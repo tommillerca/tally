@@ -58,7 +58,7 @@ ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
-  if (type === 'rare') return crateIcon('egg', s);
+  if (type === 'rare') return `<img class="ico" src="assets/brand/sword.png" style="width:${Math.round(s * 0.8)}px" alt="rare">`;
   return ICONS.bone(s);
 }
 
@@ -102,7 +102,7 @@ async function showSplash(userEq) {
     await beat(430);
   }
   if (done) return;
-  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' })}</div><div class="splash-title">BONEHEADZ<br>GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
   await beat(forced ? 2600 : 950);
   finish();
 }
@@ -342,26 +342,33 @@ async function renderToday(el) {
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
   </div>
 
-  <div class="chip-row">
-    <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b> day${streak === 1 ? '' : 's'}</button>
-    <button class="level-chip" id="lvlChip">
-      <span class="lvl-n">Lv ${lvl.level}</span> ${esc(lvl.name)}
-      <span class="xp-mini"><i style="width:${lvl.pct}%"></i></span>
-    </button>
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
+    ${avatarLayersHtml(eq)}
+    <img class="hero-tomb" src="assets/brand/tombstone.png" alt="">
+    <div class="hero-fade"></div>
+    <div class="hero-top">
+      <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b></button>
+      <div class="hero-top-right">
+        <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
+        ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
+      </div>
+    </div>
+    <div class="hero-bubble">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
+    <div class="hero-meta">
+      <button class="hero-level" id="lvlChip">
+        <span class="hero-lv">Lv ${lvl.level}</span>
+        <span class="hero-title">${esc(lvl.name)}</span>
+        <span class="hero-xpbar"><i style="width:${lvl.pct}%"></i></span>
+        <span class="hero-xpnum">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP · Lv ${lvl.level + 1} unlocks a Golden Crate</span>
+      </button>
+    </div>
   </div>
 
-  <div class="card bh-card">
-    <button class="bh-stage ${S.justLogged ? 'bounce' : ''}" id="bhStage" aria-label="Your Bonehead">
-      ${avatarLayersHtml(eq)}
-    </button>
-    <div class="bh-side">
-      <div class="bh-topline">
-        <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
-        ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length} to open</button>` : ''}
-        <button class="bh-hunt" id="huntBtn">${ICONS.radar(13)} Hunt</button>
-      </div>
-      <div class="bh-bubble">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
-    </div>
+  <div class="hero-actions">
+    <button class="hero-act" id="huntBtn">${ICONS.radar(23)}<span>Hunt</span></button>
+    <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
+    <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
+    <button class="hero-act" id="progBtn">${ICONS.boltIco(23)}<span>Progress</span></button>
   </div>
 
   <div class="card ring-card">
@@ -442,6 +449,9 @@ async function renderToday(el) {
   $('#lvlChip').addEventListener('click', () => openCharacter('progress'));
   $('#streakChip').addEventListener('click', () => openCharacter('progress'));
   $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
+  $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
+  $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
+  $('#progBtn')?.addEventListener('click', () => openCharacter('progress'));
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -1549,7 +1559,7 @@ function renderOnboarding() {
   $('#tabbar').style.display = 'none';
   el.innerHTML = `
   <div class="onb">
-    <img class="logo" src="icons/icon-192.png" alt="">
+    <img src="assets/brand/logo.png" alt="" style="width:150px;margin-bottom:14px">
     <h1>BONEHEADZ GYM</h1>
     <p class="tag">Feed the bones. Scan barcodes, photograph labels, and log meals in seconds while a very cool skeleton earns loot on your behalf. Private: your data never leaves this device.</p>
     <div class="feature">${ICONS.barcode.replace('<svg', '<svg class="fi"')}<div><b>Instant barcode scanning</b><span>Millions of packaged foods via Open Food Facts + USDA</span></div></div>

@@ -73,6 +73,20 @@ player's inventory valid. Slots and z-order live in one table in the script.
   reuse the crate system. Requires nothing new from the platform; it is a pure
   game-core module plus UI.
 
+## Art inventory (beyond the wardrobe)
+
+- `assets/brand/`: wordmark + skull logo (splash, onboarding), sword map marker
+  (rare spawns), tombstone + tomb gate (hero-scene decor now, "Haunt" items later),
+  and Cam's illustrated quest map (parked for the steps-journey feature).
+- **SOL library** (bust-style portraits, 270 layers, held in Downloads): different
+  anatomy from the full-body set, so it must NOT merge into the wardrobe. Best
+  future uses: player profile portraits, friend avatars, or battle opponents.
+- **Haunts (planned).** The user's idea: customize the scene behind your Bonehead
+  (house / castle / graveyard) with dedicated loot. v1 already ships the BG slot
+  rendered as the hero backdrop; Haunts extends it with scene-level items and
+  yard-decor slots (tombstones, gates, props layered at fixed anchor points).
+  Pure data + one new slot family in the manifest; no migration needed.
+
 ## Non-negotiables
 
 - IndexedDB upgrades are strictly additive; the e2e `migrate` stage proves
