@@ -44,7 +44,57 @@ const ICONS = {
   bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
   star: (on) => `<svg viewBox="0 0 24 24" style="width:21px;height:21px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`,
+  coin: (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
+  flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
+  freeze: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4.5" fill="#bfe7ff" opacity="0.92" stroke="#173a52" stroke-width="1.6"/><path d="M12 7v10M8.5 9l7 6M15.5 9l-7 6" stroke="#5fa8d8" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
 };
+
+function crateIcon(kind, s = 22) {
+  if (kind === 'golden') return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="13" rx="2.6" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><path d="M2.5 11.4h19" stroke="#3a2b12" stroke-width="1.4"/><rect x="10.3" y="9.6" width="3.4" height="4.8" rx="1.1" fill="#f2e9d7" stroke="#3a2b12" stroke-width="1.2"/></svg>`;
+  if (kind === 'egg') return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.8c3.6 0 6.5 4.6 6.5 9.3 0 4.4-2.9 7.4-6.5 7.4s-6.5-3-6.5-7.4c0-4.7 2.9-9.3 6.5-9.3z" fill="#e8f7d0" stroke="#2a3313" stroke-width="1.6"/><path d="M8.5 10.5l2 1.8 1.8-2 2 2.1 1.7-1.6" fill="none" stroke="#93b45e" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.6" fill="#a9825a" stroke="#2e2113" stroke-width="1.6"/><rect x="3" y="9.6" width="18" height="3.2" fill="#8a6845" stroke="#2e2113" stroke-width="1.1"/><circle cx="12" cy="16.4" r="1.8" fill="#f2e9d7" stroke="#2e2113" stroke-width="1.1"/></svg>`;
+}
+function consumableIcon(type, s = 20) { return type === 'freeze' ? ICONS.freeze(s) : ICONS.boltIco(s); }
+
+/* ================= splash montage ================= */
+
+function randomOutfit() {
+  const eq = { B: 'B0-1', SK: 'SK0-1' };
+  for (const slot of BH_SLOTS) {
+    if (slot.code === 'B' || slot.code === 'SK') continue;
+    if (Math.random() < 0.55) {
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code);
+      eq[slot.code] = pool[(Math.random() * pool.length) | 0].id;
+    }
+  }
+  return eq;
+}
+
+async function showSplash(userEq) {
+  const forced = location.search.includes('splash=1');
+  if (navigator.webdriver && !forced) return;
+  if (reducedMotion && !forced) return;
+  if (sessionStorage.getItem('bhg-splash') && !forced) return;
+  try { sessionStorage.setItem('bhg-splash', '1'); } catch { /* private mode */ }
+  const el = document.createElement('div');
+  el.id = 'splash';
+  document.body.appendChild(el);
+  let done = false;
+  const finish = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 380); };
+  el.addEventListener('click', finish);
+  const beat = ms => new Promise(r => setTimeout(r, ms));
+  for (const word of ['EAT.', 'LOG.', 'EVOLVE.']) {
+    if (done) return;
+    el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(randomOutfit())}</div><div class="splash-word">${word}</div></div>`;
+    await beat(430);
+  }
+  if (done) return;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' })}</div><div class="splash-title">BONEHEADZ<br>GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  await beat(forced ? 2600 : 950);
+  finish();
+}
 
 /* ================= boot ================= */
 
@@ -55,10 +105,20 @@ async function boot() {
   S.userFoods = await db.all('foods');
 
   if ('serviceWorker' in navigator && !S.demo && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // resumed PWAs never re-navigate, so check for updates whenever we come back
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) { hadController = true; return; } // first-ever install
+      if (performance.now() < 20000 && !sheetStack.length) location.reload();
+      else toast('Update ready: close and reopen to apply', 3600);
+    });
   }
   requestPersistence();
   S.sounds = (await kvGet('sounds', true)) !== false;
+  equipped().then(eq => showSplash(eq)).catch(() => {});
 
   if (!S.settings) { renderOnboarding(); return; }
 
@@ -67,9 +127,9 @@ async function boot() {
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
   const frozen = await checkStreakFreeze();
-  if (frozen) setTimeout(() => toast(`🧊 Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
+  if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed) setTimeout(() => toast('🧰 Yesterday closed on budget: Golden Crate earned', 3400), 2400);
+  if (closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   await ingestHkFromUrl();
   backupNudge();
 
@@ -271,7 +331,7 @@ async function renderToday(el) {
   </div>
 
   <div class="chip-row">
-    <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">🔥</span> <b>${streak}</b> day${streak === 1 ? '' : 's'}</button>
+    <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b> day${streak === 1 ? '' : 's'}</button>
     <button class="level-chip" id="lvlChip">
       <span class="lvl-n">Lv ${lvl.level}</span> ${esc(lvl.name)}
       <span class="xp-mini"><i style="width:${lvl.pct}%"></i></span>
@@ -284,34 +344,10 @@ async function renderToday(el) {
     </button>
     <div class="bh-side">
       <div class="bh-topline">
-        <button class="bh-coin" id="coinBtn">🪙 <b>${coinBal.toLocaleString()}</b></button>
-        ${crates.length ? `<button class="bh-crates" id="cratesBtn">📦 ${crates.length} to open</button>` : ''}
+        <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
+        ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length} to open</button>` : ''}
       </div>
-      ${isToday ? `
-      <div class="q-list">
-        ${quests.map(q => {
-          const st = questState(q, qctx, dateXp);
-          const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
-          return `<div class="q-row">
-            <div class="q-main">
-              <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}🪙</span></div>
-              <div class="q-bar"><i style="width:${pct}%"></i></div>
-            </div>
-            ${st.claimed ? '<span class="q-done">✓</span>'
-              : st.done ? `<button class="q-claim" data-claim="${q.id}">Claim</button>`
-              : `<span class="q-frac">${st.target > 9 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
-          </div>`;
-        }).join('')}
-        <div class="q-row weekly">
-          <div class="q-main">
-            <div class="q-name">Weekly: ${esc(WEEKLY.name)} <span class="q-coins">🧰</span></div>
-            <div class="q-bar gold"><i style="width:${Math.min(100, (weekly.cur / weekly.target) * 100)}%"></i></div>
-          </div>
-          ${weekly.claimed ? '<span class="q-done">✓</span>'
-            : weekly.done ? '<button class="q-claim" id="claimWeekly">Claim</button>'
-            : `<span class="q-frac">${weekly.cur}/${weekly.target}</span>`}
-        </div>
-      </div>` : `<p class="note" style="margin-top:8px">Tap your Bonehead to change its fit, open crates, and browse badges.</p>`}
+      <div class="bh-bubble">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
     </div>
   </div>
 
@@ -336,6 +372,35 @@ async function renderToday(el) {
       ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
+
+  ${isToday ? `
+  <div class="card q-card">
+    <div class="card-title">TODAY'S QUESTS <button class="link" id="qProg">Progress</button></div>
+    <div class="q-list">
+      ${quests.map(q => {
+        const st = questState(q, qctx, dateXp);
+        const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
+        return `<div class="q-row">
+          <div class="q-main">
+            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}</span></div>
+            <div class="q-bar"><i style="width:${pct}%"></i></div>
+          </div>
+          ${st.claimed ? '<span class="q-done">✓</span>'
+            : st.done ? `<button class="q-claim" data-claim="${q.id}">Claim</button>`
+            : `<span class="q-frac">${st.target > 9 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
+        </div>`;
+      }).join('')}
+      <div class="q-row weekly">
+        <div class="q-main">
+          <div class="q-name">Weekly: ${esc(WEEKLY.name)} <span class="q-coins">${crateIcon('golden', 13)}</span></div>
+          <div class="q-bar gold"><i style="width:${Math.min(100, (weekly.cur / weekly.target) * 100)}%"></i></div>
+        </div>
+        ${weekly.claimed ? '<span class="q-done">✓</span>'
+          : weekly.done ? '<button class="q-claim" id="claimWeekly">Claim</button>'
+          : `<span class="q-frac">${weekly.cur}/${weekly.target}</span>`}
+      </div>
+    </div>
+  </div>` : ''}
 
   ${healthCardHtml(hk, isToday)}
 
@@ -364,6 +429,7 @@ async function renderToday(el) {
   $('#lvlChip').addEventListener('click', () => openCharacter('progress'));
   $('#streakChip').addEventListener('click', () => openCharacter('progress'));
   $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
+  $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
@@ -377,8 +443,8 @@ async function renderToday(el) {
     popSound(S.sounds);
     const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
     const bonus = await claimAllBonusIfDue(S.date, quests, dateXp2);
-    toast(bonus ? `Quest done · +${res.xp + bonus.xp} XP · +${res.coins}🪙 · Daily Crate earned!`
-      : `Quest done · +${res.xp} XP · +${res.coins}🪙`, 2800);
+    toast(bonus ? `Quest done · +${res.xp + bonus.xp} XP · +${res.coins} coins · Daily Crate earned!`
+      : `Quest done · +${res.xp} XP · +${res.coins} coins`, 2800);
     refresh();
   }));
   $('#claimWeekly')?.addEventListener('click', async ev => {
@@ -386,7 +452,7 @@ async function renderToday(el) {
     if (!res) return;
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, 22);
     levelSound(S.sounds);
-    toast(`Weekly complete · +${res.xp} XP · +${res.coins}🪙 · Golden Crate earned!`, 3200);
+    toast(`Weekly complete · +${res.xp} XP · +${res.coins} coins · Golden Crate earned!`, 3200);
     refresh();
   });
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
@@ -416,13 +482,26 @@ function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
   </div>`;
 }
 
+function speechLine({ entries, tot, targets, crates, streak, isToday }) {
+  const pick = arr => arr[(new Date().getDate() + arr.length) % arr.length];
+  if (crates.length) return pick(['Crack that crate open already!', 'Loot is burning a hole in my ribs.', 'Crates do not open themselves, chief.']);
+  if (!isToday) return 'Time traveling, are we? Tap me to change my fit.';
+  if (!entries.length) return pick(['Feed me a log, chief.', 'Bones do not fuel themselves.', 'Scan something tasty. I dare you.']);
+  if (targets && targets.p && tot.p >= targets.p) return pick(['Protein secured. Bones swole.', 'Full protein. Maximum calcium energy.']);
+  if (targets && tot.kcal > targets.kcal) return pick(['Big day. We log it all anyway.', 'Honest logs make strong bones.']);
+  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick(['Right in the zone. Finish strong.', 'Stick the landing tonight.']);
+  if (streak >= 3) return `Day ${streak}. Keep the flame alive.`;
+  return pick(['Solid pace today.', 'What is next on the menu?', 'More protein never hurt a skeleton.']);
+}
+
 function avatarLayersHtml(eq) {
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
-  return slots.map(s => {
+  const layers = slots.map(s => {
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
     return `<img src="${bhAsset(BH_BY_ID[itemId])}" alt="" loading="lazy" decoding="async">`;
   }).join('');
+  return `<div class="bh-anim">${layers}</div>`;
 }
 
 function healthCardHtml(hk, isToday) {
@@ -435,13 +514,13 @@ function healthCardHtml(hk, isToday) {
     <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? '<button class="link" id="hkSync">Sync</button>' : ''}</div>
     ${hk ? `
       <div class="hk-rows">
-        <div class="hk-row"><span class="hk-ico">👟</span>
+        <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
           <div style="flex:1">
             <div class="row" style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
             <div class="bar steps" style="margin-top:5px"><i style="width:${stepPct}%"></i></div>
           </div>
         </div>
-        ${active != null ? `<div class="hk-row"><span class="hk-ico">⚡️</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn <span style="color:var(--text-3);font-weight:500">· shown for context, your target already covers activity</span></div></div>` : ''}
+        ${active != null ? `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn <span style="color:var(--text-3);font-weight:500">· shown for context, your target already covers activity</span></div></div>` : ''}
       </div>` :
       '<p class="note">No sync yet today. Run your "Sync Tally" shortcut, then tap Sync.</p>'}
   </div>`;
@@ -1299,7 +1378,7 @@ async function renderSettings(el) {
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
-    Tally v2 · data lives only on this device<br>
+    Boneheadz Gym v4 · data lives only on this device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a>
   </p>`;
 
@@ -1457,8 +1536,8 @@ function renderOnboarding() {
   el.innerHTML = `
   <div class="onb">
     <img class="logo" src="icons/icon-192.png" alt="">
-    <h1>Count what counts.</h1>
-    <p class="tag">Tally is a fast, private calorie and macro tracker. Scan barcodes, photograph nutrition labels, and log meals in seconds. Your data never leaves this device.</p>
+    <h1>BONEHEADZ GYM</h1>
+    <p class="tag">Feed the bones. Scan barcodes, photograph labels, and log meals in seconds while a very cool skeleton earns loot on your behalf. Private: your data never leaves this device.</p>
     <div class="feature">${ICONS.barcode.replace('<svg', '<svg class="fi"')}<div><b>Instant barcode scanning</b><span>Millions of packaged foods via Open Food Facts + USDA</span></div></div>
     <div class="feature">${ICONS.label.replace('<svg', '<svg class="fi"')}<div><b>Label camera</b><span>Photograph any Nutrition Facts panel, Tally reads it on-device</span></div></div>
     <div class="feature">${ICONS.bolt.replace('<svg', '<svg class="fi"')}<div><b>Built for consistency</b><span>Recents, favorites, copy-yesterday, streaks</span></div></div>
@@ -1580,7 +1659,7 @@ async function renderCharacter(wrap, tab) {
       <div class="bh-hero-meta">
         <b>Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
-        <span class="note">🪙 ${coinBal.toLocaleString()} · 👕 ${ownedCount}/${BH_ITEMS.length}${boost ? ` · ⚡️x${boost} active` : ''}</span>
+        <span class="note">${ICONS.coin(13)} ${coinBal.toLocaleString()} · ${ownedCount}/${BH_ITEMS.length} cosmetics${boost ? ` · ${ICONS.boltIco(13)}x${boost}` : ''}</span>
       </div>
     </div>
     <div class="chips" id="chTabs" style="margin:12px 0 4px">
@@ -1628,20 +1707,20 @@ async function renderCharacter(wrap, tab) {
       ${crates.length ? crates.map(c => {
         const def = CRATES[c.crate] || CRATES.daily;
         return `<div class="crate-row">
-          <span class="crate-ico">${def.icon}</span>
+          <span class="crate-ico">${crateIcon(c.crate, 27)}</span>
           <div style="flex:1"><b>${def.label}</b><small>from ${esc(c.source || 'quests')}</small></div>
           <button class="btn small" data-open="${c.id}">Open</button>
         </div>`;
       }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
       <div class="sect-h">Consumables</div>
-      <div class="crate-row"><span class="crate-ico">🧊</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
-      <div class="crate-row"><span class="crate-ico">⚡️</span><div style="flex:1"><b>XP Boost</b><small>${CONSUMABLES.xp2.desc}</small></div>
+      <div class="crate-row"><span class="crate-ico">${ICONS.freeze(24)}</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
+      <div class="crate-row"><span class="crate-ico">${ICONS.boltIco(24)}</span><div style="flex:1"><b>XP Boost</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
-      ${boost ? `<p class="note" style="margin:6px 2px">⚡️ Boost active: ${boost} double-XP log${boost === 1 ? '' : 's'} remaining</p>` : ''}
+      ${boost ? `<p class="note" style="margin:6px 2px">${ICONS.boltIco(13)} Boost active: ${boost} double-XP log${boost === 1 ? '' : 's'} remaining</p>` : ''}
       <div class="sect-h">Shop</div>
       <div class="grid2">
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
-          <span class="crate-ico">${s.icon}</span><b>${s.label}</b><small>🪙 ${s.cost}</small></button>`).join('')}
+          <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
       </div>`;
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
@@ -1650,7 +1729,7 @@ async function renderCharacter(wrap, tab) {
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
-      if (await activateXpBoost()) { popSound(S.sounds); toast('⚡️ XP Boost active: next 5 logs give double XP'); }
+      if (await activateXpBoost()) { popSound(S.sounds); toast('XP Boost active: next 5 logs give double XP'); }
       renderCharacter(wrap, 'crates');
     });
     $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
@@ -1698,12 +1777,12 @@ async function openCrateReveal(result) {
   }, 0);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:24px">
-      <div class="crate-shake" id="crateAnim">${def.icon}</div>
+      <div class="crate-shake" id="crateAnim">${crateIcon(result.crate, 96)}</div>
       <div id="crateResults" hidden>
         ${result.results.map(r => {
           if (r.type === 'consumable') {
             const c = CONSUMABLES[r.consumable];
-            return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${c.icon}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
+            return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${consumableIcon(r.consumable, 34)}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
           }
           const rar = RARITIES[r.item.rarity];
           if (r.type === 'dupe') {
@@ -1711,7 +1790,7 @@ async function openCrateReveal(result) {
           }
           return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>${esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || '')}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
         }).join('')}
-        <p class="note" style="margin:10px 0 16px">+${result.coins}🪙 coins</p>
+        <p class="note" style="margin:10px 0 16px">+${result.coins} ${ICONS.coin(13)} coins</p>
         <button class="btn" id="crateOk">Collect</button>
       </div>
       <div style="height:10px"></div>

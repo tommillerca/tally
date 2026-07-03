@@ -1,6 +1,6 @@
-# Tally
+# Boneheadz Gym (Tally)
 
-A fast, private calorie and macro tracker you install from the browser. Built to make daily logging so quick you actually do it.
+A gamified, private calorie and macro tracker you install from the browser. Feed the bones: scan, log, earn loot, and level up a skeleton dressed in art by Cam Miller. Built to make daily logging so quick you actually do it.
 
 **Live app:** https://tommillerca.github.io/tally/
 **Try with sample data:** https://tommillerca.github.io/tally/?demo=1
@@ -54,4 +54,4 @@ E2E (puppeteer + real Chrome, iPhone viewport): 40 assertions covering onboardin
 - [Open Food Facts](https://world.openfoodfacts.org) (ODbL)
 - [USDA FoodData Central](https://fdc.nal.usda.gov) (public domain)
 
-Libraries: [@undecaf/zbar-wasm](https://github.com/undecaf/zbar-wasm) (LGPL), [tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0).
+Libraries: [@undecaf/zbar-wasm](https://github.com/undecaf/zbar-wasm) (LGPL), [tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0). Display font: [Bangers](https://fonts.google.com/specimen/Bangers) (OFL). Character art: Cam Miller (placeholder library).
