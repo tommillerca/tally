@@ -400,3 +400,98 @@ a { color: var(--accent); text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
 }
+
+/* ---------- boneheadz ---------- */
+.bh-card { display: flex; gap: 14px; align-items: stretch; }
+.bh-stage {
+  position: relative; width: 118px; min-height: 118px; flex: none;
+  border-radius: 16px; overflow: hidden; background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.bh-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.bh-stage.lg { width: 210px; height: 210px; margin: 0 auto; }
+.bh-stage.bounce { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes bhbounce { 0% { transform: scale(1); } 30% { transform: scale(1.07) rotate(-2deg); } 60% { transform: scale(0.98) rotate(1.5deg); } 100% { transform: scale(1); } }
+.bh-side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bh-topline { display: flex; gap: 7px; margin-bottom: 8px; }
+.bh-coin, .bh-crates {
+  font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
+}
+.bh-coin b { color: var(--carbs); }
+.bh-crates { color: var(--accent); border-color: rgba(185, 239, 74, 0.35); animation: cratepulse 2.2s ease-in-out infinite; }
+@keyframes cratepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(185, 239, 74, 0); } 50% { box-shadow: 0 0 12px 0 rgba(185, 239, 74, 0.25); } }
+
+.q-list { display: grid; gap: 7px; }
+.q-row { display: flex; align-items: center; gap: 9px; }
+.q-main { flex: 1; min-width: 0; }
+.q-name { font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-coins { color: var(--text-3); font-weight: 600; font-size: 11px; }
+.q-bar { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 4px; }
+.q-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.q-bar.gold i { background: var(--carbs); }
+.q-claim {
+  font-size: 11.5px; font-weight: 800; padding: 6px 11px; border-radius: 9px;
+  background: var(--accent); color: var(--accent-ink); flex: none;
+  animation: cratepulse 1.8s ease-in-out infinite;
+}
+.q-done { color: var(--accent); font-weight: 800; flex: none; font-size: 14px; }
+.q-frac { color: var(--text-3); font-size: 11px; font-weight: 700; flex: none; font-variant-numeric: tabular-nums; }
+.q-row.weekly { padding-top: 3px; border-top: 1px dashed var(--line); }
+
+.bh-hero { display: grid; justify-items: center; gap: 8px; }
+.bh-hero-meta { display: grid; justify-items: center; gap: 5px; font-size: 14px; }
+
+.ward-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.ward-cell {
+  position: relative; aspect-ratio: 1; border-radius: 13px; overflow: hidden;
+  background: var(--surface-2); border: 2px solid var(--line);
+  display: grid; place-items: center; font-size: 11px; font-weight: 650; color: var(--text-3);
+}
+.ward-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ward-cell.r-common { border-color: rgba(159, 172, 159, 0.4); }
+.ward-cell.r-uncommon { border-color: rgba(74, 222, 128, 0.55); }
+.ward-cell.r-rare { border-color: rgba(111, 208, 255, 0.6); }
+.ward-cell.r-epic { border-color: rgba(192, 132, 252, 0.65); }
+.ward-cell.r-legendary { border-color: rgba(255, 201, 97, 0.8); box-shadow: 0 0 12px rgba(255, 201, 97, 0.25); }
+.ward-cell.equipped::after {
+  content: "✓"; position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+  background: var(--accent); color: var(--accent-ink); border-radius: 7px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 900;
+}
+
+.crate-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--line); }
+.crate-row b { display: block; font-size: 14.5px; }
+.crate-row small { color: var(--text-3); font-size: 12px; display: block; }
+.crate-ico { font-size: 24px; flex: none; }
+.shop-cell {
+  display: grid; justify-items: center; gap: 4px; padding: 13px 8px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
+  font-size: 13px; font-weight: 650;
+}
+.shop-cell small { color: var(--carbs); font-weight: 700; }
+.shop-cell:disabled { opacity: 0.4; }
+
+.crate-shake { font-size: 74px; margin: 34px 0 40px; display: inline-block; animation: crateshake 0.95s ease-in-out; }
+@keyframes crateshake {
+  0%, 100% { transform: rotate(0) scale(1); }
+  15% { transform: rotate(-9deg) scale(1.02); }
+  30% { transform: rotate(8deg) scale(1.05); }
+  45% { transform: rotate(-7deg) scale(1.08); }
+  60% { transform: rotate(6deg) scale(1.12); }
+  75% { transform: rotate(-4deg) scale(1.18); }
+  90% { transform: rotate(2deg) scale(1.25); }
+}
+.reveal-card {
+  display: flex; align-items: center; gap: 13px; text-align: left;
+  background: var(--surface-2); border: 2px solid var(--line); border-radius: 15px;
+  padding: 11px 13px; margin: 0 6px 9px;
+  animation: badgepop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.reveal-card img, .reveal-ico { width: 54px; height: 54px; border-radius: 11px; background: var(--surface-3); object-fit: cover; flex: none; font-size: 30px; display: grid; place-items: center; }
+.reveal-card b { display: block; font-size: 15px; }
+.reveal-card small { color: var(--text-3); font-size: 12px; display: block; }
+.rar-chip { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+.reveal-card.r-rare { border-color: rgba(111, 208, 255, 0.5); }
+.reveal-card.r-epic { border-color: rgba(192, 132, 252, 0.55); }
+.reveal-card.r-legendary { border-color: rgba(255, 201, 97, 0.7); box-shadow: 0 0 18px rgba(255, 201, 97, 0.2); }

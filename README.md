@@ -20,7 +20,8 @@ A fast, private calorie and macro tracker you install from the browser. Built to
 - **Plan targets**: Mifflin-St Jeor TDEE, goal presets (lose fat, slow cut, recomp, maintain, lean bulk), protein set by bodyweight, all editable.
 - **Frictionless logging**: recents, favorites, copy-yesterday, quick add, per-meal totals, streaks, portion stepper with live macro preview.
 - **Trends**: smoothed weight trend with weekly rate, 14-day calorie chart vs target, 7-day protein adherence.
-- **Gamified**: XP for every log, 20 levels (Rookie Logger to Tally Grandmaster), 13 badges, streak flames with milestone celebrations, confetti on adds, animated rings and count-ups. Daily bonuses for hitting protein, logging all meals, and closing the day on budget. Existing history is retroactively credited on first launch.
+- **Gamified**: XP for every log, 20 levels (Rookie Logger to Tally Grandmaster), 15 badges, streak flames with milestone celebrations, confetti on adds, animated rings and count-ups. Existing history is retroactively credited on first launch.
+- **Boneheadz RPG layer**: your skeleton avatar (art by Cam Miller) lives on the Today screen and wears loot you earn. 258 cosmetics across 15 slots with rarity tiers, loot crates from quests/day-closes/level-ups/10k-step days, coins with duplicate conversion and a small shop, XP Boost consumables, and Streak Freezes that auto-save a missed day. Three seeded daily quests plus a weekly protein challenge.
 - **Apple Health bridge**: a one-time 3-minute Shortcut copies steps, active energy, and weight from your Apple Watch/Health into Tally (guide built into Settings). Steps show against a 10k goal; weight auto-logs into the trend.
 - **Private by design**: all data in IndexedDB on your device. Export/import JSON backups any time. No accounts, no tracking, no server. The app requests persistent storage and reminds you to back up every couple of weeks.
 
@@ -43,10 +44,10 @@ Static PWA, no build step. Vanilla ES modules, hand-rolled CSS, service worker p
 ## Tests
 
 ```
-node tests/unit.test.js       # 35 unit tests: math, parser, mappers, game math, food DB integrity
+node tests/unit.test.js       # 41 unit tests: math, parser, mappers, game math, quests, loot data, food DB integrity
 ```
 
-E2E (puppeteer + real Chrome, iPhone viewport): 35 assertions covering onboarding, search, portioning, persistence, barcode scan via fake camera video, label OCR through the UI, v1-to-v2 data migration, XP/badge celebrations, and Apple Health ingest (URL + clipboard). Screenshots reviewed before every deploy.
+E2E (puppeteer + real Chrome, iPhone viewport): 40 assertions covering onboarding, search, portioning, persistence, barcode scan via fake camera video, label OCR through the UI, v1-to-current data migration, XP/badge celebrations, Apple Health ingest (URL + clipboard), and the RPG loop (avatar compositing, crate opening, wardrobe equip). Screenshots reviewed before every deploy. See ARCHITECTURE.md for the native-iOS porting plan.
 
 ## Data sources
 

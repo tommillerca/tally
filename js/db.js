@@ -1,7 +1,7 @@
-// Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health.
+// Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health, inv.
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
 
@@ -33,6 +33,9 @@ function open() {
         }
         if (!db.objectStoreNames.contains('health')) {
           db.createObjectStore('health', { keyPath: 'date' });
+        }
+        if (!db.objectStoreNames.contains('inv')) {
+          db.createObjectStore('inv', { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -79,10 +82,10 @@ export function newId() {
 }
 
 export async function exportAll() {
-  const [foods, log, weights, kv, xp, health] = await Promise.all([
-    db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'),
+  const [foods, log, weights, kv, xp, health, inv] = await Promise.all([
+    db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'), db.all('inv'),
   ]);
-  return { app: 'tally', version: 2, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health };
+  return { app: 'tally', version: 3, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
 }
 
 export async function importAll(data) {
@@ -93,6 +96,7 @@ export async function importAll(data) {
   for (const r of data.kv || []) await db.put('kv', r);
   for (const r of data.xp || []) await db.put('xp', r);
   for (const r of data.health || []) await db.put('health', r);
+  for (const r of data.inv || []) await db.put('inv', r);
   return { foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length };
 }
 

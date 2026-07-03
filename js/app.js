@@ -3,8 +3,16 @@ import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersis
 import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, evaluateBadges, earnedBadgeIds, BADGES, xpForDate, parseHkPayload,
+  initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
+  BADGES, xpForDate, parseHkPayload,
 } from './game.js';
+import {
+  RARITIES, CRATES, CONSUMABLES, SHOP, coins, inventory, ownedCosmeticIds,
+  unopenedCrates, openCrate, buyShopItem, equipped, equip, activateXpBoost,
+  xpBoostCharges, consumableCount,
+} from './loot.js';
+import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
+import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
@@ -56,7 +64,12 @@ async function boot() {
 
   const init = await initGameIfNeeded(S.settings.targets);
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
-  await awardDayCloseIfDue(S.settings.targets);
+  const kit = await initLootIfNeeded();
+  if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  const frozen = await checkStreakFreeze();
+  if (frozen) setTimeout(() => toast(`🧊 Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
+  const closed = await awardDayCloseIfDue(S.settings.targets);
+  if (closed) setTimeout(() => toast('🧰 Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   await ingestHkFromUrl();
   backupNudge();
 
@@ -221,6 +234,18 @@ async function renderToday(el) {
   const xp = await totalXp();
   const lvl = levelFor(xp);
   const hk = await db.get('health', S.date);
+  const eq = await equipped();
+  const coinBal = await coins();
+  const crates = await unopenedCrates();
+  const allXp = await db.all('xp');
+  const dateXp = allXp.filter(r => r.date === S.date);
+  const quests = dailyQuests(S.date, { hkConnected: !!S.settings.hkConnected });
+  const qctx = {
+    date: S.date, entries, xpRows: dateXp, health: hk, targets: S.settings.targets,
+    priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
+    weighedToday: !!(await db.get('weights', S.date)),
+  };
+  const weekly = weeklyState(allXp, S.date);
   const tot = dayTotals(entries);
   const remaining = Math.round(t.kcal - tot.kcal);
   const pct = Math.min(1, tot.kcal / t.kcal);
@@ -251,6 +276,43 @@ async function renderToday(el) {
       <span class="lvl-n">Lv ${lvl.level}</span> ${esc(lvl.name)}
       <span class="xp-mini"><i style="width:${lvl.pct}%"></i></span>
     </button>
+  </div>
+
+  <div class="card bh-card">
+    <button class="bh-stage ${S.justLogged ? 'bounce' : ''}" id="bhStage" aria-label="Your Bonehead">
+      ${avatarLayersHtml(eq)}
+    </button>
+    <div class="bh-side">
+      <div class="bh-topline">
+        <button class="bh-coin" id="coinBtn">🪙 <b>${coinBal.toLocaleString()}</b></button>
+        ${crates.length ? `<button class="bh-crates" id="cratesBtn">📦 ${crates.length} to open</button>` : ''}
+      </div>
+      ${isToday ? `
+      <div class="q-list">
+        ${quests.map(q => {
+          const st = questState(q, qctx, dateXp);
+          const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
+          return `<div class="q-row">
+            <div class="q-main">
+              <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}🪙</span></div>
+              <div class="q-bar"><i style="width:${pct}%"></i></div>
+            </div>
+            ${st.claimed ? '<span class="q-done">✓</span>'
+              : st.done ? `<button class="q-claim" data-claim="${q.id}">Claim</button>`
+              : `<span class="q-frac">${st.target > 9 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
+          </div>`;
+        }).join('')}
+        <div class="q-row weekly">
+          <div class="q-main">
+            <div class="q-name">Weekly: ${esc(WEEKLY.name)} <span class="q-coins">🧰</span></div>
+            <div class="q-bar gold"><i style="width:${Math.min(100, (weekly.cur / weekly.target) * 100)}%"></i></div>
+          </div>
+          ${weekly.claimed ? '<span class="q-done">✓</span>'
+            : weekly.done ? '<button class="q-claim" id="claimWeekly">Claim</button>'
+            : `<span class="q-frac">${weekly.cur}/${weekly.target}</span>`}
+        </div>
+      </div>` : `<p class="note" style="margin-top:8px">Tap your Bonehead to change its fit, open crates, and browse badges.</p>`}
+    </div>
   </div>
 
   <div class="card ring-card">
@@ -299,9 +361,34 @@ async function renderToday(el) {
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
-  $('#lvlChip').addEventListener('click', openProgressSheet);
-  $('#streakChip').addEventListener('click', openProgressSheet);
+  $('#lvlChip').addEventListener('click', () => openCharacter('progress'));
+  $('#streakChip').addEventListener('click', () => openCharacter('progress'));
+  $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
+  $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
+  S.justLogged = false;
+  $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
+    const q = quests.find(x => x.id === b.dataset.claim);
+    if (!q) return;
+    const res = await claimQuest(S.date, q);
+    if (!res) return;
+    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, 14);
+    popSound(S.sounds);
+    const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
+    const bonus = await claimAllBonusIfDue(S.date, quests, dateXp2);
+    toast(bonus ? `Quest done · +${res.xp + bonus.xp} XP · +${res.coins}🪙 · Daily Crate earned!`
+      : `Quest done · +${res.xp} XP · +${res.coins}🪙`, 2800);
+    refresh();
+  }));
+  $('#claimWeekly')?.addEventListener('click', async ev => {
+    const res = await claimWeekly(weekly.weekKey);
+    if (!res) return;
+    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, 22);
+    levelSound(S.sounds);
+    toast(`Weekly complete · +${res.xp} XP · +${res.coins}🪙 · Golden Crate earned!`, 3200);
+    refresh();
+  });
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
@@ -327,6 +414,15 @@ function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
     <div class="row"><span>${label}${glow ? ' <span class="hit-dot">✓</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
     <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
   </div>`;
+}
+
+function avatarLayersHtml(eq) {
+  const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
+  return slots.map(s => {
+    const itemId = eq[s.code];
+    if (!itemId || !BH_BY_ID[itemId]) return '';
+    return `<img src="${bhAsset(BH_BY_ID[itemId])}" alt="" loading="lazy" decoding="async">`;
+  }).join('');
 }
 
 function healthCardHtml(hk, isToday) {
@@ -431,6 +527,7 @@ function openAdd(meal = 0) {
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
       toast(`Added ${src.name}${game.xp ? ` · +${game.xp} XP` : ''}`);
+      S.justLogged = true;
       queueCelebration(game);
       history.back();
       setTimeout(refresh, 60);
@@ -638,7 +735,8 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       confettiBurst(r.left + r.width / 2, r.top, 18);
       popSound(S.sounds);
     }
-    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP${game.boosted ? ' ⚡️x2' : ''}` : ''}`);
+    S.justLogged = !editing;
     queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -713,7 +811,8 @@ function openQuickAdd(getMeal, entry = null) {
       confettiBurst(r.left + r.width / 2, r.top, 16);
       popSound(S.sounds);
     }
-    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP${game.boosted ? ' ⚡️x2' : ''}` : ''}`);
+    S.justLogged = !entry;
     queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -1399,6 +1498,8 @@ async function saveInitialSettings(np) {
   };
   await kvSet('settings', S.settings);
   await kvSet('game-init', true); // fresh install: nothing to backfill
+  const kit = await initLootIfNeeded();
+  if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), 1200);
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -1456,37 +1557,176 @@ function bindBadgeTaps(wrap) {
   }));
 }
 
-async function openProgressSheet() {
-  const xp = await totalXp();
-  const lvl = levelFor(xp);
-  const earned = await earnedBadgeIds();
-  const todayRows = await xpForDate(dateKey());
-  const todayXp = todayRows.reduce((a, r) => a + r.xp, 0);
-  const keys = new Set(todayRows.map(r => r.key));
-  const earnables = [];
-  if (![...keys].some(k => k.startsWith('protein-'))) earnables.push('+40 hit your protein target');
-  if (![...keys].some(k => k.startsWith('meals3-'))) earnables.push('+20 log all three meals');
-  if (![...keys].some(k => k.startsWith('scan-'))) earnables.push('+15 log something by barcode');
-  if (![...keys].some(k => k.startsWith('weigh-'))) earnables.push('+15 log a weigh-in');
-  earnables.push('+50 finish the day inside budget');
-
+async function openCharacter(tab = 'wardrobe') {
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>Your progress</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body">
-      <div class="card" style="background:var(--surface-2)">
-        <div class="big-stat" style="margin:0"><span class="v">Lv ${lvl.level}</span><span class="d">${esc(lvl.name)}</span></div>
-        <div class="xp-bar"><i style="width:${lvl.pct}%"></i></div>
-        <p class="note" style="margin-top:7px">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP to level ${lvl.level + 1} · ${xp.toLocaleString()} XP total</p>
+    <div class="sheet-head"><h2>Your Bonehead</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="chBody"></div>`, { cls: 'full' });
+  await renderCharacter(wrap, tab);
+}
+
+async function renderCharacter(wrap, tab) {
+  const body = $('#chBody', wrap);
+  if (!body) return;
+  const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), xpBoostCharges()]);
+  const lvl = levelFor(xp);
+  const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
+  const freezes = inv.filter(r => r.kind === 'freeze').length;
+  const boosts = inv.filter(r => r.kind === 'xp2').length;
+  const ownedCount = inv.filter(r => r.kind === 'cos').length;
+
+  body.innerHTML = `
+    <div class="bh-hero">
+      <div class="bh-stage lg">${avatarLayersHtml(eq)}</div>
+      <div class="bh-hero-meta">
+        <b>Lv ${lvl.level} · ${esc(lvl.name)}</b>
+        <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
+        <span class="note">🪙 ${coinBal.toLocaleString()} · 👕 ${ownedCount}/${BH_ITEMS.length}${boost ? ` · ⚡️x${boost} active` : ''}</span>
       </div>
+    </div>
+    <div class="chips" id="chTabs" style="margin:12px 0 4px">
+      <button class="chip ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">Wardrobe</button>
+      <button class="chip ${tab === 'crates' ? 'on' : ''}" data-tab="crates">Crates & Shop ${crates.length ? `(${crates.length})` : ''}</button>
+      <button class="chip ${tab === 'progress' ? 'on' : ''}" data-tab="progress">Progress</button>
+    </div>
+    <div id="chContent"></div>`;
+
+  $$('#chTabs .chip', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  const content = $('#chContent', body);
+
+  if (tab === 'wardrobe') {
+    const owned = await ownedCosmeticIds();
+    const slot = S.wardrobeSlot || 'H';
+    const counts = {};
+    for (const s of BH_SLOTS) counts[s.code] = BH_ITEMS.filter(i => i.slot === s.code && owned.has(i.id)).length;
+    const slotMeta = BH_SLOTS.find(s => s.code === slot);
+    const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
+    const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
+    content.innerHTML = `
+      <div class="chips scroll" id="slotChips">
+        ${BH_SLOTS.map(s => `<button class="chip ${s.code === slot ? 'on' : ''}" data-slot="${s.code}">${s.label} ${counts[s.code] ? `· ${counts[s.code]}` : ''}</button>`).join('')}
+      </div>
+      <div class="ward-grid">
+        ${slotMeta.default || !items.length ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
+        ${items.map(i => `
+          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
+            <img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">
+          </button>`).join('')}
+      </div>
+      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">${lockedCount} more ${slotMeta.label.toLowerCase()} item${lockedCount === 1 ? '' : 's'} still in crates somewhere</p>` : ''}
+      ${!items.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
+      ${!items.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
+    $$('#slotChips .chip', content).forEach(c => c.addEventListener('click', () => { S.wardrobeSlot = c.dataset.slot; renderCharacter(wrap, 'wardrobe'); }));
+    $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
+      await equip(slot, cell.dataset.equip || null);
+      popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe');
+    }));
+  }
+
+  if (tab === 'crates') {
+    content.innerHTML = `
+      ${crates.length ? crates.map(c => {
+        const def = CRATES[c.crate] || CRATES.daily;
+        return `<div class="crate-row">
+          <span class="crate-ico">${def.icon}</span>
+          <div style="flex:1"><b>${def.label}</b><small>from ${esc(c.source || 'quests')}</small></div>
+          <button class="btn small" data-open="${c.id}">Open</button>
+        </div>`;
+      }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      <div class="sect-h">Consumables</div>
+      <div class="crate-row"><span class="crate-ico">🧊</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
+      <div class="crate-row"><span class="crate-ico">⚡️</span><div style="flex:1"><b>XP Boost</b><small>${CONSUMABLES.xp2.desc}</small></div>
+        ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
+      ${boost ? `<p class="note" style="margin:6px 2px">⚡️ Boost active: ${boost} double-XP log${boost === 1 ? '' : 's'} remaining</p>` : ''}
+      <div class="sect-h">Shop</div>
+      <div class="grid2">
+        ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
+          <span class="crate-ico">${s.icon}</span><b>${s.label}</b><small>🪙 ${s.cost}</small></button>`).join('')}
+      </div>`;
+    $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      const result = await openCrate(b.dataset.open);
+      await openCrateReveal(result);
+      renderCharacter(wrap, 'crates');
+    }));
+    $('#useBoost', content)?.addEventListener('click', async () => {
+      if (await activateXpBoost()) { popSound(S.sounds); toast('⚡️ XP Boost active: next 5 logs give double XP'); }
+      renderCharacter(wrap, 'crates');
+    });
+    $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
+      const r = await buyShopItem(b.dataset.buy);
+      if (!r.ok) { toast('Not enough coins yet'); return; }
+      popSound(S.sounds);
+      toast('Purchased');
+      renderCharacter(wrap, 'crates');
+    }));
+  }
+
+  if (tab === 'progress') {
+    const earned = await earnedBadgeIds();
+    const todayRows = await xpForDate(dateKey());
+    const todayXp = todayRows.reduce((a, r) => a + r.xp, 0);
+    const keys = new Set(todayRows.map(r => r.key));
+    const earnables = [];
+    if (![...keys].some(k => k.startsWith('protein-'))) earnables.push('+40 hit your protein target');
+    if (![...keys].some(k => k.startsWith('meals3-'))) earnables.push('+20 log all three meals');
+    if (![...keys].some(k => k.startsWith('scan-'))) earnables.push('+15 log something by barcode');
+    if (![...keys].some(k => k.startsWith('weigh-'))) earnables.push('+15 log a weigh-in');
+    earnables.push('+50 finish the day inside budget');
+    content.innerHTML = `
+      <p class="note" style="margin:4px 2px 2px">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP to level ${lvl.level + 1} · ${xp.toLocaleString()} XP total</p>
       <div class="sect-h">Today · ${todayXp} XP earned</div>
       ${todayRows.slice(0, 6).map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
       <div class="sect-h">Still on the table today</div>
       ${earnables.slice(0, 4).map(e => `<div class="xp-row dim"><span>${esc(e)}</span></div>`).join('')}
       <div class="sect-h">Badges · ${earned.size}/${BADGES.length}</div>
       ${badgesGridHtml(earned)}
+      <div style="height:10px"></div>`;
+    bindBadgeTaps(content);
+  }
+}
+
+// kept as an alias: some entry points still ask for "progress"
+function openProgressSheet() { return openCharacter('progress'); }
+
+async function openCrateReveal(result) {
+  const def = result.def;
+  const best = result.results.reduce((acc, r) => {
+    if (r.type !== 'cos' && r.type !== 'dupe') return acc;
+    const idx = ['common', 'uncommon', 'rare', 'epic', 'legendary'].indexOf(r.item.rarity);
+    return Math.max(acc, idx);
+  }, 0);
+  const wrap = openSheet(`
+    <div class="sheet-body" style="text-align:center;padding-top:24px">
+      <div class="crate-shake" id="crateAnim">${def.icon}</div>
+      <div id="crateResults" hidden>
+        ${result.results.map(r => {
+          if (r.type === 'consumable') {
+            const c = CONSUMABLES[r.consumable];
+            return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${c.icon}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
+          }
+          const rar = RARITIES[r.item.rarity];
+          if (r.type === 'dupe') {
+            return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>Duplicate → +${r.coins}🪙</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
+          }
+          return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>${esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || '')}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
+        }).join('')}
+        <p class="note" style="margin:10px 0 16px">+${result.coins}🪙 coins</p>
+        <button class="btn" id="crateOk">Collect</button>
+      </div>
       <div style="height:10px"></div>
-    </div>`, { cls: 'full' });
-  bindBadgeTaps(wrap);
+    </div>`);
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const anim = $('#crateAnim', wrap);
+      if (anim) anim.hidden = true;
+      const res = $('#crateResults', wrap);
+      if (res) res.hidden = false;
+      if (best >= 3) { confettiRain(90); levelSound(S.sounds); }
+      else { confettiBurst(innerWidth / 2, innerHeight * 0.35, 22); popSound(S.sounds); }
+    }, 950);
+    $('#crateOk', wrap).addEventListener('click', () => { history.back(); setTimeout(resolve, 150); });
+  });
 }
 
 /* ================= Apple Health bridge ================= */
@@ -1588,6 +1828,15 @@ async function seedDemo() {
       activeKcal: [512, 640, 388, 545][i],
     });
   }
+  await kvSet('coins', 340);
+  const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR1', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
+  for (const id of demoCos) await db.put('inv', { id: 'demo-' + id, kind: 'cos', itemId: id, source: 'demo', ts: Date.now() });
+  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
+  await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
+  await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
+  await db.put('inv', { id: 'demo-freeze', kind: 'freeze', source: 'welcome', ts: Date.now() });
+  await db.put('inv', { id: 'demo-xp2', kind: 'xp2', source: 'crate', ts: Date.now() });
+  await kvSet('loot-init', true);
   const g = id => GENERIC_FOODS.find(f => f.id === id);
   const put = async (date, meal, foodId, idx, qty, hourTs) => {
     const food = g(foodId);

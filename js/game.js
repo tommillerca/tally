@@ -4,6 +4,15 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
+import { consumeXpBoostCharge, consumeFreeze, grantCrate, grantConsumable } from './loot.js';
+import { BH_SLOTS } from '../data/boneheadz.js';
+
+// Streak counts logged days PLUS days protected by a Streak Freeze marker.
+export function streakDateSet(log, xpRows) {
+  const set = new Set(log.map(e => e.date));
+  for (const r of xpRows) if (r.type === 'freeze') set.add(r.date);
+  return set;
+}
 
 export const LEVEL_NAMES = [
   'Rookie Logger', 'Snack Scout', 'Barcode Cadet', 'Portion Padawan', 'Macro Apprentice',
@@ -61,6 +70,8 @@ export const BADGES = [
   { id: 'scan-25', icon: '🛒', name: 'Scanner pro', desc: '25 barcode scans logged' },
   { id: 'weigh-5', icon: '⚖️', name: 'Data driven', desc: 'Log 5 weigh-ins' },
   { id: 'steps-10k', icon: '👟', name: '10k stepper', desc: 'Sync a 10,000-step day from Apple Health' },
+  { id: 'collector-10', icon: '🎩', name: 'Collector', desc: 'Own 10 Boneheadz cosmetics' },
+  { id: 'drip-6', icon: '🧥', name: 'Full drip', desc: 'Have 6 or more slots equipped at once' },
 ];
 
 export function badgeCheck(id, st) {
@@ -78,14 +89,17 @@ export function badgeCheck(id, st) {
     case 'scan-25': return st.scans >= 25;
     case 'weigh-5': return st.weighs >= 5;
     case 'steps-10k': return st.maxSteps >= 10000;
+    case 'collector-10': return st.cosmetics >= 10;
+    case 'drip-6': return st.equippedSlots >= 6;
     default: return false;
   }
 }
 
 async function buildStats() {
-  const [log, weights, xp, health] = await Promise.all([
-    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'),
+  const [log, weights, xp, health, inv, eq] = await Promise.all([
+    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'), db.all('inv'), kvGet('equipped', {}),
   ]);
+  const defaults = new Set(BH_SLOTS.filter(s => s.default).map(s => s.code));
   return {
     logs: log.length,
     scans: xp.filter(r => r.type === 'scan').length,
@@ -93,8 +107,10 @@ async function buildStats() {
     proteinDays: xp.filter(r => r.type === 'protein').length,
     closes: xp.filter(r => r.type === 'dayclose').length,
     weighs: weights.length,
-    streak: streakFrom([...new Set(log.map(e => e.date))], dateKey()),
+    streak: streakFrom([...streakDateSet(log, xp)], dateKey()),
     maxSteps: Math.max(0, ...health.map(h => h.steps || 0)),
+    cosmetics: inv.filter(r => r.kind === 'cos').length,
+    equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on
   };
 }
 
@@ -133,11 +149,12 @@ async function streakAwards(streak) {
   return { gained, milestone };
 }
 
-// Called after a log entry is written. Returns {xp, levelUp, newBadges, streakMilestone}.
+// Called after a log entry is written. Returns {xp, levelUp, newBadges, streakMilestone, boosted}.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   const before = await totalXp();
   let gained = 0;
-  gained += await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
+  const logXp = await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
+  gained += logXp;
   gained += await award(`firstlog-${entry.date}`, 'firstlog', 15, 'First log of the day', entry.date);
   if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || entry.id}`, 'scan', 15, 'Barcode scan', entry.date);
   if (via === 'label') gained += await award(`label-${entry.foodId || entry.id}`, 'label', 20, 'Label scan', entry.date);
@@ -151,23 +168,41 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
     gained += await award(`meals3-${entry.date}`, 'meals', 20, 'All meals logged', entry.date);
   }
 
-  const log = await db.all('log');
-  const streak = streakFrom([...new Set(log.map(e => e.date))], dateKey());
+  // XP Boost: one charge per genuinely new log, doubles this action's xp.
+  // The bonus is written to the ledger so totals stay a pure sum of events.
+  let boosted = false;
+  if (logXp > 0 && gained > 0) {
+    const factor = await consumeXpBoostCharge();
+    if (factor > 1) {
+      const bonus = gained * (factor - 1);
+      await award(`boost-${entry.id}`, 'boost', bonus, 'XP Boost x2', entry.date);
+      gained += bonus;
+      boosted = true;
+    }
+  }
+
+  const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
+  const streak = streakFrom([...streakDateSet(log, xpRows)], dateKey());
   const sa = await streakAwards(streak);
   gained += sa.gained;
+  if (sa.milestone) await grantCrate('golden', 'streak-' + sa.milestone);
 
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
 
   const after = before + gained;
   const lvBefore = levelFor(before), lvAfter = levelFor(after);
+  const levelUp = lvAfter.level > lvBefore.level ? lvAfter : null;
+  if (levelUp) await grantCrate('golden', 'level-' + levelUp.level);
   return {
     xp: gained,
     total: after,
-    levelUp: lvAfter.level > lvBefore.level ? lvAfter : null,
+    levelUp,
     newBadges,
     streakMilestone: sa.milestone,
     streak,
+    boosted,
+    crates: (levelUp ? 1 : 0) + (sa.milestone ? 1 : 0),
   };
 }
 
@@ -179,25 +214,49 @@ export async function onWeighIn(date) {
 
 export async function onHealthSync(date, { steps } = {}) {
   let gained = await award(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
+  let egg = false;
+  if (steps != null && steps >= 10000) {
+    const g = await award(`egg-${date}`, 'egg', 15, '10k-step egg', date);
+    if (g) { gained += g; await grantCrate('egg', 'steps-' + date); egg = true; }
+  }
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
-  return { xp: gained, newBadges };
+  return { xp: gained, newBadges, egg };
 }
 
 // At boot: settle yesterday (day-close bonus and any missed day checks).
 export async function awardDayCloseIfDue(targets) {
-  if (!targets) return;
+  if (!targets) return null;
   const y = addDays(dateKey(), -1);
   const es = await db.byIndex('log', 'date', y);
-  if (!es.length) return;
+  if (!es.length) return null;
   const tot = dayTotals(es);
+  let closed = false;
   if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) {
-    await award(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y);
+    const g = await award(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y);
+    if (g) { await grantCrate('golden', 'dayclose-' + y); closed = true; }
   }
   if (targets.p && tot.p >= targets.p) await award(`protein-${y}`, 'protein', 40, 'Protein target hit', y);
   const meals = new Set(es.map(e => e.meal));
   if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${y}`, 'meals', 20, 'All meals logged', y);
   await evaluateBadges();
+  return closed ? { date: y } : null;
+}
+
+// At boot: if yesterday broke a streak and a Streak Freeze is in the inventory,
+// consume it and mark the day as protected.
+export async function checkStreakFreeze() {
+  const y = addDays(dateKey(), -1);
+  const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
+  if (log.some(e => e.date === y)) return null;
+  if (xpRows.some(r => r.key === `freeze-${y}`)) return null;
+  const dates = streakDateSet(log, xpRows);
+  let d = addDays(y, -1), s = 0;
+  while (dates.has(d)) { s++; d = addDays(d, -1); }
+  if (s < 2) return null; // nothing meaningful to protect
+  if (!(await consumeFreeze())) return null;
+  await award(`freeze-${y}`, 'freeze', 0, 'Streak Freeze used', y);
+  return { date: y, saved: s };
 }
 
 // One-time retroactive backfill so existing users start with their history honored.
@@ -228,6 +287,16 @@ export async function initGameIfNeeded(targets) {
   await kvSet('game-init', true);
   const xp = await totalXp();
   return { xp, level: levelFor(xp) };
+}
+
+// One-time welcome kit when the RPG layer first arrives (or on fresh install).
+export async function initLootIfNeeded() {
+  if (await kvGet('loot-init')) return null;
+  await grantCrate('golden', 'welcome');
+  await grantCrate('daily', 'welcome');
+  await grantConsumable('freeze', 'welcome');
+  await kvSet('loot-init', true);
+  return { crates: 2, freeze: 1 };
 }
 
 // XP rows for a given date (for the progress sheet).

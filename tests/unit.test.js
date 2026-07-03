@@ -13,6 +13,10 @@ import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES } from '../js/game.js';
+import { dailyQuests, questState, weekKeyOf, weekDates, QUEST_POOL } from '../js/quests.js';
+import { RARITIES, RARITY_ORDER, CRATES, SHOP } from '../js/loot.js';
+import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { existsSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -315,6 +319,71 @@ test('parseHkPayload rejects junk', () => {
 test('parseHkPayload weight sanity bounds', () => {
   const p = parseHkPayload('tally-hk steps=100 weightlb=9999');
   assert.equal(p.weightKg, null);
+});
+
+// ---- quests ----
+test('daily quests: deterministic, three distinct, hk-gated', () => {
+  const a = dailyQuests('2026-07-03', { hkConnected: true });
+  const b = dailyQuests('2026-07-03', { hkConnected: true });
+  assert.deepEqual(a.map(q => q.id), b.map(q => q.id));
+  assert.equal(new Set(a.map(q => q.id)).size, 3);
+  const noHk = dailyQuests('2026-07-03', { hkConnected: false });
+  assert.ok(noHk.every(q => !q.needsHk));
+  // rotation actually rotates across a week
+  const week = new Set();
+  for (let i = 0; i < 7; i++) dailyQuests(`2026-07-0${i + 1}`, { hkConnected: true }).forEach(q => week.add(q.id));
+  assert.ok(week.size >= 6, String(week.size));
+});
+test('quest progress measures real data', () => {
+  const q3 = QUEST_POOL.find(q => q.id === 'q-3meals');
+  const ctx = { date: '2026-07-03', entries: [{ meal: 0 }, { meal: 1 }], xpRows: [], targets: { p: 180 }, priorFoodIds: new Set(), weighedToday: false };
+  const st = questState(q3, ctx, []);
+  assert.equal(st.cur, 2); assert.equal(st.target, 3); assert.ok(!st.done);
+  const qp = QUEST_POOL.find(q => q.id === 'q-protein-half');
+  const ctx2 = { ...ctx, entries: [{ meal: 0, p: 50 }, { meal: 1, p: 45 }, { meal: 2, p: 100 }] };
+  const st2 = questState(qp, ctx2, []);
+  assert.equal(st2.target, 90);
+  assert.ok(st2.done, JSON.stringify(st2)); // 95g by lunch >= 90
+  const claimed = questState(q3, ctx, [{ key: 'quest-2026-07-03-q-3meals' }]);
+  assert.ok(claimed.claimed);
+});
+test('week helpers', () => {
+  assert.equal(weekKeyOf('2026-07-03'), '2026-06-29'); // Friday -> Monday
+  assert.equal(weekKeyOf('2026-06-29'), '2026-06-29');
+  assert.equal(weekDates('2026-06-29').length, 7);
+  assert.equal(weekDates('2026-06-29')[6], '2026-07-05');
+});
+
+// ---- loot data ----
+test('rarity weights sum to 100 and crates are sane', () => {
+  assert.equal(RARITY_ORDER.reduce((a, r) => a + RARITIES[r].w, 0), 100);
+  for (const k of Object.keys(CRATES)) {
+    assert.ok(CRATES[k].rolls >= 1 && CRATES[k].floor < RARITY_ORDER.length, k);
+  }
+  assert.ok(SHOP.every(s => s.cost > 0));
+});
+
+// ---- boneheadz manifest ----
+test('boneheadz: unique ids, valid slots, assets exist', () => {
+  const ids = new Set(BH_ITEMS.map(i => i.id));
+  assert.equal(ids.size, BH_ITEMS.length);
+  const slotCodes = new Set(BH_SLOTS.map(s => s.code));
+  for (const i of BH_ITEMS) {
+    assert.ok(slotCodes.has(i.slot), i.id);
+    assert.ok(RARITY_ORDER.includes(i.rarity), i.id);
+  }
+  // spot-check asset files on disk (every 10th to keep it fast)
+  for (let k = 0; k < BH_ITEMS.length; k += 10) {
+    const p = join(here, '..', bhAsset(BH_ITEMS[k]));
+    assert.ok(existsSync(p), p);
+  }
+});
+test('boneheadz: every slot has a legendary to chase, defaults exist', () => {
+  for (const s of BH_SLOTS) {
+    const items = BH_ITEMS.filter(i => i.slot === s.code);
+    assert.ok(items.some(i => i.rarity === 'legendary'), s.code);
+    if (s.default) assert.ok(BH_BY_ID[s.default], s.default);
+  }
 });
 
 // async tests resolution
