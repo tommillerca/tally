@@ -1,0 +1,274 @@
+// Node unit tests: node tests/unit.test.js
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import assert from 'node:assert/strict';
+
+import {
+  computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
+  dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
+  lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
+} from '../js/nutrition.js';
+import { parseNutritionText } from '../js/labelparse.js';
+import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
+import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
+
+let passed = 0, failed = 0;
+function test(name, fn) {
+  try { fn(); passed++; }
+  catch (e) { failed++; console.error(`FAIL ${name}\n  ${e.message}`); }
+}
+const approx = (a, b, tol = 0.02) => {
+  assert.ok(Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 0.01), `${a} !~ ${b}`);
+};
+
+// ---- targets ----
+test('computeTargets male recomp', () => {
+  const t = computeTargets({ sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' });
+  // BMR = 840 + 1125 - 160 + 5 = 1810; TDEE = 2805.5; recomp -8% = 2581 -> 2580
+  assert.equal(t.bmr, 1810);
+  assert.equal(t.kcal, 2580);
+  assert.equal(t.p, Math.round(2.2 * 84)); // 185
+  assert.ok(t.f >= Math.round(0.6 * 84));
+  approx(t.p * 4 + t.c * 4 + t.f * 9, t.kcal, 0.03);
+});
+test('computeTargets female floor', () => {
+  const t = computeTargets({ sex: 'f', age: 45, heightCm: 158, weightKg: 52, activity: 'sedentary', goal: 'cut' });
+  assert.ok(t.kcal >= 1200);
+});
+
+// ---- portion math ----
+const rice = GENERIC_FOODS.find(f => f.id === 'g-white-rice-cooked');
+test('rice exists with cup serving', () => {
+  assert.ok(rice, 'rice food present');
+  assert.ok(rice.servings.some(s => s.g === 158));
+});
+test('nutrientsFor serving mode', () => {
+  const idx = rice.servings.findIndex(s => s.g === 158);
+  const n = nutrientsFor(rice, { mode: 'serving', idx, qty: 1 });
+  approx(n.kcal, 205.4); approx(n.p, 4.27); approx(n.c, 44.6);
+});
+test('nutrientsFor grams mode', () => {
+  const n = nutrientsFor(rice, { mode: 'grams', grams: 50 });
+  approx(n.kcal, 65);
+});
+test('nutrientsFor perServing-only food', () => {
+  const f = { name: 'X', perServing: { kcal: 210, p: 5, c: 30, f: 8 }, servings: [{ label: '1 serving', g: null }] };
+  const n = nutrientsFor(f, { mode: 'serving', idx: 0, qty: 2 });
+  assert.equal(n.kcal, 420); assert.equal(n.p, 10);
+});
+test('portionLabel grams appended', () => {
+  const idx = rice.servings.findIndex(s => s.g === 158);
+  assert.equal(portionLabel(rice, { mode: 'serving', idx, qty: 1 }), '1 cup (158 g)');
+  assert.equal(portionLabel(rice, { mode: 'grams', grams: 85 }), '85 g');
+  assert.equal(portionLabel(rice, { mode: 'serving', idx, qty: 2 }), '2 × 1 cup (316 g)');
+});
+test('dayTotals sums', () => {
+  const t = dayTotals([{ kcal: 100, p: 10 }, { kcal: 50, p: 2, f: 3 }]);
+  assert.equal(t.kcal, 150); assert.equal(t.p, 12); assert.equal(t.f, 3);
+});
+
+// ---- dates ----
+test('date helpers', () => {
+  assert.equal(addDays('2026-07-02', -1), '2026-07-01');
+  assert.equal(addDays('2026-01-01', -1), '2025-12-31');
+  assert.equal(dateKey(new Date(2026, 6, 2)), '2026-07-02');
+  assert.equal(mealForHour(8), 0); assert.equal(mealForHour(12), 1);
+  assert.equal(mealForHour(19), 2); assert.equal(mealForHour(23), 3);
+});
+test('streak counts back from today or yesterday', () => {
+  assert.equal(streakFrom(['2026-06-30', '2026-07-01', '2026-07-02'], '2026-07-02'), 3);
+  assert.equal(streakFrom(['2026-06-30', '2026-07-01'], '2026-07-02'), 2);
+  assert.equal(streakFrom([], '2026-07-02'), 0);
+});
+
+// ---- weight trend ----
+test('weightTrend smooths and rate is weekly', () => {
+  const w = [];
+  for (let i = 0; i < 28; i++) w.push({ date: addDays('2026-06-01', i), kg: 90 - i * 0.05 + (i % 2 ? 0.4 : -0.4) });
+  const t = weightTrend(w);
+  assert.equal(t.length, 28);
+  const rate = trendRatePerWeek(t, 14);
+  assert.ok(rate < 0 && rate > -1, `rate ${rate}`);
+});
+
+// ---- units ----
+test('unit conversions round-trip', () => {
+  approx(lbToKg(185), 83.91);
+  approx(kgToLb(84), 185.2);
+  approx(ftInToCm(5, 11), 180.34);
+  const { ft, inch } = cmToFtIn(180);
+  assert.equal(ft, 5); assert.equal(inch, 11);
+});
+
+// ---- generic DB integrity ----
+test('generic foods: unique ids', () => {
+  const ids = new Set(GENERIC_FOODS.map(f => f.id));
+  assert.equal(ids.size, GENERIC_FOODS.length);
+});
+test('generic foods: kcal consistent with macros (non-alcohol)', () => {
+  const bad = [];
+  for (const f of GENERIC_FOODS) {
+    if ((f.kws || '').includes('alcohol')) continue;
+    if (!kcalConsistent(f.per100, 0.25, 25)) bad.push(`${f.name}: ${f.per100.kcal} vs ${4 * f.per100.p + 4 * f.per100.c + 9 * f.per100.f}`);
+  }
+  assert.equal(bad.length, 0, '\n' + bad.join('\n'));
+});
+test('generic foods: servings sane', () => {
+  for (const f of GENERIC_FOODS) {
+    assert.ok(f.servings.length >= 1, f.name);
+    for (const s of f.servings) {
+      assert.ok(s.g > 0 && s.g <= 1000, `${f.name} ${s.label} ${s.g}`);
+      assert.ok(s.label.length > 0);
+    }
+  }
+});
+test('search: banana first for "banana"', () => {
+  assert.equal(searchFoods(GENERIC_FOODS, 'banana')[0].name, 'Banana');
+});
+test('search: multi-term and keyword', () => {
+  assert.equal(searchFoods(GENERIC_FOODS, 'chicken br')[0].name, 'Chicken breast, cooked');
+  assert.ok(searchFoods(GENERIC_FOODS, 'pb')[0].name.includes('Peanut butter'));
+  assert.ok(searchFoods(GENERIC_FOODS, 'oj')[0].name.includes('Orange juice'));
+  assert.equal(searchFoods(GENERIC_FOODS, 'zzzz').length, 0);
+});
+
+// ---- label parser ----
+const US_LABEL = `Nutrition Facts
+8 servings per container
+Serving size 2/3 cup (55g)
+Amount per serving
+Calories
+230
+% Daily Value
+Total Fat 8g 10%
+Saturated Fat 1g 5%
+Trans Fat 0g
+Cholesterol 0mg 0%
+Sodium 160mg 7%
+Total Carbohydrate 37g 13%
+Dietary Fiber 4g 14%
+Total Sugars 12g
+Includes 10g Added Sugars 20%
+Protein 3g
+Vitamin D 2mcg 10%`;
+test('parses US new-style label', () => {
+  const r = parseNutritionText(US_LABEL);
+  assert.equal(r.kcal, 230); assert.equal(r.fat, 8); assert.equal(r.satFat, 1);
+  assert.equal(r.sodium, 160); assert.equal(r.carbs, 37); assert.equal(r.fiber, 4);
+  assert.equal(r.sugar, 12); assert.equal(r.addedSugar, 10); assert.equal(r.protein, 3);
+  assert.equal(r.servingGrams, 55);
+});
+
+const CA_LABEL = `Valeur nutritive
+Nutrition Facts
+Per 3/4 cup (175 g)
+pour 3/4 tasse (175 g)
+Calories 150
+Fat / Lipides 8 g 11%
+Saturated / satures 5 g
++ Trans / trans 0.2 g 26%
+Carbohydrate / Glucides 27 g
+Fibre / Fibres 0 g 0%
+Sugars / Sucres 18 g 18%
+Protein / Proteines 8 g
+Cholesterol / Cholesterol 30 mg
+Sodium 105 mg 5%`;
+test('parses Canadian bilingual label', () => {
+  const r = parseNutritionText(CA_LABEL);
+  assert.equal(r.kcal, 150); assert.equal(r.fat, 8); assert.equal(r.satFat, 5);
+  assert.equal(r.carbs, 27); assert.equal(r.sugar, 18); assert.equal(r.protein, 8);
+  assert.equal(r.sodium, 105); assert.equal(r.servingGrams, 175);
+});
+
+const NOISY_LABEL = `Nutrition Facts
+Serving Size 1 cup (24Og)
+Calories 11O
+Total Fat Og 0%
+Sodium 125mg 5%
+Total Carbohydrate 26g 9%
+Dietary Fiber lg 4%
+Sugars 22g
+Protein 1g`;
+test('parses OCR-noisy label (O for 0, l for 1)', () => {
+  const r = parseNutritionText(NOISY_LABEL);
+  assert.equal(r.kcal, 110); assert.equal(r.fat, 0); assert.equal(r.fiber, 1);
+  assert.equal(r.carbs, 26); assert.equal(r.servingGrams, 240);
+});
+
+const OLD_LABEL = `Nutrition Facts
+Serving Size 1 package (255g)
+Servings Per Container 1
+Amount Per Serving
+Calories 250 Calories from Fat 110
+Total Fat 12g 18%
+Sodium 470mg 20%
+Total Carbohydrate 31g 10%
+Protein 5g`;
+test('old label ignores calories-from-fat', () => {
+  const r = parseNutritionText(OLD_LABEL);
+  assert.equal(r.kcal, 250); assert.equal(r.fat, 12);
+});
+test('g-as-9 recovery bounded by parent value', () => {
+  const r = parseNutritionText('Calories 230\nTotal Fat 8g\nSaturated Fat 19 5%\nTotal Carbohydrate 37g\nDietary Fiber 49\nProtein 3g');
+  assert.equal(r.satFat, 1);
+  assert.equal(r.fiber, 4);
+});
+test('macro mismatch warning fires', () => {
+  const r = parseNutritionText('Calories 900\nTotal Fat 1g\nTotal Carbohydrate 10g\nProtein 2g');
+  assert.ok(r.warnings.some(w => w.includes('Double-check')));
+});
+
+// ---- OFF mapper ----
+test('mapOffProduct coca-cola fixture', () => {
+  const f = mapOffProduct(fx('off_cocacola.json'));
+  assert.equal(f.barcode, '5449000000996');
+  assert.equal(f.per100.kcal, 42);
+  approx(f.per100.sugar, 10.6);
+  const s = f.servings.find(s => s.g === 330);
+  assert.ok(s, 'has 330 ml serving');
+  const n = nutrientsFor(f, { mode: 'serving', idx: f.servings.indexOf(s), qty: 1 });
+  approx(n.kcal, 138.6);
+});
+test('mapOffProduct quaker fixture', () => {
+  const f = mapOffProduct(fx('off_quaker.json'));
+  assert.equal(f.per100.kcal, 375);
+  assert.ok(f.servings.some(s => s.g === 40));
+  assert.equal(f.brand, 'Quaker Oats');
+});
+test('fetchOffProduct retries UPC-A with leading zero', async () => {
+  const calls = [];
+  const fakeFetch = async (url) => {
+    calls.push(url);
+    if (url.includes('/038000138416.json')) return { status: 404, ok: false };
+    return { status: 200, ok: true, json: async () => fx('off_quaker.json') };
+  };
+  const f = await fetchOffProduct('038000138416', fakeFetch);
+  assert.ok(f);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].includes('/0038000138416.json'));
+});
+
+// ---- FDC mapper ----
+test('mapFdcFood cheerios per-100g basis', () => {
+  const foods = fx('fdc_cheerios.json').foods.map(mapFdcFood);
+  const good = foods.find(f => f && f.name.toLowerCase().includes('cheerios') && f.quality === 1);
+  assert.ok(good, 'has a consistent cheerios');
+  assert.ok(good.per100.kcal > 300 && good.per100.kcal < 420, String(good.per100.kcal));
+  assert.ok(good.servings.some(s => s.g && s.g < 100), 'has label serving');
+});
+test('rankFdcResults dedupes and prefers quality', () => {
+  const foods = fx('fdc_search.json').foods.map(mapFdcFood);
+  const ranked = rankFdcResults(foods, 'fairlife 2% milk');
+  assert.ok(ranked.length >= 1);
+  const keys = ranked.map(f => `${f.name}|${f.brand}`);
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+// async tests resolution
+await new Promise(r => setTimeout(r, 50));
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failed) process.exit(1);

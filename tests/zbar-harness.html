@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>pending</title>
+<canvas id="c"></canvas>
+<script type="module">
+import { decodeImageData } from '../js/scanner.js';
+const img = new Image();
+img.onload = async () => {
+  const c = document.getElementById('c');
+  c.width = img.width; c.height = img.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  try {
+    const hit = await decodeImageData(ctx.getImageData(0, 0, c.width, c.height));
+    document.title = hit ? `OK:${hit.code}:${hit.type}` : 'FAIL:nosymbol';
+  } catch (e) {
+    document.title = 'FAIL:' + e.message;
+  }
+};
+img.onerror = () => { document.title = 'FAIL:imgload'; };
+img.src = './fixtures/ean13_cola.png';
+</script>

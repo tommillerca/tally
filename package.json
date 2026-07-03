@@ -1,0 +1,10 @@
+{
+  "name": "tally",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Fast private calorie + macro tracker PWA",
+  "scripts": {
+    "test": "node tests/unit.test.js"
+  }
+}

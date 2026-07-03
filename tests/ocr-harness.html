@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>pending</title>
+<script type="module">
+import { ocrLabel } from '../js/ocr.js';
+import { parseNutritionText } from '../js/labelparse.js';
+const img = new Image();
+const name = new URLSearchParams(location.search).get('img') || 'label_clean.png';
+img.onload = async () => {
+  try {
+    const t0 = performance.now();
+    const text = await ocrLabel(img);
+    const ms = Math.round(performance.now() - t0);
+    const parsed = parseNutritionText(text);
+    window.__ocrText = text;
+    document.title = 'OK:' + JSON.stringify({ ms, parsed });
+  } catch (e) {
+    document.title = 'FAIL:' + (e && e.message);
+  }
+};
+img.onerror = () => { document.title = 'FAIL:imgload'; };
+img.src = './fixtures/' + name;
+</script>
