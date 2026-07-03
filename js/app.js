@@ -14,6 +14,7 @@ import {
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
+import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -144,6 +145,8 @@ async function boot() {
   if (closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   await ingestHkFromUrl();
   backupNudge();
+  nativeAutoSync();
+  onAppResume(() => { nativeAutoSync(); });
 
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -1875,7 +1878,43 @@ async function ingestHkFromUrl() {
   else toast('Could not read the Health sync link');
 }
 
+let lastNativeSync = 0;
+async function nativeSyncNow({ silent = false } = {}) {
+  try {
+    const r = await nativeQueryToday();
+    if (!r || (r.steps == null && r.activeKcal == null)) return false;
+    lastNativeSync = Date.now();
+    const payload = { date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null };
+    await ingestHealth(payload, { celebrate: !silent });
+    if (!S.settings.hkConnected || S.settings.hkNative !== true) {
+      S.settings.hkConnected = true; S.settings.hkNative = true;
+      await kvSet('settings', S.settings);
+    }
+    return true;
+  } catch { return false; }
+}
+
+async function nativeAutoSync() {
+  if (!isNative() || !S.settings?.hkNative) return;
+  if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
+  const ok = await nativeSyncNow({ silent: true });
+  if (ok && currentTab() === 'today') refresh();
+}
+
+async function connectNativeHealth() {
+  if (!(await nativeHealthAvailable())) { toast('Health is not available on this device'); return; }
+  const granted = await nativeRequestAuth();
+  if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
+  S.settings.hkConnected = true; S.settings.hkNative = true;
+  await kvSet('settings', S.settings);
+  await nativeSyncNow({ silent: false });
+  toast('Apple Health connected. Boneheadz now syncs automatically.', 3400);
+  closeAllSheetsViaHistory();
+  setTimeout(refresh, 120);
+}
+
 async function syncFromClipboard() {
+  if (isNative()) { const ok = await nativeSyncNow(); if (ok) refresh(); else toast('Nothing to sync yet today.'); return; }
   try {
     const text = await navigator.clipboard.readText();
     const payload = parseHkPayload(text);
@@ -1893,6 +1932,16 @@ async function syncFromClipboard() {
 const HK_TEMPLATE = 'tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]';
 
 function openHealthGuide() {
+  if (isNative()) {
+    const wrap = openSheet(`
+      <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
+      <div class="sheet-body">
+        <p class="note" style="margin-bottom:14px">One tap. iOS will ask permission to share your steps, active energy, and weight. After that, Boneheadz syncs automatically every time you open it: no shortcuts, no clipboard.</p>
+        <button class="btn" id="nativeConnect">Connect Apple Health</button>
+      </div>`);
+    $('#nativeConnect', wrap).addEventListener('click', connectNativeHealth);
+    return;
+  }
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
