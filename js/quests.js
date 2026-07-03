@@ -87,6 +87,11 @@ export const QUEST_POOL = [
     progress: c => ({ cur: c.weighedToday ? 1 : 0, target: 1 }),
   },
   {
+    id: 'q-hunt', name: 'Boneyard sweep', desc: 'Collect 2 spawns on the radar',
+    coins: 70, needsHk: false, needsHunt: true,
+    progress: c => ({ cur: Math.min(2, c.xpRows.filter(r => r.type === 'spawn').length), target: 2 }),
+  },
+  {
     id: 'q-steps8', name: 'Get moving', desc: 'Sync 8,000+ steps from Apple Health',
     coins: 60, needsHk: true,
     progress: c => ({ cur: Math.min(8000, c.health?.steps || 0), target: 8000 }),
@@ -98,8 +103,8 @@ export const QUEST_POOL = [
   },
 ];
 
-export function dailyQuests(date, { hkConnected = false } = {}) {
-  const pool = QUEST_POOL.filter(q => !q.needsHk || hkConnected);
+export function dailyQuests(date, { hkConnected = false, huntEnabled = false } = {}) {
+  const pool = QUEST_POOL.filter(q => (!q.needsHk || hkConnected) && (!q.needsHunt || huntEnabled));
   const rand = mulberry32(hashStr('quests:' + date));
   const picked = [];
   const used = new Set();

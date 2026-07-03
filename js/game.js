@@ -72,6 +72,8 @@ export const BADGES = [
   { id: 'steps-10k', icon: '👟', name: '10k stepper', desc: 'Sync a 10,000-step day from Apple Health' },
   { id: 'collector-10', icon: '🎩', name: 'Collector', desc: 'Own 10 Boneheadz cosmetics' },
   { id: 'drip-6', icon: '🧥', name: 'Full drip', desc: 'Have 6 or more slots equipped at once' },
+  { id: 'hunter-1', icon: '🦴', name: 'First find', desc: 'Collect a Boneyard spawn' },
+  { id: 'hunter-25', icon: '🗺', name: 'Boneyard regular', desc: 'Collect 25 Boneyard spawns' },
 ];
 
 export function badgeCheck(id, st) {
@@ -91,6 +93,8 @@ export function badgeCheck(id, st) {
     case 'steps-10k': return st.maxSteps >= 10000;
     case 'collector-10': return st.cosmetics >= 10;
     case 'drip-6': return st.equippedSlots >= 6;
+    case 'hunter-1': return st.spawns >= 1;
+    case 'hunter-25': return st.spawns >= 25;
     default: return false;
   }
 }
@@ -110,6 +114,7 @@ async function buildStats() {
     streak: streakFrom([...streakDateSet(log, xp)], dateKey()),
     maxSteps: Math.max(0, ...health.map(h => h.steps || 0)),
     cosmetics: inv.filter(r => r.kind === 'cos').length,
+    spawns: xp.filter(r => r.type === 'spawn').length,
     equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on
   };
 }

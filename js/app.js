@@ -12,6 +12,7 @@ import {
   xpBoostCharges, consumableCount,
 } from './loot.js';
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
+import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -50,6 +51,16 @@ const ICONS = {
   boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
 };
+
+ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
+
+function spawnIcon(type, s = 20) {
+  if (type === 'coins') return ICONS.coin(s);
+  if (type === 'crate') return crateIcon('daily', s);
+  if (type === 'rare') return crateIcon('egg', s);
+  return ICONS.bone(s);
+}
 
 function crateIcon(kind, s = 22) {
   if (kind === 'golden') return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="13" rx="2.6" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><path d="M2.5 11.4h19" stroke="#3a2b12" stroke-width="1.4"/><rect x="10.3" y="9.6" width="3.4" height="4.8" rx="1.1" fill="#f2e9d7" stroke="#3a2b12" stroke-width="1.2"/></svg>`;
@@ -299,7 +310,8 @@ async function renderToday(el) {
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const dateXp = allXp.filter(r => r.date === S.date);
-  const quests = dailyQuests(S.date, { hkConnected: !!S.settings.hkConnected });
+  const huntEnabled = !!(await kvGet('hunt-enabled'));
+  const quests = dailyQuests(S.date, { hkConnected: !!S.settings.hkConnected, huntEnabled });
   const qctx = {
     date: S.date, entries, xpRows: dateXp, health: hk, targets: S.settings.targets,
     priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
@@ -346,6 +358,7 @@ async function renderToday(el) {
       <div class="bh-topline">
         <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length} to open</button>` : ''}
+        <button class="bh-hunt" id="huntBtn">${ICONS.radar(13)} Hunt</button>
       </div>
       <div class="bh-bubble">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
     </div>
@@ -432,6 +445,7 @@ async function renderToday(el) {
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
+  $('#huntBtn')?.addEventListener('click', openHunt);
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
@@ -1892,6 +1906,98 @@ function openHealthGuide() {
     try { await navigator.clipboard.writeText(HK_TEMPLATE); toast('Template copied'); } catch { toast('Long-press the text to copy it'); }
   });
   $('#hkTrySync', wrap).addEventListener('click', syncFromClipboard);
+}
+
+/* ================= the boneyard (gps hunt) ================= */
+
+let huntWatchId = null;
+function stopHuntWatch() {
+  if (huntWatchId != null && navigator.geolocation) navigator.geolocation.clearWatch(huntWatchId);
+  huntWatchId = null;
+}
+
+async function openHunt() {
+  const eq = await equipped();
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Boneyard</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div id="huntBody">
+        <p class="note" style="margin-bottom:6px">Fresh spawns appear around your neighborhood every day: bone caches, coin piles, buried crates, and sometimes a RARE. Walk within ${COLLECT_RADIUS_M} m of a blip and collect it.</p>
+        <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device.</p>
+        <button class="btn" id="huntStart">Start the radar</button>
+      </div>
+    </div>`, { cls: 'full', onClose: stopHuntWatch });
+
+  const body = $('#huntBody', wrap);
+  function startRadar() {
+    stopHuntWatch();
+    if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn">This device has no location support.</p>'; return; }
+    body.innerHTML = '<p class="note" style="text-align:center;padding:40px 0">Acquiring signal...</p>';
+    let lastTick = 0;
+    huntWatchId = navigator.geolocation.watchPosition(pos => {
+      const now = Date.now();
+      if (now - lastTick < 1200) return;
+      lastTick = now;
+      renderRadar(body, pos.coords.latitude, pos.coords.longitude, eq);
+    }, err => {
+      body.innerHTML = `<p class="warn">${err.code === 1
+        ? 'Location permission denied. Allow location for this app in iOS Settings, then try again.'
+        : 'No location fix yet. Step outside or near a window and retry.'}</p><button class="btn ghost" id="huntRetry" style="margin-top:10px">Retry</button>`;
+      $('#huntRetry', body)?.addEventListener('click', startRadar);
+    }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+  }
+  $('#huntStart', wrap).addEventListener('click', startRadar);
+}
+
+async function renderRadar(body, lat, lng, eq) {
+  if (!body.isConnected) { stopHuntWatch(); return; }
+  const date = dateKey();
+  const xpRows = await db.all('xp');
+  const collected = new Set(xpRows.filter(r => r.type === 'spawn').map(r => r.key));
+  const live = spawnsNear(date, lat, lng).map(s => ({ ...s, collected: collected.has(spawnKey(date, s)) }));
+  const rare = live.find(s => s.type === 'rare' && !s.collected);
+
+  body.innerHTML = `
+    ${rare ? `<div class="rare-banner">${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)}</div>` : ''}
+    <div class="radar">
+      <div class="radar-sweep"></div>
+      <div class="radar-ring" style="inset:16.6%"></div>
+      <div class="radar-ring" style="inset:33.3%"></div>
+      <div class="radar-ring" style="inset:8px"></div>
+      <div class="radar-you">${avatarLayersHtml(eq)}</div>
+      ${live.filter(s => !s.collected).map(s => {
+        const r = Math.min(s.dist, VIEW_RADIUS_M - 25) / VIEW_RADIUS_M * 46;
+        const x = 50 + r * Math.sin(s.bearing * Math.PI / 180);
+        const y = 50 - r * Math.cos(s.bearing * Math.PI / 180);
+        return `<div class="radar-blip ${s.type === 'rare' ? 'rare' : ''} ${s.dist <= COLLECT_RADIUS_M ? 'inrange' : ''}" style="left:${x}%;top:${y}%">${spawnIcon(s.type, 19)}</div>`;
+      }).join('')}
+    </div>
+    <div class="note" style="text-align:center;margin:6px 0 10px">Rings: 200 / 400 / 600 m · spawns refresh at midnight</div>
+    ${live.map(s => `
+      <div class="crate-row">
+        <span class="crate-ico">${spawnIcon(s.type, 25)}</span>
+        <div style="flex:1"><b>${SPAWN_TYPES[s.type].label}</b><small>${fmtDist(s.dist)} ${compassLabel(s.bearing)}${s.type === 'rare' ? ' · today only' : ''}</small></div>
+        ${s.collected ? '<span class="q-done">✓</span>' : s.dist <= COLLECT_RADIUS_M
+          ? `<button class="btn small" data-collect="${s.id}">Collect</button>`
+          : `<span class="q-frac">${fmtDist(Math.max(1, s.dist - COLLECT_RADIUS_M))} to go</span>`}
+      </div>`).join('')}
+  `;
+  $$('[data-collect]', body).forEach(b => b.addEventListener('click', async () => {
+    const s2 = live.find(x => x.id === b.dataset.collect);
+    if (!s2) return;
+    const res = await collectSpawn(s2);
+    if (!res) return;
+    await kvSet('hunt-enabled', true);
+    confettiBurst(innerWidth / 2, innerHeight * 0.32, 20);
+    popSound(S.sounds);
+    const bits = [`+${res.xp} XP`];
+    if (res.coins) bits.push(`+${res.coins} coins`);
+    if (res.crate) bits.push((res.crate === 'egg' ? 'Step Egg' : 'Daily Crate') + ' added to your stash');
+    toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
+    const badges = await evaluateBadges();
+    if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
+    renderRadar(body, lat, lng, eq);
+  }));
 }
 
 /* ================= demo seed ================= */

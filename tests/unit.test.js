@@ -386,6 +386,44 @@ test('boneheadz: every slot has a legendary to chase, defaults exist', () => {
   }
 });
 
+// ---- boneyard hunt ----
+const huntMod = await import('../js/hunt.js');
+test('hunt: spawns are deterministic per date+cell and differ across cells/days', () => {
+  const a = huntMod.spawnsForCell('2026-07-03', 9856, -24625);
+  const b = huntMod.spawnsForCell('2026-07-03', 9856, -24625);
+  assert.deepEqual(a, b);
+  const c = huntMod.spawnsForCell('2026-07-04', 9856, -24625);
+  assert.notDeepEqual(a.map(s => [s.lat, s.lng]), c.map(s => [s.lat, s.lng]));
+  const d = huntMod.spawnsForCell('2026-07-03', 9857, -24625);
+  assert.notDeepEqual(a.map(s => [s.lat, s.lng]), d.map(s => [s.lat, s.lng]));
+  assert.ok(a.length >= 3 && a.length <= 4);
+  for (const s of a) assert.ok(['bones', 'coins', 'crate', 'rare'].includes(s.type));
+});
+test('hunt: distance and bearing math', () => {
+  // 0.001 deg latitude ~ 111 m
+  approx(huntMod.distanceM(49.28, -123.12, 49.281, -123.12), 111.2, 0.02);
+  approx(huntMod.bearingDeg(49.28, -123.12, 49.281, -123.12), 0, 0.01); // due north
+  const east = huntMod.bearingDeg(49.28, -123.12, 49.28, -123.119);
+  assert.ok(Math.abs(east - 90) < 1, String(east));
+  assert.equal(huntMod.compassLabel(0), 'N');
+  assert.equal(huntMod.compassLabel(93), 'E');
+  assert.equal(huntMod.compassLabel(225), 'SW');
+});
+test('hunt: spawnsNear returns nearest-first annotated set', () => {
+  const near = huntMod.spawnsNear('2026-07-03', 49.28, -123.12);
+  assert.ok(near.length > 0 && near.length <= 9);
+  for (let i = 1; i < near.length; i++) assert.ok(near[i].dist >= near[i - 1].dist);
+  for (const s of near) { assert.ok(isFinite(s.dist) && isFinite(s.bearing)); }
+});
+test('hunt: spawn keys are stable and ledger-friendly', () => {
+  const s = { id: '9856_-24625_1' };
+  assert.equal(huntMod.spawnKey('2026-07-03', s), 'spawn-2026-07-03-9856_-24625_1');
+});
+test('hunt: fmtDist', () => {
+  assert.equal(huntMod.fmtDist(42), '42 m');
+  assert.equal(huntMod.fmtDist(1620), '1.6 km');
+});
+
 // async tests resolution
 await new Promise(r => setTimeout(r, 50));
 console.log(`\n${passed} passed, ${failed} failed`);

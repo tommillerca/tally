@@ -54,6 +54,25 @@ assigns deterministic rarities/names, and writes `data/boneheadz.js`.
 Item ids are the source filenames, so re-running with final art keeps every
 player's inventory valid. Slots and z-order live in one table in the script.
 
+## Roadmap features and their platform requirements
+
+- **"Rare spawn near you" push notifications.** Web push works on iOS 16.4+ for
+  installed home-screen apps but requires a push server (subscription storage +
+  APNs web push sends). Because spawns are deterministic from (date, grid cell),
+  the server never needs live location: a user opts in with a coarse home cell
+  and the server can compute "a rare spawned in your area today" on its own.
+  Ships naturally alongside the leaderboard server or the Capacitor wrapper
+  (native local notifications need no server at all).
+- **Talent trees.** Spend a talent point per level across branches like Hunter
+  (+radar range, +egg odds), Chef (+coins from food quests), and Sage (+xp from
+  protein days). Pure data + one kv key (`talents`); perks apply as multipliers
+  inside game core functions. No schema migration needed beyond additive kv.
+- **Monster battles.** Roam encounters seeded exactly like Boneyard spawns
+  (deterministic per date + cell), turn-based, with fighter stats derived from
+  real behavior: STR = protein adherence, STA = streak, AGI = steps. Rewards
+  reuse the crate system. Requires nothing new from the platform; it is a pure
+  game-core module plus UI.
+
 ## Non-negotiables
 
 - IndexedDB upgrades are strictly additive; the e2e `migrate` stage proves
