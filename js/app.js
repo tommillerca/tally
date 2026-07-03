@@ -1904,9 +1904,10 @@ function openHealthGuide() {
         <li>Come back here and tap <b>Sync</b>, then allow the paste</li>
       </ol>
       <div style="height:10px"></div>
-      <a class="btn" id="getShortcutBtn" href="assets/shortcut/Sync-Boneheadz.shortcut" download="Sync-Boneheadz.shortcut" style="text-decoration:none">Get the shortcut</a>
+      <a class="btn" id="getShortcutBtn" href="https://www.icloud.com/shortcuts/53ce57388e954d16812509ea81c6a56a" rel="noopener" style="text-decoration:none">Get the shortcut</a>
       <div style="height:8px"></div>
       <button class="btn ghost" id="hkTrySync">I ran it, sync now</button>
+      <p class="note" style="margin-top:8px;text-align:center">Opens the Shortcuts app via iCloud. <a href="assets/shortcut/Sync-Boneheadz.shortcut" download="Sync-Boneheadz.shortcut">Direct file</a> if you prefer Safari downloads.</p>
       <div class="sect-h">Every day after that</div>
       <p class="note">Run it any time with "Hey Siri, Sync Boneheadz", or automate it: Shortcuts app → Automation → New → Time of Day (e.g. 9:00 PM) → Run Immediately → Sync Boneheadz. Then Boneheadz picks it up next time you open it and tap Sync.</p>
       <details style="margin-top:14px">
