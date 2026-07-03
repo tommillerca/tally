@@ -468,6 +468,15 @@ test('hunt: fmtDist', () => {
   assert.equal(huntMod.fmtDist(1620), '1.6 km');
 });
 
+// ---- companion shortcut ----
+test('signed Sync Boneheadz shortcut ships with the app', () => {
+  const p = join(here, '..', 'assets', 'shortcut', 'Sync-Boneheadz.shortcut');
+  assert.ok(existsSync(p));
+  const buf = readFileSync(p);
+  assert.equal(buf.subarray(0, 4).toString(), 'AEA1'); // Apple signed-shortcut container
+  assert.ok(buf.length > 5000 && buf.length < 200000, String(buf.length));
+});
+
 // async tests resolution
 await new Promise(r => setTimeout(r, 50));
 console.log(`\n${passed} passed, ${failed} failed`);

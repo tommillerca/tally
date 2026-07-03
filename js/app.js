@@ -1896,32 +1896,32 @@ function openHealthGuide() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin-bottom:12px">iPhone web apps can't read Health directly, so Tally uses a tiny Shortcut you build once (about 3 minutes). It copies your day's numbers and opens Tally; one tap on Sync pulls them in. You can automate it to run every evening.</p>
-      <div class="sect-h">One-time setup</div>
+      <p class="note" style="margin-bottom:14px">Apple only lets real apps read Health directly, so Boneheadz uses a tiny companion shortcut. Good news: it's pre-built. No assembly required.</p>
+      <div class="sect-h">One-time setup (about 20 seconds)</div>
       <ol class="guide">
-        <li>Open the <b>Shortcuts</b> app, tap <b>+</b>, name it <b>Sync Tally</b></li>
-        <li>Add action <b>Find Health Samples</b>. Set Type: <b>Steps</b>, add filter <b>Start Date · is today</b></li>
-        <li>Add action <b>Calculate Statistics</b>, operation <b>Sum</b> (input: Health Samples)</li>
-        <li>Repeat steps 2-3 for Type: <b>Active Energy</b></li>
-        <li>Optional: add another <b>Find Health Samples</b>, Type: <b>Weight</b>, Sort by Start Date, Order Latest First, Limit 1</li>
-        <li>Add action <b>Text</b> and type this, inserting the variables from the steps above:</li>
+        <li>Tap the button below, then <b>Open in Shortcuts</b> and <b>Add Shortcut</b></li>
+        <li>Run <b>Sync Boneheadz</b> once and allow Health access (steps + active energy)</li>
+        <li>Come back here and tap <b>Sync</b>, then allow the paste</li>
       </ol>
-      <div class="code-line" id="hkTpl">${esc(HK_TEMPLATE)}</div>
-      <button class="btn small ghost" id="copyTpl" style="margin:8px 0 14px">Copy template</button>
-      <ol class="guide" start="7">
-        <li>Add action <b>Copy to Clipboard</b></li>
-        <li>Add action <b>Open App</b> and pick <b>Tally</b> (install Tally to your home screen first)</li>
-        <li>Run it, then tap <b>Sync</b> on Tally's Today screen and allow the paste</li>
-      </ol>
-      <div class="sect-h">Automate it</div>
-      <p class="note">Shortcuts app → Automation → New → Time of Day (e.g. 9:00 PM) → Run Immediately → pick Sync Tally. Or just say "Hey Siri, Sync Tally".</p>
-      <div style="height:12px"></div>
-      <button class="btn" id="hkTrySync">I ran it, sync now</button>
+      <div style="height:10px"></div>
+      <a class="btn" id="getShortcutBtn" href="assets/shortcut/Sync-Boneheadz.shortcut" download="Sync-Boneheadz.shortcut" style="text-decoration:none">Get the shortcut</a>
+      <div style="height:8px"></div>
+      <button class="btn ghost" id="hkTrySync">I ran it, sync now</button>
+      <div class="sect-h">Every day after that</div>
+      <p class="note">Run it any time with "Hey Siri, Sync Boneheadz", or automate it: Shortcuts app → Automation → New → Time of Day (e.g. 9:00 PM) → Run Immediately → Sync Boneheadz. Then Boneheadz picks it up next time you open it and tap Sync.</p>
+      <details style="margin-top:14px">
+        <summary class="note" style="cursor:pointer">Prefer to build the shortcut by hand?</summary>
+        <ol class="guide" style="margin-top:10px">
+          <li>Shortcuts app → <b>+</b> → name it <b>Sync Boneheadz</b></li>
+          <li><b>Find Health Samples</b>: Type <b>Steps</b>, filter <b>Start Date is today</b></li>
+          <li><b>Calculate Statistics</b>: <b>Sum</b></li>
+          <li>Repeat steps 2-3 for Type <b>Active Calories</b></li>
+          <li><b>Text</b>: <span class="code-line" style="display:inline;padding:2px 8px">${esc(HK_TEMPLATE)}</span> inserting the two Sum variables</li>
+          <li><b>Copy to Clipboard</b></li>
+        </ol>
+      </details>
       <div style="height:8px"></div>
     </div>`, { cls: 'full' });
-  $('#copyTpl', wrap).addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(HK_TEMPLATE); toast('Template copied'); } catch { toast('Long-press the text to copy it'); }
-  });
   $('#hkTrySync', wrap).addEventListener('click', syncFromClipboard);
 }
 
