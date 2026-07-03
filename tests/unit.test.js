@@ -12,6 +12,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES } from '../js/game.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -266,6 +267,54 @@ test('rankFdcResults dedupes and prefers quality', () => {
   assert.ok(ranked.length >= 1);
   const keys = ranked.map(f => `${f.name}|${f.brand}`);
   assert.equal(new Set(keys).size, keys.length);
+});
+
+// ---- game ----
+test('xp curve is monotonic and starts at zero', () => {
+  assert.equal(xpForLevel(1), 0);
+  for (let L = 2; L <= 30; L++) assert.ok(xpForLevel(L) > xpForLevel(L - 1), `L${L}`);
+});
+test('levelFor boundaries', () => {
+  assert.equal(levelFor(0).level, 1);
+  assert.equal(levelFor(0).name, LEVEL_NAMES[0]);
+  assert.equal(levelFor(xpForLevel(5)).level, 5);
+  assert.equal(levelFor(xpForLevel(3) - 1).level, 2);
+  const l = levelFor(120);
+  assert.ok(l.pct >= 0 && l.pct <= 100);
+});
+test('badge checks', () => {
+  assert.ok(badgeCheck('first-log', { logs: 1 }));
+  assert.ok(!badgeCheck('first-log', { logs: 0 }));
+  assert.ok(badgeCheck('streak-7', { streak: 9 }));
+  assert.ok(badgeCheck('steps-10k', { maxSteps: 10400 }));
+  assert.ok(!badgeCheck('steps-10k', { maxSteps: 9999 }));
+  const ids = new Set(BADGES.map(b => b.id));
+  assert.equal(ids.size, BADGES.length);
+});
+test('parseHkPayload clipboard format with separators', () => {
+  const p = parseHkPayload('tally-hk steps=8,421 active=512,3 weightlb=184.6');
+  assert.equal(p.steps, 8421);
+  assert.equal(p.activeKcal, 512);
+  approx(p.weightKg, 83.74, 0.01);
+});
+test('parseHkPayload url format with date', () => {
+  const p = parseHkPayload('#/hk?steps=9000&active=300&weightkg=83.2&d=2026-07-01');
+  assert.equal(p.steps, 9000);
+  assert.equal(p.date, '2026-07-01');
+  approx(p.weightKg, 83.2, 0.01);
+});
+test('parseHkPayload rejects junk', () => {
+  assert.equal(parseHkPayload(''), null);
+  assert.equal(parseHkPayload('hello world'), null);
+  assert.equal(parseHkPayload('tally-hk nothing=1'), null);
+  const p = parseHkPayload('tally-hk steps=4200');
+  assert.equal(p.steps, 4200);
+  assert.equal(p.weightKg, undefined ?? p.weightKg); // no weight present
+  assert.equal(p.activeKcal, null);
+});
+test('parseHkPayload weight sanity bounds', () => {
+  const p = parseHkPayload('tally-hk steps=100 weightlb=9999');
+  assert.equal(p.weightKg, null);
 });
 
 // async tests resolution

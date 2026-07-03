@@ -1,5 +1,7 @@
-// Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv.
-const DB_VERSION = 1;
+// Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health.
+// IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
+// Existing user data must survive every version bump.
+const DB_VERSION = 2;
 let dbPromise = null;
 let dbName = 'tally';
 
@@ -25,6 +27,12 @@ function open() {
         }
         if (!db.objectStoreNames.contains('kv')) {
           db.createObjectStore('kv', { keyPath: 'k' });
+        }
+        if (!db.objectStoreNames.contains('xp')) {
+          db.createObjectStore('xp', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('health')) {
+          db.createObjectStore('health', { keyPath: 'date' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -71,10 +79,10 @@ export function newId() {
 }
 
 export async function exportAll() {
-  const [foods, log, weights, kv] = await Promise.all([
-    db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'),
+  const [foods, log, weights, kv, xp, health] = await Promise.all([
+    db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'),
   ]);
-  return { app: 'tally', version: 1, exportedAt: new Date().toISOString(), foods, log, weights, kv };
+  return { app: 'tally', version: 2, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health };
 }
 
 export async function importAll(data) {
@@ -83,5 +91,14 @@ export async function importAll(data) {
   for (const e of data.log || []) await db.put('log', e);
   for (const w of data.weights || []) await db.put('weights', w);
   for (const r of data.kv || []) await db.put('kv', r);
+  for (const r of data.xp || []) await db.put('xp', r);
+  for (const r of data.health || []) await db.put('health', r);
   return { foods: (data.foods || []).length, log: (data.log || []).length, weights: (data.weights || []).length };
+}
+
+// Ask the browser to protect this origin's storage from automatic eviction.
+export function requestPersistence() {
+  try {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  } catch { /* unsupported */ }
 }

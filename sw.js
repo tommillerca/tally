@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v1';
+const VERSION = 'tally-v2';
 const PRECACHE = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const PRECACHE = [
   './js/sources.js',
   './js/scanner.js',
   './js/ocr.js',
+  './js/game.js',
+  './js/fx.js',
   './data/generic-foods.js',
   './vendor/zbar/zbar.mjs',
   './icons/icon-192.png',
@@ -20,7 +22,15 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  // no-cache: revalidate against the server so a stale HTTP cache can't poison the precache
+  e.waitUntil(
+    caches.open(VERSION)
+      .then(c => Promise.all(PRECACHE.map(u => fetch(new Request(u, { cache: 'no-cache' })).then(r => {
+        if (r.ok) return c.put(u, r);
+        throw new Error('precache ' + u + ' -> ' + r.status);
+      }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {

@@ -333,3 +333,70 @@ a { color: var(--accent); text-decoration: none; }
 @media (min-width: 640px) {
   .screen { padding-top: 26px; }
 }
+
+/* ---------- game ---------- */
+.chip-row { display: flex; gap: 8px; justify-content: center; margin: -2px 0 14px; }
+.streak-chip, .level-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 7px 13px; font-size: 12.5px; font-weight: 650; color: var(--text-2);
+}
+.streak-chip b { color: var(--text); font-variant-numeric: tabular-nums; }
+.streak-chip .flame { font-size: 14px; filter: grayscale(1) opacity(0.55); }
+.streak-chip.hot .flame { filter: none; display: inline-block; animation: flicker 1.5s ease-in-out infinite; }
+@keyframes flicker {
+  0%, 100% { transform: scale(1) rotate(-3deg); }
+  50% { transform: scale(1.18) rotate(3deg); }
+}
+.level-chip .lvl-n { color: var(--accent); font-weight: 800; }
+.xp-mini { width: 46px; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; display: inline-block; }
+.xp-mini i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+.xp-bar { height: 8px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin-top: 10px; }
+.xp-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9ed32e, var(--accent)); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+
+.badge-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.badge {
+  display: grid; justify-items: center; gap: 6px; padding: 11px 4px 9px;
+  border-radius: 13px; background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 10px; font-weight: 650; color: var(--text-2); text-align: center; line-height: 1.2;
+}
+.badge .bicon { font-size: 22px; line-height: 1; }
+.badge.locked { opacity: 0.3; filter: grayscale(1); }
+.badge.new { animation: badgepop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1); border-color: rgba(185, 239, 74, 0.5); }
+@keyframes badgepop { from { transform: scale(0.5); } }
+
+.cele-big { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
+.cele-sub { font-size: 14px; color: var(--text-2); font-weight: 600; margin-top: 3px; }
+.cele-badge {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; margin: 0 8px;
+}
+.cele-badge > span { font-size: 28px; }
+.cele-badge b { display: block; font-size: 15px; }
+.cele-badge small { color: var(--text-3); font-size: 12px; }
+
+.xp-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 550; }
+.xp-row b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.xp-row.dim { color: var(--text-3); border-bottom-style: dashed; }
+
+.macro .hit-dot { color: var(--protein); font-weight: 800; font-size: 11px; }
+.bar.glow i { box-shadow: 0 0 10px rgba(111, 208, 255, 0.65); }
+.bar.steps i { background: var(--accent); }
+
+.hk-rows { display: grid; gap: 12px; }
+.hk-row { display: flex; align-items: center; gap: 11px; }
+.hk-ico { font-size: 19px; flex: none; }
+
+.guide { padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.45; color: var(--text-2); }
+.guide b { color: var(--text); }
+.code-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 11px;
+  padding: 11px 13px; color: var(--accent); word-break: break-all; user-select: all;
+  -webkit-user-select: all;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+}

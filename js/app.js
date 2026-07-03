@@ -1,5 +1,10 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, reducedMotion } from './fx.js';
+import {
+  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
+  initGameIfNeeded, evaluateBadges, earnedBadgeIds, BADGES, xpForDate, parseHkPayload,
+} from './game.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
@@ -20,6 +25,9 @@ const S = {
   date: dateKey(),
   demo: new URLSearchParams(location.search).has('demo'),
   onlineCache: new Map(),
+  ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
+  celebration: null,
+  sounds: true,
 };
 
 const ICONS = {
@@ -41,11 +49,34 @@ async function boot() {
   if ('serviceWorker' in navigator && !S.demo && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  requestPersistence();
+  S.sounds = (await kvGet('sounds', true)) !== false;
 
   if (!S.settings) { renderOnboarding(); return; }
+
+  const init = await initGameIfNeeded(S.settings.targets);
+  if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
+  await awardDayCloseIfDue(S.settings.targets);
+  await ingestHkFromUrl();
+  backupNudge();
+
   window.addEventListener('hashchange', route);
   bindTabs();
   route();
+}
+
+async function backupNudge() {
+  try {
+    const log = await db.all('log');
+    if (log.length < 20) return;
+    const last = await kvGet('lastExportAt', 0);
+    const nudged = await kvGet('lastNudgeAt', 0);
+    const twoWeeks = 14 * 86400e3;
+    if (Date.now() - last > twoWeeks && Date.now() - nudged > 7 * 86400e3) {
+      await kvSet('lastNudgeAt', Date.now());
+      setTimeout(() => toast('Tip: back up your log (Settings, Export)', 3400), 4000);
+    }
+  } catch { /* non-critical */ }
 }
 
 function bindTabs() {
@@ -72,6 +103,7 @@ function route() {
   else if (tab === 'settings') renderSettings(el);
   else renderToday(el);
   el.scrollTop = 0;
+  maybeCelebrate();
 }
 
 function refresh() { route(); }
@@ -186,6 +218,9 @@ async function renderToday(el) {
   const yEntries = await entriesFor(addDays(S.date, -1));
   const allLog = await db.all('log');
   const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
+  const xp = await totalXp();
+  const lvl = levelFor(xp);
+  const hk = await db.get('health', S.date);
   const tot = dayTotals(entries);
   const remaining = Math.round(t.kcal - tot.kcal);
   const pct = Math.min(1, tot.kcal / t.kcal);
@@ -197,25 +232,36 @@ async function renderToday(el) {
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
 
   const C = 2 * Math.PI * 66;
+  const prev = S.ui;
+  const protHit = t.p && tot.p >= t.p;
+
   el.innerHTML = `
   <div class="day-head">
     <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <div class="day-title">
-      <h1>${title}</h1><div class="sub">${sub}${streak >= 2 ? ` · <b style="color:var(--accent)">${streak} day streak</b>` : ''}</div>
+      <h1>${title}</h1><div class="sub">${sub}</div>
       <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
     </div>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
+  </div>
+
+  <div class="chip-row">
+    <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">🔥</span> <b>${streak}</b> day${streak === 1 ? '' : 's'}</button>
+    <button class="level-chip" id="lvlChip">
+      <span class="lvl-n">Lv ${lvl.level}</span> ${esc(lvl.name)}
+      <span class="xp-mini"><i style="width:${lvl.pct}%"></i></span>
+    </button>
   </div>
 
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
         <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
-        <circle class="ring-fill ${over ? 'over' : ''}" cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
-          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}"/>
+        <circle class="ring-fill ${over ? 'over' : ''}" id="ringFill" cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
+          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - prev.ringPct)}"/>
       </svg>
       <div class="ring-center">
-        <div class="big">${Math.abs(remaining).toLocaleString()}</div>
+        <div class="big" id="ringBig">${Math.abs(prev.remainShown ?? remaining).toLocaleString()}</div>
         <div class="lbl">${over ? 'kcal over' : 'kcal left'}</div>
       </div>
     </div>
@@ -223,38 +269,85 @@ async function renderToday(el) {
       <div class="kv"><span>Eaten</span><b>${Math.round(tot.kcal).toLocaleString()}</b></div>
       <div class="kv"><span>Target</span><b>${t.kcal.toLocaleString()}</b></div>
       <div class="divider" style="margin:2px 0"></div>
-      ${macroRow('Protein', tot.p, t.p, 'protein')}
-      ${macroRow('Carbs', tot.c, t.c, 'carbs')}
-      ${macroRow('Fat', tot.f, t.f, 'fat')}
+      ${macroRow('Protein', tot.p, t.p, 'protein', prev.macroPcts[0], protHit)}
+      ${macroRow('Carbs', tot.c, t.c, 'carbs', prev.macroPcts[1], false)}
+      ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
+
+  ${healthCardHtml(hk, isToday)}
 
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i))).join('')}
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   `;
 
+  // animate ring, macro bars, and the remaining number from their previous states
+  const macroPcts = [
+    Math.min(100, t.p ? (tot.p / t.p) * 100 : 0),
+    Math.min(100, t.c ? (tot.c / t.c) * 100 : 0),
+    Math.min(100, t.f ? (tot.f / t.f) * 100 : 0),
+  ];
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const ring = $('#ringFill', el);
+    if (ring) ring.style.strokeDashoffset = String(C * (1 - pct));
+    $$('.ring-side .bar i', el).forEach((bar, i) => { bar.style.width = macroPcts[i] + '%'; });
+  }));
+  tweenNumber($('#ringBig', el), prev.remainShown ?? remaining, Math.abs(remaining), 650, v => Math.round(Math.abs(v)).toLocaleString());
+  S.ui = { ringPct: pct, remainShown: Math.abs(remaining), macroPcts };
+
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
+  $('#lvlChip').addEventListener('click', openProgressSheet);
+  $('#streakChip').addEventListener('click', openProgressSheet);
+  $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
-  $$('[data-copymeal]').forEach(b => b.addEventListener('click', async () => {
+  $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
     const meal = Number(b.dataset.copymeal);
     const src = yEntries.filter(e => e.meal === meal);
+    let gained = 0, last = null;
     for (const e of src) {
-      await db.put('log', { ...e, id: newId(), date: S.date, ts: Date.now() });
+      const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
+      await db.put('log', copy);
+      last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      gained += last.xp;
     }
-    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from yesterday`);
+    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 14);
+    popSound(S.sounds);
+    toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} from yesterday${gained ? ` · +${gained} XP` : ''}`);
+    if (last) queueCelebration(last);
     refresh();
   }));
 }
 
-function macroRow(label, val, target, cls) {
-  const pct = Math.min(100, target ? (val / target) * 100 : 0);
+function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
   return `<div class="macro">
-    <div class="row"><span>${label}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
-    <div class="bar ${cls}"><i style="width:${pct}%"></i></div>
+    <div class="row"><span>${label}${glow ? ' <span class="hit-dot">✓</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
+    <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
+  </div>`;
+}
+
+function healthCardHtml(hk, isToday) {
+  if (!hk && !(S.settings.hkConnected && isToday)) return '';
+  const steps = hk?.steps;
+  const active = hk?.activeKcal;
+  const goal = 10000;
+  const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
+  return `<div class="card">
+    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? '<button class="link" id="hkSync">Sync</button>' : ''}</div>
+    ${hk ? `
+      <div class="hk-rows">
+        <div class="hk-row"><span class="hk-ico">👟</span>
+          <div style="flex:1">
+            <div class="row" style="display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>${steps != null ? steps.toLocaleString() : '·'} steps</span><span style="color:var(--text-3)">${steps >= goal ? 'goal hit!' : 'of ' + goal.toLocaleString()}</span></div>
+            <div class="bar steps" style="margin-top:5px"><i style="width:${stepPct}%"></i></div>
+          </div>
+        </div>
+        ${active != null ? `<div class="hk-row"><span class="hk-ico">⚡️</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn <span style="color:var(--text-3);font-weight:500">· shown for context, your target already covers activity</span></div></div>` : ''}
+      </div>` :
+      '<p class="note">No sync yet today. Run your "Sync Tally" shortcut, then tap Sync.</p>'}
   </div>`;
 }
 
@@ -328,12 +421,17 @@ function openAdd(meal = 0) {
       const f = findFood(b.dataset.food) || onlineById(b.dataset.food);
       if (f) openPortion(f, { meal: curMeal });
     }));
-    $$('[data-relog]', results).forEach(b => b.addEventListener('click', async () => {
+    $$('[data-relog]', results).forEach(b => b.addEventListener('click', async (ev) => {
       const rows = await db.all('log');
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
-      await db.put('log', { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() });
-      toast(`Added ${src.name}`);
+      const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
+      await db.put('log', copy);
+      const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
+      popSound(S.sounds);
+      toast(`Added ${src.name}${game.xp ? ` · +${game.xp} XP` : ''}`);
+      queueCelebration(game);
       history.back();
       setTimeout(refresh, 60);
     }));
@@ -400,7 +498,7 @@ function foodRowHtml(f) {
 
 /* ================= portion sheet ================= */
 
-function openPortion(food, { meal = 0, entry = null } = {}) {
+function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
   const sel = entry ? (entry.sel ? { ...entry.sel } : { mode: 'serving', idx: 0, qty: entry.qty || 1 }) : defaultSel(food);
   if (sel.mode === 'serving' && (!food.servings || !food.servings[sel.idx])) { sel.idx = 0; }
   let curMeal = entry ? entry.meal : meal;
@@ -515,7 +613,8 @@ function openPortion(food, { meal = 0, entry = null } = {}) {
     else await kvSet('fav-' + food.id, food.favorite); // generic favs live in kv
   });
 
-  $('#addBtn', wrap).addEventListener('click', async () => {
+  $('#addBtn', wrap).addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
     const n = nutrientsFor(food, sel);
     if (!n || !isFinite(n.kcal)) { toast('Pick a portion first'); return; }
     const e = {
@@ -533,7 +632,14 @@ function openPortion(food, { meal = 0, entry = null } = {}) {
     await db.put('log', e);
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
-    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal`);
+    const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    if (!editing && btn && btn.isConnected) {
+      const r = btn.getBoundingClientRect();
+      confettiBurst(r.left + r.width / 2, r.top, 18);
+      popSound(S.sounds);
+    }
+    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });
@@ -586,7 +692,8 @@ function openQuickAdd(getMeal, entry = null) {
       ${entry ? '<div style="height:8px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
     </div>`);
   $('#qaKcal', wrap).focus();
-  $('#qaAdd', wrap).addEventListener('click', async () => {
+  $('#qaAdd', wrap).addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
     const kcal = num($('#qaKcal', wrap).value);
     if (kcal == null) { toast('Calories required'); return; }
     const e = {
@@ -600,7 +707,14 @@ function openQuickAdd(getMeal, entry = null) {
       kcal, p: num($('#qaP', wrap).value) || 0, c: num($('#qaC', wrap).value) || 0, f: num($('#qaF', wrap).value) || 0,
     };
     await db.put('log', e);
-    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal`);
+    const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    if (!entry && btn && btn.isConnected) {
+      const r = btn.getBoundingClientRect();
+      confettiBurst(r.left + r.width / 2, r.top, 16);
+      popSound(S.sounds);
+    }
+    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });
@@ -666,7 +780,7 @@ async function openScanner(getMeal) {
     // 3. USDA branded fallback
     if (!food) { status.textContent = 'Checking USDA...'; food = await fetchFdcByBarcode(code, S.settings.fdcKey || 'DEMO_KEY'); }
     if (food) {
-      openPortion(food, { meal: getMeal() });
+      openPortion(food, { meal: getMeal(), via: 'scan' });
       return;
     }
     status.textContent = '';
@@ -731,6 +845,7 @@ function openLabelConfirm(parsed, { getMeal, barcode, photoUrl }) {
   openFoodForm({
     barcode,
     meal: getMeal(),
+    fromLabel: true,
     photoUrl,
     prefill: {
       servingText: parsed.servingText || '1 serving',
@@ -744,7 +859,7 @@ function openLabelConfirm(parsed, { getMeal, barcode, photoUrl }) {
 
 /* ================= food form (create/edit custom) ================= */
 
-function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = null, warnings = [], photoUrl = null } = {}) {
+function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = null, warnings = [], photoUrl = null, fromLabel = false } = {}) {
   const f = existing;
   const pv = prefill || {};
   const perServ = f ? (f.perServing || (f.per100 && f.servings[0]?.g ? scalePer100(f.per100, f.servings[0].g) : f.per100)) : null;
@@ -815,7 +930,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     toast('Food saved');
     if (!kcalConsistent(perServing)) toast('Heads up: calories and macros disagree, double-check the label', 3400);
     if (f) { closeAllSheetsViaHistory(); setTimeout(refresh, 80); }
-    else openPortion(food, { meal });
+    else openPortion(food, { meal, via: fromLabel ? 'label' : null });
   });
 
   if (f) $('#ffDel', wrap).addEventListener('click', async () => {
@@ -861,8 +976,20 @@ async function renderTrends(el) {
   const pAvg = days7.reduce((a, d) => a + d.tot.p, 0) / 7;
   const loggedDays7 = days7.filter(d => d.tot.kcal > 0).length;
 
+  const xp = await totalXp();
+  const lvl = levelFor(xp);
+  const earned = await earnedBadgeIds();
+
   el.innerHTML = `
-  <h1 class="page-h1">Trends<span class="sub">Weight and intake over time</span></h1>
+  <h1 class="page-h1">Trends<span class="sub">Progress, weight, and intake</span></h1>
+
+  <div class="card">
+    <div class="card-title">PROGRESS <button class="link" id="openProg">Details</button></div>
+    <div class="big-stat"><span class="v">Lv ${lvl.level}</span><span class="d">${esc(lvl.name)} · ${xp.toLocaleString()} XP</span></div>
+    <div class="xp-bar"><i style="width:${lvl.pct}%"></i></div>
+    <p class="note" style="margin-top:7px">${(lvl.need - lvl.into).toLocaleString()} XP to level ${lvl.level + 1}</p>
+    ${badgesGridHtml(earned)}
+  </div>
 
   <div class="card">
     <div class="card-title">WEIGHT ${weights.length ? `<span class="note">${weights.length} entries</span>` : ''}</div>
@@ -892,6 +1019,8 @@ async function renderTrends(el) {
   </div>`;
 
   $('#logWeight').addEventListener('click', openWeightSheet);
+  $('#openProg').addEventListener('click', openProgressSheet);
+  bindBadgeTaps(el);
 }
 
 function weightChart(points, toUnit) {
@@ -961,7 +1090,11 @@ function openWeightSheet() {
     // keep profile weight fresh for future target recalcs
     S.settings.profile.weightKg = kg;
     await kvSet('settings', S.settings);
-    toast('Weight logged');
+    const game = await onWeighIn(d);
+    confettiBurst(innerWidth / 2, innerHeight * 0.4, 12);
+    popSound(S.sounds);
+    toast(`Weight logged${game.xp ? ` · +${game.xp} XP` : ''}`);
+    if (game.newBadges.length) queueCelebration({ newBadges: game.newBadges });
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });
@@ -1011,10 +1144,12 @@ async function renderFoods(el) {
 
 /* ================= settings ================= */
 
-function renderSettings(el) {
+async function renderSettings(el) {
   const t = S.settings.targets;
   const p = S.settings.profile;
   const units = S.settings.units;
+  const lastExport = await kvGet('lastExportAt', 0);
+  const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
 
@@ -1037,6 +1172,10 @@ function renderSettings(el) {
       <div class="seg" style="width:130px"><button id="uLb" class="${units === 'lb' ? 'on' : ''}">lb</button><button id="uKg" class="${units === 'kg' ? 'on' : ''}">kg</button></div>
     </div>
     <div class="settings-row">
+      <div class="lab"><b>Sounds</b><span>Little pops and level-up chimes</span></div>
+      <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
+    </div>
+    <div class="settings-row">
       <div class="lab"><b>USDA API key</b><span>Optional: raises online search limit to 1,000/hr. <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></span></div>
     </div>
     <input class="input" id="fdcKey" placeholder="DEMO_KEY (default)" value="${esc(S.settings.fdcKey || '')}" style="margin-top:2px">
@@ -1044,15 +1183,24 @@ function renderSettings(el) {
   </div>
 
   <div class="card">
+    <div class="card-title">APPLE HEALTH</div>
+    <div class="settings-row">
+      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Tally shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
+      <button class="btn small ghost" id="hkGuide">${S.settings.hkConnected ? 'Guide' : 'Connect'}</button>
+    </div>
+    <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>
+  </div>
+
+  <div class="card">
     <div class="card-title">DATA</div>
-    <div class="settings-row"><div class="lab"><b>Export backup</b><span>Everything as a JSON file</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
+    <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Tally export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
-    Tally v1 · data lives only on this device<br>
+    Tally v2 · data lives only on this device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a>
   </p>`;
 
@@ -1071,6 +1219,10 @@ function renderSettings(el) {
     await kvSet('settings', S.settings);
     toast('Saved');
   });
+  $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
+  $('#sndOff').addEventListener('click', async () => { S.sounds = false; await kvSet('sounds', false); refresh(); });
+  $('#hkGuide').addEventListener('click', openHealthGuide);
+  $('#hkSyncNow').addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
     const data = await exportAll();
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
@@ -1078,6 +1230,7 @@ function renderSettings(el) {
     a.href = URL.createObjectURL(blob);
     a.download = `tally-backup-${dateKey()}.json`;
     a.click();
+    await kvSet('lastExportAt', Date.now());
     toast('Backup exported');
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
@@ -1095,7 +1248,7 @@ function renderSettings(el) {
   $('#eraseBtn').addEventListener('click', async () => {
     if (!confirm('Erase ALL Tally data on this device? This cannot be undone.')) return;
     if (!confirm('Last check: your log, foods, and weights will be gone.')) return;
-    for (const st of ['foods', 'log', 'weights', 'kv']) await db.clear(st);
+    for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
     location.reload();
   });
 }
@@ -1245,6 +1398,7 @@ async function saveInitialSettings(np) {
     createdAt: Date.now(),
   };
   await kvSet('settings', S.settings);
+  await kvSet('game-init', true); // fresh install: nothing to backfill
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -1252,12 +1406,188 @@ async function saveInitialSettings(np) {
   route();
 }
 
+/* ================= game: celebrations + progress ================= */
+
+function queueCelebration(game) {
+  if (!game) return;
+  if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone) {
+    S.celebration = game;
+  }
+}
+
+function maybeCelebrate() {
+  if (!S.celebration) return;
+  const c = S.celebration;
+  S.celebration = null;
+  setTimeout(() => openCelebration(c), 380);
+}
+
+function openCelebration({ levelUp = null, newBadges = [], streakMilestone = null }) {
+  const bits = [];
+  if (levelUp) bits.push(`<div class="cele-big">Level ${levelUp.level}</div><div class="cele-sub">${esc(levelUp.name)}</div>`);
+  if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
+  for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${b.icon}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
+  if (!bits.length) return;
+  confettiRain();
+  levelSound(S.sounds);
+  const wrap = openSheet(`
+    <div class="sheet-body" style="text-align:center;padding-top:26px">
+      <div style="font-size:44px;line-height:1">${levelUp ? '🎉' : streakMilestone ? '🔥' : '🏅'}</div>
+      <div style="height:10px"></div>
+      ${bits.join('<div style="height:14px"></div>')}
+      <div style="height:22px"></div>
+      <button class="btn" id="celeOk">Keep it going</button>
+      <div style="height:6px"></div>
+    </div>`);
+  $('#celeOk', wrap).addEventListener('click', () => history.back());
+}
+
+function badgesGridHtml(earned, newIds = new Set()) {
+  return `<div class="badge-grid">${BADGES.map(b => `
+    <button class="badge ${earned.has(b.id) ? '' : 'locked'} ${newIds.has(b.id) ? 'new' : ''}" data-badge="${b.id}">
+      <span class="bicon">${b.icon}</span>${esc(b.name)}
+    </button>`).join('')}</div>`;
+}
+
+function bindBadgeTaps(wrap) {
+  $$('[data-badge]', wrap).forEach(el => el.addEventListener('click', () => {
+    const b = BADGES.find(x => x.id === el.dataset.badge);
+    if (b) toast(`${b.icon} ${b.name}: ${b.desc}`, 2600);
+  }));
+}
+
+async function openProgressSheet() {
+  const xp = await totalXp();
+  const lvl = levelFor(xp);
+  const earned = await earnedBadgeIds();
+  const todayRows = await xpForDate(dateKey());
+  const todayXp = todayRows.reduce((a, r) => a + r.xp, 0);
+  const keys = new Set(todayRows.map(r => r.key));
+  const earnables = [];
+  if (![...keys].some(k => k.startsWith('protein-'))) earnables.push('+40 hit your protein target');
+  if (![...keys].some(k => k.startsWith('meals3-'))) earnables.push('+20 log all three meals');
+  if (![...keys].some(k => k.startsWith('scan-'))) earnables.push('+15 log something by barcode');
+  if (![...keys].some(k => k.startsWith('weigh-'))) earnables.push('+15 log a weigh-in');
+  earnables.push('+50 finish the day inside budget');
+
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Your progress</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div class="card" style="background:var(--surface-2)">
+        <div class="big-stat" style="margin:0"><span class="v">Lv ${lvl.level}</span><span class="d">${esc(lvl.name)}</span></div>
+        <div class="xp-bar"><i style="width:${lvl.pct}%"></i></div>
+        <p class="note" style="margin-top:7px">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP to level ${lvl.level + 1} · ${xp.toLocaleString()} XP total</p>
+      </div>
+      <div class="sect-h">Today · ${todayXp} XP earned</div>
+      ${todayRows.slice(0, 6).map(r => `<div class="xp-row"><span>${esc(r.label)}</span><b>+${r.xp}</b></div>`).join('') || '<p class="note" style="padding:6px 2px">Nothing yet. Log something!</p>'}
+      <div class="sect-h">Still on the table today</div>
+      ${earnables.slice(0, 4).map(e => `<div class="xp-row dim"><span>${esc(e)}</span></div>`).join('')}
+      <div class="sect-h">Badges · ${earned.size}/${BADGES.length}</div>
+      ${badgesGridHtml(earned)}
+      <div style="height:10px"></div>
+    </div>`, { cls: 'full' });
+  bindBadgeTaps(wrap);
+}
+
+/* ================= Apple Health bridge ================= */
+
+async function ingestHealth(payload, { celebrate = true } = {}) {
+  const existing = await db.get('health', payload.date);
+  const row = { ...(existing || {}), date: payload.date };
+  if (payload.steps != null) row.steps = payload.steps;
+  if (payload.activeKcal != null) row.activeKcal = payload.activeKcal;
+  await db.put('health', row);
+  if (payload.weightKg != null) {
+    await db.put('weights', { date: payload.date, kg: payload.weightKg });
+    await onWeighIn(payload.date);
+  }
+  if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
+  const game = await onHealthSync(payload.date, { steps: payload.steps });
+  const bits = [];
+  if (payload.steps != null) bits.push(`${payload.steps.toLocaleString()} steps`);
+  if (payload.activeKcal != null) bits.push(`${payload.activeKcal.toLocaleString()} active kcal`);
+  if (payload.weightKg != null) bits.push(`weight ${S.settings.units === 'kg' ? payload.weightKg.toFixed(1) + ' kg' : kgToLb(payload.weightKg).toFixed(1) + ' lb'}`);
+  if (celebrate) {
+    confettiBurst(innerWidth / 2, 160, 14);
+    popSound(S.sounds);
+    toast(`Health synced: ${bits.join(' · ')}${game.xp ? ` · +${game.xp} XP` : ''}`, 3200);
+    if (game.newBadges.length) { queueCelebration({ newBadges: game.newBadges }); maybeCelebrate(); }
+  }
+  return bits;
+}
+
+async function ingestHkFromUrl() {
+  const h = location.hash || '';
+  if (!h.startsWith('#/hk')) return;
+  const payload = parseHkPayload(decodeURIComponent(h));
+  history.replaceState(null, '', location.pathname + location.search + '#/today');
+  if (payload) await ingestHealth(payload, { celebrate: true });
+  else toast('Could not read the Health sync link');
+}
+
+async function syncFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const payload = parseHkPayload(text);
+    if (!payload) {
+      toast('No Tally sync data on the clipboard. Run your "Sync Tally" shortcut first.', 3400);
+      return;
+    }
+    await ingestHealth(payload);
+    refresh();
+  } catch {
+    toast('Clipboard not available. Run the shortcut, then tap Sync again.', 3200);
+  }
+}
+
+const HK_TEMPLATE = 'tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]';
+
+function openHealthGuide() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin-bottom:12px">iPhone web apps can't read Health directly, so Tally uses a tiny Shortcut you build once (about 3 minutes). It copies your day's numbers and opens Tally; one tap on Sync pulls them in. You can automate it to run every evening.</p>
+      <div class="sect-h">One-time setup</div>
+      <ol class="guide">
+        <li>Open the <b>Shortcuts</b> app, tap <b>+</b>, name it <b>Sync Tally</b></li>
+        <li>Add action <b>Find Health Samples</b>. Set Type: <b>Steps</b>, add filter <b>Start Date · is today</b></li>
+        <li>Add action <b>Calculate Statistics</b>, operation <b>Sum</b> (input: Health Samples)</li>
+        <li>Repeat steps 2-3 for Type: <b>Active Energy</b></li>
+        <li>Optional: add another <b>Find Health Samples</b>, Type: <b>Weight</b>, Sort by Start Date, Order Latest First, Limit 1</li>
+        <li>Add action <b>Text</b> and type this, inserting the variables from the steps above:</li>
+      </ol>
+      <div class="code-line" id="hkTpl">${esc(HK_TEMPLATE)}</div>
+      <button class="btn small ghost" id="copyTpl" style="margin:8px 0 14px">Copy template</button>
+      <ol class="guide" start="7">
+        <li>Add action <b>Copy to Clipboard</b></li>
+        <li>Add action <b>Open App</b> and pick <b>Tally</b> (install Tally to your home screen first)</li>
+        <li>Run it, then tap <b>Sync</b> on Tally's Today screen and allow the paste</li>
+      </ol>
+      <div class="sect-h">Automate it</div>
+      <p class="note">Shortcuts app → Automation → New → Time of Day (e.g. 9:00 PM) → Run Immediately → pick Sync Tally. Or just say "Hey Siri, Sync Tally".</p>
+      <div style="height:12px"></div>
+      <button class="btn" id="hkTrySync">I ran it, sync now</button>
+      <div style="height:8px"></div>
+    </div>`, { cls: 'full' });
+  $('#copyTpl', wrap).addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(HK_TEMPLATE); toast('Template copied'); } catch { toast('Long-press the text to copy it'); }
+  });
+  $('#hkTrySync', wrap).addEventListener('click', syncFromClipboard);
+}
+
 /* ================= demo seed ================= */
 
 async function seedDemo() {
   const profile = { sex: 'm', age: 33, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };
-  const settings = { profile, targets: computeTargets(profile), units: 'lb', fdcKey: null, createdAt: Date.now() };
+  const settings = { profile, targets: computeTargets(profile), units: 'lb', fdcKey: null, hkConnected: true, createdAt: Date.now() };
   await kvSet('settings', settings);
+  for (let i = 0; i < 4; i++) {
+    await db.put('health', {
+      date: addDays(dateKey(), -i),
+      steps: [8421, 11250, 6480, 9902][i],
+      activeKcal: [512, 640, 388, 545][i],
+    });
+  }
   const g = id => GENERIC_FOODS.find(f => f.id === id);
   const put = async (date, meal, foodId, idx, qty, hourTs) => {
     const food = g(foodId);
