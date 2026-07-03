@@ -74,6 +74,8 @@ export const BADGES = [
   { id: 'drip-6', icon: '🧥', name: 'Full drip', desc: 'Have 6 or more slots equipped at once' },
   { id: 'hunter-1', icon: '🦴', name: 'First find', desc: 'Collect a Boneyard spawn' },
   { id: 'hunter-25', icon: '🗺', name: 'Boneyard regular', desc: 'Collect 25 Boneyard spawns' },
+  { id: 'road-stop-1', icon: '🪧', name: 'First mile', desc: 'Claim a Bone Road stop' },
+  { id: 'road-1', icon: '🗿', name: 'Road tripper', desc: 'Walk a full Bone Road lap' },
 ];
 
 export function badgeCheck(id, st) {
@@ -95,6 +97,8 @@ export function badgeCheck(id, st) {
     case 'drip-6': return st.equippedSlots >= 6;
     case 'hunter-1': return st.spawns >= 1;
     case 'hunter-25': return st.spawns >= 25;
+    case 'road-stop-1': return st.roadStops >= 1;
+    case 'road-1': return st.roadCycles >= 1;
     default: return false;
   }
 }
@@ -115,6 +119,8 @@ async function buildStats() {
     maxSteps: Math.max(0, ...health.map(h => h.steps || 0)),
     cosmetics: inv.filter(r => r.kind === 'cos').length,
     spawns: xp.filter(r => r.type === 'spawn').length,
+    roadStops: xp.filter(r => r.type === 'road').length,
+    roadCycles: xp.filter(r => r.type === 'road' && r.key.endsWith('-6')).length,
     equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on
   };
 }

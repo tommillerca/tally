@@ -13,6 +13,7 @@ import {
 } from './loot.js';
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
+import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -343,8 +344,9 @@ async function renderToday(el) {
   </div>
 
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
-    ${avatarLayersHtml(eq)}
-    <img class="hero-tomb" src="assets/brand/tombstone.png" alt="">
+    ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
+    <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG'], noYard: true })}</div>
+    ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
     <div class="hero-fade"></div>
     <div class="hero-top">
       <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b></button>
@@ -368,7 +370,7 @@ async function renderToday(el) {
     <button class="hero-act" id="huntBtn">${ICONS.radar(23)}<span>Hunt</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
-    <button class="hero-act" id="progBtn">${ICONS.boltIco(23)}<span>Progress</span></button>
+    <button class="hero-act" id="roadBtn"><img src="assets/brand/sword.png" style="height:24px" alt=""><span>Bone Road</span></button>
   </div>
 
   <div class="card ring-card">
@@ -451,7 +453,7 @@ async function renderToday(el) {
   $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
   $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#progBtn')?.addEventListener('click', () => openCharacter('progress'));
+  $('#roadBtn')?.addEventListener('click', openRoad);
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -518,14 +520,19 @@ function speechLine({ entries, tot, targets, crates, streak, isToday }) {
   return pick(['Solid pace today.', 'What is next on the menu?', 'More protein never hurt a skeleton.']);
 }
 
-function avatarLayersHtml(eq) {
+function avatarLayersHtml(eq, opts = {}) {
+  const skip = new Set(opts.skip || []);
+  skip.add('YD'); // yard decor is anchored, never a full-frame layer
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
   const layers = slots.map(s => {
+    if (skip.has(s.code)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
     return `<img src="${bhAsset(BH_BY_ID[itemId])}" alt="" loading="lazy" decoding="async">`;
   }).join('');
-  return `<div class="bh-anim">${layers}</div>`;
+  const yd = !opts.noYard && eq.YD && BH_BY_ID[eq.YD]
+    ? `<img class="yard-decor" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : '';
+  return `<div class="bh-anim">${layers}</div>${yd}`;
 }
 
 function healthCardHtml(hk, isToday) {
@@ -2010,6 +2017,78 @@ async function renderRadar(body, lat, lng, eq) {
   }));
 }
 
+/* ================= the bone road (steps journey) ================= */
+
+async function openRoad() {
+  const [eq, lifetime, xpRows] = await Promise.all([equipped(), lifetimeSteps(), db.all('xp')]);
+  const claimed = new Set(xpRows.filter(r => r.type === 'road').map(r => r.key));
+  const st = roadState(lifetime, claimed);
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Bone Road</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="roadBody"></div>`, { cls: 'full' });
+  renderRoad(wrap, eq);
+}
+
+async function renderRoad(wrap, eq) {
+  const body = $('#roadBody', wrap);
+  if (!body) return;
+  const [lifetime, xpRows] = await Promise.all([lifetimeSteps(), db.all('xp')]);
+  const claimed = new Set(xpRows.filter(r => r.type === 'road').map(r => r.key));
+  const st = roadState(lifetime, claimed);
+
+  if (lifetime <= 0) {
+    body.innerHTML = `
+      <p class="note" style="margin-bottom:12px">The Bone Road runs on your real steps. Every step you sync from Apple Health walks your Bonehead further down Cam's map, and every stop pays a chest.</p>
+      <button class="btn" id="roadConnect">Connect Apple Health</button>`;
+    $('#roadConnect', body).addEventListener('click', openHealthGuide);
+    return;
+  }
+
+  const pos = travelerPos(st.progress);
+  const nextTxt = st.next
+    ? `${(st.next.steps - st.progress).toLocaleString()} steps to ${st.next.n}`
+    : 'Road complete! Claim X to start the next lap.';
+  body.innerHTML = `
+    <div class="road-strip">
+      <span class="road-cycle">Lap ${st.cycle}</span>
+      <div style="flex:1">
+        <b>${st.progress.toLocaleString()} steps walked</b>
+        <small>${nextTxt}</small>
+      </div>
+    </div>
+    <div class="road-wrap">
+      <img class="road-map" src="assets/brand/quest-map.png" alt="The Bone Road map">
+      ${st.stops.map(stop => {
+        const state = stop.claimed ? 'claimed' : stop.reached ? 'ready' : 'locked';
+        const icon = stop.claimed ? '✓' : (stop.reward.crate ? crateIcon(stop.reward.crate, 21) : ICONS.coin(21));
+        return `<button class="road-stop ${state}" style="left:${stop.x}%;top:${stop.y}%" data-stop="${stop.idx}" ${state !== 'ready' ? 'disabled' : ''} title="${stop.n}">${icon}</button>`;
+      }).join('')}
+      <div class="road-you" style="left:${pos.x}%;top:${pos.y}%">${avatarLayersHtml(eq, { skip: ['BG'], noYard: true })}</div>
+    </div>
+    <div class="sect-h">Stops</div>
+    ${st.stops.map(stop => `
+      <div class="crate-row">
+        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${stop.claimed ? 'var(--text-3)' : stop.reached ? 'var(--accent)' : 'var(--text-3)'}">${stop.n}</span>
+        <div style="flex:1"><b>${stop.steps.toLocaleString()} steps</b><small>${rewardLabel(stop.reward)}</small></div>
+        ${stop.claimed ? '<span class="q-done">✓</span>' : stop.reached
+          ? `<button class="btn small" data-claim-stop="${stop.idx}">Claim</button>`
+          : `<span class="q-frac">${(stop.steps - st.progress).toLocaleString()} to go</span>`}
+      </div>`).join('')}
+    <p class="note" style="margin-top:10px">Lifetime synced steps: ${lifetime.toLocaleString()}. Finish stop X and the road loops with a fresh lap.</p>`;
+
+  $$('[data-claim-stop]', body).forEach(b => b.addEventListener('click', async () => {
+    const idx = Number(b.dataset.claimStop);
+    const res = await claimStop(st.cycle, idx);
+    if (!res) return;
+    confettiBurst(innerWidth / 2, innerHeight * 0.3, 22);
+    popSound(S.sounds);
+    toast(`Stop ${ROAD_STOPS[idx].n} claimed · ${rewardLabel(res)}`, 3400);
+    const badges = await evaluateBadges();
+    if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
+    renderRoad(wrap, eq);
+  }));
+}
+
 /* ================= demo seed ================= */
 
 async function seedDemo() {
@@ -2026,7 +2105,9 @@ async function seedDemo() {
   await kvSet('coins', 340);
   const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR1', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
   for (const id of demoCos) await db.put('inv', { id: 'demo-' + id, kind: 'cos', itemId: id, source: 'demo', ts: Date.now() });
-  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
+  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1', YD: 'YD1' });
+  await db.put('inv', { id: 'demo-YD1', kind: 'cos', itemId: 'YD1', source: 'demo', ts: Date.now() });
+  await db.put('inv', { id: 'demo-YD2', kind: 'cos', itemId: 'YD2', source: 'demo', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
   await db.put('inv', { id: 'demo-freeze', kind: 'freeze', source: 'welcome', ts: Date.now() });

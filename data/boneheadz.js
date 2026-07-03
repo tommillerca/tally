@@ -90,6 +90,12 @@ export const BH_SLOTS = [
   "label": "Pet",
   "z": 140,
   "default": null
+ },
+ {
+  "code": "YD",
+  "label": "Yard",
+  "z": 150,
+  "default": null
  }
 ];
 
@@ -1643,8 +1649,22 @@ export const BH_ITEMS = [
   "slot": "C",
   "rarity": "uncommon",
   "name": "Tidy Pet #5"
+ },
+ {
+  "id": "YD1",
+  "slot": "YD",
+  "file": "assets/brand/tombstone.png",
+  "name": "Haunted Tombstone",
+  "rarity": "uncommon"
+ },
+ {
+  "id": "YD2",
+  "slot": "YD",
+  "file": "assets/brand/tomb.png",
+  "name": "Tomb Gate",
+  "rarity": "epic"
  }
 ];
 
 export const BH_BY_ID = Object.fromEntries(BH_ITEMS.map(i => [i.id, i]));
-export function bhAsset(item) { return `assets/bh/${item.slot}/${item.id}.png`; }
+export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }

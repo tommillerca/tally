@@ -665,3 +665,41 @@ body::before {
 .hero-act:active { background: var(--surface-2); }
 
 .splash-mark { width: min(78%, 320px); }
+
+/* ---------- hero reframe: whole body + yard ---------- */
+.hero-scene { height: min(47vh, 400px); }
+.hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
+.hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; }
+.hero-char .bh-anim img { object-fit: contain; }
+.hero-yard {
+  position: absolute; left: 3%; bottom: 10%; width: clamp(64px, 21%, 104px);
+  z-index: 1; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
+}
+.yard-decor { position: absolute; left: 4%; bottom: 6%; width: 24%; z-index: 3; pointer-events: none; }
+
+/* ---------- bone road ---------- */
+.road-strip {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px;
+}
+.road-strip b { display: block; font-size: 15px; }
+.road-strip small { color: var(--text-3); font-size: 12px; display: block; }
+.road-cycle { font-family: var(--display); font-size: 19px; color: var(--carbs); letter-spacing: 1px; flex: none; }
+.road-wrap { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line-strong); background: #131118; }
+.road-map { display: block; width: 100%; height: auto; opacity: 0.94; }
+.road-stop {
+  position: absolute; transform: translate(-50%, -50%); z-index: 2;
+  width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center;
+  background: rgba(13, 12, 18, 0.78); border: 2px solid var(--line-strong);
+  color: var(--accent); font-weight: 800; font-size: 15px;
+}
+.road-stop.ready { border-color: rgba(165, 232, 71, 0.7); animation: cratepulse 1.4s ease-in-out infinite; }
+.road-stop.claimed { color: var(--accent); opacity: 0.75; }
+.road-stop.locked { opacity: 0.42; filter: grayscale(0.6); }
+.road-you {
+  position: absolute; transform: translate(-50%, -90%); z-index: 3;
+  width: 46px; height: 46px; border-radius: 50%; overflow: hidden;
+  border: 2px solid var(--accent); background: var(--surface-2);
+  box-shadow: 0 0 12px rgba(165, 232, 71, 0.45); pointer-events: none;
+}
+.road-you .bh-anim { animation-duration: 2.4s; }
