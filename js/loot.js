@@ -4,6 +4,7 @@
 
 import { db, kvGet, kvSet, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
+import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -62,6 +63,20 @@ export async function grantCosmetic(itemId, source) {
   const row = { id: newId(), kind: 'cos', itemId, source, ts: Date.now() };
   await db.put('inv', row);
   return row;
+}
+
+export async function ownedGearIds() {
+  const inv = await db.all('inv');
+  return new Set(inv.filter(r => r.kind === 'gear').map(r => r.gearId));
+}
+
+export async function grantGear(gearId, source) {
+  const g = GEAR_BY_ID[gearId];
+  if (!g) throw new Error('unknown gear');
+  const owned = await ownedGearIds();
+  if (owned.has(gearId)) return null;
+  await db.put('inv', { id: newId(), kind: 'gear', gearId, source, ts: Date.now() });
+  return g;
 }
 
 export async function grantCrate(kind, source) {
@@ -137,6 +152,22 @@ export async function openCrate(invId) {
       continue;
     }
     const { item, dupe } = rollCosmetic(owned, floor, def.slotBias);
+    // gear-slot art has a 55% chance to drop as a STATTED variant of the same look
+    if (GEAR_SLOTS.includes(item.slot) && rng() < 0.55) {
+      const variants = GEAR_ITEMS.filter(g => g.artId === item.id);
+      const gOwned = await ownedGearIds();
+      const pick = variants.find(g => !gOwned.has(g.id)) || variants[Math.floor(rng() * variants.length)];
+      if (pick && !gOwned.has(pick.id)) {
+        await grantGear(pick.id, 'crate');
+        results.push({ type: 'gear', gear: pick, item });
+        continue;
+      } else if (pick) {
+        const value = RARITIES[pick.rarity].dupe;
+        coinsWon += value;
+        results.push({ type: 'geardupe', gear: pick, item, coins: value });
+        continue;
+      }
+    }
     if (dupe || owned.has(item.id)) {
       const value = RARITIES[item.rarity].dupe;
       coinsWon += value;
@@ -172,7 +203,7 @@ export async function equipped() {
   return { ...base, ...saved };
 }
 
-export async function equip(slot, itemId) {
+export async function equip(slot, itemId, { keepGear = false } = {}) {
   const eq = await equipped();
   if (itemId == null) {
     const def = BH_SLOTS.find(s => s.code === slot)?.default || null;
@@ -185,7 +216,33 @@ export async function equip(slot, itemId) {
     eq[slot] = itemId;
   }
   await kvSet('equipped', eq);
+  // choosing a plain look drops the statted piece from that slot
+  if (!keepGear && GEAR_SLOTS.includes(slot)) {
+    const lo = await gearLoadout();
+    if (lo[slot]) { delete lo[slot]; await kvSet('gearloadout', lo); }
+  }
   return eq;
+}
+
+export async function gearLoadout() { return (await kvGet('gearloadout', {})) || {}; }
+
+// Equip a statted piece: sets the stats slot AND the matching look.
+// The art does not need to be separately owned: the gear IS the item.
+export async function equipGear(slot, gearId) {
+  const lo = await gearLoadout();
+  if (gearId == null) { delete lo[slot]; await kvSet('gearloadout', lo); return lo; }
+  const g = GEAR_BY_ID[gearId];
+  if (!g || g.slot !== slot) throw new Error('bad gear');
+  const owned = await ownedGearIds();
+  if (!owned.has(gearId)) throw new Error('not owned');
+  const { totalXp, levelFor } = await import('./game.js'); // lazy: avoids circular init
+  if (levelFor(await totalXp()).level < g.minLevel) throw new Error('level ' + g.minLevel + ' required');
+  lo[slot] = gearId;
+  await kvSet('gearloadout', lo);
+  const eq = await equipped();
+  eq[slot] = g.artId;
+  await kvSet('equipped', eq);
+  return lo;
 }
 
 /* ---------- XP boost ---------- */

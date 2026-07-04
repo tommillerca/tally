@@ -478,5 +478,51 @@ test('level rewards scale with level', () => {
   assert.ok(levelCoins(11) > levelCoins(10));
 });
 
+// ---- gear: statted head/chest/weapon equipment ----
+const gear = await import('../js/gear.js');
+test('gear: catalog is deterministic and only covers H/T/IR', () => {
+  assert.ok(gear.GEAR_ITEMS.length > 50, String(gear.GEAR_ITEMS.length));
+  for (const g of gear.GEAR_ITEMS) {
+    assert.ok(gear.GEAR_SLOTS.includes(g.slot), g.id);
+    assert.ok(gear.GEAR_ARCHETYPES[g.arch], g.id);
+    assert.ok(BH_BY_ID[g.artId], 'art exists ' + g.id);
+  }
+  const again = new Set(gear.GEAR_ITEMS.map(g => g.id));
+  assert.equal(again.size, gear.GEAR_ITEMS.length, 'ids unique');
+});
+test('gear: same art, different stats (saves illustration)', () => {
+  const byArt = {};
+  for (const g of gear.GEAR_ITEMS) (byArt[g.artId] = byArt[g.artId] || []).push(g);
+  const arts = Object.values(byArt);
+  assert.ok(arts.every(v => v.length === 2), 'two variants per art');
+  const differing = arts.filter(([a, b]) => a.arch !== b.arch);
+  assert.equal(differing.length, arts.length, 'variants use distinct archetypes');
+  const rarityBumped = arts.filter(([a, b]) => a.rarity !== b.rarity);
+  assert.ok(rarityBumped.length > arts.length * 0.7, 'second variant usually a tier up');
+});
+test('gear: rarity scales budgets and level gates', () => {
+  const order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+  for (let i = 1; i < order.length; i++) {
+    assert.ok(gear.GEAR_BUDGET[order[i]] > gear.GEAR_BUDGET[order[i - 1]], 'budget ascends');
+    assert.ok(gear.GEAR_MIN_LEVEL[order[i]] > gear.GEAR_MIN_LEVEL[order[i - 1]], 'gate ascends');
+  }
+  for (const g of gear.GEAR_ITEMS) {
+    const total = Object.values(g.stats).reduce((a, b) => a + b, 0);
+    assert.equal(total, gear.GEAR_BUDGET[g.rarity], g.id + ' spends its exact budget');
+    assert.equal(g.minLevel, gear.GEAR_MIN_LEVEL[g.rarity], g.id);
+    const [p, s2] = gear.GEAR_ARCHETYPES[g.arch].stats;
+    assert.ok(g.stats[p] >= g.stats[s2], 'primary stat leads');
+  }
+});
+test('gear: gearStats validates ownership, slot, and level', () => {
+  const g = gear.GEAR_ITEMS.find(x => x.rarity === 'epic');
+  const lo = { [g.slot]: g.id };
+  const zero = { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 };
+  assert.deepEqual(gear.gearStats(lo, new Set(), 20), zero, 'unowned = nothing');
+  assert.deepEqual(gear.gearStats(lo, new Set([g.id]), g.minLevel - 1), zero, 'underleveled = nothing');
+  const on = gear.gearStats(lo, new Set([g.id]), g.minLevel);
+  assert.equal(Object.values(on).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.epic, 'at level = full budget');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

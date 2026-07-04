@@ -9,11 +9,13 @@ import {
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateXpBoost,
+  ownedGearIds, grantGear, gearLoadout, equipGear,
   xpBoostCharges, consumableCount,
 } from './loot.js';
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
+import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel } from './gear.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, isoWeekKey, DEN_RADIUS_M } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -1853,29 +1855,54 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
+    const [gOwnedSet, gearLo, xpAllW] = await Promise.all([ownedGearIds(), gearLoadout(), db.all('xp')]);
+    const wLevel = levelFor(xpAllW.reduce((a, r) => a + (r.xp || 0), 0)).level;
     const slot = S.wardrobeSlot || 'H';
     const counts = {};
-    for (const s of BH_SLOTS) counts[s.code] = BH_ITEMS.filter(i => i.slot === s.code && owned.has(i.id)).length;
+    for (const s of BH_SLOTS) {
+      counts[s.code] = BH_ITEMS.filter(i => i.slot === s.code && owned.has(i.id)).length
+        + GEAR_ITEMS.filter(g => g.slot === s.code && gOwnedSet.has(g.id)).length;
+    }
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
     const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
+    const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
     content.innerHTML = `
       <div class="chips scroll" id="slotChips">
         ${BH_SLOTS.map(s => `<button class="chip ${s.code === slot ? 'on' : ''}" data-slot="${s.code}">${s.label} ${counts[s.code] ? `· ${counts[s.code]}` : ''}</button>`).join('')}
       </div>
       <div class="ward-grid">
-        ${slotMeta.default || !items.length ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
+        ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
-          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
+          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
             <img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">
           </button>`).join('')}
+        ${gearItems.map(g => {
+          const art = BH_BY_ID[g.artId];
+          const locked = wLevel < g.minLevel;
+          return `
+          <button class="ward-cell gear r-${g.rarity} ${gearLo[slot] === g.id ? 'equipped' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}">
+            <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
+            <span class="gear-stat">${gearLabel(g)}</span>
+            ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
+          </button>`;
+        }).join('')}
       </div>
+      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; rarer rolls hit harder.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">${lockedCount} more ${slotMeta.label.toLowerCase()} item${lockedCount === 1 ? '' : 's'} still in crates somewhere</p>` : ''}
-      ${!items.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
-      ${!items.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
+      ${!items.length && !gearItems.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
+      ${!items.length && !gearItems.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
     $$('#slotChips .chip', content).forEach(c => c.addEventListener('click', () => { S.wardrobeSlot = c.dataset.slot; renderCharacter(wrap, 'wardrobe'); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
+      popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+    $$('[data-equipgear]', content).forEach(cell => cell.addEventListener('click', async () => {
+      const g = GEAR_BY_ID[cell.dataset.equipgear];
+      if (!g) return;
+      if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
+      await equipGear(slot, g.id);
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
@@ -1963,6 +1990,11 @@ async function openCrateReveal(result) {
           if (r.type === 'consumable') {
             const c = CONSUMABLES[r.consumable];
             return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${consumableIcon(r.consumable, 34)}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
+          }
+          if (r.type === 'gear' || r.type === 'geardupe') {
+            const g = r.gear, grar = RARITIES[g.rarity];
+            const dup = r.type === 'geardupe';
+            return `<div class="reveal-card gear r-${g.rarity}"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt=""><div><b>${esc(g.name)}</b><small>${dup ? `Duplicate → +${r.coins}🪙` : `GEAR · ${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`}</small><span class="rar-chip" style="color:${grar.color}">${grar.label}</span></div></div>`;
           }
           const rar = RARITIES[r.item.rarity];
           if (r.type === 'dupe') {
@@ -2404,7 +2436,12 @@ async function buildFighter() {
   };
   const baseStats = deriveStats(behavior);
   const alloc = await kvGet('trainalloc', {});
-  const stats = allocatedStats(baseStats, alloc);
+  const [gearLo, gOwned, xpAll] = await Promise.all([gearLoadout(), ownedGearIds(), db.all('xp')]);
+  const level = levelFor(xpAll.reduce((a, r) => a + (r.xp || 0), 0)).level;
+  const gBonus = gearStats(gearLo, gOwned, level);
+  const gearedBase = {};
+  for (const k of Object.keys(baseStats)) gearedBase[k] = baseStats[k] + (gBonus[k] || 0);
+  const stats = allocatedStats(gearedBase, alloc);
   // training points: one per wellbeing-safe positive day (protein hit / day closed on budget)
   const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
@@ -2414,7 +2451,7 @@ async function buildFighter() {
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
-  return { stats, baseStats, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents };
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2467,6 +2504,17 @@ async function renderPit(wrap) {
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
     <button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">Talents · ${unspent > 0 ? unspent + ' point' + (unspent === 1 ? '' : 's') + ' to spend!' : fighter.talents.length ? fighter.talents.length + ' taken' : 'choose a spec'}</button>
+    <div class="sect-h">Gear</div>
+    <div class="gear-row">
+      ${GEAR_SLOTS.map(sl => {
+        const g = GEAR_BY_ID[fighter.gearLo[sl]];
+        return `<div class="gear-chip ${g ? 'on r-' + g.rarity : ''}">
+          <small>${GEAR_SLOT_LABELS[sl]}</small>
+          <b>${g ? esc(g.name) : 'empty'}</b>
+          ${g ? `<span>${gearLabel(g)}</span>` : '<span>equip in Wardrobe</span>'}
+        </div>`;
+      }).join('')}
+    </div>
     <div class="sect-h">Weapon</div>
     <div class="chips">
       ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
