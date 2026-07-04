@@ -30,6 +30,21 @@ export const STAT_META = [
   { key: 'hype', label: 'Hype', role: 'signature meter speed', fedBy: 'quests + logging variety' },
 ];
 
+// Hybrid customization: your habits set the BASE (deriveStats); training points
+// earned from wellbeing-safe behavior (protein-target hits + closing days on
+// budget) are spent to nudge stats up. Foes scale off your effective stats, so
+// this specializes a build rather than just inflating it.
+export const TRAIN_STEP = 2;       // stat points per allocated training point
+export const TRAIN_CAP = 100;      // most you can add to one stat via training
+export function allocatedStats(base, alloc = {}, step = TRAIN_STEP) {
+  const out = {};
+  for (const k of ['power', 'marrow', 'wind', 'reflex', 'hype']) {
+    const bump = Math.min(TRAIN_CAP, (alloc[k] || 0) * step);
+    out[k] = Math.max(0, Math.min(150, (base[k] || 0) + bump));
+  }
+  return out;
+}
+
 /* ================= talents (framework §7, simplified to 3-node chains) ================= */
 
 export const TALENT_TREES = [

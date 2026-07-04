@@ -1193,3 +1193,22 @@ body::before {
 @keyframes raysSpin { to { transform: rotate(360deg); } }
 @keyframes lvlHero { from { transform: scale(0.55); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .lvl-rays { animation: none; } }
+
+/* ===== pit: training-point allocation ===== */
+.statline { display: flex; align-items: center; gap: 8px; }
+.statline .bar.pitstat { position: relative; }
+.statbase { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(242, 233, 215, 0.55); border-radius: 2px; }
+.stat-bonus { color: var(--accent); font-size: 12px; }
+.tp-btn {
+  width: 30px; height: 30px; flex: none; border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--line-strong); color: var(--text);
+  font-size: 19px; font-weight: 700; line-height: 1; display: grid; place-items: center;
+}
+.tp-btn:active { background: var(--surface-2); }
+.tp-btn:disabled { opacity: 0.3; }
+.tp-bar {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--text-2);
+}
+.tp-count { color: var(--accent); font-weight: 700; white-space: nowrap; }

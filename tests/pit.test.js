@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
-  simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE,
+  simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -584,6 +584,58 @@ test('one miracle per fight: second wind and last light are exclusive', () => {
 test('champion runs the full slab tree', () => {
   assert.equal(CHAMPION.talents.length, 6);
   assert.ok(CHAMPION.talents.includes('thickskull') && CHAMPION.talents.includes('titan'));
+});
+
+/* ============ v26: hybrid training-point allocation ============ */
+
+test('allocatedStats adds TRAIN_STEP per point on top of the habit base', () => {
+  const base = { power: 30, marrow: 40, wind: 50, reflex: 20, hype: 25 };
+  const eff = allocatedStats(base, { power: 5, wind: 2 });
+  assert.equal(eff.power, 30 + 5 * TRAIN_STEP);
+  assert.equal(eff.wind, 50 + 2 * TRAIN_STEP);
+  assert.equal(eff.marrow, 40, 'untouched stats keep their base');
+  assert.equal(eff.reflex, 20);
+});
+
+test('allocatedStats never lowers a stat and is guardrail-safe (only adds)', () => {
+  const base = { power: 30, marrow: 40, wind: 50, reflex: 20, hype: 25 };
+  const eff = allocatedStats(base, {});
+  for (const k of Object.keys(base)) assert.ok(eff[k] >= base[k], k + ' never drops');
+  // allocation can only ever raise stats (no path to reward eating less)
+  const eff2 = allocatedStats(base, { power: 999 });
+  assert.ok(eff2.power > base.power && eff2.power <= 150, 'clamped, still a raise');
+});
+
+test('specced build does not trivialize the champion (foes scale off effective stats)', () => {
+  // dump everything into Power on a mid fighter
+  const base = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
+  const eff = allocatedStats(base, { power: 25 }); // +50 power
+  let wins = 0, n = 60;
+  for (let i = 0; i < n; i++) {
+    const fight = createFight({
+      player: makeFighter({ name: 'P', stats: eff }),
+      foe: makeFighter({ name: 'C', stats: scaleStats(eff, CHAMPION.mult), weaponId: CHAMPION.weaponId, talents: CHAMPION.talents }),
+      seed: 40000 + i, aiLevel: 3,
+    });
+    let g = 0;
+    while (!fight.over && g++ < 300) {
+      if (fight.active === 'p') {
+        let inner = 0;
+        while (!fight.over && fight.active === 'p' && fight.ap > 0 && inner++ < 8) {
+          const legal = actionsFor(fight).filter(x => x.enabled);
+          const pick = id => legal.find(x => x.id === id);
+          // brainless: biggest swing every AP
+          const c = pick('signature') || pick('haymaker') || pick('swing') || pick('jab') || legal[0];
+          if (!c) break;
+          applyAction(fight, c.id);
+        }
+        if (!fight.over) endTurn(fight);
+      } else { aiTakeTurn(fight); if (!fight.over) endTurn(fight); }
+    }
+    if (fight.over && fight.over.winner === 'p') wins++;
+  }
+  const rate = wins / n;
+  assert.ok(rate < 0.9, `glass-cannon spam vs champ winrate ${Math.round(rate * 100)}% should stay under 90% (foes scale)`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

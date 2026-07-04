@@ -16,7 +16,7 @@ import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW
 import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
-  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor,
+  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE,
 } from './pit.js';
@@ -2348,13 +2348,19 @@ async function buildFighter() {
     questsDone: xpRows.filter(r => r.type === 'quest').length,
     variety: new Set(log.filter(e => e.foodId).map(e => e.foodId)).size,
   };
-  const stats = deriveStats(behavior);
+  const baseStats = deriveStats(behavior);
+  const alloc = await kvGet('trainalloc', {});
+  const stats = allocatedStats(baseStats, alloc);
+  // training points: one per wellbeing-safe positive day (protein hit / day closed on budget)
+  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0);
+  const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
+  const tpAvail = Math.max(0, tpTotal - tpSpent);
   const inv = await inventory();
   const owned = ['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)];
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
-  return { stats, behavior, owned, loadout, talents };
+  return { stats, baseStats, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2382,14 +2388,29 @@ async function renderPit(wrap) {
   const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
 
   body.innerHTML = `
-    <p class="note" style="margin-bottom:12px">Your fighter is a mirror of your habits. Protein powers the swing, steps power the lungs, streaks thicken the bones. Fights take about a minute.</p>
+    <p class="note" style="margin-bottom:12px">Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Spend <b>training points</b> to specialize the build your way. Fights take about a minute.</p>
     <div class="card" style="background:var(--surface-2)">
       <div class="card-title">YOUR FIGHTER · ${d.maxHp} HP · ${d.maxWind} WIND ${wins ? `· ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
-      ${STAT_META.map(m => `
+      ${STAT_META.map(m => {
+        const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
+        return `
         <div class="macro" style="margin-bottom:8px">
-          <div class="row"><span>${m.label} <span class="q-coins">${esc(m.fedBy)}</span></span><span class="val">${fighter.stats[m.key]}</span></div>
-          <div class="bar pitstat"><i style="width:${fighter.stats[m.key]}%"></i></div>
-        </div>`).join('')}
+          <div class="row">
+            <span>${m.label} <span class="q-coins">${esc(m.fedBy)}</span></span>
+            <span class="val">${fighter.stats[m.key]}${bonus ? ` <span class="stat-bonus">+${bonus}</span>` : ''}</span>
+          </div>
+          <div class="statline">
+            <div class="bar pitstat" style="flex:1"><i style="width:${fighter.stats[m.key]}%"></i>${bonus ? `<span class="statbase" style="left:${fighter.baseStats[m.key]}%"></span>` : ''}</div>
+            <button class="tp-btn" data-tpminus="${m.key}" ${(fighter.alloc[m.key] || 0) <= 0 ? 'disabled' : ''}>−</button>
+            <button class="tp-btn" data-tpplus="${m.key}" ${fighter.tpAvail <= 0 ? 'disabled' : ''}>+</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="tp-bar">
+        <span><b>Training points</b> · earned from protein hits + closing days on budget</span>
+        <span class="tp-count">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span>
+      </div>
+      ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
     <button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">Talents · ${unspent > 0 ? unspent + ' point' + (unspent === 1 ? '' : 's') + ' to spend!' : fighter.talents.length ? fighter.talents.length + ' taken' : 'choose a spec'}</button>
     <div class="sect-h">Weapon</div>
@@ -2420,6 +2441,19 @@ async function renderPit(wrap) {
       ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>`;
 
+  async function adjustAlloc(key, delta) {
+    const alloc = { ...(await kvGet('trainalloc', {})) };
+    const cur = alloc[key] || 0;
+    if (delta > 0 && fighter.tpAvail <= 0) return;
+    if (delta < 0 && cur <= 0) return;
+    alloc[key] = Math.max(0, cur + delta);
+    await kvSet('trainalloc', alloc);
+    popSound(S.sounds);
+    renderPit(wrap);
+  }
+  $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
+  $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
+  $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderPit(wrap); });
   $('#talentsBtn', body)?.addEventListener('click', () => openTalents(wrap));
   $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon);
