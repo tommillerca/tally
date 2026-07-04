@@ -1703,15 +1703,19 @@ async function renderCharacter(wrap, tab) {
     <div class="bh-hero${tab === 'wardrobe' ? '' : ' mini'}">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
       <div class="bh-hero-meta">
-        <b>Lv ${lvl.level} · ${esc(lvl.name)}</b>
+        <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
-        <span class="note">${ICONS.coin(13)} ${coinBal.toLocaleString()} · ${ownedCount}/${BH_ITEMS.length} cosmetics${boost ? ` · ${ICONS.boltIco(13)}x${boost}` : ''}</span>
+        <div class="bh-pills">
+          <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
+          <span class="bh-pill">${ICONS.bone(14)} ${ownedCount}/${BH_ITEMS.length}</span>
+          ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
+        </div>
       </div>
     </div>
-    <div class="chips" id="chTabs" style="margin:12px 0 4px">
-      <button class="chip ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">Wardrobe</button>
-      <button class="chip ${tab === 'crates' ? 'on' : ''}" data-tab="crates">Crates & Shop ${crates.length ? `(${crates.length})` : ''}</button>
-      <button class="chip ${tab === 'progress' ? 'on' : ''}" data-tab="progress">Progress</button>
+    <div class="ch-tabs" id="chTabs">
+      <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
+      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Loot</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
     </div>
     <div id="chContent"></div>`;
 
@@ -1750,6 +1754,7 @@ async function renderCharacter(wrap, tab) {
 
   if (tab === 'crates') {
     content.innerHTML = `
+      <div class="sect-h" style="margin-top:2px">Crates${crates.length ? ` · ${crates.length} to open` : ''}</div>
       ${crates.length ? crates.map(c => {
         const def = CRATES[c.crate] || CRATES.daily;
         return `<div class="crate-row">

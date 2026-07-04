@@ -974,3 +974,34 @@ body::before {
 .blip-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; box-shadow: 0 0 8px rgba(242, 233, 215, 0.35); }
 .blip-dot.rare { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: rarePulse 1.6s ease-in-out infinite; }
 @keyframes rarePulse { 50% { box-shadow: 0 0 18px var(--accent); } }
+
+/* ===== character sheet: game tabs + stat pills ===== */
+.ch-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 10px; }
+.chip.ch-tab {
+  position: relative; display: grid; justify-items: center; gap: 4px;
+  padding: 11px 4px 8px; border-radius: 15px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-family: var(--display); font-size: 15px; letter-spacing: 0.03em;
+  color: var(--text-2);
+}
+.chip.ch-tab svg, .chip.ch-tab img { opacity: 0.75; }
+.chip.ch-tab.on {
+  color: var(--accent); border-color: rgba(165, 232, 71, 0.55);
+  background: rgba(165, 232, 71, 0.08);
+  box-shadow: 0 0 16px rgba(165, 232, 71, 0.14), inset 0 0 12px rgba(165, 232, 71, 0.05);
+}
+.chip.ch-tab.on svg, .chip.ch-tab.on img { opacity: 1; }
+.ch-badge {
+  position: absolute; top: 5px; right: 12%;
+  background: var(--amber); color: #201500; font-style: normal;
+  font-family: var(--body, system-ui); font-size: 11px; font-weight: 800;
+  padding: 1px 6px; border-radius: 999px;
+}
+.bh-title { font-family: var(--display); font-size: 19px; letter-spacing: 0.02em; }
+.bh-pills { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+.bh-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 11px; font-size: 12.5px; font-weight: 700; color: var(--text-2);
+}
+.bh-hero.mini .bh-pills { justify-content: start; }
