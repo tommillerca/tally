@@ -5,7 +5,10 @@ Capacitor wrapper around the PWA with a custom Swift HealthKit plugin
 flow: Connect Apple Health → iOS permission sheet → done. Syncing then
 happens automatically on every launch/resume (no shortcut, no clipboard).
 
-## Build (needs Xcode installed once)
+## Build
+
+**First time?** See `SETUP.md` for the two Apple-ID gated steps (install Xcode,
+enroll in the Developer Program) and run `bash preflight.sh` to check readiness.
 
 ```
 cd native
@@ -14,9 +17,10 @@ npx cap sync ios
 npx cap open ios        # opens Xcode
 ```
 
-In Xcode: select your team under Signing & Capabilities (personal Apple ID
-works for device installs; HealthKit capability + entitlements are already
-wired), pick your iPhone or a simulator, press Run.
+In Xcode: select your team under Signing & Capabilities, pick your iPhone or a
+simulator, press Run. HealthKit capability + entitlements are already wired.
+Note: HealthKit provisioning is unreliable on a free personal team; the paid
+Developer Program is the clean path (and is required for push + TestFlight).
 
 - Simulator testing: DEBUG builds expose `Health.debugWrite({steps, activeKcal})`
   from the JS console to inject samples (simulators have no real Health data).
