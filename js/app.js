@@ -18,6 +18,7 @@ import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, o
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
+  TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2165,7 +2166,8 @@ async function buildFighter() {
   const owned = ['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)];
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
-  return { stats, behavior, owned, loadout };
+  const talents = await kvGet('talents', []);
+  return { stats, behavior, owned, loadout, talents };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2187,8 +2189,10 @@ async function renderPit(wrap) {
   const beaten = pitBeatKeys(xpRows);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout]);
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.talents));
   const wins = xpRows.filter(r => r.type === 'fight').length;
+  const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
+  const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
 
   body.innerHTML = `
     <p class="note" style="margin-bottom:12px">Your fighter is a mirror of your habits. Protein powers the swing, steps power the lungs, streaks thicken the bones. Fights take about a minute.</p>
@@ -2200,6 +2204,7 @@ async function renderPit(wrap) {
           <div class="bar pitstat"><i style="width:${fighter.stats[m.key]}%"></i></div>
         </div>`).join('')}
     </div>
+    <button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">Talents · ${unspent > 0 ? unspent + ' point' + (unspent === 1 ? '' : 's') + ' to spend!' : fighter.talents.length ? fighter.talents.length + ' taken' : 'choose a spec'}</button>
     <div class="sect-h">Weapon</div>
     <div class="chips">
       ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
@@ -2228,6 +2233,7 @@ async function renderPit(wrap) {
       ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>`;
 
+  $('#talentsBtn', body)?.addEventListener('click', () => openTalents(wrap));
   $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon);
     renderPit(wrap);
@@ -2259,12 +2265,14 @@ function foeOutfitFor(name) {
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq });
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.talents });
+  const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : []);
   const foe = makeFighter({
     name: foeCfg.name,
     stats: scaleStats(fighter.stats, foeCfg.mult),
     weaponId: foeCfg.weaponId || 'starter',
     outfit: foeOutfitFor(foeCfg.name),
+    talents: foeTalents,
   });
   const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1 });
   const fast = !!navigator.webdriver;
@@ -2376,6 +2384,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (ev.t === 'shove') {
       pulse(atkStage, lungeCls, fxMs);
       setTimeout(() => pulse(vicStage, 'hurt', fxMs), fxMs * 0.5);
+    } else if (ev.t === 'counter') {
+      const vs = ev.who === 'p' ? 'f' : 'p';
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.who === 'p' ? 'lunge-r' : 'lunge-l', fxMs);
+      floatNode(`-${ev.damage}`, vs, 'dmg');
+      floatNode('COUNTER!', vs, 'stamp hot');
+    } else if (ev.t === 'heal') {
+      floatNode(`+${ev.amount}`, ev.who, 'dmg heal');
     } else if (ev.t === 'brace') {
       floatNode('+wind', ev.who, 'stamp cool');
     } else if (ev.t === 'taunt') {
@@ -2386,7 +2401,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
   function describe(ev) {
     const who = ev.who === 'p' ? 'You' : foe.name;
     const them = ev.who === 'p' ? foe.name : 'you';
-    if (ev.t === 'hit') return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
+    if (ev.t === 'hit') {
+      if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
+      if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
+      return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
+    }
+    if (ev.t === 'counter') return `${who === 'You' ? 'You counterstep' : who + ' countersteps'} for ${ev.damage}!`;
+    if (ev.t === 'heal') return `${who} drank the marrow (+${ev.amount} HP)`;
     if (ev.t === 'miss') return `${who} whiffed the haymaker`;
     if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
     if (ev.t === 'brace') return `${who} caught a breath`;
@@ -2422,6 +2443,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult)} dmg · unblockable</small></button>`;
 
     if (fight.range === 'close') {
+      const titan = get('titan');
+      if (titan) html += btn(titan, { hint: 'ignores defense · once', glow: true });
+      const flurry = get('flurry');
+      if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
       html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
       html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
       html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
@@ -2553,6 +2578,66 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   planTelegraph(fight);
   refreshAll('Round one. Your turn.');
+}
+
+/* ================= talents ================= */
+
+async function openTalents(pitWrap) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Talents</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="talBody"></div>`, { cls: 'full', onClose: () => pitWrap && renderPit(pitWrap) });
+  renderTalents(wrap);
+}
+
+async function renderTalents(wrap) {
+  const body = $('#talBody', wrap);
+  if (!body) return;
+  const [xpRows, takenArr] = await Promise.all([db.all('xp'), kvGet('talents', [])]);
+  const taken = new Set(takenArr);
+  const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
+  const points = talentPoints(lvl.level);
+  const unspent = Math.max(0, points - taken.size);
+
+  body.innerHTML = `
+    <div class="tal-head">
+      <div><b style="font-family:var(--display);font-size:24px;letter-spacing:1px">${unspent}</b> <span class="note">point${unspent === 1 ? '' : 's'} to spend</span></div>
+      <span class="note">1 point per level · Lv ${lvl.level}</span>
+    </div>
+    <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
+    ${TALENT_TREES.map(tree => `
+      <div class="tal-tree">
+        <div class="tal-tree-head">
+          <b style="color:${tree.color}">${tree.name}</b>
+          <span class="tal-tag">${tree.tag}</span>
+          <span class="note" style="margin-left:auto">${tree.nodes.filter(n => taken.has(n.id)).length}/3</span>
+        </div>
+        <p class="note" style="margin:0 2px 8px">${tree.flavor}</p>
+        ${tree.nodes.map((n, i) => {
+          const has = taken.has(n.id);
+          const can = !has && unspent > 0 && canTakeTalent(taken, tree.id, i);
+          const locked = !has && !canTakeTalent(taken, tree.id, i);
+          return `<button class="tal-node ${has ? 'taken' : can ? 'can' : 'locked'}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
+            <span class="tal-pip" style="${has ? `background:${tree.color};border-color:${tree.color}` : ''}">${has ? '✓' : 'T' + (i + 1)}</span>
+            <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small></span>
+          </button>`;
+        }).join('')}
+      </div>`).join('')}
+    ${taken.size ? '<button class="btn danger" id="respecBtn">Respec (free) · refund all points</button>' : ''}`;
+
+  $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
+    const t = new Set(await kvGet('talents', []));
+    if (!canTakeTalent(t, b.dataset.tree, Number(b.dataset.idx))) return;
+    t.add(b.dataset.talent);
+    await kvSet('talents', [...t]);
+    popSound(S.sounds);
+    confettiBurst(innerWidth / 2, innerHeight * 0.3, 12);
+    renderTalents(wrap);
+  }));
+  $('#respecBtn', body)?.addEventListener('click', async () => {
+    await kvSet('talents', []);
+    toast('Points refunded. Build something new.');
+    renderTalents(wrap);
+  });
 }
 
 /* ================= demo seed ================= */

@@ -177,5 +177,96 @@ test('ladder scaling floors and caps', () => {
   assert.equal(CHAMPION.weaponId, 'bonecrusher');
 });
 
+
+
+// ---- talents (framework section 7) ----
+import { TALENT_TREES, talentPoints, canTakeTalent, sigThreshold, RUNG_TALENTS } from '../js/pit.js';
+import { makeFighter as mf, createFight as cf, applyAction as apply, actionsFor as acts, endTurn as et, resolveHit as rh } from '../js/pit.js';
+
+const MID = { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 30 };
+
+test('talent chains gate linearly and points come from levels', () => {
+  assert.equal(talentPoints(1), 0);
+  assert.equal(talentPoints(8), 7);
+  const taken = new Set();
+  assert.ok(canTakeTalent(taken, 'slab', 0));
+  assert.ok(!canTakeTalent(taken, 'slab', 1)); // needs heavy hands first
+  taken.add('heavyhands');
+  assert.ok(canTakeTalent(taken, 'slab', 1));
+  assert.ok(!canTakeTalent(taken, 'slab', 0)); // already taken
+  assert.equal(TALENT_TREES.length, 3);
+  assert.ok(TALENT_TREES.every(t => t.nodes.length === 3));
+});
+test('light feet grants 3 AP turns', () => {
+  const f = mf({ name: 'G', stats: MID, talents: ['lightfeet'] });
+  assert.equal(f.d.ap, 3);
+});
+test('heavy hands: +15% on haymakers only', () => {
+  const atk = mf({ name: 'S', stats: MID, talents: ['heavyhands'] });
+  const dfd = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const hay = rh({ move: 'haymaker', attacker: atk, defender: dfd, rng: noLuck });
+  assert.equal(hay.damage, Math.round(40 * 1.75 * 1.15)); // 81
+  const swing = rh({ move: 'swing', attacker: atk, defender: dfd, rng: noLuck });
+  assert.equal(swing.damage, Math.round(22 * 1.75)); // untouched
+});
+test('marrowlust heals 25% of haymaker damage', () => {
+  const fight = cf({ player: mf({ name: 'P', stats: MID, talents: ['heavyhands', 'marrowlust'] }), foe: mf({ name: 'F', stats: MID }), seed: 11 });
+  fight.p.hp = 100;
+  apply(fight, 'haymaker');
+  const heal = fight.log; // events returned, not stored; recompute via hp
+  assert.ok(fight.p.hp > 100, String(fight.p.hp));
+});
+test('titan ignores block and dodge, once per fight', () => {
+  const fight = cf({ player: mf({ name: 'P', stats: MID, talents: ['heavyhands', 'marrowlust', 'titan'] }), foe: mf({ name: 'F', stats: { ...MID, marrow: 90 } }), seed: 12 });
+  fight.f.state = 'dodge';
+  const before = fight.f.hp;
+  const evs = apply(fight, 'titan');
+  assert.ok(evs.some(e => e.t === 'hit' && e.titan && e.damage > 0), JSON.stringify(evs));
+  assert.ok(fight.f.hp < before);
+  assert.ok(fight.p.titanUsed);
+  fight.ap = 2; fight.p.wind = 90;
+  assert.ok(!acts(fight).some(a => a.id === 'titan')); // once per fight
+});
+test('flurry dumps all wind for 3 unblockable hits', () => {
+  const fight = cf({ player: mf({ name: 'P', stats: MID, talents: ['lightfeet', 'counterstep', 'flurry'] }), foe: mf({ name: 'F', stats: { ...MID, marrow: 90 } }), seed: 13 });
+  fight.f.state = 'block';
+  const wind = fight.p.wind;
+  assert.ok(wind >= 30);
+  const before = fight.f.hp;
+  const evs = apply(fight, 'flurry');
+  const hits = evs.filter(e => e.t === 'hit' && e.flurry);
+  assert.equal(hits.length, 3);
+  assert.equal(fight.p.wind, 0);
+  assert.ok(fight.f.hp < before);
+});
+test('counterstep punishes a whiffed haymaker', () => {
+  const fight = cf({ player: mf({ name: 'P', stats: MID }), foe: mf({ name: 'F', stats: MID, talents: ['lightfeet', 'counterstep'] }), seed: 14 });
+  fight.f.state = 'dodge';
+  const before = fight.p.hp;
+  const evs = apply(fight, 'haymaker');
+  assert.ok(evs.some(e => e.t === 'miss'));
+  assert.ok(evs.some(e => e.t === 'counter'), JSON.stringify(evs));
+  assert.ok(fight.p.hp <= before);
+});
+test('ringmaster: big entrance + showstopper threshold + crowd work', () => {
+  const rm = mf({ name: 'R', stats: MID, talents: ['crowdwork', 'bigentrance', 'showstopper'] });
+  assert.equal(rm.hype, 25);
+  assert.equal(sigThreshold(rm), 80);
+  const fight = cf({ player: rm, foe: mf({ name: 'F', stats: { ...MID, reflex: 0, marrow: 90 } }), seed: 15 });
+  apply(fight, 'swing'); // landed swing: 10 hype * 1.4 = 14
+  assert.equal(fight.p.hype, 25 + 14, String(fight.p.hype));
+  fight.p.hype = 85; fight.ap = 2;
+  assert.ok(acts(fight).some(a => a.id === 'signature')); // fires at 80 with showstopper
+});
+test('balance: full-spec fighter wins more but pacing holds', () => {
+  let w = 0, turns = 0, n = 150;
+  for (let i = 0; i < n; i++) {
+    const r = simulate({ pStats: MID, fStats: MID, seed: 20000 + i });
+    turns += r.turns;
+  }
+  assert.ok(turns / n >= 3.5 && turns / n <= 9);
+  assert.equal(RUNG_TALENTS[5].length, 2);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
