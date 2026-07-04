@@ -742,3 +742,86 @@ body::before {
 .shake { animation: fshake 0.4s ease; }
 @keyframes fshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px) rotate(-1deg); } 60% { transform: translateX(4px) rotate(1deg); } }
 .fight-over { text-align: center; padding: 18px 0 8px; }
+
+/* ---------- the pit: arena ---------- */
+.arena {
+  position: relative; height: 258px; border-radius: 18px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 120%, #1d1a14 0%, #14120e 45%, #0e0d12 100%);
+  border: 1px solid var(--line-strong);
+}
+.arena-floor {
+  position: absolute; left: -10%; right: -10%; bottom: 26px; height: 3px;
+  background: rgba(242, 233, 215, 0.12); border-radius: 50%;
+  box-shadow: 0 10px 30px 14px rgba(0, 0, 0, 0.5);
+}
+.arena.quake { animation: quake 0.4s ease; }
+@keyframes quake { 0%,100% { transform: translate(0,0); } 25% { transform: translate(-5px,2px); } 50% { transform: translate(4px,-2px); } 75% { transform: translate(-3px,1px); } }
+.fighterG {
+  position: absolute; bottom: 14px; width: 128px;
+  transition: left 0.5s cubic-bezier(0.22, 1, 0.36, 1), right 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  display: grid; gap: 6px; justify-items: center;
+}
+.fplate { width: 100%; display: grid; gap: 3px; }
+.fplate .fname { font-size: 13px; justify-content: center; }
+.microbars { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.fstage {
+  width: 112px; height: 112px; min-height: 112px; border-radius: 16px;
+  background: transparent; border: none; overflow: visible;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.5));
+}
+.fstage img { object-fit: contain !important; }
+.mirror-wrap { position: absolute; inset: 0; transform: scaleX(-1); }
+.fstage.lunge-r { transform: translateX(52px) rotate(4deg); }
+.fstage.lunge-l { transform: translateX(-52px) rotate(-4deg); }
+.fstage.lunge-r.big { transform: translateX(74px) rotate(9deg) scale(1.06); }
+.fstage.lunge-l.big { transform: translateX(-74px) rotate(-9deg) scale(1.06); }
+.fstage.lunge-r.whiff { transform: translateX(96px) rotate(16deg); transition-duration: 0.34s; }
+.fstage.lunge-l.whiff { transform: translateX(-96px) rotate(-16deg); transition-duration: 0.34s; }
+.fstage.hurt { animation: hurtflash 0.34s ease; }
+@keyframes hurtflash {
+  0% { filter: brightness(2.4) drop-shadow(0 10px 12px rgba(0,0,0,0.5)); transform: translateX(0); }
+  35% { transform: translateX(10px) rotate(2deg); }
+  70% { transform: translateX(-6px) rotate(-1deg); }
+  100% { filter: brightness(1) drop-shadow(0 10px 12px rgba(0,0,0,0.5)); transform: translateX(0); }
+}
+.you-side .fstage.hurt { animation-name: hurtflashL; }
+@keyframes hurtflashL {
+  0% { filter: brightness(2.4); transform: translateX(0); }
+  35% { transform: translateX(-10px) rotate(-2deg); }
+  70% { transform: translateX(6px) rotate(1deg); }
+  100% { filter: brightness(1); transform: translateX(0); }
+}
+.fstage.guard { animation: guardup 0.4s ease; }
+@keyframes guardup { 0% { transform: scale(1); } 40% { transform: scale(0.94) translateY(4px); filter: brightness(1.25) drop-shadow(0 0 14px rgba(124,196,255,0.6)); } 100% { transform: scale(1); } }
+.fstage.slip { animation: slipfx 0.4s ease; }
+@keyframes slipfx { 0% { opacity: 1; } 45% { opacity: 0.35; transform: translateX(-14px) skewX(-6deg); } 100% { opacity: 1; } }
+.you-side .fstage.slip { animation-name: slipfxR; }
+@keyframes slipfxR { 0% { opacity: 1; } 45% { opacity: 0.35; transform: translateX(14px) skewX(6deg); } 100% { opacity: 1; } }
+.fstage.ko { transform: rotate(78deg) translateY(34px); opacity: 0.55; transition: all 0.7s cubic-bezier(0.34, 1.2, 0.64, 1); }
+
+#floats { position: absolute; inset: 0; pointer-events: none; }
+.float {
+  position: absolute; top: 46%; transform: translateX(-50%);
+  animation: floatup 1s ease forwards; z-index: 5; text-align: center;
+}
+.float.dmg { font-family: var(--display); font-size: 30px; color: var(--text); text-shadow: 0 2px 8px rgba(0,0,0,0.8); letter-spacing: 1px; }
+.float.dmg.crit { font-size: 40px; color: var(--carbs); }
+.float.dmg.sig { font-size: 46px; color: var(--accent); }
+.float.stamp { font-size: 13px; font-weight: 800; letter-spacing: 0.1em; color: var(--text-2); top: 34%; }
+.float.stamp.hot { color: var(--carbs); }
+.float.stamp.dim { color: var(--text-3); }
+.float.stamp.cool { color: var(--protein); }
+.float.stamp.warm { color: var(--carbs); }
+@keyframes floatup { 0% { opacity: 0; margin-top: 8px; } 15% { opacity: 1; } 100% { opacity: 0; margin-top: -44px; } }
+.arena-tele { position: absolute; top: 8px; left: 10px; right: 10px; z-index: 6; }
+.fight-meta { display: flex; align-items: center; gap: 10px; margin: 10px 2px 10px; }
+.fight-meta .fight-log { flex: 1; text-align: left; min-height: 32px; font-size: 12.5px; }
+.fight-act.glow { border-color: rgba(165, 232, 71, 0.65); animation: cratepulse 1.2s ease-in-out infinite; }
+.fight-act.glow b { color: var(--accent); }
+.fight-act.weak { opacity: 0.55; }
+.fight-act.sig {
+  background: linear-gradient(180deg, rgba(255, 201, 97, 0.2), rgba(255, 201, 97, 0.06));
+  border-color: rgba(255, 201, 97, 0.7); animation: cratepulse 1s ease-in-out infinite;
+}
+.fight-act.sig b { color: var(--carbs); letter-spacing: 2px; }

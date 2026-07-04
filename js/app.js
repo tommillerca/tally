@@ -17,7 +17,7 @@ import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimSt
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor,
-  applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats,
+  applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2267,8 +2267,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.name),
   });
   const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1 });
-  const beatMs = navigator.webdriver ? 60 : 620;
+  const fast = !!navigator.webdriver;
+  const beatMs = fast ? 60 : 700;
+  const fxMs = fast ? 30 : 300;
   let settled = false;
+  let showMore = false;
 
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(foeCfg.name)}</h2><button class="sheet-close">Flee</button></div>
@@ -2276,79 +2279,198 @@ async function openFight(pitWrap, fighter, foeCfg) {
     { cls: 'full', onClose: () => { if (!fight.over && !settled) toast('You slipped out of The Pit. No harm done.'); } });
 
   const body = $('#fightBody', wrap);
+  body.innerHTML = `
+    <div class="arena" id="arena">
+      <div class="arena-floor"></div>
+      <div class="fighterG foe-side" id="foeG">
+        <div class="fplate">
+          <div class="fname">${esc(foe.name)}<span class="fstate" id="foeState" hidden></span></div>
+          <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
+          <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
+        </div>
+        <div class="bh-stage fstage" id="foeStage"><div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+      </div>
+      <div class="fighterG you-side" id="youG">
+        <div class="fplate">
+          <div class="fname">You<span class="fstate" id="youState" hidden></span></div>
+          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
+          <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
+        </div>
+        <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG'] })}</div>
+      </div>
+      <div class="telegraph arena-tele" id="teleBanner" hidden></div>
+      <div id="floats"></div>
+    </div>
+    <div class="fight-meta"><span class="range-pill" id="rangePill"></span><span class="fight-log" id="flog">Round one. Your turn.</span></div>
+    <div class="fight-actions" id="factions"></div>`;
 
-  function bars(f, who) {
-    const hpPct = (f.hp / f.d.maxHp) * 100;
-    return `
-      <div class="fbars">
-        <div class="fname">${esc(f.name)} ${f.state ? `<span class="fstate">${f.state === 'block' ? 'BLOCKING' : 'DODGING'}</span>` : ''}${f.stagger ? '<span class="fstate stag">STAGGERED</span>' : ''}</div>
-        <div class="bar fhp"><i style="width:${hpPct}%;${hpPct < 30 ? 'background:var(--danger)' : ''}"></i></div>
-        <div class="frow"><span>HP ${f.hp}/${f.d.maxHp}</span><span>Wind ${f.wind}/${f.d.maxWind}</span><span>Hype ${f.hype}</span></div>
-        <div class="bar fwind"><i style="width:${(f.wind / f.d.maxWind) * 100}%"></i></div>
-        <div class="bar fhype"><i style="width:${f.hype}%"></i></div>
-      </div>`;
+  const el = id => $('#' + id, body);
+
+  function positionFighters() {
+    const close = fight.range === 'close';
+    el('youG').style.left = close ? '12%' : '-2%';
+    el('foeG').style.right = close ? '12%' : '-2%';
+    el('rangePill').textContent = `${fight.range === 'close' ? 'CLOSE' : 'FAR'} · turn ${fight.turn}`;
   }
 
-  function render(msg = '') {
-    if (!body.isConnected) return;
-    const legal = actionsFor(fight);
-    const playerTurn = fight.active === 'p' && !fight.over;
-    body.innerHTML = `
-      <div class="fight-stage">
-        <div class="foe-side">
-          <div class="bh-stage fsmall ${fight.lastHit === 'f' ? 'shake' : ''}">${avatarLayersHtml(foe.outfit, { noYard: true })}</div>
-          ${bars(foe, 'f')}
-        </div>
-        ${fight.telegraph ? `<div class="telegraph">⚠ ${esc(foe.name)} is winding up something heavy</div>` : ''}
-        <div class="range-pill">${fight.range === 'close' ? 'CLOSE RANGE' : 'FAR RANGE'} · turn ${fight.turn}</div>
-        <div class="fight-log">${esc(msg || '...')}</div>
-        <div class="you-side">
-          <div class="bh-stage fsmall ${fight.lastHit === 'p' ? 'shake' : ''}">${avatarLayersHtml(player.outfit, { noYard: true })}</div>
-          ${bars(player, 'p')}
-        </div>
-      </div>
-      <div class="fight-actions">
-        ${playerTurn ? legal.map(a => `
-          <button class="fight-act" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
-            <b>${a.label}</b><small>${'●'.repeat(a.ap)} ${a.windCost ? a.windCost + 'w' : ''}</small>
-          </button>`).join('') + `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`
-        : '<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">' + (fight.over ? '' : esc(foe.name) + ' is acting...') + '</p>'}
-      </div>`;
-    $$('[data-act]', body).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
-    $('#endTurn', body)?.addEventListener('click', finishPlayerTurn);
+  function updateBars() {
+    el('youHp').style.width = (player.hp / player.d.maxHp * 100) + '%';
+    el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
+    el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';
+    el('foeHp').style.background = foe.hp / foe.d.maxHp < 0.3 ? 'var(--danger)' : '';
+    el('youWind').style.width = (player.wind / player.d.maxWind * 100) + '%';
+    el('foeWind').style.width = (foe.wind / foe.d.maxWind * 100) + '%';
+    el('youHype').style.width = player.hype + '%';
+    el('foeHype').style.width = foe.hype + '%';
+    for (const [f, id] of [[player, 'youState'], [foe, 'foeState']]) {
+      const chip = el(id);
+      if (f.state || f.stagger) {
+        chip.hidden = false;
+        chip.textContent = f.stagger ? 'STAGGERED' : f.state === 'block' ? 'BLOCKING' : 'DODGING';
+        chip.classList.toggle('stag', !!f.stagger);
+      } else chip.hidden = true;
+    }
+    el('teleBanner').hidden = !fight.telegraph;
+    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy — Dodge it!`;
+  }
+
+  function floatNode(html, side, cls = '') {
+    const n = document.createElement('div');
+    n.className = 'float ' + cls;
+    n.innerHTML = html;
+    n.style.left = side === 'f' ? '68%' : '22%';
+    el('floats').appendChild(n);
+    setTimeout(() => n.remove(), fast ? 200 : 1100);
+  }
+
+  function pulse(node, cls, ms) {
+    const tokens = cls.split(' ').filter(Boolean);
+    node.classList.add(...tokens);
+    setTimeout(() => node.classList.remove(...tokens), ms);
+  }
+
+  // choreograph one engine event
+  function playFx(ev) {
+    const atkStage = ev.who === 'p' ? el('youStage') : el('foeStage');
+    const vicStage = ev.who === 'p' ? el('foeStage') : el('youStage');
+    const vicSide = ev.who === 'p' ? 'f' : 'p';
+    const lungeCls = ev.who === 'p' ? 'lunge-r' : 'lunge-l';
+    if (ev.t === 'hit') {
+      pulse(atkStage, ev.move === 'haymaker' || ev.signature ? lungeCls + ' big' : lungeCls, fxMs + 120);
+      setTimeout(() => {
+        pulse(vicStage, 'hurt', fxMs + 150);
+        if (ev.move === 'haymaker' || ev.signature) pulse(el('arena'), 'quake', fxMs + 160);
+        floatNode(`-${ev.damage}`, vicSide, 'dmg' + (ev.crit ? ' crit' : '') + (ev.signature ? ' sig' : ''));
+        if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
+        if (ev.glance) floatNode('glancing', vicSide, 'stamp dim');
+        if (ev.breaksGuard) floatNode('GUARD BREAK', vicSide, 'stamp hot');
+        if (ev.signature) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 20); levelSound(S.sounds); }
+        else if (ev.crit) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 10); popSound(S.sounds); }
+      }, fxMs * 0.6);
+    } else if (ev.t === 'miss') {
+      pulse(atkStage, lungeCls + ' big whiff', fxMs + 250);
+      floatNode('MISS', vicSide, 'stamp');
+      floatNode('off-balance!', ev.who, 'stamp dim');
+    } else if (ev.t === 'state') {
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.state === 'block' ? 'guard' : 'slip', fxMs + 200);
+    } else if (ev.t === 'shove') {
+      pulse(atkStage, lungeCls, fxMs);
+      setTimeout(() => pulse(vicStage, 'hurt', fxMs), fxMs * 0.5);
+    } else if (ev.t === 'brace') {
+      floatNode('+wind', ev.who, 'stamp cool');
+    } else if (ev.t === 'taunt') {
+      floatNode(`+${ev.gain} hype`, ev.who, 'stamp warm');
+    }
   }
 
   function describe(ev) {
     const who = ev.who === 'p' ? 'You' : foe.name;
     const them = ev.who === 'p' ? foe.name : 'you';
-    if (ev.t === 'hit') return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}${ev.crit ? ' · CRIT!' : ''}${ev.glance ? ' (glancing)' : ''}${ev.breaksGuard ? ' · GUARD BROKEN' : ''}`;
-    if (ev.t === 'miss') return `${who} whiffed the haymaker and stumbled off-balance`;
+    if (ev.t === 'hit') return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
+    if (ev.t === 'miss') return `${who} whiffed the haymaker`;
     if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
     if (ev.t === 'brace') return `${who} caught a breath`;
     if (ev.t === 'shove') return `${who} shoved ${them} back`;
-    if (ev.t === 'advance') return `${who} closed the distance`;
-    if (ev.t === 'taunt') return `${who} talked trash (+${ev.gain} hype)`;
+    if (ev.t === 'advance') return `${who} closed in`;
+    if (ev.t === 'taunt') return `${who} talked trash`;
     if (ev.t === 'ko') return `${who} wins by KO`;
     return '';
+  }
+
+  function renderActions() {
+    const factions = el('factions');
+    const playerTurn = fight.active === 'p' && !fight.over;
+    if (!playerTurn) {
+      factions.innerHTML = `<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">${fight.over ? '' : esc(foe.name) + ' is acting...'}</p>`;
+      return;
+    }
+    const legal = actionsFor(fight);
+    const get = id => legal.find(a => a.id === id);
+    const foeBlocking = foe.state === 'block';
+    const foeDodging = foe.state === 'dodge';
+    const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
+      <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
+        <b>${a.label}</b><small>${hint || `${'●'.repeat(a.ap)}${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
+      </button>` : '';
+    const dmgHint = id => {
+      const est = expectedDamage(id === 'throwb' ? 'throwb' : id, player, foe.state, foe);
+      return `~${est} dmg · ${'●'.repeat(ACTIONS[id].ap)}`;
+    };
+
+    let html = '';
+    const sig = get('signature');
+    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult)} dmg · unblockable</small></button>`;
+
+    if (fight.range === 'close') {
+      html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
+      html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
+      html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
+      html += btn(get('block'), { hint: 'guards vs swings' });
+      html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
+      if (player.wind < 20) html += btn(get('brace'), { hint: '+40 wind', glow: player.wind < 12 });
+      html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, brace'}</small></button>`;
+      if (showMore) {
+        html += btn(get('shove'), { hint: 'knock to far' });
+        if (player.wind >= 20) html += btn(get('brace'), { hint: '+40 wind' });
+      }
+    } else {
+      html += btn(get('advance'), { hint: 'close the gap', glow: true });
+      html += btn(get('throwb'), { hint: dmgHint('throwb') });
+      html += btn(get('brace'), { hint: '+40 wind' });
+      html += btn(get('taunt'), { hint: '+hype' });
+    }
+    html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
+    factions.innerHTML = html;
+    $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
+    $('#moreBtn', factions)?.addEventListener('click', () => { showMore = !showMore; renderActions(); });
+    $('#endTurn', factions)?.addEventListener('click', finishPlayerTurn);
+  }
+
+  function setLog(msg) { const f = el('flog'); if (f) f.textContent = msg || '...'; }
+
+  function refreshAll(msg) {
+    positionFighters();
+    updateBars();
+    renderActions();
+    if (msg != null) setLog(msg);
   }
 
   let pendingEnd = null;
   function playerAct(id) {
     if (fight.active !== 'p' || fight.over) return;
     const evs = applyAction(fight, id);
-    const hit = evs.find(e => e.t === 'hit');
-    fight.lastHit = hit && hit.damage > 0 ? 'f' : null;
-    if (hit && (hit.crit || hit.signature)) { confettiBurst(innerWidth / 2, innerHeight * 0.25, 12); popSound(S.sounds); }
-    render(evs.map(describe).filter(Boolean).join(' · '));
+    if (!evs.length) return;
+    evs.forEach(playFx);
+    refreshAll(evs.map(describe).filter(Boolean).join(' · '));
     if (fight.over) return settle();
-    if (fight.ap <= 0 && !pendingEnd) pendingEnd = setTimeout(finishPlayerTurn, 420);
+    if (fight.ap <= 0 && !pendingEnd) pendingEnd = setTimeout(finishPlayerTurn, fast ? 120 : 500);
   }
 
   function finishPlayerTurn() {
     if (pendingEnd) { clearTimeout(pendingEnd); pendingEnd = null; }
     if (fight.active !== 'p' || fight.over) return;
     endTurn(fight);
-    render('');
+    refreshAll('');
     aiPlay();
   }
 
@@ -2365,23 +2487,26 @@ async function openFight(pitWrap, fighter, foeCfg) {
         break;
       }
       if (batch.length) {
-        const hit = batch.find(e => e.t === 'hit');
-        fight.lastHit = hit && hit.damage > 0 ? 'p' : null;
-        render(batch.map(describe).filter(Boolean).join(' · '));
+        batch.forEach(playFx);
+        positionFighters(); updateBars();
+        setLog(batch.map(describe).filter(Boolean).join(' · '));
       }
       if (i < evs.length && !fight.over) { setTimeout(step, beatMs); return; }
       if (fight.over) return settle();
       endTurn(fight);
       planTelegraph(fight);
-      fight.lastHit = null;
-      setTimeout(() => render('Your turn.'), beatMs);
+      setTimeout(() => refreshAll('Your turn.'), beatMs * 0.7);
     };
-    setTimeout(step, beatMs);
+    setTimeout(step, beatMs * 0.6);
   }
 
   async function settle() {
     if (settled) return; settled = true;
     const won = fight.over.winner === 'p';
+    // KO choreography
+    const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
+    if (loserStage) loserStage.classList.add('ko');
+    renderActions();
     let coins = 0, xp = 0, extras = [];
     if (won) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
@@ -2415,17 +2540,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const sub = won
       ? [`+${coins} coins`, xp ? `+${xp} XP` : '', ...extras].filter(Boolean).join(' · ')
       : fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`;
-    body.insertAdjacentHTML('beforeend', `
-      <div class="fight-over">
-        <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
-        <p class="note" style="margin:8px 0 16px">${esc(sub)}</p>
-        <button class="btn" id="fightDone">Back to The Pit</button>
-      </div>`);
-    $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+    setTimeout(() => {
+      body.insertAdjacentHTML('beforeend', `
+        <div class="fight-over">
+          <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
+          <p class="note" style="margin:8px 0 16px">${esc(sub)}</p>
+          <button class="btn" id="fightDone">Back to The Pit</button>
+        </div>`);
+      $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+    }, fast ? 80 : 750);
   }
 
   planTelegraph(fight);
-  render('Round one. Your turn.');
+  refreshAll('Round one. Your turn.');
 }
 
 /* ================= demo seed ================= */
