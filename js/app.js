@@ -521,14 +521,54 @@ function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
 
 function speechLine({ entries, tot, targets, crates, streak, isToday }) {
   const pick = arr => arr[(new Date().getDate() + arr.length) % arr.length];
-  if (crates.length) return pick(['Crack that crate open already!', 'Loot is burning a hole in my ribs.', 'Crates do not open themselves, chief.']);
+  if (crates.length) return pick([
+    'Crack that crate open already!',
+    'Loot is burning a hole in my ribs.',
+    'Crates do not open themselves, chief.',
+    'I can hear something rattling in there. Relatable.',
+    'Unopened crates keep me up at night. I do not sleep anyway.',
+  ]);
   if (!isToday) return 'Time traveling, are we? Tap me to change my fit.';
-  if (!entries.length) return pick(['Feed me a log, chief.', 'Bones do not fuel themselves.', 'Scan something tasty. I dare you.']);
-  if (targets && targets.p && tot.p >= targets.p) return pick(['Protein secured. Bones swole.', 'Full protein. Maximum calcium energy.']);
-  if (targets && tot.kcal > targets.kcal) return pick(['Big day. We log it all anyway.', 'Honest logs make strong bones.']);
-  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick(['Right in the zone. Finish strong.', 'Stick the landing tonight.']);
-  if (streak >= 3) return `Day ${streak}. Keep the flame alive.`;
-  return pick(['Solid pace today.', 'What is next on the menu?', 'More protein never hurt a skeleton.']);
+  if (!entries.length) return pick([
+    'Feed me a log, chief.',
+    'Bones do not fuel themselves.',
+    'Scan something tasty. I dare you.',
+    'My stomach would growl if I had one.',
+    'I have not eaten in years. You have no excuse.',
+    'Breakfast: the most important meal I cannot have.',
+  ]);
+  if (targets && targets.p && tot.p >= targets.p) return pick([
+    'Protein secured. Bones swole.',
+    'Full protein. Maximum calcium energy.',
+    'Somewhere, a cow is proud of us.',
+    'These femurs? Sponsored by protein.',
+  ]);
+  if (targets && tot.kcal > targets.kcal) return pick([
+    'Big day. We log it all anyway.',
+    'Honest logs make strong bones.',
+    'We feast like kings. Kings log too.',
+  ]);
+  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick([
+    'Right in the zone. Finish strong.',
+    'Stick the landing tonight.',
+    'So close I can taste it. Figure of speech.',
+  ]);
+  if (streak >= 3) return pick([
+    `Day ${streak}. Keep the flame alive.`,
+    `${streak} days straight. Absolutely unkillable. Well. Again.`,
+    `Streak day ${streak}. The calcium is compounding.`,
+  ]);
+  return pick([
+    'The bones are our money!',
+    'Solid pace today.',
+    'What is next on the menu?',
+    'More protein never hurt a skeleton.',
+    'Cardio? In this economy?',
+    'I am 206 bones of pure potential.',
+    'Every day is leg day when you are mostly legs.',
+    'I do all my thinking with my skull.',
+    'Hydrate. Marrow does not make itself.',
+  ]);
 }
 
 function avatarLayersHtml(eq, opts = {}) {
@@ -1689,7 +1729,7 @@ async function openCharacter(tab = 'wardrobe') {
   await renderCharacter(wrap, tab);
 }
 
-async function renderCharacter(wrap, tab) {
+async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
   const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), xpBoostCharges()]);
@@ -1699,10 +1739,10 @@ async function renderCharacter(wrap, tab) {
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
 
-  const curtains = tab === 'wardrobe' && !reducedMotion;
+  const curtains = tab === 'wardrobe' && !reducedMotion && !opts.instant;
   body.innerHTML = `
     <div class="bh-hero${tab === 'wardrobe' ? '' : ' mini'}">
-      <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt-rod"></div><div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+      <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -1747,19 +1787,10 @@ async function renderCharacter(wrap, tab) {
       ${!items.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
       ${!items.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
     $$('#slotChips .chip', content).forEach(c => c.addEventListener('click', () => { S.wardrobeSlot = c.dataset.slot; renderCharacter(wrap, 'wardrobe'); }));
-    let changing = false;
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
-      if (changing) return;
-      changing = true;
-      cell.classList.add('equipped');
-      const curts = $$('.curt', body);
-      if (curts.length) {
-        curts.forEach(x => x.classList.remove('open'));
-        await new Promise(r => setTimeout(r, 300));
-      }
       await equip(slot, cell.dataset.equip || null);
       popSound(S.sounds);
-      renderCharacter(wrap, 'wardrobe');
+      renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
   }
 
