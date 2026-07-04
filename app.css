@@ -324,7 +324,7 @@ svg { display: block; }
 .onb .feature span { color: var(--text-3); font-size: 13.5px; }
 .onb .spacer { flex: 1; }
 
-.demo-badge { position: fixed; top: calc(var(--sat) + 8px); right: 10px; z-index: 90; background: var(--amber); color: #201500; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; padding: 4px 9px; border-radius: 999px; }
+.demo-badge { position: fixed; bottom: calc(var(--sab, 0px) + 86px); left: 10px; z-index: 90; background: var(--amber); color: #201500; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 999px; opacity: 0.92; pointer-events: none; }
 
 .spin { width: 16px; height: 16px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -418,6 +418,7 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--line);
 }
 .bh-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.bh-stage img.yard-decor { inset: auto; left: 4%; bottom: 6%; width: 24%; height: auto; object-fit: contain; }
 .bh-stage.lg { width: 210px; height: 210px; margin: 0 auto; }
 .bh-stage.bounce { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes bhbounce { 0% { transform: scale(1); } 30% { transform: scale(1.07) rotate(-2deg); } 60% { transform: scale(0.98) rotate(1.5deg); } 100% { transform: scale(1); } }
@@ -449,6 +450,9 @@ a { color: var(--accent); text-decoration: none; }
 .q-row.weekly { padding-top: 3px; border-top: 1px dashed var(--line); }
 
 .bh-hero { display: grid; justify-items: center; gap: 8px; }
+.bh-hero.mini { grid-template-columns: auto 1fr; justify-items: start; align-items: center; gap: 14px; }
+.bh-hero.mini .bh-stage.lg { width: 76px; height: 76px; border-radius: 14px; }
+.bh-hero.mini .bh-hero-meta { justify-items: start; }
 .bh-hero-meta { display: grid; justify-items: center; gap: 5px; font-size: 14px; }
 
 .ward-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
@@ -656,11 +660,12 @@ body::before {
 .hero-xpnum { font-size: 11.5px; color: var(--text-2); font-weight: 600; }
 .hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
 
-.hero-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 14px; }
+.hero-actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-bottom: 14px; }
 .hero-act {
-  display: grid; justify-items: center; gap: 5px; padding: 11px 4px 9px;
+  display: grid; justify-items: center; gap: 5px; padding: 11px 2px 9px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 15px;
-  font-size: 11px; font-weight: 700; color: var(--text-2);
+  font-size: 10.5px; font-weight: 700; color: var(--text-2);
+  white-space: nowrap; overflow: hidden;
 }
 .hero-act:active { background: var(--surface-2); }
 
@@ -962,3 +967,10 @@ body::before {
   .proj, .burst { display: none; }
   .fstage.windup { animation: none; }
 }
+
+/* ===== design pass: boneyard legend ===== */
+.legend-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.legend-row:last-child { border-bottom: 0; }
+.blip-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; box-shadow: 0 0 8px rgba(242, 233, 215, 0.35); }
+.blip-dot.rare { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: rarePulse 1.6s ease-in-out infinite; }
+@keyframes rarePulse { 50% { box-shadow: 0 0 18px var(--accent); } }

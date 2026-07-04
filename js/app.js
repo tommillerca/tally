@@ -1227,6 +1227,7 @@ async function renderTrends(el) {
 
   <div class="card">
     <div class="card-title">CALORIES · LAST 14 DAYS</div>
+    <div class="big-stat"><span class="v">${(() => { const logged = days14.filter(d => d.tot.kcal > 0); return logged.length ? Math.round(logged.reduce((a, d) => a + d.tot.kcal, 0) / logged.length).toLocaleString() : '·'; })()}</span><span class="d">avg / logged day · target ${t.kcal.toLocaleString()}</span></div>
     <div class="chart">${kcalChart(days14, t.kcal)}</div>
     <p class="note" style="margin-top:8px">Line = your ${t.kcal.toLocaleString()} kcal target.</p>
   </div>
@@ -1341,7 +1342,10 @@ async function renderFoods(el) {
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
     if (customs.length) html += '<div class="sect-h">My foods</div>' + customs.map(foodRowHtml).join('');
     if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
-    if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:20px">Foods you scan, create, or favorite collect here.</p>';
+    if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
+    const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
+    html += `<div class="sect-h">Built-in library · ${GENERIC_FOODS.length}</div>` + sample.map(foodRowHtml).join('');
+    if (GENERIC_FOODS.length > sample.length) html += '<p class="note" style="text-align:center;padding:10px">Showing the first 40 A to Z. Search finds the rest.</p>';
     list.innerHTML = html;
     bind();
   }
@@ -1696,8 +1700,8 @@ async function renderCharacter(wrap, tab) {
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
 
   body.innerHTML = `
-    <div class="bh-hero">
-      <div class="bh-stage lg">${avatarLayersHtml(eq)}</div>
+    <div class="bh-hero${tab === 'wardrobe' ? '' : ' mini'}">
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
       <div class="bh-hero-meta">
         <b>Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -2000,6 +2004,13 @@ async function openHunt() {
         <p class="note" style="margin-bottom:6px">Fresh spawns appear around your neighborhood every day: bone caches, coin piles, buried crates, and sometimes a RARE. Walk within ${COLLECT_RADIUS_M} m of a blip and collect it.</p>
         <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device.</p>
         <button class="btn" id="huntStart">Start the radar</button>
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">OUT THERE TODAY</div>
+          <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
+          <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
+          <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
+          <div class="legend-row"><span class="blip-dot rare"></span><div><b>RARE</b><span class="note"> · shiny cosmetic, one-day-only spawn</span></div></div>
+        </div>
       </div>
     </div>`, { cls: 'full', onClose: stopHuntWatch });
 
