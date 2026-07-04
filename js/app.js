@@ -2543,7 +2543,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult)} dmg · unblockable</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · unblockable${player.sigsUsed ? ' · encore' : ''}</small></button>`;
 
     const casterRow = () => {
       let h = '';
@@ -2576,7 +2576,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
       html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
       html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
-      html += btn(get('block'), { hint: 'guards vs swings' });
+      html += btn(get('block'), { hint: 'guards swings + spells' });
       html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
       if (player.wind < 20) html += btn(get('brace'), { hint: '+40 wind', glow: player.wind < 12 });
       html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, brace'}</small></button>`;

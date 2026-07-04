@@ -168,14 +168,14 @@ export const ACTIONS = {
   signature:{ label: 'Signature', range: 'close', ap: 2, wind: 0, base: 120 },
   titan:    { label: 'Titan', range: 'close', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
   flurry:   { label: 'Flurry', range: 'close', ap: 2, wind: 0, base: 10, talent: 'flurry' },
-  bonebolt: { label: 'Bone Bolt', range: 'any', ap: 1, wind: 12, base: 16, hype: 6, talent: 'bonebolt', magic: true, school: 'shadow' },
+  bonebolt: { label: 'Bone Bolt', range: 'any', ap: 1, wind: 18, base: 16, hype: 6, talent: 'bonebolt', magic: true, school: 'shadow' },
   mend:     { label: 'Mend', range: 'any', ap: 1, wind: 20, talent: 'mend', magic: true, school: 'nature' },
   hex:      { label: 'Hex', range: 'any', ap: 1, wind: 15, talent: 'hex', magic: true, school: 'shadow' },
   bonestorm:{ label: 'Bone Storm', range: 'close', ap: 2, wind: 40, base: 14, talent: 'bonestorm', magic: true, school: 'shadow' },
-  smite:    { label: 'Smite', range: 'any', ap: 1, wind: 13, base: 15, hype: 6, talent: 'smite', magic: true, school: 'holy' },
+  smite:    { label: 'Smite', range: 'any', ap: 1, wind: 18, base: 15, hype: 6, talent: 'smite', magic: true, school: 'holy' },
   ward:     { label: 'Ward', range: 'any', ap: 1, wind: 15, talent: 'ward', magic: true, school: 'holy' },
-  frostbolt:{ label: 'Frost Bolt', range: 'any', ap: 1, wind: 12, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
-  firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 14, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
+  frostbolt:{ label: 'Frost Bolt', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
+  firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
   tempest:  { label: 'Tempest', range: 'close', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
 };
 export const SHOWSTOPPER_HYPE = 80;
@@ -233,6 +233,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
   dmg *= counter.mult;
   if (move === 'haymaker' && attacker.talents.has('heavyhands')) dmg *= 1.15;
   if (move === 'throwb' && attacker.talents.has('kite')) dmg *= 1.6;
+  if (a.magic && defender.state === 'block') dmg *= 0.65; // covering up blunts spells
   if (move === 'smite' && attacker.talents.has('judgement') && (defender.stagger || defender.sunder)) dmg *= 1.5;
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
@@ -267,6 +268,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     name, stats, weapon, d, outfit, talents: tset,
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false,
+    sigsUsed: 0, shoveCount: 0,
     mendUses: 3,
     ward: 0,          // holy shield pool, absorbs damage first
     burn: null,       // {per, turns}
@@ -316,14 +318,14 @@ function dealDamage(fight, victimWho, amount, events) {
     v.ward -= soak; amount -= soak;
     events.push({ t: 'absorb', who: victimWho, amount: soak, broken: v.ward <= 0 });
   }
-  if (amount >= v.hp && v.talents.has('lastlight') && !v.lastlightUsed) {
+  if (amount >= v.hp && v.talents.has('lastlight') && !v.lastlightUsed && !v.secondWindUsed) {
     v.lastlightUsed = true;
     v.hp = 1 + Math.round(v.d.maxHp * 0.20 * healMult(v));
     events.push({ t: 'lastlight', who: victimWho });
     return;
   }
   v.hp = Math.max(0, v.hp - amount);
-  if (v.hp > 0 && v.hp <= v.d.maxHp * 0.25 && v.talents.has('secondwind') && !v.secondWindUsed) {
+  if (v.hp > 0 && v.hp <= v.d.maxHp * 0.25 && v.talents.has('secondwind') && !v.secondWindUsed && !v.lastlightUsed) {
     v.secondWindUsed = true;
     const heal = Math.round(v.d.maxHp * 0.15 * healMult(v));
     v.hp = Math.min(v.d.maxHp, v.hp + heal);
@@ -349,6 +351,7 @@ export function actionsFor(fight) {
     if (id === 'tempest' && me.tempestUsed) continue;
     if (id === 'ward' && me.ward >= 25) continue;
     let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
+    if (id === 'shove') windCost = Math.round(windCost * (1 + me.shoveCount));
     let ok = fight.ap >= a.ap && me.wind >= windCost;
     if (id === 'flurry') { windCost = me.wind; ok = fight.ap >= a.ap && me.wind >= 30; }
     out.push({ id, ...a, windCost, enabled: ok && !fight.over });
@@ -362,7 +365,8 @@ export function applyAction(fight, actionId) {
   const them = opponentOf(fight, fight.active);
   const a = ACTIONS[actionId];
   const events = [];
-  const windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(actionId));
+  let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(actionId));
+  if (actionId === 'shove') windCost = Math.round(windCost * (1 + me.shoveCount));
   if (!a || fight.over) return events;
   if (a.range !== 'any' && a.range !== fight.range) return events;
   if (fight.ap < a.ap || me.wind < windCost) return events;
@@ -389,6 +393,7 @@ export function applyAction(fight, actionId) {
     case 'shove': {
       fight.range = 'far';
       them.state = null; // resets their setup
+      me.shoveCount += 1; // they get wise: each shove costs more wind
       gainHype(me, a.hype);
       events.push({ t: 'shove', who: fight.active });
       break;
@@ -413,7 +418,9 @@ export function applyAction(fight, actionId) {
       if (me.hype < sigThreshold(me)) break;
       me.hype = 0;
       const boost = me.talents.has('showstopper') ? 1.25 : 1;
-      const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost);
+      const encore = Math.pow(0.75, me.sigsUsed); // the crowd's seen this one before
+      me.sigsUsed += 1;
+      const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost * encore);
       dealDamage(fight, fight.active === 'p' ? 'f' : 'p', dmg, events);
       events.push({ t: 'hit', who: fight.active, move: 'signature', damage: dmg, crit: false, glance: false, signature: true });
       break;
@@ -457,7 +464,7 @@ export function applyAction(fight, actionId) {
       dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
-        gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         if (me.talents.has('soulsiphon')) {
           const heal = Math.round(r.damage * 0.30 * healMult(me));
           me.hp = Math.min(me.d.maxHp, me.hp + heal);
@@ -488,7 +495,7 @@ export function applyAction(fight, actionId) {
       dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
-        gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         if (me.talents.has('radiance')) {
           const heal = Math.round(r.damage * 0.20 * healMult(me));
           me.hp = Math.min(me.d.maxHp, me.hp + heal);
@@ -508,7 +515,7 @@ export function applyAction(fight, actionId) {
       dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
-        gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         them.wind = Math.max(0, them.wind - 8);
         events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'chill' });
       }
@@ -520,7 +527,7 @@ export function applyAction(fight, actionId) {
       dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
-        gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         them.burn = { per: me.talents.has('wildfire') ? 7 : 5, turns: me.talents.has('wildfire') ? 3 : 2 };
         events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'burn' });
       }
@@ -534,7 +541,7 @@ export function applyAction(fight, actionId) {
         const school = h % 2 === 0 ? 'fire' : 'frost';
         const r = resolveHit({ move: 'tempest', attacker: me, defender: them, rng: fight.rng });
         dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
-        if (r.damage > 0) { landed = true; gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 8 : 4); }
+        if (r.damage > 0) { landed = true; gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
         events.push({ t: 'hit', who: fight.active, move: 'tempest', damage: r.damage, crit: r.crit, glance: false, storm: true, school, hitNo: h + 1, whiffed: !!r.whiffed });
       }
       if (landed && them.hp > 0) {
@@ -550,7 +557,7 @@ export function applyAction(fight, actionId) {
       for (let h = 0; h < 3 && them.hp > 0; h++) {
         const r = resolveHit({ move: 'bonestorm', attacker: me, defender: them, rng: fight.rng });
         dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
-        if (r.damage > 0) { gainHype(me, 5); gainHype(them, them.talents.has('ovation') ? 8 : 4); }
+        if (r.damage > 0) { gainHype(me, 5); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
         events.push({ t: 'hit', who: fight.active, move: 'bonestorm', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed });
       }
       break;
@@ -573,7 +580,7 @@ export function applyAction(fight, actionId) {
         if (r.stagger || (move === 'haymaker' && r.damage > 0 && me.talents.has('concussive'))) { them.stagger = true; }
         if (r.damage > 0) {
           gainHype(me, a.hype || 0);
-          gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+          gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
           if (move === 'haymaker' && me.talents.has('marrowlust')) {
             const heal = Math.round(r.damage * 0.25 * healMult(me));
             me.hp = Math.min(me.d.maxHp, me.hp + heal);
@@ -749,7 +756,7 @@ export const LADDER = [
   { rung: 4, name: 'The Gravekeeper', mult: 1.05, coins: 90, repeatCoins: 20, xp: 50 },
   { rung: 5, name: 'Two-Ton Tibia', mult: 1.2, coins: 110, repeatCoins: 25, xp: 60 },
 ];
-export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, weaponId: 'bonecrusher', talents: ['heavyhands', 'marrowlust', 'titan'] };
+export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, weaponId: 'bonecrusher', talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'] };
 export const RUNG_TALENTS = { 4: ['heavyhands'], 5: ['heavyhands', 'marrowlust'] };
 
 export function scaleStats(stats, mult) {

@@ -210,9 +210,12 @@ test('talent tiers gate by points-in-tree (WoW style)', () => {
 test('gravecaller: bone bolt is any-range magic scaling off Hype', () => {
   const caster = mf({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt'] });
   const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
-  dummy.state = 'block'; // magic ignores the counter matrix
   const r = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
   assert.equal(r.damage, Math.round(16 * (1 + 0.6 * 1.5))); // 30
+  dummy.state = 'block'; // no counter event vs magic, but covering up blunts it 35%
+  const rb = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
+  assert.ok(!rb.miss && rb.damage === Math.round(16 * (1 + 0.6 * 1.5) * 0.65), String(rb.damage));
+  dummy.state = null;
   const fight = cf({ player: caster, foe: mf({ name: 'F', stats: MID }), seed: 21 });
   fight.range = 'far';
   assert.ok(acts(fight).some(a => a.id === 'bonebolt')); // castable at far
@@ -531,6 +534,56 @@ test('six trees, six nodes each, unique ids, new moves registered', () => {
   assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
   assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);
   for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest']) assert.ok(ACTIONS[id], id + ' action exists');
+});
+
+/* ============ v16: anti-exploit balance ============ */
+
+test('shove costs escalate: kiting is a window, not a lock', () => {
+  const P = makeFighter({ name: 'P', stats: MID });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 9 });
+  fight.rng = () => 0.99;
+  const costOf = () => actionsFor(fight).find(a => a.id === 'shove');
+  const c0 = costOf().windCost;
+  applyAction(fight, 'shove');
+  fight.range = 'close'; fight.ap = 3; P.wind = 100;
+  const c1 = costOf().windCost;
+  applyAction(fight, 'shove');
+  fight.range = 'close'; fight.ap = 3; P.wind = 100;
+  const c2 = costOf().windCost;
+  assert.ok(c1 === c0 * 2 && c2 === c0 * 3, `${c0} -> ${c1} -> ${c2}`);
+});
+
+test('signature encore falloff: 0.75x per prior use', () => {
+  const P = makeFighter({ name: 'P', stats: MID });
+  const F = makeFighter({ name: 'F', stats: { ...MID, marrow: 99 } });
+  const fight = createFight({ player: P, foe: F, seed: 9 });
+  fight.rng = () => 0.99;
+  P.hype = 100; fight.ap = 3;
+  const d1 = applyAction(fight, 'signature').find(e => e.t === 'hit').damage;
+  P.hype = 100; fight.ap = 3;
+  const d2 = applyAction(fight, 'signature').find(e => e.t === 'hit').damage;
+  assert.equal(d2, Math.round(120 * P.d.powerMult * 0.75));
+  assert.ok(d2 < d1, 'second showing hits softer');
+});
+
+test('one miracle per fight: second wind and last light are exclusive', () => {
+  const both = ['secondwind', 'lastlight'];
+  const P = makeFighter({ name: 'P', stats: MID, talents: both });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 9 });
+  fight.active = 'f'; fight.ap = 3; fight.rng = () => 0.99;
+  P.hp = Math.round(P.d.maxHp * 0.24); // low enough to proc second wind on any hit
+  const evs = applyAction(fight, 'jab');
+  assert.ok(evs.find(e => e.t === 'secondwind'), 'second wind fired first');
+  P.hp = 3;
+  const evs2 = applyAction(fight, 'jab');
+  assert.ok(!evs2.find(e => e.t === 'lastlight'), 'no second miracle');
+});
+
+test('champion runs the full slab tree', () => {
+  assert.equal(CHAMPION.talents.length, 6);
+  assert.ok(CHAMPION.talents.includes('thickskull') && CHAMPION.talents.includes('titan'));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
