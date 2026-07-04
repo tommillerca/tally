@@ -4,10 +4,10 @@ import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, reduced
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
-  BADGES, xpForDate, parseHkPayload,
+  BADGES, xpForDate, parseHkPayload, award,
 } from './game.js';
 import {
-  RARITIES, CRATES, CONSUMABLES, SHOP, coins, inventory, ownedCosmeticIds,
+  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateXpBoost,
   xpBoostCharges, consumableCount,
 } from './loot.js';
@@ -15,6 +15,10 @@ import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, c
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
+import {
+  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor,
+  applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats,
+} from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -54,6 +58,7 @@ const ICONS = {
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
 };
 
+ICONS.pit = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
 
@@ -374,6 +379,7 @@ async function renderToday(el) {
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="roadBtn"><img src="assets/brand/sword.png" style="height:24px" alt=""><span>Bone Road</span></button>
+    <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
 
   <div class="card ring-card">
@@ -457,6 +463,7 @@ async function renderToday(el) {
   $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#roadBtn')?.addEventListener('click', openRoad);
+  $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -2137,6 +2144,288 @@ async function renderRoad(wrap, eq) {
     if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
     renderRoad(wrap, eq);
   }));
+}
+
+/* ================= the pit (combat) ================= */
+
+async function buildFighter() {
+  const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
+  const behavior = {
+    proteinDays: xpRows.filter(r => r.type === 'protein').length,
+    closes: xpRows.filter(r => r.type === 'dayclose').length,
+    streak: streakFrom([...new Set(log.map(e => e.date))], dateKey()),
+    lifetimeSteps: health.reduce((a, r) => a + (r.steps || 0), 0),
+    spawns: xpRows.filter(r => r.type === 'spawn').length,
+    eggDays: xpRows.filter(r => r.type === 'egg').length,
+    questsDone: xpRows.filter(r => r.type === 'quest').length,
+    variety: new Set(log.filter(e => e.foodId).map(e => e.foodId)).size,
+  };
+  const stats = deriveStats(behavior);
+  const inv = await inventory();
+  const owned = ['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)];
+  let loadout = await kvGet('loadout', 'starter');
+  if (!owned.includes(loadout)) loadout = 'starter';
+  return { stats, behavior, owned, loadout };
+}
+
+function pitBeatKeys(xpRows) {
+  return new Set(xpRows.filter(r => r.type === 'pitrung' || r.type === 'pitchamp').map(r => r.key));
+}
+
+async function openPit() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Pit</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="pitBody"></div>`, { cls: 'full' });
+  renderPit(wrap);
+}
+
+async function renderPit(wrap) {
+  const body = $('#pitBody', wrap);
+  if (!body) return;
+  const fighter = await buildFighter();
+  const xpRows = await db.all('xp');
+  const beaten = pitBeatKeys(xpRows);
+  const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
+  const champOpen = rungsBeaten >= LADDER.length;
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout]);
+  const wins = xpRows.filter(r => r.type === 'fight').length;
+
+  body.innerHTML = `
+    <p class="note" style="margin-bottom:12px">Your fighter is a mirror of your habits. Protein powers the swing, steps power the lungs, streaks thicken the bones. Fights take about a minute.</p>
+    <div class="card" style="background:var(--surface-2)">
+      <div class="card-title">YOUR FIGHTER · ${d.maxHp} HP · ${d.maxWind} WIND ${wins ? `· ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
+      ${STAT_META.map(m => `
+        <div class="macro" style="margin-bottom:8px">
+          <div class="row"><span>${m.label} <span class="q-coins">${esc(m.fedBy)}</span></span><span class="val">${fighter.stats[m.key]}</span></div>
+          <div class="bar pitstat"><i style="width:${fighter.stats[m.key]}%"></i></div>
+        </div>`).join('')}
+    </div>
+    <div class="sect-h">Weapon</div>
+    <div class="chips">
+      ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
+    </div>
+    <p class="note" style="margin:6px 2px">${esc(WEAPONS[fighter.loadout].desc)} Weapons multiply effort; they never replace it.</p>
+    <div class="sect-h">Sparring · no stakes</div>
+    ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
+      <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
+        <div style="flex:1"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <button class="btn small ghost" data-spar="${m}" data-name="${name}">Fight</button>
+      </div>`).join('')}
+    <div class="sect-h">The Ladder</div>
+    ${LADDER.map(r => {
+      const done = beaten.has(`pitrung-${r.rung}`);
+      const locked = r.rung > rungsBeaten + 1;
+      return `<div class="crate-row">
+        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
+        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · first win: ${r.coins} coins + ${r.xp} XP</small></div>
+        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}">Fight</button>`}
+      </div>`;
+    }).join('')}
+    <div class="sect-h">Champion</div>
+    <div class="crate-row">
+      <span class="crate-ico">${crateIcon('golden', 24)}</span>
+      <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
+      ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
+    </div>`;
+
+  $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
+    await kvSet('loadout', b.dataset.weapon);
+    renderPit(wrap);
+  }));
+  const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
+  $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
+    start({ mode: 'spar', name: b.dataset.name, mult: Number(b.dataset.spar) })));
+  $$('[data-rung]', body).forEach(b => b.addEventListener('click', () => {
+    const r = LADDER[Number(b.dataset.rung) - 1];
+    start({ mode: 'rung', rung: r.rung, name: r.name, mult: r.mult, coins: r.coins, repeatCoins: r.repeatCoins, xp: r.xp, done: beaten.has(`pitrung-${r.rung}`) });
+  }));
+  $('#champBtn', body)?.addEventListener('click', () =>
+    start({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
+}
+
+function foeOutfitFor(name) {
+  // deterministic outfit per opponent name
+  const seedRand = (() => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; let a = h || 7; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
+  const eq = { B: 'B0-1', SK: 'SK0-1' };
+  for (const slot of BH_SLOTS) {
+    if (slot.code === 'B' || slot.code === 'SK' || slot.code === 'YD' || slot.code === 'BG') continue;
+    if (seedRand() < 0.5) {
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file);
+      if (pool.length) eq[slot.code] = pool[Math.floor(seedRand() * pool.length)].id;
+    }
+  }
+  return eq;
+}
+
+async function openFight(pitWrap, fighter, foeCfg) {
+  const eq = await equipped();
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq });
+  const foe = makeFighter({
+    name: foeCfg.name,
+    stats: scaleStats(fighter.stats, foeCfg.mult),
+    weaponId: foeCfg.weaponId || 'starter',
+    outfit: foeOutfitFor(foeCfg.name),
+  });
+  const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1 });
+  const beatMs = navigator.webdriver ? 60 : 620;
+  let settled = false;
+
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>${esc(foeCfg.name)}</h2><button class="sheet-close">Flee</button></div>
+    <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
+    { cls: 'full', onClose: () => { if (!fight.over && !settled) toast('You slipped out of The Pit. No harm done.'); } });
+
+  const body = $('#fightBody', wrap);
+
+  function bars(f, who) {
+    const hpPct = (f.hp / f.d.maxHp) * 100;
+    return `
+      <div class="fbars">
+        <div class="fname">${esc(f.name)} ${f.state ? `<span class="fstate">${f.state === 'block' ? 'BLOCKING' : 'DODGING'}</span>` : ''}${f.stagger ? '<span class="fstate stag">STAGGERED</span>' : ''}</div>
+        <div class="bar fhp"><i style="width:${hpPct}%;${hpPct < 30 ? 'background:var(--danger)' : ''}"></i></div>
+        <div class="frow"><span>HP ${f.hp}/${f.d.maxHp}</span><span>Wind ${f.wind}/${f.d.maxWind}</span><span>Hype ${f.hype}</span></div>
+        <div class="bar fwind"><i style="width:${(f.wind / f.d.maxWind) * 100}%"></i></div>
+        <div class="bar fhype"><i style="width:${f.hype}%"></i></div>
+      </div>`;
+  }
+
+  function render(msg = '') {
+    if (!body.isConnected) return;
+    const legal = actionsFor(fight);
+    const playerTurn = fight.active === 'p' && !fight.over;
+    body.innerHTML = `
+      <div class="fight-stage">
+        <div class="foe-side">
+          <div class="bh-stage fsmall ${fight.lastHit === 'f' ? 'shake' : ''}">${avatarLayersHtml(foe.outfit, { noYard: true })}</div>
+          ${bars(foe, 'f')}
+        </div>
+        ${fight.telegraph ? `<div class="telegraph">⚠ ${esc(foe.name)} is winding up something heavy</div>` : ''}
+        <div class="range-pill">${fight.range === 'close' ? 'CLOSE RANGE' : 'FAR RANGE'} · turn ${fight.turn}</div>
+        <div class="fight-log">${esc(msg || '...')}</div>
+        <div class="you-side">
+          <div class="bh-stage fsmall ${fight.lastHit === 'p' ? 'shake' : ''}">${avatarLayersHtml(player.outfit, { noYard: true })}</div>
+          ${bars(player, 'p')}
+        </div>
+      </div>
+      <div class="fight-actions">
+        ${playerTurn ? legal.map(a => `
+          <button class="fight-act" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
+            <b>${a.label}</b><small>${'●'.repeat(a.ap)} ${a.windCost ? a.windCost + 'w' : ''}</small>
+          </button>`).join('') + `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`
+        : '<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">' + (fight.over ? '' : esc(foe.name) + ' is acting...') + '</p>'}
+      </div>`;
+    $$('[data-act]', body).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
+    $('#endTurn', body)?.addEventListener('click', finishPlayerTurn);
+  }
+
+  function describe(ev) {
+    const who = ev.who === 'p' ? 'You' : foe.name;
+    const them = ev.who === 'p' ? foe.name : 'you';
+    if (ev.t === 'hit') return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}${ev.crit ? ' · CRIT!' : ''}${ev.glance ? ' (glancing)' : ''}${ev.breaksGuard ? ' · GUARD BROKEN' : ''}`;
+    if (ev.t === 'miss') return `${who} whiffed the haymaker and stumbled off-balance`;
+    if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
+    if (ev.t === 'brace') return `${who} caught a breath`;
+    if (ev.t === 'shove') return `${who} shoved ${them} back`;
+    if (ev.t === 'advance') return `${who} closed the distance`;
+    if (ev.t === 'taunt') return `${who} talked trash (+${ev.gain} hype)`;
+    if (ev.t === 'ko') return `${who} wins by KO`;
+    return '';
+  }
+
+  let pendingEnd = null;
+  function playerAct(id) {
+    if (fight.active !== 'p' || fight.over) return;
+    const evs = applyAction(fight, id);
+    const hit = evs.find(e => e.t === 'hit');
+    fight.lastHit = hit && hit.damage > 0 ? 'f' : null;
+    if (hit && (hit.crit || hit.signature)) { confettiBurst(innerWidth / 2, innerHeight * 0.25, 12); popSound(S.sounds); }
+    render(evs.map(describe).filter(Boolean).join(' · '));
+    if (fight.over) return settle();
+    if (fight.ap <= 0 && !pendingEnd) pendingEnd = setTimeout(finishPlayerTurn, 420);
+  }
+
+  function finishPlayerTurn() {
+    if (pendingEnd) { clearTimeout(pendingEnd); pendingEnd = null; }
+    if (fight.active !== 'p' || fight.over) return;
+    endTurn(fight);
+    render('');
+    aiPlay();
+  }
+
+  function aiPlay() {
+    const evs = aiTakeTurn(fight);
+    let i = 0;
+    const step = () => {
+      if (!body.isConnected) return;
+      const batch = [];
+      while (i < evs.length) {
+        const e = evs[i++];
+        if (e.t === 'foeAction') { if (batch.length) break; continue; }
+        batch.push(e);
+        break;
+      }
+      if (batch.length) {
+        const hit = batch.find(e => e.t === 'hit');
+        fight.lastHit = hit && hit.damage > 0 ? 'p' : null;
+        render(batch.map(describe).filter(Boolean).join(' · '));
+      }
+      if (i < evs.length && !fight.over) { setTimeout(step, beatMs); return; }
+      if (fight.over) return settle();
+      endTurn(fight);
+      planTelegraph(fight);
+      fight.lastHit = null;
+      setTimeout(() => render('Your turn.'), beatMs);
+    };
+    setTimeout(step, beatMs);
+  }
+
+  async function settle() {
+    if (settled) return; settled = true;
+    const won = fight.over.winner === 'p';
+    let coins = 0, xp = 0, extras = [];
+    if (won) {
+      await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
+      xp += 10;
+      if (foeCfg.mode === 'spar') { coins = 15; }
+      else if (foeCfg.mode === 'rung') {
+        if (!foeCfg.done) {
+          const g = await award(`pitrung-${foeCfg.rung}`, 'pitrung', foeCfg.xp, `Ladder: beat ${foeCfg.name}`);
+          if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
+        } else coins = foeCfg.repeatCoins;
+      } else if (foeCfg.mode === 'champ') {
+        if (!foeCfg.done) {
+          const g = await award('pitchamp', 'pitchamp', foeCfg.xp, `Champion: beat ${CHAMPION.name}`);
+          if (g) {
+            xp += g; coins = foeCfg.coins;
+            await grantCrate('golden', 'pit-champion');
+            await db.put('inv', { id: newId(), kind: 'weapon', weaponId: 'bonecrusher', source: 'pit-champion', ts: Date.now() });
+            extras.push('the BONECRUSHER', 'a Golden Crate');
+          } else coins = foeCfg.repeatCoins;
+        } else coins = foeCfg.repeatCoins;
+      }
+      if (coins) await coinsAdd(coins);
+      const badges = await evaluateBadges();
+      confettiRain(90); levelSound(S.sounds);
+      if (badges.length) queueCelebration({ newBadges: badges });
+    } else if (fight.over.winner === 'f') {
+      coins = 5;
+      await coinsAdd(coins);
+    }
+    const title = won ? 'VICTORY' : fight.over.winner === 'draw' ? 'DOUBLE KO' : 'DOWN, NOT OUT';
+    const sub = won
+      ? [`+${coins} coins`, xp ? `+${xp} XP` : '', ...extras].filter(Boolean).join(' · ')
+      : fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`;
+    body.insertAdjacentHTML('beforeend', `
+      <div class="fight-over">
+        <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
+        <p class="note" style="margin:8px 0 16px">${esc(sub)}</p>
+        <button class="btn" id="fightDone">Back to The Pit</button>
+      </div>`);
+    $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+  }
+
+  planTelegraph(fight);
+  render('Round one. Your turn.');
 }
 
 /* ================= demo seed ================= */

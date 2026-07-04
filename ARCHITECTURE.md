@@ -67,11 +67,11 @@ player's inventory valid. Slots and z-order live in one table in the script.
   (+radar range, +egg odds), Chef (+coins from food quests), and Sage (+xp from
   protein days). Pure data + one kv key (`talents`); perks apply as multipliers
   inside game core functions. No schema migration needed beyond additive kv.
-- **Monster battles.** Roam encounters seeded exactly like Boneyard spawns
-  (deterministic per date + cell), turn-based, with fighter stats derived from
-  real behavior: STR = protein adherence, STA = streak, AGI = steps. Rewards
-  reuse the crate system. Requires nothing new from the platform; it is a pure
-  game-core module plus UI.
+- **Combat (The Pit) shipped V1** per the combat framework + math spec docs
+  (see js/pit.js). V2/V3 from the spec remain: talent trees, Form live-buff,
+  full weapon arsenal + leveling, Pit Tokens, seasons, Boneyard Challenger
+  spawns, and async ghost PvP (fights against snapshots of friends' real
+  weeks; the ledger-derived stats make those snapshots one JSON blob).
 
 ## Art inventory (beyond the wardrobe)
 

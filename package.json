@@ -5,6 +5,6 @@
   "type": "module",
   "description": "Fast private calorie + macro tracker PWA",
   "scripts": {
-    "test": "node tests/unit.test.js"
+    "test": "node tests/unit.test.js && node tests/pit.test.js"
   }
 }
