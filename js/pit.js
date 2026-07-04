@@ -37,49 +37,76 @@ export const TALENT_TREES = [
     id: 'slab', name: 'Slab', tag: 'The Bruiser', color: 'var(--fat)',
     flavor: 'Fewer, bigger hits. Pairs with a protein habit.',
     nodes: [
-      { id: 'heavyhands', name: 'Heavy Hands', desc: 'Haymakers hit 15% harder.' },
-      { id: 'marrowlust', name: 'Marrowlust', desc: 'Haymaker and Titan hits heal you for 25% of the damage dealt.' },
-      { id: 'titan', name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, an overhead slam that ignores Block and Dodge.' },
+      { id: 'heavyhands', tier: 1, name: 'Heavy Hands', desc: 'Haymakers hit 15% harder.' },
+      { id: 'marrowlust', tier: 2, name: 'Marrowlust', desc: 'Haymaker and Titan hits heal you for 25% of the damage dealt.' },
+      { id: 'bonebreaker', tier: 2, name: 'Bonebreaker', desc: 'Landed haymakers SUNDER: the enemy takes +15% damage for 2 turns.' },
+      { id: 'concussive', tier: 3, name: 'Concussive', desc: 'Landed haymakers always stagger (enemy loses an action).' },
+      { id: 'thickskull', tier: 3, name: 'Thick Skull', desc: '+45 max HP.' },
+      { id: 'titan', tier: 4, name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, an overhead slam that ignores Block and Dodge.' },
     ],
   },
   {
     id: 'greyhound', name: 'Greyhound', tag: 'The Runner', color: 'var(--protein)',
-    flavor: 'Speed and attrition. Pairs with a walking habit.',
+    flavor: 'Speed, bleed, and attrition. Pairs with a walking habit.',
     nodes: [
-      { id: 'lightfeet', name: 'Light Feet', desc: '+1 action point every turn.' },
-      { id: 'counterstep', name: 'Counterstep', desc: 'When a haymaker whiffs into your Dodge, you land a free counter-jab.' },
-      { id: 'flurry', name: 'Flurry', move: true, desc: 'NEW MOVE: dump ALL your Wind into an unblockable 3-hit combo. Harder with more Wind.' },
+      { id: 'lightfeet', tier: 1, name: 'Light Feet', desc: '+1 action point every turn.' },
+      { id: 'counterstep', tier: 2, name: 'Counterstep', desc: 'When a haymaker whiffs into your Dodge, you land a free counter-jab.' },
+      { id: 'kite', tier: 2, name: 'Kite', desc: 'Throws hit 60% harder.' },
+      { id: 'bleedout', tier: 3, name: 'Bleed Out', desc: 'Jabs open wounds: 4 damage per stack at the start of their turn, stacks to 3.' },
+      { id: 'deeplungs', tier: 3, name: 'Deep Lungs', desc: '+15 max Wind.' },
+      { id: 'flurry', tier: 4, name: 'Flurry', move: true, desc: 'NEW MOVE: dump ALL your Wind into an unblockable 3-hit combo.' },
     ],
   },
   {
     id: 'ringmaster', name: 'Ringmaster', tag: 'The Showman', color: 'var(--carbs)',
-    flavor: 'Finishers and momentum. Pairs with quests and variety.',
+    flavor: 'Finishers, comebacks, crowd control. Pairs with quests and variety.',
     nodes: [
-      { id: 'crowdwork', name: 'Crowd Work', desc: 'Hype builds 40% faster.' },
-      { id: 'bigentrance', name: 'Big Entrance', desc: 'Start every fight at 25 Hype.' },
-      { id: 'showstopper', name: 'Showstopper', desc: 'Signature fires at 80 Hype and hits 25% harder.' },
+      { id: 'crowdwork', tier: 1, name: 'Crowd Work', desc: 'Hype builds 40% faster.' },
+      { id: 'bigentrance', tier: 2, name: 'Big Entrance', desc: 'Start every fight at 25 Hype.' },
+      { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Taunts WEAKEN: the enemy deals 15% less damage for 2 turns.' },
+      { id: 'ovation', tier: 3, name: 'Standing Ovation', desc: 'Getting hit builds double Hype (the comeback engine).' },
+      { id: 'secondwind', tier: 3, name: 'Second Wind', desc: 'Once per fight, dropping below 25% HP restores 15% HP and 30 Wind.' },
+      { id: 'showstopper', tier: 4, name: 'Showstopper', desc: 'Signature fires at 80 Hype and hits 25% harder.' },
+    ],
+  },
+  {
+    id: 'gravecaller', name: 'Gravecaller', tag: 'The Necromancer', color: '#c084fc',
+    flavor: 'Bone magic and marrow mending. Pairs with quest-hunting variety.',
+    nodes: [
+      { id: 'bonebolt', tier: 1, name: 'Bone Bolt', move: true, desc: 'NEW MOVE: hurl a shard of bone at ANY range. Scales with your Hype stat.' },
+      { id: 'soulsiphon', tier: 2, name: 'Soul Siphon', desc: 'Bone Bolts heal you for 30% of their damage.' },
+      { id: 'mend', tier: 2, name: 'Mend Marrow', move: true, desc: 'NEW MOVE: knit your bones back together. Heals 12% max HP, 3 uses per fight.' },
+      { id: 'hex', tier: 3, name: 'Hex of Dust', move: true, desc: 'NEW MOVE: curse the enemy to deal 20% less damage for 2 turns.' },
+      { id: 'gravechill', tier: 3, name: 'Grave Chill', desc: 'Bone Bolts also drain 10 of the enemy Wind.' },
+      { id: 'bonestorm', tier: 4, name: 'Bone Storm', move: true, desc: 'NEW MOVE: once per fight, a whirlwind of shards: three unblockable magic hits.' },
     ],
   },
 ];
 
 export function talentPoints(level) { return Math.max(0, level - 1); }
 
-// linear chains: a node needs the previous node in its tree
+const TIER_GATE = { 1: 0, 2: 1, 3: 3, 4: 5 };
+
+// WoW-style: tiers unlock by points already spent in that tree
 export function canTakeTalent(taken, treeId, nodeIdx) {
   const tree = TALENT_TREES.find(t => t.id === treeId);
   if (!tree || nodeIdx >= tree.nodes.length) return false;
-  if (taken.has(tree.nodes[nodeIdx].id)) return false;
-  return nodeIdx === 0 || taken.has(tree.nodes[nodeIdx - 1].id);
+  const node = tree.nodes[nodeIdx];
+  if (taken.has(node.id)) return false;
+  const inTree = tree.nodes.filter(n => taken.has(n.id)).length;
+  return inTree >= TIER_GATE[node.tier];
 }
 
 /* ================= derived pools (spec §1) ================= */
 
 export function derived(stats, weapon = WEAPONS.starter, talents = null) {
+  const t = talents || new Set();
   return {
-    maxHp: Math.round(150 + stats.marrow * 3),
-    maxWind: Math.round(40 + stats.wind * 0.6),
+    maxHp: Math.round(150 + stats.marrow * 3) + (t.has('thickskull') ? 45 : 0),
+    maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0),
     ap: 2 + (weapon.apBonus || 0) + (talents && talents.has('lightfeet') ? 1 : 0),
     powerMult: 1 + (stats.power / 100) * 1.5,
+    magicMult: 1 + (stats.hype / 100) * 1.5,
     critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0)),
     glanceChance: (stats.reflex / 100) * 0.25,
   };
@@ -117,6 +144,10 @@ export const ACTIONS = {
   signature:{ label: 'Signature', range: 'close', ap: 2, wind: 0, base: 120 },
   titan:    { label: 'Titan', range: 'close', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
   flurry:   { label: 'Flurry', range: 'close', ap: 2, wind: 0, base: 10, talent: 'flurry' },
+  bonebolt: { label: 'Bone Bolt', range: 'any', ap: 1, wind: 12, base: 16, hype: 6, talent: 'bonebolt', magic: true },
+  mend:     { label: 'Mend', range: 'any', ap: 1, wind: 20, talent: 'mend', magic: true },
+  hex:      { label: 'Hex', range: 'any', ap: 1, wind: 15, talent: 'hex', magic: true },
+  bonestorm:{ label: 'Bone Storm', range: 'close', ap: 2, wind: 40, base: 14, talent: 'bonestorm', magic: true },
 };
 export const SHOWSTOPPER_HYPE = 80;
 
@@ -152,16 +183,19 @@ export function counterMult(move, defState) {
 
 export function resolveHit({ move, attacker, defender, rng }) {
   const a = ACTIONS[move];
-  const immune = move === 'signature' || move === 'titan' || move === 'flurry';
+  const immune = move === 'signature' || move === 'titan' || move === 'flurry' || !!ACTIONS[move].magic;
   const counter = immune ? { mult: 1.0 } : counterMult(move, defender.state);
   if (counter.miss) {
     return { damage: 0, miss: true, offBalance: !!counter.offBalance, crit: false, glance: false };
   }
   let dmg = a.base;
-  dmg *= attacker.d.powerMult;
-  dmg *= attacker.weapon.mult(move, attacker.stats);
+  dmg *= a.magic ? attacker.d.magicMult : attacker.d.powerMult;
+  if (!a.magic) dmg *= attacker.weapon.mult(move, attacker.stats);
   dmg *= counter.mult;
   if (move === 'haymaker' && attacker.talents.has('heavyhands')) dmg *= 1.15;
+  if (move === 'throwb' && attacker.talents.has('kite')) dmg *= 1.6;
+  if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
+  if (defender.sunder) dmg *= 1.15;
   const crit = rng() < attacker.d.critChance;
   if (crit) dmg *= 1.5;
   const glance = !immune && rng() < defender.d.glanceChance;
@@ -189,7 +223,11 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
   const d = derived(stats, weapon, tset);
   return {
     name, stats, weapon, d, outfit, talents: tset,
-    titanUsed: false,
+    titanUsed: false, bonestormUsed: false, secondWindUsed: false,
+    mendUses: 3,
+    bleed: null,      // {stacks, turns}
+    sunder: null,     // {turns} takes +15% damage
+    weaken: null,     // {pct, turns} deals less damage
     hp: d.maxHp, wind: d.maxWind, hype: tset.has('bigentrance') ? 25 : 0,
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
@@ -224,6 +262,18 @@ function mulberry32(seed) {
   };
 }
 
+function dealDamage(fight, victimWho, amount, events) {
+  const v = fighterOf(fight, victimWho);
+  v.hp = Math.max(0, v.hp - amount);
+  if (v.hp > 0 && v.hp <= v.d.maxHp * 0.25 && v.talents.has('secondwind') && !v.secondWindUsed) {
+    v.secondWindUsed = true;
+    const heal = Math.round(v.d.maxHp * 0.15);
+    v.hp = Math.min(v.d.maxHp, v.hp + heal);
+    v.wind = Math.min(v.d.maxWind, v.wind + 30);
+    events.push({ t: 'secondwind', who: victimWho, heal });
+  }
+}
+
 export function fighterOf(fight, who) { return who === 'p' ? fight.p : fight.f; }
 export function opponentOf(fight, who) { return who === 'p' ? fight.f : fight.p; }
 
@@ -236,6 +286,8 @@ export function actionsFor(fight) {
     if (a.talent && !me.talents.has(a.talent)) continue;
     if (id === 'signature' && me.hype < sigThreshold(me)) continue;
     if (id === 'titan' && me.titanUsed) continue;
+    if (id === 'bonestorm' && me.bonestormUsed) continue;
+    if (id === 'mend' && me.mendUses <= 0) continue;
     let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
     let ok = fight.ap >= a.ap && me.wind >= windCost;
     if (id === 'flurry') { windCost = me.wind; ok = fight.ap >= a.ap && me.wind >= 30; }
@@ -290,6 +342,10 @@ export function applyAction(fight, actionId) {
       const gain = TAUNT_CURVE[Math.min(me.tauntCount, TAUNT_CURVE.length - 1)];
       me.tauntCount += 1;
       gainHype(me, gain);
+      if (me.talents.has('heckle')) {
+        if (!them.weaken || them.weaken.pct <= 0.15) them.weaken = { pct: 0.15, turns: 2 };
+        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'weaken' });
+      }
       events.push({ t: 'taunt', who: fight.active, gain });
       break;
     }
@@ -298,14 +354,14 @@ export function applyAction(fight, actionId) {
       me.hype = 0;
       const boost = me.talents.has('showstopper') ? 1.25 : 1;
       const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost);
-      them.hp = Math.max(0, them.hp - dmg);
+      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', dmg, events);
       events.push({ t: 'hit', who: fight.active, move: 'signature', damage: dmg, crit: false, glance: false, signature: true });
       break;
     }
     case 'titan': {
       me.titanUsed = true;
       const r = resolveHit({ move: 'titan', attacker: me, defender: them, rng: fight.rng });
-      them.hp = Math.max(0, them.hp - r.damage);
+      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, HIT_TAKEN_HYPE);
@@ -325,9 +381,50 @@ export function applyAction(fight, actionId) {
       for (let h = 0; h < 3 && them.hp > 0; h++) {
         const r = resolveHit({ move: 'flurry', attacker: me, defender: them, rng: fight.rng });
         const dmg = Math.round(r.damage * mult);
-        them.hp = Math.max(0, them.hp - dmg);
+        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', dmg, events);
         if (dmg > 0) { gainHype(me, 6); gainHype(them, HIT_TAKEN_HYPE); }
         events.push({ t: 'hit', who: fight.active, move: 'flurry', damage: dmg, crit: r.crit, glance: false, flurry: true, hitNo: h + 1 });
+      }
+      break;
+    }
+    case 'bonebolt': {
+      const r = resolveHit({ move: 'bonebolt', attacker: me, defender: them, rng: fight.rng });
+      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      if (r.damage > 0) {
+        gainHype(me, a.hype || 0);
+        gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
+        if (me.talents.has('soulsiphon')) {
+          const heal = Math.round(r.damage * 0.30);
+          me.hp = Math.min(me.d.maxHp, me.hp + heal);
+          events.push({ t: 'heal', who: fight.active, amount: heal });
+        }
+        if (me.talents.has('gravechill')) {
+          them.wind = Math.max(0, them.wind - 10);
+          events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'chill' });
+        }
+      }
+      events.push({ t: 'hit', who: fight.active, move: 'bonebolt', ...r, magic: true });
+      break;
+    }
+    case 'mend': {
+      me.mendUses -= 1;
+      const heal = Math.round(me.d.maxHp * 0.12 + 8 * me.d.magicMult);
+      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.mendUses });
+      break;
+    }
+    case 'hex': {
+      if (!them.weaken || them.weaken.pct <= 0.20) them.weaken = { pct: 0.20, turns: 2 };
+      events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'hex' });
+      break;
+    }
+    case 'bonestorm': {
+      me.bonestormUsed = true;
+      for (let h = 0; h < 3 && them.hp > 0; h++) {
+        const r = resolveHit({ move: 'bonestorm', attacker: me, defender: them, rng: fight.rng });
+        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+        if (r.damage > 0) { gainHype(me, 5); gainHype(them, them.talents.has('ovation') ? 8 : 4); }
+        events.push({ t: 'hit', who: fight.active, move: 'bonestorm', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1 });
       }
       break;
     }
@@ -338,22 +435,30 @@ export function applyAction(fight, actionId) {
         me.offBalance = true;
         events.push({ t: 'miss', who: fight.active, move });
         if (them.talents.has('counterstep')) {
-          const c = resolveHit({ move: 'jab', attacker: them, defender: { ...me, state: null, d: me.d }, rng: fight.rng });
-          me.hp = Math.max(0, me.hp - c.damage);
+          const c = resolveHit({ move: 'jab', attacker: them, defender: { ...me, state: null, d: me.d, talents: me.talents, sunder: me.sunder }, rng: fight.rng });
+          dealDamage(fight, fight.active, c.damage, events);
           if (c.damage > 0) gainHype(them, 6);
           events.push({ t: 'counter', who: fight.active === 'p' ? 'f' : 'p', damage: c.damage, crit: c.crit });
         }
       } else {
-        them.hp = Math.max(0, them.hp - r.damage);
+        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
         if (r.breaksGuard) { them.state = null; }
-        if (r.stagger) { them.stagger = true; }
+        if (r.stagger || (move === 'haymaker' && r.damage > 0 && me.talents.has('concussive'))) { them.stagger = true; }
         if (r.damage > 0) {
           gainHype(me, a.hype || 0);
-          gainHype(them, HIT_TAKEN_HYPE);
+          gainHype(them, them.talents.has('ovation') ? HIT_TAKEN_HYPE * 2 : HIT_TAKEN_HYPE);
           if (move === 'haymaker' && me.talents.has('marrowlust')) {
             const heal = Math.round(r.damage * 0.25);
             me.hp = Math.min(me.d.maxHp, me.hp + heal);
             events.push({ t: 'heal', who: fight.active, amount: heal });
+          }
+          if (move === 'haymaker' && me.talents.has('bonebreaker')) {
+            them.sunder = { turns: 2 };
+            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'sunder' });
+          }
+          if (move === 'jab' && me.talents.has('bleedout')) {
+            them.bleed = { stacks: Math.min(3, (them.bleed ? them.bleed.stacks : 0) + 1), turns: 3 };
+            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'bleed', stacks: them.bleed.stacks });
           }
         }
         events.push({ t: 'hit', who: fight.active, move, ...r });
@@ -378,6 +483,17 @@ export function endTurn(fight) {
   // my defensive state persisted through the opponent's turn; clears now
   me.state = null;
   me.wind = Math.min(me.d.maxWind, me.wind + REGEN_PER_TURN);
+  // status ticks
+  if (me.bleed) {
+    const tick = 4 * me.bleed.stacks;
+    me.hp = Math.max(0, me.hp - tick);
+    fight.pendingTick = { t: 'bleedtick', who: next, damage: tick };
+    me.bleed.turns -= 1;
+    if (me.bleed.turns <= 0) me.bleed = null;
+    if (me.hp <= 0) fight.over = { winner: next === 'p' ? 'f' : 'p' };
+  } else fight.pendingTick = null;
+  if (me.sunder) { me.sunder.turns -= 1; if (me.sunder.turns <= 0) me.sunder = null; }
+  if (me.weaken) { me.weaken.turns -= 1; if (me.weaken.turns <= 0) me.weaken = null; }
   let ap = me.d.ap;
   if (me.stagger) { ap = Math.max(1, ap - 1); me.stagger = false; }
   if (me.offBalance) { ap = Math.max(1, ap - 1); me.offBalance = false; }

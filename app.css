@@ -851,3 +851,25 @@ body::before {
 .tal-node.locked { opacity: 0.5; }
 .tal-move { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: var(--carbs); border: 1px solid rgba(255, 180, 84, 0.4); padding: 1.5px 5px; border-radius: 5px; vertical-align: 2px; }
 .float.dmg.heal { color: var(--accent); font-size: 26px; }
+
+/* ---------- talents v2 + spellcraft ---------- */
+.tal-tier { display: grid; gap: 6px; margin-bottom: 6px; }
+.tal-tier.pair { grid-template-columns: 1fr 1fr; }
+.tal-tier.pair .tal-node { flex-direction: column; text-align: center; gap: 6px; padding: 11px 8px; margin: 0; }
+.tal-tier.pair .tal-node .tal-body b { font-size: 13px; }
+.tal-tier.pair .tal-node .tal-body small { font-size: 10.5px; }
+.tal-gate { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); text-align: center; margin: 8px 0 4px; }
+.fstage.castfx { animation: castglow 0.5s ease; }
+@keyframes castglow {
+  0% { filter: brightness(1) drop-shadow(0 10px 12px rgba(0,0,0,0.5)); }
+  45% { filter: brightness(1.5) drop-shadow(0 0 22px rgba(192, 132, 252, 0.9)); transform: translateY(-6px); }
+  100% { filter: brightness(1) drop-shadow(0 10px 12px rgba(0,0,0,0.5)); }
+}
+.fstage.hexfx { animation: hexglow 0.5s ease; }
+@keyframes hexglow { 45% { filter: brightness(0.7) drop-shadow(0 0 18px rgba(192, 132, 252, 0.8)); } }
+.fstage.hurt.hexhit { animation-name: hurtflash; }
+.fstage.mendfx { animation: mendglow 0.55s ease; }
+@keyframes mendglow { 45% { filter: brightness(1.4) drop-shadow(0 0 20px rgba(165, 232, 71, 0.9)); } }
+.float.dmg.magic { color: #c084fc; }
+.float.dmg.bleed { color: var(--danger); font-size: 22px; }
+.float.stamp.hex { color: #c084fc; }

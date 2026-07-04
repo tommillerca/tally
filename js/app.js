@@ -2332,10 +2332,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
     el('foeHype').style.width = foe.hype + '%';
     for (const [f, id] of [[player, 'youState'], [foe, 'foeState']]) {
       const chip = el(id);
-      if (f.state || f.stagger) {
+      const bits = [];
+      if (f.stagger) bits.push('STAGGERED');
+      else if (f.state) bits.push(f.state === 'block' ? 'BLOCKING' : 'DODGING');
+      if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
+      if (f.sunder) bits.push('SUNDERED');
+      if (f.weaken) bits.push('WEAKENED');
+      if (bits.length) {
         chip.hidden = false;
-        chip.textContent = f.stagger ? 'STAGGERED' : f.state === 'block' ? 'BLOCKING' : 'DODGING';
-        chip.classList.toggle('stag', !!f.stagger);
+        chip.textContent = bits.join(' · ');
+        chip.classList.toggle('stag', !!f.stagger || !!f.sunder);
       } else chip.hidden = true;
     }
     el('teleBanner').hidden = !fight.telegraph;
@@ -2364,6 +2370,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const vicSide = ev.who === 'p' ? 'f' : 'p';
     const lungeCls = ev.who === 'p' ? 'lunge-r' : 'lunge-l';
     if (ev.t === 'hit') {
+      if (ev.magic || ev.move === 'bonebolt' || ev.storm) {
+        pulse(atkStage, 'castfx', fxMs + 200);
+        setTimeout(() => {
+          pulse(vicStage, 'hurt hexhit', fxMs + 150);
+          floatNode(`-${ev.damage}`, vicSide, 'dmg magic');
+          if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
+        }, fxMs * 0.5);
+        return;
+      }
       pulse(atkStage, ev.move === 'haymaker' || ev.signature ? lungeCls + ' big' : lungeCls, fxMs + 120);
       setTimeout(() => {
         pulse(vicStage, 'hurt', fxMs + 150);
@@ -2389,8 +2404,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.who === 'p' ? 'lunge-r' : 'lunge-l', fxMs);
       floatNode(`-${ev.damage}`, vs, 'dmg');
       floatNode('COUNTER!', vs, 'stamp hot');
-    } else if (ev.t === 'heal') {
-      floatNode(`+${ev.amount}`, ev.who, 'dmg heal');
+    } else if (ev.t === 'heal' || ev.t === 'secondwind') {
+      floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
+    } else if (ev.t === 'status') {
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED' }[ev.kind] || '';
+      floatNode(label, ev.who, 'stamp hex');
+      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+    } else if (ev.t === 'bleedtick') {
+      floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
     } else if (ev.t === 'brace') {
       floatNode('+wind', ev.who, 'stamp cool');
     } else if (ev.t === 'taunt') {
@@ -2403,11 +2425,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const them = ev.who === 'p' ? foe.name : 'you';
     if (ev.t === 'hit') {
       if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
+      if (ev.storm) return ev.hitNo === 1 ? `${who} summoned a BONE STORM: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
+      if (ev.move === 'bonebolt') return `${who} hurled a bone bolt at ${them} for ${ev.damage}`;
       if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
       return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
     }
     if (ev.t === 'counter') return `${who === 'You' ? 'You counterstep' : who + ' countersteps'} for ${ev.damage}!`;
-    if (ev.t === 'heal') return `${who} drank the marrow (+${ev.amount} HP)`;
+    if (ev.t === 'heal') return ev.mend ? `${who} mended ${who === 'You' ? 'your' : 'their'} marrow (+${ev.amount} HP)` : `${who} drank the marrow (+${ev.amount} HP)`;
+    if (ev.t === 'status') {
+      if (ev.kind === 'sunder') return `${who === 'You' ? 'You are' : who + ' is'} SUNDERED: +15% damage taken`;
+      if (ev.kind === 'bleed') return `${who === 'You' ? 'You are' : who + ' is'} bleeding (x${ev.stacks})`;
+      if (ev.kind === 'hex' || ev.kind === 'weaken') return `${who === 'You' ? 'You are' : who + ' is'} cursed: -damage`;
+      if (ev.kind === 'chill') return `grave chill drains ${who === 'You' ? 'your' : 'their'} wind`;
+    }
+    if (ev.t === 'secondwind') return `${who} found a SECOND WIND (+${ev.heal} HP)`;
+    if (ev.t === 'bleedtick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} for ${ev.damage}`;
     if (ev.t === 'miss') return `${who} whiffed the haymaker`;
     if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
     if (ev.t === 'brace') return `${who} caught a breath`;
@@ -2442,11 +2474,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const sig = get('signature');
     if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult)} dmg · unblockable</small></button>`;
 
+    const casterRow = () => {
+      let h = '';
+      const bolt = get('bonebolt');
+      if (bolt) h += btn(bolt, { hint: `~${expectedDamage('bonebolt', player, null, foe)} dmg · any range` });
+      const mendA = get('mend');
+      if (mendA) h += btn(mendA, { hint: `heal · ${player.mendUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.mendUses > 0 });
+      const hexA = get('hex');
+      if (hexA) h += btn(hexA, { hint: 'curse: -20% their dmg', weak: !!foe.weaken });
+      return h;
+    };
     if (fight.range === 'close') {
       const titan = get('titan');
       if (titan) html += btn(titan, { hint: 'ignores defense · once', glow: true });
+      const storm = get('bonestorm');
+      if (storm) html += btn(storm, { hint: '3 magic hits · once', glow: true });
       const flurry = get('flurry');
       if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
+      html += casterRow();
       html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
       html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
       html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
@@ -2459,10 +2504,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (player.wind >= 20) html += btn(get('brace'), { hint: '+40 wind' });
       }
     } else {
-      html += btn(get('advance'), { hint: 'close the gap', glow: true });
+      html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
+      html += casterRow();
       html += btn(get('brace'), { hint: '+40 wind' });
-      html += btn(get('taunt'), { hint: '+hype' });
+      html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
     }
     html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
     factions.innerHTML = html;
@@ -2495,6 +2541,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (pendingEnd) { clearTimeout(pendingEnd); pendingEnd = null; }
     if (fight.active !== 'p' || fight.over) return;
     endTurn(fight);
+    if (fight.pendingTick) { playFx(fight.pendingTick); fight.pendingTick = null; if (fight.over) return settle(); }
     refreshAll('');
     aiPlay();
   }
@@ -2519,6 +2566,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (i < evs.length && !fight.over) { setTimeout(step, beatMs); return; }
       if (fight.over) return settle();
       endTurn(fight);
+      if (fight.pendingTick) { playFx(fight.pendingTick); setLog(describe(fight.pendingTick)); fight.pendingTick = null; if (fight.over) return settle(); }
       planTelegraph(fight);
       setTimeout(() => refreshAll('Your turn.'), beatMs * 0.7);
     };
@@ -2612,14 +2660,21 @@ async function renderTalents(wrap) {
           <span class="note" style="margin-left:auto">${tree.nodes.filter(n => taken.has(n.id)).length}/3</span>
         </div>
         <p class="note" style="margin:0 2px 8px">${tree.flavor}</p>
-        ${tree.nodes.map((n, i) => {
-          const has = taken.has(n.id);
-          const can = !has && unspent > 0 && canTakeTalent(taken, tree.id, i);
-          const locked = !has && !canTakeTalent(taken, tree.id, i);
-          return `<button class="tal-node ${has ? 'taken' : can ? 'can' : 'locked'}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
-            <span class="tal-pip" style="${has ? `background:${tree.color};border-color:${tree.color}` : ''}">${has ? '✓' : 'T' + (i + 1)}</span>
-            <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small></span>
-          </button>`;
+        ${[1, 2, 3, 4].map(tier => {
+          const nodes = tree.nodes.map((n, i) => ({ n, i })).filter(x => x.n.tier === tier);
+          if (!nodes.length) return '';
+          const inTree = tree.nodes.filter(n => taken.has(n.id)).length;
+          const gate = { 1: 0, 2: 1, 3: 3, 4: 5 }[tier];
+          const gateTxt = inTree < gate ? `<div class="tal-gate">needs ${gate} point${gate === 1 ? '' : 's'} in ${tree.name}</div>` : '';
+          const cards = nodes.map(({ n, i }) => {
+            const has = taken.has(n.id);
+            const can = !has && unspent > 0 && canTakeTalent(taken, tree.id, i);
+            return `<button class="tal-node ${has ? 'taken' : can ? 'can' : 'locked'}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
+              <span class="tal-pip" style="${has ? `background:${tree.color};border-color:${tree.color}` : ''}">${has ? '✓' : tier === 4 ? '★' : 'T' + tier}</span>
+              <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small></span>
+            </button>`;
+          }).join('');
+          return `${gateTxt}<div class="tal-tier ${nodes.length > 1 ? 'pair' : ''}">${cards}</div>`;
         }).join('')}
       </div>`).join('')}
     ${taken.size ? '<button class="btn danger" id="respecBtn">Respec (free) · refund all points</button>' : ''}`;

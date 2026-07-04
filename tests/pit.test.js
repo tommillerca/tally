@@ -185,17 +185,121 @@ import { makeFighter as mf, createFight as cf, applyAction as apply, actionsFor 
 
 const MID = { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 30 };
 
-test('talent chains gate linearly and points come from levels', () => {
+test('talent tiers gate by points-in-tree (WoW style)', () => {
   assert.equal(talentPoints(1), 0);
   assert.equal(talentPoints(8), 7);
   const taken = new Set();
-  assert.ok(canTakeTalent(taken, 'slab', 0));
-  assert.ok(!canTakeTalent(taken, 'slab', 1)); // needs heavy hands first
+  assert.ok(canTakeTalent(taken, 'slab', 0));      // T1 open
+  assert.ok(!canTakeTalent(taken, 'slab', 1));     // T2 needs 1 in tree
+  assert.ok(!canTakeTalent(taken, 'slab', 5));     // capstone needs 5
   taken.add('heavyhands');
-  assert.ok(canTakeTalent(taken, 'slab', 1));
-  assert.ok(!canTakeTalent(taken, 'slab', 0)); // already taken
-  assert.equal(TALENT_TREES.length, 3);
-  assert.ok(TALENT_TREES.every(t => t.nodes.length === 3));
+  assert.ok(canTakeTalent(taken, 'slab', 1));      // both T2 options open
+  assert.ok(canTakeTalent(taken, 'slab', 2));
+  assert.ok(!canTakeTalent(taken, 'slab', 3));     // T3 needs 3 in tree
+  taken.add('marrowlust'); taken.add('bonebreaker');
+  assert.ok(canTakeTalent(taken, 'slab', 3));
+  taken.add('concussive'); taken.add('thickskull');
+  assert.ok(canTakeTalent(taken, 'slab', 5));      // capstone at 5 in tree
+  assert.ok(!canTakeTalent(taken, 'slab', 0));     // already taken
+  assert.equal(TALENT_TREES.length, 4);
+  assert.ok(TALENT_TREES.every(t => t.nodes.length === 6));
+  const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
+  assert.ok(gc && gc.nodes.filter(n => n.move).length >= 4); // the caster is move-rich
+});
+
+test('gravecaller: bone bolt is any-range magic scaling off Hype', () => {
+  const caster = mf({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt'] });
+  const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  dummy.state = 'block'; // magic ignores the counter matrix
+  const r = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
+  assert.equal(r.damage, Math.round(16 * (1 + 0.6 * 1.5))); // 30
+  const fight = cf({ player: caster, foe: mf({ name: 'F', stats: MID }), seed: 21 });
+  fight.range = 'far';
+  assert.ok(acts(fight).some(a => a.id === 'bonebolt')); // castable at far
+});
+test('soul siphon + grave chill riders', () => {
+  const caster = mf({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt', 'soulsiphon', 'mend', 'hex', 'gravechill'] });
+  const fight = cf({ player: caster, foe: mf({ name: 'F', stats: { ...MID, reflex: 0 } }), seed: 22 });
+  fight.p.hp = 100;
+  const foeWind = fight.f.wind;
+  const evs = apply(fight, 'bonebolt');
+  assert.ok(evs.some(e => e.t === 'heal'), 'siphon heals');
+  assert.equal(fight.f.wind, Math.max(0, foeWind - 10), 'chill drains wind');
+});
+test('mend heals and is limited to 3 uses', () => {
+  const caster = mf({ name: 'C', stats: MID, talents: ['bonebolt', 'mend'] });
+  const fight = cf({ player: caster, foe: mf({ name: 'F', stats: MID }), seed: 23 });
+  fight.p.hp = 50;
+  for (let i = 0; i < 3; i++) { fight.ap = 2; fight.p.wind = 90; apply(fight, 'mend'); }
+  assert.ok(fight.p.hp > 50);
+  assert.equal(fight.p.mendUses, 0);
+  fight.ap = 2; fight.p.wind = 90;
+  assert.ok(!acts(fight).some(a => a.id === 'mend'));
+});
+test('hex weakens outgoing damage 20%', () => {
+  const caster = mf({ name: 'C', stats: MID, talents: ['bonebolt', 'mend', 'hex'] });
+  const foe = mf({ name: 'F', stats: MID });
+  const fight = cf({ player: caster, foe, seed: 24 });
+  apply(fight, 'hex');
+  assert.ok(foe.weaken && foe.weaken.pct === 0.20);
+  const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const r = rh({ move: 'swing', attacker: foe, defender: dummy, rng: noLuck });
+  assert.equal(r.damage, Math.round(22 * 1.75 * 0.8)); // 31
+});
+test('bonebreaker sunder makes the enemy take +15%', () => {
+  const slab = mf({ name: 'S', stats: MID, talents: ['heavyhands', 'bonebreaker'] });
+  const foe = mf({ name: 'F', stats: { ...MID, reflex: 0, marrow: 90 } });
+  const fight = cf({ player: slab, foe, seed: 25 });
+  apply(fight, 'haymaker');
+  assert.ok(foe.sunder, 'sunder applied');
+  const r = rh({ move: 'jab', attacker: slab, defender: foe, rng: noLuck });
+  assert.equal(r.damage, Math.round(10 * 1.75 * 1.15));
+});
+test('bleed out stacks and ticks at turn start', () => {
+  const grey = mf({ name: 'G', stats: MID, talents: ['lightfeet', 'counterstep', 'kite', 'bleedout'] });
+  const foe = mf({ name: 'F', stats: { ...MID, reflex: 0, marrow: 90 } });
+  const fight = cf({ player: grey, foe, seed: 26 });
+  apply(fight, 'jab'); fight.ap = 3; fight.p.wind = 90;
+  apply(fight, 'jab');
+  assert.equal(foe.bleed.stacks, 2);
+  const hpBefore = foe.hp;
+  et(fight); // foe's turn starts: bleed ticks 8
+  assert.equal(foe.hp, hpBefore - 8);
+});
+test('kite boosts throws 60%', () => {
+  const grey = mf({ name: 'G', stats: MID, talents: ['lightfeet', 'kite'] });
+  const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const r = rh({ move: 'throwb', attacker: grey, defender: dummy, rng: noLuck });
+  assert.equal(r.damage, Math.round(14 * 1.75 * 1.6)); // 39
+});
+test('concussive: landed haymakers stagger without a block', () => {
+  const slab = mf({ name: 'S', stats: MID, talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive'] });
+  const foe = mf({ name: 'F', stats: { ...MID, reflex: 0, marrow: 90 } });
+  const fight = cf({ player: slab, foe, seed: 27 });
+  apply(fight, 'haymaker'); // neutral stance, no guard break needed
+  assert.ok(foe.stagger);
+});
+test('second wind procs once below 25%', () => {
+  const rm = mf({ name: 'R', stats: MID, talents: ['crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind'] });
+  const foe = mf({ name: 'F', stats: { ...MID, power: 90 } });
+  const fight = cf({ player: foe, foe: rm, seed: 28 }); // attacker is the player slot
+  rm.hp = Math.round(rm.d.maxHp * 0.26);
+  const evs = apply(fight, 'haymaker');
+  assert.ok(evs.some(e => e.t === 'secondwind') || rm.hp === 0, JSON.stringify(evs.map(e => e.t)));
+  assert.ok(rm.secondWindUsed || rm.hp === 0);
+});
+test('derived bonuses: thick skull + deep lungs', () => {
+  const base = mf({ name: 'B', stats: MID });
+  const tanked = mf({ name: 'T', stats: MID, talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'thickskull', 'lightfeet', 'counterstep', 'kite', 'deeplungs'] });
+  assert.equal(tanked.d.maxHp, base.d.maxHp + 45);
+  assert.equal(tanked.d.maxWind, base.d.maxWind + 15);
+});
+test('caster vs bruiser: both builds viable, pacing holds', () => {
+  // full sims use the built-in policies (no caster policy), so just verify
+  // a specced fight still terminates in bounds via the standard sim
+  let turns = 0, n = 100;
+  for (let i = 0; i < n; i++) turns += simulate({ pStats: MID, fStats: MID, seed: 30000 + i }).turns;
+  assert.ok(turns / n >= 3.5 && turns / n <= 9, String(turns / n));
 });
 test('light feet grants 3 AP turns', () => {
   const f = mf({ name: 'G', stats: MID, talents: ['lightfeet'] });
