@@ -2181,6 +2181,7 @@ async function openHunt() {
   $('#huntStart', wrap).addEventListener('click', startRadar);
 }
 
+const bearingArrow = b => ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][Math.round(b / 45) % 8];
 let radarLastNearest = null;
 async function renderRadar(body, lat, lng, eq) {
   if (!body.isConnected) { stopHuntWatch(); return; }
@@ -2208,8 +2209,8 @@ async function renderRadar(body, lat, lng, eq) {
       <div class="radar">
         <div class="radar-cone" hidden></div>
         <div class="radar-sweep"></div>
-        <div class="radar-ring" style="inset:16.6%"><i>400m</i></div>
-        <div class="radar-ring" style="inset:33.3%"><i>200m</i></div>
+        <div class="radar-ring" style="inset:16.6%"><i>315m</i></div>
+        <div class="radar-ring" style="inset:33.3%"><i>80m</i></div>
         <div class="radar-ring" style="inset:8px"></div>
         <div class="radar-blips"></div>
         <div class="radar-you">${avatarLayersHtml(eq)}</div>
@@ -2219,16 +2220,19 @@ async function renderRadar(body, lat, lng, eq) {
       <div id="radarList"></div>`;
   }
   const banner = $('#rareBanner', body);
-  if (rare) { banner.hidden = false; banner.innerHTML = `${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)}`; }
+  if (rare) { banner.hidden = false; banner.innerHTML = `${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)} ${bearingArrow(rare.bearing)}`; }
   else banner.hidden = true;
   $('.radar-blips', body).innerHTML = open.map(s => {
-    const r = Math.min(s.dist, VIEW_RADIUS_M - 25) / VIEW_RADIUS_M * 46;
+    // sqrt scale: close-in distances get most of the disc, and a floor keeps
+    // blips outside the center avatar (a 20 m target must never vanish under you)
+    const frac = Math.min(1, s.dist / VIEW_RADIUS_M);
+    const r = Math.max(12, Math.min(46, Math.sqrt(frac) * 46));
     const x = 50 + r * Math.sin(s.bearing * Math.PI / 180);
     const y = 50 - r * Math.cos(s.bearing * Math.PI / 180);
     return `<div class="radar-blip ${s.type === 'rare' ? 'rare' : ''} ${s.dist <= COLLECT_RADIUS_M ? 'inrange' : ''} ${nearest && s.id === nearest.id ? 'nearest' : ''}" style="left:${x}%;top:${y}%">${spawnIcon(s.type, 19)}</div>`;
   }).join('');
   $('#radarTarget', body).innerHTML = nearest
-    ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE, collect it below!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)}${trend}`}`
+    ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE, collect it below!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
     : 'All spawns collected. Legend.';
   $('#radarList', body).innerHTML = `
     ${live.map(s => `
