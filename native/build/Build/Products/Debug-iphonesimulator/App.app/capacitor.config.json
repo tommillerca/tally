@@ -1,0 +1,12 @@
+{
+	"appId": "com.boneheadz.gym",
+	"appName": "Boneheadz Gym",
+	"webDir": "www",
+	"ios": {
+		"contentInset": "never",
+		"backgroundColor": "#0d0c12"
+	},
+	"packageClassList": [
+		"AppPlugin"
+	]
+}

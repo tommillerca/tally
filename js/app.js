@@ -634,7 +634,7 @@ function healthCardHtml(hk, isToday) {
         </div>
         ${active != null ? `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn <span style="color:var(--text-3);font-weight:500">· shown for context, your target already covers activity</span></div></div>` : ''}
       </div>` :
-      '<p class="note">No sync yet today. Run your "Sync Tally" shortcut, then tap Sync.</p>'}
+      '<p class="note">No sync yet today. Run your "Sync Boneheadz" shortcut, then tap Sync.</p>'}
   </div>`;
 }
 
@@ -1099,7 +1099,7 @@ function openLabelFlow(getMeal, barcode = null) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Scan nutrition label</h2><button class="sheet-close">Cancel</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin-bottom:14px">Take a straight-on photo of the Nutrition Facts panel in good light. Tally reads it on-device; nothing is uploaded.</p>
+      <p class="note" style="margin-bottom:14px">Take a straight-on photo of the Nutrition Facts panel in good light. Boneheadz reads it on-device; nothing is uploaded.</p>
       <input type="file" accept="image/*" capture="environment" id="labelFile" hidden>
       <input type="file" accept="image/*" id="labelPick" hidden>
       <button class="btn" id="takeBtn">Take photo</button>
@@ -1480,7 +1480,7 @@ async function renderSettings(el) {
   <div class="card">
     <div class="card-title">APPLE HEALTH</div>
     <div class="settings-row">
-      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Tally shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
+      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Boneheadz shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
       <button class="btn small ghost" id="hkGuide">${S.settings.hkConnected ? 'Guide' : 'Connect'}</button>
     </div>
     <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>
@@ -1489,7 +1489,7 @@ async function renderSettings(el) {
   <div class="card">
     <div class="card-title">DATA</div>
     <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Tally export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
   </div>
@@ -1541,7 +1541,7 @@ async function renderSettings(el) {
     } catch (err) { toast('Import failed: ' + err.message, 3200); }
   });
   $('#eraseBtn').addEventListener('click', async () => {
-    if (!confirm('Erase ALL Tally data on this device? This cannot be undone.')) return;
+    if (!confirm('Erase ALL Boneheadz Gym data on this device? This cannot be undone.')) return;
     if (!confirm('Last check: your log, foods, and weights will be gone.')) return;
     for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
     location.reload();
@@ -1656,7 +1656,7 @@ function renderOnboarding() {
     <h1>BONEHEADZ GYM</h1>
     <p class="tag">Feed the bones. Scan barcodes, photograph labels, and log meals in seconds while a very cool skeleton earns loot on your behalf. Private: your data never leaves this device.</p>
     <div class="feature">${ICONS.barcode.replace('<svg', '<svg class="fi"')}<div><b>Instant barcode scanning</b><span>Millions of packaged foods via Open Food Facts + USDA</span></div></div>
-    <div class="feature">${ICONS.label.replace('<svg', '<svg class="fi"')}<div><b>Label camera</b><span>Photograph any Nutrition Facts panel, Tally reads it on-device</span></div></div>
+    <div class="feature">${ICONS.label.replace('<svg', '<svg class="fi"')}<div><b>Label camera</b><span>Photograph any Nutrition Facts panel, Boneheadz reads it on-device</span></div></div>
     <div class="feature">${ICONS.bolt.replace('<svg', '<svg class="fi"')}<div><b>Built for consistency</b><span>Recents, favorites, copy-yesterday, streaks</span></div></div>
     <div class="spacer"></div>
     <button class="btn" id="onbGo">Set up my plan</button>
@@ -2049,7 +2049,7 @@ async function syncFromClipboard() {
     const text = await navigator.clipboard.readText();
     const payload = parseHkPayload(text);
     if (!payload) {
-      toast('No Tally sync data on the clipboard. Run your "Sync Tally" shortcut first.', 3400);
+      toast('No sync data on the clipboard. Run your "Sync Boneheadz" shortcut first.', 3400);
       return;
     }
     await ingestHealth(payload);

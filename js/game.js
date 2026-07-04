@@ -18,7 +18,7 @@ export const LEVEL_NAMES = [
   'Rookie Logger', 'Snack Scout', 'Barcode Cadet', 'Portion Padawan', 'Macro Apprentice',
   'Kitchen Chemist', 'Protein Prefect', 'Streak Runner', 'Label Sleuth', 'Calorie Cartographer',
   'Meal Strategist', 'Macro Machinist', 'Data Gourmet', 'Trend Tamer', 'Deficit Architect',
-  'Gainz Engineer', 'Nutrition Ninja', 'Macro Wizard', 'Legendary Logger', 'Tally Grandmaster',
+  'Gainz Engineer', 'Nutrition Ninja', 'Macro Wizard', 'Legendary Logger', 'Bone Grandmaster',
 ];
 
 export function xpForLevel(L) {

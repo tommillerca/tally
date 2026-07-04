@@ -1,0 +1,19 @@
+{
+  "" : {
+    "diagnostics" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary.dia",
+    "emit-module-dependencies" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-emit-module.dia",
+    "pch" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary.swiftdeps"
+  },
+  "/Users/tommiller/Documents/Hyperframes Editor/tally/native/ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift" : {
+    "const-values" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.swiftconstvalues",
+    "dependencies" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.d",
+    "diagnostics" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.dia",
+    "index-unit-output-path" : "/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.o",
+    "llvm-bc" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.bc",
+    "object" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.o",
+    "swift-dependencies" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.swiftdeps",
+    "swiftmodule" : "/Users/tommiller/Documents/Hyperframes Editor/tally/native/build/Build/Intermediates.noindex/CapApp-SPM.build/Debug-iphonesimulator/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM~partial.swiftmodule"
+  }
+}
