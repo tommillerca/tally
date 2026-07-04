@@ -12,7 +12,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
 import { dailyQuests, questState, weekKeyOf, weekDates, QUEST_POOL } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
@@ -479,5 +479,11 @@ test('signed Sync Boneheadz shortcut ships with the app', () => {
 
 // async tests resolution
 await new Promise(r => setTimeout(r, 50));
+test('level rewards scale with level', () => {
+  assert.equal(levelCoins(2), 30);
+  assert.equal(levelCoins(10), 70);
+  assert.ok(levelCoins(11) > levelCoins(10));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

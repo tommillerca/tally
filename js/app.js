@@ -356,7 +356,7 @@ async function renderToday(el) {
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG'], noYard: true })}</div>
     ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
-    <div class="hero-fade"></div>
+
     <div class="hero-top">
       <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b></button>
       <div class="hero-top-right">
@@ -550,6 +550,7 @@ async function measureBubbleSide(stage, eq) {
 
 function speechLine({ entries, tot, targets, crates, streak, isToday }) {
   const pick = arr => arr[(new Date().getDate() + arr.length) % arr.length];
+  if (S.pendingLevelLine) { const l = S.pendingLevelLine; S.pendingLevelLine = null; return l; }
   if (crates.length) return pick([
     'Crack that crate open already!',
     'Loot is burning a hole in my ribs.',
@@ -1706,9 +1707,32 @@ async function saveInitialSettings(np) {
 function queueCelebration(game) {
   if (!game) return;
   if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone) {
-    S.celebration = game;
+    const prev = S.celebration || {};
+    S.celebration = {
+      levelUp: game.levelUp || prev.levelUp,
+      levelRewards: game.levelRewards || prev.levelRewards,
+      streakMilestone: game.streakMilestone || prev.streakMilestone,
+      newBadges: [...(prev.newBadges || []), ...(game.newBadges || [])],
+    };
   }
 }
+
+// any XP source (steps, quests, pit, road) can level you up
+addEventListener('bh-levelup', e => {
+  queueCelebration({ levelUp: e.detail.levelUp, levelRewards: e.detail.rewards });
+  maybeCelebrate();
+});
+
+const LEVELUP_LINES = [
+  'Another level? I felt that in my femurs.',
+  'New level, same beautiful skull.',
+  'We grind, we rattle, we rise.',
+  'Somewhere, the Marrow King just shivered.',
+  'Level up! The bones are our money and business is BOOMING.',
+  'Stronger bones, bigger drip. The system works.',
+  'They said I had no guts. Look at me now. Still no guts.',
+  'That XP went straight to my spine.',
+];
 
 function maybeCelebrate() {
   if (!S.celebration) return;
@@ -1717,21 +1741,38 @@ function maybeCelebrate() {
   setTimeout(() => openCelebration(c), 380);
 }
 
-function openCelebration({ levelUp = null, newBadges = [], streakMilestone = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null }) {
   const bits = [];
-  if (levelUp) bits.push(`<div class="cele-big">Level ${levelUp.level}</div><div class="cele-sub">${esc(levelUp.name)}</div>`);
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${b.icon}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
-  if (!bits.length) return;
+  if (!levelUp && !bits.length) return;
   confettiRain();
   levelSound(S.sounds);
+  let hero = '';
+  if (levelUp) {
+    const eq = await equipped();
+    const line = LEVELUP_LINES[levelUp.level % LEVELUP_LINES.length];
+    S.pendingLevelLine = line;
+    hero = `
+      <div class="lvlup-stage">
+        <div class="lvl-rays"></div>
+        <div class="bh-stage lg lvlup-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>
+      </div>
+      <div class="lvl-stamp">LEVEL ${levelUp.level}!</div>
+      <div class="cele-sub" style="font-size:16px;margin-top:2px">${esc(levelUp.name)}</div>
+      <div class="cele-bubble">${esc(line)}</div>
+      ${levelRewards ? `<div class="lvl-rewards">
+        <span class="bh-pill">${ICONS.coin(15)} +${levelRewards.coins}</span>
+        <span class="bh-pill">${crateIcon('golden', 15)} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+      </div>` : ''}`;
+  }
   const wrap = openSheet(`
-    <div class="sheet-body" style="text-align:center;padding-top:26px">
-      <div style="font-size:44px;line-height:1">${levelUp ? '🎉' : streakMilestone ? '🔥' : '🏅'}</div>
+    <div class="sheet-body" style="text-align:center;padding-top:${levelUp ? 10 : 26}px">
+      ${hero || `<div style="font-size:44px;line-height:1">${streakMilestone ? '🔥' : '🏅'}</div>`}
       <div style="height:10px"></div>
       ${bits.join('<div style="height:14px"></div>')}
       <div style="height:22px"></div>
-      <button class="btn" id="celeOk">Keep it going</button>
+      <button class="btn" id="celeOk">${levelUp ? 'RATTLE ON' : 'Keep it going'}</button>
       <div style="height:6px"></div>
     </div>`);
   $('#celeOk', wrap).addEventListener('click', () => history.back());

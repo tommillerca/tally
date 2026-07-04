@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { consumeXpBoostCharge, consumeFreeze, grantCrate, grantConsumable } from './loot.js';
+import { consumeXpBoostCharge, consumeFreeze, grantCrate, grantConsumable, coinsAdd } from './loot.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days protected by a Streak Freeze marker.
@@ -47,11 +47,42 @@ export async function totalXp() {
 }
 
 // Idempotent award. Returns the xp granted (0 if this key already exists).
+let quietLevelups = false; // backfills replay history; they must not celebrate or drop loot
+
 export async function award(key, type, xp, label, date) {
   const existing = await db.get('xp', key);
   if (existing) return 0;
+  const before = await totalXp();
   await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
+  // any XP source can cross a level: steps, quests, pit wins, the road
+  if (type !== 'levelup' && !quietLevelups) {
+    const lvB = levelFor(before), lvA = levelFor(before + xp);
+    if (lvA.level > lvB.level) {
+      const rewards = await grantLevelRewards(lvB.level, lvA.level);
+      if (typeof dispatchEvent === 'function') {
+        dispatchEvent(new CustomEvent('bh-levelup', { detail: { levelUp: lvA, rewards } }));
+      }
+    }
+  }
   return xp;
+}
+
+export function levelCoins(level) { return 20 + level * 5; }
+
+// one reward drop per level, ever: ledger rows `levelup-N` make it idempotent,
+// safe across multi-level jumps and every XP source
+export async function grantLevelRewards(fromLevel, toLevel) {
+  let coins = 0, crates = 0;
+  for (let L = fromLevel + 1; L <= toLevel; L++) {
+    const got = await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
+    const row = await db.get('xp', `levelup-${L}`);
+    if (row && row.claimed) continue;
+    if (row) { row.claimed = true; await db.put('xp', row); }
+    await coinsAdd(levelCoins(L));
+    await grantCrate('golden', 'level-' + L);
+    coins += levelCoins(L); crates += 1;
+  }
+  return { coins, crates };
 }
 
 /* ---------------- badges ---------------- */
@@ -212,16 +243,18 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   const after = before + gained;
   const lvBefore = levelFor(before), lvAfter = levelFor(after);
   const levelUp = lvAfter.level > lvBefore.level ? lvAfter : null;
-  if (levelUp) await grantCrate('golden', 'level-' + levelUp.level);
+  let levelRewards = null;
+  if (levelUp) levelRewards = await grantLevelRewards(lvBefore.level, lvAfter.level);
   return {
     xp: gained,
     total: after,
     levelUp,
+    levelRewards,
     newBadges,
     streakMilestone: sa.milestone,
     streak,
     boosted,
-    crates: (levelUp ? 1 : 0) + (sa.milestone ? 1 : 0),
+    crates: (levelUp ? levelRewards.crates : 0) + (sa.milestone ? 1 : 0),
   };
 }
 
@@ -281,6 +314,8 @@ export async function checkStreakFreeze() {
 // One-time retroactive backfill so existing users start with their history honored.
 export async function initGameIfNeeded(targets) {
   if (await kvGet('game-init')) return null;
+  quietLevelups = true;
+  try {
   const [log, weights] = await Promise.all([db.all('log'), db.all('weights')]);
   const today = dateKey();
   const dates = [...new Set(log.map(e => e.date))].sort();
@@ -305,7 +340,15 @@ export async function initGameIfNeeded(targets) {
   await evaluateBadges();
   await kvSet('game-init', true);
   const xp = await totalXp();
-  return { xp, level: levelFor(xp) };
+  const lv = levelFor(xp);
+  // baseline: levels reached before this feature never retro-drop rewards
+  for (let L = 2; L <= lv.level; L++) {
+    await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
+    const row = await db.get('xp', `levelup-${L}`);
+    if (row && !row.claimed) { row.claimed = true; await db.put('xp', row); }
+  }
+  return { xp, level: lv };
+  } finally { quietLevelups = false; }
 }
 
 // One-time welcome kit when the RPG layer first arrives (or on fresh install).

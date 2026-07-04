@@ -628,10 +628,7 @@ body::before {
   z-index: 2; opacity: 0.95; pointer-events: none;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
 }
-.hero-fade {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 42%; z-index: 3; pointer-events: none;
-  background: linear-gradient(to bottom, transparent, rgba(13, 12, 18, 0.55) 55%, rgba(13, 12, 18, 0.96));
-}
+
 .hero-top {
   position: absolute; top: calc(var(--sat) + 10px); left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: space-between; align-items: flex-start;
@@ -651,7 +648,13 @@ body::before {
   font-family: var(--display); font-size: 14px; letter-spacing: 0.045em; line-height: 1.12;
   text-align: center; transform: rotate(-2deg);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
-  animation: bubblePop 0.45s cubic-bezier(0.34, 1.6, 0.64, 1) both, bubbleFloat 3.2s ease-in-out 0.5s infinite alternate;
+  animation: bubblePop 0.45s cubic-bezier(0.34, 1.6, 0.64, 1) both,
+    bubbleFloat 2.2s ease-in-out 0.5s 2 alternate,
+    bubbleOut 0.32s ease-in 5.2s forwards;
+  pointer-events: none;
+}
+@keyframes bubbleOut {
+  to { transform: var(--sway) scale(0.6) translateY(-8px); opacity: 0; }
 }
 .hero-bubble::before { /* ink tail (drawn behind the fill tail) */
   content: ""; position: absolute; right: -14px; top: 42%;
@@ -668,8 +671,15 @@ body::before {
 @media (prefers-reduced-motion: reduce) { .hero-bubble { animation: none; } }
 .hero-meta { position: absolute; left: 14px; right: 14px; bottom: 10px; z-index: 4; }
 .hero-level { display: grid; gap: 3px; width: 100%; text-align: left; }
-.hero-lv { font-family: var(--display); font-size: 40px; line-height: 0.9; color: var(--accent); letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
-.hero-title { font-family: var(--display); font-size: 17px; color: var(--text); letter-spacing: 1px; opacity: 0.95; }
+.hero-lv {
+  font-family: var(--display); font-size: 40px; line-height: 0.9; color: var(--accent); letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #17151d, -2px 2px 0 #17151d, 2px -2px 0 #17151d, -2px -2px 0 #17151d, 3px 4px 0 rgba(0, 0, 0, 0.45);
+}
+.hero-title {
+  font-family: var(--display); font-size: 17px; color: var(--text); letter-spacing: 1px; opacity: 0.98;
+  text-shadow: 1.5px 1.5px 0 #17151d, -1.5px 1.5px 0 #17151d, 1.5px -1.5px 0 #17151d, -1.5px -1.5px 0 #17151d;
+}
+.hero-xpnum { text-shadow: 1px 1px 0 rgba(23, 21, 29, 0.85), -1px 1px 0 rgba(23, 21, 29, 0.85), 1px -1px 0 rgba(23, 21, 29, 0.85), -1px -1px 0 rgba(23, 21, 29, 0.85); }
 .hero-xpbar { display: block; height: 8px; border-radius: 5px; background: rgba(242, 233, 215, 0.14); overflow: hidden; margin-top: 4px; }
 .hero-xpbar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9ed32e, var(--accent)); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 .hero-xpnum { font-size: 11.5px; color: var(--text-2); font-weight: 600; }
@@ -1139,3 +1149,41 @@ body::before {
 .hero-bubble.side-r { left: auto; right: 10px; --sway: rotate(2deg); text-align: right; }
 .hero-bubble.side-r::before { right: auto; left: -14px; border-left-color: transparent; border-right-color: #17151d; border-right-width: 10px; border-left-width: 0; transform: rotate(-12deg); }
 .hero-bubble.side-r::after { right: auto; left: -8px; border-left-color: transparent; border-right-color: #f2e9d7; border-right-width: 7px; border-left-width: 0; transform: rotate(-12deg); }
+
+/* ===== level-up spectacle ===== */
+.lvlup-stage { position: relative; width: 224px; height: 224px; margin: 0 auto; }
+.lvl-rays {
+  position: absolute; inset: -34px; border-radius: 50%; z-index: 0;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(165, 232, 71, 0.22) 0deg 11deg, transparent 11deg 30deg);
+  -webkit-mask: radial-gradient(circle, #000 30%, transparent 72%);
+  mask: radial-gradient(circle, #000 30%, transparent 72%);
+  animation: raysSpin 14s linear infinite;
+}
+.lvlup-avatar { position: relative; z-index: 1; width: 100%; height: 100%; animation: lvlHero 0.6s cubic-bezier(0.34, 1.6, 0.64, 1) both; }
+.lvl-stamp {
+  font-family: var(--display); font-size: 46px; line-height: 1; color: var(--accent);
+  letter-spacing: 0.04em; text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55);
+  animation: vsStamp 0.5s cubic-bezier(0.34, 1.8, 0.64, 1) 0.28s both;
+  margin-top: 6px;
+}
+.cele-bubble {
+  display: inline-block; margin-top: 14px;
+  background: #f2e9d7; color: #17151d; border: 2.5px solid #17151d; border-radius: 15px;
+  padding: 8px 13px; font-family: var(--display); font-size: 15px; letter-spacing: 0.04em;
+  transform: rotate(-1.6deg); box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+  position: relative; max-width: 82%;
+}
+.cele-bubble::before {
+  content: ""; position: absolute; left: 46%; top: -13px;
+  border: 9px solid transparent; border-bottom-color: #17151d; border-top-width: 0;
+}
+.cele-bubble::after {
+  content: ""; position: absolute; left: 47.5%; top: -7px;
+  border: 6px solid transparent; border-bottom-color: #f2e9d7; border-top-width: 0;
+}
+.lvl-rewards { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+.lvl-rewards .bh-pill { font-size: 13.5px; padding: 6px 13px; }
+@keyframes raysSpin { to { transform: rotate(360deg); } }
+@keyframes lvlHero { from { transform: scale(0.55); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lvl-rays { animation: none; } }
