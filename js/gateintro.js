@@ -42,6 +42,7 @@ const STYLE = `
   -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
 }
+.gi-deep { position: absolute; inset: 0 0 6.9% 0; overflow: hidden; } /* the void stops at the doorway floor */
 .gi-void {
   position: absolute; inset: 0;
   background: radial-gradient(90% 70% at 50% 30%, #2a1850 0%, #150d2c 45%, #08060f 78%);
@@ -68,7 +69,7 @@ const STYLE = `
 .gi-eyes {
   position: absolute; left: 50.1%; top: 77.4%; width: 12%; height: 6%; margin: -3% 0 0 -6%;
   transform-origin: 50% 50%;
-  animation: giIgnite 0.62s steps(1, end) 1.5s both, giApproach 0.85s cubic-bezier(0.3, 0.6, 0.4, 1) 2.3s both, giCutOut 0.01s linear 3.13s both;
+  animation: giIgnite 0.62s steps(1, end) 1.5s both, giApproach 0.85s cubic-bezier(0.3, 0.6, 0.4, 1) 2.3s both;
 }
 .gi-eyes i {
   position: absolute; top: 22%; width: 19%; height: 58%; border-radius: 50%;
@@ -124,7 +125,11 @@ const STYLE = `
   25% { opacity: 1; }
   to { opacity: 1; transform: translateY(0) scale(0.62); filter: brightness(0.28) saturate(0.4) drop-shadow(0 0 14px rgba(150, 90, 255, 0.35)); }
 }
-@keyframes giApproach { from { transform: scale(1); } to { transform: translateY(-165%) scale(2.05); } }
+@keyframes giApproach {
+  from { transform: scale(1); opacity: 1; }
+  55% { opacity: 1; }
+  to { transform: translateY(-120%) scale(1.55); opacity: 0; }
+}
 @keyframes giIgnite { 0% { opacity: 0; } 12% { opacity: 1; } 26% { opacity: 0.25; } 42% { opacity: 1; } 58% { opacity: 0.55; } 74% { opacity: 1; } }
 @keyframes giCutOut { to { opacity: 0; visibility: hidden; } }
 @keyframes giCutIn { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
@@ -145,7 +150,8 @@ function ensureStyle() {
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function showGateIntro({ foeName, venue = 'The Boneyard Gate', spriteHtml = '', sounds = true } = {}) {
-  if (navigator.webdriver || reducedMotion) return Promise.resolve();
+  // __giForce lets tests/gateintro-harness.html run the intro under webdriver
+  if ((navigator.webdriver && !window.__giForce) || reducedMotion) return Promise.resolve();
   ensureStyle();
   return new Promise(resolve => {
     const gi = document.createElement('div');
@@ -155,8 +161,7 @@ export function showGateIntro({ foeName, venue = 'The Boneyard Gate', spriteHtml
       <div class="gi-stage">
         <div class="gi-ground"></div>
         <div class="gi-portal">
-          <div class="gi-void"></div>
-          <div class="gi-swirl"></div>
+          <div class="gi-deep"><div class="gi-void"></div><div class="gi-swirl"></div></div>
           <div class="gi-boss gi-behind">${spriteHtml}</div>
           <div class="gi-eyes"><i class="l"></i><i class="r"></i></div>
           <div class="gi-flash"></div>
@@ -182,13 +187,21 @@ export function showGateIntro({ foeName, venue = 'The Boneyard Gate', spriteHtml
     // the overlay's own fade-out is the end-of-sequence sentinel
     gi.addEventListener('animationend', e => { if (e.target === gi && e.animationName === 'giOut') finish(); });
     gi.addEventListener('pointerdown', () => {
-      // fast-forward every finite animation to its end state (incl. the fade-out)
-      for (const a of gi.getAnimations({ subtree: true })) {
-        const t = a.effect && a.effect.getTiming();
-        if (t && t.iterations !== Infinity) { try { a.finish(); } catch { /* not finishable */ } }
+      // fast-forward every finite animation to its end state (incl. the fade-out).
+      // document.getAnimations + containment beats Element.getAnimations({subtree})
+      // for cross-engine reliability.
+      const anims = document.getAnimations ? document.getAnimations() : [];
+      for (const a of anims) {
+        const target = a.effect && a.effect.target;
+        if (!target || !gi.contains(target)) continue;
+        const t = a.effect.getTiming();
+        if (t.iterations !== Infinity) { try { a.finish(); } catch { /* not finishable */ } }
       }
+      // engines that ignore WAAPI fast-forward on CSS animations still tear down
+      timers.push(setTimeout(finish, 450));
     }, { once: true });
     // belt and braces: if animation events never fire, resolve anyway
-    timers.push(setTimeout(finish, 5800));
+    // (skipped under the harness, which freezes time to capture frames)
+    if (!window.__giForce) timers.push(setTimeout(finish, 5800));
   });
 }

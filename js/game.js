@@ -107,6 +107,8 @@ export const BADGES = [
   { id: 'hunter-25', icon: '🗺', name: 'Boneyard regular', desc: 'Collect 25 Boneyard spawns' },
   { id: 'road-stop-1', icon: '🪧', name: 'First mile', desc: 'Claim a Bone Road stop' },
   { id: 'road-1', icon: '🗿', name: 'Road tripper', desc: 'Walk a full Bone Road lap' },
+  { id: 'den-1', icon: '🏚', name: 'Den cracker', desc: 'Beat a boss den on the map' },
+  { id: 'den-5', icon: '👑', name: 'Den lord', desc: 'Beat 5 boss dens' },
   { id: 'pit-1', icon: '🥊', name: 'Blooded', desc: 'Win a fight in The Pit' },
   { id: 'pit-25', icon: '💀', name: 'Pit fiend', desc: 'Win 25 Pit fights' },
   { id: 'pit-champ', icon: '👑', name: 'Kingslayer', desc: 'Dethrone the Marrow King' },
@@ -133,6 +135,8 @@ export function badgeCheck(id, st) {
     case 'hunter-25': return st.spawns >= 25;
     case 'road-stop-1': return st.roadStops >= 1;
     case 'road-1': return st.roadCycles >= 1;
+    case 'den-1': return st.bossWins >= 1;
+    case 'den-5': return st.bossWins >= 5;
     case 'pit-1': return st.pitWins >= 1;
     case 'pit-25': return st.pitWins >= 25;
     case 'pit-champ': return st.pitChamp;
@@ -158,6 +162,7 @@ async function buildStats() {
     spawns: xp.filter(r => r.type === 'spawn').length,
     roadStops: xp.filter(r => r.type === 'road').length,
     roadCycles: xp.filter(r => r.type === 'road' && r.key.endsWith('-6')).length,
+    bossWins: xp.filter(r => r.type === 'boss').length,
     pitWins: xp.filter(r => r.type === 'fight').length,
     pitChamp: xp.some(r => r.type === 'pitchamp'),
     equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on

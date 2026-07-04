@@ -14,7 +14,7 @@ import {
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
-import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, isoWeekKey, DEN_RADIUS_M } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
@@ -381,7 +381,6 @@ async function renderToday(el) {
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
-    <button class="hero-act" id="roadBtn"><img src="assets/brand/sword.png" style="height:24px" alt=""><span>Bone Road</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
 
@@ -468,7 +467,6 @@ async function renderToday(el) {
   });
   $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#roadBtn')?.addEventListener('click', openRoad);
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -2210,6 +2208,7 @@ async function openMap() {
         <div class="map-attrib">© OpenStreetMap</div>
         <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
         <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
+        <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
 
@@ -2248,10 +2247,45 @@ async function openMap() {
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
 
     const date = dateKey();
-    const xpRows = await db.all('xp');
-    const collected = new Set(xpRows.filter(r => r.type === 'spawn').map(r => r.key));
+    const week = isoWeekKey();
+    const xpRows0 = await db.all('xp');
+    const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
+    let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
+    const denMarkers = new Map();   // id -> {marker, el, den}
     let lastNearest = null;
+
+    function refreshDens() {
+      const dens = densNear(week, lat, lng);
+      for (const d of dens) {
+        let rec = denMarkers.get(d.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-den-mark';
+          el.innerHTML = `<img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span>`;
+          rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
+          denMarkers.set(d.id, rec);
+        }
+        rec.den = d;
+        rec.el.classList.toggle('claimed', claimedBoss.has(denKey(week, d)));
+        rec.el.classList.toggle('inrange', d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
+        rec.el.classList.toggle('big', d.tier >= 4);
+      }
+      const openDen = dens.find(d => d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
+      const db2 = $('#mapDen', body);
+      if (db2) {
+        db2.hidden = !openDen;
+        if (openDen) { db2.textContent = `☠ Enter ${openDen.name}`; db2.dataset.denId = openDen.id; }
+      }
+      return dens;
+    }
+
+    async function refreshWorld() {
+      const rows = await db.all('xp');
+      claimedBoss = new Set(rows.filter(r => r.type === 'boss').map(r => r.key));
+      refreshSpawns();
+      refreshDens();
+    }
 
     function refreshSpawns() {
       const live = spawnsNear(date, lat, lng).filter(s => !collected.has(spawnKey(date, s)));
@@ -2293,6 +2327,18 @@ async function openMap() {
       }
     }
 
+    $('#mapDen', body).addEventListener('click', async () => {
+      const id = $('#mapDen', body).dataset.denId;
+      const rec = denMarkers.get(id);
+      if (!rec || rec.den.dist > DEN_RADIUS_M) return;
+      const den = rec.den;
+      const fighter = await buildFighter();
+      openFight(wrap, fighter, {
+        mode: 'boss', name: den.boss, mult: den.mult, aiLevel: den.aiLevel,
+        talents: den.talents || [], venue: den.name, den, week,
+      });
+    });
+
     $('#mapCollect', body).addEventListener('click', async () => {
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
@@ -2309,10 +2355,14 @@ async function openMap() {
       toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
-      refreshSpawns();
+      refreshWorld();
     });
 
-    refreshSpawns();
+    refreshWorld();
+    // claims and day rollovers must surface even when standing still
+    const worldTimer = setInterval(() => { if (body.isConnected) refreshWorld(); else clearInterval(worldTimer); }, 5000);
+    const prevCleanupWT = cleanupExtras;
+    cleanupExtras = () => { prevCleanupWT(); clearInterval(worldTimer); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -2332,87 +2382,13 @@ async function openMap() {
       }
       youMarker.setLngLat([lng, lat]);
       if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
-      refreshSpawns();
+      refreshWorld();
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
   $('#mapStart', wrap).addEventListener('click', startMap);
 }
 
 const bearingArrow = b => ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][Math.round(b / 45) % 8];
-
-/* ================= the bone road (steps journey) ================= */
-
-async function openRoad() {
-  const [eq, lifetime, xpRows] = await Promise.all([equipped(), lifetimeSteps(), db.all('xp')]);
-  const claimed = new Set(xpRows.filter(r => r.type === 'road').map(r => r.key));
-  const st = roadState(lifetime, claimed);
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Bone Road</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="roadBody"></div>`, { cls: 'full' });
-  renderRoad(wrap, eq);
-}
-
-async function renderRoad(wrap, eq) {
-  const body = $('#roadBody', wrap);
-  if (!body) return;
-  const [lifetime, xpRows] = await Promise.all([lifetimeSteps(), db.all('xp')]);
-  const claimed = new Set(xpRows.filter(r => r.type === 'road').map(r => r.key));
-  const st = roadState(lifetime, claimed);
-
-  if (lifetime <= 0) {
-    body.innerHTML = `
-      <p class="note" style="margin-bottom:12px">The Bone Road runs on your real steps. Every step you sync from Apple Health walks your Bonehead further down Cam's map, and every stop pays a chest.</p>
-      <button class="btn" id="roadConnect">Connect Apple Health</button>`;
-    $('#roadConnect', body).addEventListener('click', openHealthGuide);
-    return;
-  }
-
-  const pos = travelerPos(st.progress);
-  const nextTxt = st.next
-    ? `${(st.next.steps - st.progress).toLocaleString()} steps to ${st.next.n}`
-    : 'Road complete! Claim X to start the next lap.';
-  body.innerHTML = `
-    <div class="road-strip">
-      <span class="road-cycle">Lap ${st.cycle}</span>
-      <div style="flex:1">
-        <b>${st.progress.toLocaleString()} steps walked</b>
-        <small>${nextTxt}</small>
-      </div>
-    </div>
-    <div class="road-wrap">
-      <img class="road-map" src="assets/brand/quest-map.png" alt="The Bone Road map">
-      ${st.stops.map(stop => {
-        const state = stop.claimed ? 'claimed' : stop.reached ? 'ready' : 'locked';
-        const icon = stop.claimed ? '✓' : (stop.reward.crate ? crateIcon(stop.reward.crate, 21) : ICONS.coin(21));
-        return `<button class="road-stop ${state}" style="left:${stop.x}%;top:${stop.y}%" data-stop="${stop.idx}" ${state !== 'ready' ? 'disabled' : ''} title="${stop.n}">${icon}</button>`;
-      }).join('')}
-      <div class="road-you" style="left:${pos.x}%;top:${pos.y}%">${avatarLayersHtml(eq, { skip: ['BG'], noYard: true })}</div>
-    </div>
-    <div class="sect-h">Stops</div>
-    ${st.stops.map(stop => `
-      <div class="crate-row">
-        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${stop.claimed ? 'var(--text-3)' : stop.reached ? 'var(--accent)' : 'var(--text-3)'}">${stop.n}</span>
-        <div style="flex:1"><b>${stop.steps.toLocaleString()} steps</b><small>${rewardLabel(stop.reward)}</small></div>
-        ${stop.claimed ? '<span class="q-done">✓</span>' : stop.reached
-          ? `<button class="btn small" data-claim-stop="${stop.idx}">Claim</button>`
-          : `<span class="q-frac">${(stop.steps - st.progress).toLocaleString()} to go</span>`}
-      </div>`).join('')}
-    <p class="note" style="margin-top:10px">Lifetime synced steps: ${lifetime.toLocaleString()}. Finish stop X and the road loops with a fresh lap.</p>`;
-
-  $$('[data-claim-stop]', body).forEach(b => b.addEventListener('click', async () => {
-    const idx = Number(b.dataset.claimStop);
-    const res = await claimStop(st.cycle, idx);
-    if (!res) return;
-    confettiBurst(innerWidth / 2, innerHeight * 0.3, 22);
-    popSound(S.sounds);
-    toast(`Stop ${ROAD_STOPS[idx].n} claimed · ${rewardLabel(res)}`, 3400);
-    const badges = await evaluateBadges();
-    if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
-    renderRoad(wrap, eq);
-  }));
-}
-
-/* ================= the pit (combat) ================= */
 
 async function buildFighter() {
   const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
@@ -2571,7 +2547,7 @@ const PIT_VENUES = {
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.talents });
-  const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : []);
+  const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
     stats: scaleStats(fighter.stats, foeCfg.mult),
@@ -2579,11 +2555,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.name),
     talents: foeTalents,
   });
-  const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1 });
+  const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
-  const venue = PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
+  const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
   if (!fast && !reducedMotion) {
     const vs = document.createElement('div');
     vs.className = 'vs-card quake';
@@ -3008,6 +2984,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
+      else if (foeCfg.mode === 'boss') {
+        const r = await claimDenWin(foeCfg.den, foeCfg.week);
+        if (r) {
+          xp += r.xp || 0;
+          coins = r.coins || 0;
+          if (r.crate) {
+            extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
+          }
+        } else coins = 10; // den already cracked this week: pocket change
+      }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {
           const g = await award(`pitrung-${foeCfg.rung}`, 'pitrung', foeCfg.xp, `Ladder: beat ${foeCfg.name}`);

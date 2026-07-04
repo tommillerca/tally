@@ -394,40 +394,33 @@ test('boneheadz: yard specials exist with real art files', () => {
   }
 });
 
-// ---- bone road ----
-const road = await import('../js/road.js');
-test('road: thresholds ascend and stops sit on the map', () => {
-  for (let i = 1; i < road.ROAD_STOPS.length; i++) {
-    assert.ok(road.ROAD_STOPS[i].steps > road.ROAD_STOPS[i - 1].steps);
+// ---- boss dens (the bone road, reimagined) ----
+const poi = await import('../js/poi.js');
+test('dens: permanent positions, weekly identity, deterministic', () => {
+  const wk = '2026-W27';
+  const a = poi.densNear(wk, 49.2827, -123.1207);
+  const b = poi.densNear(wk, 49.2827, -123.1207);
+  assert.equal(a.length, 9);
+  assert.deepEqual(a.map(d => d.id), b.map(d => d.id), 'same cells, same dens');
+  assert.deepEqual([a[0].lat, a[0].lng], [b[0].lat, b[0].lng], 'positions stable');
+  // positions do NOT change across weeks; identity (tier/theme) may
+  const c = poi.densNear('2026-W28', 49.2827, -123.1207);
+  assert.deepEqual(a.map(d => [d.id, d.lat, d.lng]), c.map(d => [d.id, d.lat, d.lng]), 'landmarks never move');
+  for (const d of a) {
+    assert.ok(d.tier >= 0 && d.tier < poi.DEN_TIERS.length);
+    assert.ok(d.mult >= 0.7 && d.mult <= 1.32, 'boss scale within audited pit range');
+    assert.ok(d.name && d.boss);
+    assert.ok(d.reward.xp > 0);
   }
-  for (const s of road.ROAD_STOPS) {
-    assert.ok(s.x >= 0 && s.x <= 100 && s.y >= 0 && s.y <= 100, s.n);
-    assert.ok(s.reward.xp > 0);
-  }
-  assert.equal(road.CYCLE_STEPS, road.ROAD_STOPS[road.ROAD_STOPS.length - 1].steps);
 });
-test('road: state derivation and cycles', () => {
-  const st = road.roadState(36053, new Set());
-  assert.equal(st.cycle, 1);
-  assert.equal(st.progress, 36053);
-  assert.ok(st.stops[0].reached && !st.stops[0].claimed);
-  assert.ok(!st.stops[1].reached);
-  assert.equal(st.next.n, 'II');
-  // claimed final stop rolls into lap 2 and progress restarts
-  const lap2 = road.roadState(road.CYCLE_STEPS + 12000, new Set([road.roadKey(1, road.ROAD_STOPS.length - 1)]));
-  assert.equal(lap2.cycle, 2);
-  assert.equal(lap2.progress, 12000);
-  assert.ok(!lap2.stops[0].reached);
-});
-test('road: traveler interpolates within bounds', () => {
-  const p0 = road.travelerPos(0);
-  const pMid = road.travelerPos(35000);
-  const pEnd = road.travelerPos(road.CYCLE_STEPS + 999);
-  for (const p of [p0, pMid, pEnd]) {
-    assert.ok(p.x >= 0 && p.x <= 100 && p.y >= 0 && p.y <= 100, JSON.stringify(p));
-  }
-  assert.ok(pMid.y > p0.y); // moving down the map
-  approx(pEnd.x, road.ROAD_STOPS[road.ROAD_STOPS.length - 1].x, 0.01);
+test('dens: weekly claim keys + reward labels', () => {
+  const wk = poi.isoWeekKey(new Date('2026-07-04T12:00:00Z'));
+  assert.equal(wk, '2026-W27');
+  const den = poi.densNear(wk, 49.2827, -123.1207)[0];
+  assert.ok(poi.denKey(wk, den).startsWith('boss-2026-W27-'));
+  assert.ok(poi.denRewardLabel({ crate: 'golden', coins: 200, xp: 100 }).includes('Golden Crate'));
+  // iso week boundaries: Sunday belongs to the week of the preceding Monday
+  assert.equal(poi.isoWeekKey(new Date('2026-01-01T12:00:00Z')), '2026-W01');
 });
 
 // ---- boneyard hunt ----

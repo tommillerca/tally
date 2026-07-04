@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>gate intro harness</title>
+<link rel="stylesheet" href="../app.css">
+<style>
+  .gih-bar { position: fixed; top: 14px; left: 14px; z-index: 10; display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="gih-bar"><button class="btn" id="play">Play intro</button></div>
+<script type="module">
+// dynamic import with a timestamp so Safari never serves a stale module while iterating
+const { showGateIntro } = await import('../js/gateintro.js?ts=' + Date.now());
+
+// same layers foeOutfitFor() gives every ladder opponent
+const SPRITE = '<div class="bh-anim"><img src="../assets/bh/B/B0-1.png"><img src="../assets/bh/SK/SK0-1.png"></div>';
+const OPTS = { foeName: 'Rattles', venue: 'The Boneyard Gate', spriteHtml: SPRITE };
+
+// deterministic hooks for headless frame capture
+window.__gi = {
+  async play() {
+    window.__giForce = true;
+    await Promise.race([
+      Promise.all([document.fonts.load('16px Bangers').catch(() => {}), document.fonts.ready]),
+      new Promise(r => setTimeout(r, 1500)),
+    ]);
+    showGateIntro({ ...OPTS, sounds: false });
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return true;
+  },
+  seek(t) {
+    const gi = document.querySelector('.gi');
+    if (!gi) return false;
+    const anims = (document.getAnimations ? document.getAnimations() : [])
+      .filter(a => a.effect && a.effect.target && gi.contains(a.effect.target));
+    for (const a of anims) {
+      a.pause();
+      try { a.currentTime = t * 1000; } catch { /* unseekable */ }
+    }
+    return anims.length > 0;
+  },
+};
+
+document.getElementById('play').addEventListener('click', () => showGateIntro({ ...OPTS, sounds: true }));
+const q = new URLSearchParams(location.search);
+if (q.get('auto')) {
+  window.__gi.play();
+  const f = parseFloat(q.get('freeze')); // ?auto=1&freeze=3.9 holds a frame for inspection
+  if (!Number.isNaN(f)) {
+    const t0 = Date.now();
+    const iv = setInterval(() => { window.__gi.seek(f); if (Date.now() - t0 > 3500) clearInterval(iv); }, 150);
+  }
+}
+</script>
+</body>
+</html>
