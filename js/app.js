@@ -12,7 +12,8 @@ import {
   xpBoostCharges, consumableCount,
 } from './loot.js';
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
-import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, VIEW_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
+import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
+import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { ROAD_STOPS, CYCLE_STEPS, lifetimeSteps, roadState, travelerPos, claimStop, rewardLabel, roadKey } from './road.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -47,6 +48,7 @@ const S = {
 };
 
 const ICONS = {
+  mapmark: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#8fd0ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 21c-4.4-4.5-6.6-8-6.6-11A6.6 6.6 0 0 1 12 3.4 6.6 6.6 0 0 1 18.6 10c0 3-2.2 6.5-6.6 11z" fill="rgba(143,208,255,0.14)"/><circle cx="9.8" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><circle cx="14.2" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><path d="M10.4 12.6h3.2" stroke-width="1.6"/></svg>`,
   barcode: '<svg viewBox="0 0 24 24"><path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/></svg>',
   label: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>',
   bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/></svg>',
@@ -376,7 +378,7 @@ async function renderToday(el) {
   </div>
 
   <div class="hero-actions">
-    <button class="hero-act" id="huntBtn">${ICONS.radar(23)}<span>Hunt</span></button>
+    <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="roadBtn"><img src="assets/brand/sword.png" style="height:24px" alt=""><span>Bone Road</span></button>
@@ -471,7 +473,17 @@ async function renderToday(el) {
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#huntBtn')?.addEventListener('click', openHunt);
+  $('#huntBtn')?.addEventListener('click', openMap);
+  // dev hook: ?automap=1 walks straight into the map with stubbed coords
+  // (simulator smoke tests: no permission prompts, deterministic location)
+  if (!window.__automapRan && new URLSearchParams(location.search).has('automap')) {
+    window.__automapRan = true;
+    const fake = { coords: { latitude: 49.2827, longitude: -123.1207, accuracy: 5, heading: null, speed: 0 } };
+    navigator.geolocation.getCurrentPosition = ok => setTimeout(() => ok(fake), 60);
+    navigator.geolocation.watchPosition = ok => { setTimeout(() => ok(fake), 400); return 1; };
+    navigator.geolocation.clearWatch = () => {};
+    setTimeout(() => { $('#huntBtn')?.click(); setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
+  }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
@@ -2120,39 +2132,51 @@ function stopHuntWatch() {
   huntWatchId = null;
 }
 
-async function openHunt() {
+async function openMap() {
   const eq = await equipped();
+  let map = null, maplibregl = null;
+  let cleanupExtras = () => {};
+  const cleanup = () => {
+    stopHuntWatch();
+    if (huntStopOrient) huntStopOrient();
+    cleanupExtras();
+    try { map?.remove(); } catch { /* already gone */ }
+    map = null;
+  };
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Boneyard</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body">
-      <div id="huntBody">
-        <p class="note" style="margin-bottom:6px">Fresh spawns appear around your neighborhood every day: bone caches, coin piles, buried crates, and sometimes a RARE. Walk within ${COLLECT_RADIUS_M} m of a blip and collect it.</p>
-        <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device.</p>
-        <button class="btn" id="huntStart">Start the radar</button>
-        <div class="card" style="margin-top:16px">
-          <div class="card-title">OUT THERE TODAY</div>
-          <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
-          <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
-          <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-          <div class="legend-row"><span class="blip-dot rare"></span><div><b>RARE</b><span class="note"> · shiny cosmetic, one-day-only spawn</span></div></div>
+    <div class="sheet-body map-sheet">
+      <div id="mapBody">
+        <div id="mapIntro" style="padding:16px 16px 0">
+          <p class="note" style="margin-bottom:6px">The Boneyard is your real neighborhood, skinned for skeletons. Fresh spawns appear around you every day: walk within ${COLLECT_RADIUS_M} m of one and collect it.</p>
+          <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device; the map itself loads over the network.</p>
+          <button class="btn" id="mapStart">Open the map</button>
+          <div class="card" style="margin-top:16px">
+            <div class="card-title">OUT THERE TODAY</div>
+            <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
+            <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
+            <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
+            <div class="legend-row"><span class="blip-dot rare"></span><div><b>RARE</b><span class="note"> · shiny cosmetic, one-day-only spawn</span></div></div>
+          </div>
         </div>
       </div>
-    </div>`, { cls: 'full', onClose: () => { stopHuntWatch(); if (huntStopOrient) huntStopOrient(); } });
+    </div>`, { cls: 'full', onClose: cleanup });
 
-  const body = $('#huntBody', wrap);
+  const body = $('#mapBody', wrap);
   let heading = null, headingSeen = false;
   const onOrient = e => {
     const h = e.webkitCompassHeading != null ? e.webkitCompassHeading : (e.alpha != null ? 360 - e.alpha : null);
     if (h == null || Number.isNaN(h)) return;
     heading = h; headingSeen = true;
-    const cone = $('.radar-cone', body);
+    const cone = $('.map-cone', body);
     if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(h)}deg)`; }
   };
   const stopOrient = () => removeEventListener('deviceorientation', onOrient);
   huntStopOrient = stopOrient;
-  function startRadar() {
+
+  async function startMap() {
     stopHuntWatch();
-    if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn">This device has no location support.</p>'; return; }
+    if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -2161,112 +2185,160 @@ async function openHunt() {
         addEventListener('deviceorientation', onOrient);
       }
     } catch { /* no compass */ }
-    body.innerHTML = '<p class="note" style="text-align:center;padding:40px 0">Acquiring signal...</p>';
+    body.innerHTML = '<p class="note" style="text-align:center;padding:40px 0">Raising the map from the dirt...</p>';
+
+    let boot;
+    try {
+      [maplibregl, boot] = await Promise.all([
+        loadMaplibre(),
+        new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })),
+      ]);
+    } catch (err) {
+      const geoErr = err && typeof err.code === 'number';
+      body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
+        ? 'Location permission denied. Allow location for this app in iOS Settings, then try again.'
+        : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
+        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
+      $('#mapRetry', body)?.addEventListener('click', startMap);
+      return;
+    }
+
+    let lat = boot.coords.latitude, lng = boot.coords.longitude;
+    body.innerHTML = `
+      <div class="map-stage" id="mapStage">
+        <div class="map-canvas" id="mapCanvas"></div>
+        <div class="map-attrib">© OpenStreetMap</div>
+        <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
+        <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
+        <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
+      </div>`;
+
+    let loaded = false, follow = true;
+    try {
+      map = createBoneyardMap(maplibregl, $('#mapCanvas', body), { lat, lng });
+    } catch (e) {
+      body.innerHTML = `<p class="warn" style="margin:16px">The map renderer could not start on this device.</p>`;
+      return;
+    }
+    if (navigator.webdriver) window.__map = map;
+    map.on('load', () => { loaded = true; map.resize(); });
+    // the sheet lays out while the map initializes: keep canvas matched to stage
+    const stageEl = $('#mapStage', body);
+    requestAnimationFrame(() => requestAnimationFrame(() => map && map.resize()));
+    const ro = new ResizeObserver(() => { try { map && map.resize(); } catch { /* gone */ } });
+    ro.observe(stageEl);
+    const prevCleanupRO = cleanupExtras;
+    cleanupExtras = () => { prevCleanupRO(); try { ro.disconnect(); } catch { /* noop */ } };
+    map.once('error', e => {
+      if (!loaded) {
+        body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
+        $('#mapRetry', body)?.addEventListener('click', startMap);
+      }
+    });
+    map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
+    $('#mapRecenter', body).addEventListener('click', () => {
+      follow = true; $('#mapRecenter', body).hidden = true;
+      map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
+    });
+
+    // player marker: mini bonehead + facing cone
+    const youEl = document.createElement('div');
+    youEl.className = 'map-you';
+    youEl.innerHTML = `<div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+    const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
+
+    const date = dateKey();
+    const xpRows = await db.all('xp');
+    const collected = new Set(xpRows.filter(r => r.type === 'spawn').map(r => r.key));
+    const spawnMarkers = new Map(); // id -> {marker, el, spawn}
+    let lastNearest = null;
+
+    function refreshSpawns() {
+      const live = spawnsNear(date, lat, lng).filter(s => !collected.has(spawnKey(date, s)));
+      const liveIds = new Set(live.map(s => s.id));
+      for (const [id, rec] of spawnMarkers) {
+        if (!liveIds.has(id)) { rec.marker.remove(); spawnMarkers.delete(id); }
+      }
+      for (const s of live) {
+        let rec = spawnMarkers.get(s.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''}`;
+          el.innerHTML = spawnIcon(s.type, 20);
+          rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
+          spawnMarkers.set(s.id, rec);
+        }
+        rec.spawn = s;
+        rec.el.classList.toggle('inrange', s.dist <= COLLECT_RADIUS_M);
+      }
+      // readout + collect button
+      const nearest = live.length ? live.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
+      let trend = '';
+      if (nearest && lastNearest && lastNearest.id === nearest.id) {
+        const d = nearest.dist - lastNearest.dist;
+        if (d <= -2) trend = ' · getting closer!';
+        else if (d >= 2) trend = ' · getting farther';
+      }
+      if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
+      const ro = $('#mapReadout', body);
+      if (ro) ro.innerHTML = nearest
+        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
+        : 'All spawns collected. Legend. Fresh bones at midnight.';
+      const btn = $('#mapCollect', body);
+      const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
+      if (btn) {
+        btn.hidden = !inRange;
+        if (inRange) btn.textContent = `Collect ${SPAWN_TYPES[nearest.type].label}`;
+        btn.dataset.spawnId = inRange ? nearest.id : '';
+      }
+    }
+
+    $('#mapCollect', body).addEventListener('click', async () => {
+      const id = $('#mapCollect', body).dataset.spawnId;
+      const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
+      if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      const res = await collectSpawn(rec.spawn);
+      if (!res) return;
+      collected.add(spawnKey(date, rec.spawn));
+      await kvSet('hunt-enabled', true);
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
+      popSound(S.sounds);
+      const bits = [`+${res.xp} XP`];
+      if (res.coins) bits.push(`+${res.coins} coins`);
+      if (res.crate) bits.push((res.crate === 'egg' ? 'Step Egg' : 'Daily Crate') + ' added to your stash');
+      toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
+      const badges = await evaluateBadges();
+      if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
+      refreshSpawns();
+    });
+
+    refreshSpawns();
+
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
       const now = Date.now();
       if (now - lastTick < 1200) return;
       lastTick = now;
+      if (!body.isConnected) { cleanup(); return; }
       // smooth the jitter: exponential moving average, fresh fixes weighted 40%
       if (!ema) ema = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       else { ema.lat += (pos.coords.latitude - ema.lat) * 0.4; ema.lng += (pos.coords.longitude - ema.lng) * 0.4; }
+      lat = ema.lat; lng = ema.lng;
       // GPS course as compass fallback while walking
       if (!headingSeen && pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.speed > 0.4) {
         heading = pos.coords.heading;
-        const cone = $('.radar-cone', body);
+        const cone = $('.map-cone', body);
         if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(heading)}deg)`; }
       }
-      renderRadar(body, ema.lat, ema.lng, eq);
-    }, err => {
-      stopOrient();
-      body.innerHTML = `<p class="warn">${err.code === 1
-        ? 'Location permission denied. Allow location for this app in iOS Settings, then try again.'
-        : 'No location fix yet. Step outside or near a window and retry.'}</p><button class="btn ghost" id="huntRetry" style="margin-top:10px">Retry</button>`;
-      $('#huntRetry', body)?.addEventListener('click', startRadar);
-    }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+      youMarker.setLngLat([lng, lat]);
+      if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
+      refreshSpawns();
+    }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
-  $('#huntStart', wrap).addEventListener('click', startRadar);
+  $('#mapStart', wrap).addEventListener('click', startMap);
 }
 
 const bearingArrow = b => ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][Math.round(b / 45) % 8];
-let radarLastNearest = null;
-async function renderRadar(body, lat, lng, eq) {
-  if (!body.isConnected) { stopHuntWatch(); return; }
-  const date = dateKey();
-  const xpRows = await db.all('xp');
-  const collected = new Set(xpRows.filter(r => r.type === 'spawn').map(r => r.key));
-  const live = spawnsNear(date, lat, lng).map(s => ({ ...s, collected: collected.has(spawnKey(date, s)) }));
-  const rare = live.find(s => s.type === 'rare' && !s.collected);
-  const open = live.filter(s => !s.collected);
-  const nearest = open.length ? open.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
-  let trend = '';
-  if (nearest) {
-    if (radarLastNearest && radarLastNearest.id === nearest.id) {
-      const d = nearest.dist - radarLastNearest.dist;
-      if (d <= -2) trend = ' · getting closer!';
-      else if (d >= 2) trend = ' · getting farther';
-    }
-    radarLastNearest = { id: nearest.id, dist: nearest.dist };
-  }
-
-  // build the disc once; per-tick we only move blips and rewrite the list
-  if (!$('.radar', body)) {
-    body.innerHTML = `
-      <div class="rare-banner" id="rareBanner" hidden></div>
-      <div class="radar">
-        <div class="radar-cone" hidden></div>
-        <div class="radar-sweep"></div>
-        <div class="radar-ring" style="inset:16.6%"><i>315m</i></div>
-        <div class="radar-ring" style="inset:33.3%"><i>80m</i></div>
-        <div class="radar-ring" style="inset:8px"></div>
-        <div class="radar-blips"></div>
-        <div class="radar-you">${avatarLayersHtml(eq)}</div>
-      </div>
-      <p class="note radar-target" id="radarTarget" style="text-align:center;margin:8px 0 2px"></p>
-      <div class="note" style="text-align:center;margin:4px 0 10px;opacity:.75">Cone shows your facing · spawns refresh at midnight</div>
-      <div id="radarList"></div>`;
-  }
-  const banner = $('#rareBanner', body);
-  if (rare) { banner.hidden = false; banner.innerHTML = `${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)} ${bearingArrow(rare.bearing)}`; }
-  else banner.hidden = true;
-  $('.radar-blips', body).innerHTML = open.map(s => {
-    // sqrt scale: close-in distances get most of the disc, and a floor keeps
-    // blips outside the center avatar (a 20 m target must never vanish under you)
-    const frac = Math.min(1, s.dist / VIEW_RADIUS_M);
-    const r = Math.max(12, Math.min(46, Math.sqrt(frac) * 46));
-    const x = 50 + r * Math.sin(s.bearing * Math.PI / 180);
-    const y = 50 - r * Math.cos(s.bearing * Math.PI / 180);
-    return `<div class="radar-blip ${s.type === 'rare' ? 'rare' : ''} ${s.dist <= COLLECT_RADIUS_M ? 'inrange' : ''} ${nearest && s.id === nearest.id ? 'nearest' : ''}" style="left:${x}%;top:${y}%">${spawnIcon(s.type, 19)}</div>`;
-  }).join('');
-  $('#radarTarget', body).innerHTML = nearest
-    ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE, collect it below!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
-    : 'All spawns collected. Legend.';
-  $('#radarList', body).innerHTML = `
-    ${live.map(s => `
-      <div class="crate-row">
-        <span class="crate-ico">${spawnIcon(s.type, 25)}</span>
-        <div style="flex:1"><b>${SPAWN_TYPES[s.type].label}</b><small>${fmtDist(s.dist)} ${compassLabel(s.bearing)}${s.type === 'rare' ? ' · today only' : ''}</small></div>
-        ${s.collected ? '<span class="q-done">✓</span>' : s.dist <= COLLECT_RADIUS_M
-          ? `<button class="btn small" data-collect="${s.id}">Collect</button>`
-          : `<span class="q-frac">${fmtDist(Math.max(1, s.dist - COLLECT_RADIUS_M))} to go</span>`}
-      </div>`).join('')}`;
-  $$('[data-collect]', body).forEach(b => b.addEventListener('click', async () => {
-    const s2 = live.find(x => x.id === b.dataset.collect);
-    if (!s2) return;
-    const res = await collectSpawn(s2);
-    if (!res) return;
-    await kvSet('hunt-enabled', true);
-    confettiBurst(innerWidth / 2, innerHeight * 0.32, 20);
-    popSound(S.sounds);
-    const bits = [`+${res.xp} XP`];
-    if (res.coins) bits.push(`+${res.coins} coins`);
-    if (res.crate) bits.push((res.crate === 'egg' ? 'Step Egg' : 'Daily Crate') + ' added to your stash');
-    toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
-    const badges = await evaluateBadges();
-    if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
-    renderRadar(body, lat, lng, eq);
-  }));
-}
 
 /* ================= the bone road (steps journey) ================= */
 
