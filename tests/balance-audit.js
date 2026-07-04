@@ -99,6 +99,14 @@ const POLICIES = {
     if (pick('jab')) return 'jab';
     return null;
   },
+  // spike-lock: keep the enemy blinded, then swing on the misses
+  spikelock(fight, legal, pick) {
+    if (!fight.f.blind && pick('bonespike')) return 'bonespike';
+    for (const id of ['signature', 'haymaker', 'swing', 'bonespike', 'jab']) if (pick(id)) return id;
+    if (pick('brace')) return 'brace';
+    if (fight.range === 'far' && pick('advance')) return 'advance';
+    return null;
+  },
   // hype battery: taunt -> signature loop
   sigcycle(fight, legal, pick) {
     if (pick('signature')) return 'signature';

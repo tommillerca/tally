@@ -2590,6 +2590,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       else if (f.state) bits.push(f.state === 'block' ? 'BLOCKING' : 'DODGING');
       if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
       if (f.burn) bits.push('BURNING');
+      if (f.blind) bits.push('BLINDED');
       if (f.ward > 0) bits.push(`WARD ${f.ward}`);
       if (f.sunder) bits.push('SUNDERED');
       if (f.weaken) bits.push('WEAKENED');
@@ -2719,11 +2720,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED' }[ev.kind] || '';
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED' }[ev.kind] || '';
       floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'ward' ? 'stamp holy' : 'stamp hex');
-      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
       if (ev.kind === 'ward') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 300);
       if (ev.kind === 'burn') impactBurst(ev.who, 'fire');
+      if (ev.kind === 'blind') impactBurst(ev.who, 'phys');
     } else if (ev.t === 'bleedtick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
     } else if (ev.t === 'brace') {
@@ -2738,12 +2740,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const them = ev.who === 'p' ? foe.name : 'you';
     if (ev.t === 'hit') {
       if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
-      if (ev.storm) return ev.hitNo === 1 ? `${who} summoned a BONE STORM: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
+      if (ev.storm) {
+        const [label, last] = ({ bonestorm: ['BONE STORM', 3], bonerain: ['BONE RAIN', 3], tempest: ['TEMPEST', 4] })[ev.move] || ['BONE STORM', 3];
+        const val = ev.whiffed ? 'miss' : ev.damage;
+        return ev.hitNo === 1 ? `${who} called down the ${label}: ${val}...` : `...${val}${ev.hitNo === last ? '!' : '...'}`;
+      }
       if (ev.move === 'bonebolt') return `${who} hurled a bone bolt at ${them} for ${ev.damage}`;
       if (ev.move === 'smite') return `${who} smote ${them} with grave-light for ${ev.damage}`;
       if (ev.move === 'frostbolt') return `${who} lanced ${them} with frost for ${ev.damage}`;
       if (ev.move === 'firebolt') return `${who} seared ${them} with fire for ${ev.damage}`;
-      if (ev.move === 'tempest') return ev.hitNo === 1 ? `${who} called the TEMPEST: ${ev.whiffed ? 'miss' : ev.damage}...` : `...${ev.whiffed ? 'miss' : ev.damage}${ev.hitNo === 4 ? '!' : '...'}`;
       if (ev.whiffed && !ev.damage) return null;
       if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
       return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
@@ -2757,6 +2762,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} wind`;
       if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
       if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
+      if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
     }
     if (ev.t === 'secondwind') return `${who} found a SECOND WIND (+${ev.heal} HP)`;
     if (ev.t === 'bleedtick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} for ${ev.damage}`;
@@ -2829,6 +2835,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
       html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
       html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
+      html += btn(get('bonespike'), { hint: foe.blind ? 'blinds · already blind' : 'blinds them · they miss more', glow: !foe.blind });
       html += btn(get('block'), { hint: 'guards swings + spells' });
       html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
       if (player.wind < 20) html += btn(get('brace'), { hint: '+40 wind', glow: player.wind < 12 });
@@ -2840,6 +2847,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else {
       html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
+      html += btn(get('bonerain'), { hint: '3 bone hits · from range', glow: player.wind > player.d.maxWind * 0.6 });
       html += casterRow();
       html += btn(get('brace'), { hint: '+40 wind' });
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });

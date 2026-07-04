@@ -638,5 +638,62 @@ test('specced build does not trivialize the champion (foes scale off effective s
   assert.ok(rate < 0.9, `glass-cannon spam vs champ winrate ${Math.round(rate * 100)}% should stay under 90% (foes scale)`);
 });
 
+/* ============ v27: bone moves, blind, attack-vs-defense ============ */
+
+test('bone spike applies BLIND on hit; blind makes physical attacks miss', () => {
+  const P = makeFighter({ name: 'P', stats: MID });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99; // lands, no crit
+  applyAction(fight, 'bonespike');
+  assert.ok(F.blind && F.blind.pct > 0, 'foe is blinded');
+  // a blinded attacker's physical jab can now miss (base jab never misses)
+  const blinded = makeFighter({ name: 'B', stats: MID }); blinded.blind = { pct: 0.30, turns: 2 };
+  const clear = makeFighter({ name: 'C', stats: MID });
+  const dummy = makeFighter({ name: 'D', stats: MID });
+  const rollInWindow = () => 0.15; // under 0.30 blind, over 0 for clear
+  assert.ok(resolveHit({ move: 'jab', attacker: blinded, defender: dummy, rng: rollInWindow }).miss, 'blinded jab can miss');
+  assert.ok(!resolveHit({ move: 'jab', attacker: clear, defender: dummy, rng: rollInWindow }).miss, 'clear jab never misses');
+});
+
+test('blind does NOT affect magic bolts (they home in)', () => {
+  const caster = makeFighter({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt'] });
+  caster.blind = { pct: 0.8, turns: 2 };
+  const dummy = makeFighter({ name: 'D', stats: MID });
+  assert.ok(!resolveHit({ move: 'bonebolt', attacker: caster, defender: dummy, rng: () => 0.5 }).miss, 'bolt ignores blind');
+});
+
+test('bone rain lands three hits', () => {
+  const P = makeFighter({ name: 'P', stats: MID });
+  const F = makeFighter({ name: 'F', stats: { ...MID, marrow: 99 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99; fight.range = 'far'; fight.ap = 3;
+  const hits = applyAction(fight, 'bonerain').filter(e => e.t === 'hit');
+  assert.equal(hits.length, 3);
+  assert.ok(hits.every(h => h.storm), 'flagged multi-hit');
+});
+
+test('attack-vs-defense: Power raises hit, Reflex evades (Cam model)', () => {
+  const bruiser = makeFighter({ name: 'A', stats: { power: 100, marrow: 50, wind: 50, reflex: 50, hype: 50 } });
+  const weakling = makeFighter({ name: 'B', stats: { power: 20, marrow: 50, wind: 50, reflex: 50, hype: 50 } });
+  const slippery = makeFighter({ name: 'S', stats: { power: 50, marrow: 50, wind: 50, reflex: 100, hype: 50 } });
+  const plain = makeFighter({ name: 'P', stats: MID });
+  // haymaker base miss 0.12; count misses over many rolls
+  const rolls = Array.from({ length: 1000 }, (_, i) => (i + 0.5) / 1000);
+  const missRate = (atk, def) => { let m = 0; for (const r of rolls) if (resolveHit({ move: 'haymaker', attacker: atk, defender: def, rng: () => r }).miss) m++; return m / rolls.length; };
+  assert.ok(missRate(bruiser, plain) < missRate(weakling, plain), 'higher Power = fewer misses');
+  assert.ok(missRate(plain, slippery) > missRate(plain, plain), 'higher Reflex defender dodges more');
+  assert.ok(!resolveHit({ move: 'jab', attacker: weakling, defender: slippery, rng: () => 0.001 }).miss, 'jabs still reliable regardless');
+});
+
+test('Heavy Hands also steadies aim (accuracy talent)', () => {
+  const plain = makeFighter({ name: 'P', stats: MID });
+  const slab = makeFighter({ name: 'S', stats: MID, talents: ['heavyhands'] });
+  const def = makeFighter({ name: 'D', stats: MID });
+  const rolls = Array.from({ length: 1000 }, (_, i) => (i + 0.5) / 1000);
+  const missRate = atk => { let m = 0; for (const r of rolls) if (resolveHit({ move: 'haymaker', attacker: atk, defender: def, rng: () => r }).miss) m++; return m / rolls.length; };
+  assert.ok(missRate(slab) < missRate(plain), 'heavy hands lands more often');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

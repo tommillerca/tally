@@ -192,14 +192,18 @@ export const ACTIONS = {
   frostbolt:{ label: 'Frost Bolt', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
   firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
   tempest:  { label: 'Tempest', range: 'close', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
+  // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
+  bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8 },   // BLINDS on hit
+  bonerain: { label: 'Bone Rain', range: 'far', ap: 2, wind: 32, base: 12, hype: 6 },      // 3 raining hits
 };
 export const SHOWSTOPPER_HYPE = 80;
 
 // big moves can miss (whiffed heavies leave you off-balance)
 export const MISS_CHANCE = {
   swing: 0.04, haymaker: 0.12, titan: 0.15,
-  flurry: 0.08, bonestorm: 0.10, tempest: 0.08,
+  flurry: 0.08, bonestorm: 0.10, tempest: 0.08, bonerain: 0.06,
 };
+const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export const REGEN_PER_TURN = 15;
 export const BRACE_BONUS = 40;
@@ -238,7 +242,16 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (counter.miss) {
     return { damage: 0, miss: true, offBalance: !!counter.offBalance, crit: false, glance: false };
   }
-  const missChance = MISS_CHANCE[move] || 0;
+  let missChance = MISS_CHANCE[move] || 0;
+  // Cam's model: on already-riskier moves, hit rate flexes with your attack (Power)
+  // vs their evasion (Reflex). Small so the ladder stays balanced; jabs stay reliable.
+  if (missChance > 0) {
+    missChance += clampNum((defender.stats.reflex - attacker.stats.power) * 0.0015, -0.05, 0.10);
+    if (attacker.talents.has('heavyhands')) missChance -= 0.05; // committed swing = steadier aim
+  }
+  // blindness fogs even simple strikes (physical only; magic bolts still home in)
+  if (!a.magic && attacker.blind) missChance += attacker.blind.pct;
+  missChance = clampNum(missChance, 0, 0.85);
   if (missChance && rng() < missChance) {
     return { damage: 0, miss: true, whiffed: true, offBalance: move === 'haymaker' || move === 'titan', crit: false, glance: false };
   }
@@ -290,6 +303,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     bleed: null,      // {stacks, turns}
     sunder: null,     // {turns} takes +15% damage
     weaken: null,     // {pct, turns} deals less damage
+    blind: null,      // {pct, turns} its own physical attacks miss more
     hp: d.maxHp, wind: d.maxWind, hype: tset.has('bigentrance') ? 25 : 0,
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
@@ -577,7 +591,16 @@ export function applyAction(fight, actionId) {
       }
       break;
     }
-    default: { // jab / swing / haymaker / throwb
+    case 'bonerain': {
+      for (let h = 0; h < 3 && them.hp > 0; h++) {
+        const r = resolveHit({ move: 'bonerain', attacker: me, defender: them, rng: fight.rng });
+        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+        if (r.damage > 0) { gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
+        events.push({ t: 'hit', who: fight.active, move: 'bonerain', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed });
+      }
+      break;
+    }
+    default: { // jab / swing / haymaker / throwb / bonespike
       const move = actionId === 'throwb' ? 'throwb' : actionId;
       const r = resolveHit({ move, attacker: me, defender: them, rng: fight.rng });
       if (r.miss) {
@@ -608,6 +631,10 @@ export function applyAction(fight, actionId) {
           if (move === 'jab' && me.talents.has('bleedout')) {
             them.bleed = { stacks: Math.min(3, (them.bleed ? them.bleed.stacks : 0) + 1), turns: 3 };
             events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'bleed', stacks: them.bleed.stacks });
+          }
+          if (move === 'bonespike') {
+            them.blind = { pct: 0.30, turns: 2 };
+            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'blind' });
           }
         }
         events.push({ t: 'hit', who: fight.active, move, ...r });
@@ -652,6 +679,7 @@ export function endTurn(fight) {
   if (me.hp <= 0) fight.over = { winner: next === 'p' ? 'f' : 'p' };
   if (me.sunder) { me.sunder.turns -= 1; if (me.sunder.turns <= 0) me.sunder = null; }
   if (me.weaken) { me.weaken.turns -= 1; if (me.weaken.turns <= 0) me.weaken = null; }
+  if (me.blind) { me.blind.turns -= 1; if (me.blind.turns <= 0) me.blind = null; }
   let ap = me.d.ap;
   if (me.stagger) { ap = Math.max(1, ap - 1); me.stagger = false; }
   if (me.offBalance) { ap = Math.max(1, ap - 1); me.offBalance = false; }
@@ -707,6 +735,7 @@ export function aiTakeTurn(fight) {
       const pHeavy = haymakerRate(p.recentCloseMoves);
       if (f.wind < 18 && pick('brace')) choice = 'brace';
       else if (pHeavy > 0.45 && fight.rng() < 0.55 + fight.aiLevel * 0.1 && pick('dodge') && f.state == null) choice = 'dodge';
+      else if (!p.blind && pick('bonespike') && fight.rng() < 0.16 + fight.aiLevel * 0.03) choice = 'bonespike'; // blind the player
       else if (p.state === 'dodge' && pick('jab')) choice = 'jab';
       else if (p.state === 'block' && pick('jab') && fight.rng() < 0.5) choice = 'jab';
       else {
