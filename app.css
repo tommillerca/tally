@@ -641,27 +641,27 @@ body::before {
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .hero-bubble {
-  position: absolute; left: 46%; top: calc(var(--sat) + 6px); z-index: 3;
-  --sway: translateX(-50%) rotate(-2deg);
+  position: absolute; left: 10px; top: calc(var(--sat) + 58px); z-index: 3;
+  --sway: rotate(-2deg);
   transform: var(--sway);
-  max-width: 52%; width: max-content;
+  max-width: 42%; width: max-content; text-align: left;
   background: #f2e9d7; color: #17151d;
   border: 2.5px solid #17151d; border-radius: 16px;
   padding: 9px 13px 8px;
-  font-family: var(--display); font-size: 15.5px; letter-spacing: 0.045em; line-height: 1.12;
+  font-family: var(--display); font-size: 14px; letter-spacing: 0.045em; line-height: 1.12;
   text-align: center; transform: rotate(-2deg);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
   animation: bubblePop 0.45s cubic-bezier(0.34, 1.6, 0.64, 1) both, bubbleFloat 3.2s ease-in-out 0.5s infinite alternate;
 }
 .hero-bubble::before { /* ink tail (drawn behind the fill tail) */
-  content: ""; position: absolute; left: 34%; bottom: -15px;
-  border: 11px solid transparent; border-top-color: #17151d;
-  border-bottom-width: 0; transform: rotate(-14deg);
+  content: ""; position: absolute; right: -14px; top: 42%;
+  border: 10px solid transparent; border-left-color: #17151d;
+  border-right-width: 0; transform: rotate(12deg);
 }
 .hero-bubble::after { /* fill tail */
-  content: ""; position: absolute; left: 35.5%; bottom: -9px;
-  border: 8px solid transparent; border-top-color: #f2e9d7;
-  border-bottom-width: 0; transform: rotate(-14deg);
+  content: ""; position: absolute; right: -8px; top: 45%;
+  border: 7px solid transparent; border-left-color: #f2e9d7;
+  border-right-width: 0; transform: rotate(12deg);
 }
 @keyframes bubblePop { from { transform: var(--sway) scale(0.7); opacity: 0; } to { transform: var(--sway) scale(1); opacity: 1; } }
 @keyframes bubbleFloat { from { translate: 0 0; } to { translate: 0 4px; } }
@@ -776,7 +776,7 @@ body::before {
 }
 .arena.quake { animation: quake 0.4s ease; }
 @keyframes quake { 0%,100% { transform: translate(0,0); } 25% { transform: translate(-5px,2px); } 50% { transform: translate(4px,-2px); } 75% { transform: translate(-3px,1px); } }
-.fighterG {
+.fighterG { z-index: 2; 
   position: absolute; bottom: 14px; width: 128px;
   transition: left 0.5s cubic-bezier(0.22, 1, 0.36, 1), right 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   display: grid; gap: 6px; justify-items: center;
@@ -1044,3 +1044,98 @@ body::before {
 .curt.l.open { transform: translateX(-106%); }
 .curt.r.open { transform: translateX(106%); }
 @media (prefers-reduced-motion: reduce) { .curt { display: none; } }
+
+/* ===== radar v2: facing cone, ring labels, nearest target ===== */
+.radar-cone {
+  position: absolute; inset: 0; border-radius: 50%; z-index: 1; pointer-events: none;
+  background: conic-gradient(from -30deg at 50% 50%,
+    rgba(165, 232, 71, 0.28) 0deg, rgba(165, 232, 71, 0.10) 30deg,
+    rgba(165, 232, 71, 0.28) 60deg, transparent 60.5deg);
+  -webkit-mask: radial-gradient(circle, transparent 12%, #000 12.5%);
+  mask: radial-gradient(circle, transparent 12%, #000 12.5%);
+  transition: transform 0.35s ease-out;
+}
+.radar-ring i { position: absolute; top: -2px; left: 50%; transform: translate(-50%, -55%); font-style: normal; font-size: 9px; color: rgba(165, 232, 71, 0.45); background: #0c100c; padding: 0 5px; border-radius: 6px; }
+.radar-blip.nearest { filter: drop-shadow(0 0 7px rgba(165, 232, 71, 0.9)); }
+.radar-target { font-size: 14px; }
+
+/* ===== the pit: VS smash card ===== */
+.vs-card {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 45%, #241019 0%, #12090e 60%, #0a0508 100%);
+  animation: vsIn 0.2s ease-out;
+}
+.vs-inner { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 0 26px; }
+.vs-name {
+  font-family: var(--display); color: #f2e9d7; font-size: 30px; letter-spacing: 0.05em;
+  text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.6);
+}
+.vs-name.foe { color: #ff7a45; }
+.vs-vs {
+  font-family: var(--display); font-size: 54px; color: var(--accent); line-height: 1;
+  text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.65); animation: vsStamp 0.45s cubic-bezier(0.34, 1.8, 0.64, 1) 0.25s both;
+}
+.vs-venue { font-size: 12.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--text-3); text-transform: uppercase; }
+.vs-bones { position: relative; width: 150px; height: 66px; }
+.vs-bone { position: absolute; top: 8px; font-size: 44px; filter: drop-shadow(2px 3px 0 rgba(0,0,0,.5)); }
+.vs-bone.l { left: -6px; animation: boneSlamL 0.5s cubic-bezier(0.6, 0, 0.4, 1) both; }
+.vs-bone.r { right: -6px; animation: boneSlamR 0.5s cubic-bezier(0.6, 0, 0.4, 1) both; transform: scaleX(-1); }
+.vs-impact {
+  position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; border-radius: 50%;
+  transform: translate(-50%, -50%); border: 4px solid #f2e9d7; opacity: 0;
+  animation: burstPopBig 0.5s ease-out 0.42s;
+}
+@keyframes vsIn { from { opacity: 0 } }
+@keyframes vsStamp { from { transform: scale(2.4); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes boneSlamL { from { transform: translateX(-70px) rotate(-70deg); } to { transform: translateX(0) rotate(-24deg); } }
+@keyframes boneSlamR { from { transform: scaleX(-1) translateX(-70px) rotate(-70deg); } to { transform: scaleX(-1) translateX(0) rotate(-24deg); } }
+.vs-card.quake { animation: vsIn 0.2s ease-out, quake 0.3s linear 0.42s; }
+
+/* ===== the pit: arena atmosphere ===== */
+.arena { position: relative; }
+.arena::before { /* torchlight + vignette */
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(70% 45% at 8% 46%, rgba(255, 150, 60, 0.16), transparent 65%),
+    radial-gradient(70% 45% at 92% 46%, rgba(255, 150, 60, 0.16), transparent 65%),
+    radial-gradient(120% 90% at 50% 100%, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
+  animation: torchBreathe 3.4s ease-in-out infinite alternate;
+}
+.pit-crowd { /* silhouette skulls swaying in the dark rows */
+  position: absolute; left: 0; right: 0; top: 0; height: 30%; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(9px 8px at 14px 82%, #221722 98%, transparent) repeat-x,
+    radial-gradient(12px 10px at 30px 96%, #1a121c 98%, transparent) repeat-x;
+  background-size: 42px 100%, 58px 100%;
+  opacity: 0.9;
+  animation: crowdSway 4.2s ease-in-out infinite alternate;
+  -webkit-mask: linear-gradient(#000 78%, transparent);
+  mask: linear-gradient(#000 78%, transparent);
+}
+.pit-flags { /* bunting strung across the pit */
+  position: absolute; left: -2%; right: -2%; top: 5%; height: 16px; z-index: 1; pointer-events: none;
+  background: linear-gradient(135deg, #6b1f2a 25%, transparent 25%) 0 0 / 22px 16px repeat-x,
+    linear-gradient(225deg, #6b1f2a 25%, transparent 25%) 0 0 / 22px 16px repeat-x;
+  transform: rotate(-1.6deg);
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
+}
+.pit-flags.two { top: 8.5%; transform: rotate(1.4deg); background-image: linear-gradient(135deg, #274a2b 25%, transparent 25%), linear-gradient(225deg, #274a2b 25%, transparent 25%); }
+.pit-floor { /* packed-dirt fighting circle */
+  position: absolute; left: 4%; right: 4%; bottom: 4%; height: 17%; z-index: 0; pointer-events: none;
+  background: #2a1e19; border: 3px solid #17151d; border-radius: 50%;
+  box-shadow: inset 0 5px 0 rgba(255, 255, 255, 0.04);
+}
+.venue-tag {
+  position: absolute; top: 6px; left: 8px; z-index: 3;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: rgba(242, 233, 215, 0.55); background: rgba(10, 8, 12, 0.55);
+  padding: 3px 8px; border-radius: 999px; pointer-events: none;
+}
+@keyframes torchBreathe { from { opacity: 0.75 } to { opacity: 1 } }
+@keyframes crowdSway { from { background-position: 0 0, 0 0 } to { background-position: 9px 0, -7px 0 } }
+@media (prefers-reduced-motion: reduce) { .arena::before, .pit-crowd { animation: none; } }
+
+/* bubble docks on whichever top corner the outfit leaves empty */
+.hero-bubble.side-r { left: auto; right: 10px; --sway: rotate(2deg); text-align: right; }
+.hero-bubble.side-r::before { right: auto; left: -14px; border-left-color: transparent; border-right-color: #17151d; border-right-width: 10px; border-left-width: 0; transform: rotate(-12deg); }
+.hero-bubble.side-r::after { right: auto; left: -8px; border-left-color: transparent; border-right-color: #f2e9d7; border-right-width: 7px; border-left-width: 0; transform: rotate(-12deg); }

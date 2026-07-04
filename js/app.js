@@ -364,7 +364,7 @@ async function renderToday(el) {
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
       </div>
     </div>
-    <div class="hero-bubble">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
+    <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
         <span class="hero-lv">Lv ${lvl.level}</span>
@@ -461,6 +461,9 @@ async function renderToday(el) {
   $('#lvlChip').addEventListener('click', () => openCharacter('progress'));
   $('#streakChip').addEventListener('click', () => openCharacter('progress'));
   $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
+  measureBubbleSide($('#bhStage'), eq).then(side => {
+    $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
+  });
   $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#roadBtn')?.addEventListener('click', openRoad);
@@ -517,6 +520,32 @@ function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
     <div class="row"><span>${label}${glow ? ' <span class="hit-dot">✓</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
     <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
   </div>`;
+}
+
+const bubbleSideCache = {};
+async function measureBubbleSide(stage, eq) {
+  const key = JSON.stringify(eq);
+  if (bubbleSideCache[key]) return bubbleSideCache[key];
+  try {
+    const imgs = $$('.bh-anim img', stage);
+    if (!imgs.length) return 'l';
+    await Promise.allSettled(imgs.map(i => i.decode ? i.decode() : Promise.resolve()));
+    const N = 64;
+    const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    for (const i of imgs) { try { ctx.drawImage(i, 0, 0, N, N); } catch { /* not ready */ } }
+    const d = ctx.getImageData(0, 0, N, N).data;
+    // top band of the artwork, where the bubble lives
+    const y0 = Math.floor(N * 0.05), y1 = Math.floor(N * 0.38);
+    let left = 0, right = 0;
+    for (let y = y0; y < y1; y++) for (let x = 0; x < N; x++) {
+      const a = d[(y * N + x) * 4 + 3];
+      if (a > 40) { if (x < N * 0.46) left++; else if (x > N * 0.54) right++; }
+    }
+    const side = right < left ? 'r' : 'l';
+    bubbleSideCache[key] = side;
+    return side;
+  } catch { return 'l'; }
 }
 
 function speechLine({ entries, tot, targets, crates, streak, isToday }) {
@@ -2037,6 +2066,7 @@ function openHealthGuide() {
 /* ================= the boneyard (gps hunt) ================= */
 
 let huntWatchId = null;
+let huntStopOrient = null;
 function stopHuntWatch() {
   if (huntWatchId != null && navigator.geolocation) navigator.geolocation.clearWatch(huntWatchId);
   huntWatchId = null;
@@ -2059,20 +2089,48 @@ async function openHunt() {
           <div class="legend-row"><span class="blip-dot rare"></span><div><b>RARE</b><span class="note"> · shiny cosmetic, one-day-only spawn</span></div></div>
         </div>
       </div>
-    </div>`, { cls: 'full', onClose: stopHuntWatch });
+    </div>`, { cls: 'full', onClose: () => { stopHuntWatch(); if (huntStopOrient) huntStopOrient(); } });
 
   const body = $('#huntBody', wrap);
+  let heading = null, headingSeen = false;
+  const onOrient = e => {
+    const h = e.webkitCompassHeading != null ? e.webkitCompassHeading : (e.alpha != null ? 360 - e.alpha : null);
+    if (h == null || Number.isNaN(h)) return;
+    heading = h; headingSeen = true;
+    const cone = $('.radar-cone', body);
+    if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(h)}deg)`; }
+  };
+  const stopOrient = () => removeEventListener('deviceorientation', onOrient);
+  huntStopOrient = stopOrient;
   function startRadar() {
     stopHuntWatch();
     if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn">This device has no location support.</p>'; return; }
+    // compass permission must be requested inside this tap
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(st => { if (st === 'granted') addEventListener('deviceorientation', onOrient); }).catch(() => {});
+      } else if (typeof DeviceOrientationEvent !== 'undefined') {
+        addEventListener('deviceorientation', onOrient);
+      }
+    } catch { /* no compass */ }
     body.innerHTML = '<p class="note" style="text-align:center;padding:40px 0">Acquiring signal...</p>';
-    let lastTick = 0;
+    let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
       const now = Date.now();
       if (now - lastTick < 1200) return;
       lastTick = now;
-      renderRadar(body, pos.coords.latitude, pos.coords.longitude, eq);
+      // smooth the jitter: exponential moving average, fresh fixes weighted 40%
+      if (!ema) ema = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      else { ema.lat += (pos.coords.latitude - ema.lat) * 0.4; ema.lng += (pos.coords.longitude - ema.lng) * 0.4; }
+      // GPS course as compass fallback while walking
+      if (!headingSeen && pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.speed > 0.4) {
+        heading = pos.coords.heading;
+        const cone = $('.radar-cone', body);
+        if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(heading)}deg)`; }
+      }
+      renderRadar(body, ema.lat, ema.lng, eq);
     }, err => {
+      stopOrient();
       body.innerHTML = `<p class="warn">${err.code === 1
         ? 'Location permission denied. Allow location for this app in iOS Settings, then try again.'
         : 'No location fix yet. Step outside or near a window and retry.'}</p><button class="btn ghost" id="huntRetry" style="margin-top:10px">Retry</button>`;
@@ -2082,6 +2140,7 @@ async function openHunt() {
   $('#huntStart', wrap).addEventListener('click', startRadar);
 }
 
+let radarLastNearest = null;
 async function renderRadar(body, lat, lng, eq) {
   if (!body.isConnected) { stopHuntWatch(); return; }
   const date = dateKey();
@@ -2089,23 +2148,48 @@ async function renderRadar(body, lat, lng, eq) {
   const collected = new Set(xpRows.filter(r => r.type === 'spawn').map(r => r.key));
   const live = spawnsNear(date, lat, lng).map(s => ({ ...s, collected: collected.has(spawnKey(date, s)) }));
   const rare = live.find(s => s.type === 'rare' && !s.collected);
+  const open = live.filter(s => !s.collected);
+  const nearest = open.length ? open.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
+  let trend = '';
+  if (nearest) {
+    if (radarLastNearest && radarLastNearest.id === nearest.id) {
+      const d = nearest.dist - radarLastNearest.dist;
+      if (d <= -2) trend = ' · getting closer!';
+      else if (d >= 2) trend = ' · getting farther';
+    }
+    radarLastNearest = { id: nearest.id, dist: nearest.dist };
+  }
 
-  body.innerHTML = `
-    ${rare ? `<div class="rare-banner">${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)}</div>` : ''}
-    <div class="radar">
-      <div class="radar-sweep"></div>
-      <div class="radar-ring" style="inset:16.6%"></div>
-      <div class="radar-ring" style="inset:33.3%"></div>
-      <div class="radar-ring" style="inset:8px"></div>
-      <div class="radar-you">${avatarLayersHtml(eq)}</div>
-      ${live.filter(s => !s.collected).map(s => {
-        const r = Math.min(s.dist, VIEW_RADIUS_M - 25) / VIEW_RADIUS_M * 46;
-        const x = 50 + r * Math.sin(s.bearing * Math.PI / 180);
-        const y = 50 - r * Math.cos(s.bearing * Math.PI / 180);
-        return `<div class="radar-blip ${s.type === 'rare' ? 'rare' : ''} ${s.dist <= COLLECT_RADIUS_M ? 'inrange' : ''}" style="left:${x}%;top:${y}%">${spawnIcon(s.type, 19)}</div>`;
-      }).join('')}
-    </div>
-    <div class="note" style="text-align:center;margin:6px 0 10px">Rings: 200 / 400 / 600 m · spawns refresh at midnight</div>
+  // build the disc once; per-tick we only move blips and rewrite the list
+  if (!$('.radar', body)) {
+    body.innerHTML = `
+      <div class="rare-banner" id="rareBanner" hidden></div>
+      <div class="radar">
+        <div class="radar-cone" hidden></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-ring" style="inset:16.6%"><i>400m</i></div>
+        <div class="radar-ring" style="inset:33.3%"><i>200m</i></div>
+        <div class="radar-ring" style="inset:8px"></div>
+        <div class="radar-blips"></div>
+        <div class="radar-you">${avatarLayersHtml(eq)}</div>
+      </div>
+      <p class="note radar-target" id="radarTarget" style="text-align:center;margin:8px 0 2px"></p>
+      <div class="note" style="text-align:center;margin:4px 0 10px;opacity:.75">Cone shows your facing · spawns refresh at midnight</div>
+      <div id="radarList"></div>`;
+  }
+  const banner = $('#rareBanner', body);
+  if (rare) { banner.hidden = false; banner.innerHTML = `${crateIcon('egg', 15)} RARE spawn today: ${fmtDist(rare.dist)} ${compassLabel(rare.bearing)}`; }
+  else banner.hidden = true;
+  $('.radar-blips', body).innerHTML = open.map(s => {
+    const r = Math.min(s.dist, VIEW_RADIUS_M - 25) / VIEW_RADIUS_M * 46;
+    const x = 50 + r * Math.sin(s.bearing * Math.PI / 180);
+    const y = 50 - r * Math.cos(s.bearing * Math.PI / 180);
+    return `<div class="radar-blip ${s.type === 'rare' ? 'rare' : ''} ${s.dist <= COLLECT_RADIUS_M ? 'inrange' : ''} ${nearest && s.id === nearest.id ? 'nearest' : ''}" style="left:${x}%;top:${y}%">${spawnIcon(s.type, 19)}</div>`;
+  }).join('');
+  $('#radarTarget', body).innerHTML = nearest
+    ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE, collect it below!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)}${trend}`}`
+    : 'All spawns collected. Legend.';
+  $('#radarList', body).innerHTML = `
     ${live.map(s => `
       <div class="crate-row">
         <span class="crate-ico">${spawnIcon(s.type, 25)}</span>
@@ -2113,8 +2197,7 @@ async function renderRadar(body, lat, lng, eq) {
         ${s.collected ? '<span class="q-done">✓</span>' : s.dist <= COLLECT_RADIUS_M
           ? `<button class="btn small" data-collect="${s.id}">Collect</button>`
           : `<span class="q-frac">${fmtDist(Math.max(1, s.dist - COLLECT_RADIUS_M))} to go</span>`}
-      </div>`).join('')}
-  `;
+      </div>`).join('')}`;
   $$('[data-collect]', body).forEach(b => b.addEventListener('click', async () => {
     const s2 = live.find(x => x.id === b.dataset.collect);
     if (!s2) return;
@@ -2321,6 +2404,12 @@ function foeOutfitFor(name) {
   return eq;
 }
 
+const PIT_VENUES = {
+  spar: 'The Back Alley',
+  1: 'The Boneyard Gate', 2: 'The Catacomb Club', 3: 'The Chapel Undercroft',
+  4: 'The Sunken Colosseum', 5: 'The Old Crypt Arena', champ: 'The Marrow Throne',
+};
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.talents });
@@ -2336,6 +2425,27 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
+  const venue = PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
+  if (!fast && !reducedMotion) {
+    const vs = document.createElement('div');
+    vs.className = 'vs-card quake';
+    vs.innerHTML = `
+      <div class="vs-inner">
+        <div class="vs-name">YOU</div>
+        <div class="vs-bones">
+          <span class="vs-bone l">${ICONS.bone(46)}</span>
+          <span class="vs-bone r">${ICONS.bone(46)}</span>
+          <div class="vs-impact"></div>
+        </div>
+        <div class="vs-vs">VS</div>
+        <div class="vs-name foe">${esc(foeCfg.name.toUpperCase())}</div>
+        <div class="vs-venue">at ${esc(venue)}</div>
+      </div>`;
+    document.body.appendChild(vs);
+    setTimeout(() => hitSound(S.sounds, 'thud'), 430);
+    setTimeout(() => { vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
+    setTimeout(() => vs.remove(), 1420);
+  }
   let settled = false;
   let showMore = false;
 
@@ -2347,7 +2457,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const body = $('#fightBody', wrap);
   body.innerHTML = `
     <div class="arena" id="arena">
+      <div class="pit-crowd"></div>
+      <div class="pit-flags"></div>
+      <div class="pit-flags two"></div>
+      <div class="pit-floor"></div>
       <div class="arena-floor"></div>
+      <span class="venue-tag">${esc(venue)}</span>
       <div class="fighterG foe-side" id="foeG">
         <div class="fplate">
           <div class="fname">${esc(foe.name)}<span class="fstate" id="foeState" hidden></span></div>
