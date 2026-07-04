@@ -79,7 +79,61 @@ export async function grantGear(gearId, source) {
   return g;
 }
 
+export const EGG_GOAL_STEPS = 5000;
+
+export async function lifetimeStepsSum() {
+  const rows = await db.all('health');
+  return rows.reduce((a, r) => a + (r.steps || 0), 0);
+}
+
+// Eggs incubate: they hatch into PETS after you walk EGG_GOAL_STEPS.
+export async function grantEgg(source) {
+  const stepsAtStart = await lifetimeStepsSum();
+  const row = { id: newId(), kind: 'egg', stepsAtStart, goal: EGG_GOAL_STEPS, source, ts: Date.now() };
+  await db.put('inv', row);
+  return row;
+}
+
+export function eggProgress(row, lifetime) {
+  const walked = Math.max(0, lifetime - (row.stepsAtStart || 0));
+  return { walked: Math.min(walked, row.goal || EGG_GOAL_STEPS), goal: row.goal || EGG_GOAL_STEPS, ready: walked >= (row.goal || EGG_GOAL_STEPS) };
+}
+
+// Crack a ready egg: rolls a PET (slot C), unowned first, dupe pays coins.
+export async function hatchEgg(invId) {
+  const inv = await inventory();
+  const row = inv.find(r => r.id === invId && r.kind === 'egg');
+  if (!row) throw new Error('egg gone');
+  const { ready } = eggProgress(row, await lifetimeStepsSum());
+  if (!ready) return { ready: false };
+  const owned = await ownedCosmeticIds();
+  const pets = BH_ITEMS.filter(i => i.slot === 'C');
+  const fresh = pets.filter(i => !owned.has(i.id));
+  await db.del('inv', row.id);
+  if (!fresh.length) {
+    await coinsAdd(120);
+    return { ready: true, dupe: true, coins: 120 };
+  }
+  // rarity-weighted among unowned pets (uncommon floor keeps hatches exciting)
+  const pool = fresh.filter(i => i.rarity !== 'common');
+  const pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
+  await grantCosmetic(pick.id, 'egg');
+  return { ready: true, item: pick };
+}
+
+// Legacy: unopened egg-type crates become incubating eggs (idempotent sweep).
+export async function migrateLegacyEggs() {
+  const inv = await inventory();
+  const legacy = inv.filter(r => r.kind === 'crate' && r.crate === 'egg');
+  for (const r of legacy) {
+    await db.del('inv', r.id);
+    await grantEgg(r.source || 'legacy');
+  }
+  return legacy.length;
+}
+
 export async function grantCrate(kind, source) {
+  if (kind === 'egg') return grantEgg(source); // eggs incubate, they don't open
   const row = { id: newId(), kind: 'crate', crate: kind, source, ts: Date.now() };
   await db.put('inv', row);
   return row;
@@ -112,7 +166,8 @@ function rollRarity(floor = 0) {
 }
 
 function candidates(rarity, owned, slotBias) {
-  let pool = BH_ITEMS.filter(i => !i.default && i.rarity === rarity && !owned.has(i.id));
+  // pets (slot C) hatch from step eggs only, never from crates
+  let pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && i.rarity === rarity && !owned.has(i.id));
   if (slotBias && rng() < 0.5) {
     const biased = pool.filter(i => slotBias.includes(i.slot));
     if (biased.length) pool = biased;

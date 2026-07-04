@@ -5,7 +5,8 @@
 // `boss-<week>-<denId>` makes each den claimable once per week, server-verifiable
 // later, exactly like hunt spawns.
 import { award } from './game.js';
-import { coinsAdd, grantCrate } from './loot.js';
+import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
+import { GEAR_ITEMS } from './gear.js';
 import { distanceM, bearingDeg } from './hunt.js';
 
 export const DEN_CELL_DEG = 0.018;       // ~2 km cells: sparse, walkable-to landmarks
@@ -26,12 +27,12 @@ const TIER_WEIGHTS = [3, 3, 2, 2, 1.2, 0.8, 0.4]; // mostly approachable, someti
 
 // Themes reuse the Bone Road / Pit art language.
 export const DEN_THEMES = [
-  { key: 'gate', name: 'The Boneyard Gate', boss: 'The Gatekeeper' },
-  { key: 'catacomb', name: 'The Catacomb Club', boss: 'The Bouncer Below' },
-  { key: 'chapel', name: 'The Chapel Undercroft', boss: 'The Grave Sexton' },
-  { key: 'colosseum', name: 'The Sunken Colosseum', boss: 'The Pit Lion' },
-  { key: 'crypt', name: 'The Old Crypt', boss: 'The Crypt Keeper' },
-  { key: 'marsh', name: 'The Sour Marsh', boss: 'The Bog Body' },
+  { key: 'gate', name: 'The Boneyard Gate', boss: 'The Gatekeeper', arch: 'slab' },
+  { key: 'catacomb', name: 'The Catacomb Club', boss: 'The Bouncer Below', arch: 'greyhound' },
+  { key: 'chapel', name: 'The Chapel Undercroft', boss: 'The Grave Sexton', arch: 'gravewarden' },
+  { key: 'colosseum', name: 'The Sunken Colosseum', boss: 'The Pit Lion', arch: 'ringmaster' },
+  { key: 'crypt', name: 'The Old Crypt', boss: 'The Crypt Keeper', arch: 'gravecaller' },
+  { key: 'marsh', name: 'The Sour Marsh', boss: 'The Bog Body', arch: 'boneshaman' },
 ];
 
 function hashStr(s) {
@@ -106,6 +107,23 @@ export function denRewardLabel(r) {
   return bits.join(' + ');
 }
 
+// Open-world bosses drop better gear: rarity floor rises with den tier.
+const DEN_GEAR_FLOOR = ['rare', 'rare', 'rare', 'epic', 'epic', 'legendary', 'legendary'];
+const RAR_IDX = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+
+function rollDenGear(den, week, ownedSet) {
+  const floor = RAR_IDX[DEN_GEAR_FLOOR[den.tier] || 'rare'];
+  // themed loot: the den's archetype first, anything qualifying as fallback
+  const pools = [
+    GEAR_ITEMS.filter(g => g.arch === den.theme.arch && RAR_IDX[g.rarity] >= floor && !ownedSet.has(g.id)),
+    GEAR_ITEMS.filter(g => RAR_IDX[g.rarity] >= floor && !ownedSet.has(g.id)),
+  ];
+  const pool = pools.find(p => p.length);
+  if (!pool) return null; // everything owned: coins instead
+  const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
+  return pool[Math.floor(rng() * pool.length)];
+}
+
 // Called after a boss-den victory. Idempotent per den per week.
 export async function claimDenWin(den, week = isoWeekKey()) {
   const r = den.reward;
@@ -113,5 +131,14 @@ export async function claimDenWin(den, week = isoWeekKey()) {
   if (xp === 0) return null;
   if (r.coins) await coinsAdd(r.coins);
   if (r.crate) await grantCrate(r.crate, 'boss-den');
-  return { xp, ...r };
+  // 65% chance the boss also drops themed high-floor gear
+  let gear = null;
+  const chanceRng = mulberry32(hashStr(`dendrop:${week}:${den.id}`));
+  if (chanceRng() < 0.65) {
+    const owned = await ownedGearIds();
+    gear = rollDenGear(den, week, owned);
+    if (gear) await grantGear(gear.id, 'boss-den');
+    else await coinsAdd(60); // full collection consolation
+  }
+  return { xp, ...r, gear };
 }

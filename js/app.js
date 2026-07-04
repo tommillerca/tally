@@ -10,12 +10,13 @@ import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateXpBoost,
   ownedGearIds, grantGear, gearLoadout, equipGear,
+  migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
   xpBoostCharges, consumableCount,
 } from './loot.js';
 import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
-import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel } from './gear.js';
+import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, isoWeekKey, DEN_RADIUS_M } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -1830,8 +1831,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   const curtains = tab === 'wardrobe' && !reducedMotion && !opts.instant;
   body.innerHTML = `
-    <div class="bh-hero${tab === 'wardrobe' ? '' : ' mini'}">
-      <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+    ${tab === 'wardrobe' ? `
+    <div class="bh-hero mini">
+      <div class="bh-hero-meta" style="justify-items:start">
+        <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
+        <div class="bh-pills">
+          <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
+          <span class="bh-pill">${ICONS.bone(14)} ${ownedCount}/${BH_ITEMS.length}</span>
+          ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
+        </div>
+      </div>
+    </div>` : `
+    <div class="bh-hero mini">
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -1841,7 +1853,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
         </div>
       </div>
-    </div>
+    </div>`}
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
       <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Loot</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
@@ -1855,22 +1867,45 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, xpAllW] = await Promise.all([ownedGearIds(), gearLoadout(), db.all('xp')]);
-    const wLevel = levelFor(xpAllW.reduce((a, r) => a + (r.xp || 0), 0)).level;
+    const [gOwnedSet, gearLo, fighter] = await Promise.all([ownedGearIds(), gearLoadout(), buildFighter()]);
+    const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
-    const counts = {};
-    for (const s of BH_SLOTS) {
-      counts[s.code] = BH_ITEMS.filter(i => i.slot === s.code && owned.has(i.id)).length
-        + GEAR_ITEMS.filter(g => g.slot === s.code && gOwnedSet.has(g.id)).length;
-    }
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
     const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
+
+    const pdSlot = code => {
+      const meta = BH_SLOTS.find(x => x.code === code);
+      const isGearSlot = GEAR_SLOTS.includes(code);
+      const g = isGearSlot ? GEAR_BY_ID[gearLo[code]] : null;
+      const art = eq[code] && BH_BY_ID[eq[code]] ? BH_BY_ID[eq[code]] : null;
+      const label = isGearSlot ? GEAR_SLOT_LABELS[code] : meta.label;
+      return `<button class="pd-slot ${slot === code ? 'sel' : ''} ${g ? 'gear-on r-' + g.rarity : ''}" data-pd="${code}" title="${esc(label)}">
+        ${art ? `<img src="${bhAsset(art)}" alt="" loading="lazy">` : '<span class="pd-empty">+</span>'}
+        <span class="pd-tag">${esc(label)}</span>
+        ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>` : ''}
+      </button>`;
+    };
+    const LEFT = ['H', 'E', 'M', 'T', 'P'];
+    const RIGHT = ['IR', 'IL', 'G', 'U', 'S'];
+    const BOTTOM = ['SK', 'B', 'FW', 'C', 'BG', 'YD'];
+    const statChip = m => {
+      const gb = fighter.gearBonus[m.key] || 0;
+      return `<span class="pd-stat"><small>${m.label}</small><b>${fighter.stats[m.key]}</b>${gb ? `<i>+${gb}</i>` : ''}</span>`;
+    };
+
     content.innerHTML = `
-      <div class="chips scroll" id="slotChips">
-        ${BH_SLOTS.map(s => `<button class="chip ${s.code === slot ? 'on' : ''}" data-slot="${s.code}">${s.label} ${counts[s.code] ? `· ${counts[s.code]}` : ''}</button>`).join('')}
+      <div class="paperdoll">
+        <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
+        <div class="pd-center">
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+        </div>
+        <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
+      <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
+      <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
+      <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
@@ -1883,16 +1918,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
           return `
           <button class="ward-cell gear r-${g.rarity} ${gearLo[slot] === g.id ? 'equipped' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}">
             <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
-            <span class="gear-stat">${gearLabel(g)}</span>
+            <span class="gear-stat">${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
         }).join('')}
       </div>
-      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; rarer rolls hit harder.</p>' : ''}
-      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">${lockedCount} more ${slotMeta.label.toLowerCase()} item${lockedCount === 1 ? '' : 's'} still in crates somewhere</p>` : ''}
-      ${!items.length && !gearItems.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
-      ${!items.length && !gearItems.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
-    $$('#slotChips .chip', content).forEach(c => c.addEventListener('click', () => { S.wardrobeSlot = c.dataset.slot; renderCharacter(wrap, 'wardrobe'); }));
+      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder.</p>' : ''}
+      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">${lockedCount} more ${slotMeta.label.toLowerCase()} item${lockedCount === 1 ? '' : 's'} still in crates somewhere</p>` : ''}`;
+    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
       popSound(S.sounds);
@@ -1907,10 +1940,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
   }
-
   if (tab === 'crates') {
+    await migrateLegacyEggs();
+    const [invAll, lifeSteps] = await Promise.all([inventory(), lifetimeStepsSum()]);
+    const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     content.innerHTML = `
-      <div class="sect-h" style="margin-top:2px">Crates${crates.length ? ` · ${crates.length} to open` : ''}</div>
+      ${eggs.length ? `<div class="sect-h" style="margin-top:2px">Eggs · hatch by walking</div>
+      ${eggs.map(e => {
+        const p = eggProgress(e, lifeSteps);
+        const pct = Math.min(100, Math.round(p.walked / p.goal * 100));
+        return `<div class="crate-row egg-row">
+          <span class="crate-ico">${crateIcon('egg', 27)}</span>
+          <div style="flex:1">
+            <b>${p.ready ? 'Ready to hatch!' : 'Incubating...'}</b>
+            <div class="q-bar egg-bar"><i style="width:${pct}%"></i></div>
+            <small>${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps · a PET is inside</small>
+          </div>
+          ${p.ready ? `<button class="btn small" data-hatch="${e.id}">Hatch</button>` : `<span class="q-frac">${(p.goal - p.walked).toLocaleString()} to go</span>`}
+        </div>`;
+      }).join('')}` : ''}
+      <div class="sect-h" style="margin-top:${eggs.length ? '14px' : '2px'}">Crates${crates.length ? ` · ${crates.length} to open` : ''}</div>
       ${crates.length ? crates.map(c => {
         const def = CRATES[c.crate] || CRATES.daily;
         return `<div class="crate-row">
@@ -1929,6 +1978,25 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
           <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
       </div>`;
+    $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
+      const res = await hatchEgg(b.dataset.hatch);
+      if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
+      confettiRain(80);
+      levelSound(S.sounds);
+      const wrap2 = openSheet(`
+        <div class="sheet-body" style="text-align:center;padding-top:26px">
+          <div style="font-size:44px;line-height:1">🐣</div>
+          <div style="height:10px"></div>
+          ${res.item ? `
+            <div class="lvl-stamp" style="font-size:30px">IT HATCHED!</div>
+            <div class="reveal-card r-${res.item.rarity}" style="margin:14px auto 0;max-width:320px"><img src="${bhAsset(res.item)}" alt=""><div><b>${esc(res.item.name)}</b><small>Pet · follows your bonehead</small><span class="rar-chip" style="color:${RARITIES[res.item.rarity].color}">${RARITIES[res.item.rarity].label}</span></div></div>`
+          : `<div class="cele-big">All pets found!</div><p class="note">+${res.coins} coins instead. Legend.</p>`}
+          <div style="height:18px"></div>
+          <button class="btn" id="hatchOk">${res.item ? 'Adopt' : 'Nice'}</button>
+        </div>`);
+      $('#hatchOk', wrap2).addEventListener('click', () => history.back());
+      setTimeout(() => renderCharacter(wrap, 'crates'), 400);
+    }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
       const result = await openCrate(b.dataset.open);
@@ -2451,7 +2519,8 @@ async function buildFighter() {
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents };
+  const fightTalents = [...new Set([...talents, ...gearTalents(gearLo, gOwned, level)])];
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2473,7 +2542,7 @@ async function renderPit(wrap) {
   const beaten = pitBeatKeys(xpRows);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.talents));
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
   const wins = xpRows.filter(r => r.type === 'fight').length;
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
@@ -2481,7 +2550,7 @@ async function renderPit(wrap) {
   body.innerHTML = `
     <p class="note" style="margin-bottom:12px">Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Spend <b>training points</b> to specialize the build your way. Fights take about a minute.</p>
     <div class="card" style="background:var(--surface-2)">
-      <div class="card-title">YOUR FIGHTER · ${d.maxHp} HP · ${d.maxWind} WIND ${wins ? `· ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
+      <div class="card-title">YOUR FIGHTER · ${d.maxHp} HP · ${d.maxWind} STAMINA ${wins ? `· ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
       ${STAT_META.map(m => {
         const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
         return `
@@ -2511,7 +2580,7 @@ async function renderPit(wrap) {
         return `<div class="gear-chip ${g ? 'on r-' + g.rarity : ''}">
           <small>${GEAR_SLOT_LABELS[sl]}</small>
           <b>${g ? esc(g.name) : 'empty'}</b>
-          ${g ? `<span>${gearLabel(g)}</span>` : '<span>equip in Wardrobe</span>'}
+          ${g ? `<span>${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>` : '<span>equip in Wardrobe</span>'}
         </div>`;
       }).join('')}
     </div>
@@ -2594,7 +2663,7 @@ const PIT_VENUES = {
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.talents });
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
@@ -2831,7 +2900,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (ev.t === 'bleedtick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
     } else if (ev.t === 'brace') {
-      floatNode('+wind', ev.who, 'stamp cool');
+      floatNode('+stamina', ev.who, 'stamp cool');
     } else if (ev.t === 'taunt') {
       floatNode(`+${ev.gain} hype`, ev.who, 'stamp warm');
     }
@@ -2861,7 +2930,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'sunder') return `${who === 'You' ? 'You are' : who + ' is'} SUNDERED: +15% damage taken`;
       if (ev.kind === 'bleed') return `${who === 'You' ? 'You are' : who + ' is'} bleeding (x${ev.stacks})`;
       if (ev.kind === 'hex' || ev.kind === 'weaken') return `${who === 'You' ? 'You are' : who + ' is'} cursed: -damage`;
-      if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} wind`;
+      if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} stamina`;
       if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
       if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
       if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
@@ -2940,18 +3009,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
       html += btn(get('bonespike'), { hint: foe.blind ? 'blinds · already blind' : 'blinds them · they miss more', glow: !foe.blind });
       html += btn(get('block'), { hint: 'guards swings + spells' });
       html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
-      if (player.wind < 20) html += btn(get('brace'), { hint: '+40 wind', glow: player.wind < 12 });
+      if (player.wind < 20) html += btn(get('brace'), { hint: '+40 stamina', glow: player.wind < 12 });
       html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, brace'}</small></button>`;
       if (showMore) {
         html += btn(get('shove'), { hint: 'knock to far' });
-        if (player.wind >= 20) html += btn(get('brace'), { hint: '+40 wind' });
+        if (player.wind >= 20) html += btn(get('brace'), { hint: '+40 stamina' });
       }
     } else {
       html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
       html += btn(get('bonerain'), { hint: '3 bone hits · from range', glow: player.wind > player.d.maxWind * 0.6 });
       html += casterRow();
-      html += btn(get('brace'), { hint: '+40 wind' });
+      html += btn(get('brace'), { hint: '+40 stamina' });
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
     }
     html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
@@ -3040,6 +3109,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (r.crate) {
             extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
           }
+          if (r.gear) extras.push(`${r.gear.name} (${r.gear.rarity.toUpperCase()} gear)`);
         } else coins = 10; // den already cracked this week: pocket change
       }
       else if (foeCfg.mode === 'rung') {

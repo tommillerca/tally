@@ -5,6 +5,7 @@
 // stats and rarities. Higher rarity = bigger stat budget; rarer gear is
 // level-gated. Plain cosmetics stay stat-free.
 import { BH_ITEMS } from '../data/boneheadz.js';
+import { TALENT_TREES } from './pit.js';
 
 export const GEAR_SLOTS = ['H', 'T', 'IR'];
 export const GEAR_SLOT_LABELS = { H: 'Head', T: 'Chest', IR: 'Weapon' };
@@ -43,8 +44,10 @@ function bumpRarity(r) {
   return RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, RARITY_ORDER.indexOf(r) + 1)];
 }
 
+const TREE_BY_ID = Object.fromEntries(TALENT_TREES.map(t => [t.id, t]));
+
 function variant(art, arch, rarity) {
-  return {
+  const g = {
     id: `g-${art.id}-${arch}`,
     artId: art.id,
     slot: art.slot,
@@ -54,6 +57,18 @@ function variant(art, arch, rarity) {
     stats: statSplit(arch, rarity),
     name: `${GEAR_ARCHETYPES[arch].epithet} ${art.name}`,
   };
+  // Diablo-style affix: epic+ gear carries a talent from its archetype's tree
+  // (tiers 1-3 only: capstones stay earned). Works even unspecced; stacks
+  // nothing if you already took the talent.
+  if (rarity === 'epic' || rarity === 'legendary') {
+    const nodes = (TREE_BY_ID[arch]?.nodes || []).filter(n => n.tier <= 3);
+    if (nodes.length) {
+      const pick = nodes[hashStr('affix:' + art.id + ':' + arch) % nodes.length];
+      g.talent = pick.id;
+      g.talentName = pick.name;
+    }
+  }
+  return g;
 }
 
 // Two variants per art: one at the art's own rarity, one a tier up with a
@@ -75,11 +90,23 @@ export const GEAR_ITEMS = (() => {
 export const GEAR_BY_ID = Object.fromEntries(GEAR_ITEMS.map(g => [g.id, g]));
 
 export function gearLabel(g) {
-  const KEY = { power: 'POW', marrow: 'MAR', wind: 'WND', reflex: 'RFX', hype: 'HYP' };
+  const KEY = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hype: 'HYP' };
   return Object.entries(g.stats).map(([k, v]) => `+${v} ${KEY[k]}`).join(' · ');
 }
 
 // Sum equipped gear bonuses. Only owned pieces count, and only at level.
+// Talents granted by equipped gear (validated like stats).
+export function gearTalents(loadout = {}, ownedGearIds = new Set(), level = 1) {
+  const out = [];
+  for (const slot of GEAR_SLOTS) {
+    const g = GEAR_BY_ID[loadout[slot]];
+    if (!g || g.slot !== slot || !g.talent) continue;
+    if (!ownedGearIds.has(g.id) || level < g.minLevel) continue;
+    out.push(g.talent);
+  }
+  return out;
+}
+
 export function gearStats(loadout = {}, ownedGearIds = new Set(), level = 1) {
   const out = { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 };
   for (const slot of GEAR_SLOTS) {
