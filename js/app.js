@@ -1479,11 +1479,17 @@ async function renderSettings(el) {
 
   <div class="card">
     <div class="card-title">APPLE HEALTH</div>
+    ${isNative() ? `
+    <div class="settings-row">
+      <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected · syncs automatically every time you open' : 'Connect once, then it syncs automatically'}</span></div>
+      <button class="btn small ${S.settings.hkConnected ? 'ghost' : ''}" id="hkGuide">${S.settings.hkConnected ? 'Reconnect' : 'Connect'}</button>
+    </div>
+    ${S.settings.hkConnected ? '<button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync now</button>' : ''}` : `
     <div class="settings-row">
       <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Boneheadz shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
       <button class="btn small ghost" id="hkGuide">${S.settings.hkConnected ? 'Guide' : 'Connect'}</button>
     </div>
-    <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>
+    <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>`}
   </div>
 
   <div class="card">
@@ -1516,8 +1522,8 @@ async function renderSettings(el) {
   });
   $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
   $('#sndOff').addEventListener('click', async () => { S.sounds = false; await kvSet('sounds', false); refresh(); });
-  $('#hkGuide').addEventListener('click', openHealthGuide);
-  $('#hkSyncNow').addEventListener('click', syncFromClipboard);
+  $('#hkGuide')?.addEventListener('click', openHealthGuide);
+  $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
     const data = await exportAll();
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
