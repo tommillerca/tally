@@ -35,7 +35,7 @@ SLOTS = {
     'H':  ('Hat', 110, None),
     'IL': ('Left hand', 120, None),
     'IR': ('Right hand', 130, None),
-    'C':  ('Pet', 140, None),
+    'C':  ('Pet', 5, None),  # companion sits BEHIND the character (just above BG)
     'YD': ('Yard', 150, None),  # anchored decor, not a full-frame layer
 }
 

@@ -88,7 +88,7 @@ export const BH_SLOTS = [
  {
   "code": "C",
   "label": "Pet",
-  "z": 140,
+  "z": 5,
   "default": null
  },
  {

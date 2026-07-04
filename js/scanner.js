@@ -20,6 +20,9 @@ export function createScanner(video, { onCode, onState }) {
         video: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1920 }, height: { ideal: 1080 },
+          // continuous autofocus is the #1 reliability win for 1D barcodes;
+          // ignored gracefully where unsupported (e.g. iOS often lacks it)
+          focusMode: { ideal: 'continuous' },
         },
       });
     } catch (e) {
@@ -42,7 +45,15 @@ export function createScanner(video, { onCode, onState }) {
     return true;
   }
 
-  function loop() {
+  function scanRegion(sx, sy, sw, sh, maxW) {
+    const scale = Math.min(1, maxW / sw);
+    canvas.width = Math.round(sw * scale);
+    canvas.height = Math.round(sh * scale);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    return scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  }
+
+  async function loop() {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     const now = performance.now();
@@ -50,15 +61,17 @@ export function createScanner(video, { onCode, onState }) {
     lastScan = now;
     const vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
-    // center band: full width, middle 45% height, downscaled to <=900px wide
-    const bandH = Math.round(vh * 0.45);
-    const sy = Math.round((vh - bandH) / 2);
-    const scale = Math.min(1, 900 / vw);
-    canvas.width = Math.round(vw * scale);
-    canvas.height = Math.round(bandH * scale);
-    ctx.drawImage(video, 0, sy, vw, bandH, 0, 0, canvas.width, canvas.height);
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    scanImageData(img).then(symbols => {
+    try {
+      // Pass 1: the center reticle at NATIVE resolution (sharp bars) so a
+      // barcode held at a comfortable, in-focus distance still decodes.
+      // Pass 2: the full-width band downscaled, to catch off-center codes.
+      const rw = Math.round(vw * 0.8), rh = Math.round(vh * 0.34);
+      const rx = Math.round((vw - rw) / 2), ry = Math.round((vh - rh) / 2);
+      let symbols = await scanRegion(rx, ry, rw, rh, 1600);
+      if ((!symbols || !symbols.length) && running) {
+        const bandH = Math.round(vh * 0.5), by = Math.round((vh - bandH) / 2);
+        symbols = await scanRegion(0, by, vw, bandH, 1024);
+      }
       if (!running || !symbols || !symbols.length) return;
       for (const s of symbols) {
         if (!ACCEPT.has(s.typeName)) continue;
@@ -69,7 +82,7 @@ export function createScanner(video, { onCode, onState }) {
           return;
         }
       }
-    }).catch(() => { /* keep scanning */ });
+    } catch { /* keep scanning */ }
   }
 
   function stopLoop() {

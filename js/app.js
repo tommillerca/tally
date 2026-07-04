@@ -1024,7 +1024,7 @@ async function openScanner(getMeal) {
       <video muted playsinline></video>
       <div class="reticle"></div>
       <div class="scan-status" id="scanStatus"></div>
-      <div class="scan-hint">Center the barcode · hold 10-15 cm away</div>
+      <div class="scan-hint">Fill the box with the barcode · hold ~20 cm so it stays sharp</div>
       <div class="scan-tools">
         <button class="icon-btn" id="torchBtn" hidden aria-label="Flashlight"><svg viewBox="0 0 24 24"><path d="M8 2h8l-1 7h3l-9 13 2-9H7z"/></svg></button>
         <button class="icon-btn sheet-close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1075,12 +1075,13 @@ async function openScanner(getMeal) {
     }
     status.textContent = '';
     openSheet(`
-      <div class="sheet-head"><h2>Not in database</h2><button class="sheet-close">Back</button></div>
+      <div class="sheet-head"><h2>New food</h2><button class="sheet-close">Back</button></div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:14px">Barcode <b style="color:var(--text)">${esc(code)}</b> isn't in Open Food Facts or USDA yet. Add it once and it's yours forever:</p>
-        <button class="btn" id="missLabel">Scan the nutrition label</button>
+        <p class="note" style="margin-bottom:14px">We couldn't find this barcode in the food databases (lots of packaged foods aren't listed). Snap the nutrition label instead, it takes a few seconds and it's yours forever after:</p>
+        <button class="btn" id="missLabel">📷 Scan the nutrition label</button>
         <div style="height:8px"></div>
-        <button class="btn ghost" id="missManual">Enter nutrition manually</button>
+        <button class="btn ghost" id="missManual">Type it in manually</button>
+        <p class="note" style="margin-top:12px;font-size:11.5px;opacity:.7">Barcode ${esc(code)}</p>
       </div>`);
     $('#missLabel').addEventListener('click', () => openLabelFlow(getMeal, code));
     $('#missManual').addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
