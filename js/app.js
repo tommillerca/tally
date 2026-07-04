@@ -1,6 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
-import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, reducedMotion } from './fx.js';
+import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
@@ -18,7 +18,7 @@ import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, o
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
-  TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS,
+  TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2336,6 +2336,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (f.stagger) bits.push('STAGGERED');
       else if (f.state) bits.push(f.state === 'block' ? 'BLOCKING' : 'DODGING');
       if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
+      if (f.burn) bits.push('BURNING');
+      if (f.ward > 0) bits.push(`WARD ${f.ward}`);
       if (f.sunder) bits.push('SUNDERED');
       if (f.weaken) bits.push('WEAKENED');
       if (bits.length) {
@@ -2345,7 +2347,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       } else chip.hidden = true;
     }
     el('teleBanner').hidden = !fight.telegraph;
-    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy — Dodge it!`;
+    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy. Dodge it!`;
   }
 
   function floatNode(html, side, cls = '') {
@@ -2363,6 +2365,26 @@ async function openFight(pitWrap, fighter, foeCfg) {
     setTimeout(() => node.classList.remove(...tokens), ms);
   }
 
+  // a magic bolt that flies across the arena
+  function projectile(who, school) {
+    const p = document.createElement('div');
+    p.className = `proj ${school} ${who === 'p' ? 'ltr' : 'rtl'}`;
+    p.style.animationDuration = (fast ? 90 : 340) + 'ms';
+    el('arena').appendChild(p);
+    setTimeout(() => p.remove(), fast ? 120 : 380);
+  }
+
+  // an expanding impact ring at a fighter, colored by school
+  function impactBurst(side, school, big = false) {
+    const b = document.createElement('div');
+    b.className = `burst ${school}${big ? ' bigburst' : ''}`;
+    b.style.left = side === 'f' ? '68%' : '22%';
+    el('arena').appendChild(b);
+    setTimeout(() => b.remove(), fast ? 150 : 500);
+  }
+
+  const schoolOf = ev => ev.school || (ACTIONS[ev.move] && ACTIONS[ev.move].school) || 'phys';
+
   // choreograph one engine event
   function playFx(ev) {
     const atkStage = ev.who === 'p' ? el('youStage') : el('foeStage');
@@ -2370,30 +2392,66 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const vicSide = ev.who === 'p' ? 'f' : 'p';
     const lungeCls = ev.who === 'p' ? 'lunge-r' : 'lunge-l';
     if (ev.t === 'hit') {
-      if (ev.magic || ev.move === 'bonebolt' || ev.storm) {
-        pulse(atkStage, 'castfx', fxMs + 200);
-        setTimeout(() => {
-          pulse(vicStage, 'hurt hexhit', fxMs + 150);
-          floatNode(`-${ev.damage}`, vicSide, 'dmg magic');
-          if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
-        }, fxMs * 0.5);
+      if (ev.whiffed && !ev.damage) {
+        floatNode('whiff', ev.who === 'p' ? 'f' : 'p', 'stamp dim');
         return;
       }
-      pulse(atkStage, ev.move === 'haymaker' || ev.signature ? lungeCls + ' big' : lungeCls, fxMs + 120);
-      setTimeout(() => {
-        pulse(vicStage, 'hurt', fxMs + 150);
-        if (ev.move === 'haymaker' || ev.signature) pulse(el('arena'), 'quake', fxMs + 160);
-        floatNode(`-${ev.damage}`, vicSide, 'dmg' + (ev.crit ? ' crit' : '') + (ev.signature ? ' sig' : ''));
-        if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
-        if (ev.glance) floatNode('glancing', vicSide, 'stamp dim');
-        if (ev.breaksGuard) floatNode('GUARD BREAK', vicSide, 'stamp hot');
-        if (ev.signature) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 20); levelSound(S.sounds); }
-        else if (ev.crit) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 10); popSound(S.sounds); }
-      }, fxMs * 0.6);
+      if (ev.magic || ACTIONS[ev.move]?.magic) {
+        const school = schoolOf(ev);
+        pulse(atkStage, 'castfx cast-' + school, fxMs + 200);
+        setTimeout(() => projectile(ev.who, school), fast ? 10 : fxMs * 0.25);
+        setTimeout(() => {
+          pulse(vicStage, 'hurt', fxMs + 150);
+          impactBurst(vicSide, school, ev.crit);
+          floatNode(`-${ev.damage}`, vicSide, 'dmg ' + (school === 'phys' ? 'magic' : school));
+          if (ev.crit) { floatNode('CRIT!', vicSide, 'stamp hot'); }
+          hitSound(S.sounds, 'zap');
+        }, fast ? 30 : fxMs * 0.6);
+        return;
+      }
+      const heavy = ev.move === 'haymaker' || ev.move === 'titan' || ev.signature;
+      const strike = () => {
+        pulse(atkStage, heavy ? lungeCls + ' big' : lungeCls, fxMs + 120);
+        setTimeout(() => {
+          pulse(vicStage, 'hurt', fxMs + 150);
+          impactBurst(vicSide, 'phys', heavy);
+          if (heavy) pulse(el('arena'), 'quake', fxMs + 160);
+          floatNode(`-${ev.damage}`, vicSide, 'dmg' + (ev.crit ? ' crit' : '') + (ev.signature ? ' sig' : ''));
+          if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
+          if (ev.glance) floatNode('glancing', vicSide, 'stamp dim');
+          if (ev.breaksGuard) floatNode('GUARD BREAK', vicSide, 'stamp hot');
+          if (ev.signature) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 20); levelSound(S.sounds); }
+          else if (ev.crit) { confettiBurst(innerWidth / 2, innerHeight * 0.3, 10); popSound(S.sounds); }
+          else hitSound(S.sounds, heavy ? 'thud' : 'tick');
+        }, fxMs * 0.6);
+      };
+      if (heavy && !ev.signature && !fast) { pulse(atkStage, 'windup', fxMs * 0.55); setTimeout(strike, fxMs * 0.5); }
+      else strike();
     } else if (ev.t === 'miss') {
-      pulse(atkStage, lungeCls + ' big whiff', fxMs + 250);
-      floatNode('MISS', vicSide, 'stamp');
-      floatNode('off-balance!', ev.who, 'stamp dim');
+      if (ev.whiffed || false) {
+        if (!fast) pulse(atkStage, 'windup', fxMs * 0.55);
+        setTimeout(() => {
+          pulse(atkStage, lungeCls + ' big whiff', fxMs + 250);
+          floatNode('WHIFF!', ev.who, 'stamp hot');
+          if (ev.offBalance) floatNode('off-balance!', ev.who, 'stamp dim');
+        }, fast ? 0 : fxMs * 0.5);
+      } else {
+        pulse(atkStage, lungeCls + ' big whiff', fxMs + 250);
+        floatNode('MISS', vicSide, 'stamp');
+        floatNode('off-balance!', ev.who, 'stamp dim');
+      }
+    } else if (ev.t === 'absorb') {
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 200);
+      floatNode(`${ev.amount} absorbed`, ev.who, 'stamp holy');
+      if (ev.broken) setTimeout(() => floatNode('WARD BROKEN', ev.who, 'stamp dim'), fxMs * 0.4);
+    } else if (ev.t === 'lastlight') {
+      pulse(el('arena'), 'holyflash', fxMs + 400);
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 400);
+      floatNode('LAST LIGHT!', ev.who, 'stamp gold');
+      levelSound(S.sounds);
+    } else if (ev.t === 'burntick') {
+      floatNode(`-${ev.damage}`, ev.who, 'dmg fire');
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
     } else if (ev.t === 'state') {
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.state === 'block' ? 'guard' : 'slip', fxMs + 200);
     } else if (ev.t === 'shove') {
@@ -2408,9 +2466,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED' }[ev.kind] || '';
-      floatNode(label, ev.who, 'stamp hex');
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED' }[ev.kind] || '';
+      floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'ward' ? 'stamp holy' : 'stamp hex');
       if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      if (ev.kind === 'ward') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 300);
+      if (ev.kind === 'burn') impactBurst(ev.who, 'fire');
     } else if (ev.t === 'bleedtick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
     } else if (ev.t === 'brace') {
@@ -2427,6 +2487,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
       if (ev.storm) return ev.hitNo === 1 ? `${who} summoned a BONE STORM: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
       if (ev.move === 'bonebolt') return `${who} hurled a bone bolt at ${them} for ${ev.damage}`;
+      if (ev.move === 'smite') return `${who} smote ${them} with grave-light for ${ev.damage}`;
+      if (ev.move === 'frostbolt') return `${who} lanced ${them} with frost for ${ev.damage}`;
+      if (ev.move === 'firebolt') return `${who} seared ${them} with fire for ${ev.damage}`;
+      if (ev.move === 'tempest') return ev.hitNo === 1 ? `${who} called the TEMPEST: ${ev.whiffed ? 'miss' : ev.damage}...` : `...${ev.whiffed ? 'miss' : ev.damage}${ev.hitNo === 4 ? '!' : '...'}`;
+      if (ev.whiffed && !ev.damage) return null;
       if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
       return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
     }
@@ -2436,11 +2501,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'sunder') return `${who === 'You' ? 'You are' : who + ' is'} SUNDERED: +15% damage taken`;
       if (ev.kind === 'bleed') return `${who === 'You' ? 'You are' : who + ' is'} bleeding (x${ev.stacks})`;
       if (ev.kind === 'hex' || ev.kind === 'weaken') return `${who === 'You' ? 'You are' : who + ' is'} cursed: -damage`;
-      if (ev.kind === 'chill') return `grave chill drains ${who === 'You' ? 'your' : 'their'} wind`;
+      if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} wind`;
+      if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
+      if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
     }
     if (ev.t === 'secondwind') return `${who} found a SECOND WIND (+${ev.heal} HP)`;
     if (ev.t === 'bleedtick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} for ${ev.damage}`;
-    if (ev.t === 'miss') return `${who} whiffed the haymaker`;
+    if (ev.t === 'burntick') return `${who === 'You' ? 'You burn' : who + ' burns'} for ${ev.damage}`;
+    if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
+    if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
+    if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;
     if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
     if (ev.t === 'brace') return `${who} caught a breath`;
     if (ev.t === 'shove') return `${who} shoved ${them} back`;
@@ -2467,7 +2537,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id === 'throwb' ? 'throwb' : id, player, foe.state, foe);
-      return `~${est} dmg · ${'●'.repeat(ACTIONS[id].ap)}`;
+      const mc = MISS_CHANCE[id];
+      return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : '●'.repeat(ACTIONS[id].ap)}`;
     };
 
     let html = '';
@@ -2478,8 +2549,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       let h = '';
       const bolt = get('bonebolt');
       if (bolt) h += btn(bolt, { hint: `~${expectedDamage('bonebolt', player, null, foe)} dmg · any range` });
+      const smiteA = get('smite');
+      if (smiteA) h += btn(smiteA, { hint: `~${expectedDamage('smite', player, null, foe)} dmg${foe.sunder || foe.stagger ? ' · JUDGED!' : ' · holy'}`, glow: player.talents.has('judgement') && (!!foe.sunder || !!foe.stagger) });
+      const fbolt = get('frostbolt');
+      if (fbolt) h += btn(fbolt, { hint: `~${expectedDamage('frostbolt', player, null, foe)} dmg · chills`, glow: player.talents.has('frostbite') && foe.wind < 30 });
+      const fire = get('firebolt');
+      if (fire) h += btn(fire, { hint: `~${expectedDamage('firebolt', player, null, foe)} dmg · burns`, weak: !!foe.burn });
       const mendA = get('mend');
       if (mendA) h += btn(mendA, { hint: `heal · ${player.mendUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.mendUses > 0 });
+      const wardA = get('ward');
+      if (wardA) h += btn(wardA, { hint: 'shield: absorbs 25' });
       const hexA = get('hex');
       if (hexA) h += btn(hexA, { hint: 'curse: -20% their dmg', weak: !!foe.weaken });
       return h;
@@ -2489,6 +2568,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (titan) html += btn(titan, { hint: 'ignores defense · once', glow: true });
       const storm = get('bonestorm');
       if (storm) html += btn(storm, { hint: '3 magic hits · once', glow: true });
+      const temp = get('tempest');
+      if (temp) html += btn(temp, { hint: 'fire+frost x4 · once', glow: true });
       const flurry = get('flurry');
       if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
       html += casterRow();
@@ -2541,7 +2622,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (pendingEnd) { clearTimeout(pendingEnd); pendingEnd = null; }
     if (fight.active !== 'p' || fight.over) return;
     endTurn(fight);
-    if (fight.pendingTick) { playFx(fight.pendingTick); fight.pendingTick = null; if (fight.over) return settle(); }
+    for (const tick of (fight.pendingTicks || [])) playFx(tick);
+    fight.pendingTick = null; fight.pendingTicks = [];
+    if (fight.over) return settle();
     refreshAll('');
     aiPlay();
   }
@@ -2566,7 +2649,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (i < evs.length && !fight.over) { setTimeout(step, beatMs); return; }
       if (fight.over) return settle();
       endTurn(fight);
-      if (fight.pendingTick) { playFx(fight.pendingTick); setLog(describe(fight.pendingTick)); fight.pendingTick = null; if (fight.over) return settle(); }
+      const ticks = fight.pendingTicks || [];
+      if (ticks.length) { ticks.forEach(playFx); setLog(ticks.map(describe).join(' · ')); fight.pendingTick = null; fight.pendingTicks = []; if (fight.over) return settle(); }
       planTelegraph(fight);
       setTimeout(() => refreshAll('Your turn.'), beatMs * 0.7);
     };
@@ -2657,7 +2741,7 @@ async function renderTalents(wrap) {
         <div class="tal-tree-head">
           <b style="color:${tree.color}">${tree.name}</b>
           <span class="tal-tag">${tree.tag}</span>
-          <span class="note" style="margin-left:auto">${tree.nodes.filter(n => taken.has(n.id)).length}/3</span>
+          <span class="note" style="margin-left:auto">${tree.nodes.filter(n => taken.has(n.id)).length}/6</span>
         </div>
         <p class="note" style="margin:0 2px 8px">${tree.flavor}</p>
         ${[1, 2, 3, 4].map(tier => {

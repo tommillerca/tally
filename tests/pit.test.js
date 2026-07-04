@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
-  simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE,
+  simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -201,7 +201,7 @@ test('talent tiers gate by points-in-tree (WoW style)', () => {
   taken.add('concussive'); taken.add('thickskull');
   assert.ok(canTakeTalent(taken, 'slab', 5));      // capstone at 5 in tree
   assert.ok(!canTakeTalent(taken, 'slab', 0));     // already taken
-  assert.equal(TALENT_TREES.length, 4);
+  assert.equal(TALENT_TREES.length, 6);
   assert.ok(TALENT_TREES.every(t => t.nodes.length === 6));
   const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
   assert.ok(gc && gc.nodes.filter(n => n.move).length >= 4); // the caster is move-rich
@@ -370,6 +370,167 @@ test('balance: full-spec fighter wins more but pacing holds', () => {
   }
   assert.ok(turns / n >= 3.5 && turns / n <= 9);
   assert.equal(RUNG_TALENTS[5].length, 2);
+});
+
+/* ============ v15: accuracy + cleric + shaman ============ */
+
+test('big moves can miss outright (whiff leaves heavies off-balance)', () => {
+  const A = makeFighter({ name: 'A', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const B = makeFighter({ name: 'B', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const alwaysMiss = () => 0.001;
+  const r = resolveHit({ move: 'haymaker', attacker: A, defender: B, rng: alwaysMiss });
+  assert.ok(r.miss && r.whiffed && r.offBalance, 'haymaker whiffs and leaves you off-balance');
+  const j = resolveHit({ move: 'jab', attacker: A, defender: B, rng: alwaysMiss });
+  assert.ok(!j.miss, 'jabs never whiff');
+  const bolt = resolveHit({ move: 'bonebolt', attacker: A, defender: B, rng: alwaysMiss });
+  assert.ok(!bolt.miss, 'casts are reliable');
+  assert.ok(MISS_CHANCE.titan >= MISS_CHANCE.haymaker, 'bigger move, bigger whiff risk');
+  const noLuck = () => 0.99;
+  const h = resolveHit({ move: 'haymaker', attacker: A, defender: B, rng: noLuck });
+  assert.ok(!h.miss && h.damage > 0, 'high roll still lands');
+});
+
+test('expectedDamage discounts by accuracy', () => {
+  const A = makeFighter({ name: 'A', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const hay = expectedDamage('haymaker', A);
+  const hayFull = Math.round(hay / (1 - MISS_CHANCE.haymaker));
+  assert.ok(hayFull > hay, 'accuracy discount applied');
+});
+
+test('ward absorbs the next 25 damage, then breaks', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 }, talents: ['smite', 'ward'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99;
+  applyAction(fight, 'ward');
+  assert.equal(P.ward, 25);
+  const hpBefore = P.hp;
+  fight.active = 'f'; fight.ap = 3;
+  const evs = applyAction(fight, 'swing');
+  const absorb = evs.find(e => e.t === 'absorb');
+  assert.ok(absorb && absorb.amount === 25 && absorb.broken, 'ward soaked its full pool');
+  assert.equal(P.ward, 0);
+  assert.ok(hpBefore - P.hp <= 15, 'only the overflow reached bone');
+});
+
+test('Last Light cheats death once per fight', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 20, power: 20, wind: 20, reflex: 20, hype: 20 }, talents: ['lastlight'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 90, power: 90, wind: 90, reflex: 90, hype: 90 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  P.hp = 10;
+  fight.active = 'f'; fight.ap = 3; fight.rng = () => 0.99;
+  const evs = applyAction(fight, 'swing');
+  assert.ok(evs.find(e => e.t === 'lastlight'), 'cheat death fired');
+  assert.ok(P.hp >= 1 + Math.round(P.d.maxHp * 0.20), 'left standing with the promised marrow');
+  assert.ok(!fight.over, 'fight continues');
+  P.hp = 5;
+  const evs2 = applyAction(fight, 'jab');
+  assert.ok(!evs2.find(e => e.t === 'lastlight'), 'only once per fight');
+});
+
+test('fire bolt burns; wildfire burns hotter and longer; burn ticks at their turn start', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 }, talents: ['frostbolt', 'firebolt'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99;
+  applyAction(fight, 'firebolt');
+  assert.deepEqual(F.burn, { per: 5, turns: 2 });
+  const hpBefore = F.hp;
+  endTurn(fight);
+  assert.equal(hpBefore - F.hp, 5, 'burn ticked 5');
+  assert.ok(fight.pendingTicks.some(e => e.t === 'burntick'), 'tick surfaced for UI');
+  const P2 = makeFighter({ name: 'P2', stats: P.stats, talents: ['frostbolt', 'firebolt', 'wildfire'] });
+  const fight2 = createFight({ player: P2, foe: makeFighter({ name: 'F2', stats: F.stats }), seed: 5 });
+  fight2.rng = () => 0.99;
+  applyAction(fight2, 'firebolt');
+  assert.deepEqual(fight2.f.burn, { per: 7, turns: 3 });
+});
+
+test('frost bolt chills wind; frostbite punishes gassed enemies', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 60 }, talents: ['frostbolt', 'frostbite'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99;
+  const windBefore = F.wind;
+  applyAction(fight, 'frostbolt');
+  assert.equal(windBefore - F.wind, 8, 'chill drained 8 wind');
+  const gassed = makeFighter({ name: 'G', stats: F.stats }); gassed.wind = 20;
+  const fresh = makeFighter({ name: 'H', stats: F.stats });
+  const noLuck = () => 0.99;
+  const vsGassed = resolveHit({ move: 'frostbolt', attacker: P, defender: gassed, rng: noLuck });
+  const vsFresh = resolveHit({ move: 'frostbolt', attacker: P, defender: fresh, rng: noLuck });
+  assert.ok(vsGassed.damage > vsFresh.damage, 'frostbite bonus applied');
+});
+
+test('smite scales as magic; radiance heals 20%; judgement punishes sunder', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 60 }, talents: ['smite', 'radiance', 'judgement'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99;
+  P.hp = 100;
+  const evs = applyAction(fight, 'smite');
+  const hit = evs.find(e => e.t === 'hit');
+  const heal = evs.find(e => e.t === 'heal');
+  assert.ok(hit.damage > 0 && hit.magic, 'smite lands as magic');
+  assert.equal(heal.amount, Math.round(hit.damage * 0.20), 'radiance healed 20%');
+  const sundered = makeFighter({ name: 'S', stats: F.stats }); sundered.sunder = { turns: 2 };
+  const plain = makeFighter({ name: 'N', stats: F.stats });
+  const noLuck = () => 0.99;
+  const vsSunder = resolveHit({ move: 'smite', attacker: P, defender: sundered, rng: noLuck });
+  const vsPlain = resolveHit({ move: 'smite', attacker: P, defender: plain, rng: noLuck });
+  assert.ok(vsSunder.damage > vsPlain.damage * 1.5, 'judgement + sunder stack');
+});
+
+test('hallowed marrow amplifies healing received', () => {
+  const base = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
+  const plain = makeFighter({ name: 'A', stats: base, talents: ['bonebolt', 'mend'] });
+  const holy = makeFighter({ name: 'B', stats: base, talents: ['bonebolt', 'mend', 'hallowed'] });
+  const f1 = createFight({ player: plain, foe: makeFighter({ name: 'X', stats: base }), seed: 5 });
+  const f2 = createFight({ player: holy, foe: makeFighter({ name: 'Y', stats: base }), seed: 5 });
+  plain.hp = 50; holy.hp = 50;
+  const h1 = applyAction(f1, 'mend').find(e => e.t === 'heal').amount;
+  const h2 = applyAction(f2, 'mend').find(e => e.t === 'heal').amount;
+  assert.equal(h2, Math.round((holy.d.maxHp * 0.12 + 8 * holy.d.magicMult) * 1.2));
+  assert.ok(h2 > h1, 'hallowed heals bigger');
+});
+
+test('tempest: four alternating elemental hits, once per fight, burn + chill riders', () => {
+  const P = makeFighter({ name: 'P', stats: { marrow: 60, power: 60, wind: 60, reflex: 60, hype: 60 }, talents: ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'tempest'] });
+  const F = makeFighter({ name: 'F', stats: { marrow: 70, power: 70, wind: 70, reflex: 70, hype: 70 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  fight.rng = () => 0.99; fight.ap = 3;
+  const evs = applyAction(fight, 'tempest');
+  const hits = evs.filter(e => e.t === 'hit');
+  assert.equal(hits.length, 4, 'four hits');
+  assert.deepEqual(hits.map(h => h.school), ['fire', 'frost', 'fire', 'frost'], 'alternating elements');
+  assert.ok(F.burn && F.burn.per === 7, 'burn applied (wildfire-boosted)');
+  assert.ok(evs.some(e => e.t === 'status' && e.kind === 'chill'), 'chill applied');
+  assert.ok(P.tempestUsed);
+  assert.ok(!actionsFor(fight).some(x => x.id === 'tempest'), 'tempest gone after use');
+});
+
+test('totemic marrow regenerates extra wind each turn', () => {
+  const base = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
+  const P = makeFighter({ name: 'P', stats: base, talents: ['frostbolt', 'totemic'] });
+  const F = makeFighter({ name: 'F', stats: base });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  P.wind = 10;
+  fight.active = 'f';
+  endTurn(fight);
+  assert.equal(P.wind, 10 + 15 + 5, 'base regen + totemic 5');
+});
+
+test('six trees, six nodes each, unique ids, new moves registered', () => {
+  assert.equal(TALENT_TREES.length, 6);
+  const ids = TALENT_TREES.flatMap(t => t.nodes.map(n => n.id));
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
+  for (const t of TALENT_TREES) {
+    assert.equal(t.nodes.length, 6);
+    assert.equal(t.nodes.filter(n => n.tier === 4).length, 1, t.id + ' has one capstone');
+  }
+  assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
+  assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);
+  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest']) assert.ok(ACTIONS[id], id + ' action exists');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

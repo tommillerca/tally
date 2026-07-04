@@ -113,3 +113,33 @@ export function levelSound(enabled = true) {
   if (!enabled) return;
   try { note(523, 0, 0.14); note(659, 0.09, 0.14); note(784, 0.18, 0.22, 0.08); } catch { /* no audio */ }
 }
+
+// per-hit combat foley: heavies thud, casts zap, quick strikes tick
+export function hitSound(enabled = true, kind = 'tick') {
+  if (!enabled) return;
+  try {
+    if (kind === 'thud') {
+      const c = ac();
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(150, c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(45, c.currentTime + 0.16);
+      g.gain.setValueAtTime(0.16, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.2);
+      o.connect(g); g.connect(c.destination);
+      o.start(); o.stop(c.currentTime + 0.24);
+    } else if (kind === 'zap') {
+      const c = ac();
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(1100, c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(220, c.currentTime + 0.14);
+      g.gain.setValueAtTime(0.05, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.16);
+      o.connect(g); g.connect(c.destination);
+      o.start(); o.stop(c.currentTime + 0.2);
+    } else {
+      note(660, 0, 0.05, 0.035, 'square');
+    }
+  } catch { /* no audio */ }
+}
