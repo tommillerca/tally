@@ -1699,9 +1699,10 @@ async function renderCharacter(wrap, tab) {
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
 
+  const curtains = tab === 'wardrobe' && !reducedMotion;
   body.innerHTML = `
     <div class="bh-hero${tab === 'wardrobe' ? '' : ' mini'}">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
+      <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt-rod"></div><div class="curt l"></div><div class="curt r"></div>' : ''}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -1721,6 +1722,7 @@ async function renderCharacter(wrap, tab) {
 
   $$('#chTabs .chip', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
+  if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
@@ -1745,7 +1747,16 @@ async function renderCharacter(wrap, tab) {
       ${!items.length && !lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing here yet.</p>' : ''}
       ${!items.length && lockedCount ? '<p class="note" style="text-align:center;padding:14px">Nothing unlocked here yet. Crates await.</p>' : ''}`;
     $$('#slotChips .chip', content).forEach(c => c.addEventListener('click', () => { S.wardrobeSlot = c.dataset.slot; renderCharacter(wrap, 'wardrobe'); }));
+    let changing = false;
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
+      if (changing) return;
+      changing = true;
+      cell.classList.add('equipped');
+      const curts = $$('.curt', body);
+      if (curts.length) {
+        curts.forEach(x => x.classList.remove('open'));
+        await new Promise(r => setTimeout(r, 300));
+      }
       await equip(slot, cell.dataset.equip || null);
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe');
