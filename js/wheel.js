@@ -187,6 +187,13 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   if (navigator.webdriver && !window.__wheelForce && !force && !preview) return false;
   ensureStyle();
   const today = dateKey();
+  // one-time make-good: the pre-v61 bug consumed the day on SHOW, so anyone who
+  // saw-but-didn't-spin lost today's spin. Clear that stale gate once so the
+  // wheel returns. Runs a single time ever, then normal daily gating resumes.
+  if (!(await kvGet('wheelResetOnce_v61', false))) {
+    await kvSet('wheelResetOnce_v61', true);
+    await kvSet('wheelLastDate', null);
+  }
   if (!force && !preview && (await kvGet('wheelLastDate', null)) === today) return false;
 
   await waitForSplash();
