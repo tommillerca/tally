@@ -72,7 +72,7 @@ export const TALENT_TREES = [
       { id: 'bonebreaker', tier: 2, name: 'Bonebreaker', desc: 'Landed haymakers SUNDER: the enemy takes +15% damage for 2 turns.' },
       { id: 'concussive', tier: 3, name: 'Concussive', desc: 'Landed haymakers always stagger (enemy loses an action).' },
       { id: 'thickskull', tier: 3, name: 'Thick Skull', desc: '+45 max HP.' },
-      { id: 'titan', tier: 4, name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, an overhead slam that ignores Block and Dodge.' },
+      { id: 'titan', tier: 4, name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, a devastating overhead slam.' },
     ],
   },
   {
@@ -80,11 +80,11 @@ export const TALENT_TREES = [
     flavor: 'Speed, bleed, and attrition. Pairs with a walking habit.',
     nodes: [
       { id: 'lightfeet', tier: 1, name: 'Light Feet', desc: '+1 action point every turn.' },
-      { id: 'counterstep', tier: 2, name: 'Counterstep', desc: 'When a haymaker whiffs into your Dodge, you land a free counter-jab.' },
+      { id: 'counterstep', tier: 2, name: 'Counterstep', desc: 'When an enemy attack misses you, you snap back with a free counter-jab.' },
       { id: 'kite', tier: 2, name: 'Kite', desc: 'Throws hit 60% harder.' },
       { id: 'bleedout', tier: 3, name: 'Bleed Out', desc: 'Jabs open wounds: 4 damage per stack at the start of their turn, stacks to 3.' },
       { id: 'deeplungs', tier: 3, name: 'Deep Lungs', desc: '+15 max Stamina.' },
-      { id: 'flurry', tier: 4, name: 'Flurry', move: true, desc: 'NEW MOVE: dump ALL your Stamina into an unblockable 3-hit combo.' },
+      { id: 'flurry', tier: 4, name: 'Flurry', move: true, desc: 'NEW MOVE: dump ALL your Stamina into a relentless 3-hit combo.' },
     ],
   },
   {
@@ -108,7 +108,7 @@ export const TALENT_TREES = [
       { id: 'mend', tier: 2, name: 'Mend Marrow', move: true, desc: 'NEW MOVE: knit your bones back together. Heals 12% max HP, 3 uses per fight.' },
       { id: 'hex', tier: 3, name: 'Hex of Dust', move: true, desc: 'NEW MOVE: curse the enemy to deal 20% less damage for 2 turns.' },
       { id: 'gravechill', tier: 3, name: 'Grave Chill', desc: 'Bone Bolts also drain 10 of the enemy Stamina.' },
-      { id: 'bonestorm', tier: 4, name: 'Bone Storm', move: true, desc: 'NEW MOVE: once per fight, a whirlwind of shards: three unblockable magic hits.' },
+      { id: 'bonestorm', tier: 4, name: 'Bone Storm', move: true, desc: 'NEW MOVE: once per fight, a whirlwind of shards: three piercing magic hits.' },
     ],
   },
   {
@@ -214,12 +214,13 @@ export const ACTIONS = {
   jab:      { label: 'Jab', range: 'close', ap: 1, wind: 8, base: 10, hype: 6 },
   swing:    { label: 'Swing', range: 'close', ap: 1, wind: 18, base: 22, hype: 10 },
   haymaker: { label: 'Haymaker', range: 'close', ap: 2, wind: 35, base: 40, hype: 15 },
-  block:    { label: 'Block', range: 'close', ap: 1, wind: 10 },
-  dodge:    { label: 'Dodge', range: 'close', ap: 1, wind: 10 },
+  // Active defense (no more passive Block/Dodge/Brace): a shield you raise and a
+  // debuff you land. Both are proactive plays, not "turtle and wait".
+  guard:    { label: 'Bone Guard', range: 'any', ap: 1, wind: 12, shield: true, hype: 3 },
+  rattle:   { label: 'Rattle', range: 'any', ap: 1, wind: 12, debuff: true, hype: 4 },
   shove:    { label: 'Shove', range: 'close', ap: 1, wind: 12, hype: 4 },
   advance:  { label: 'Advance', range: 'far', ap: 1, wind: 5 },
   throwb:   { label: 'Throw', range: 'far', ap: 1, wind: 15, base: 14, hype: 8 },
-  brace:    { label: 'Brace', range: 'any', ap: 1, wind: 0 },
   taunt:    { label: 'Taunt', range: 'far', ap: 1, wind: 5 },
   signature:{ label: 'Signature', range: 'close', ap: 2, wind: 0, base: 120 },
   titan:    { label: 'Titan', range: 'close', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
@@ -245,8 +246,8 @@ export const MISS_CHANCE = {
 };
 const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-export const REGEN_PER_TURN = 15;
-export const BRACE_BONUS = 40;
+export const REGEN_PER_TURN = 20; // higher now that Brace is gone: Stamina refills passively
+export const GUARD_BASE = 16;     // Bone Guard absorb floor; scales with Marrow
 export const TAUNT_CURVE = [8, 5, 3, 2, 1];
 export const SIGNATURE_HYPE = 100;
 export const HIT_TAKEN_HYPE = 4;
@@ -339,30 +340,17 @@ export function applyPetAction(fight, actionId) {
 }
 export const TURN_CAP = 30;
 
-// counter matrix (spec §4): attacker move vs defender state
-export function counterMult(move, defState) {
-  if (defState === 'block') {
-    if (move === 'jab') return { mult: 0.5 };
-    if (move === 'swing') return { mult: 0.35 };
-    if (move === 'haymaker') return { mult: 1.15, breaksGuard: true, stagger: true };
-  }
-  if (defState === 'dodge') {
-    if (move === 'jab') return { mult: 1.1 };
-    if (move === 'swing') return { mult: 0.7 };
-    if (move === 'haymaker') return { mult: 0, miss: true, offBalance: true };
-  }
-  return { mult: 1.0 };
-}
+// Passive Block/Dodge are retired: defense is now active (Bone Guard's absorb
+// pool + Rattle's weaken), so there is no attacker-vs-defender-state matrix.
+// Kept as a stable {mult:1} shim so callers/tests don't need to branch.
+export function counterMult() { return { mult: 1.0 }; }
 
 /* ================= damage pipeline (spec §3) ================= */
 
 export function resolveHit({ move, attacker, defender, rng }) {
   const a = ACTIONS[move];
-  const immune = move === 'signature' || move === 'titan' || move === 'flurry' || !!ACTIONS[move].magic;
-  const counter = immune ? { mult: 1.0 } : counterMult(move, defender.state);
-  if (counter.miss) {
-    return { damage: 0, miss: true, offBalance: !!counter.offBalance, crit: false, glance: false };
-  }
+  const counter = { mult: 1.0 }; // no passive-defense matrix anymore
+  const immune = move === 'signature' || move === 'titan' || move === 'flurry' || !!a.magic; // no glance
   let missChance = MISS_CHANCE[move] || 0;
   // Cam's model: on already-riskier moves, hit rate flexes with your attack (Power)
   // vs their evasion (Reflex). Small so the ladder stays balanced; jabs stay reliable.
@@ -382,7 +370,6 @@ export function resolveHit({ move, attacker, defender, rng }) {
   dmg *= counter.mult;
   if (move === 'haymaker' && attacker.talents.has('heavyhands')) dmg *= 1.15;
   if (move === 'throwb' && attacker.talents.has('kite')) dmg *= 1.6;
-  if (a.magic && defender.state === 'block') dmg *= 0.65; // covering up blunts spells
   if (move === 'smite' && attacker.talents.has('judgement') && (defender.stagger || defender.sunder)) dmg *= 1.5;
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
@@ -497,7 +484,7 @@ function mulberry32(seed) {
 
 function healMult(f) { return f.talents.has('hallowed') ? 1.2 : 1; }
 
-function dealDamage(fight, victimWho, amount, events) {
+export function dealDamage(fight, victimWho, amount, events) {
   const v = fighterOf(fight, victimWho);
   if (v.ward > 0 && amount > 0) {
     const soak = Math.min(v.ward, amount);
@@ -576,6 +563,7 @@ export function actionsFor(fight) {
     if (id === 'mend' && me.mendUses <= 0) continue;
     if (id === 'tempest' && me.tempestUsed) continue;
     if (id === 'ward' && me.ward >= 25) continue;
+    if (id === 'guard' && (me.ward || 0) >= Math.round(GUARD_BASE + me.stats.marrow * 0.15)) continue;
     let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
     if (id === 'shove') windCost = Math.round(windCost * (1 + me.shoveCount));
     let ok = fight.ap >= a.ap && me.wind >= windCost;
@@ -600,21 +588,26 @@ export function applyAction(fight, actionId) {
 
   fight.ap -= a.ap;
   me.wind -= windCost;
-  if (fight.range === 'close' && ['jab', 'swing', 'haymaker', 'block', 'dodge', 'shove'].includes(actionId)) {
+  if (fight.range === 'close' && ['jab', 'swing', 'haymaker', 'guard', 'rattle', 'shove'].includes(actionId)) {
     me.recentCloseMoves.push(actionId);
     if (me.recentCloseMoves.length > 6) me.recentCloseMoves.shift();
   }
 
   switch (actionId) {
-    case 'block':
-    case 'dodge': {
-      me.state = actionId;
-      events.push({ t: 'state', who: fight.active, state: actionId });
+    case 'guard': {
+      // Bone Guard: raise an absorb pool (Marrow-scaled). Active defense, not a wait.
+      const shield = Math.round(GUARD_BASE + me.stats.marrow * 0.15);
+      me.ward = Math.max(me.ward || 0, shield);
+      gainHype(me, a.hype);
+      events.push({ t: 'status', who: fight.active, kind: 'guard', shield });
       break;
     }
-    case 'brace': {
-      me.wind = Math.min(me.d.maxWind, me.wind + BRACE_BONUS);
-      events.push({ t: 'brace', who: fight.active });
+    case 'rattle': {
+      // Rattle: shake the foe (weaken their damage) and jar loose some Stamina.
+      if (!them.weaken || them.weaken.pct < 0.18) them.weaken = { pct: 0.18, turns: 2 };
+      them.wind = Math.max(0, them.wind - 12);
+      gainHype(me, a.hype);
+      events.push({ t: 'status', who: defWho, kind: 'rattle' });
       break;
     }
     case 'shove': {
@@ -807,7 +800,9 @@ export function applyAction(fight, actionId) {
       if (r.miss) {
         me.offBalance = r.whiffed ? !!r.offBalance : true;
         events.push({ t: 'miss', who: fight.active, move, whiffed: !!r.whiffed, offBalance: me.offBalance });
-        if (them.talents.has('counterstep') && !r.whiffed) {
+        // counterstep: any missed enemy attack (heavies whiff now that Dodge is gone)
+        // opens a free counter-jab for the defender who has it
+        if (them.talents.has('counterstep')) {
           const c = resolveHit({ move: 'jab', attacker: them, defender: { ...me, state: null, d: me.d, talents: me.talents, sunder: me.sunder }, rng: fight.rng });
           dealDamage(fight, fight.active, c.damage, events);
           if (c.damage > 0) gainHype(them, 6);
@@ -931,7 +926,7 @@ export function planTelegraph(fight) {
   fight.telegraph = null;
   if (fight.over || fight.range !== 'close') return;
   const wantsHeavy = f.wind >= Math.round(35 * f.weapon.windCostMult('haymaker')) &&
-    fight.rng() < (fight.p.state === 'block' ? 0.75 : 0.28 + fight.aiLevel * 0.04);
+    fight.rng() < (0.28 + fight.aiLevel * 0.04);
   if (wantsHeavy) fight.telegraph = 'haymaker';
 }
 
@@ -960,25 +955,21 @@ function actForEnemy(fight, who, events) {
     } else if (pick('titan') && fight.rng() < 0.6) {
       choice = 'titan';
     } else if (fight.range === 'far') {
-      if (f.wind < 20 && pick('brace')) choice = 'brace';
-      else if (pick('advance')) choice = 'advance';
+      if (pick('advance')) choice = 'advance';
       else if (pick('throwb')) choice = 'throwb';
       else choice = legal[0].id;
     } else {
-      const pHeavy = haymakerRate(p.recentCloseMoves);
-      if (f.wind < 18 && pick('brace')) choice = 'brace';
-      else if (pHeavy > 0.45 && fight.rng() < 0.55 + fight.aiLevel * 0.1 && pick('dodge') && f.state == null) choice = 'dodge';
-      else if (p.state === 'dodge' && pick('jab')) choice = 'jab';
-      else if (p.state === 'block' && pick('jab') && fight.rng() < 0.5) choice = 'jab';
-      else {
-        const roll = fight.rng();
-        if (roll < 0.5 && pick('swing')) choice = 'swing';
-        else if (roll < 0.72 && pick('jab')) choice = 'jab';
-        else if (roll < 0.86 && pick('block') && f.state == null) choice = 'block';
-        else if (pick('swing')) choice = 'swing';
-        else if (pick('jab')) choice = 'jab';
-        else choice = legal[0].id;
-      }
+      // Active-defense AI: raise a Bone Guard when hurt, occasionally Rattle to
+      // sap the player's offense, but mostly press the attack.
+      const lowHp = f.hp <= f.d.maxHp * 0.30;
+      const roll = fight.rng();
+      if (lowHp && (f.ward || 0) <= 0 && pick('guard') && roll < 0.45 + fight.aiLevel * 0.05) choice = 'guard';
+      else if (roll < 0.16 && pick('rattle') && !p.weaken) choice = 'rattle';
+      else if (roll < 0.60 && pick('swing')) choice = 'swing';
+      else if (roll < 0.82 && pick('jab')) choice = 'jab';
+      else if (pick('swing')) choice = 'swing';
+      else if (pick('jab')) choice = 'jab';
+      else choice = legal[0].id;
     }
     events.push({ t: 'foeAction', id: choice });
     events.push(...applyAction(fight, choice));
@@ -1019,10 +1010,9 @@ export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapo
         if (!legal.length) break;
         const pick = id => legal.find(x => x.id === id);
         let c;
-        if (fight.range === 'far') c = (fight.p.wind < 15 && pick('brace')) ? 'brace' : (pick('advance') ? 'advance' : legal[0].id);
-        else if (fight.telegraph === 'haymaker' && pick('dodge') && fight.p.state == null && fight.rng() < 0.6) c = 'dodge';
+        if (fight.range === 'far') c = pick('advance') ? 'advance' : legal[0].id;
+        else if (fight.telegraph === 'haymaker' && (fight.p.ward || 0) <= 0 && pick('guard') && fight.rng() < 0.5) c = 'guard';
         else if (pick('signature')) c = 'signature';
-        else if (fight.p.wind < 18 && pick('brace')) c = 'brace';
         else if (pick('swing')) c = 'swing';
         else if (pick('jab')) c = 'jab';
         else c = legal[0].id;

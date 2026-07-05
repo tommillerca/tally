@@ -37,7 +37,7 @@ const POLICIES = {
       if (pick('advance')) return 'advance';
       return legal[0]?.id ?? null;
     }
-    if (fight.telegraph === 'haymaker' && pick('dodge') && p.state == null) return 'dodge';
+    if (fight.telegraph === 'haymaker' && pick('guard') && (p.ward || 0) <= 0) return 'guard';
     if (pick('signature')) return 'signature';
     if (p.hp < p.d.maxHp * 0.4 && pick('mend')) return 'mend';
     if (pick('ward') && p.ward <= 0 && fight.rng() < 0.5) return 'ward';
@@ -81,14 +81,14 @@ const POLICIES = {
     if (pick('brace')) return 'brace';
     return null;
   },
-  // turtle: ward + mend + block forever, jab with spare AP
+  // turtle: ward + mend + Bone Guard forever, jab with spare AP
   turtle(fight, legal, pick) {
     const p = fight.p;
     if (pick('ward') && p.ward <= 0) return 'ward';
     if (p.hp < p.d.maxHp * 0.7 && pick('mend')) return 'mend';
-    if (pick('block') && p.state == null) return 'block';
+    if (pick('guard') && (p.ward || 0) <= 0) return 'guard';
+    if (pick('rattle') && !fight.f.weaken) return 'rattle';
     if (pick('jab')) return 'jab';
-    if (pick('brace')) return 'brace';
     return null;
   },
   // windlock: chill them to zero wind, execute with frostbite

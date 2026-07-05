@@ -3055,13 +3055,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const chip = el(id);
       const bits = [];
       if (f.stagger) bits.push('STAGGERED');
-      else if (f.state) bits.push(f.state === 'block' ? 'BLOCKING' : 'DODGING');
       if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
       if (f.burn) bits.push('BURNING');
       if (f.poison) bits.push(`POISON x${f.poison.stacks}`);
       if (f.blind) bits.push('BLINDED');
       if (f.marked) bits.push('MARKED');
-      if (f.ward > 0) bits.push(`WARD ${f.ward}`);
+      if (f.ward > 0) bits.push(`GUARD ${f.ward}`);
       if (f.sunder) bits.push('SUNDERED');
       if (f.weaken) bits.push('WEAKENED');
       if (bits.length) {
@@ -3071,7 +3070,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       } else chip.hidden = true;
     }
     el('teleBanner').hidden = !fight.telegraph;
-    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy. Dodge it!`;
+    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy. Guard or race it!`;
   }
 
   function floatNode(html, side, cls = '') {
@@ -3202,8 +3201,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const pg = el('petG'); if (pg) pg.classList.add('fainted');
       floatNode('🐾 DOWN', 'p', 'stamp dim');
       hitSound(S.sounds, 'thud');
-    } else if (ev.t === 'state') {
-      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.state === 'block' ? 'guard' : 'slip', fxMs + 200);
     } else if (ev.t === 'shove') {
       pulse(atkStage, lungeCls, fxMs);
       setTimeout(() => pulse(vicStage, 'hurt', fxMs), fxMs * 0.5);
@@ -3216,16 +3213,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED' }[ev.kind] || '';
-      floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'ward' ? 'stamp holy' : 'stamp hex');
-      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
-      if (ev.kind === 'ward') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 300);
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rattle: 'RATTLED' }[ev.kind] || '';
+      floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
+      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind' || ev.kind === 'rattle') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      if (ev.kind === 'ward' || ev.kind === 'guard') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.kind === 'guard' ? 'guard' : 'wardfx', fxMs + 300);
       if (ev.kind === 'burn') impactBurst(ev.who, 'fire');
       if (ev.kind === 'blind') impactBurst(ev.who, 'phys');
     } else if (ev.t === 'bleedtick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
-    } else if (ev.t === 'brace') {
-      floatNode('+stamina', ev.who, 'stamp cool');
     } else if (ev.t === 'taunt') {
       floatNode(`+${ev.gain} hype`, ev.who, 'stamp warm');
     }
@@ -3257,6 +3252,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'hex' || ev.kind === 'weaken') return `${who === 'You' ? 'You are' : who + ' is'} cursed: -damage`;
       if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} stamina`;
       if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
+      if (ev.kind === 'guard') return `${who === 'You' ? 'You raise' : who + ' raises'} a Bone Guard (absorbs ${ev.shield})`;
+      if (ev.kind === 'rattle') return `${who === 'You' ? 'You are' : who + ' is'} RATTLED: less damage, drained stamina`;
       if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
       if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
       if (ev.kind === 'poison') return `${who === 'You' ? 'You are' : who + ' is'} POISONED (x${ev.stacks})`;
@@ -3274,8 +3271,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;
-    if (ev.t === 'state') return `${who} ${ev.state === 'block' ? 'raised a guard' : 'got light on their feet'}`;
-    if (ev.t === 'brace') return `${who} caught a breath`;
     if (ev.t === 'shove') return `${who} shoved ${them} back`;
     if (ev.t === 'advance') return `${who} closed in`;
     if (ev.t === 'taunt') return `${who} talked trash`;
@@ -3301,21 +3296,29 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }
     const legal = actionsFor(fight);
     const get = id => legal.find(a => a.id === id);
-    const foeBlocking = foe.state === 'block';
-    const foeDodging = foe.state === 'dodge';
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
         <b>${a.label}</b><small>${hint || `${'●'.repeat(a.ap)}${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
       </button>` : '';
     const dmgHint = id => {
-      const est = expectedDamage(id === 'throwb' ? 'throwb' : id, player, foe.state, foe);
+      const est = expectedDamage(id === 'throwb' ? 'throwb' : id, player, null, foe);
       const mc = MISS_CHANCE[id];
       return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : '●'.repeat(ACTIONS[id].ap)}`;
+    };
+    const guardAmt = Math.round(16 + player.stats.marrow * 0.15);
+    // active defense (no more Block/Dodge): raise a shield or land a debuff
+    const defenseRow = () => {
+      let h = '';
+      const g = get('guard');
+      if (g) h += btn(g, { hint: `shield: absorbs ~${guardAmt}`, glow: (!!fight.telegraph && (player.ward || 0) <= 0) || player.hp < player.d.maxHp * 0.4 });
+      const r = get('rattle');
+      if (r) h += btn(r, { hint: '-18% their dmg · saps stamina', weak: !!foe.weaken });
+      return h;
     };
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · unblockable${player.sigsUsed ? ' · encore' : ''}</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small></button>`;
 
     const casterRow = () => {
       let h = '';
@@ -3339,7 +3342,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     };
     if (fight.range === 'close') {
       const titan = get('titan');
-      if (titan) html += btn(titan, { hint: 'ignores defense · once', glow: true });
+      if (titan) html += btn(titan, { hint: 'big hit · once', glow: true });
       const storm = get('bonestorm');
       if (storm) html += btn(storm, { hint: '3 magic hits · once', glow: true });
       const temp = get('tempest');
@@ -3347,22 +3350,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const flurry = get('flurry');
       if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
       html += casterRow();
-      html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
-      html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
-      html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
-      html += btn(get('block'), { hint: 'guards swings + spells' });
-      html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
-      if (player.wind < 20) html += btn(get('brace'), { hint: '+40 stamina', glow: player.wind < 12 });
-      html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, brace'}</small></button>`;
+      html += btn(get('jab'), { hint: dmgHint('jab') });
+      html += btn(get('swing'), { hint: dmgHint('swing') });
+      html += btn(get('haymaker'), { hint: dmgHint('haymaker') });
+      html += defenseRow();
+      html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, taunt'}</small></button>`;
       if (showMore) {
         html += btn(get('shove'), { hint: 'knock to far' });
-        if (player.wind >= 20) html += btn(get('brace'), { hint: '+40 stamina' });
+        html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
       }
     } else {
       html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
       html += casterRow();
-      html += btn(get('brace'), { hint: '+40 stamina' });
+      html += defenseRow();
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
     }
     html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;

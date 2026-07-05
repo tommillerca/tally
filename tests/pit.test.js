@@ -4,7 +4,7 @@ import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
-  petActionsFor, applyPetAction,
+  petActionsFor, applyPetAction, dealDamage,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -27,13 +27,12 @@ test('derived pools at stat=50 match the spec table', () => {
 });
 
 // ---- spec section 8: the worked example ----
-test('worked example: P60 Bonecrusher haymaker vs Block = ~108 + stagger', () => {
+test('worked example: P60 Bonecrusher haymaker = base*power*weapon (no passive defense)', () => {
   const attacker = makeFighter({ name: 'A', stats: { power: 60, marrow: 50, wind: 50, reflex: 50, hype: 0 }, weaponId: 'bonecrusher' });
   const defender = makeFighter({ name: 'D', stats: { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 0 } });
-  defender.state = 'block';
   const r = resolveHit({ move: 'haymaker', attacker, defender, rng: noLuck });
-  assert.equal(r.damage, 108, String(r.damage));
-  assert.ok(r.breaksGuard && r.stagger);
+  // 40 base * powerMult(1.9) * bonecrusher haymaker mult(1.24) = 94.24 -> 94
+  assert.equal(r.damage, 94, String(r.damage));
   // wind cost with Bonecrusher penalty: 35 * 1.3 = 45.5 -> 46
   assert.equal(Math.round(35 * WEAPONS.bonecrusher.windCostMult('haymaker')), 46);
 });
@@ -78,16 +77,42 @@ test('guardrail: Z (effort + Bonecrusher) haymaker = 122', () => {
   assert.equal(r.damage, 122, String(r.damage));
 });
 
-// ---- spec section 4: counter matrix ----
-test('counter matrix reads', () => {
-  assert.equal(counterMult('swing', 'block').mult, 0.35);
-  assert.equal(counterMult('jab', 'block').mult, 0.5);
-  assert.equal(counterMult('jab', 'dodge').mult, 1.1);
-  assert.equal(counterMult('swing', 'dodge').mult, 0.7);
-  assert.ok(counterMult('haymaker', 'dodge').miss);
-  assert.ok(counterMult('haymaker', 'dodge').offBalance);
-  assert.ok(counterMult('haymaker', 'block').breaksGuard);
-  assert.equal(counterMult('swing', null).mult, 1.0);
+// ---- passive Block/Dodge retired: defense is active (Bone Guard + Rattle) ----
+test('no counter matrix: counterMult is a neutral shim', () => {
+  assert.equal(counterMult('swing', 'block').mult, 1.0);
+  assert.equal(counterMult('haymaker', 'dodge').mult, 1.0);
+  assert.ok(!counterMult('haymaker', 'dodge').miss);
+  // the defensive moves are gone from the action set entirely
+  assert.ok(!ACTIONS.block && !ACTIONS.dodge && !ACTIONS.brace);
+  // replaced by an active shield + an active debuff
+  assert.ok(ACTIONS.guard.shield && ACTIONS.rattle.debuff);
+});
+
+test('Bone Guard raises a Marrow-scaled absorb pool that soaks damage', () => {
+  const fight = createFight({
+    player: makeFighter({ name: 'P', stats: { power: 50, marrow: 60, wind: 90, reflex: 0, hype: 0 } }),
+    foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
+    seed: 5,
+  });
+  applyAction(fight, 'guard');
+  const shield = Math.round(16 + 60 * 0.15); // 25
+  assert.equal(fight.p.ward, shield);
+  const hpBefore = fight.p.hp;
+  const evs = []; dealDamage(fight, 'p', 10, evs);
+  assert.equal(fight.p.hp, hpBefore); // fully soaked
+  assert.equal(fight.p.ward, shield - 10);
+});
+
+test('Rattle weakens the foe and drains their stamina', () => {
+  const fight = createFight({
+    player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
+    foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
+    seed: 5,
+  });
+  const foeWind = fight.f.wind;
+  applyAction(fight, 'rattle');
+  assert.ok(fight.f.weaken && fight.f.weaken.pct >= 0.18);
+  assert.equal(fight.f.wind, foeWind - 12); // target's stamina jarred loose
 });
 
 // ---- spec section 5: signature ----
@@ -105,15 +130,13 @@ test('signature at Power 50 deals 210, resets hype', () => {
 });
 
 // ---- stagger economics ----
-test('guard break staggers: defender starts next turn with 1 AP', () => {
+test('stagger economics: a staggered fighter starts next turn with 1 AP', () => {
   const fight = createFight({
     player: makeFighter({ name: 'P', stats: { power: 60, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
     foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 80, wind: 50, reflex: 0, hype: 0 } }),
     seed: 3,
   });
-  fight.f.state = 'block';
-  applyAction(fight, 'haymaker');
-  assert.ok(fight.f.stagger);
+  fight.f.stagger = true; // (now applied by concussive, no longer by blocking a haymaker)
   endTurn(fight); // foe's turn begins
   assert.equal(fight.active, 'f');
   assert.equal(fight.ap, 1);
@@ -146,7 +169,7 @@ test('actionsFor respects range and hype gate', () => {
     seed: 3,
   });
   let ids = actionsFor(fight).map(a => a.id);
-  assert.ok(ids.includes('jab') && ids.includes('block') && !ids.includes('advance') && !ids.includes('signature'));
+  assert.ok(ids.includes('jab') && ids.includes('guard') && ids.includes('rattle') && !ids.includes('advance') && !ids.includes('signature'));
   fight.range = 'far';
   ids = actionsFor(fight).map(a => a.id);
   assert.ok(ids.includes('advance') && ids.includes('throwb') && !ids.includes('jab'));
@@ -235,10 +258,6 @@ test('gravecaller: bone bolt is any-range magic scaling off Hype', () => {
   const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
   assert.equal(r.damage, Math.round(16 * (1 + 0.6 * 1.5))); // 30
-  dummy.state = 'block'; // no counter event vs magic, but covering up blunts it 35%
-  const rb = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
-  assert.ok(!rb.miss && rb.damage === Math.round(16 * (1 + 0.6 * 1.5) * 0.65), String(rb.damage));
-  dummy.state = null;
   const fight = cf({ player: caster, foe: mf({ name: 'F', stats: MID }), seed: 21 });
   fight.range = 'far';
   assert.ok(acts(fight).some(a => a.id === 'bonebolt')); // castable at far
@@ -346,9 +365,8 @@ test('marrowlust heals 25% of haymaker damage', () => {
   const heal = fight.log; // events returned, not stored; recompute via hp
   assert.ok(fight.p.hp > 100, String(fight.p.hp));
 });
-test('titan ignores block and dodge, once per fight', () => {
+test('titan lands a big hit, once per fight', () => {
   const fight = cf({ player: mf({ name: 'P', stats: MID, talents: ['heavyhands', 'marrowlust', 'titan'] }), foe: mf({ name: 'F', stats: { ...MID, marrow: 90 } }), seed: 12 });
-  fight.f.state = 'dodge';
   const before = fight.f.hp;
   const evs = apply(fight, 'titan');
   assert.ok(evs.some(e => e.t === 'hit' && e.titan && e.damage > 0), JSON.stringify(evs));
@@ -357,9 +375,8 @@ test('titan ignores block and dodge, once per fight', () => {
   fight.ap = 2; fight.p.wind = 90;
   assert.ok(!acts(fight).some(a => a.id === 'titan')); // once per fight
 });
-test('flurry dumps all wind for 3 unblockable hits', () => {
+test('flurry dumps all wind for 3 hits', () => {
   const fight = cf({ player: mf({ name: 'P', stats: MID, talents: ['lightfeet', 'counterstep', 'flurry'] }), foe: mf({ name: 'F', stats: { ...MID, marrow: 90 } }), seed: 13 });
-  fight.f.state = 'block';
   const wind = fight.p.wind;
   assert.ok(wind >= 30);
   const before = fight.f.hp;
@@ -369,14 +386,20 @@ test('flurry dumps all wind for 3 unblockable hits', () => {
   assert.equal(fight.p.wind, 0);
   assert.ok(fight.f.hp < before);
 });
-test('counterstep punishes a whiffed haymaker', () => {
-  const fight = cf({ player: mf({ name: 'P', stats: MID }), foe: mf({ name: 'F', stats: MID, talents: ['lightfeet', 'counterstep'] }), seed: 14 });
-  fight.f.state = 'dodge';
-  const before = fight.p.hp;
-  const evs = apply(fight, 'haymaker');
-  assert.ok(evs.some(e => e.t === 'miss'));
-  assert.ok(evs.some(e => e.t === 'counter'), JSON.stringify(evs));
-  assert.ok(fight.p.hp <= before);
+test('counterstep punishes a missed enemy attack', () => {
+  // With Dodge retired, misses come from MISS_CHANCE/blind. Blind the attacker so
+  // the haymaker whiffs, and counterstep should fire the free counter-jab.
+  let sawMissWithCounter = false;
+  for (let seed = 1; seed <= 40 && !sawMissWithCounter; seed++) {
+    const fight = cf({ player: mf({ name: 'P', stats: MID }), foe: mf({ name: 'F', stats: MID, talents: ['lightfeet', 'counterstep'] }), seed });
+    fight.p.blind = { pct: 0.85, turns: 2 };
+    const evs = apply(fight, 'haymaker');
+    if (evs.some(e => e.t === 'miss')) {
+      assert.ok(evs.some(e => e.t === 'counter'), JSON.stringify(evs.map(e => e.t)));
+      sawMissWithCounter = true;
+    }
+  }
+  assert.ok(sawMissWithCounter, 'a blinded haymaker eventually whiffs and is countered');
 });
 test('ringmaster: big entrance + showstopper threshold + crowd work', () => {
   const rm = mf({ name: 'R', stats: MID, talents: ['crowdwork', 'bigentrance', 'showstopper'] });
@@ -543,7 +566,7 @@ test('totemic marrow regenerates extra wind each turn', () => {
   P.wind = 10;
   fight.active = 'f';
   endTurn(fight);
-  assert.equal(P.wind, 10 + 15 + 5, 'base regen + totemic 5');
+  assert.equal(P.wind, 10 + 20 + 5, 'base regen (20) + totemic 5');
 });
 
 test('six trees, six nodes each, unique ids, new moves registered', () => {
