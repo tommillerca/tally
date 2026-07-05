@@ -182,7 +182,8 @@ async function boot() {
   const frozen = await checkStreakFreeze();
   if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
+  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
+  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Daily Crate earned", 3600), 2400);
   await ingestHkFromUrl();
   backupNudge();
   nativeAutoSync();
@@ -2084,6 +2085,10 @@ function openHatchReveal(res, charWrap) {
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
+  // instant re-renders come from an in-page action (equip, salvage, etc.): keep the
+  // scroll position so equipping a piece doesn't bounce you back to the top. A tab
+  // switch renders WITHOUT instant, so it still starts fresh at the top.
+  const keepScroll = opts.instant ? body.scrollTop : null;
   const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges()]);
   const lvl = levelFor(xp);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
@@ -2404,6 +2409,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${badgesGridHtml(earned)}
       <div style="height:10px"></div>`;
     bindBadgeTaps(content);
+  }
+  // restore scroll for in-page re-renders (equip/salvage) so the view doesn't jump
+  if (keepScroll != null) {
+    body.scrollTop = keepScroll;
+    requestAnimationFrame(() => { body.scrollTop = keepScroll; });
   }
 }
 

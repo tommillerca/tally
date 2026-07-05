@@ -308,16 +308,25 @@ export async function awardDayCloseIfDue(targets) {
   const es = await db.byIndex('log', 'date', y);
   if (!es.length) return null;
   const tot = dayTotals(es);
-  let closed = false;
-  if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) {
+  const onBudget = tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6;
+  let closed = false, consoled = false;
+  if (onBudget) {
+    // locked in: the full reward
     const g = await award(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y);
     if (g) { await grantCrate('golden', 'dayclose-' + y); closed = true; }
+  } else {
+    // shame-free: you still logged the day, so you still earn — just a lighter
+    // reward, never a penalty ("you'll get 'em next time"). This rewards the ACT
+    // of tracking, not the calorie number, so it never favours eating less: an
+    // on-budget day always pays strictly more, and over/under both land here.
+    const g = await award(`dayeffort-${y}`, 'dayeffort', 25, 'Logged the day', y);
+    if (g) { await grantCrate('daily', 'dayeffort-' + y); consoled = true; }
   }
   if (targets.p && tot.p >= targets.p) await award(`protein-${y}`, 'protein', 40, 'Protein target hit', y);
   const meals = new Set(es.map(e => e.meal));
   if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${y}`, 'meals', 20, 'All meals logged', y);
   await evaluateBadges();
-  return closed ? { date: y } : null;
+  return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
 }
 
 // At boot: if yesterday broke a streak and a Streak Freeze is in the inventory,
