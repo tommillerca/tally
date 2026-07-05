@@ -412,6 +412,34 @@ async function renderToday(el) {
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
 
+  ${isToday ? `
+  <details class="q-collapse">
+    <summary>QUESTS${questTiers.some(tier => tier.quests.some(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; })) ? ' <i class="q-badge">!</i>' : ''}</summary>
+    <div class="q-card-body">
+    ${questTiers.map(tier => `
+    <div class="q-tier ${tier.period}">
+      <div class="q-tier-h">${tier.label}</div>
+      <div class="q-list">
+      ${tier.quests.map(q => {
+        const st = questState(q, tier.ctx);
+        const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
+        return `<div class="q-row ${tier.period !== 'day' ? 'longterm' : ''}">
+          <div class="q-main">
+            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}</span></div>
+            <div class="q-desc">${esc(q.desc)}</div>
+            <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
+          </div>
+          ${st.claimed ? '<span class="q-done">✓</span>'
+            : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
+            : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
+        </div>`;
+      }).join('')}
+      </div>
+    </div>`).join('')}
+    <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
+    </div>
+  </details>` : ''}
+
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
@@ -433,31 +461,6 @@ async function renderToday(el) {
       ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
-
-  ${isToday ? `
-  <div class="card q-card">
-    <div class="card-title">QUESTS <button class="link" id="qProg">Progress</button></div>
-    ${questTiers.map(tier => `
-    <div class="q-tier ${tier.period}">
-      <div class="q-tier-h">${tier.label}</div>
-      <div class="q-list">
-      ${tier.quests.map(q => {
-        const st = questState(q, tier.ctx);
-        const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
-        return `<div class="q-row ${tier.period !== 'day' ? 'longterm' : ''}">
-          <div class="q-main">
-            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}</span></div>
-            <div class="q-desc">${esc(q.desc)}</div>
-            <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
-          </div>
-          ${st.claimed ? '<span class="q-done">✓</span>'
-            : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
-            : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
-        </div>`;
-      }).join('')}
-      </div>
-    </div>`).join('')}
-  </div>` : ''}
 
   ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs) : ''}
   ${healthCardHtml(hk, isToday)}
@@ -2026,7 +2029,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const takenTal = await kvGet('talents', []);
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
 
-  const curtains = tab === 'wardrobe' && !reducedMotion && !opts.instant;
+  const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
     ${tab === 'wardrobe' ? `
     <div class="bh-hero mini">
@@ -2654,7 +2657,7 @@ async function openMap() {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-den-mark';
-          el.innerHTML = `<img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span>`;
+          el.innerHTML = `<span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
         }
@@ -2781,8 +2784,19 @@ async function openMap() {
     refreshWorld();
     // claims and day rollovers must surface even when standing still
     const worldTimer = setInterval(() => { if (body.isConnected) refreshWorld(); else clearInterval(worldTimer); }, 5000);
+    // occasionally a den STIRS (boss eyes glow + a shake) to give the map life —
+    // not a loop, just a random flicker; the full gate cinematic plays on entry.
+    const denAwaken = setInterval(() => {
+      if (!body.isConnected) { clearInterval(denAwaken); return; }
+      if (reducedMotion) return;
+      const marks = [...denMarkers.values()].filter(r => r.el && !r.el.classList.contains('awaken'));
+      if (!marks.length) return;
+      const pick = marks[Math.floor(Math.random() * marks.length)];
+      pick.el.classList.add('awaken');
+      setTimeout(() => pick.el && pick.el.classList.remove('awaken'), 2600);
+    }, 14000);
     const prevCleanupWT = cleanupExtras;
-    cleanupExtras = () => { prevCleanupWT(); clearInterval(worldTimer); };
+    cleanupExtras = () => { prevCleanupWT(); clearInterval(worldTimer); clearInterval(denAwaken); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -2907,13 +2921,14 @@ async function renderPit(wrap) {
     </div>
     <p class="note" style="margin:12px 2px 8px">Step into the ring. Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Pick your fight below.</p>
     <button class="btn ghost" id="buildBtn" style="margin:2px 0 6px">${ICONS.pit(18)} Shape your build · stats, weapon &amp; talents${unspent > 0 ? ` <i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
-    <div class="sect-h">Sparring · no stakes</div>
+    <details class="pit-sect"><summary>Sparring · no stakes</summary>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
         <div style="flex:1"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
         <button class="btn small ghost" data-spar="${m}" data-name="${name}">Fight</button>
       </div>`).join('')}
-    <div class="sect-h">The Ladder</div>
+    </details>
+    <details class="pit-sect" open><summary>The Ladder</summary>
     ${LADDER.map(r => {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
@@ -2923,13 +2938,15 @@ async function renderPit(wrap) {
         ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}">Fight</button>`}
       </div>`;
     }).join('')}
-    <div class="sect-h">Champion</div>
+    </details>
+    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion</summary>
     <div class="crate-row">
       <span class="crate-ico">${crateIcon('golden', 24)}</span>
       <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
       ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>
-    <div class="sect-h">Endless · The Gauntlet</div>
+    </details>
+    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet</summary>
     ${champBeaten ? `
     <p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b> — the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'}.${canNewRank ? '' : ` You've hit the current cap: <b>beat a world boss</b> to unlock rank ${ceiling + 1}.`}</p>
     <div class="crate-row">
@@ -2942,7 +2959,8 @@ async function renderPit(wrap) {
     <div class="crate-row" style="opacity:.75">
       <span class="crate-ico">🔒</span>
       <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
-    </div>`}`;
+    </div>`}
+    </details>`;
 
   $('#buildBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
