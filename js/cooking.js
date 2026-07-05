@@ -7,14 +7,34 @@
 import { kvGet, kvSet } from './db.js';
 
 export const INGREDIENTS = {
-  marrow:    { id: 'marrow',    name: 'Marrow',       icon: '🦴' },
-  graveroot: { id: 'graveroot', name: 'Graveroot',    icon: '🌿' },
-  ember:     { id: 'ember',     name: 'Ember Pepper',  icon: '🌶️' },
-  bog:       { id: 'bog',       name: 'Bog Mushroom',  icon: '🍄' },
-  sinew:     { id: 'sinew',     name: 'Sinew',         icon: '🥩' },
-  salt:      { id: 'salt',      name: 'Grave Salt',    icon: '🧂' },
+  marrow:    { id: 'marrow',    name: 'Marrow',        icon: '🦴', tier: 'common' },
+  graveroot: { id: 'graveroot', name: 'Graveroot',     icon: '🌿', tier: 'common' },
+  ember:     { id: 'ember',     name: 'Ember Pepper',  icon: '🌶️', tier: 'common' },
+  bog:       { id: 'bog',       name: 'Bog Mushroom',  icon: '🍄', tier: 'common' },
+  sinew:     { id: 'sinew',     name: 'Sinew',         icon: '🥩', tier: 'common' },
+  salt:      { id: 'salt',      name: 'Grave Salt',    icon: '🧂', tier: 'common' },
+  // RARE: only from RARE map spawns + world-boss dens. Gates the premium feast.
+  ectoplasm: { id: 'ectoplasm', name: 'Ectoplasm',     icon: '🫧', tier: 'rare' },
 };
 export const INGREDIENT_IDS = Object.keys(INGREDIENTS);
+export const COMMON_INGREDIENT_IDS = INGREDIENT_IDS.filter(id => INGREDIENTS[id].tier === 'common');
+export const RARE_INGREDIENT = 'ectoplasm';
+
+// which ingredients each spawn TYPE yields (thematic), so bone caches feel
+// different from coin piles. RARE spawns yield the rare ingredient.
+export const SPAWN_INGREDIENTS = {
+  bones: ['marrow', 'sinew'],
+  coins: ['salt', 'ember'],
+  crate: ['graveroot', 'bog'],
+};
+// Deterministic per spawn: same spot always yields the same drop, so the map can
+// show it and you can route to the ingredient you need.
+export function spawnIngredient(spawn) {
+  if (spawn.type === 'rare') return { id: RARE_INGREDIENT, n: 1 };
+  const pool = SPAWN_INGREDIENTS[spawn.type] || COMMON_INGREDIENT_IDS;
+  const h = [...spawn.id].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return { id: pool[h % pool.length], n: 1 };
+}
 
 // buff kinds:
 //   combat -> applies for the next `fights` Pit fights (damagePct / hype / regenPct / petFree)
@@ -30,6 +50,8 @@ export const RECIPES = [
     buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special has no cooldown, next 2 fights" },
   { id: 'zombie-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
     buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
+  { id: 'necro-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 180,
+    buff: { kind: 'combat', damagePct: 0.15, hype: 20, fights: 3 }, desc: '+15% damage AND +20 Hype start, next 3 fights (needs rare Ectoplasm)' },
 ];
 export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
 

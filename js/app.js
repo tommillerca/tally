@@ -21,8 +21,8 @@ import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
 import {
-  INGREDIENTS, INGREDIENT_IDS, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
+  spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
 } from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -717,7 +717,7 @@ async function openKitchen() {
           <div style="flex:1"><b>${esc(cook.recipe.name)}</b><small>${cook.ready ? 'Ready to serve!' : 'Cooking · ' + fmtCookTime(cook.remainingMs) + ' left'}</small></div>
           ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : '<span class="q-frac">🔥</span>'}</div>`
         : '<p class="note" style="margin:2px 2px 12px">The pot is empty. Pick a recipe below.</p>'}
-      <div class="sect-h">Ingredients</div>
+      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${'🪙'}</button></div>
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${INGREDIENTS[id].icon}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
@@ -733,6 +733,16 @@ async function openKitchen() {
     $('#collectDish', body)?.addEventListener('click', async () => {
       const dish = await collectDish();
       if (dish) { confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds); toast(`${dish.icon} ${dish.name} served! Buff active.`, 3200); }
+      render(); refresh();
+    });
+    $('#forageBtn', body)?.addEventListener('click', async () => {
+      const FORAGE_COST = 45;
+      if ((await coins()) < FORAGE_COST) { toast('Not enough coins to forage. Walk the Boneyard for free ingredients.', 3000); return; }
+      await coinsAdd(-FORAGE_COST);
+      const ing = COMMON_INGREDIENT_IDS[Math.floor(Math.random() * COMMON_INGREDIENT_IDS.length)];
+      await grantIngredient(ing);
+      popSound(S.sounds);
+      toast(`Foraged ${INGREDIENTS[ing].icon} ${INGREDIENTS[ing].name}.`, 2400);
       render(); refresh();
     });
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
@@ -2239,6 +2249,10 @@ async function openCrateReveal(result) {
             const c = CONSUMABLES[r.consumable];
             return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${consumableIcon(r.consumable, 34)}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
           }
+          if (r.type === 'ingredient') {
+            const ing = INGREDIENTS[r.ingredient];
+            return `<div class="reveal-card r-common"><span class="reveal-ico" style="font-size:30px">${ing.icon}</span><div><b>${esc(ing.name)}</b><small>Cooking ingredient</small></div></div>`;
+          }
           if (r.type === 'gear' || r.type === 'geardupe') {
             const g = r.gear, grar = RARITIES[g.rarity];
             const dup = r.type === 'geardupe';
@@ -2578,7 +2592,7 @@ async function openMap() {
         if (!rec) {
           const el = document.createElement('div');
           el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''}`;
-          el.innerHTML = spawnIcon(s.type, 20);
+          el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${INGREDIENTS[spawnIngredient(s).id].icon}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         }
@@ -2596,7 +2610,7 @@ async function openMap() {
       if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
       const ro = $('#mapReadout', body);
       if (ro) ro.innerHTML = nearest
-        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
+        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> ${(() => { const ing = INGREDIENTS[spawnIngredient(nearest).id]; return `<span class="ro-ing">${ing.icon} ${esc(ing.name)}</span>`; })()} · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
         : 'All spawns collected. Legend. Fresh bones at midnight.';
       const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
@@ -2629,9 +2643,8 @@ async function openMap() {
       await kvSet('hunt-enabled', true);
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       popSound(S.sounds);
-      // scavenging drops a cooking ingredient (RAREs drop 2); deterministic per spawn
-      const ingId = INGREDIENT_IDS[[...rec.spawn.id].reduce((a, c) => a + c.charCodeAt(0), 0) % INGREDIENT_IDS.length];
-      const ingN = rec.spawn.type === 'rare' ? 2 : 1;
+      // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give Ectoplasm)
+      const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
       await grantIngredient(ingId, ingN);
       // active feast buff boosts the spawn's coins too
       const fcm = await foodCoinMult();
@@ -3443,6 +3456,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
             extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
           }
           if (r.gearChoices) bossLoot = { key: denKey(foeCfg.week, foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
+          // world bosses are the other source of the RARE cooking ingredient
+          const eN = foeCfg.add ? 2 : 1;
+          await grantIngredient(RARE_INGREDIENT, eN);
+          extras.push(`${INGREDIENTS[RARE_INGREDIENT].icon} Ectoplasm${eN > 1 ? ' x' + eN : ''}`);
         } else coins = 10; // den already cracked this week: pocket change
       }
       else if (foeCfg.mode === 'rung') {

@@ -5,6 +5,7 @@
 import { db, kvGet, kvSet, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
+import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -84,7 +85,7 @@ export async function grantGear(gearId, source) {
   return g;
 }
 
-export const EGG_GOAL_STEPS = 5000;
+export const EGG_GOAL_STEPS = 8000;
 
 export async function lifetimeStepsSum() {
   const rows = await db.all('health');
@@ -230,6 +231,13 @@ export async function openCrate(invId) {
       const type = rng() < 0.5 ? 'freeze' : 'xp2';
       await grantConsumable(type, 'crate');
       results.push({ type: 'consumable', consumable: type });
+      continue;
+    }
+    // a no-walk fallback for cooking: crates sometimes hold a common ingredient
+    if (rng() < 0.28) {
+      const ing = COMMON_INGREDIENT_IDS[Math.floor(rng() * COMMON_INGREDIENT_IDS.length)];
+      await grantIngredient(ing);
+      results.push({ type: 'ingredient', ingredient: ing });
       continue;
     }
     const { item, dupe } = rollCosmetic(owned, floor, def.slotBias);

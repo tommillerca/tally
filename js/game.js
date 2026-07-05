@@ -266,8 +266,11 @@ export async function onWeighIn(date) {
 export const STEP_MILESTONES = [
   { at: 5000, coins: 20 },
   { at: 8000, coins: 30 },
-  { at: 10000, coins: 40, egg: true }, // the daily cap: hit it and you get a Step Egg
+  { at: 10000, coins: 40 }, // the daily cap
 ];
+// Step Eggs now take a genuinely big day (not every 10k), so pets aren't handed
+// out too fast. Combined with the higher hatch cost (EGG_GOAL_STEPS), eggs are rarer.
+export const EGG_STEP_THRESHOLD = 14000;
 export const STEP_OVER = [ // diminishing bonuses beyond the cap
   { at: 12500, coins: 12 }, { at: 15000, coins: 10 }, { at: 17500, coins: 8 }, { at: 20000, coins: 6 },
 ];
@@ -279,7 +282,12 @@ export async function onHealthSync(date, { steps } = {}) {
     for (const m of STEP_MILESTONES) {
       if (steps < m.at) break;
       const g = await award(`stepms-${date}-${m.at}`, 'stepms', 15, `${m.at.toLocaleString()} steps`, date);
-      if (g) { gained += g; coinsEarned += m.coins; if (m.egg) { await grantCrate('egg', 'steps-' + date); egg = true; } }
+      if (g) { gained += g; coinsEarned += m.coins; }
+    }
+    // a Step Egg only on a genuinely big day
+    if (steps >= EGG_STEP_THRESHOLD) {
+      const g = await award(`egg-${date}`, 'egg', 15, 'Big-day Step Egg', date);
+      if (g) { gained += g; await grantCrate('egg', 'steps-' + date); egg = true; }
     }
     for (const o of STEP_OVER) {
       if (steps < o.at) break;
