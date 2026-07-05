@@ -2827,9 +2827,16 @@ async function renderPit(wrap) {
 
   body.innerHTML = `
     <div class="pit-hero">
-      <div class="pit-hero-atmos"><span class="pit-flags"></span><span class="pit-flags two"></span><span class="pit-crowd"></span><span class="pit-torch l"></span><span class="pit-torch r"></span></div>
+      <div class="pit-hero-atmos">
+        <span class="pit-arch"></span>
+        <span class="pit-crowd"></span>
+        <span class="pit-torch l"></span><span class="pit-torch r"></span>
+        <span class="pit-banner l"></span><span class="pit-banner r"></span>
+        <span class="pit-fog"></span>
+      </div>
       <img class="pit-emblem" src="assets/brand/sword.png" alt="" draggable="false">
       <div class="pit-hero-title">THE PIT</div>
+      <div class="pit-quote">Many enter. Few leave.</div>
       <div class="pit-hero-sub">${d.maxHp} HP · ${d.maxWind} STAMINA${wins ? ` · ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
     </div>
     <p class="note" style="margin:12px 2px 8px">Step into the ring. Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Pick your fight below.</p>
@@ -2975,9 +2982,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
   body.innerHTML = `
     <div class="arena" id="arena">
       <div class="pit-crowd"></div>
-      <div class="pit-flags"></div>
-      <div class="pit-flags two"></div>
+      <div class="pit-banner l"></div><div class="pit-banner r"></div>
+      <div class="pit-torch l"></div><div class="pit-torch r"></div>
       <div class="pit-floor"></div>
+      <div class="pit-fog"></div>
       <div class="arena-floor"></div>
       <span class="venue-tag">${esc(venue)}</span>
       <div class="fighterG foe-side" id="foeG" data-target="f">
