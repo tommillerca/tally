@@ -16,6 +16,7 @@ const BUILDS = {
   gravecaller:   ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'raisedead', 'bonestorm'],
   gravewarden:   ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight'],
   boneshaman:    ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'totem', 'tempest'],
+  alchemist:     ['fireflask', 'potency', 'acidvial', 'swallow', 'concoction', 'catalyst', 'corrode', 'overdose', 'deathbomb'],
   // 12-point cross-tree menaces
   kitecaster:    ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'bonestorm', 'lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
   immortal:      ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight', 'crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind', 'showstopper'],
@@ -48,6 +49,9 @@ const POLICIES = {
     if (pick('titan')) return 'titan';
     if (pick('tempest')) return 'tempest';
     if (pick('bonestorm')) return 'bonestorm';
+    if (pick('deathbomb') && p.toxicity >= 40) return 'deathbomb'; // dump the bomb at high Toxicity
+    if (pick('acidvial') && !fight.f.sunder) return 'acidvial';
+    if (pick('fireflask') && !fight.f.burn) return 'fireflask';
     if (p.wind < 18 && pick('brace')) return 'brace';
     if (pick('firebolt') && !fight.f.burn) return 'firebolt';
     if (pick('frostbolt') && fight.f.wind < 30) return 'frostbolt';

@@ -139,33 +139,45 @@ export function denRewardLabel(r) {
   return bits.join(' + ');
 }
 
-// Open-world bosses drop LOOT CHOICES: two random pieces, keep one.
-// No class-locking: the gamble is the fun. Rarity floor rises with den tier.
-const DEN_GEAR_FLOOR = ['uncommon', 'uncommon', 'rare', 'rare', 'rare', 'legendary', 'legendary'];
-const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
-
-// maxLevel caps how far ahead a drop can be gated (current level + 3): loot you
-// can't equip for many levels kills momentum. We'd rather drop a LOWER tier you
-// can use soon than a prestige piece you can't touch, so the level cap wins over
-// the tier floor when they conflict.
-// preferArch: bias the FIRST choice toward the player's spec so a boss drop
-// always offers "one for your build" + a different alternative — a real spec pick.
+// Open-world bosses drop LOOT CHOICES: two random pieces, keep one. Rarity is a
+// tier-scaled CHANCE, not a guaranteed floor: even the toughest den only has a
+// ~30% legendary shot, so awesome gear stays a lucky event and players don't get
+// over-geared from nonstop drops. (Gear rarities are uncommon/rare/legendary.)
+const RARITY_TIERS = ['uncommon', 'rare', 'legendary'];
+// weights per den tier 0..6 → [uncommon, rare, legendary]
+const RARITY_WEIGHTS = [
+  [90, 10, 0], [80, 20, 0], [60, 38, 2], [45, 50, 5], [30, 60, 10], [18, 62, 20], [8, 62, 30],
+];
+function rollRarityIdx(rng, tier) {
+  const w = RARITY_WEIGHTS[Math.min(tier, RARITY_WEIGHTS.length - 1)];
+  let roll = rng() * (w[0] + w[1] + w[2]);
+  for (let i = 0; i < 3; i++) { roll -= w[i]; if (roll <= 0) return i; }
+  return 0;
+}
+// Pick a gear item AT the rolled rarity, stepping DOWN if none fits the filters
+// (level cap wins over rarity: a piece you can equip soon beats a locked prize).
+// preferArch biases toward the player's spec; avoidArch keeps the 2nd choice a
+// genuinely different pick; unowned pieces come first.
+function pickDenGear(rng, rIdx, { preferArch = null, avoidArch = null, exclude, maxLevel, ownedSet }) {
+  for (let r = rIdx; r >= 0; r--) {
+    let pool = GEAR_ITEMS.filter(g => g.rarity === RARITY_TIERS[r] && (g.minLevel || 1) <= maxLevel && !exclude.has(g.id) && (!avoidArch || g.arch !== avoidArch));
+    if (!pool.length) continue;
+    if (preferArch) { const a = pool.filter(g => g.arch === preferArch); if (a.length) pool = a; }
+    const fresh = pool.filter(g => !ownedSet.has(g.id));
+    const use = fresh.length ? fresh : pool;
+    return use[Math.floor(rng() * use.length)];
+  }
+  return null;
+}
 export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = null) {
-  const floor = TIER_IDX[DEN_GEAR_FLOOR[den.tier] || 'uncommon'];
-  const within = g => (g.minLevel || 1) <= maxLevel;
-  const fresh = GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && !ownedSet.has(g.id) && within(g));
-  let pool = fresh.length >= 2 ? fresh : GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && within(g));
-  if (pool.length < 2) pool = GEAR_ITEMS.filter(g => !ownedSet.has(g.id) && within(g)); // drop the tier floor
-  if (pool.length < 2) pool = GEAR_ITEMS.filter(within);
-  if (pool.length < 2) return null;
   const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
-  // first choice: prefer the player's specced archetype when the pool has one
-  const specPool = preferArch ? pool.filter(g => g.arch === preferArch) : [];
-  const firstPool = specPool.length ? specPool : pool;
-  const first = firstPool[Math.floor(rng() * firstPool.length)];
-  // second choice: a DIFFERENT archetype so the pick is a real decision
-  const alts = pool.filter(g => g.id !== first.id && g.arch !== first.arch);
-  const second = (alts.length ? alts : pool.filter(g => g.id !== first.id))[Math.floor(rng() * (alts.length ? alts.length : pool.length - 1))];
+  const exclude = new Set();
+  const first = pickDenGear(rng, rollRarityIdx(rng, den.tier), { preferArch, exclude, maxLevel, ownedSet });
+  if (!first) return null;
+  exclude.add(first.id);
+  // second: independent rarity roll, a DIFFERENT archetype so the pick matters
+  let second = pickDenGear(rng, rollRarityIdx(rng, den.tier), { avoidArch: first.arch, exclude, maxLevel, ownedSet });
+  if (!second) second = pickDenGear(rng, rollRarityIdx(rng, den.tier), { exclude, maxLevel, ownedSet });
   return second ? [first, second] : null;
 }
 

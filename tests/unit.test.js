@@ -658,7 +658,7 @@ test('gear tier sets: 2pc/4pc thresholds, level+ownership gated', () => {
   assert.ok(gear.setBonusLabel('slab', 2).length > 0 && gear.setBonusLabel('slab', 4).includes('·'));
 });
 function gearSetInfoSets(info) { return info.sets.filter(s => s.tiers.length); }
-test('den loot: two-piece gamble rolls distinct choices with tier floors', async () => {
+test('den loot: two-piece gamble rolls distinct, deterministic choices; legendary is a rare chance not a floor', async () => {
   const poi = await import('../js/poi.js');
   const wk = '2026-W27';
   const dens = poi.densNear(wk, 49.2827, -123.1207);
@@ -667,13 +667,20 @@ test('den loot: two-piece gamble rolls distinct choices with tier floors', async
     const pair = poi.rollDenLoot(den, wk, new Set());
     assert.ok(pair && pair.length === 2, den.id);
     assert.ok(pair[0].id !== pair[1].id, 'distinct pieces');
-    const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
-    const floor = den.tier >= 5 ? 3 : den.tier >= 2 ? 2 : 1;
-    assert.ok(pair.every(g => TIER_IDX[g.rarity] >= floor), `tier ${den.tier} floor holds`);
-    // deterministic
+    // deterministic (seeded by week + den)
     const again = poi.rollDenLoot(den, wk, new Set());
     assert.deepEqual(pair.map(g => g.id), again.map(g => g.id));
   }
+  // pacing: across all dens/weeks, legendary drops are the exception, not the rule
+  const RANK = { uncommon: 0, rare: 1, legendary: 2 };
+  let n = 0, leg = 0;
+  for (let i = 0; i < 300; i++) {
+    for (const d of poi.densNear(wk, 40 + i * 0.02, -74 - i * 0.02)) {
+      const p = poi.rollDenLoot(d, wk, new Set(), 20); if (!p) continue;
+      n++; if (p[0].rarity === 'legendary') leg++;
+    }
+  }
+  assert.ok(leg / n < 0.15, `legendary drop rate ${(leg / n * 100).toFixed(1)}% stays rare (was a guaranteed floor)`);
 });
 test('den loot never drops gear gated more than 3 levels ahead', async () => {
   const poi = await import('../js/poi.js');

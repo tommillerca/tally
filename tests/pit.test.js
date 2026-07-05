@@ -345,7 +345,7 @@ test('talent tiers gate by points-in-tree, ranks count (v69 deep trees)', () => 
   assert.ok(!canTakeTalent(taken, 'slab', idx('steadyhands')));
   // single-rank stays single
   assert.ok(!canTakeTalent(taken, 'slab', idx('heavyhands')));
-  assert.equal(TALENT_TREES.length, 6);
+  assert.equal(TALENT_TREES.length, 7); // +Alchemist (v77)
   assert.ok(TALENT_TREES.every(t => t.nodes.length >= 10), 'deep trees: 10+ nodes each');
   assert.ok(TALENT_TREES.every(t => t.nodes.reduce((a, n) => a + (n.ranks || 1), 0) >= 22), 'each tree takes 22+ points to max');
   const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
@@ -754,7 +754,7 @@ test('totemic marrow regenerates extra wind each turn', () => {
 });
 
 test('six trees, ten nodes each, unique ids, new moves registered', () => {
-  assert.equal(TALENT_TREES.length, 6);
+  assert.equal(TALENT_TREES.length, 7); // +Alchemist (v77)
   const ids = TALENT_TREES.flatMap(t => t.nodes.map(n => n.id));
   assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
   for (const t of TALENT_TREES) {
@@ -764,7 +764,34 @@ test('six trees, ten nodes each, unique ids, new moves registered', () => {
   }
   assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
   assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);
-  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest', 'rage', 'raisedead', 'totem']) assert.ok(ACTIONS[id], id + ' action exists');
+  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest', 'rage', 'raisedead', 'totem', 'fireflask', 'acidvial', 'swallow', 'deathbomb']) assert.ok(ACTIONS[id], id + ' action exists');
+  assert.ok(TALENT_TREES.find(t => t.id === 'alchemist'), 'the Alchemist tree exists');
+});
+
+test('v77 Alchemist: potions build Toxicity, Toxicity powers alchemy, it decays each turn', () => {
+  const base = { power: 0, marrow: 50, wind: 90, reflex: 0, hype: 80 };
+  const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  // Catalyst: identical flask hits harder when Toxicity is high
+  const lowTox = makeFighter({ name: 'A', stats: base, talents: ['fireflask', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'catalyst'] });
+  const hiTox = makeFighter({ name: 'B', stats: base, talents: ['fireflask', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'catalyst'] });
+  hiTox.toxicity = 100;
+  const lo = resolveHit({ move: 'fireflask', attacker: lowTox, defender: dummy, rng: noLuck }).damage;
+  const hi = resolveHit({ move: 'fireflask', attacker: hiTox, defender: dummy, rng: noLuck }).damage;
+  assert.ok(hi > lo, `high-toxicity flask ${hi} > low ${lo}`);
+  // throwing a flask builds Toxicity + applies BURN; Distill lowers the build
+  const P = makeFighter({ name: 'P', stats: base, talents: ['fireflask', 'acidvial', 'corrode'] });
+  const F = makeFighter({ name: 'F', stats: { power: 40, marrow: 80, wind: 60, reflex: 40, hype: 20 } });
+  const fight = createFight({ player: P, foe: F, seed: 4 });
+  apply(fight, 'fireflask');
+  assert.equal(P.toxicity, 18, 'flask built 18 toxicity');
+  assert.ok(F.burn, 'flask set a burn');
+  const foeWind = F.wind;
+  apply(fight, 'acidvial');
+  assert.ok(F.sunder, 'acid sundered'); assert.ok(F.wind < foeWind, 'corrode drained enemy stamina');
+  assert.equal(P.toxicity, 36);
+  // decays 10 at the start of my next turn
+  et(fight); et(fight);
+  assert.equal(P.toxicity, 26, 'toxicity bled off 10');
 });
 
 /* ============ v16: anti-exploit balance ============ */

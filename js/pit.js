@@ -162,6 +162,23 @@ export const TALENT_TREES = [
       { id: 'tempest', tier: 4, name: 'Tempest', move: true, desc: 'NEW MOVE: once per fight, a barrage of fire and frost: four elemental hits.' },
     ],
   },
+  {
+    id: 'alchemist', name: 'The Alchemist', tag: 'The Toxicologist', color: '#8bd450',
+    flavor: 'Bombs, vials and decoctions. Every potion builds TOXICITY, and Toxicity powers your alchemy — but it bleeds off each turn, so keep brewing.',
+    nodes: [
+      { id: 'fireflask', tier: 1, name: 'Fire Flask', move: true, desc: 'NEW MOVE: hurl a Fire Flask at ANY range — alchemical fire that BURNS. Builds Toxicity.' },
+      { id: 'potency', tier: 1, ranks: 5, name: 'Potency', desc: 'Your alchemy (flasks, vials, bombs) hits 3% harder per rank.' },
+      { id: 'acidvial', tier: 2, name: 'Acid Vial', move: true, desc: 'NEW MOVE: shatter an Acid Vial — damage and SUNDER (enemy takes +15% damage) for 2 turns.' },
+      { id: 'swallow', tier: 2, name: 'Swallow', move: true, desc: 'NEW MOVE: quaff a Swallow decoction — heal 12% max HP. 3 uses per fight.' },
+      { id: 'concoction', tier: 2, ranks: 3, name: 'Concoction', desc: 'Your potions cost 2 less Stamina per rank.' },
+      { id: 'hardyliver', tier: 2, ranks: 5, name: 'Hardy Liver', desc: '+5 max HP per rank — a constitution that shrugs off its own brews.' },
+      { id: 'catalyst', tier: 3, ranks: 5, name: 'Catalyst', desc: 'Every 10 Toxicity adds +2% alchemy damage per rank. Ride the high.' },
+      { id: 'corrode', tier: 3, name: 'Corrode', desc: 'Acid Vials also drain 12 of the enemy Stamina.' },
+      { id: 'distill', tier: 3, ranks: 3, name: 'Distill', desc: 'Your potions build 3 less Toxicity per rank (a cleaner brew).' },
+      { id: 'overdose', tier: 3, name: 'Overdose', desc: 'While your Toxicity is 60+, all your alchemy hits 15% harder.' },
+      { id: 'deathbomb', tier: 4, name: 'Fury Bomb', move: true, desc: 'NEW MOVE: once per fight, a three-stage alchemical bomb whose damage scales with your Toxicity.' },
+    ],
+  },
 ];
 
 export function talentPoints(level) { return Math.max(0, level - 1); }
@@ -339,6 +356,12 @@ export const ACTIONS = {
   rage:     { label: 'Rage', range: 'any', ap: 1, wind: 10, talent: 'rage' },
   raisedead:{ label: 'Raise Dead', range: 'any', ap: 2, wind: 22, talent: 'raisedead', magic: true, school: 'shadow' },
   totem:    { label: 'Spirit Totem', range: 'any', ap: 1, wind: 18, talent: 'totem', magic: true, school: 'nature' },
+  // The Alchemist (v77): thrown potions. Their own school 'alchemy' + a Toxicity
+  // ramp (own resource, NOT the kitchen). Toxicity powers alchemy damage, decays each turn.
+  fireflask:{ label: 'Fire Flask', range: 'any', ap: 1, wind: 18, base: 16, hype: 6, talent: 'fireflask', magic: true, school: 'alchemy' },
+  acidvial: { label: 'Acid Vial', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'acidvial', magic: true, school: 'alchemy' },
+  swallow:  { label: 'Swallow', range: 'any', ap: 1, wind: 18, talent: 'swallow', magic: true, school: 'alchemy' },
+  deathbomb:{ label: 'Fury Bomb', range: 'close', ap: 2, wind: 40, base: 12, talent: 'deathbomb', magic: true, school: 'alchemy' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
   bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
 };
@@ -351,6 +374,8 @@ export const MISS_CHANCE = {
 };
 const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rkOf = (f, id) => (f && f.tranks && f.tranks[id]) || 0; // multi-rank talent rank
+// Alchemist: potions build Toxicity (Distill brews cleaner), capped at 100.
+function addToxicity(me, n) { me.toxicity = Math.min(100, (me.toxicity || 0) + Math.max(0, n - rkOf(me, 'distill') * 3)); }
 
 export const REGEN_PER_TURN = 20; // higher now that Brace is gone: Stamina refills passively
 export const GUARD_BASE = 16;     // Bone Guard absorb floor; scales with Marrow
@@ -488,6 +513,11 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (a.school === 'shadow') dmg *= 1 + rkOf(attacker, 'darkstudy') * 0.03;
   if (a.school === 'holy') dmg *= 1 + rkOf(attacker, 'devotion') * 0.03;
   if (a.school === 'fire' || a.school === 'frost') dmg *= 1 + rkOf(attacker, 'attunement') * 0.03;
+  if (a.school === 'alchemy') {
+    dmg *= 1 + rkOf(attacker, 'potency') * 0.03;                                   // Potency
+    dmg *= 1 + Math.floor((attacker.toxicity || 0) / 10) * rkOf(attacker, 'catalyst') * 0.02; // Catalyst: ride the Toxicity
+    if (attacker.talents.has('overdose') && (attacker.toxicity || 0) >= 60) dmg *= 1.15;       // Overdose
+  }
   if (attacker.rage) dmg *= 1.35; // Blood Rage: all-in aggression
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
@@ -535,9 +565,10 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     foodPetHpPct: food?.petHpPct || 0,      // Bonemeal Kibble: pet HP up
     foodPetDamagePct: food?.petDamagePct || 0, // Bonemeal Kibble: pet damage up
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
-    tempestUsed: false, lastlightUsed: false,
+    tempestUsed: false, lastlightUsed: false, deathbombUsed: false,
     sigsUsed: 0, shoveCount: 0,
-    mendUses: 3,
+    mendUses: 3, swallowUses: 3,
+    toxicity: 0,      // Alchemist: builds from potions, powers alchemy dmg, decays each turn
     ward: 0,          // holy shield pool, absorbs damage first
     burn: null,       // {per, turns}
     bleed: null,      // {stacks, turns}
@@ -703,6 +734,8 @@ export function actionsFor(fight) {
     if (id === 'rage' && me.rage) continue;       // already raging
     if (id === 'raisedead' && me.minion) continue; // minion still up
     if (id === 'totem' && me.totem) continue;      // totem still planted
+    if (id === 'swallow' && me.swallowUses <= 0) continue;
+    if (id === 'deathbomb' && me.deathbombUsed) continue;
     if (id === 'ward' && me.ward >= 25) continue;
     if (id === 'guard' && (me.ward || 0) >= Math.round(GUARD_BASE + me.stats.marrow * 0.15)) continue;
     let windCost = windCostFor(me, id, a);
@@ -928,6 +961,53 @@ export function applyAction(fight, actionId) {
       events.push({ t: 'summon', who: fight.active, kind: 'totem' });
       break;
     }
+    case 'fireflask': {
+      const r = resolveHit({ move: 'fireflask', attacker: me, defender: them, rng: fight.rng });
+      dealDamage(fight, defWho, r.damage, events);
+      if (r.damage > 0) {
+        gainHype(me, a.hype || 0);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
+        them.burn = { per: 5 + rkOf(me, 'kindling'), turns: 2 };
+        events.push({ t: 'status', who: defWho, kind: 'burn' });
+      }
+      addToxicity(me, 18);
+      events.push({ t: 'hit', who: fight.active, move: 'fireflask', ...r, magic: true, toxicity: me.toxicity });
+      break;
+    }
+    case 'acidvial': {
+      const r = resolveHit({ move: 'acidvial', attacker: me, defender: them, rng: fight.rng });
+      dealDamage(fight, defWho, r.damage, events);
+      if (r.damage > 0) {
+        gainHype(me, a.hype || 0);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
+        them.sunder = { turns: 2 };
+        events.push({ t: 'status', who: defWho, kind: 'sunder' });
+        if (me.talents.has('corrode')) { them.wind = Math.max(0, them.wind - 12); events.push({ t: 'status', who: defWho, kind: 'chill' }); }
+      }
+      addToxicity(me, 18);
+      events.push({ t: 'hit', who: fight.active, move: 'acidvial', ...r, magic: true, toxicity: me.toxicity });
+      break;
+    }
+    case 'swallow': {
+      me.swallowUses -= 1;
+      const heal = Math.round(me.d.maxHp * 0.12 * healMult(me));
+      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      addToxicity(me, 10);
+      events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.swallowUses, toxicity: me.toxicity });
+      break;
+    }
+    case 'deathbomb': {
+      me.deathbombUsed = true;
+      addToxicity(me, 30);
+      for (let h = 0; h < 3 && them.hp > 0; h++) {
+        const r = resolveHit({ move: 'deathbomb', attacker: me, defender: them, rng: fight.rng });
+        dealDamage(fight, defWho, r.damage, events);
+        if (r.damage > 0) { gainHype(me, 5); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
+        events.push({ t: 'hit', who: fight.active, move: 'deathbomb', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed, toxicity: me.toxicity });
+      }
+      if (them.hp > 0) { them.burn = { per: 5 + rkOf(me, 'kindling'), turns: 2 }; events.push({ t: 'status', who: defWho, kind: 'burn' }); }
+      break;
+    }
     case 'bonestorm': {
       me.bonestormUsed = true;
       for (let h = 0; h < 3 && them.hp > 0; h++) {
@@ -1041,6 +1121,7 @@ export function endTurn(fight) {
     ticks.push({ t: 'heal', who: next, amount: h, food: true });
   }
   tickDots(me, next, ticks);
+  if (me.toxicity > 0) me.toxicity = Math.max(0, me.toxicity - 10); // Alchemist Toxicity bleeds off
   // v70 class-identity ticks, at the START of this fighter's turn
   if (me.rage && me.hp > 0) {
     me.hp = Math.max(1, me.hp - 6); // bleed the cost; never self-KO

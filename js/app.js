@@ -3429,6 +3429,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (f.rage) bits.push('RAGING');
       if (f.minion) bits.push('MINION');
       if (f.totem) bits.push('TOTEM');
+      if (f.toxicity > 0) bits.push(`TOXIC ${f.toxicity}`);
       if (bits.length) {
         chip.hidden = false;
         chip.textContent = bits.join(' · ');
@@ -3751,6 +3752,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (raise) h += btn(raise, { hint: player.minion ? 'minion already up' : 'raise a bone minion · 3t', glow: !player.minion });
       const tot = get('totem');
       if (tot) h += btn(tot, { hint: player.totem ? 'totem already up' : 'zaps + stamina · 3t', glow: !player.totem });
+      // Alchemist potions (build Toxicity, which powers alchemy damage)
+      const flask = get('fireflask');
+      if (flask) h += btn(flask, { hint: `~${expectedDamage('fireflask', player, null, foe)} dmg · burns · +tox`, weak: !!foe.burn });
+      const acid = get('acidvial');
+      if (acid) h += btn(acid, { hint: `~${expectedDamage('acidvial', player, null, foe)} dmg · sunders · +tox`, weak: !!foe.sunder });
+      const swal = get('swallow');
+      if (swal) h += btn(swal, { hint: `heal · ${player.swallowUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.swallowUses > 0 });
+      const dbomb = get('deathbomb');
+      if (dbomb) h += btn(dbomb, { hint: `bomb x3 · scales with Toxicity (${player.toxicity})`, glow: (player.toxicity || 0) >= 40 });
       return h;
     };
     // Blood Rage (Slab): any-range self-buff, offered in both rows
