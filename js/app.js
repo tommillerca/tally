@@ -2029,7 +2029,6 @@ function openHatchReveal(res, charWrap) {
     <div class="hatch-stage${reduced ? ' burst' : ''}" id="hatchStage">
       <div class="hatch-glow"></div>
       <div class="hatch-flash"></div>
-      <div class="hatch-pet r-${item.rarity}"><img src="${bhAsset(item)}" alt=""></div>
       <div class="bone-egg" id="boneEgg">
         <svg class="egg-cracks" viewBox="0 0 100 130" preserveAspectRatio="none" aria-hidden="true">
           <path class="ec" d="M50 8 L45 36 L55 58 L46 82"/>
@@ -2041,7 +2040,12 @@ function openHatchReveal(res, charWrap) {
     </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
   const revealHtml = item
     ? `<div class="lvl-stamp" style="font-size:30px">IT HATCHED!</div>
-       <div class="reveal-card r-${item.rarity}" style="margin:12px auto 0;max-width:320px"><img src="${bhAsset(item)}" alt=""><div><b>${esc(item.name)}</b><small>Pet · follows your bonehead</small><span class="rar-chip" style="color:${RARITIES[item.rarity].color}">${RARITIES[item.rarity].label}</span></div></div>`
+       <div class="hatch-prize r-${item.rarity}">
+         <img src="${bhAsset(item)}" alt="">
+         <b>${esc(item.name)}</b>
+         <small>Pet · follows your bonehead</small>
+         <span class="rar-chip" style="color:${RARITIES[item.rarity].color}">${RARITIES[item.rarity].label}</span>
+       </div>`
     : `<p class="note">+${res.coins} coins instead. Legend.</p>`;
   const wrap2 = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:22px">
@@ -2054,7 +2058,8 @@ function openHatchReveal(res, charWrap) {
     </div>`);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
-  const finish = () => { revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
+  // once the pet is revealed, retire the egg cinematic so the pet is centred
+  const finish = () => { if (stage) stage.style.display = 'none'; revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
   if (reduced || !item) {
     finish();
   } else {
@@ -2223,11 +2228,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     content.innerHTML = `
-      ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · pick one per drop</div>
-      ${pendingLoot.map(p => `
-        <div class="loot-pending">
+      ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
+      ${pendingLoot.map((p, i) => `
+        <div class="loot-pending" data-lootkey="${esc(p.key)}">
           <small>${esc(p.den)} dropped:</small>
           <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : '').join('')}</div>
+          <button class="btn loot-keep" disabled>Tap a piece to preview</button>
         </div>`).join('')}` : ''}
       ${eggs.length ? `<div class="sect-h" style="margin-top:2px">Eggs · hatch by walking</div>
       ${eggs.map(e => {
@@ -2267,16 +2273,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
           <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
       </div>`;
-    $$('.loot-pending .loot-card', content).forEach(card => card.addEventListener('click', async () => {
-      const entry = (await kvGet('denloot', [])).find(p => p.choices.includes(card.dataset.gear));
-      if (!entry) return;
-      const picked = await claimDenLoot(entry.key, card.dataset.gear);
-      if (!picked) return;
-      confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
-      popSound(S.sounds);
-      toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
-      renderCharacter(wrap, 'crates');
-    }));
+    $$('.loot-pending', content).forEach(scope => {
+      wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
+        toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
+        setTimeout(() => renderCharacter(wrap, 'crates'), 900);
+      });
+    });
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
@@ -2329,14 +2331,44 @@ async function renderCharacter(wrap, tab, opts = {}) {
 // kept as an alias: some entry points still ask for "progress"
 function openProgressSheet() { return openCharacter('progress'); }
 
+// what each gear-granted talent actually DOES (so loot can be compared, not just named)
+const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
+
 function lootCardHtml(g) {
   const rar = RARITIES[g.rarity] || RARITIES.uncommon;
-  return `<button class="loot-card r-${g.rarity}" data-gear="${g.id}">
+  return `<button class="loot-card r-${g.rarity}" data-gear="${g.id}" aria-pressed="false">
     <img src="${bhAsset(BH_BY_ID[g.artId])}" alt="">
     <b>${esc(g.name)}</b>
-    <span class="loot-stats">${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>
+    <span class="loot-stats">${gearLabel(g)}</span>
+    ${g.talent ? `<span class="loot-talent">⚡ ${esc(g.talentName)}</span><span class="loot-talent-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</span>` : ''}
     <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}</span>
   </button>`;
+}
+
+// Select-then-confirm for a boss loot drop: tapping a card PREVIEWS/selects it
+// (never commits), an explicit Keep button claims. `scope` wraps the .loot-cards
+// + a .loot-keep button. claimFn(gearId) -> picked|null; onDone(picked) after.
+function wireLootChoice(scope, claimFn, onDone) {
+  const cards = $$('.loot-card', scope);
+  const keep = $('.loot-keep', scope);
+  let sel = null, busy = false;
+  const select = card => {
+    sel = card.dataset.gear;
+    cards.forEach(c => { const on = c === card; c.classList.toggle('selected', on); c.setAttribute('aria-pressed', on); });
+    if (keep) { keep.disabled = false; keep.textContent = `Keep ${GEAR_BY_ID[sel] ? GEAR_BY_ID[sel].name : 'this piece'}`; }
+  };
+  cards.forEach(card => card.addEventListener('click', () => { if (!busy && !card.classList.contains('taken')) select(card); }));
+  keep?.addEventListener('click', async () => {
+    if (!sel || busy) return;
+    busy = true;
+    const picked = await claimFn(sel);
+    if (!picked) { busy = false; return; }
+    cards.forEach(c => { const won = c.dataset.gear === sel; c.classList.toggle('taken', won); c.classList.remove('selected'); c.disabled = true; });
+    if (keep) { keep.disabled = true; keep.textContent = `${picked.name} kept`; }
+    confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
+    popSound(S.sounds);
+    onDone?.(picked);
+  });
 }
 
 function petPanelHtml(petId, fighter) {
@@ -3730,10 +3762,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
           ${bossLoot ? `
           <div class="loot-choice">
-            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · TAP TO KEEP ONE</div>
+            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · TAP TO COMPARE</div>
             <div class="loot-cards">
               ${bossLoot.choices.map(g => lootCardHtml(g)).join('')}
             </div>
+            <button class="btn loot-keep" disabled>Tap a piece to preview</button>
           </div>` : ''}
           ${rewardHtml}
           <div style="height:12px"></div>
@@ -3742,16 +3775,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const overEl = $('.fight-over', body);
       if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
       if (bossLoot) {
-        $$('.loot-card', body).forEach(card => card.addEventListener('click', async () => {
-          const picked = await claimDenLoot(bossLoot.key, card.dataset.gear);
-          if (!picked) return;
-          $$('.loot-card', body).forEach(c => c.classList.toggle('taken', c === card));
-          $$('.loot-card', body).forEach(c => { c.disabled = true; });
-          confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
-          popSound(S.sounds);
+        wireLootChoice($('.loot-choice', body), gid => claimDenLoot(bossLoot.key, gid), picked => {
           toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
           const fd = $('#fightDone', body); if (fd) fd.textContent = 'Back to the map';
-        }));
+        });
       }
       $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
     }, fast ? 80 : 750);

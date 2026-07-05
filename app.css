@@ -1385,7 +1385,15 @@ body::before {
 @keyframes shardFly { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1) } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-92px) scale(0.4) } }
 .hatch-reveal { opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.35s ease; }
 .hatch-reveal.show { opacity: 1; transform: none; }
-@media (prefers-reduced-motion: reduce) { .bone-egg, .hatch-stage.burst .hatch-pet, .hatch-stage.burst .egg-shard { animation: none; } }
+/* the hatched pet, front & centre: big portrait, name + rarity below */
+.hatch-prize { display: grid; justify-items: center; gap: 5px; margin: 6px auto 0; }
+.hatch-prize img { width: 148px; height: 148px; object-fit: contain; filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.5)); }
+.hatch-prize.r-epic img { filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.85)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
+.hatch-prize.r-legendary img { filter: drop-shadow(0 0 15px rgba(255, 201, 97, 0.95)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
+.hatch-prize b { font-size: 20px; letter-spacing: -0.01em; }
+.hatch-prize small { color: var(--text-3); font-size: 12.5px; }
+.hatch-reveal.show .hatch-prize img { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@media (prefers-reduced-motion: reduce) { .bone-egg, .hatch-stage.burst .hatch-pet, .hatch-stage.burst .egg-shard, .hatch-reveal.show .hatch-prize img { animation: none; } }
 
 /* ===== Build page: armor / defense readout ===== */
 .def-readout { display: flex; gap: 10px; margin: 0 2px 6px; }
@@ -1644,11 +1652,18 @@ body::before {
 .loot-card img { width: 74px; height: 74px; object-fit: contain; }
 .loot-card b { font-size: 12px; line-height: 1.2; }
 .loot-card .loot-stats { font-size: 10.5px; font-weight: 800; color: var(--accent); }
+.loot-card .loot-talent { font-size: 10px; font-weight: 800; color: var(--carbs); letter-spacing: .01em; }
+.loot-card .loot-talent-desc { font-size: 9.5px; line-height: 1.25; color: var(--text-2); }
 .loot-card .rar-chip { font-size: 9px; }
 .loot-card.r-rare { border-color: #7cc4ff88; }
 .loot-card.r-legendary { border-color: #ffb454; box-shadow: 0 0 14px rgba(255, 180, 84, 0.35); }
+/* previewing a piece (not yet kept): blue highlight, distinct from the green "taken" */
+.loot-card.selected { border-color: var(--protein); box-shadow: 0 0 13px rgba(124, 196, 255, 0.45); }
 .loot-card.taken { border-color: var(--accent); box-shadow: 0 0 14px rgba(165, 232, 71, 0.4); }
 .loot-card:disabled:not(.taken) { opacity: 0.35; filter: grayscale(0.6); }
+.loot-keep { width: 100%; margin-top: 10px; }
+.loot-keep:disabled { opacity: 0.5; }
+.loot-pending .loot-keep { margin-top: 8px; }
 .loot-pending { margin-bottom: 12px; }
 .loot-pending small { color: var(--text-3); font-weight: 700; }
 

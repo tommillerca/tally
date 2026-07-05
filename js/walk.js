@@ -18,15 +18,15 @@ import { distanceM, bearingDeg } from './hunt.js';
 
 const STYLE = `
 .bh-walking .bh-anim, .map-you-av.bh-walking .bh-anim {
-  animation: bhWalkCycle 0.9s linear infinite;
+  animation: bhWalkCycle 1.2s ease-in-out infinite;
 }
 .bh-face-w { transform: scaleX(-1); }
 @keyframes bhWalkCycle {
-  0%   { transform: translateY(0) rotate(-2.4deg); }
-  25%  { transform: translateY(-5.5%) rotate(0deg); }
-  50%  { transform: translateY(0) rotate(2.4deg); }
-  75%  { transform: translateY(-5.5%) rotate(0deg); }
-  100% { transform: translateY(0) rotate(-2.4deg); }
+  0%   { transform: translateY(0) rotate(-1.1deg); }
+  25%  { transform: translateY(-2.6%) rotate(0deg); }
+  50%  { transform: translateY(0) rotate(1.1deg); }
+  75%  { transform: translateY(-2.6%) rotate(0deg); }
+  100% { transform: translateY(0) rotate(-1.1deg); }
 }
 @media (prefers-reduced-motion: reduce) {
   .bh-walking .bh-anim, .map-you-av.bh-walking .bh-anim { animation: none; }
