@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>grave rise harness</title>
+<link rel="stylesheet" href="../app.css">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; }
+  .grh-bar { position: fixed; top: 14px; left: 14px; z-index: 10; }
+  #stage { width: min(76vw, 340px); }
+</style>
+</head>
+<body>
+<div class="grh-bar"><button class="btn" id="play">Rise</button></div>
+<div id="stage"></div>
+<script type="module">
+const { mountGraveRise } = await import('../js/graverise.js?ts=' + Date.now());
+
+const rise = mountGraveRise(document.getElementById('stage'), { sounds: false });
+
+window.__gr = {
+  async play() {
+    await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]);
+    rise.play();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return true;
+  },
+  seek(t) {
+    const anims = (document.getAnimations ? document.getAnimations() : [])
+      .filter(a => a.effect && a.effect.target && rise.el.contains(a.effect.target));
+    for (const a of anims) {
+      a.pause();
+      try { a.currentTime = t * 1000; } catch { /* unseekable */ }
+    }
+    return anims.length > 0;
+  },
+};
+
+document.getElementById('play').addEventListener('click', () => rise.play());
+const q = new URLSearchParams(location.search);
+if (q.get('auto')) {
+  window.__gr.play();
+  const f = parseFloat(q.get('freeze'));
+  if (!Number.isNaN(f)) {
+    const t0 = Date.now();
+    const iv = setInterval(() => { window.__gr.seek(f); if (Date.now() - t0 > 3500) clearInterval(iv); }, 150);
+  }
+}
+</script>
+</body>
+</html>
