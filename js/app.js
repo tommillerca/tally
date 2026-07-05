@@ -18,7 +18,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
-import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel } from './gear.js';
+import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
@@ -2759,6 +2759,7 @@ async function buildFighter() {
   const gBonus = gearStats(gearLo, gOwned, level);
   const setInfo = gearSetInfo(gearLo, gOwned, level); // 2pc/4pc tier-set bonuses
   for (const k of Object.keys(gBonus)) gBonus[k] += (setInfo.stats[k] || 0);
+  const gArmor = gearArmor(gearLo, gOwned, level); // {armor, spellArmor} points from worn gear
   const gearedBase = {};
   for (const k of Object.keys(baseStats)) gearedBase[k] = baseStats[k] + (gBonus[k] || 0);
   const stats = allocatedStats(gearedBase, alloc);
@@ -2781,7 +2782,7 @@ async function buildFighter() {
     battlePet = buildBattlePet(eqForPet.C, pl, picks);
     petMeta = { id: eqForPet.C, level: pl, picks };
   }
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2902,7 +2903,7 @@ const PIT_VENUES = {
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food });
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food, gearArmor: fighter.gearArmor });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
@@ -3579,12 +3580,17 @@ async function renderTalents(wrap) {
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const points = talentPoints(lvl.level);
   const unspent = Math.max(0, points - taken.size);
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents), fighter.gearArmor);
 
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
   const statBlock = `
     <div class="sect-h">Your Fighter · ${d.maxHp} HP · ${d.maxWind} Stamina</div>
     <p class="note" style="margin:2px 2px 10px">Your base stats grow from your real habits. Spend <b>training points</b> to lean into a stat and shape your build. Every point here is a choice about how you fight.</p>
+    <div class="def-readout">
+      <span class="def-chip"><small>Armor</small><b>${Math.round(d.armor * 100)}%</b><i>vs melee</i></span>
+      <span class="def-chip"><small>Spell Armor</small><b>${Math.round(d.spellArmor * 100)}%</b><i>vs magic</i></span>
+    </div>
+    <p class="note" style="margin:0 2px 10px">Armor cuts incoming damage by type. Physical Armor grows from Marrow, Spell Armor from Reflex, and worn gear adds to both.</p>
     <div class="stat-build">
       ${STAT_META.map(m => {
         const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;

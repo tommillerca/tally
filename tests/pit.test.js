@@ -4,7 +4,7 @@ import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
-  petActionsFor, applyPetAction, dealDamage,
+  petActionsFor, applyPetAction, dealDamage, armorDR,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -27,11 +27,11 @@ test('derived pools at stat=50 match the spec table', () => {
 });
 
 // ---- spec section 8: the worked example ----
-test('worked example: P60 Bonecrusher haymaker = base*power*weapon (no passive defense)', () => {
+test('worked example: P60 Bonecrusher haymaker = base*power*weapon (vs a no-armor dummy)', () => {
   const attacker = makeFighter({ name: 'A', stats: { power: 60, marrow: 50, wind: 50, reflex: 50, hype: 0 }, weaponId: 'bonecrusher' });
-  const defender = makeFighter({ name: 'D', stats: { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 0 } });
+  const defender = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = resolveHit({ move: 'haymaker', attacker, defender, rng: noLuck });
-  // 40 base * powerMult(1.9) * bonecrusher haymaker mult(1.24) = 94.24 -> 94
+  // 40 base * powerMult(1.9) * bonecrusher haymaker mult(1.24) = 94.24 -> 94 (dummy has 0 armor)
   assert.equal(r.damage, 94, String(r.damage));
   // wind cost with Bonecrusher penalty: 35 * 1.3 = 45.5 -> 46
   assert.equal(Math.round(35 * WEAPONS.bonecrusher.windCostMult('haymaker')), 46);
@@ -103,6 +103,28 @@ test('Bone Guard raises a Marrow-scaled absorb pool that soaks damage', () => {
   assert.equal(fight.p.ward, shield - 10);
 });
 
+test('armor: Marrow blunts physical, Reflex blunts magic, gear adds on top', () => {
+  // physical armor from Marrow
+  const beefy = makeFighter({ name: 'B', stats: { power: 0, marrow: 100, wind: 0, reflex: 0, hype: 0 } });
+  const glassy = makeFighter({ name: 'G', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  assert.ok(beefy.d.armor > 0.2 && glassy.d.armor === 0, `${beefy.d.armor} vs ${glassy.d.armor}`);
+  // a physical hit lands softer on the armored target
+  const atk = makeFighter({ name: 'A', stats: { power: 60, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const hard = resolveHit({ move: 'swing', attacker: atk, defender: beefy, rng: noLuck }).damage;
+  const soft = resolveHit({ move: 'swing', attacker: atk, defender: glassy, rng: noLuck }).damage;
+  assert.ok(hard < soft, `armored ${hard} < bare ${soft}`);
+  // Reflex gives SPELL armor, not physical; a caster is blunted by it
+  const nimble = makeFighter({ name: 'N', stats: { power: 0, marrow: 0, wind: 0, reflex: 100, hype: 0 } });
+  assert.ok(nimble.d.spellArmor > 0.2 && nimble.d.armor === 0);
+  const caster = makeFighter({ name: 'C', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 80 }, talents: ['bonebolt'] });
+  const boltHard = resolveHit({ move: 'bonebolt', attacker: caster, defender: nimble, rng: noLuck }).damage;
+  const boltSoft = resolveHit({ move: 'bonebolt', attacker: caster, defender: glassy, rng: noLuck }).damage;
+  assert.ok(boltHard < boltSoft, `spell-armored ${boltHard} < bare ${boltSoft}`);
+  // gear armor stacks on the base and stays capped
+  const geared = makeFighter({ name: 'GA', stats: { power: 0, marrow: 100, wind: 0, reflex: 0, hype: 0 }, gearArmor: { armor: 200, spellArmor: 0 } });
+  assert.ok(geared.d.armor > beefy.d.armor && geared.d.armor <= 0.40);
+});
+
 test('Rattle weakens the foe and drains their stamina', () => {
   const fight = createFight({
     player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
@@ -116,7 +138,7 @@ test('Rattle weakens the foe and drains their stamina', () => {
 });
 
 // ---- spec section 5: signature ----
-test('signature at Power 50 deals 210, resets hype', () => {
+test('signature at Power 50 deals 210 pre-armor, resets hype', () => {
   const fight = createFight({
     player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 50, reflex: 0, hype: 50 } }),
     foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 90, wind: 50, reflex: 0, hype: 0 } }),
@@ -125,7 +147,8 @@ test('signature at Power 50 deals 210, resets hype', () => {
   fight.p.hype = 100;
   const before = fight.f.hp;
   applyAction(fight, 'signature');
-  assert.equal(before - fight.f.hp, 210);
+  // 210 raw, blunted by the foe's physical armor (marrow 90 -> 54 pts)
+  assert.equal(before - fight.f.hp, Math.round(210 * (1 - armorDR(90 * 0.6))));
   assert.equal(fight.p.hype, 0);
 });
 
@@ -298,7 +321,7 @@ test('bonebreaker sunder makes the enemy take +15%', () => {
   apply(fight, 'haymaker');
   assert.ok(foe.sunder, 'sunder applied');
   const r = rh({ move: 'jab', attacker: slab, defender: foe, rng: noLuck });
-  assert.equal(r.damage, Math.round(10 * 1.75 * 1.15));
+  assert.equal(r.damage, Math.round(10 * 1.75 * 1.15 * (1 - armorDR(90 * 0.6))));
 });
 test('bleed out stacks and ticks at turn start', () => {
   const grey = mf({ name: 'G', stats: MID, talents: ['lightfeet', 'counterstep', 'kite', 'bleedout'] });
@@ -609,7 +632,7 @@ test('signature encore falloff: 0.75x per prior use', () => {
   const d1 = applyAction(fight, 'signature').find(e => e.t === 'hit').damage;
   P.hype = 100; fight.ap = 3;
   const d2 = applyAction(fight, 'signature').find(e => e.t === 'hit').damage;
-  assert.equal(d2, Math.round(120 * P.d.powerMult * 0.75));
+  assert.equal(d2, Math.round(120 * P.d.powerMult * 0.75 * (1 - armorDR(99 * 0.6))));
   assert.ok(d2 < d1, 'second showing hits softer');
 });
 

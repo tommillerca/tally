@@ -157,6 +157,22 @@ export function setBonusLabel(arch, tier) {
   return `${statBundle(b.fourStat || {})} · ${TALENT_NAME[b.fourTalent] || b.fourTalent}`;
 }
 
+// Worn gear also grants ARMOR points on top of the base (Marrow/Reflex) armor.
+// Heavy/melee archetypes plate you against physical hits; caster archetypes ward
+// you against spells, so your gear choice answers "what am I about to face".
+const ARMOR_PTS = { common: 4, uncommon: 8, rare: 14, legendary: 22 };
+const SPELL_ARCH = new Set(['gravecaller', 'gravewarden', 'boneshaman']); // casters -> spell armor
+export function gearArmor(loadout = {}, ownedGearIds = new Set(), level = 1) {
+  let armor = 0, spellArmor = 0;
+  for (const slot of GEAR_SLOTS) {
+    const g = GEAR_BY_ID[loadout[slot]];
+    if (!g || g.slot !== slot || !ownedGearIds.has(g.id) || level < g.minLevel) continue;
+    const pts = Math.round((ARMOR_PTS[g.rarity] || 0) * (SLOT_WEIGHT[slot] || 0.5));
+    if (SPELL_ARCH.has(g.arch)) spellArmor += pts; else armor += pts;
+  }
+  return { armor, spellArmor };
+}
+
 // Count equipped/owned/at-level pieces per archetype and total the set bonuses.
 export function gearSetInfo(loadout = {}, ownedGearIds = new Set(), level = 1) {
   const counts = {};

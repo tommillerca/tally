@@ -31,14 +31,14 @@ export const STAT_META = [
   { key: 'power', label: 'Power', role: 'attack damage', fedBy: 'hitting your protein target',
     combat: 'Multiplies every physical hit (Jab, Swing, Haymaker) and your Signature.',
     spec: 'Bruisers who win with raw melee.' },
-  { key: 'marrow', label: 'Marrow', role: 'max HP', fedBy: 'streaks + closing days on budget',
-    combat: 'Your HP pool. More Marrow means more hits before you drop.',
+  { key: 'marrow', label: 'Marrow', role: 'max HP + armor', fedBy: 'streaks + closing days on budget',
+    combat: 'Your HP pool, and your physical Armor (cuts incoming melee damage).',
     spec: 'Tanks and clerics who outlast the fight.' },
   { key: 'wind', label: 'Stamina', role: 'move fuel per turn', fedBy: 'steps + active burn',
     combat: 'Move fuel. Every action spends Stamina; run dry and you can only Jab or catch your breath.',
     spec: 'Fast fighters who chain lots of moves.' },
-  { key: 'reflex', label: 'Reflex', role: 'crits + glances', fedBy: 'Boneyard collecting + step eggs',
-    combat: 'More crits on your hits, and more incoming hits glance off you for half.',
+  { key: 'reflex', label: 'Reflex', role: 'crits + spell armor', fedBy: 'Boneyard collecting + step eggs',
+    combat: 'More crits on your hits, hits glance off you for half, and your Spell Armor (cuts incoming magic).',
     spec: 'Duelists who win on finesse.' },
   { key: 'hype', label: 'Hype', role: 'spell power + signature', fedBy: 'quests + logging variety',
     combat: 'Powers your spells (bolts, heals) and fills your Signature meter faster.',
@@ -153,8 +153,17 @@ export function canTakeTalent(taken, treeId, nodeIdx) {
 
 /* ================= derived pools (spec §1) ================= */
 
-export function derived(stats, weapon = WEAPONS.starter, talents = null) {
+// Armor points -> damage-reduction fraction, with diminishing returns and a hard
+// cap so nobody becomes unhittable. 60 pts ~ 33%, capped at 40%.
+export const ARMOR_K = 120;
+export const ARMOR_CAP = 0.40;
+export function armorDR(points) { return Math.min(ARMOR_CAP, Math.max(0, points) / (Math.max(0, points) + ARMOR_K)); }
+
+export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArmor = null) {
   const t = talents || new Set();
+  // Blend: base armor from stats (Marrow -> physical, Reflex -> spell) + gear on top.
+  const physPts = stats.marrow * 0.6 + (gearArmor?.armor || 0);
+  const spellPts = stats.reflex * 0.6 + (gearArmor?.spellArmor || 0);
   return {
     maxHp: Math.round(150 + stats.marrow * 3) + (t.has('thickskull') ? 45 : 0),
     maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0),
@@ -163,6 +172,9 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null) {
     magicMult: 1 + (stats.hype / 100) * 1.5 + (weapon.magicBonus || 0),
     critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0)),
     glanceChance: (stats.reflex / 100) * 0.25,
+    armor: armorDR(physPts),        // cuts incoming physical damage
+    spellArmor: armorDR(spellPts),  // cuts incoming magic damage
+    armorPts: Math.round(physPts), spellArmorPts: Math.round(spellPts),
   };
 }
 
@@ -375,6 +387,8 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
   if (defender.marked) dmg *= 1.07; // imp Death's Mark
+  // armor: physical hits blunted by Armor, magic by Spell Armor
+  dmg *= (1 - (a.magic ? (defender.d.spellArmor || 0) : (defender.d.armor || 0)));
   if (attacker.pet && attacker.pet.passive === 'yourDamage') dmg *= (1 + attacker.pet.passivePct);
   if (defender.pet && defender.pet.passive === 'damageTaken') dmg *= (1 - defender.pet.passivePct);
   if (attacker.foodDamagePct) dmg *= (1 + attacker.foodDamagePct); // Marrow Stew etc.
@@ -395,15 +409,16 @@ export function expectedDamage(move, attacker, defenderState, defender) {
   if (counter.miss) return 0;
   const raw = a.base * (a.magic ? attacker.d.magicMult : attacker.d.powerMult) * (a.magic ? 1 : attacker.weapon.mult(move, attacker.stats)) * counter.mult;
   const acc = 1 - (MISS_CHANCE[move] || 0);
-  return Math.round(raw * acc * (1 + attacker.d.critChance * 0.5) * (1 - (defender ? defender.d.glanceChance : 0) * 0.5));
+  const armorCut = defender ? (1 - (a.magic ? (defender.d.spellArmor || 0) : (defender.d.armor || 0))) : 1;
+  return Math.round(raw * acc * armorCut * (1 + attacker.d.critChance * 0.5) * (1 - (defender ? defender.d.glanceChance : 0) * 0.5));
 }
 
 /* ================= fight state ================= */
 
-export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null, food = null }) {
+export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null, food = null, gearArmor = null }) {
   const weapon = WEAPONS[weaponId] || WEAPONS.starter;
   const tset = new Set(talents);
-  const d = derived(stats, weapon, tset);
+  const d = derived(stats, weapon, tset, gearArmor);
   return {
     name, stats, weapon, d, outfit, talents: tset,
     pet: pet ? { ...pet, specialCd: 0, lastStandUsed: false } : null,
@@ -640,7 +655,7 @@ export function applyAction(fight, actionId) {
       const boost = me.talents.has('showstopper') ? 1.25 : 1;
       const encore = Math.pow(0.75, me.sigsUsed); // the crowd's seen this one before
       me.sigsUsed += 1;
-      const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost * encore);
+      const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost * encore * (1 - (them.d.armor || 0)));
       dealDamage(fight, defWho, dmg, events);
       events.push({ t: 'hit', who: fight.active, move: 'signature', damage: dmg, crit: false, glance: false, signature: true });
       break;
