@@ -28,6 +28,7 @@ import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
+import { refreshPitEnergy, spendPitFight, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -3097,6 +3098,9 @@ async function renderPit(wrap) {
   const wins = xpRows.filter(r => r.type === 'fight').length;
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
+  const energy = await refreshPitEnergy();     // hybrid: free floor + Vigor from logging/steps
+  const tapped = energy.ready <= 0;
+  const gate = tapped ? 'disabled' : '';
 
   body.innerHTML = `
     <div class="pit-hero">
@@ -3114,6 +3118,15 @@ async function renderPit(wrap) {
     </div>
     <p class="note" style="margin:12px 2px 8px">Step into the ring. Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Pick your fight below.</p>
     <button class="btn ghost" id="buildBtn" style="margin:2px 0 6px">${ICONS.pit(18)} Shape your build · stats, weapon &amp; talents${unspent > 0 ? ` <i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
+    <div class="pit-energy ${tapped ? 'empty' : ''}">
+      <span class="pe-ico">${ICONS.pit(20)}</span>
+      <div style="flex:1">
+        <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} ready</b>
+        <div class="pe-bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · rest up! log a meal or take a walk to earn Vigor' : ' · earn more by logging food &amp; walking'}</small>
+      </div>
+    </div>
+    <p class="note" style="margin:6px 2px 8px">Sparring is always free. Ladder, Champion and Gauntlet fights cost one charge: ${FREE_FIGHTS} free a day, then Vigor you earn by logging food and getting your steps.</p>
     <details class="pit-sect"><summary>Sparring · no stakes</summary>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
@@ -3128,7 +3141,7 @@ async function renderPit(wrap) {
       return `<div class="crate-row">
         <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
         <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · first win: ${r.coins} coins + ${r.xp} XP</small></div>
-        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}">Fight</button>`}
+        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>Fight</button>`}
       </div>`;
     }).join('')}
     </details>
@@ -3136,7 +3149,7 @@ async function renderPit(wrap) {
     <div class="crate-row">
       <span class="crate-ico">${crateIcon('golden', 24)}</span>
       <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
-      ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
+      ${champOpen ? `<button class="btn small" id="champBtn" ${gate}>Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>
     </details>
     <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet</summary>
@@ -3145,7 +3158,7 @@ async function renderPit(wrap) {
     <div class="crate-row">
       <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:var(--accent)">${fightRank}</span>
       <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `rematch · +${fightFoe.repeatCoins} coins`}</small></div>
-      <button class="btn small" id="endlessBtn">Fight</button>
+      <button class="btn small" id="endlessBtn" ${gate}>Fight</button>
     </div>
     ${canNewRank ? '' : `<button class="link" id="endlessGate" style="margin:4px 2px 0">Go beat a world boss to climb higher →</button>`}`
     : `
@@ -3157,16 +3170,22 @@ async function renderPit(wrap) {
 
   $('#buildBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
+  // sparring is always free (practice); real fights spend the hybrid energy
+  const startPit = async (foeCfg) => {
+    const spent = await spendPitFight();
+    if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
+    openFight(wrap, fighter, foeCfg);
+  };
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
     start({ mode: 'spar', name: b.dataset.name, mult: Number(b.dataset.spar) })));
   $$('[data-rung]', body).forEach(b => b.addEventListener('click', () => {
     const r = LADDER[Number(b.dataset.rung) - 1];
-    start({ mode: 'rung', rung: r.rung, name: r.name, mult: r.mult, coins: r.coins, repeatCoins: r.repeatCoins, xp: r.xp, done: beaten.has(`pitrung-${r.rung}`) });
+    startPit({ mode: 'rung', rung: r.rung, name: r.name, mult: r.mult, coins: r.coins, repeatCoins: r.repeatCoins, xp: r.xp, done: beaten.has(`pitrung-${r.rung}`) });
   }));
   $('#champBtn', body)?.addEventListener('click', () =>
-    start({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
+    startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
-    start({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet' }));
+    startPit({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet' }));
   $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); history.back(); setTimeout(openMap, 250); });
 }
 
