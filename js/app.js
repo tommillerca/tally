@@ -18,6 +18,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
+import * as social from './social.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
@@ -184,7 +185,11 @@ async function boot() {
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
-  onAppResume(() => { nativeAutoSync(); });
+  // social: push the game snapshot + pull server grants (opt-in, throttled, silent)
+  social.initFromQuery().then(() => social.autoSync(socialSnapshot, APP_SOCIAL_V).then(r => {
+    if (r && r.applied > 0) { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived. Check your Backpack.`, 3600); refresh(); }
+  }));
+  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V); });
 
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -1600,8 +1605,24 @@ async function renderSettings(el) {
   const units = S.settings.units;
   const lastExport = await kvGet('lastExportAt', 0);
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
+  const apiConfigured = !!(await social.apiBase());
+  const me = apiConfigured ? await social.socialMe() : null;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
+
+  ${apiConfigured ? `
+  <div class="card">
+    <div class="card-title">THE CREW · ${me ? 'ONLINE' : 'GO ONLINE'}</div>
+    ${me ? `
+    <div class="crew-id">
+      <div class="crew-handle">${esc(me.handle)}</div>
+      <button class="crew-code" id="copyCode" title="Copy friend code">${esc(me.friendCode)} ⧉</button>
+    </div>
+    <p class="note" style="margin:8px 0 0">Share your friend code so friends can add you. Your game profile syncs when you open the app. Food logs, weight, and location never leave this phone. Your backup export carries your account: restore it on a new phone to keep this identity.</p>`
+    : `
+    <p class="note" style="margin:0 0 10px">Go online to join the Crew: friend codes, and soon trading and PvP. Only your game profile syncs (level, stats, outfit, gear, badges). Food logs, weight, and location <b>never</b> leave this phone.</p>
+    <button class="btn" id="goOnlineBtn">Go Online</button>`}
+  </div>` : ''}
 
   <div class="card">
     <div class="card-title">REDEEM A CODE</div>
@@ -1676,6 +1697,22 @@ async function renderSettings(el) {
     S.settings.targets = { ...S.settings.targets, kcal: Math.round(kcal), p: Math.round(p2 || 0), c: Math.round(c || 0), f: Math.round(f || 0) };
     await kvSet('settings', S.settings);
     toast('Targets saved');
+  });
+  $('#goOnlineBtn', el)?.addEventListener('click', async () => {
+    const btn = $('#goOnlineBtn', el);
+    btn.disabled = true; btn.textContent = 'Connecting...';
+    const r = await social.goOnline().catch(() => ({ ok: false, reason: 'network' }));
+    if (!r.ok) { toast('Could not reach the Crew server. Try again in a bit.'); btn.disabled = false; btn.textContent = 'Go Online'; return; }
+    confettiRain(70); levelSound(S.sounds);
+    await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
+    const pulled = await social.pullGrants().catch(() => null);
+    toast(`You're online as ${r.me.handle}!${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    renderSettings(el);
+  });
+  $('#copyCode', el)?.addEventListener('click', async () => {
+    const me = await social.socialMe();
+    try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); }
+    catch { toast(me.friendCode, 4000); }
   });
   $('#redeemBtn', el)?.addEventListener('click', async () => {
     const res = await redeemCode($('#redeemInput', el).value);
@@ -2891,6 +2928,27 @@ async function buildFighter() {
     petMeta = { id: eqForPet.C, level: pl, picks };
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
+}
+
+// The GAME-ONLY profile snapshot that syncs when online. Level, stats, outfit
+// ids (art renders locally on friends' devices), gear, badges. Deliberately
+// NEVER: food logs, weights, location, health data.
+const APP_SOCIAL_V = 'v68';
+async function socialSnapshot() {
+  const [fighter, eq, xp, gOwned, earned] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds()]);
+  const lvl = levelFor(xp);
+  return {
+    level: lvl.level,
+    levelName: lvl.name,
+    stats: fighter.stats,
+    talents: fighter.talents,
+    weapon: fighter.loadout,
+    outfit: eq,
+    gearLo: fighter.gearLo,
+    gear: [...gOwned].slice(0, 400),
+    badges: earned.size ?? [...earned].length,
+    pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level } : null,
+  };
 }
 
 function pitBeatKeys(xpRows) {

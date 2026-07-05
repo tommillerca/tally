@@ -1,0 +1,18 @@
+# Boneheadz Gym social API (Cloudflare Worker + D1).
+# Local dev needs NO account:  npm run db:local && npm run dev
+# Production deploy (once Tom's Cloudflare account exists):
+#   npx wrangler d1 create bonez   -> paste database_id below
+#   npx wrangler d1 execute bonez --remote --file=schema.sql
+#   npx wrangler deploy
+name = "bonez-api"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bonez"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder until deploy
+
+[vars]
+# DEV enables /dev/* test endpoints. NEVER set in production.
+DEV = "0"

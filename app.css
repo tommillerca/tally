@@ -1296,6 +1296,15 @@ body::before {
 .weap-cta { display: flex; justify-content: flex-end; }
 .weap-cta .q-frac { align-self: center; }
 
+/* ===== The Crew: online identity card ===== */
+.crew-id { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.crew-handle { font-family: var(--display); font-size: 22px; letter-spacing: 0.5px; color: var(--accent); }
+.crew-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 700;
+  color: var(--text, #f2e9d7); background: var(--surface-2); border: 1px solid var(--line-strong, #2c2936);
+  border-radius: 999px; padding: 7px 12px; cursor: pointer; letter-spacing: 0.06em;
+}
+
 /* ===== icon pack (game-icons.net, flat no-rim + soft shadow) ===== */
 .bhi-wrap { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
 .bhi { display: block; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45)); }

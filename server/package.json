@@ -1,0 +1,14 @@
+{
+  "name": "bonez-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:local": "wrangler d1 execute bonez --local --file=schema.sql",
+    "dev": "wrangler dev --local --port 8788 --var DEV:1",
+    "test": "node test/api.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}
