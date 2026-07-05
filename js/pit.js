@@ -454,16 +454,18 @@ export function fighterOf(fight, who) {
 }
 export function opponentOf(fight, who) { return (who === 'p' || who === 'pa') ? fight.f : fight.p; }
 
-// Who the given captain is attacking right now (falls back to a living enemy).
+// Who the given attacker hits right now: their chosen target if it is still up,
+// otherwise any living enemy (so nobody swings at a corpse and stalls the fight).
 export function targetWhoFor(fight, who) {
+  const alive = (w) => { const f = fighterOf(fight, w); return f && f.hp > 0 && !f.fainted; };
   if (who === 'p' || who === 'pa') {
-    const t = fight.pTarget;
-    if (t === 'fa' && fight.fAux && fight.fAux.hp > 0) return 'fa';
-    return 'f';
+    if (fight.pTarget === 'fa' && alive('fa')) return 'fa';
+    if (alive('f')) return 'f';
+    return alive('fa') ? 'fa' : 'f';
   }
-  const t = fight.fTarget;
-  if (t === 'pa' && fight.pAux && fight.pAux.hp > 0 && !fight.pAux.fainted) return 'pa';
-  return 'p';
+  if (fight.fTarget === 'pa' && alive('pa')) return 'pa';
+  if (alive('p')) return 'p';
+  return alive('pa') ? 'pa' : 'p';
 }
 
 // Fight ends only when a whole SIDE's captains-and-adds are down. A downed pet is
@@ -843,10 +845,9 @@ export function planTelegraph(fight) {
   if (wantsHeavy) fight.telegraph = 'haymaker';
 }
 
-// choose and apply the foe's whole turn; returns events
-export function aiTakeTurn(fight) {
-  const events = [];
-  const f = fight.f, p = fight.p;
+// run one enemy fighter's whole turn (captain or add), pushing events
+function actForEnemy(fight, who, events) {
+  const f = fighterOf(fight, who), p = fight.p;
   // pick a target for this turn: usually the player, but sometimes go after a
   // living pet to strip its aura (more tempting the lower the pet already is)
   fight.fTarget = 'p';
@@ -855,7 +856,7 @@ export function aiTakeTurn(fight) {
     if (fight.rng() < (petLow ? 0.25 : 0.06)) fight.fTarget = 'pa';
   }
   let guard = 0;
-  while (!fight.over && fight.active === 'f' && fight.ap > 0 && guard++ < 6) {
+  while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {
     const legal = actionsFor(fight).filter(x => x.enabled);
     if (!legal.length) break;
     const pick = (id) => legal.find(x => x.id === id);
@@ -891,6 +892,20 @@ export function aiTakeTurn(fight) {
     }
     events.push({ t: 'foeAction', id: choice });
     events.push(...applyAction(fight, choice));
+  }
+}
+
+// the whole enemy phase: the boss captain acts, then its add (if any). In a 1v1
+// there is no add, so this is just the captain (identical to before).
+export function aiTakeTurn(fight) {
+  const events = [];
+  if (fight.f.hp > 0) actForEnemy(fight, 'f', events);
+  if (fight.fAux && fight.fAux.hp > 0 && !fight.over) {
+    fight.active = 'fa';
+    fight.ap = fight.fAux.d.ap;
+    events.push({ t: 'foeAction', id: 'add' });
+    actForEnemy(fight, 'fa', events);
+    fight.active = 'f'; // restore so endTurn flips f -> p
   }
   return events;
 }
@@ -943,6 +958,37 @@ export const LADDER = [
 ];
 export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, weaponId: 'bonecrusher', talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'] };
 export const RUNG_TALENTS = { 4: ['heavyhands'], 5: ['heavyhands', 'marrowlust'] };
+
+// Endless ladder: past the Champion, foes scale forever so the Pit never runs
+// dry. First-clear XP is real; repeat coins diminish so it's not a farm exploit.
+// Access is GATED by world-boss den wins (see gating in app.js) so you can't
+// couch-grind to the top: you have to go outside.
+const ENDLESS_NAMES = ['The Hollow King', 'Gravemaw', 'The Tallboy', 'Ossuary Prime', 'Rattle Lord', 'The Marrowmancer', 'Bonefather', 'Calcite the Cruel'];
+const ENDLESS_TREES = [
+  ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'],
+  ['lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
+  ['crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind', 'showstopper'],
+  ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'bonestorm'],
+  ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight'],
+  ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'tempest'],
+];
+export function endlessFoe(rank) {
+  const cycle = Math.floor((rank - 1) / ENDLESS_NAMES.length) + 1;
+  const base = ENDLESS_NAMES[(rank - 1) % ENDLESS_NAMES.length];
+  return {
+    rank,
+    name: cycle > 1 ? `${base} ${['II', 'III', 'IV', 'V', 'VI'][cycle - 2] || cycle}` : base,
+    mult: 1.32 + rank * 0.07,
+    talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
+    weaponId: rank % 3 === 0 ? 'bonecrusher' : 'starter',
+    aiLevel: 3,
+    xp: 60 + rank * 10,
+    coins: 120 + rank * 15,
+    repeatCoins: 15 + Math.min(35, rank * 2),
+  };
+}
+// How high you may climb: 3 free ranks, then +2 per distinct world-boss den beaten.
+export function endlessCeiling(denWins) { return 3 + 2 * Math.max(0, denWins); }
 
 export function scaleStats(stats, mult) {
   const out = {};

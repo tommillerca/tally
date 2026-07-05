@@ -6,7 +6,7 @@
 // later, exactly like hunt spawns.
 import { award } from './game.js';
 import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
-import { kvGet, kvSet } from './db.js';
+import { kvGet, kvSet, db } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { distanceM, bearingDeg } from './hunt.js';
 
@@ -75,13 +75,23 @@ function denForCell(week, cx, cy) {
   const theme = DEN_THEMES[Math.floor(wkRng() * DEN_THEMES.length)];
   let roll = wkRng() * TIER_WEIGHTS.reduce((a, b) => a + b, 0), tier = 0;
   for (let i = 0; i < TIER_WEIGHTS.length; i++) { roll -= TIER_WEIGHTS[i]; if (roll <= 0) { tier = i; break; } }
-  return {
+  const den = {
     id: `${cx}_${cy}`,
     lat, lng, theme, tier,
     name: theme.name,
     boss: theme.boss,
     ...DEN_TIERS[tier],
   };
+  // The toughest dens are a 2-on-1: the boss brings a minion. Two bodies is the
+  // real "outnumbered" threat. The boss itself is EASED (bossMult below its solo
+  // tier) precisely because it fights alongside an add, so the pair is a genuine
+  // but beatable threat rather than an impossible wall. These are the endless keys.
+  if (tier >= 5) {
+    const bm = tier >= 6 ? 0.9 : 0.8;
+    den.bossMult = bm;
+    den.add = { name: `${theme.boss}'s Second`, mult: bm * 0.6, talents: [] };
+  }
+  return den;
 }
 
 // The dens around a position (3x3 den-cells: up to ~5-6 km out).
@@ -99,6 +109,12 @@ export function densNear(week, lat, lng) {
 }
 
 export function denKey(week, den) { return `boss-${week}-${den.id}`; }
+
+// How many world-boss dens you have ever beaten (drives the endless-Pit gate).
+export async function denWinsCount() {
+  const xp = await db.all('xp');
+  return xp.filter(r => r.type === 'boss').length;
+}
 
 export function denRewardLabel(r) {
   const bits = [];

@@ -1433,4 +1433,9 @@ body::before {
 .petplate { display: grid; gap: 2px; justify-items: center; }
 .petname { font-size: 9px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
 .bar.fhp.mini { width: 52px; height: 4px; }
+/* the add (2v1 world boss) sits beside the boss, toward center */
+.pet-fighter.add { transform: translateX(-18px) scale(0.74); }
+/* tap-to-target: pointer + a focus ring on the current target */
+.foe-side[data-target], .pet-fighter.add[data-target] { cursor: pointer; }
+.fighterG.foe-side.targeted > .fstage, .pet-fighter.add.targeted > .fstage { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }
 @media (prefers-reduced-motion: reduce) { .fstage.petpounce { animation: none; } }

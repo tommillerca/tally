@@ -19,12 +19,12 @@ import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './ma
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
-  TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE,
+  TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2511,7 +2511,7 @@ async function openMap() {
       const fighter = await buildFighter();
       openFight(wrap, fighter, {
         mode: 'boss', name: den.boss, mult: den.mult, aiLevel: den.aiLevel,
-        talents: den.talents || [], venue: den.name, den, week,
+        talents: den.talents || [], venue: den.name, den, week, add: den.add || null, bossMult: den.bossMult || null,
       });
     });
 
@@ -2629,6 +2629,15 @@ async function renderPit(wrap) {
   const beaten = pitBeatKeys(xpRows);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
+  const champBeaten = beaten.has('pitchamp');
+  // Endless: unlocked after the Champion. You may climb up to a CEILING that
+  // grows only when you beat world-boss dens out on the map (the outside gate).
+  const denWins = await denWinsCount();
+  const ceiling = endlessCeiling(denWins);
+  const endlessBeaten = xpRows.filter(r => r.type === 'endless').length;
+  const nextRank = endlessBeaten + 1;
+  const endlessOpen = nextRank <= ceiling;
+  const nextFoe = endlessFoe(nextRank);
   const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
   const wins = xpRows.filter(r => r.type === 'fight').length;
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
@@ -2691,7 +2700,15 @@ async function renderPit(wrap) {
       <span class="crate-ico">${crateIcon('golden', 24)}</span>
       <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
       ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
-    </div>`;
+    </div>
+    ${champBeaten ? `
+    <div class="sect-h">Endless · The Gauntlet</div>
+    <p class="note" style="margin:2px 2px 8px">Never runs dry: foes scale forever. Cleared <b>${endlessBeaten}</b> · climb ceiling <b>${ceiling}</b>. Beat <b>world bosses</b> on the map to raise the ceiling (${denWins} beaten).</p>
+    <div class="crate-row">
+      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:${endlessOpen ? 'var(--accent)' : 'var(--text-3)'}">${nextRank}</span>
+      <div style="flex:1"><b>${esc(nextFoe.name)}</b><small>${Math.round(nextFoe.mult * 100)}% stats · ${nextFoe.xp} XP + ${nextFoe.coins} coins</small></div>
+      ${endlessOpen ? `<button class="btn small" id="endlessBtn">Fight</button>` : `<button class="btn small ghost" id="endlessGate">Beat a world boss</button>`}
+    </div>` : ''}`;
 
   async function adjustAlloc(key, delta) {
     const alloc = { ...(await kvGet('trainalloc', {})) };
@@ -2720,6 +2737,9 @@ async function renderPit(wrap) {
   }));
   $('#champBtn', body)?.addEventListener('click', () =>
     start({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
+  $('#endlessBtn', body)?.addEventListener('click', () =>
+    start({ mode: 'endless', rank: nextFoe.rank, name: nextFoe.name, mult: nextFoe.mult, talents: nextFoe.talents, weaponId: nextFoe.weaponId, aiLevel: nextFoe.aiLevel, coins: nextFoe.coins, repeatCoins: nextFoe.repeatCoins, xp: nextFoe.xp, venue: 'The Gauntlet' }));
+  $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); history.back(); setTimeout(openMap, 250); });
 }
 
 function foeOutfitFor(name) {
@@ -2748,12 +2768,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
-    stats: scaleStats(fighter.stats, foeCfg.mult),
+    stats: scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
     weaponId: foeCfg.weaponId || 'starter',
     outfit: foeOutfitFor(foeCfg.name),
     talents: foeTalents,
   });
-  const fight = createFight({ player, foe, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
+  const add = foeCfg.add ? makeFighter({
+    name: foeCfg.add.name,
+    stats: scaleStats(fighter.stats, foeCfg.add.mult),
+    talents: foeCfg.add.talents || [],
+    outfit: foeOutfitFor(foeCfg.add.name),
+  }) : null;
+  const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
@@ -2797,13 +2823,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-floor"></div>
       <div class="arena-floor"></div>
       <span class="venue-tag">${esc(venue)}</span>
-      <div class="fighterG foe-side" id="foeG">
+      <div class="fighterG foe-side" id="foeG" data-target="f">
         <div class="fplate">
           <div class="fname">${esc(foe.name)}<span class="fstate" id="foeState" hidden></span></div>
           <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
         </div>
         <div class="bh-stage fstage" id="foeStage"><div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+        ${add ? `
+        <div class="pet-fighter add" id="addG" data-target="fa">
+          <div class="bh-stage fstage petmini" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+          <div class="petplate"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div></div>
+        </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">
         <div class="fplate">
@@ -2826,6 +2857,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   const el = id => $('#' + id, body);
 
+  // 2v1: tap an enemy plate to focus it. Default stays the boss; retargets to a
+  // living enemy automatically (updateBars). Highlight shows the current focus.
+  if (add) {
+    [el('foeG'), el('addG')].forEach(g => g && g.addEventListener('click', (e) => {
+      e.stopPropagation(); // #addG is nested in #foeG; don't let the tap bubble
+      const t = g.dataset.target;
+      const tf = t === 'fa' ? add : foe;
+      if (!tf || tf.hp <= 0) return;
+      fight.pTarget = t;
+      updateBars();
+    }));
+  }
+
   function positionFighters() {
     const close = fight.range === 'close';
     el('youG').style.left = close ? '12%' : '-2%';
@@ -2842,6 +2886,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       el('petHp').style.width = Math.max(0, petBody.hp / petBody.d.maxHp * 100) + '%';
       const pg = el('petG');
       if (pg) pg.classList.toggle('fainted', !!petBody.fainted);
+    }
+    if (add && el('addHp')) {
+      el('addHp').style.width = Math.max(0, add.hp / add.d.maxHp * 100) + '%';
+      const ag = el('addG'); if (ag) ag.classList.toggle('fainted', add.hp <= 0);
+      // auto-retarget onto a living enemy, then highlight the current target
+      if (fight.pTarget === 'fa' && add.hp <= 0) fight.pTarget = 'f';
+      else if (fight.pTarget === 'f' && foe.hp <= 0 && add.hp > 0) fight.pTarget = 'fa';
+      const eff = (add.hp > 0 && fight.pTarget === 'fa') ? 'fa' : 'f';
+      el('foeG')?.classList.toggle('targeted', eff === 'f');
+      el('addG')?.classList.toggle('targeted', eff === 'fa');
     }
     el('youWind').style.width = (player.wind / player.d.maxWind * 100) + '%';
     el('foeWind').style.width = (foe.wind / foe.d.maxWind * 100) + '%';
@@ -2907,10 +2961,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // choreograph one engine event
   function playFx(ev) {
-    // when the foe is going after your pet, land the hit on the pet's mini-stage
-    const foeHitsPet = ev.who === 'f' && fight.fTarget === 'pa' && el('petStage');
-    const atkStage = ev.who === 'p' ? el('youStage') : el('foeStage');
-    const vicStage = ev.who === 'p' ? el('foeStage') : (foeHitsPet ? el('petStage') : el('youStage'));
+    // multi-body staging: an enemy going after your pet lands on the pet plate;
+    // you going after the add lands on the add plate; the add attacks from its plate
+    const foeHitsPet = (ev.who === 'f' || ev.who === 'fa') && fight.fTarget === 'pa' && el('petStage');
+    const playerHitsAdd = ev.who === 'p' && add && fight.pTarget === 'fa' && el('addStage');
+    const atkStage = ev.who === 'p' ? el('youStage') : (ev.who === 'fa' && el('addStage') ? el('addStage') : el('foeStage'));
+    const vicStage = ev.who === 'p' ? (playerHitsAdd ? el('addStage') : el('foeStage')) : (foeHitsPet ? el('petStage') : el('youStage'));
     const vicSide = ev.who === 'p' ? 'f' : 'p';
     const lungeCls = ev.who === 'p' ? 'lunge-r' : 'lunge-l';
     if (ev.t === 'hit') {
@@ -3023,8 +3079,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
   }
 
   function describe(ev) {
-    const who = ev.who === 'p' ? 'You' : foe.name;
-    const them = ev.who === 'p' ? foe.name : 'you';
+    const who = ev.who === 'p' ? 'You' : (ev.who === 'fa' && add) ? add.name : foe.name;
+    const them = ev.who === 'p' ? ((fight.pTarget === 'fa' && add) ? add.name : foe.name) : 'you';
     if (ev.t === 'hit') {
       if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
       if (ev.storm) {
@@ -3218,6 +3274,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
+    if (fight.over.winner === 'p' && add && el('addStage')) el('addStage').classList.add('ko'); // both enemies drop
     renderActions();
     let coins = 0, xp = 0, extras = [], bossLoot = null;
     if (won) {
@@ -3250,6 +3307,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
             extras.push('the BONECRUSHER', 'a Golden Crate');
           } else coins = foeCfg.repeatCoins;
         } else coins = foeCfg.repeatCoins;
+      } else if (foeCfg.mode === 'endless') {
+        // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
+        const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
+        if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
       }
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
