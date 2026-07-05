@@ -5,11 +5,12 @@
 // `boss-<week>-<denId>` makes each den claimable once per week, server-verifiable
 // later, exactly like hunt spawns.
 import { award, levelFor, totalXp } from './game.js';
-import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
+import { coinsAdd, grantCrate, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
 import { kvGet, kvSet, db } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { TALENT_TREES } from './pit.js';
 import { distanceM, bearingDeg } from './hunt.js';
+import { dateKey } from './nutrition.js';
 
 // the player's leaning archetype = the talent tree they've invested most in
 // (tree ids match gear archetypes). Used to bias one boss-drop choice to their spec.
@@ -201,4 +202,68 @@ export async function claimDenLoot(key, gearId) {
   await kvSet('denloot', pending.filter(p => p.key !== key));
   const g = await grantGear(gearId, 'boss-den');
   return g || GEAR_ITEMS.find(x => x.id === gearId) || null;
+}
+
+/* ================= Boneyard mini-bosses (v75) =================
+   Lesser Boneyard creatures that ROAM daily: tougher than sparring, far below a
+   weekly world-boss den. They fill the map with real-world combat variety and
+   feed coins / XP / Bone Dust. Position + identity are seeded by DATE + cell, so
+   a fresh sparse set appears every day. Free to fight (you walked there); the
+   ledger key `mini-<date>-<id>` (type 'mini') makes each beatable once a day. */
+export const MINI_CELL_DEG = 0.008;   // ~0.9 km cells: minis a bit denser than dens
+export const MINI_RADIUS_M = 55;
+
+export const MINI_TIERS = [
+  { mult: 0.6, aiLevel: 1, reward: { coins: 30, xp: 20 } },
+  { mult: 0.75, aiLevel: 1, reward: { coins: 45, xp: 30, dust: 6 } },
+  { mult: 0.9, aiLevel: 2, reward: { coins: 65, xp: 40, dust: 12 } },
+];
+const MINI_TIER_WEIGHTS = [4, 3, 1.5];  // mostly the weakest, occasionally a nastier one
+export const MINI_THEMES = [
+  { key: 'hound', name: 'Bonehound' },
+  { key: 'wretch', name: 'Rattling Wretch' },
+  { key: 'ghoul', name: 'Marsh Ghoul' },
+  { key: 'shade', name: 'Cinder Shade' },
+  { key: 'acolyte', name: 'Lost Acolyte' },
+  { key: 'jester', name: 'Boneyard Jester' },
+];
+
+function miniCellOf(lat, lng) { return { cx: Math.round(lat / MINI_CELL_DEG), cy: Math.round(lng / MINI_CELL_DEG) }; }
+
+// A mini for one cell on one day, or null (sparse — not every cell has one).
+function miniForCell(date, cx, cy) {
+  const rng = mulberry32(hashStr(`mini:${date}:${cx}:${cy}`));
+  if (rng() > 0.6) return null;   // ~60% of cells hold a mini on a given day
+  const lat = (cx + (rng() - 0.5) * 0.86) * MINI_CELL_DEG;
+  const lng = (cy + (rng() - 0.5) * 0.86) * MINI_CELL_DEG;
+  const theme = MINI_THEMES[Math.floor(rng() * MINI_THEMES.length)];
+  let roll = rng() * MINI_TIER_WEIGHTS.reduce((a, b) => a + b, 0), tier = 0;
+  for (let i = 0; i < MINI_TIER_WEIGHTS.length; i++) { roll -= MINI_TIER_WEIGHTS[i]; if (roll <= 0) { tier = i; break; } }
+  const t = MINI_TIERS[tier];
+  return { id: `${cx}_${cy}`, lat, lng, theme, tier, name: theme.name, mult: t.mult, aiLevel: t.aiLevel, reward: t.reward };
+}
+
+// The mini-bosses roaming around a position today (3x3 cells).
+export function minisNear(date, lat, lng) {
+  const { cx, cy } = miniCellOf(lat, lng);
+  const out = [];
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const m = miniForCell(date, cx + dx, cy + dy);
+    if (m) out.push(m);
+  }
+  for (const m of out) { m.dist = distanceM(lat, lng, m.lat, m.lng); m.bearing = bearingDeg(lat, lng, m.lat, m.lng); }
+  return out.sort((a, b) => a.dist - b.dist);
+}
+
+export function miniKey(date, mini) { return `mini-${date}-${mini.id}`; }
+
+// Beat a roaming mini-boss. Idempotent per mini per day. Coins are added by the
+// caller (settle) so the Battle Charm + food coin boost apply uniformly.
+export async function claimMiniWin(mini, date = dateKey()) {
+  const r = mini.reward;
+  const xp = await award(miniKey(date, mini), 'mini', r.xp || 20, `Boneyard: ${mini.name}`);
+  if (xp === 0) return null; // already beaten today
+  if (r.crate) await grantCrate(r.crate, 'mini');
+  if (r.dust) await boneDustAdd(r.dust);
+  return { xp, ...r };
 }

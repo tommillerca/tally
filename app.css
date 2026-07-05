@@ -1612,6 +1612,18 @@ body::before {
 @keyframes denShudder { 0%,100% { transform: translateX(0) } 20% { transform: translate(-1.5px, 0) rotate(-1.5deg) } 60% { transform: translate(1.5px, 0) rotate(1.5deg) } }
 @keyframes denEyes { 0%,100% { opacity: 0 } 15% { opacity: 1 } 30% { opacity: 0.3 } 45% { opacity: 1 } 85% { opacity: 0.9 } }
 .map-den-mark.claimed { opacity: 0.45; filter: grayscale(0.7) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.6)); }
+
+/* Boneyard mini-bosses (v75): smaller roaming creatures, distinct from dens */
+.map-mini-mark {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 38%, #5a3a7a, #2a1836);
+  border: 2px solid #c084fc; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  filter: drop-shadow(0 0 3px rgba(192, 132, 252, 0.5));
+}
+.map-mini-mark .mini-glyph { font-size: 15px; color: #f2e9d7; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+.map-mini-mark.t2 { border-color: var(--amber); background: radial-gradient(circle at 50% 38%, #7a5a2a, #3a2810); filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.6)); }
+.map-mini-mark.inrange { animation: blipready 0.9s ease-in-out infinite; }
+.map-mini-mark.claimed { opacity: 0.4; filter: grayscale(0.8); }
 .map-den-mark.claimed::after {
   content: '✓'; position: absolute; right: -4px; top: -6px;
   width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
@@ -1623,6 +1635,12 @@ body::before {
   animation: bubblePop 0.3s cubic-bezier(0.34, 1.6, 0.64, 1);
 }
 .btn.map-den ~ .btn.map-collect { bottom: calc(var(--sab, 0px) + 14px); }
+.btn.map-mini {
+  position: absolute; left: 16px; right: 16px; bottom: calc(var(--sab, 0px) + 66px); z-index: 6;
+  width: auto; background: #c084fc; color: #1a1024;
+  animation: bubblePop 0.3s cubic-bezier(0.34, 1.6, 0.64, 1);
+}
+.btn.map-mini ~ .btn.map-collect { bottom: calc(var(--sab, 0px) + 14px); }
 
 /* ===== gear: statted equipment ===== */
 .ward-cell.gear { position: relative; }

@@ -24,7 +24,7 @@ import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './ma
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -2771,6 +2771,7 @@ async function openMap() {
         <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
         <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
+        <button class="btn map-mini" id="mapMini" hidden>Fight</button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
 
@@ -2814,9 +2815,11 @@ async function openMap() {
     const xpRows0 = await db.all('xp');
     const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss').map(r => r.key));
+    let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
     const spawnSnap = new Map();    // id -> {lat,lng} snapped onto walkable ground
     const denMarkers = new Map();   // id -> {marker, el, den}
+    const miniMarkers = new Map();  // id -> {marker, el, mini}
     let lastNearest = null;
 
     function refreshDens() {
@@ -2844,11 +2847,41 @@ async function openMap() {
       return dens;
     }
 
+    function refreshMinis() {
+      const minis = minisNear(date, lat, lng);
+      const liveIds = new Set(minis.map(m => m.id));
+      for (const [id, rec] of miniMarkers) { if (!liveIds.has(id)) { rec.marker.remove(); miniMarkers.delete(id); } }
+      for (const m of minis) {
+        let rec = miniMarkers.get(m.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-mini-mark';
+          el.innerHTML = `<span class="mini-glyph">☠</span>`;
+          rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
+          miniMarkers.set(m.id, rec);
+        }
+        rec.mini = m;
+        rec.el.classList.toggle('claimed', claimedMini.has(miniKey(date, m)));
+        rec.el.classList.toggle('inrange', m.dist <= MINI_RADIUS_M && !claimedMini.has(miniKey(date, m)));
+        rec.el.classList.toggle('t2', m.tier >= 2);
+      }
+      const open = minis.find(m => m.dist <= MINI_RADIUS_M && !claimedMini.has(miniKey(date, m)));
+      const mb = $('#mapMini', body);
+      if (mb) {
+        // den takes precedence over a mini if both are in range (bosses are the event)
+        const denOpen = !$('#mapDen', body)?.hidden;
+        mb.hidden = !open || denOpen;
+        if (open && !denOpen) { mb.textContent = `⚔ Fight the ${open.name}`; mb.dataset.miniId = open.id; }
+      }
+    }
+
     async function refreshWorld() {
       const rows = await db.all('xp');
       claimedBoss = new Set(rows.filter(r => r.type === 'boss').map(r => r.key));
+      claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       refreshSpawns();
       refreshDens();
+      refreshMinis();
     }
 
     function refreshSpawns() {
@@ -2922,6 +2955,15 @@ async function openMap() {
         mode: 'boss', name: den.boss, mult: den.mult, aiLevel: den.aiLevel,
         talents: den.talents || [], venue: den.name, den, week, add: den.add || null, bossMult: den.bossMult || null,
       });
+    });
+
+    $('#mapMini', body).addEventListener('click', async () => {
+      const id = $('#mapMini', body).dataset.miniId;
+      const rec = miniMarkers.get(id);
+      if (!rec || rec.mini.dist > MINI_RADIUS_M || claimedMini.has(miniKey(date, rec.mini))) return;
+      const mini = rec.mini;
+      const fighter = await buildFighter();
+      openFight(wrap, fighter, { mode: 'mini', name: mini.name, mult: mini.mult, aiLevel: mini.aiLevel, talents: [], venue: 'The Boneyard', mini, date });
     });
 
     $('#mapCollect', body).addEventListener('click', async () => {
@@ -3844,6 +3886,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
           await grantIngredient(RARE_INGREDIENT, eN);
           extras.push(`${INGREDIENTS[RARE_INGREDIENT].icon} Ectoplasm${eN > 1 ? ' x' + eN : ''}`);
         } else coins = 10; // den already cracked this week: pocket change
+      }
+      else if (foeCfg.mode === 'mini') {
+        const r = await claimMiniWin(foeCfg.mini, foeCfg.date);
+        if (r) {
+          xp += r.xp || 0; coins = r.coins || 0;
+          if (r.crate) extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
+          if (r.dust) extras.push(`${r.dust} Bone Dust`);
+        } else coins = 8; // already beaten today
       }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {

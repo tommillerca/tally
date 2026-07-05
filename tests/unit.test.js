@@ -706,5 +706,20 @@ test('v73 Dust Shop loops junk back into pets/crates/consumables', () => {
   assert.ok(DUST_SHOP.some(d => d.id === 'egg'), 'dust can buy an egg (dupe pets -> new pet)');
 });
 
+test('v75 mini-bosses: deterministic per day, roam daily, keyed once/day', async () => {
+  const poi = await import('../js/poi.js');
+  const [lat, lng] = [49.2827, -123.1207];
+  const a1 = poi.minisNear('2026-07-05', lat, lng);
+  const a2 = poi.minisNear('2026-07-05', lat, lng);
+  assert.deepEqual(a1.map(m => m.id + m.name + m.tier), a2.map(m => m.id + m.name + m.tier), 'same day = same minis');
+  // across a week the roster changes (roaming), not frozen like dens
+  const days = ['2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08'].map(d => JSON.stringify(poi.minisNear(d, lat, lng).map(m => m.id)));
+  assert.ok(new Set(days).size > 1, 'minis roam day to day');
+  assert.ok(a1.length >= 1 && a1.every(m => m.mult > 0 && m.aiLevel >= 1 && m.reward && m.reward.xp > 0), 'minis are valid, rewarding foes');
+  assert.match(poi.miniKey('2026-07-05', a1[0]), /^mini-2026-07-05-/);
+  // tiers escalate mult; all beatable filler (well under a world-boss)
+  assert.ok(poi.MINI_TIERS[0].mult < poi.MINI_TIERS[2].mult && poi.MINI_TIERS[2].mult <= 1.0, 'minis stay below world-boss strength');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
