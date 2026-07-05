@@ -1,0 +1,204 @@
+{
+ "style": "flat, single-color, NO rim; recolor via fill/currentColor + subtle drop-shadow(0 2px 3px rgba(0,0,0,.45))",
+ "source": "game-icons.net (CC-BY 3.0) except dish-fajita (custom, original)",
+ "attribution": "one credit line, e.g. Settings > About: \"Icons: game-icons.net (CC-BY 3.0)\"",
+ "note": "NOT yet wired into the app; these are app-ready (bg stripped, fill=currentColor). See memory ref_boneheadz_icon_system.md for full rationale + Tom decisions (flat chosen over rim).",
+ "icons": [
+  {
+   "file": "crate-daily.svg",
+   "depicts": "treasure chest",
+   "replaces": "loot.js CRATES.daily \ud83d\udce6",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "crate-golden.svg",
+   "depicts": "locked chest",
+   "replaces": "loot.js CRATES.golden \ud83e\uddf0",
+   "tint": "#e8c24d",
+   "custom": false
+  },
+  {
+   "file": "egg.svg",
+   "depicts": "egg clutch",
+   "replaces": "loot.js Step Egg / CRATES.egg \ud83e\udd5a",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "freeze.svg",
+   "depicts": "frozen orb",
+   "replaces": "loot.js CONSUMABLES.freeze \ud83e\uddca",
+   "tint": "#7cc4ff",
+   "custom": false
+  },
+  {
+   "file": "charm.svg",
+   "depicts": "lightning",
+   "replaces": "loot.js CONSUMABLES.xp2 Battle Charm \ud83e\uddff (loose fit\u2014maybe swap to an eye)",
+   "tint": "#a5e847",
+   "custom": false
+  },
+  {
+   "file": "badge-skull.svg",
+   "depicts": "cracked skull",
+   "replaces": "game.js BADGES \ud83d\udc80 (Undying)",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "badge-crown.svg",
+   "depicts": "crown",
+   "replaces": "game.js BADGES \ud83d\udc51 (Marrow King)",
+   "tint": "#e8c24d",
+   "custom": false
+  },
+  {
+   "file": "badge-trophy.svg",
+   "depicts": "trophy",
+   "replaces": "game.js BADGES \ud83c\udfc6 (Pit Champ)",
+   "tint": "#e8c24d",
+   "custom": false
+  },
+  {
+   "file": "badge-boxing.svg",
+   "depicts": "boxing glove",
+   "replaces": "game.js BADGES \ud83e\udd4a (Sparring)",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "badge-target.svg",
+   "depicts": "on-target",
+   "replaces": "game.js BADGES \ud83c\udfaf (On Target)",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "badge-muscle.svg",
+   "depicts": "muscle-up",
+   "replaces": "game.js BADGES \ud83d\udcaa (Swole)",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "badge-map.svg",
+   "depicts": "treasure map",
+   "replaces": "game.js BADGES \ud83d\uddfa (Boneyard Regular)",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "flame.svg",
+   "depicts": "celebration fire",
+   "replaces": "app.js streak flame \ud83d\udd25",
+   "tint": "#ffb454",
+   "custom": false
+  },
+  {
+   "file": "tombstone.svg",
+   "depicts": "tombstone",
+   "replaces": "app.js/poi den marker \ud83d\uddff\ud83c\udfda",
+   "tint": "#f2e9d7",
+   "custom": false
+  },
+  {
+   "file": "ingr-marrow.svg",
+   "depicts": "broken bone",
+   "replaces": "cooking.js INGREDIENTS.marrow \ud83e\uddb4",
+   "tint": "#d7cba6",
+   "custom": false
+  },
+  {
+   "file": "ingr-graveroot.svg",
+   "depicts": "herb bundle",
+   "replaces": "cooking.js INGREDIENTS.graveroot \ud83c\udf3f",
+   "tint": "#a7b24c",
+   "custom": false
+  },
+  {
+   "file": "ingr-ember.svg",
+   "depicts": "chili pepper",
+   "replaces": "cooking.js INGREDIENTS.ember \ud83c\udf36",
+   "tint": "#9a5140",
+   "custom": false
+  },
+  {
+   "file": "ingr-bog.svg",
+   "depicts": "mushrooms",
+   "replaces": "cooking.js INGREDIENTS.bog \ud83c\udf44",
+   "tint": "#9c8fa0",
+   "custom": false
+  },
+  {
+   "file": "ingr-sinew.svg",
+   "depicts": "steak",
+   "replaces": "cooking.js INGREDIENTS.sinew \ud83e\udd69",
+   "tint": "#9a7a6a",
+   "custom": false
+  },
+  {
+   "file": "ingr-salt.svg",
+   "depicts": "salt shaker",
+   "replaces": "cooking.js INGREDIENTS.salt \ud83e\uddc2",
+   "tint": "#c8bfae",
+   "custom": false
+  },
+  {
+   "file": "ingr-ectoplasm.svg",
+   "depicts": "bubbles",
+   "replaces": "cooking.js INGREDIENTS.ectoplasm \ud83e\udee7 (rare, add glow)",
+   "tint": "#9fe3cf",
+   "custom": false
+  },
+  {
+   "file": "dish-broth.svg",
+   "depicts": "cauldron",
+   "replaces": "cooking.js RECIPES bone-broth \ud83c\udf72",
+   "tint": "#7f8a4a",
+   "custom": false
+  },
+  {
+   "file": "dish-hash.svg",
+   "depicts": "hot meal",
+   "replaces": "cooking.js RECIPES hearty-hash \ud83e\udd58",
+   "tint": "#a8813f",
+   "custom": false
+  },
+  {
+   "file": "dish-stew.svg",
+   "depicts": "noodles",
+   "replaces": "cooking.js RECIPES marrow-stew \ud83c\udf5c",
+   "tint": "#8a924e",
+   "custom": false
+  },
+  {
+   "file": "dish-skewer.svg",
+   "depicts": "chicken leg",
+   "replaces": "cooking.js RECIPES hunters-skewer \ud83c\udf62 (loose fit)",
+   "tint": "#9a8f66",
+   "custom": false
+  },
+  {
+   "file": "dish-fajita.svg",
+   "depicts": "CUSTOM burrito",
+   "replaces": "cooking.js RECIPES zombie-fajita \ud83c\udf2f (hand-drawn, evenodd)",
+   "tint": "#9c6b3a",
+   "custom": true
+  },
+  {
+   "file": "dish-feast.svg",
+   "depicts": "roast chicken",
+   "replaces": "cooking.js RECIPES necro-feast \ud83c\udf56 (rare, add glow)",
+   "tint": "#9a5f4a",
+   "custom": false
+  },
+  {
+   "file": "dish-kibble.svg",
+   "depicts": "dog bowl",
+   "replaces": "cooking.js RECIPES bonemeal-kibble \ud83e\uddb4",
+   "tint": "#b8a878",
+   "custom": false
+  }
+ ]
+}

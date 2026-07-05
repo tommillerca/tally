@@ -23,6 +23,7 @@ import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
 import { showGateIntro } from './gateintro.js';
+import { maybeShowDailyWheel } from './wheel.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -174,6 +175,10 @@ async function boot() {
   window.addEventListener('hashchange', route);
   bindTabs();
   route();
+
+  // daily haunted prize wheel: once per day, after the splash intro. Self-gates
+  // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
+  maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
 }
 
 async function backupNudge() {
