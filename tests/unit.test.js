@@ -617,6 +617,47 @@ test('gear: level gates ascend and gearStats validates', () => {
   const on = gear.gearStats(lo, new Set([g.id]), g.minLevel);
   assert.equal(Object.values(on).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.legendary);
 });
+test('gear tier sets: 2pc/4pc thresholds, level+ownership gated', () => {
+  // gather 4 distinct-slot slab pieces
+  const bySlot = {};
+  for (const g of gear.GEAR_ITEMS) { if (g.arch === 'slab' && !bySlot[g.slot]) bySlot[g.slot] = g; }
+  const four = Object.values(bySlot).slice(0, 4);
+  assert.ok(four.length === 4, 'have 4 distinct-slot slab pieces');
+  const lo = {}, owned = new Set();
+  for (const g of four) { lo[g.slot] = g.id; owned.add(g.id); }
+  const hiLvl = Math.max(...four.map(g => g.minLevel));
+
+  // unowned = no set at all
+  assert.deepEqual(gearSetInfoSets(gear.gearSetInfo(lo, new Set(), hiLvl)), [], 'unowned = no set');
+
+  // own only 1 piece -> counted but no tier
+  const oneOwned = new Set([four[0].id]);
+  const one = gear.gearSetInfo(lo, oneOwned, hiLvl);
+  assert.deepEqual(one.sets.find(s => s.arch === 'slab')?.tiers || [], [], '1 piece = no bonus');
+
+  // own 2 -> 2pc only
+  const twoOwned = new Set([four[0].id, four[1].id]);
+  const lvl2 = Math.max(four[0].minLevel, four[1].minLevel);
+  const two = gear.gearSetInfo(lo, twoOwned, lvl2);
+  assert.deepEqual(two.sets.find(s => s.arch === 'slab').tiers, [2], '2pc active, not 4pc');
+  assert.equal(two.talents.length, 0, 'no talent at 2pc');
+  assert.ok(two.stats.power > 0 && two.stats.marrow > 0, '2pc grants the stat bundle');
+
+  // own 4 at level -> 2pc + 4pc + talent
+  const full = gear.gearSetInfo(lo, owned, hiLvl);
+  assert.deepEqual(full.sets.find(s => s.arch === 'slab').tiers, [2, 4], 'both tiers');
+  assert.deepEqual(full.talents, ['heavyhands'], '4pc grants archetype talent');
+  assert.ok(full.stats.power >= 12, '4pc stacks more power');
+
+  // underleveled pieces do not count toward the set
+  const under = gear.gearSetInfo(lo, owned, 1);
+  const underSlab = under.sets.find(s => s.arch === 'slab');
+  assert.ok(!underSlab || underSlab.pieces < 4, 'underleveled pieces excluded from count');
+
+  // labels are non-empty
+  assert.ok(gear.setBonusLabel('slab', 2).length > 0 && gear.setBonusLabel('slab', 4).includes('·'));
+});
+function gearSetInfoSets(info) { return info.sets.filter(s => s.tiers.length); }
 test('den loot: two-piece gamble rolls distinct choices with tier floors', async () => {
   const poi = await import('../js/poi.js');
   const wk = '2026-W27';

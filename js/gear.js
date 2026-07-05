@@ -136,3 +136,44 @@ export function gearStats(loadout = {}, ownedGearIds = new Set(), level = 1) {
   }
   return out;
 }
+
+// TIER SETS (WoW-style): wear matching-archetype gear for a bonus at 2 and 4
+// pieces. 2pc = a stat bundle; 4pc = more stats + the archetype's signature
+// tier-1 talent (a move / +AP / hype engine), so a 4-set always does something.
+export const SET_BONUSES = {
+  slab:        { two: { power: 6, marrow: 6 }, fourStat: { power: 6 },  fourTalent: 'heavyhands' },
+  greyhound:   { two: { wind: 6, reflex: 6 },  fourStat: { reflex: 6 }, fourTalent: 'lightfeet' },
+  ringmaster:  { two: { hype: 8 },             fourStat: { hype: 6 },   fourTalent: 'crowdwork' },
+  gravecaller: { two: { hype: 6, power: 6 },    fourStat: { hype: 6 },   fourTalent: 'bonebolt' },
+  gravewarden: { two: { marrow: 8 },           fourStat: { marrow: 6 }, fourTalent: 'smite' },
+  boneshaman:  { two: { reflex: 6, hype: 6 },   fourStat: { hype: 6 },   fourTalent: 'frostbolt' },
+};
+const TALENT_NAME = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.name])));
+const STAT_ABBR = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hype: 'HYP' };
+function statBundle(o) { return Object.entries(o).map(([k, v]) => `+${v} ${STAT_ABBR[k]}`).join(' '); }
+export function setBonusLabel(arch, tier) {
+  const b = SET_BONUSES[arch]; if (!b) return '';
+  if (tier === 2) return statBundle(b.two);
+  return `${statBundle(b.fourStat || {})} · ${TALENT_NAME[b.fourTalent] || b.fourTalent}`;
+}
+
+// Count equipped/owned/at-level pieces per archetype and total the set bonuses.
+export function gearSetInfo(loadout = {}, ownedGearIds = new Set(), level = 1) {
+  const counts = {};
+  for (const slot of GEAR_SLOTS) {
+    const g = GEAR_BY_ID[loadout[slot]];
+    if (!g || g.slot !== slot || !ownedGearIds.has(g.id) || level < g.minLevel) continue;
+    counts[g.arch] = (counts[g.arch] || 0) + 1;
+  }
+  const stats = { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 };
+  const talents = [];
+  const sets = [];
+  for (const [arch, n] of Object.entries(counts)) {
+    const b = SET_BONUSES[arch]; if (!b) continue;
+    const tiers = [];
+    if (n >= 2) { for (const [k, v] of Object.entries(b.two)) stats[k] += v; tiers.push(2); }
+    if (n >= 4) { for (const [k, v] of Object.entries(b.fourStat || {})) stats[k] += v; if (b.fourTalent) talents.push(b.fourTalent); tiers.push(4); }
+    sets.push({ arch, epithet: GEAR_ARCHETYPES[arch].epithet, pieces: n, tiers });
+  }
+  return { stats, talents, sets };
+}

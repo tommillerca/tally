@@ -17,7 +17,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
-import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
+import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
@@ -2756,6 +2756,8 @@ async function buildFighter() {
   const [gearLo, gOwned, xpAll] = await Promise.all([gearLoadout(), ownedGearIds(), db.all('xp')]);
   const level = levelFor(xpAll.reduce((a, r) => a + (r.xp || 0), 0)).level;
   const gBonus = gearStats(gearLo, gOwned, level);
+  const setInfo = gearSetInfo(gearLo, gOwned, level); // 2pc/4pc tier-set bonuses
+  for (const k of Object.keys(gBonus)) gBonus[k] += (setInfo.stats[k] || 0);
   const gearedBase = {};
   for (const k of Object.keys(baseStats)) gearedBase[k] = baseStats[k] + (gBonus[k] || 0);
   const stats = allocatedStats(gearedBase, alloc);
@@ -2768,7 +2770,7 @@ async function buildFighter() {
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
-  const fightTalents = [...new Set([...talents, ...gearTalents(gearLo, gOwned, level)])];
+  const fightTalents = [...new Set([...talents, ...gearTalents(gearLo, gOwned, level), ...setInfo.talents])];
   // battle pet: equipped C slot, level from steps since hatch, its spec picks
   let battlePet = null, petMeta = null;
   const eqForPet = await equipped();
@@ -2778,7 +2780,7 @@ async function buildFighter() {
     battlePet = buildBattlePet(eqForPet.C, pl, picks);
     petMeta = { id: eqForPet.C, level: pl, picks };
   }
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta };
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2846,6 +2848,7 @@ async function renderPit(wrap) {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       return parts.length ? `Worn gear grants ${parts.join(' · ')}. Manage it in your Wardrobe.` : 'No statted gear equipped. Crates and boss dens drop it; equip in your Wardrobe.';
     })()}</p>
+    ${(fighter.setInfo?.sets || []).some(s => s.tiers.length) ? `<div class="set-note">${fighter.setInfo.sets.filter(s => s.tiers.length).map(s => `<div class="set-row"><b>${esc(s.epithet)} Set (${s.pieces})</b>${s.tiers.map(t => `<small>${t}pc: ${esc(setBonusLabel(s.arch, t))}</small>`).join('')}</div>`).join('')}</div>` : ''}
     <div class="sect-h">Weapon</div>
     <div class="chips">
       ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
