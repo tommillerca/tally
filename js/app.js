@@ -1955,7 +1955,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const next = [...cur.filter(id => !tierNodes.includes(id)), node]; // one pick per tier
       await setPetPick(petId, node, next);
       popSound(S.sounds);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      // update the highlight IN PLACE (a full re-render resets scroll and bounces
+      // the view back up to the paperdoll); keep petMeta in sync for later renders
+      $$(`.pet-opt[data-tier="${tier}"]`, content).forEach(o => o.classList.toggle('on', o.dataset.petpick === node));
+      if (fighter.petMeta && fighter.petMeta.id === petId) fighter.petMeta.picks = next;
     }));
   }
   if (tab === 'talents') {
