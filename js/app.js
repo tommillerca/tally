@@ -17,6 +17,8 @@ import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, c
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
+import { petStepsSince, petPicks, setPetPick } from './loot.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -1908,6 +1910,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
+      ${slot === 'C' && eq.C ? petPanelHtml(eq.C, fighter) : ''}
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
@@ -1939,6 +1942,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (!g) return;
       if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
       await equipGear(slot, g.id);
+      popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+    $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
+      const petId = b.dataset.pet, tier = Number(b.dataset.tier), node = b.dataset.petpick;
+      const meta = fighter.petMeta;
+      if (!meta || meta.level < tier) { toast(`Pet reaches this at level ${tier}: keep walking.`, 2600); return; }
+      const cur = await petPicks(petId);
+      const tierNodes = (PET_TREES[familyOf(petId).key].find(t => t.tier === tier) || {}).opts.map(o => o.id);
+      const next = [...cur.filter(id => !tierNodes.includes(id)), node]; // one pick per tier
+      await setPetPick(petId, node, next);
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
@@ -2075,6 +2089,33 @@ function lootCardHtml(g) {
     <span class="loot-stats">${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>
     <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}</span>
   </button>`;
+}
+
+function petPanelHtml(petId, fighter) {
+  const fam = familyOf(petId);
+  const meta = fighter.petMeta && fighter.petMeta.id === petId ? fighter.petMeta : { level: petLevel(0), picks: [] };
+  const lvl = meta.level, picks = meta.picks;
+  const tree = PET_TREES[fam.key];
+  const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
+  return `
+    <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}">
+      <img src="${bhAsset(BH_BY_ID[petId])}" alt="">
+      <div class="pet-card-meta">
+        <b>${esc(fam.name)} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <small>Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
+        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.</span>
+      </div>
+    </div>
+    <div class="pet-tree">
+      ${tree.map(row => `
+        <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
+          <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
+          <div class="pet-opts">
+            ${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-pet="${petId}" data-tier="${row.tier}" data-petpick="${o.id}" ${lvl < row.tier ? 'disabled' : ''}>
+              <b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
 }
 
 async function openCrateReveal(result) {
@@ -2556,7 +2597,16 @@ async function buildFighter() {
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
   const fightTalents = [...new Set([...talents, ...gearTalents(gearLo, gOwned, level)])];
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents };
+  // battle pet: equipped C slot, level from steps since hatch, its spec picks
+  let battlePet = null, petMeta = null;
+  const eqForPet = await equipped();
+  if (eqForPet.C) {
+    const pl = petLevel(await petStepsSince(eqForPet.C));
+    const picks = await petPicks(eqForPet.C);
+    battlePet = buildBattlePet(eqForPet.C, pl, picks);
+    petMeta = { id: eqForPet.C, level: pl, picks };
+  }
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta };
 }
 
 function pitBeatKeys(xpRows) {
@@ -2693,7 +2743,7 @@ const PIT_VENUES = {
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents });
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
@@ -2791,7 +2841,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       else if (f.state) bits.push(f.state === 'block' ? 'BLOCKING' : 'DODGING');
       if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
       if (f.burn) bits.push('BURNING');
+      if (f.poison) bits.push(`POISON x${f.poison.stacks}`);
       if (f.blind) bits.push('BLINDED');
+      if (f.marked) bits.push('MARKED');
       if (f.ward > 0) bits.push(`WARD ${f.ward}`);
       if (f.sunder) bits.push('SUNDERED');
       if (f.weaken) bits.push('WEAKENED');
@@ -2907,6 +2959,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (ev.t === 'burntick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg fire');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+    } else if (ev.t === 'poisontick') {
+      floatNode(`-${ev.damage}`, ev.who, 'dmg poison');
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+    } else if (ev.t === 'pethit') {
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'petpounce', fxMs + 150);
+      setTimeout(() => { impactBurst(ev.who === 'p' ? 'f' : 'p', 'phys'); floatNode(`-${ev.damage}`, ev.who === 'p' ? 'f' : 'p', 'dmg'); }, fast ? 20 : fxMs * 0.4);
+      floatNode(`🐾 ${esc(ev.name)}`, ev.who, 'stamp warm');
+      hitSound(S.sounds, 'tick');
+    } else if (ev.t === 'petshield') {
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 250);
+      floatNode(ev.laststand ? 'LAST STAND!' : (ev.shield ? `+${ev.shield} ward` : '+heal'), ev.who, 'stamp holy');
+      if (ev.heal) floatNode(`+${ev.heal}`, ev.who, 'dmg heal');
+    } else if (ev.t === 'petdebuff') {
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      floatNode('🐾 cursed', ev.who, 'stamp hex');
     } else if (ev.t === 'state') {
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.state === 'block' ? 'guard' : 'slip', fxMs + 200);
     } else if (ev.t === 'shove') {
@@ -2964,10 +3031,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
       if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
       if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
+      if (ev.kind === 'poison') return `${who === 'You' ? 'You are' : who + ' is'} POISONED (x${ev.stacks})`;
+      if (ev.kind === 'mark') return `${who === 'You' ? 'You are' : who + ' is'} MARKED for death`;
     }
     if (ev.t === 'secondwind') return `${who} found a SECOND WIND (+${ev.heal} HP)`;
     if (ev.t === 'bleedtick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} for ${ev.damage}`;
     if (ev.t === 'burntick') return `${who === 'You' ? 'You burn' : who + ' burns'} for ${ev.damage}`;
+    if (ev.t === 'poisontick') return `${who === 'You' ? 'You take' : who + ' takes'} ${ev.damage} poison`;
+    if (ev.t === 'pethit') return `${esc(ev.name)} savaged ${who === 'You' ? foe.name : 'you'} for ${ev.damage}`;
+    if (ev.t === 'petshield') return ev.laststand ? `${esc(ev.name)} threw itself in front of the blow!` : `${esc(ev.name)} shielded ${who === 'You' ? 'you' : foe.name}`;
+    if (ev.t === 'petdebuff') return `${esc(ev.name)} cursed ${who === 'You' ? 'you' : foe.name}`;
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;

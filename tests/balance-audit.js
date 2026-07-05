@@ -1,3 +1,4 @@
+import { buildBattlePet } from '/Users/tommiller/Documents/Hyperframes Editor/tally/js/pets.js';
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {
   makeFighter, createFight, actionsFor, applyAction, endTurn,
@@ -119,8 +120,8 @@ const POLICIES = {
   },
 };
 
-function runFight({ stats, talents, foeCfg, seed, policy }) {
-  const player = makeFighter({ name: 'P', stats, talents });
+function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
+  const player = makeFighter({ name: 'P', stats, talents, pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || []) : null });
   const foe = makeFighter({
     name: 'F',
     stats: scaleStats(stats, foeCfg.mult),
@@ -191,7 +192,7 @@ function cell({ stats, talents, foeCfg, policy }) {
 const FOES = [
   { key: 'mirror', mult: 1.0, rung: 3 },
   ...LADDER.map(l => ({ key: 'rung' + l.rung, mult: l.mult, rung: l.rung, talents: RUNG_TALENTS[l.rung] || [] })),
-  { key: 'CHAMP', mult: CHAMPION.mult, rung: 5, talents: CHAMPION.talents, weaponId: CHAMPION.weaponId },
+  { key: 'CHAMP', mult: CHAMPION.mult, rung: 5, talents: CHAMPION.talents, weaponId: CHAMPION.weaponId, champ: true },
 ];
 
 const statsName = process.argv[2] === 'tom' ? 'TOM' : 'MID';

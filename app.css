@@ -1394,3 +1394,28 @@ body::before {
 .map-spawn.rare, .map-den-mark.big { filter: drop-shadow(0 0 8px rgba(255,180,84,.7)); }
 @keyframes legpulse { 0%,100% { box-shadow: 0 0 0 1.5px #ffb454, 0 0 12px rgba(255,180,84,.45); } 50% { box-shadow: 0 0 0 1.5px #ffd27a, 0 0 20px rgba(255,180,84,.75); } }
 @media (prefers-reduced-motion: reduce) { .ward-cell.r-legendary { animation: none; } }
+
+/* ===== pets in battle: card + mini-tree + fx ===== */
+.pet-card { display: flex; gap: 12px; align-items: center; padding: 10px; margin: 8px 0 4px;
+  background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 15px; }
+.pet-card.r-legendary { border-color: #ffb454; box-shadow: 0 0 14px rgba(255,180,84,.4); }
+.pet-card.r-epic { border-color: #c084fc88; }
+.pet-card img { width: 60px; height: 60px; object-fit: contain; flex: none; }
+.pet-card-meta { display: grid; gap: 2px; min-width: 0; }
+.pet-card-meta b { font-size: 14px; }
+.pet-role { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pet-tree { display: grid; gap: 8px; margin: 4px 0 6px; }
+.pet-tier { display: grid; gap: 4px; }
+.pet-tier.locked { opacity: .5; }
+.pet-tier-lbl { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.pet-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pet-opt { text-align: left; padding: 8px 9px; border-radius: 12px; background: var(--surface);
+  border: 1.5px solid var(--line); display: grid; gap: 2px; }
+.pet-opt b { font-size: 12px; }
+.pet-opt small { font-size: 10.5px; color: var(--text-3); line-height: 1.25; }
+.pet-opt.on { border-color: var(--accent); background: rgba(165,232,71,.08); box-shadow: 0 0 10px rgba(165,232,71,.15); }
+.pet-opt:disabled { opacity: .55; }
+.float.dmg.poison { color: #7fd463; }
+.fstage.petpounce { animation: petpounce .4s ease; }
+@keyframes petpounce { 40% { transform: translateY(-8px) scale(1.04); filter: drop-shadow(0 0 10px rgba(165,232,71,.6)); } }
+@media (prefers-reduced-motion: reduce) { .fstage.petpounce { animation: none; } }

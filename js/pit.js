@@ -1,3 +1,5 @@
+import { petAbilityEffect } from './pets.js';
+
 // The Pit: turn-based combat engine. Pure module (no DOM, injected RNG),
 // implementing boneheadz-combat-math-spec v0.1 exactly. Every constant here
 // is a spec starting value; tune via PIT_TUNING, not inline edits.
@@ -193,15 +195,14 @@ export const ACTIONS = {
   firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
   tempest:  { label: 'Tempest', range: 'close', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
-  bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8 },   // BLINDS on hit
-  bonerain: { label: 'Bone Rain', range: 'far', ap: 2, wind: 32, base: 12, hype: 6 },      // 3 raining hits
+  bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
 };
 export const SHOWSTOPPER_HYPE = 80;
 
 // big moves can miss (whiffed heavies leave you off-balance)
 export const MISS_CHANCE = {
   swing: 0.04, haymaker: 0.12, titan: 0.15,
-  flurry: 0.08, bonestorm: 0.10, tempest: 0.08, bonerain: 0.06,
+  flurry: 0.08, bonestorm: 0.10, tempest: 0.08,
 };
 const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -213,8 +214,49 @@ export const HIT_TAKEN_HYPE = 4;
 
 export function sigThreshold(f) { return f.talents.has('showstopper') ? SHOWSTOPPER_HYPE : SIGNATURE_HYPE; }
 function gainHype(f, amt) {
-  const mult = f.talents.has('crowdwork') ? 1.4 : 1;
+  let mult = f.talents.has('crowdwork') ? 1.4 : 1;
+  if (f.pet && f.pet.passive === 'hypeGain') mult *= (1 + f.pet.passivePct);
   f.hype = Math.min(SIGNATURE_HYPE, f.hype + Math.round(amt * mult));
+}
+
+// The equipped pet fights alongside you: an on-use ability on a cooldown,
+// resolved at the START of its owner's turn (reuses the pendingTicks pipeline).
+function resolvePet(fight, ownerWho, ticks) {
+  const me = fighterOf(fight, ownerWho);
+  const foe = opponentOf(fight, ownerWho);
+  const foeWho = ownerWho === 'p' ? 'f' : 'p';
+  if (!me.pet || fight.over) return;
+  if (--me.pet.cd > 0) return;
+  me.pet.cd = me.pet.cooldown;
+  const fx = petAbilityEffect(me.pet, me, foe);
+  if (fx.kind === 'pethit') {
+    for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
+      let dmg = fx.damage;
+      if (fx.crit && fight.rng() < 0.25) dmg *= 2;
+      dealDamage(fight, foeWho, dmg, ticks);
+      if (fx.lifesteal) { me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal)); }
+      ticks.push({ t: 'pethit', who: ownerWho, damage: dmg, name: me.pet.name });
+    }
+    if (foe.hp > 0 && fx.poison) {
+      const cur = foe.poison ? foe.poison.stacks : 0;
+      foe.poison = { per: fx.poison.per, stacks: Math.min(3, cur + fx.poison.stacks), turns: fx.poison.turns };
+      ticks.push({ t: 'status', who: foeWho, kind: 'poison', stacks: foe.poison.stacks });
+    }
+  } else if (fx.kind === 'petshield') {
+    me.ward = Math.max(me.ward, 0) + fx.shield;
+    if (fx.heal) me.hp = Math.min(me.d.maxHp, me.hp + fx.heal);
+    if (fx.stamina) me.wind = Math.min(me.d.maxWind, me.wind + fx.stamina);
+    if (fx.cleanse) { me.bleed = null; me.burn = null; me.poison = null; }
+    if (me.pet.picks.has('w-laststand')) me.pet.lastStandArmed = true;
+    ticks.push({ t: 'petshield', who: ownerWho, shield: fx.shield, heal: fx.heal, name: me.pet.name });
+  } else if (fx.kind === 'petdebuff') {
+    if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
+    if (fx.blind) foe.blind = { pct: 0.30, turns: 2 };
+    if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
+    if (fx.mark) foe.marked = { turns: 3 };
+    if (fx.stagger) foe.stagger = true;
+    ticks.push({ t: 'petdebuff', who: foeWho, name: me.pet.name });
+  }
 }
 export const TURN_CAP = 30;
 
@@ -266,6 +308,9 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
+  if (defender.marked) dmg *= 1.10; // imp Death's Mark
+  if (attacker.pet && attacker.pet.passive === 'yourDamage') dmg *= (1 + attacker.pet.passivePct);
+  if (defender.pet && defender.pet.passive === 'damageTaken') dmg *= (1 - defender.pet.passivePct);
   const crit = rng() < attacker.d.critChance;
   if (crit) dmg *= 1.5;
   const glance = !immune && rng() < defender.d.glanceChance;
@@ -288,12 +333,13 @@ export function expectedDamage(move, attacker, defenderState, defender) {
 
 /* ================= fight state ================= */
 
-export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [] }) {
+export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null }) {
   const weapon = WEAPONS[weaponId] || WEAPONS.starter;
   const tset = new Set(talents);
   const d = derived(stats, weapon, tset);
   return {
     name, stats, weapon, d, outfit, talents: tset,
+    pet: pet ? { ...pet, cd: 1, lastStandUsed: false } : null,
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false,
     sigsUsed: 0, shoveCount: 0,
@@ -301,9 +347,11 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     ward: 0,          // holy shield pool, absorbs damage first
     burn: null,       // {per, turns}
     bleed: null,      // {stacks, turns}
+    poison: null,     // {per, stacks, turns} pet DoT (Hound)
     sunder: null,     // {turns} takes +15% damage
     weaken: null,     // {pct, turns} deals less damage
     blind: null,      // {pct, turns} its own physical attacks miss more
+    marked: null,     // {turns} takes +10% from everything (imp Death's Mark)
     hp: d.maxHp, wind: d.maxWind, hype: tset.has('bigentrance') ? 25 : 0,
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
@@ -351,6 +399,12 @@ function dealDamage(fight, victimWho, amount, events) {
     v.lastlightUsed = true;
     v.hp = 1 + Math.round(v.d.maxHp * 0.20 * healMult(v));
     events.push({ t: 'lastlight', who: victimWho });
+    return;
+  }
+  if (amount >= v.hp && v.pet && v.pet.lastStandArmed && !v.pet.lastStandUsed) {
+    v.pet.lastStandUsed = true; v.pet.lastStandArmed = false;
+    v.hp = Math.max(1, v.hp);
+    events.push({ t: 'petshield', who: victimWho, shield: 0, laststand: true, name: v.pet.name });
     return;
   }
   v.hp = Math.max(0, v.hp - amount);
@@ -591,16 +645,19 @@ export function applyAction(fight, actionId) {
       }
       break;
     }
-    case 'bonerain': {
-      for (let h = 0; h < 3 && them.hp > 0; h++) {
-        const r = resolveHit({ move: 'bonerain', attacker: me, defender: them, rng: fight.rng });
-        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
-        if (r.damage > 0) { gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
-        events.push({ t: 'hit', who: fight.active, move: 'bonerain', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed });
+    case 'bonespike': {
+      const r = resolveHit({ move: 'bonespike', attacker: me, defender: them, rng: fight.rng });
+      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      if (r.damage > 0) {
+        gainHype(me, a.hype || 0);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
+        them.blind = { pct: 0.30, turns: 2 };
+        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'blind' });
       }
+      events.push({ t: 'hit', who: fight.active, move: 'bonespike', ...r, magic: true });
       break;
     }
-    default: { // jab / swing / haymaker / throwb / bonespike
+    default: { // jab / swing / haymaker / throwb
       const move = actionId === 'throwb' ? 'throwb' : actionId;
       const r = resolveHit({ move, attacker: me, defender: them, rng: fight.rng });
       if (r.miss) {
@@ -631,10 +688,6 @@ export function applyAction(fight, actionId) {
           if (move === 'jab' && me.talents.has('bleedout')) {
             them.bleed = { stacks: Math.min(3, (them.bleed ? them.bleed.stacks : 0) + 1), turns: 3 };
             events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'bleed', stacks: them.bleed.stacks });
-          }
-          if (move === 'bonespike') {
-            them.blind = { pct: 0.30, turns: 2 };
-            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'blind' });
           }
         }
         events.push({ t: 'hit', who: fight.active, move, ...r });
@@ -674,12 +727,22 @@ export function endTurn(fight) {
     me.burn.turns -= 1;
     if (me.burn.turns <= 0) me.burn = null;
   }
+  if (me.hp > 0 && me.poison) {
+    const tick = me.poison.per * me.poison.stacks;
+    me.hp = Math.max(0, me.hp - tick);
+    ticks.push({ t: 'poisontick', who: next, damage: tick });
+    me.poison.turns -= 1;
+    if (me.poison.turns <= 0) me.poison = null;
+  }
+  if (me.hp <= 0) fight.over = { winner: next === 'p' ? 'f' : 'p' };
+  // the owner's pet acts as their turn begins (pushes into the same tick stream)
+  if (!fight.over) resolvePet(fight, next, ticks);
   fight.pendingTick = ticks[0] || null;
   fight.pendingTicks = ticks;
-  if (me.hp <= 0) fight.over = { winner: next === 'p' ? 'f' : 'p' };
   if (me.sunder) { me.sunder.turns -= 1; if (me.sunder.turns <= 0) me.sunder = null; }
   if (me.weaken) { me.weaken.turns -= 1; if (me.weaken.turns <= 0) me.weaken = null; }
   if (me.blind) { me.blind.turns -= 1; if (me.blind.turns <= 0) me.blind = null; }
+  if (me.marked) { me.marked.turns -= 1; if (me.marked.turns <= 0) me.marked = null; }
   let ap = me.d.ap;
   if (me.stagger) { ap = Math.max(1, ap - 1); me.stagger = false; }
   if (me.offBalance) { ap = Math.max(1, ap - 1); me.offBalance = false; }
@@ -735,7 +798,6 @@ export function aiTakeTurn(fight) {
       const pHeavy = haymakerRate(p.recentCloseMoves);
       if (f.wind < 18 && pick('brace')) choice = 'brace';
       else if (pHeavy > 0.45 && fight.rng() < 0.55 + fight.aiLevel * 0.1 && pick('dodge') && f.state == null) choice = 'dodge';
-      else if (!p.blind && pick('bonespike') && fight.rng() < 0.16 + fight.aiLevel * 0.03) choice = 'bonespike'; // blind the player
       else if (p.state === 'dodge' && pick('jab')) choice = 'jab';
       else if (p.state === 'block' && pick('jab') && fight.rng() < 0.5) choice = 'jab';
       else {

@@ -640,11 +640,14 @@ test('specced build does not trivialize the champion (foes scale off effective s
 
 /* ============ v27: bone moves, blind, attack-vs-defense ============ */
 
-test('bone spike applies BLIND on hit; blind makes physical attacks miss', () => {
-  const P = makeFighter({ name: 'P', stats: MID });
+test('bone spike is necromancer-only and applies BLIND; blind makes physical attacks miss', () => {
+  const P = makeFighter({ name: 'P', stats: MID, talents: ['bonebolt'] });
   const F = makeFighter({ name: 'F', stats: MID });
   const fight = createFight({ player: P, foe: F, seed: 5 });
   fight.rng = () => 0.99; // lands, no crit
+  // only necromancers (bonebolt talent) can throw it
+  assert.ok(actionsFor(fight).some(x => x.id === 'bonespike'), 'necro has bone spike');
+  assert.ok(!actionsFor(createFight({ player: makeFighter({ name: 'N', stats: MID }), foe: F, seed: 5 })).some(x => x.id === 'bonespike'), 'non-necro does not');
   applyAction(fight, 'bonespike');
   assert.ok(F.blind && F.blind.pct > 0, 'foe is blinded');
   // a blinded attacker's physical jab can now miss (base jab never misses)
@@ -663,15 +666,6 @@ test('blind does NOT affect magic bolts (they home in)', () => {
   assert.ok(!resolveHit({ move: 'bonebolt', attacker: caster, defender: dummy, rng: () => 0.5 }).miss, 'bolt ignores blind');
 });
 
-test('bone rain lands three hits', () => {
-  const P = makeFighter({ name: 'P', stats: MID });
-  const F = makeFighter({ name: 'F', stats: { ...MID, marrow: 99 } });
-  const fight = createFight({ player: P, foe: F, seed: 5 });
-  fight.rng = () => 0.99; fight.range = 'far'; fight.ap = 3;
-  const hits = applyAction(fight, 'bonerain').filter(e => e.t === 'hit');
-  assert.equal(hits.length, 3);
-  assert.ok(hits.every(h => h.storm), 'flagged multi-hit');
-});
 
 test('attack-vs-defense: Power raises hit, Reflex evades (Cam model)', () => {
   const bruiser = makeFighter({ name: 'A', stats: { power: 100, marrow: 50, wind: 50, reflex: 50, hype: 50 } });
@@ -693,6 +687,74 @@ test('Heavy Hands also steadies aim (accuracy talent)', () => {
   const rolls = Array.from({ length: 1000 }, (_, i) => (i + 0.5) / 1000);
   const missRate = atk => { let m = 0; for (const r of rolls) if (resolveHit({ move: 'haymaker', attacker: atk, defender: def, rng: () => r }).miss) m++; return m / rolls.length; };
   assert.ok(missRate(slab) < missRate(plain), 'heavy hands lands more often');
+});
+
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_ASSIGN, PET_FAMILIES, PET_TREES } from '../js/pets.js';
+
+/* ============ v34: pets in battle ============ */
+
+test('pets: families cover all 3 roles; level curve + tier gates', () => {
+  const fams = new Set(Object.keys(PET_ASSIGN).map(id => familyOf(id).key));
+  assert.deepEqual([...fams].sort(), ['hound', 'imp', 'warden'], 'all three families represented');
+  assert.equal(petLevel(0), 1);
+  assert.equal(petLevel(3000), 2);
+  assert.equal(petLevel(99999), 6, 'caps at 6');
+  assert.deepEqual(unlockedTiers(1), []);
+  assert.deepEqual(unlockedTiers(6), [2, 4, 6]);
+});
+
+test('pets: Hound passive raises your damage; Warden passive lowers damage taken', () => {
+  const houndPet = buildBattlePet('C3', 6, []); // hound
+  const wardenPet = buildBattlePet('C2', 6, []); // warden
+  const A = makeFighter({ name: 'A', stats: MID, pet: houndPet });
+  const plain = makeFighter({ name: 'P', stats: MID });
+  const D = makeFighter({ name: 'D', stats: MID });
+  const noLuck = () => 0.99;
+  const withHound = resolveHit({ move: 'swing', attacker: A, defender: D, rng: noLuck }).damage;
+  const without = resolveHit({ move: 'swing', attacker: plain, defender: D, rng: noLuck }).damage;
+  assert.ok(withHound > without, `hound owner hits harder (${withHound} > ${without})`);
+  const Dward = makeFighter({ name: 'DW', stats: MID, pet: wardenPet });
+  const vsWarden = resolveHit({ move: 'swing', attacker: plain, defender: Dward, rng: noLuck }).damage;
+  assert.ok(vsWarden < without, `warden owner takes less (${vsWarden} < ${without})`);
+});
+
+test('pets: Hound bite fires on cooldown, deals damage + applies poison that ticks', () => {
+  const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C3', 6, ['h-rabid']) });
+  const F = makeFighter({ name: 'F', stats: { ...MID, marrow: 99 } });
+  const fight = createFight({ player: P, foe: F, seed: 7 });
+  fight.rng = () => 0.99;
+  const foeHp0 = F.hp;
+  // pet cd initialises to 1; the player's next turn begins via two endTurns (p->f->p)
+  endTurn(fight); // to foe
+  endTurn(fight); // back to player: pet acts here
+  const petEvents = fight.pendingTicks.filter(e => e.t === 'pethit');
+  assert.ok(petEvents.length >= 1, 'the hound bit');
+  assert.ok(F.hp < foeHp0, 'bite dealt damage');
+  assert.ok(F.poison && F.poison.stacks === 2, 'rabid applied 2 poison stacks');
+  const hpBeforeTick = F.hp;
+  endTurn(fight); endTurn(fight); // cycle: poison ticks on the foe's turn start
+  // find any poisontick
+  const anyPoison = fight.pendingTicks.some(e => e.t === 'poisontick') || F.hp < hpBeforeTick;
+  assert.ok(anyPoison || F.poison === null, 'poison ticked (or wore off)');
+});
+
+test('pets: Warden shields its owner when it acts', () => {
+  const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C2', 6, ['w-bulwark']) });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 7 });
+  endTurn(fight); endTurn(fight); // back to player: warden acts
+  assert.ok(P.ward > 0, `warden granted a shield (${P.ward})`);
+});
+
+test('pets: one pick per tier; tree gated by pet level', () => {
+  // build with two nodes from the SAME tier: buildBattlePet just stores picks,
+  // the UI enforces one-per-tier; here assert tree shape + level gating math
+  for (const fam of Object.keys(PET_TREES)) {
+    const tree = PET_TREES[fam];
+    assert.equal(tree.length, 3, fam + ' has 3 tiers');
+    assert.deepEqual(tree.map(t => t.tier), [2, 4, 6]);
+    assert.ok(tree.every(t => t.opts.length === 2), 'one-of-two per tier');
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

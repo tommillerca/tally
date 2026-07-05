@@ -118,7 +118,28 @@ export async function hatchEgg(invId) {
   const pool = fresh.filter(i => i.rarity !== 'common');
   const pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
   await grantCosmetic(pick.id, 'egg');
+  // anchor its battle level to now: pet level = steps walked SINCE this moment
+  const pets2 = (await kvGet('pets', {})) || {};
+  if (!pets2[pick.id]) { pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() }; await kvSet('pets', pets2); }
   return { ready: true, item: pick };
+}
+
+// The steps a pet has walked since it hatched (drives its battle level).
+export async function petStepsSince(petId) {
+  const pets = (await kvGet('pets', {})) || {};
+  const rec = pets[petId];
+  const now = await lifetimeStepsSum();
+  return Math.max(0, now - (rec ? rec.hatchedAtSteps : 0)); // pre-existing pets: count all steps
+}
+export async function petPicks(petId) {
+  const all = (await kvGet('pettalents', {})) || {};
+  return all[petId] || [];
+}
+export async function setPetPick(petId, nodeId, picks) {
+  const all = (await kvGet('pettalents', {})) || {};
+  all[petId] = picks;
+  await kvSet('pettalents', all);
+  return picks;
 }
 
 // Legacy: unopened egg-type crates become incubating eggs (idempotent sweep).
