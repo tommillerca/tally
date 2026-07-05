@@ -196,23 +196,27 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   const idx = pickPrizeIndex(rng);
   const prize = PRIZES[idx];
 
-  let coinDelta = 0;
-  if (!preview) {
-    // gate + grant BEFORE the reveal so a mid-spin reload can't double-dip
+  // Gate + grant happen ON SPIN, not on show — so closing the wheel without
+  // spinning does NOT burn your daily spin (it comes back next open). Setting
+  // the date BEFORE the grant still blocks a mid-spin reload double-dip, and the
+  // prize is date-seeded so it can't be rerolled by reloading.
+  const commit = async () => {
+    if (preview) return { coinDelta: 0 };
+    if ((await kvGet('wheelLastDate', null)) === today) return { coinDelta: 0 };
     await kvSet('wheelLastDate', today);
     const before = await coins();
     await prize.grant(rng);
-    coinDelta = (await coins()) - before;
-  }
-  const result = { iconHtml: iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta };
-  return showWheel(idx, prize, result, { sounds });
+    return { coinDelta: (await coins()) - before };
+  };
+  const result = { iconHtml: iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta: 0 };
+  return showWheel(idx, prize, result, commit, { sounds });
 }
 
 function sheetStackOpen() {
   return !!document.querySelector('#sheets .sheet');
 }
 
-function showWheel(idx, prize, result, { sounds }) {
+function showWheel(idx, prize, result, commit, { sounds }) {
   return new Promise(resolve => {
     const dw = document.createElement('div');
     dw.className = 'dw';
@@ -256,8 +260,10 @@ function showWheel(idx, prize, result, { sounds }) {
       try { window.dispatchEvent(new CustomEvent('bh-wheel-won', { detail: result })); } catch { /* noop */ }
     };
 
-    const spin = () => {
+    const spin = async () => {
       spinBtn.disabled = true;
+      // consume the day + grant the prize the moment they commit to spinning
+      try { const c = await commit(); result.coinDelta = c.coinDelta; } catch { /* grant best-effort */ }
       if (sounds) { try { popSound(true); } catch { /* no audio */ } }
       if (reducedMotion) {
         wheel.style.transform = `rotate(${360 - (idx * SEG_DEG + SEG_DEG / 2)}deg)`;
