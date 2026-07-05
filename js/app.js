@@ -2757,6 +2757,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
+  const petBody = fight.pAux;                              // your pet as a real body
+  const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
   if (!fast && !reducedMotion) {
     const vs = document.createElement('div');
@@ -2810,6 +2812,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
         </div>
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG'] })}</div>
+        ${petBody ? `
+        <div class="pet-fighter" id="petG">
+          <div class="bh-stage fstage petmini" id="petStage">${petArtId && BH_BY_ID[petArtId] ? `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">` : ''}</div>
+          <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
+        </div>` : ''}
       </div>
       <div class="telegraph arena-tele" id="teleBanner" hidden></div>
       <div id="floats"></div>
@@ -2831,6 +2838,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
     el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';
     el('foeHp').style.background = foe.hp / foe.d.maxHp < 0.3 ? 'var(--danger)' : '';
+    if (petBody && el('petHp')) {
+      el('petHp').style.width = Math.max(0, petBody.hp / petBody.d.maxHp * 100) + '%';
+      const pg = el('petG');
+      if (pg) pg.classList.toggle('fainted', !!petBody.fainted);
+    }
     el('youWind').style.width = (player.wind / player.d.maxWind * 100) + '%';
     el('foeWind').style.width = (foe.wind / foe.d.maxWind * 100) + '%';
     el('youHype').style.width = player.hype + '%';
@@ -2895,8 +2907,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // choreograph one engine event
   function playFx(ev) {
+    // when the foe is going after your pet, land the hit on the pet's mini-stage
+    const foeHitsPet = ev.who === 'f' && fight.fTarget === 'pa' && el('petStage');
     const atkStage = ev.who === 'p' ? el('youStage') : el('foeStage');
-    const vicStage = ev.who === 'p' ? el('foeStage') : el('youStage');
+    const vicStage = ev.who === 'p' ? el('foeStage') : (foeHitsPet ? el('petStage') : el('youStage'));
     const vicSide = ev.who === 'p' ? 'f' : 'p';
     const lungeCls = ev.who === 'p' ? 'lunge-r' : 'lunge-l';
     if (ev.t === 'hit') {
@@ -2964,17 +2978,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`-${ev.damage}`, ev.who, 'dmg poison');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
     } else if (ev.t === 'pethit') {
-      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'petpounce', fxMs + 150);
+      pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'petpounce', fxMs + 150);
       setTimeout(() => { impactBurst(ev.who === 'p' ? 'f' : 'p', 'phys'); floatNode(`-${ev.damage}`, ev.who === 'p' ? 'f' : 'p', 'dmg'); }, fast ? 20 : fxMs * 0.4);
       floatNode(`🐾 ${esc(ev.name)}`, ev.who, 'stamp warm');
       hitSound(S.sounds, 'tick');
     } else if (ev.t === 'petshield') {
-      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'wardfx', fxMs + 250);
+      pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'wardfx', fxMs + 250);
       floatNode(ev.laststand ? 'LAST STAND!' : (ev.shield ? `+${ev.shield} ward` : '+heal'), ev.who, 'stamp holy');
       if (ev.heal) floatNode(`+${ev.heal}`, ev.who, 'dmg heal');
     } else if (ev.t === 'petdebuff') {
-      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'hexfx', fxMs + 250);
       floatNode('🐾 cursed', ev.who, 'stamp hex');
+    } else if (ev.t === 'faint') {
+      const pg = el('petG'); if (pg) pg.classList.add('fainted');
+      floatNode('🐾 DOWN', 'p', 'stamp dim');
+      hitSound(S.sounds, 'thud');
     } else if (ev.t === 'state') {
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.state === 'block' ? 'guard' : 'slip', fxMs + 200);
     } else if (ev.t === 'shove') {
@@ -3042,6 +3060,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'pethit') return `${esc(ev.name)} savaged ${who === 'You' ? foe.name : 'you'} for ${ev.damage}`;
     if (ev.t === 'petshield') return ev.laststand ? `${esc(ev.name)} threw itself in front of the blow!` : `${esc(ev.name)} shielded ${who === 'You' ? 'you' : foe.name}`;
     if (ev.t === 'petdebuff') return `${esc(ev.name)} cursed ${who === 'You' ? 'you' : foe.name}`;
+    if (ev.t === 'faint') return `${esc(ev.name)} went down! You fight on alone.`;
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;

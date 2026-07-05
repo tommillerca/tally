@@ -87,7 +87,7 @@ export function unlockedTiers(level) {
 }
 
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
-export function passivePct(level) { return 0.06 + (level - 1) * 0.01; }
+export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
 // Assemble the battle-pet object makeFighter() takes. picks = array of node ids.
 export function buildBattlePet(petId, level = 1, picks = []) {
@@ -102,7 +102,7 @@ export function buildBattlePet(petId, level = 1, picks = []) {
     color: fam.color,
     level,
     passive: fam.passive,
-    passivePct: passivePct(level) * (fam.key === 'warden' && has('w-guardstance') ? 2 : 1) * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
+    passivePct: passivePct(level) * (fam.key === 'warden' && has('w-guardstance') ? 1.35 : 1) * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
     cooldown: fam.cooldown === 2 && has('h-pack') ? 1 : fam.cooldown,
     picks: new Set(picks),
     // per-fight mutable state is added by makeFighter (cd timer, lastStandUsed)
@@ -116,26 +116,28 @@ export function petAbilityEffect(pet, self, foe) {
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
   if (pet.family === 'hound') {
-    const base = Math.round((3 + lvl * 0.95) * self.d.powerMult);
+    const base = Math.round((2 + lvl * 0.7) * self.d.powerMult);
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
     const stacks = has('h-rabid') ? 2 : 1;
     return {
       kind: 'pethit', bites, damage: base, crit: has('h-maul'),
       lifesteal: has('h-bloodscent') ? 0.06 : 0,
-      poison: { per: Math.round((1.5 + lvl * 0.4) * (has('h-venom') ? 1.5 : 1)), turns: 3, stacks },
+      poison: { per: Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1)), turns: 3, stacks },
     };
   }
   if (pet.family === 'warden') {
-    const shield = Math.round((14 + lvl * 3) * (has('w-bulwark') ? 1.6 : 1));
+    // tuned down for the pet-as-body era: the pet already adds a soak layer, so
+    // its support kit is lighter than the v34 companion version
+    const shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1));
     return {
       kind: 'petshield', shield,
-      heal: has('w-mend') ? Math.round(self.d.maxHp * 0.08) : 0,
+      heal: has('w-mend') ? Math.round(self.d.maxHp * 0.06) : 0,
       cleanse: has('w-cleanse'),
       stamina: has('w-devotion') ? 15 : 0,
     };
   }
   // imp
-  const pct = 0.15 * (has('i-doublehex') ? 1.5 : 1);
+  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1);
   return {
     kind: 'petdebuff', weakenPct: pct, turns: has('i-doublehex') ? 3 : 2,
     blind: has('i-jinx'), staminaDrain: has('i-siphon') ? 8 : 0,

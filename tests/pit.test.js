@@ -757,5 +757,40 @@ test('pets: one pick per tier; tree gated by pet level', () => {
   }
 });
 
+test('pets as bodies: the pet has its own HP pool on your side', () => {
+  const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C3', 6, []) });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 3 });
+  assert.ok(fight.pAux && fight.pAux.isPet, 'pet body created on the player side');
+  assert.ok(fight.pAux.hp > 0 && fight.pAux.hp === fight.pAux.d.maxHp, 'pet starts at full HP');
+});
+
+test('pets as bodies: a downed pet faints (aura drops) but is NOT a loss', () => {
+  const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C3', 6, []) });
+  const F = makeFighter({ name: 'F', stats: MID });
+  const fight = createFight({ player: P, foe: F, seed: 3 });
+  assert.ok(P.pet, 'aura present while the pet lives');
+  fight.active = 'f'; fight.fTarget = 'pa'; fight.pAux.hp = 1; fight.rng = () => 0.5;
+  applyAction(fight, 'swing'); // foe finishes the pet
+  assert.ok(fight.pAux.fainted, 'pet fainted');
+  assert.equal(P.pet, null, 'aura dropped when the pet went down');
+  assert.ok(!fight.over, 'the fight continues after the pet faints');
+});
+
+test('multi-body: win requires the WHOLE enemy side down (boss + add)', () => {
+  const P = makeFighter({ name: 'P', stats: { ...MID, power: 99 } });
+  const F = makeFighter({ name: 'Boss', stats: MID });
+  const ADD = makeFighter({ name: 'Add', stats: MID });
+  const fight = createFight({ player: P, foe: F, add: ADD, seed: 3 });
+  fight.rng = () => 0.5;
+  fight.f.hp = 1; fight.pTarget = 'f';
+  applyAction(fight, 'swing'); // kill the boss captain
+  assert.ok(fight.f.hp <= 0, 'boss down');
+  assert.ok(!fight.over, 'not over while the add still stands');
+  fight.fAux.hp = 1; fight.pTarget = 'fa'; fight.ap = 2;
+  applyAction(fight, 'swing'); // kill the add
+  assert.ok(fight.over && fight.over.winner === 'p', 'win only once BOTH enemies are down');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

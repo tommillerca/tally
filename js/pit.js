@@ -308,7 +308,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
-  if (defender.marked) dmg *= 1.10; // imp Death's Mark
+  if (defender.marked) dmg *= 1.07; // imp Death's Mark
   if (attacker.pet && attacker.pet.passive === 'yourDamage') dmg *= (1 + attacker.pet.passivePct);
   if (defender.pet && defender.pet.passive === 'damageTaken') dmg *= (1 - defender.pet.passivePct);
   const crit = rng() < attacker.d.critChance;
@@ -358,12 +358,37 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     offBalance: false,
     tauntCount: 0,
     recentCloseMoves: [],  // for AI tendency reads
+    fainted: false,        // aux bodies (pet / add) can drop without ending the fight
+    isPet: false,
   };
 }
 
-export function createFight({ player, foe, seed = 1, aiLevel = 1 }) {
+// Your pet as a REAL body: enemies can target and down it (dropping its aura).
+// HP is sized directly (the 150-base HP formula is too big for a small pet);
+// it still uses a full derived block so it works as a defender in resolveHit.
+export function makePetBody(petDescriptor, owner) {
+  const L = petDescriptor.level || 1;
+  const petStats = { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0 };
+  const body = makeFighter({ name: petDescriptor.name, stats: petStats });
+  const maxHp = 40 + L * 8 + Math.round((owner.stats.marrow || 40) * 0.25);
+  body.d = { ...body.d, maxHp };
+  body.hp = maxHp;
+  body.isPet = true;
+  body.side = 'p';
+  body.kit = petDescriptor;   // family/ability/picks used by resolvePet
+  return body;
+}
+
+export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) {
+  const pAux = player.pet ? makePetBody(player.pet, player) : null;
+  if (pAux) pAux.owner = player;
+  player.side = 'p'; foe.side = 'f';
+  if (add) add.side = 'f';
   return {
     p: player, f: foe,
+    pAux, fAux: add,
+    // each captain's current target ('f'/'fa' for the player, 'p'/'pa' for the foe)
+    pTarget: 'f', fTarget: 'p',
     range: 'close',
     active: 'p',
     turn: 1,
@@ -403,7 +428,8 @@ function dealDamage(fight, victimWho, amount, events) {
   }
   if (amount >= v.hp && v.pet && v.pet.lastStandArmed && !v.pet.lastStandUsed) {
     v.pet.lastStandUsed = true; v.pet.lastStandArmed = false;
-    v.hp = Math.max(1, v.hp);
+    // a real last stand: survive the killing blow at a sliver, not a full negate
+    v.hp = Math.max(1, Math.round(v.d.maxHp * 0.15));
     events.push({ t: 'petshield', who: victimWho, shield: 0, laststand: true, name: v.pet.name });
     return;
   }
@@ -415,10 +441,41 @@ function dealDamage(fight, victimWho, amount, events) {
     v.wind = Math.min(v.d.maxWind, v.wind + 30);
     events.push({ t: 'secondwind', who: victimWho, heal });
   }
+  // A downed pet faints (not a loss): drop its aura so the fight keeps going.
+  if (v.isPet && v.hp <= 0 && !v.fainted) {
+    v.fainted = true;
+    if (v.owner) v.owner.pet = null; // aura reads (resolveHit/gainHype) stop
+    events.push({ t: 'faint', who: victimWho, name: v.name });
+  }
 }
 
-export function fighterOf(fight, who) { return who === 'p' ? fight.p : fight.f; }
-export function opponentOf(fight, who) { return who === 'p' ? fight.f : fight.p; }
+export function fighterOf(fight, who) {
+  return who === 'p' ? fight.p : who === 'f' ? fight.f : who === 'pa' ? fight.pAux : fight.fAux;
+}
+export function opponentOf(fight, who) { return (who === 'p' || who === 'pa') ? fight.f : fight.p; }
+
+// Who the given captain is attacking right now (falls back to a living enemy).
+export function targetWhoFor(fight, who) {
+  if (who === 'p' || who === 'pa') {
+    const t = fight.pTarget;
+    if (t === 'fa' && fight.fAux && fight.fAux.hp > 0) return 'fa';
+    return 'f';
+  }
+  const t = fight.fTarget;
+  if (t === 'pa' && fight.pAux && fight.pAux.hp > 0 && !fight.pAux.fainted) return 'pa';
+  return 'p';
+}
+
+// Fight ends only when a whole SIDE's captains-and-adds are down. A downed pet is
+// NOT a loss (it just faints and drops its aura).
+export function checkOver(fight) {
+  if (fight.over) return;
+  const pDown = fight.p.hp <= 0;
+  const fDown = fight.f.hp <= 0 && (!fight.fAux || fight.fAux.hp <= 0);
+  if (pDown && fDown) fight.over = { winner: 'draw' };
+  else if (pDown) fight.over = { winner: 'f' };
+  else if (fDown) fight.over = { winner: 'p' };
+}
 
 // legal actions for the active fighter right now
 export function actionsFor(fight) {
@@ -445,7 +502,8 @@ export function actionsFor(fight) {
 // apply one action by the active fighter; returns event list
 export function applyAction(fight, actionId) {
   const me = fighterOf(fight, fight.active);
-  const them = opponentOf(fight, fight.active);
+  const defWho = targetWhoFor(fight, fight.active);
+  const them = fighterOf(fight, defWho);
   const a = ACTIONS[actionId];
   const events = [];
   let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(actionId));
@@ -492,7 +550,7 @@ export function applyAction(fight, actionId) {
       gainHype(me, gain);
       if (me.talents.has('heckle')) {
         if (!them.weaken || them.weaken.pct <= 0.15) them.weaken = { pct: 0.15, turns: 2 };
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'weaken' });
+        events.push({ t: 'status', who: defWho, kind: 'weaken' });
       }
       events.push({ t: 'taunt', who: fight.active, gain });
       break;
@@ -504,7 +562,7 @@ export function applyAction(fight, actionId) {
       const encore = Math.pow(0.75, me.sigsUsed); // the crowd's seen this one before
       me.sigsUsed += 1;
       const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost * encore);
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', dmg, events);
+      dealDamage(fight, defWho, dmg, events);
       events.push({ t: 'hit', who: fight.active, move: 'signature', damage: dmg, crit: false, glance: false, signature: true });
       break;
     }
@@ -516,7 +574,7 @@ export function applyAction(fight, actionId) {
         events.push({ t: 'miss', who: fight.active, move: 'titan', whiffed: true });
         break;
       }
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, HIT_TAKEN_HYPE);
@@ -536,7 +594,7 @@ export function applyAction(fight, actionId) {
       for (let h = 0; h < 3 && them.hp > 0; h++) {
         const r = resolveHit({ move: 'flurry', attacker: me, defender: them, rng: fight.rng });
         const dmg = Math.round(r.damage * mult);
-        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', dmg, events);
+        dealDamage(fight, defWho, dmg, events);
         if (dmg > 0) { gainHype(me, 6); gainHype(them, HIT_TAKEN_HYPE); }
         events.push({ t: 'hit', who: fight.active, move: 'flurry', damage: dmg, crit: r.crit, glance: false, flurry: true, hitNo: h + 1, whiffed: !!r.whiffed });
       }
@@ -544,7 +602,7 @@ export function applyAction(fight, actionId) {
     }
     case 'bonebolt': {
       const r = resolveHit({ move: 'bonebolt', attacker: me, defender: them, rng: fight.rng });
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
@@ -555,7 +613,7 @@ export function applyAction(fight, actionId) {
         }
         if (me.talents.has('gravechill')) {
           them.wind = Math.max(0, them.wind - 10);
-          events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'chill' });
+          events.push({ t: 'status', who: defWho, kind: 'chill' });
         }
       }
       events.push({ t: 'hit', who: fight.active, move: 'bonebolt', ...r, magic: true });
@@ -570,12 +628,12 @@ export function applyAction(fight, actionId) {
     }
     case 'hex': {
       if (!them.weaken || them.weaken.pct <= 0.20) them.weaken = { pct: 0.20, turns: 2 };
-      events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'hex' });
+      events.push({ t: 'status', who: defWho, kind: 'hex' });
       break;
     }
     case 'smite': {
       const r = resolveHit({ move: 'smite', attacker: me, defender: them, rng: fight.rng });
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
@@ -595,24 +653,24 @@ export function applyAction(fight, actionId) {
     }
     case 'frostbolt': {
       const r = resolveHit({ move: 'frostbolt', attacker: me, defender: them, rng: fight.rng });
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         them.wind = Math.max(0, them.wind - 8);
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'chill' });
+        events.push({ t: 'status', who: defWho, kind: 'chill' });
       }
       events.push({ t: 'hit', who: fight.active, move: 'frostbolt', ...r, magic: true });
       break;
     }
     case 'firebolt': {
       const r = resolveHit({ move: 'firebolt', attacker: me, defender: them, rng: fight.rng });
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         them.burn = { per: me.talents.has('wildfire') ? 7 : 5, turns: me.talents.has('wildfire') ? 3 : 2 };
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'burn' });
+        events.push({ t: 'status', who: defWho, kind: 'burn' });
       }
       events.push({ t: 'hit', who: fight.active, move: 'firebolt', ...r, magic: true });
       break;
@@ -623,15 +681,15 @@ export function applyAction(fight, actionId) {
       for (let h = 0; h < 4 && them.hp > 0; h++) {
         const school = h % 2 === 0 ? 'fire' : 'frost';
         const r = resolveHit({ move: 'tempest', attacker: me, defender: them, rng: fight.rng });
-        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+        dealDamage(fight, defWho, r.damage, events);
         if (r.damage > 0) { landed = true; gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
         events.push({ t: 'hit', who: fight.active, move: 'tempest', damage: r.damage, crit: r.crit, glance: false, storm: true, school, hitNo: h + 1, whiffed: !!r.whiffed });
       }
       if (landed && them.hp > 0) {
         them.burn = { per: me.talents.has('wildfire') ? 7 : 5, turns: me.talents.has('wildfire') ? 3 : 2 };
         them.wind = Math.max(0, them.wind - 8);
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'burn' });
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'chill' });
+        events.push({ t: 'status', who: defWho, kind: 'burn' });
+        events.push({ t: 'status', who: defWho, kind: 'chill' });
       }
       break;
     }
@@ -639,7 +697,7 @@ export function applyAction(fight, actionId) {
       me.bonestormUsed = true;
       for (let h = 0; h < 3 && them.hp > 0; h++) {
         const r = resolveHit({ move: 'bonestorm', attacker: me, defender: them, rng: fight.rng });
-        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+        dealDamage(fight, defWho, r.damage, events);
         if (r.damage > 0) { gainHype(me, 5); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
         events.push({ t: 'hit', who: fight.active, move: 'bonestorm', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed });
       }
@@ -647,12 +705,12 @@ export function applyAction(fight, actionId) {
     }
     case 'bonespike': {
       const r = resolveHit({ move: 'bonespike', attacker: me, defender: them, rng: fight.rng });
-      dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+      dealDamage(fight, defWho, r.damage, events);
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         them.blind = { pct: 0.30, turns: 2 };
-        events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'blind' });
+        events.push({ t: 'status', who: defWho, kind: 'blind' });
       }
       events.push({ t: 'hit', who: fight.active, move: 'bonespike', ...r, magic: true });
       break;
@@ -667,10 +725,10 @@ export function applyAction(fight, actionId) {
           const c = resolveHit({ move: 'jab', attacker: them, defender: { ...me, state: null, d: me.d, talents: me.talents, sunder: me.sunder }, rng: fight.rng });
           dealDamage(fight, fight.active, c.damage, events);
           if (c.damage > 0) gainHype(them, 6);
-          events.push({ t: 'counter', who: fight.active === 'p' ? 'f' : 'p', damage: c.damage, crit: c.crit });
+          events.push({ t: 'counter', who: defWho, damage: c.damage, crit: c.crit });
         }
       } else {
-        dealDamage(fight, fight.active === 'p' ? 'f' : 'p', r.damage, events);
+        dealDamage(fight, defWho, r.damage, events);
         if (r.breaksGuard) { them.state = null; }
         if (r.stagger || (move === 'haymaker' && r.damage > 0 && me.talents.has('concussive'))) { them.stagger = true; }
         if (r.damage > 0) {
@@ -683,11 +741,11 @@ export function applyAction(fight, actionId) {
           }
           if (move === 'haymaker' && me.talents.has('bonebreaker')) {
             them.sunder = { turns: 2 };
-            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'sunder' });
+            events.push({ t: 'status', who: defWho, kind: 'sunder' });
           }
           if (move === 'jab' && me.talents.has('bleedout')) {
             them.bleed = { stacks: Math.min(3, (them.bleed ? them.bleed.stacks : 0) + 1), turns: 3 };
-            events.push({ t: 'status', who: fight.active === 'p' ? 'f' : 'p', kind: 'bleed', stacks: them.bleed.stacks });
+            events.push({ t: 'status', who: defWho, kind: 'bleed', stacks: them.bleed.stacks });
           }
         }
         events.push({ t: 'hit', who: fight.active, move, ...r });
@@ -695,13 +753,38 @@ export function applyAction(fight, actionId) {
     }
   }
 
-  if (them.hp <= 0) {
-    fight.over = { winner: fight.active };
-    events.push({ t: 'ko', who: fight.active });
-  } else if (me.hp <= 0) {
-    fight.over = { winner: fight.active === 'p' ? 'f' : 'p' };
-  }
+  checkOver(fight);
+  if (fight.over && fight.over.winner !== 'draw') events.push({ t: 'ko', who: fight.over.winner });
   return events;
+}
+
+// damage-over-time ticks (bleed / burn / poison) for one fighter
+function tickDots(f, who, ticks) {
+  if (f.bleed) {
+    const tick = 4 * f.bleed.stacks;
+    f.hp = Math.max(0, f.hp - tick);
+    ticks.push({ t: 'bleedtick', who, damage: tick });
+    f.bleed.turns -= 1; if (f.bleed.turns <= 0) f.bleed = null;
+  }
+  if (f.hp > 0 && f.burn) {
+    f.hp = Math.max(0, f.hp - f.burn.per);
+    ticks.push({ t: 'burntick', who, damage: f.burn.per });
+    f.burn.turns -= 1; if (f.burn.turns <= 0) f.burn = null;
+  }
+  if (f.hp > 0 && f.poison) {
+    const tick = f.poison.per * f.poison.stacks;
+    f.hp = Math.max(0, f.hp - tick);
+    ticks.push({ t: 'poisontick', who, damage: tick });
+    f.poison.turns -= 1; if (f.poison.turns <= 0) f.poison = null;
+  }
+}
+
+// count down timed debuffs for one fighter
+function tickTimers(f) {
+  if (f.sunder) { f.sunder.turns -= 1; if (f.sunder.turns <= 0) f.sunder = null; }
+  if (f.weaken) { f.weaken.turns -= 1; if (f.weaken.turns <= 0) f.weaken = null; }
+  if (f.blind) { f.blind.turns -= 1; if (f.blind.turns <= 0) f.blind = null; }
+  if (f.marked) { f.marked.turns -= 1; if (f.marked.turns <= 0) f.marked = null; }
 }
 
 // end the active fighter's turn, start the other's
@@ -712,37 +795,26 @@ export function endTurn(fight) {
   // my defensive state persisted through the opponent's turn; clears now
   me.state = null;
   me.wind = Math.min(me.d.maxWind, me.wind + REGEN_PER_TURN + (me.talents.has('totemic') ? 5 : 0));
-  // status ticks
+  // DoTs tick for the captain AND any living aux (pet / add) on this side
   const ticks = [];
-  if (me.bleed) {
-    const tick = 4 * me.bleed.stacks;
-    me.hp = Math.max(0, me.hp - tick);
-    ticks.push({ t: 'bleedtick', who: next, damage: tick });
-    me.bleed.turns -= 1;
-    if (me.bleed.turns <= 0) me.bleed = null;
+  tickDots(me, next, ticks);
+  const auxWho = next === 'p' ? 'pa' : 'fa';
+  const aux = fighterOf(fight, auxWho);
+  if (aux && aux.hp > 0 && !aux.fainted) {
+    tickDots(aux, auxWho, ticks);
+    if (aux.isPet && aux.hp <= 0 && !aux.fainted) {
+      aux.fainted = true; if (aux.owner) aux.owner.pet = null;
+      ticks.push({ t: 'faint', who: auxWho, name: aux.name });
+    }
   }
-  if (me.hp > 0 && me.burn) {
-    me.hp = Math.max(0, me.hp - me.burn.per);
-    ticks.push({ t: 'burntick', who: next, damage: me.burn.per });
-    me.burn.turns -= 1;
-    if (me.burn.turns <= 0) me.burn = null;
-  }
-  if (me.hp > 0 && me.poison) {
-    const tick = me.poison.per * me.poison.stacks;
-    me.hp = Math.max(0, me.hp - tick);
-    ticks.push({ t: 'poisontick', who: next, damage: tick });
-    me.poison.turns -= 1;
-    if (me.poison.turns <= 0) me.poison = null;
-  }
-  if (me.hp <= 0) fight.over = { winner: next === 'p' ? 'f' : 'p' };
+  checkOver(fight);
   // the owner's pet acts as their turn begins (pushes into the same tick stream)
   if (!fight.over) resolvePet(fight, next, ticks);
+  checkOver(fight);
   fight.pendingTick = ticks[0] || null;
   fight.pendingTicks = ticks;
-  if (me.sunder) { me.sunder.turns -= 1; if (me.sunder.turns <= 0) me.sunder = null; }
-  if (me.weaken) { me.weaken.turns -= 1; if (me.weaken.turns <= 0) me.weaken = null; }
-  if (me.blind) { me.blind.turns -= 1; if (me.blind.turns <= 0) me.blind = null; }
-  if (me.marked) { me.marked.turns -= 1; if (me.marked.turns <= 0) me.marked = null; }
+  tickTimers(me);
+  if (aux && !aux.fainted) tickTimers(aux);
   let ap = me.d.ap;
   if (me.stagger) { ap = Math.max(1, ap - 1); me.stagger = false; }
   if (me.offBalance) { ap = Math.max(1, ap - 1); me.offBalance = false; }
@@ -775,6 +847,13 @@ export function planTelegraph(fight) {
 export function aiTakeTurn(fight) {
   const events = [];
   const f = fight.f, p = fight.p;
+  // pick a target for this turn: usually the player, but sometimes go after a
+  // living pet to strip its aura (more tempting the lower the pet already is)
+  fight.fTarget = 'p';
+  if (fight.pAux && !fight.pAux.fainted && fight.pAux.hp > 0 && p.pet) {
+    const petLow = fight.pAux.hp <= fight.pAux.d.maxHp * 0.4;
+    if (fight.rng() < (petLow ? 0.25 : 0.06)) fight.fTarget = 'pa';
+  }
   let guard = 0;
   while (!fight.over && fight.active === 'f' && fight.ap > 0 && guard++ < 6) {
     const legal = actionsFor(fight).filter(x => x.enabled);
