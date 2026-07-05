@@ -261,16 +261,36 @@ export async function onWeighIn(date) {
   return { xp: gained + newBadges.length * 25, newBadges };
 }
 
+// A series of step goals that reward you, then keep paying (less and less) past
+// the daily cap so extra walking always counts. Steps only: wellbeing-safe.
+export const STEP_MILESTONES = [
+  { at: 5000, coins: 20 },
+  { at: 8000, coins: 30 },
+  { at: 10000, coins: 40, egg: true }, // the daily cap: hit it and you get a Step Egg
+];
+export const STEP_OVER = [ // diminishing bonuses beyond the cap
+  { at: 12500, coins: 12 }, { at: 15000, coins: 10 }, { at: 17500, coins: 8 }, { at: 20000, coins: 6 },
+];
+
 export async function onHealthSync(date, { steps } = {}) {
   let gained = await award(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
-  let egg = false;
-  if (steps != null && steps >= 10000) {
-    const g = await award(`egg-${date}`, 'egg', 15, '10k-step egg', date);
-    if (g) { gained += g; await grantCrate('egg', 'steps-' + date); egg = true; }
+  let egg = false, coinsEarned = 0;
+  if (steps != null) {
+    for (const m of STEP_MILESTONES) {
+      if (steps < m.at) break;
+      const g = await award(`stepms-${date}-${m.at}`, 'stepms', 15, `${m.at.toLocaleString()} steps`, date);
+      if (g) { gained += g; coinsEarned += m.coins; if (m.egg) { await grantCrate('egg', 'steps-' + date); egg = true; } }
+    }
+    for (const o of STEP_OVER) {
+      if (steps < o.at) break;
+      const g = await award(`stepx-${date}-${o.at}`, 'stepx', 5, `Extra steps past the cap: ${o.at.toLocaleString()}`, date);
+      if (g) { gained += g; coinsEarned += o.coins; }
+    }
+    if (coinsEarned) await coinsAdd(coinsEarned);
   }
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
-  return { xp: gained, newBadges, egg };
+  return { xp: gained, newBadges, egg, coins: coinsEarned };
 }
 
 // At boot: settle yesterday (day-close bonus and any missed day checks).

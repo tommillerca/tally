@@ -449,7 +449,7 @@ async function renderToday(el) {
 
   ${healthCardHtml(hk, isToday)}
 
-  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i))).join('')}
+  ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   `;
@@ -644,7 +644,7 @@ function healthCardHtml(hk, isToday) {
   const goal = 10000;
   const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
   return `<div class="card">
-    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? '<button class="link" id="hkSync">Sync</button>' : ''}</div>
+    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? '<span class="link auto" title="Syncs automatically on open">Auto ✓</span>' : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
     ${hk ? `
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
@@ -665,12 +665,18 @@ function healthCardHtml(hk, isToday) {
   </div>`;
 }
 
-function mealBlock(name, i, entries, yEntries) {
+// how the day's calorie target splits across meals (a per-meal cap you can see)
+const MEAL_SPLIT = [0.25, 0.35, 0.30, 0.10]; // breakfast / lunch / dinner / snacks
+
+function mealBlock(name, i, entries, yEntries, budget = 0) {
   const kcal = Math.round(dayTotals(entries).kcal);
+  const over = budget > 0 && kcal > budget;
   return `<section class="meal">
     <div class="meal-head">
       <h2>${name}</h2>
-      ${kcal ? `<span class="kcal">${kcal.toLocaleString()} kcal</span>` : '<span class="kcal"></span>'}
+      ${budget > 0
+        ? `<span class="kcal ${over ? 'over' : ''}">${kcal.toLocaleString()} / ${budget.toLocaleString()}</span>`
+        : (kcal ? `<span class="kcal">${kcal.toLocaleString()} kcal</span>` : '<span class="kcal"></span>')}
       <button class="meal-add" data-addmeal="${i}" aria-label="Add to ${name}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
     ${entries.map(e => `
@@ -2859,7 +2865,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini" id="petStage">${petArtId && BH_BY_ID[petArtId] ? `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">` : ''}</div>
+          <div class="bh-stage fstage petmini r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">` : ''}</div>
           <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>

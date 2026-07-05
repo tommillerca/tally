@@ -470,8 +470,18 @@ a { color: var(--accent); text-decoration: none; }
 .ward-cell.r-common { border-color: rgba(159, 172, 159, 0.4); }
 .ward-cell.r-uncommon { border-color: rgba(74, 222, 128, 0.55); }
 .ward-cell.r-rare { border-color: rgba(111, 208, 255, 0.6); }
-.ward-cell.r-epic { border-color: rgba(192, 132, 252, 0.65); }
+.ward-cell.r-epic { border-color: rgba(192, 132, 252, 0.65); box-shadow: 0 0 11px rgba(192, 132, 252, 0.22); }
 .ward-cell.r-legendary { border-color: rgba(255, 201, 97, 0.8); box-shadow: 0 0 12px rgba(255, 201, 97, 0.25); }
+
+/* rarity glow on pets: the pet card + the in-fight battle body (epic/legendary) */
+.pet-card.r-epic { box-shadow: 0 0 14px rgba(192, 132, 252, 0.28); }
+.pet-card.r-legendary { box-shadow: 0 0 16px rgba(255, 201, 97, 0.3); }
+.fstage.petmini.r-epic img { filter: drop-shadow(0 0 7px rgba(192, 132, 252, 0.9)); }
+.fstage.petmini.r-legendary img { filter: drop-shadow(0 0 8px rgba(255, 201, 97, 0.95)); }
+.fstage.petmini.r-rare img { filter: drop-shadow(0 0 5px rgba(111, 208, 255, 0.7)); }
+/* per-meal cap + auto-sync label */
+.meal-head .kcal.over { color: var(--danger); }
+.card-title .link.auto { color: var(--accent); font-weight: 700; cursor: default; }
 .ward-cell.equipped::after {
   content: "✓"; position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
   background: var(--accent); color: var(--accent-ink); border-radius: 7px;
