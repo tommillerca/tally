@@ -333,6 +333,27 @@ export async function buyShopItem(shopId) {
   return { ok: true };
 }
 
+/* ---------- weapons (bought with coins, one-each) ---------- */
+// Bonecrusher is the Champion's prize, not for sale. The rest reward a spec.
+export const WEAPON_COST = { rapier: 500, shivs: 500, scepter: 900 };
+
+export async function ownedWeaponIds() {
+  const inv = await db.all('inv');
+  return new Set(['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)]);
+}
+
+export async function buyWeapon(weaponId) {
+  const cost = WEAPON_COST[weaponId];
+  if (!cost) return { ok: false, reason: 'not-for-sale' };
+  const owned = await ownedWeaponIds();
+  if (owned.has(weaponId)) return { ok: false, reason: 'owned' };
+  const bal = await coins();
+  if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
+  await coinsAdd(-cost);
+  await db.put('inv', { id: newId(), kind: 'weapon', weaponId, source: 'shop', ts: Date.now() });
+  return { ok: true, weaponId, cost };
+}
+
 /* ---------- equipped ---------- */
 export async function equipped() {
   const base = {};

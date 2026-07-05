@@ -12,6 +12,7 @@ import {
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
+  WEAPON_COST, buyWeapon,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
@@ -3572,7 +3573,7 @@ async function openTalents(pitWrap) {
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
-  const [xpRows, takenArr, fighter] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter()]);
+  const [xpRows, takenArr, fighter, coinBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins()]);
   const taken = new Set(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const points = talentPoints(lvl.level);
@@ -3609,10 +3610,25 @@ async function renderTalents(wrap) {
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
     <div class="sect-h">Weapon</div>
-    <div class="chips">
-      ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
+    <p class="note" style="margin:2px 2px 8px">Each weapon amplifies a different build. It multiplies your effort; it never replaces it.</p>
+    <div class="weap-rack">
+      ${Object.values(WEAPONS).map(w => {
+        const ownedW = fighter.owned.includes(w.id);
+        const on = fighter.loadout === w.id;
+        const cost = WEAPON_COST[w.id];
+        const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
+        const cta = ownedW
+          ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
+          : cost != null
+            ? `<button class="btn small" data-buyweapon="${w.id}" ${coinBal < cost ? 'disabled' : ''}>${ICONS.coin(13)} ${cost}</button>`
+            : `<span class="q-frac">Champion drop</span>`;
+        return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''}">
+          <div class="weap-top"><b>${esc(w.name)}</b>${specTag}</div>
+          <small class="weap-desc">${esc(w.desc)}</small>
+          <div class="weap-cta">${cta}</div>
+        </div>`;
+      }).join('')}
     </div>
-    <p class="note" style="margin:6px 2px">${esc(WEAPONS[fighter.loadout].desc)} Weapons multiply effort; they never replace it.</p>
     ${(() => {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);
@@ -3671,6 +3687,17 @@ async function renderTalents(wrap) {
   $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderTalents(wrap); });
   $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon);
+    popSound(S.sounds);
+    renderTalents(wrap);
+  }));
+  $$('[data-buyweapon]', body).forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const res = await buyWeapon(b.dataset.buyweapon);
+    if (!res.ok) { toast(res.reason === 'coins' ? 'Not enough coins for that weapon.' : 'Already owned.'); b.disabled = false; return; }
+    await kvSet('loadout', res.weaponId); // auto-equip the new weapon
+    levelSound(S.sounds);
+    confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+    toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
     renderTalents(wrap);
   }));
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {

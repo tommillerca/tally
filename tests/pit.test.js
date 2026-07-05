@@ -38,6 +38,26 @@ test('worked example: P60 Bonecrusher haymaker vs Block = ~108 + stagger', () =>
   assert.equal(Math.round(35 * WEAPONS.bonecrusher.windCostMult('haymaker')), 46);
 });
 
+test('weapons: each has a clear spec identity + real mechanical hook', () => {
+  const s = { power: 40, marrow: 40, wind: 40, reflex: 40, hype: 40 };
+  // Skull Scepter: +30% magic (magicMult), no physical bonus
+  const base = derived(s, WEAPONS.starter).magicMult;
+  const scep = derived(s, WEAPONS.scepter).magicMult;
+  assert.ok(Math.abs(scep - (base + 0.30)) < 1e-9, `scepter magic ${scep} vs ${base}+0.3`);
+  assert.equal(WEAPONS.scepter.spec, 'hype');
+  // Femur Rapier: +12% crit, cheaper swing
+  assert.ok(Math.abs(derived(s, WEAPONS.rapier).critChance - (derived(s, WEAPONS.starter).critChance + 0.12)) < 1e-9);
+  assert.ok(WEAPONS.rapier.windCostMult('swing') < 1 && WEAPONS.rapier.windCostMult('jab') === 1);
+  // Twin Shivs: all close strikes cheaper, no crit/magic change
+  assert.ok(WEAPONS.shivs.windCostMult('jab') === 0.8 && WEAPONS.shivs.windCostMult('haymaker') === 0.8);
+  assert.equal(derived(s, WEAPONS.shivs).critChance, derived(s, WEAPONS.starter).critChance);
+  // Starter is a true neutral baseline
+  assert.equal(WEAPONS.starter.windCostMult('haymaker'), 1.0);
+  assert.equal(WEAPONS.starter.mult('haymaker', s), 1.0);
+  // every weapon declares a rarity
+  for (const w of Object.values(WEAPONS)) assert.ok(w.rarity, `${w.id} rarity`);
+});
+
 // ---- spec section 7: effort vs gear guardrail rows ----
 test('guardrail: X (effort, starter) swing = 50', () => {
   const x = makeFighter({ name: 'X', stats: { power: 85, marrow: 50, wind: 80, reflex: 70, hype: 0 } });

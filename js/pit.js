@@ -160,7 +160,7 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null) {
     maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0),
     ap: 2 + (weapon.apBonus || 0) + (talents && talents.has('lightfeet') ? 1 : 0),
     powerMult: 1 + (stats.power / 100) * 1.5,
-    magicMult: 1 + (stats.hype / 100) * 1.5,
+    magicMult: 1 + (stats.hype / 100) * 1.5 + (weapon.magicBonus || 0),
     critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0)),
     glanceChance: (stats.reflex / 100) * 0.25,
   };
@@ -168,14 +168,40 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null) {
 
 /* ================= weapons (spec §6) ================= */
 
+// Weapons each have a CLEAR identity tied to a stat/spec, so the choice is never
+// random: pick the weapon that amplifies the build you're growing. They MULTIPLY
+// your effort (scale off your own stats or shave Stamina), never replace it.
+// `spec` = the stat it rewards; `rarity` drives shop cost + the chip's ring.
 export const WEAPONS = {
   starter: {
-    id: 'starter', name: 'Taped Pipe', desc: 'Honest baseline. No tricks.',
+    id: 'starter', name: 'Taped Pipe', rarity: 'common', spec: null,
+    desc: 'Where every bonehead starts. No bonus, no penalty; the honest baseline.',
     mult: () => 1.0,
     windCostMult: () => 1.0,
   },
+  rapier: {
+    id: 'rapier', name: 'Femur Rapier', rarity: 'rare', spec: 'reflex',
+    desc: 'A keen, quick edge. +12% crit chance, and Swings cost less Stamina. Rewards Reflex duelists.',
+    mult: () => 1.0,
+    windCostMult: (move) => move === 'swing' ? 0.8 : 1.0,
+    critBonus: 0.12,
+  },
+  shivs: {
+    id: 'shivs', name: 'Twin Shivs', rarity: 'rare', spec: 'wind',
+    desc: 'Two blades, endless motion. Every close strike (Jab, Swing, Haymaker) costs 20% less Stamina. Rewards high-Stamina tempo.',
+    mult: () => 1.0,
+    windCostMult: (move) => (move === 'jab' || move === 'swing' || move === 'haymaker') ? 0.8 : 1.0,
+  },
+  scepter: {
+    id: 'scepter', name: 'Skull Scepter', rarity: 'epic', spec: 'hype',
+    desc: 'A focus for bone-magic. Your spells (bolts, heals, Bone Storm) hit 30% harder. Rewards Hype casters.',
+    mult: () => 1.0,
+    windCostMult: () => 1.0,
+    magicBonus: 0.30,
+  },
   bonecrusher: {
-    id: 'bonecrusher', name: 'Bonecrusher', desc: 'Feast-or-famine bombs. Scales off Power.',
+    id: 'bonecrusher', name: 'Bonecrusher', rarity: 'legendary', spec: 'power',
+    desc: 'Feast-or-famine bombs. Swing and Haymaker scale off Power; Haymaker costs more Stamina. The Champion’s prize.',
     mult: (move, s) => move === 'haymaker' ? 1 + 0.40 * (s.power / 100)
       : move === 'swing' ? 1 + 0.10 * (s.power / 100) : 1.0,
     windCostMult: (move) => move === 'haymaker' ? 1.3 : 1.0,
