@@ -24,6 +24,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Boneheadz Gym uses the camera to scan barcodes and read nutrition labels so you can log food fast. Images stay on this phone.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Boneheadz Gym can read a nutrition label from a photo you choose. Photos stay on this phone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Boneheadz uses your location to draw the Boneyard map and place nearby spawns and dens. Location is used on this phone only, never stored, never uploaded.</string>
 	<key>NSMotionUsageDescription</key>
