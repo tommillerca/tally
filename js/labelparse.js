@@ -5,6 +5,10 @@ function normalize(text) {
   return text
     .replace(/ /g, ' ')
     .replace(/[|]/g, ' ')
+    // drop the %-Daily-Value column so it can never be read as a gram/mg amount.
+    // [ \t]* (never \s*) so it can't reach across a newline and eat the big
+    // Calories number that sits a few lines above "% Daily Value".
+    .replace(/(\d+(?:\.\d+)?)[ \t]*%/g, ' ')
     // letter O or l used as digits next to units
     .replace(/\bO(?=\s*(g|mg)\b)/gi, '0')
     .replace(/\b[lI](?=\s*(g|mg)\b)/g, '1')

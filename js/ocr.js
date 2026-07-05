@@ -27,6 +27,58 @@ async function getWorker(onProgress) {
   return workerPromise;
 }
 
+// ---- image ops for label OCR (phone photos: skew, glare, small/curved text) ----
+
+function toGray(imgData) {
+  const d = imgData.data, n = d.length >> 2;
+  const g = new Float32Array(n);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) g[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  return g;
+}
+
+function otsu(gray) {
+  const hist = new Float64Array(256);
+  for (let i = 0; i < gray.length; i++) hist[gray[i] | 0]++;
+  const total = gray.length;
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0, wB = 0, best = 0, bestT = 127;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue;
+    const wF = total - wB; if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB, mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) { best = between; bestT = t; }
+  }
+  return bestT;
+}
+
+// Estimate page skew by maximising the variance of the horizontal ink-projection
+// over candidate angles: text rows line up (peaky profile) only when deskewed.
+function estimateSkew(gray, w, h) {
+  const dw = 360, dh = Math.max(1, Math.round(h * dw / w));
+  const small = new Float32Array(dw * dh);
+  for (let y = 0; y < dh; y++) { const sy = (y * h / dh) | 0; for (let x = 0; x < dw; x++) small[y * dw + x] = gray[sy * w + ((x * w / dw) | 0)]; }
+  const thr = otsu(small);
+  const ink = new Uint8Array(dw * dh);
+  for (let i = 0; i < small.length; i++) ink[i] = small[i] < thr ? 1 : 0;
+  const cx = dw / 2, cy = dh / 2;
+  let bestDeg = 0, bestVar = -1;
+  for (let deg = -12; deg <= 12; deg += 0.75) {
+    const a = deg * Math.PI / 180, s = Math.sin(a), c = Math.cos(a);
+    const rows = new Float64Array(dh);
+    for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+      if (!ink[y * dw + x]) continue;
+      const ry = Math.round(cy + (x - cx) * s + (y - cy) * c);
+      if (ry >= 0 && ry < dh) rows[ry]++;
+    }
+    let mean = 0; for (let y = 0; y < dh; y++) mean += rows[y]; mean /= dh;
+    let v = 0; for (let y = 0; y < dh; y++) { const d = rows[y] - mean; v += d * d; }
+    if (v > bestVar) { bestVar = v; bestDeg = deg; }
+  }
+  return bestDeg;
+}
+
 // source: File | Blob | HTMLCanvasElement | HTMLImageElement
 export async function preprocess(source, maxDim = 1800) {
   let bmp;
@@ -39,12 +91,28 @@ export async function preprocess(source, maxDim = 1800) {
     throw new Error('No image decoder available');
   }
   const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
-  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-  const canvas = document.createElement('canvas');
+  let w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  let canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(bmp, 0, 0, w, h);
-  // grayscale + gentle contrast stretch helps tesseract on phone photos
+
+  // DESKEW: phone photos are rarely level and tesseract fails hard past a few
+  // degrees. Measure tilt from the ink projection, rotate the canvas to level
+  // it (white fill: labels are white). This is the one big real-world win;
+  // everything else the simple path below already handles.
+  const skew = estimateSkew(toGray(ctx.getImageData(0, 0, w, h)), w, h);
+  if (Math.abs(skew) >= 1.2) {
+    const a = skew * Math.PI / 180, ac = Math.abs(Math.cos(a)), as = Math.abs(Math.sin(a));
+    const nw = Math.ceil(w * ac + h * as), nh = Math.ceil(w * as + h * ac);
+    const rot = document.createElement('canvas'); rot.width = nw; rot.height = nh;
+    const rctx = rot.getContext('2d', { willReadFrequently: true });
+    rctx.fillStyle = '#fff'; rctx.fillRect(0, 0, nw, nh);
+    rctx.translate(nw / 2, nh / 2); rctx.rotate(a); rctx.drawImage(canvas, -w / 2, -h / 2);
+    canvas = rot; ctx = rctx; w = nw; h = nh;
+  }
+
+  // grayscale + gentle global contrast stretch (proven path for phone photos)
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
   let min = 255, max = 0;
