@@ -4,7 +4,7 @@ import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
-  petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody,
+  petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -102,6 +102,36 @@ test('Bone Guard raises a Marrow-scaled absorb pool that soaks damage', () => {
   assert.equal(fight.p.hp, hpBefore); // fully soaked
   assert.equal(fight.p.ward, shield - 10);
 });
+
+test('ranked passives hook into the engine (HP, cost, damage, hit)', () => {
+  const st = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
+  const plain = makeFighter({ name: 'P', stats: st });
+  // densebones 5/5 = +30 max HP
+  const beefy = makeFighter({ name: 'B', stats: st, talents: ['densebones', 'densebones', 'densebones', 'densebones', 'densebones'] });
+  assert.equal(beefy.d.maxHp, plain.d.maxHp + 30);
+  // followthrough 3/3 = swings +12%
+  const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const base = resolveHit({ move: 'swing', attacker: plain, defender: dummy, rng: noLuck }).damage;
+  const boosted = makeFighter({ name: 'F', stats: st, talents: ['followthrough', 'followthrough', 'followthrough'] });
+  const hit = resolveHit({ move: 'swing', attacker: boosted, defender: dummy, rng: noLuck }).damage;
+  assert.equal(hit, Math.round(22 * 1.75 * 1.12), `${base} -> ${hit}`); // engine rounds once at the end
+  // marrowtap 3/3 = bone bolt costs 6 less
+  const caster = makeFighter({ name: 'C', stats: st, talents: ['bonebolt', 'marrowtap', 'marrowtap', 'marrowtap'] });
+  const fight = createFight({ player: caster, foe: makeFighter({ name: 'X', stats: st }), seed: 3 });
+  const bolt = actionsFor(fight).find(x => x.id === 'bonebolt');
+  assert.equal(bolt.windCost, ACTIONS.bonebolt.wind - 6);
+  // steadyhands 5/5 = -5% miss on haymaker (probe expected damage path via missChance edge)
+  const shaky = makeFighter({ name: 'S', stats: st });
+  const steady = makeFighter({ name: 'T', stats: st, talents: Array(5).fill('steadyhands') });
+  let shakyMiss = 0, steadyMiss = 0;
+  for (let i = 0; i < 4000; i++) {
+    const rng1 = mulberrylike(i), rng2 = mulberrylike(i);
+    if (resolveHit({ move: 'haymaker', attacker: shaky, defender: dummy, rng: rng1 }).miss) shakyMiss++;
+    if (resolveHit({ move: 'haymaker', attacker: steady, defender: dummy, rng: rng2 }).miss) steadyMiss++;
+  }
+  assert.ok(steadyMiss < shakyMiss, `steady ${steadyMiss} < shaky ${shakyMiss}`);
+});
+function mulberrylike(seed) { let a = (seed * 2654435761) >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 test('pet food (Bonemeal Kibble): bigger pet HP + harder pet hits', () => {
   const st = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
@@ -292,24 +322,32 @@ import { makeFighter as mf, createFight as cf, applyAction as apply, actionsFor 
 
 const MID = { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 30 };
 
-test('talent tiers gate by points-in-tree (WoW style)', () => {
+test('talent tiers gate by points-in-tree, ranks count (v69 deep trees)', () => {
   assert.equal(talentPoints(1), 0);
   assert.equal(talentPoints(8), 7);
-  const taken = new Set();
-  assert.ok(canTakeTalent(taken, 'slab', 0));      // T1 open
-  assert.ok(!canTakeTalent(taken, 'slab', 1));     // T2 needs 1 in tree
-  assert.ok(!canTakeTalent(taken, 'slab', 5));     // capstone needs 5
-  taken.add('heavyhands');
-  assert.ok(canTakeTalent(taken, 'slab', 1));      // both T2 options open
-  assert.ok(canTakeTalent(taken, 'slab', 2));
-  assert.ok(!canTakeTalent(taken, 'slab', 3));     // T3 needs 3 in tree
-  taken.add('marrowlust'); taken.add('bonebreaker');
-  assert.ok(canTakeTalent(taken, 'slab', 3));
-  taken.add('concussive'); taken.add('thickskull');
-  assert.ok(canTakeTalent(taken, 'slab', 5));      // capstone at 5 in tree
-  assert.ok(!canTakeTalent(taken, 'slab', 0));     // already taken
+  const slab = TALENT_TREES.find(t => t.id === 'slab');
+  const idx = id => slab.nodes.findIndex(n => n.id === id);
+  const taken = []; // raw kv array: multi-rank ids appear once per rank
+  assert.ok(canTakeTalent(taken, 'slab', idx('heavyhands')));   // T1 open
+  assert.ok(canTakeTalent(taken, 'slab', idx('steadyhands'))); // ranked T1 open
+  assert.ok(!canTakeTalent(taken, 'slab', idx('marrowlust'))); // T2 needs 2 in tree
+  assert.ok(!canTakeTalent(taken, 'slab', idx('titan')));      // capstone needs 10
+  taken.push('heavyhands', 'steadyhands');
+  assert.ok(canTakeTalent(taken, 'slab', idx('marrowlust')));  // T2 opens at 2
+  assert.ok(!canTakeTalent(taken, 'slab', idx('concussive'))); // T3 needs 6
+  taken.push('steadyhands', 'steadyhands', 'densebones', 'densebones'); // 6 in tree
+  assert.ok(canTakeTalent(taken, 'slab', idx('concussive')));
+  taken.push('followthrough', 'followthrough', 'followthrough', 'ironjaw'); // 10 in tree
+  assert.ok(canTakeTalent(taken, 'slab', idx('titan')));       // capstone at 10
+  // rank caps: steadyhands is 5 ranks; the 6th is refused
+  taken.push('steadyhands', 'steadyhands'); // now at 5 total
+  assert.equal(talentRanks(taken)['steadyhands'], 5);
+  assert.ok(!canTakeTalent(taken, 'slab', idx('steadyhands')));
+  // single-rank stays single
+  assert.ok(!canTakeTalent(taken, 'slab', idx('heavyhands')));
   assert.equal(TALENT_TREES.length, 6);
-  assert.ok(TALENT_TREES.every(t => t.nodes.length === 6));
+  assert.ok(TALENT_TREES.every(t => t.nodes.length === 10), 'deep trees: 10 nodes each');
+  assert.ok(TALENT_TREES.every(t => t.nodes.reduce((a, n) => a + (n.ranks || 1), 0) >= 22), 'each tree takes 22+ points to max');
   const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
   assert.ok(gc && gc.nodes.filter(n => n.move).length >= 4); // the caster is move-rich
 });
@@ -630,13 +668,14 @@ test('totemic marrow regenerates extra wind each turn', () => {
   assert.equal(P.wind, 10 + 20 + 5, 'base regen (20) + totemic 5');
 });
 
-test('six trees, six nodes each, unique ids, new moves registered', () => {
+test('six trees, ten nodes each, unique ids, new moves registered', () => {
   assert.equal(TALENT_TREES.length, 6);
   const ids = TALENT_TREES.flatMap(t => t.nodes.map(n => n.id));
   assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
   for (const t of TALENT_TREES) {
-    assert.equal(t.nodes.length, 6);
+    assert.equal(t.nodes.length, 10);
     assert.equal(t.nodes.filter(n => n.tier === 4).length, 1, t.id + ' has one capstone');
+    assert.ok(t.nodes.filter(n => (n.ranks || 1) > 1).length >= 4, t.id + ' has 4+ ranked passives');
   }
   assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
   assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);

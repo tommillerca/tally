@@ -68,10 +68,14 @@ export const TALENT_TREES = [
     flavor: 'Fewer, bigger hits. Pairs with a protein habit.',
     nodes: [
       { id: 'heavyhands', tier: 1, name: 'Heavy Hands', desc: 'Haymakers hit 15% harder.' },
+      { id: 'steadyhands', tier: 1, ranks: 5, name: 'Steady Hands', desc: '+1% hit chance per rank on Swings, Haymakers and Titan.' },
       { id: 'marrowlust', tier: 2, name: 'Marrowlust', desc: 'Haymaker and Titan hits heal you for 25% of the damage dealt.' },
       { id: 'bonebreaker', tier: 2, name: 'Bonebreaker', desc: 'Landed haymakers SUNDER: the enemy takes +15% damage for 2 turns.' },
+      { id: 'densebones', tier: 2, ranks: 5, name: 'Dense Bones', desc: '+6 max HP per rank.' },
+      { id: 'followthrough', tier: 2, ranks: 3, name: 'Follow-Through', desc: 'Swings and Haymakers hit 4% harder per rank.' },
       { id: 'concussive', tier: 3, name: 'Concussive', desc: 'Landed haymakers always stagger (enemy loses an action).' },
       { id: 'thickskull', tier: 3, name: 'Thick Skull', desc: '+45 max HP.' },
+      { id: 'ironjaw', tier: 3, ranks: 3, name: 'Iron Jaw', desc: '+4 Armor per rank (blunts incoming melee).' },
       { id: 'titan', tier: 4, name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, a devastating overhead slam.' },
     ],
   },
@@ -80,10 +84,14 @@ export const TALENT_TREES = [
     flavor: 'Speed, bleed, and attrition. Pairs with a walking habit.',
     nodes: [
       { id: 'lightfeet', tier: 1, name: 'Light Feet', desc: '+1 action point every turn.' },
+      { id: 'footwork', tier: 1, ranks: 5, name: 'Footwork', desc: '+1% glance chance per rank (more hits skim off you for half).' },
       { id: 'counterstep', tier: 2, name: 'Counterstep', desc: 'When an enemy attack misses you, you snap back with a free counter-jab.' },
       { id: 'kite', tier: 2, name: 'Kite', desc: 'Throws hit 60% harder.' },
+      { id: 'sharpjabs', tier: 2, ranks: 5, name: 'Sharp Jabs', desc: 'Jabs and Throws hit 4% harder per rank.' },
+      { id: 'cardio', tier: 2, ranks: 3, name: 'Cardio', desc: '+5 max Stamina per rank.' },
       { id: 'bleedout', tier: 3, name: 'Bleed Out', desc: 'Jabs open wounds: 4 damage per stack at the start of their turn, stacks to 3.' },
       { id: 'deeplungs', tier: 3, name: 'Deep Lungs', desc: '+15 max Stamina.' },
+      { id: 'pacing', tier: 3, ranks: 3, name: 'Pacing', desc: '+2 Stamina regeneration per rank, every turn.' },
       { id: 'flurry', tier: 4, name: 'Flurry', move: true, desc: 'NEW MOVE: dump ALL your Stamina into a relentless 3-hit combo.' },
     ],
   },
@@ -92,10 +100,14 @@ export const TALENT_TREES = [
     flavor: 'Finishers, comebacks, crowd control. Pairs with quests and variety.',
     nodes: [
       { id: 'crowdwork', tier: 1, name: 'Crowd Work', desc: 'Hype builds 40% faster.' },
+      { id: 'stagepresence', tier: 1, ranks: 5, name: 'Stage Presence', desc: 'All Hype you build is 6% greater per rank.' },
       { id: 'bigentrance', tier: 2, name: 'Big Entrance', desc: 'Start every fight at 25 Hype.' },
       { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Taunts WEAKEN: the enemy deals 15% less damage for 2 turns.' },
+      { id: 'warmup', tier: 2, ranks: 3, name: 'Warm-Up Act', desc: 'Start every fight with +4 Hype per rank.' },
+      { id: 'comboartist', tier: 2, ranks: 5, name: 'Combo Artist', desc: '+2% crit chance per rank.' },
       { id: 'ovation', tier: 3, name: 'Standing Ovation', desc: 'Getting hit builds double Hype (the comeback engine).' },
       { id: 'secondwind', tier: 3, name: 'Second Wind', desc: 'Once per fight, dropping below 25% HP restores 15% HP and 30 Stamina.' },
+      { id: 'encoretraining', tier: 3, ranks: 3, name: 'Encore Training', desc: 'Repeat Signatures lose 5% less punch per rank.' },
       { id: 'showstopper', tier: 4, name: 'Showstopper', desc: 'Signature fires at 80 Hype and hits 25% harder.' },
     ],
   },
@@ -104,10 +116,14 @@ export const TALENT_TREES = [
     flavor: 'Bone magic and marrow mending. Pairs with quest-hunting variety.',
     nodes: [
       { id: 'bonebolt', tier: 1, name: 'Bone Bolt', move: true, desc: 'NEW MOVE: hurl a shard of bone at ANY range. Scales with your Hype stat.' },
+      { id: 'darkstudy', tier: 1, ranks: 5, name: 'Dark Study', desc: 'Your shadow magic (bolts, spikes, storms) hits 3% harder per rank.' },
       { id: 'soulsiphon', tier: 2, name: 'Soul Siphon', desc: 'Bone Bolts heal you for 30% of their damage.' },
       { id: 'mend', tier: 2, name: 'Mend Marrow', move: true, desc: 'NEW MOVE: knit your bones back together. Heals 12% max HP, 3 uses per fight.' },
+      { id: 'marrowtap', tier: 2, ranks: 3, name: 'Marrow Tap', desc: 'Shadow spells cost 2 less Stamina per rank.' },
+      { id: 'soulreserve', tier: 2, ranks: 5, name: 'Soul Reserve', desc: '+5 max HP per rank.' },
       { id: 'hex', tier: 3, name: 'Hex of Dust', move: true, desc: 'NEW MOVE: curse the enemy to deal 20% less damage for 2 turns.' },
       { id: 'gravechill', tier: 3, name: 'Grave Chill', desc: 'Bone Bolts also drain 10 of the enemy Stamina.' },
+      { id: 'lingering', tier: 3, ranks: 3, name: 'Lingering Dust', desc: 'Your Hex saps 3% more damage per rank.' },
       { id: 'bonestorm', tier: 4, name: 'Bone Storm', move: true, desc: 'NEW MOVE: once per fight, a whirlwind of shards: three piercing magic hits.' },
     ],
   },
@@ -116,10 +132,14 @@ export const TALENT_TREES = [
     flavor: 'Last rites and first aid. Holy light for unholy bones.',
     nodes: [
       { id: 'smite', tier: 1, name: 'Smite', move: true, desc: 'NEW MOVE: a lance of grave-light at ANY range. Scales with your Hype stat.' },
+      { id: 'devotion', tier: 1, ranks: 5, name: 'Devotion', desc: 'Your holy magic hits 3% harder per rank.' },
       { id: 'radiance', tier: 2, name: 'Radiance', desc: 'Smites heal you for 20% of their damage.' },
       { id: 'ward', tier: 2, name: 'Ward', move: true, desc: 'NEW MOVE: a holy shield that absorbs the next 25 damage.' },
+      { id: 'blessedward', tier: 2, ranks: 3, name: 'Blessed Ward', desc: 'Wards absorb +5 damage per rank.' },
+      { id: 'sanctified', tier: 2, ranks: 5, name: 'Sanctified Bones', desc: '+2 Armor and +2 Spell Armor per rank.' },
       { id: 'judgement', tier: 3, name: 'Judgement', desc: 'Smites hit 50% harder on STAGGERED or SUNDERED enemies.' },
       { id: 'hallowed', tier: 3, name: 'Hallowed Marrow', desc: 'All healing you receive is 20% stronger.' },
+      { id: 'mercy', tier: 3, ranks: 3, name: 'Mercy', desc: 'Mend Marrow heals +3% max HP per rank.' },
       { id: 'lastlight', tier: 4, name: 'Last Light', desc: 'CHEAT DEATH: once per fight, a killing blow leaves you at 1 HP and restores 20% HP.' },
     ],
   },
@@ -128,10 +148,14 @@ export const TALENT_TREES = [
     flavor: 'Fire in the femurs, frost in the fingers.',
     nodes: [
       { id: 'frostbolt', tier: 1, name: 'Frost Bolt', move: true, desc: 'NEW MOVE: an icy shard at ANY range that CHILLS 8 Stamina off the enemy.' },
+      { id: 'attunement', tier: 1, ranks: 5, name: 'Attunement', desc: 'Your fire and frost magic hits 3% harder per rank.' },
       { id: 'firebolt', tier: 2, name: 'Fire Bolt', move: true, desc: 'NEW MOVE: a searing bolt that sets a BURN: 5 damage per turn for 2 turns.' },
       { id: 'totemic', tier: 2, name: 'Totemic Marrow', desc: '+5 Stamina regeneration every turn.' },
+      { id: 'deepfreeze', tier: 2, ranks: 3, name: 'Deep Freeze', desc: 'Chills drain +3 more enemy Stamina per rank.' },
+      { id: 'kindling', tier: 2, ranks: 3, name: 'Kindling', desc: 'Your burns tick +1 damage per rank.' },
       { id: 'frostbite', tier: 3, name: 'Frostbite', desc: 'Frost Bolts hit 40% harder when the enemy is gassed (under 30 Stamina).' },
       { id: 'wildfire', tier: 3, name: 'Wildfire', desc: 'Burns tick 7 damage and last 3 turns.' },
+      { id: 'conduits', tier: 3, ranks: 5, name: 'Bone Conduits', desc: 'Elemental spells cost 1 less Stamina per rank.' },
       { id: 'tempest', tier: 4, name: 'Tempest', move: true, desc: 'NEW MOVE: once per fight, a barrage of fire and frost: four elemental hits.' },
     ],
   },
@@ -139,15 +163,29 @@ export const TALENT_TREES = [
 
 export function talentPoints(level) { return Math.max(0, level - 1); }
 
-const TIER_GATE = { 1: 0, 2: 1, 3: 3, 4: 5 };
+// Deeper trees (v69): tiers unlock by POINTS SPENT in that tree, ranks included.
+// Maxing one tree now costs ~26 points (~level 27), not 6.
+const TIER_GATE = { 1: 0, 2: 2, 3: 6, 4: 10 };
 
-// WoW-style: tiers unlock by points already spent in that tree
+export function nodeRanks(node) { return node.ranks || 1; }
+
+// kv 'talents' is an ARRAY; multi-rank talents simply appear once per rank
+// (additive: every pre-v69 save is already valid). This folds it to counts.
+export function talentRanks(takenArr) {
+  const out = {};
+  for (const id of takenArr || []) out[id] = (out[id] || 0) + 1;
+  return out;
+}
+
+// WoW-style acquisition gate. Accepts the raw array (rank-aware) or a Set.
 export function canTakeTalent(taken, treeId, nodeIdx) {
+  const arr = taken instanceof Set ? [...taken] : (taken || []);
+  const ranks = talentRanks(arr);
   const tree = TALENT_TREES.find(t => t.id === treeId);
   if (!tree || nodeIdx >= tree.nodes.length) return false;
   const node = tree.nodes[nodeIdx];
-  if (taken.has(node.id)) return false;
-  const inTree = tree.nodes.filter(n => taken.has(n.id)).length;
+  if ((ranks[node.id] || 0) >= nodeRanks(node)) return false;
+  const inTree = tree.nodes.reduce((a, n) => a + Math.min(ranks[n.id] || 0, nodeRanks(n)), 0);
   return inTree >= TIER_GATE[node.tier];
 }
 
@@ -159,19 +197,21 @@ export const ARMOR_K = 120;
 export const ARMOR_CAP = 0.40;
 export function armorDR(points) { return Math.min(ARMOR_CAP, Math.max(0, points) / (Math.max(0, points) + ARMOR_K)); }
 
-export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArmor = null) {
+export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArmor = null, ranks = null) {
   const t = talents || new Set();
-  // Blend: base armor from stats (Marrow -> physical, Reflex -> spell) + gear on top.
-  const physPts = stats.marrow * 0.6 + (gearArmor?.armor || 0);
-  const spellPts = stats.reflex * 0.6 + (gearArmor?.spellArmor || 0);
+  const rk = id => (ranks && ranks[id]) || 0;
+  // Blend: base armor from stats (Marrow -> physical, Reflex -> spell) + gear +
+  // ranked defensive talents on top.
+  const physPts = stats.marrow * 0.6 + (gearArmor?.armor || 0) + rk('ironjaw') * 4 + rk('sanctified') * 2;
+  const spellPts = stats.reflex * 0.6 + (gearArmor?.spellArmor || 0) + rk('sanctified') * 2;
   return {
-    maxHp: Math.round(150 + stats.marrow * 3) + (t.has('thickskull') ? 45 : 0),
-    maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0),
+    maxHp: Math.round(150 + stats.marrow * 3) + (t.has('thickskull') ? 45 : 0) + rk('densebones') * 6 + rk('soulreserve') * 5,
+    maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0) + rk('cardio') * 5,
     ap: 2 + (weapon.apBonus || 0) + (talents && talents.has('lightfeet') ? 1 : 0),
     powerMult: 1 + (stats.power / 100) * 1.5,
     magicMult: 1 + (stats.hype / 100) * 1.5 + (weapon.magicBonus || 0),
-    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0)),
-    glanceChance: (stats.reflex / 100) * 0.25,
+    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0) + rk('comboartist') * 0.02),
+    glanceChance: (stats.reflex / 100) * 0.25 + rk('footwork') * 0.01,
     armor: armorDR(physPts),        // cuts incoming physical damage
     spellArmor: armorDR(spellPts),  // cuts incoming magic damage
     armorPts: Math.round(physPts), spellArmorPts: Math.round(spellPts),
@@ -257,6 +297,7 @@ export const MISS_CHANCE = {
   flurry: 0.08, bonestorm: 0.10, tempest: 0.08,
 };
 const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const rkOf = (f, id) => (f && f.tranks && f.tranks[id]) || 0; // multi-rank talent rank
 
 export const REGEN_PER_TURN = 20; // higher now that Brace is gone: Stamina refills passively
 export const GUARD_BASE = 16;     // Bone Guard absorb floor; scales with Marrow
@@ -268,6 +309,7 @@ export const HIT_TAKEN_HYPE = 4;
 export function sigThreshold(f) { return f.talents.has('showstopper') ? SHOWSTOPPER_HYPE : SIGNATURE_HYPE; }
 function gainHype(f, amt) {
   let mult = f.talents.has('crowdwork') ? 1.4 : 1;
+  mult *= 1 + rkOf(f, 'stagepresence') * 0.06; // ranked: Stage Presence
   if (f.pet && f.pet.passive === 'hypeGain') mult *= (1 + f.pet.passivePct);
   f.hype = Math.min(SIGNATURE_HYPE, f.hype + Math.round(amt * mult));
 }
@@ -370,6 +412,8 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (missChance > 0) {
     missChance += clampNum((defender.stats.reflex - attacker.stats.power) * 0.0015, -0.05, 0.10);
     if (attacker.talents.has('heavyhands')) missChance -= 0.05; // committed swing = steadier aim
+    // Steady Hands: +1% hit per rank on committed swings (Tom's stacking-hit ask)
+    if (move === 'swing' || move === 'haymaker' || move === 'titan') missChance -= rkOf(attacker, 'steadyhands') * 0.01;
   }
   // blindness fogs even simple strikes (physical only; magic bolts still home in)
   if (!a.magic && attacker.blind) missChance += attacker.blind.pct;
@@ -385,6 +429,12 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (move === 'throwb' && attacker.talents.has('kite')) dmg *= 1.6;
   if (move === 'smite' && attacker.talents.has('judgement') && (defender.stagger || defender.sunder)) dmg *= 1.5;
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
+  // ranked synergy passives (v69): small stacking boosts per rank
+  if (move === 'swing' || move === 'haymaker') dmg *= 1 + rkOf(attacker, 'followthrough') * 0.04;
+  if (move === 'jab' || move === 'throwb') dmg *= 1 + rkOf(attacker, 'sharpjabs') * 0.04;
+  if (a.school === 'shadow') dmg *= 1 + rkOf(attacker, 'darkstudy') * 0.03;
+  if (a.school === 'holy') dmg *= 1 + rkOf(attacker, 'devotion') * 0.03;
+  if (a.school === 'fire' || a.school === 'frost') dmg *= 1 + rkOf(attacker, 'attunement') * 0.03;
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
   if (defender.marked) dmg *= 1.07; // imp Death's Mark
@@ -419,9 +469,10 @@ export function expectedDamage(move, attacker, defenderState, defender) {
 export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null, food = null, gearArmor = null }) {
   const weapon = WEAPONS[weaponId] || WEAPONS.starter;
   const tset = new Set(talents);
-  const d = derived(stats, weapon, tset, gearArmor);
+  const tranks = talentRanks(talents instanceof Set ? [...talents] : talents); // multi-rank counts
+  const d = derived(stats, weapon, tset, gearArmor, tranks);
   return {
-    name, stats, weapon, d, outfit, talents: tset,
+    name, stats, weapon, d, outfit, talents: tset, tranks,
     pet: pet ? { ...pet, specialCd: 0, lastStandUsed: false } : null,
     // food-dish buffs (temporary, from the kitchen); only ever on the player
     foodDamagePct: food?.damagePct || 0,
@@ -441,7 +492,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     weaken: null,     // {pct, turns} deals less damage
     blind: null,      // {pct, turns} its own physical attacks miss more
     marked: null,     // {turns} takes +10% from everything (imp Death's Mark)
-    hp: d.maxHp, wind: d.maxWind, hype: Math.min(100, (tset.has('bigentrance') ? 25 : 0) + (food?.hype || 0)),
+    hp: d.maxHp, wind: d.maxWind, hype: Math.min(100, (tset.has('bigentrance') ? 25 : 0) + (tranks['warmup'] || 0) * 4 + (food?.hype || 0)),
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
     offBalance: false,
@@ -570,6 +621,16 @@ export function checkOver(fight) {
   else if (fDown) fight.over = { winner: 'p' };
 }
 
+// One source of truth for stamina costs (computed in actionsFor AND applyAction;
+// v16 lesson: never let the two drift). Ranked reductions live here.
+function windCostFor(me, id, a) {
+  let c = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
+  if (a.school === 'shadow') c = Math.max(0, c - rkOf(me, 'marrowtap') * 2);   // Marrow Tap
+  if (a.school === 'fire' || a.school === 'frost') c = Math.max(0, c - rkOf(me, 'conduits')); // Bone Conduits
+  if (id === 'shove') c = Math.round(c * (1 + me.shoveCount));
+  return c;
+}
+
 // legal actions for the active fighter right now
 export function actionsFor(fight) {
   const me = fighterOf(fight, fight.active);
@@ -584,8 +645,7 @@ export function actionsFor(fight) {
     if (id === 'tempest' && me.tempestUsed) continue;
     if (id === 'ward' && me.ward >= 25) continue;
     if (id === 'guard' && (me.ward || 0) >= Math.round(GUARD_BASE + me.stats.marrow * 0.15)) continue;
-    let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
-    if (id === 'shove') windCost = Math.round(windCost * (1 + me.shoveCount));
+    let windCost = windCostFor(me, id, a);
     let ok = fight.ap >= a.ap && me.wind >= windCost;
     if (id === 'flurry') { windCost = me.wind; ok = fight.ap >= a.ap && me.wind >= 30; }
     out.push({ id, ...a, windCost, enabled: ok && !fight.over });
@@ -600,8 +660,7 @@ export function applyAction(fight, actionId) {
   const them = fighterOf(fight, defWho);
   const a = ACTIONS[actionId];
   const events = [];
-  let windCost = Math.round((a.wind || 0) * me.weapon.windCostMult(actionId));
-  if (actionId === 'shove') windCost = Math.round(windCost * (1 + me.shoveCount));
+  const windCost = a ? windCostFor(me, actionId, a) : 0;
   if (!a || fight.over) return events;
   if (a.range !== 'any' && a.range !== fight.range) return events;
   if (fight.ap < a.ap || me.wind < windCost) return events;
@@ -660,7 +719,7 @@ export function applyAction(fight, actionId) {
       if (me.hype < sigThreshold(me)) break;
       me.hype = 0;
       const boost = me.talents.has('showstopper') ? 1.25 : 1;
-      const encore = Math.pow(0.75, me.sigsUsed); // the crowd's seen this one before
+      const encore = Math.pow(Math.min(0.95, 0.75 + rkOf(me, 'encoretraining') * 0.05), me.sigsUsed); // the crowd's seen this one before
       me.sigsUsed += 1;
       const dmg = Math.round(ACTIONS.signature.base * me.d.powerMult * boost * encore * (1 - (them.d.armor || 0)));
       dealDamage(fight, defWho, dmg, events);
@@ -722,13 +781,13 @@ export function applyAction(fight, actionId) {
     }
     case 'mend': {
       me.mendUses -= 1;
-      const heal = Math.round((me.d.maxHp * 0.12 + 8 * me.d.magicMult) * healMult(me));
+      const heal = Math.round((me.d.maxHp * (0.12 + rkOf(me, 'mercy') * 0.03) + 8 * me.d.magicMult) * healMult(me));
       me.hp = Math.min(me.d.maxHp, me.hp + heal);
       events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.mendUses });
       break;
     }
     case 'hex': {
-      if (!them.weaken || them.weaken.pct <= 0.20) them.weaken = { pct: 0.20, turns: 2 };
+      { const hexPct = 0.20 + rkOf(me, 'lingering') * 0.03; if (!them.weaken || them.weaken.pct <= hexPct) them.weaken = { pct: hexPct, turns: 2 }; }
       events.push({ t: 'status', who: defWho, kind: 'hex' });
       break;
     }
@@ -748,7 +807,7 @@ export function applyAction(fight, actionId) {
       break;
     }
     case 'ward': {
-      me.ward = 25;
+      me.ward = 25 + rkOf(me, 'blessedward') * 5;
       events.push({ t: 'status', who: fight.active, kind: 'ward' });
       break;
     }
@@ -758,7 +817,7 @@ export function applyAction(fight, actionId) {
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
-        them.wind = Math.max(0, them.wind - 8);
+        them.wind = Math.max(0, them.wind - 8 - rkOf(me, 'deepfreeze') * 3);
         events.push({ t: 'status', who: defWho, kind: 'chill' });
       }
       events.push({ t: 'hit', who: fight.active, move: 'frostbolt', ...r, magic: true });
@@ -770,7 +829,7 @@ export function applyAction(fight, actionId) {
       if (r.damage > 0) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
-        them.burn = { per: me.talents.has('wildfire') ? 7 : 5, turns: me.talents.has('wildfire') ? 3 : 2 };
+        them.burn = { per: (me.talents.has('wildfire') ? 7 : 5) + rkOf(me, 'kindling'), turns: me.talents.has('wildfire') ? 3 : 2 };
         events.push({ t: 'status', who: defWho, kind: 'burn' });
       }
       events.push({ t: 'hit', who: fight.active, move: 'firebolt', ...r, magic: true });
@@ -787,8 +846,8 @@ export function applyAction(fight, actionId) {
         events.push({ t: 'hit', who: fight.active, move: 'tempest', damage: r.damage, crit: r.crit, glance: false, storm: true, school, hitNo: h + 1, whiffed: !!r.whiffed });
       }
       if (landed && them.hp > 0) {
-        them.burn = { per: me.talents.has('wildfire') ? 7 : 5, turns: me.talents.has('wildfire') ? 3 : 2 };
-        them.wind = Math.max(0, them.wind - 8);
+        them.burn = { per: (me.talents.has('wildfire') ? 7 : 5) + rkOf(me, 'kindling'), turns: me.talents.has('wildfire') ? 3 : 2 };
+        them.wind = Math.max(0, them.wind - 8 - rkOf(me, 'deepfreeze') * 3);
         events.push({ t: 'status', who: defWho, kind: 'burn' });
         events.push({ t: 'status', who: defWho, kind: 'chill' });
       }
@@ -897,7 +956,7 @@ export function endTurn(fight) {
   const me = fighterOf(fight, next);
   // my defensive state persisted through the opponent's turn; clears now
   me.state = null;
-  me.wind = Math.min(me.d.maxWind, me.wind + REGEN_PER_TURN + (me.talents.has('totemic') ? 5 : 0));
+  me.wind = Math.min(me.d.maxWind, me.wind + REGEN_PER_TURN + (me.talents.has('totemic') ? 5 : 0) + rkOf(me, 'pacing') * 2);
   // DoTs tick for the captain AND any living aux (pet / add) on this side
   const ticks = [];
   // Bone Broth: heal a little at the start of your turn

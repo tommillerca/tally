@@ -926,9 +926,15 @@ body::before {
 .tal-node .tal-body b { display: block; font-size: 14.5px; }
 .tal-node .tal-body small { color: var(--text-3); font-size: 12px; line-height: 1.35; display: block; }
 .tal-node.taken { border-color: rgba(165, 232, 71, 0.35); }
+.tal-node.partial { border-color: rgba(165, 232, 71, 0.45); }
 .tal-node.can { border-color: rgba(165, 232, 71, 0.6); animation: cratepulse 1.6s ease-in-out infinite; }
 .tal-node.locked { opacity: 0.5; }
+.tal-node .tal-pip { font-size: 11px; letter-spacing: -0.02em; }
 .tal-move { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: var(--carbs); border: 1px solid rgba(255, 180, 84, 0.4); padding: 1.5px 5px; border-radius: 5px; vertical-align: 2px; }
+.tal-move.rank { color: var(--accent); border-color: rgba(165, 232, 71, 0.45); }
+.tal-ranks { display: flex; gap: 4px; margin-top: 5px; }
+.tal-ranks i { width: 14px; height: 6px; border-radius: 3px; background: var(--surface-3); border: 1px solid var(--line-strong); }
+.tal-ranks i.on { border-color: transparent; }
 .float.dmg.heal { color: var(--accent); font-size: 26px; }
 
 /* ---------- talents v2 + spellcraft ---------- */

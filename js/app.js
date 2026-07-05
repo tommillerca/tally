@@ -36,7 +36,7 @@ import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
-  petActionsFor, applyPetAction,
+  petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2917,7 +2917,10 @@ async function buildFighter() {
   let loadout = await kvGet('loadout', 'starter');
   if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
-  const fightTalents = [...new Set([...talents, ...gearTalents(gearLo, gOwned, level), ...setInfo.talents])];
+  // keep the player's talent array WITH repeats (ranks matter); gear/set talents
+  // are single-rank moves, add them only if not already specced.
+  const extraTalents = [...gearTalents(gearLo, gOwned, level), ...setInfo.talents].filter(id => !talents.includes(id));
+  const fightTalents = [...talents, ...extraTalents];
   // battle pet: equipped C slot, level from steps since hatch, its spec picks
   let battlePet = null, petMeta = null;
   const eqForPet = await equipped();
@@ -3772,10 +3775,12 @@ async function renderTalents(wrap) {
   if (!body) return;
   const [xpRows, takenArr, fighter, coinBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins()]);
   const taken = new Set(takenArr);
+  const tranks = talentRanks(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const points = talentPoints(lvl.level);
-  const unspent = Math.max(0, points - taken.size);
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents), fighter.gearArmor);
+  const unspent = Math.max(0, points - takenArr.length);
+  const fightArr = fighter.fightTalents || fighter.talents;
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fightArr), fighter.gearArmor, talentRanks(fightArr));
 
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
   const statBlock = `
@@ -3847,31 +3852,40 @@ async function renderTalents(wrap) {
       <span class="note">1 point per level · Lv ${lvl.level}</span>
     </div>
     <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
-    ${TALENT_TREES.map(tree => `
+    ${TALENT_TREES.map(tree => {
+      const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);
+      const treeIn = tree.nodes.reduce((a, n) => a + Math.min(tranks[n.id] || 0, nodeRanks(n)), 0);
+      return `
       <div class="tal-tree">
         <div class="tal-tree-head">
           <b style="color:${tree.color}">${tree.name}</b>
           <span class="tal-tag">${tree.tag}</span>
-          <span class="note" style="margin-left:auto">${tree.nodes.filter(n => taken.has(n.id)).length}/6</span>
+          <span class="note" style="margin-left:auto">${treeIn}/${treeMax} pts</span>
         </div>
         <p class="note" style="margin:0 2px 8px">${tree.flavor}</p>
         ${[1, 2, 3, 4].map(tier => {
           const nodes = tree.nodes.map((n, i) => ({ n, i })).filter(x => x.n.tier === tier);
           if (!nodes.length) return '';
-          const inTree = tree.nodes.filter(n => taken.has(n.id)).length;
-          const gate = { 1: 0, 2: 1, 3: 3, 4: 5 }[tier];
-          const gateTxt = inTree < gate ? `<div class="tal-gate">needs ${gate} point${gate === 1 ? '' : 's'} in ${tree.name}</div>` : '';
+          const gate = { 1: 0, 2: 2, 3: 6, 4: 10 }[tier];
+          const gateTxt = treeIn < gate ? `<div class="tal-gate">needs ${gate} point${gate === 1 ? '' : 's'} in ${tree.name}</div>` : '';
           const cards = nodes.map(({ n, i }) => {
-            const has = taken.has(n.id);
-            const can = !has && unspent > 0 && canTakeTalent(taken, tree.id, i);
-            return `<button class="tal-node ${has ? 'taken' : can ? 'can' : 'locked'}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
-              <span class="tal-pip" style="${has ? `background:${tree.color};border-color:${tree.color}` : ''}">${has ? '✓' : tier === 4 ? '★' : 'T' + tier}</span>
-              <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small></span>
+            const max = nodeRanks(n);
+            const cur = Math.min(tranks[n.id] || 0, max);
+            const full = cur >= max;
+            const can = !full && unspent > 0 && canTakeTalent(takenArr, tree.id, i);
+            const cls = full ? 'taken' : cur > 0 ? 'partial' : can ? 'can' : 'locked';
+            const pips = max > 1
+              ? `<span class="tal-ranks">${Array.from({ length: max }, (_, r) => `<i class="${r < cur ? 'on' : ''}" style="${r < cur ? `background:${tree.color}` : ''}"></i>`).join('')}</span>`
+              : '';
+            const pipTxt = max > 1 ? `${cur}/${max}` : (full ? '✓' : tier === 4 ? '★' : 'T' + tier);
+            return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
+              <span class="tal-pip" style="${cur > 0 ? `background:${tree.color};border-color:${tree.color}` : ''}">${pipTxt}</span>
+              <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small>${pips}</span>
             </button>`;
           }).join('');
           return `${gateTxt}<div class="tal-tier ${nodes.length > 1 ? 'pair' : ''}">${cards}</div>`;
         }).join('')}
-      </div>`).join('')}
+      </div>`; }).join('')}
     ${taken.size ? '<button class="btn danger" id="respecBtn">Respec (free) · refund all points</button>' : ''}`;
 
   async function adjustAlloc(key, delta) {
@@ -3903,10 +3917,10 @@ async function renderTalents(wrap) {
     renderTalents(wrap);
   }));
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
-    const t = new Set(await kvGet('talents', []));
-    if (!canTakeTalent(t, b.dataset.tree, Number(b.dataset.idx))) return;
-    t.add(b.dataset.talent);
-    await kvSet('talents', [...t]);
+    const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
+    if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;
+    arr.push(b.dataset.talent);
+    await kvSet('talents', arr);
     popSound(S.sounds);
     confettiBurst(innerWidth / 2, innerHeight * 0.3, 12);
     renderTalents(wrap);
