@@ -1637,7 +1637,9 @@ body::before {
 .gi-stats { font-size: 12px; font-weight: 800; color: var(--accent); }
 .gi-talent { font-size: 12px; font-weight: 800; color: var(--carbs); }
 .gi-desc { font-size: 11.5px; line-height: 1.35; color: var(--text-2); }
-.gi-equip { grid-column: 1 / -1; width: 100%; margin-top: 2px; }
+.gi-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 2px; }
+.gi-actions .btn { flex: 1 1 0; min-width: 0; font-size: 13px; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+.dust-ico { color: #b8a6d8; }
 .ward-cell .gear-lock {
   position: absolute; top: 4px; right: 4px;
   font-size: 9px; font-weight: 800; color: #201500;

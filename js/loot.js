@@ -85,6 +85,76 @@ export async function grantGear(gearId, source) {
   return g;
 }
 
+/* ---------- Bone Dust: the salvage economy (v73) ----------
+   Melt unwanted gear or salvage pets you don't want into Bone Dust, so a bad
+   drop / dupe egg still pays off. Dust buys eggs, crates and consumables, so
+   junk loops back into a shot at something good. Additive: dust lives in its
+   own kv key; the XP ledger is untouched. */
+export const DUST_VALUE = {
+  gear: { common: 3, uncommon: 5, rare: 12, epic: 30, legendary: 80 },
+  pet:  { common: 10, uncommon: 15, rare: 30, epic: 60, legendary: 120 },
+};
+export async function boneDust() { return (await kvGet('bonedust', 0)) || 0; }
+export async function boneDustAdd(n) {
+  const d = Math.max(0, (await boneDust()) + n);
+  await kvSet('bonedust', d);
+  return d;
+}
+export function gearDustValue(g) { return (g && DUST_VALUE.gear[g.rarity]) || 3; }
+export function petDustValue(item) { return (item && DUST_VALUE.pet[item.rarity]) || 10; }
+
+// Melt an owned gear piece into Bone Dust. Auto-unequips it first. Destructive
+// to that ONE item by the player's explicit choice; nothing else is touched.
+export async function disenchantGear(gearId) {
+  const g = GEAR_BY_ID[gearId];
+  if (!g) return { ok: false, reason: 'unknown' };
+  const inv = await db.all('inv');
+  const row = inv.find(r => r.kind === 'gear' && r.gearId === gearId);
+  if (!row) return { ok: false, reason: 'not-owned' };
+  const gl = await gearLoadout();
+  if (gl[g.slot] === gearId) { const next = { ...gl }; delete next[g.slot]; await kvSet('gearloadout', next); }
+  await db.del('inv', row.id);
+  const dust = gearDustValue(g);
+  await boneDustAdd(dust);
+  return { ok: true, dust, name: g.name };
+}
+
+// Salvage an owned, EARNED pet into Bone Dust. Won't touch a default/base pet
+// (no inv row) and unequips it if it's your active companion.
+export async function salvagePet(petId) {
+  const item = BH_BY_ID[petId];
+  if (!item || item.slot !== 'C') return { ok: false, reason: 'not-a-pet' };
+  const inv = await db.all('inv');
+  const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
+  if (!row) return { ok: false, reason: 'not-owned' }; // base/default pets can't be salvaged
+  const eq = await equipped();
+  if (eq.C === petId) await equip('C', null);
+  await db.del('inv', row.id);
+  const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
+  const dust = petDustValue(item);
+  await boneDustAdd(dust);
+  return { ok: true, dust, name: item.name };
+}
+
+// Bone Dust shop: spend salvage on a fresh shot at pets / crates / consumables.
+export const DUST_SHOP = [
+  { id: 'egg', label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' },
+  { id: 'crate-daily', label: 'Daily Crate', cost: 40, desc: 'A roll of loot' },
+  { id: 'freeze', label: 'Streak Freeze', cost: 25, desc: 'Protect a missed day' },
+  { id: 'charm', label: 'Battle Charm', cost: 25, desc: 'Next Pit win pays more' },
+];
+export async function buyWithDust(id) {
+  const item = DUST_SHOP.find(x => x.id === id);
+  if (!item) return { ok: false, reason: 'unknown' };
+  const bal = await boneDust();
+  if (bal < item.cost) return { ok: false, reason: 'dust', need: item.cost, have: bal };
+  await boneDustAdd(-item.cost);
+  if (id === 'egg') await grantEgg('dust');
+  else if (id === 'crate-daily') await grantCrate('daily', 'dust');
+  else await grantConsumable(id, 'dust');
+  return { ok: true, id, cost: item.cost };
+}
+
 export const EGG_GOAL_STEPS = 8000;
 
 export async function lifetimeStepsSum() {

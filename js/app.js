@@ -13,6 +13,7 @@ import {
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
   WEAPON_COST, buyWeapon,
+  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
@@ -2205,7 +2206,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${ig.talent ? `<span class="gi-talent">⚡ ${esc(ig.talentName)}</span><small class="gi-desc">${esc(TALENT_DESC[ig.talent] || 'a special ability')}</small>` : '<small class="gi-desc">No special ability. Pure stats.</small>'}
             <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[ig.slot]}${ig.minLevel > 1 ? ` · Lv ${ig.minLevel}` : ''}</span>
           </div>
-          <button class="btn gi-equip ${isEq ? 'ghost' : ''}" data-equipgear-commit="${ig.id}" ${isEq || locked ? 'disabled' : ''}>${isEq ? 'Equipped' : locked ? `Locked · Lv ${ig.minLevel}` : 'Equip this'}</button>
+          <div class="gi-actions">
+            <button class="btn gi-equip ${isEq ? 'ghost' : ''}" data-equipgear-commit="${ig.id}" ${isEq || locked ? 'disabled' : ''}>${isEq ? 'Equipped' : locked ? `Locked · Lv ${ig.minLevel}` : 'Equip this'}</button>
+            <button class="btn danger gi-melt" data-melt-gear="${ig.id}">Melt · +${gearDustValue(ig)} dust</button>
+          </div>
         </div>`;
       })()}
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder.</p>' : ''}
@@ -2240,6 +2244,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
       levelSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
+    $$('[data-melt-gear]', content).forEach(btn => btn.addEventListener('click', async () => {
+      // arm-then-confirm so a piece is never melted by accident
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Tap again to melt'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = `Melt · +${gearDustValue(GEAR_BY_ID[btn.dataset.meltGear])} dust`; } }, 2600); return; }
+      const res = await disenchantGear(btn.dataset.meltGear);
+      if (!res.ok) { toast('Could not melt that piece.'); return; }
+      S.wardrobePreview = null;
+      popSound(S.sounds);
+      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2800);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
       const petId = b.dataset.pet, tier = Number(b.dataset.tier), node = b.dataset.petpick;
       const meta = fighter.petMeta;
@@ -2262,8 +2276,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'crates') {
     await migrateLegacyEggs();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
+    const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     content.innerHTML = `
       ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
       ${pendingLoot.map((p, i) => `
@@ -2309,6 +2324,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="grid2">
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
           <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
+      </div>
+      <div class="sect-h">Salvage Bench · nothing wasted</div>
+      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
+      <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Feed pets you don't want here. Bad drops and dupe eggs still pay off.</p>
+      ${ownedPets.length ? ownedPets.map(p => `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(p)}" alt="" style="width:27px;height:27px;object-fit:contain"></span><div style="flex:1"><b>${esc(p.name)}</b><small>${RARITIES[p.rarity].label} pet</small></div><button class="btn small danger" data-salvage="${p.id}">+${petDustValue(p)} dust</button></div>`).join('') : '<p class="note" style="margin:2px 2px 8px">No pets to salvage. Hatch eggs by walking.</p>'}
+      <div class="sect-h">Bone Dust Shop</div>
+      <div class="grid2">
+        ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
+          <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
       </div>`;
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
@@ -2331,6 +2355,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       renderCharacter(wrap, 'crates');
     });
+    $$('[data-salvage]', content).forEach(btn => btn.addEventListener('click', async () => {
+      // arm-then-confirm: pets are earned, so never salvage on a stray tap
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
+      const res = await salvagePet(btn.dataset.salvage);
+      if (!res.ok) { toast('Could not salvage that pet.'); return; }
+      popSound(S.sounds);
+      toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2800);
+      renderCharacter(wrap, 'crates');
+    }));
+    $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await buyWithDust(btn.dataset.dustbuy);
+      if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
+      popSound(S.sounds);
+      toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Daily Crate added. Open it above.' : 'Added to your consumables.', 2800);
+      renderCharacter(wrap, 'crates');
+    }));
     $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
     $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
       const r = await buyShopItem(b.dataset.buy);

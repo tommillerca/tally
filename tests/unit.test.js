@@ -20,7 +20,7 @@ import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
-import { RARITIES, RARITY_ORDER, CRATES, SHOP } from '../js/loot.js';
+import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
 
@@ -687,6 +687,23 @@ test('den loot never drops gear gated more than 3 levels ahead', async () => {
       assert.ok(pair.every(g => (g.minLevel || 1) <= cap), `Lv${lvl} den ${den.id}: ${pair.map(g => g.minLevel)}`);
     }
   }
+});
+
+test('v73 Bone Dust values scale with rarity, pets worth more than gear', () => {
+  for (const kind of ['gear', 'pet']) {
+    const v = DUST_VALUE[kind];
+    assert.ok(v.common < v.rare && v.rare < v.epic && v.epic < v.legendary, `${kind} dust monotonic`);
+  }
+  // a pet is worth more dust than gear of the same rarity (pets are rarer to earn)
+  for (const r of ['rare', 'epic', 'legendary']) assert.ok(DUST_VALUE.pet[r] > DUST_VALUE.gear[r], `pet ${r} > gear ${r}`);
+  assert.equal(gearDustValue({ rarity: 'legendary' }), DUST_VALUE.gear.legendary);
+  assert.equal(petDustValue({ rarity: 'epic' }), DUST_VALUE.pet.epic);
+  assert.equal(gearDustValue(null), 3); // safe fallback
+});
+test('v73 Dust Shop loops junk back into pets/crates/consumables', () => {
+  assert.ok(DUST_SHOP.length >= 3);
+  assert.ok(DUST_SHOP.every(d => d.cost > 0 && d.id && d.label));
+  assert.ok(DUST_SHOP.some(d => d.id === 'egg'), 'dust can buy an egg (dupe pets -> new pet)');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
