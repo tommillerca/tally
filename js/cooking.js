@@ -7,14 +7,14 @@
 import { kvGet, kvSet } from './db.js';
 
 export const INGREDIENTS = {
-  marrow:    { id: 'marrow',    name: 'Marrow',        icon: '🦴', tier: 'common' },
-  graveroot: { id: 'graveroot', name: 'Graveroot',     icon: '🌿', tier: 'common' },
-  ember:     { id: 'ember',     name: 'Ember Pepper',  icon: '🌶️', tier: 'common' },
-  bog:       { id: 'bog',       name: 'Bog Mushroom',  icon: '🍄', tier: 'common' },
-  sinew:     { id: 'sinew',     name: 'Sinew',         icon: '🥩', tier: 'common' },
-  salt:      { id: 'salt',      name: 'Grave Salt',    icon: '🧂', tier: 'common' },
+  marrow:    { id: 'marrow',    name: 'Marrow',        icon: '🦴', iconId: 'ingr-marrow',    tier: 'common' },
+  graveroot: { id: 'graveroot', name: 'Graveroot',     icon: '🌿', iconId: 'ingr-graveroot', tier: 'common' },
+  ember:     { id: 'ember',     name: 'Ember Pepper',  icon: '🌶️', iconId: 'ingr-ember',     tier: 'common' },
+  bog:       { id: 'bog',       name: 'Bog Mushroom',  icon: '🍄', iconId: 'ingr-bog',       tier: 'common' },
+  sinew:     { id: 'sinew',     name: 'Sinew',         icon: '🥩', iconId: 'ingr-sinew',     tier: 'common' },
+  salt:      { id: 'salt',      name: 'Grave Salt',    icon: '🧂', iconId: 'ingr-salt',      tier: 'common' },
   // RARE: only from RARE map spawns + world-boss dens. Gates the premium feast.
-  ectoplasm: { id: 'ectoplasm', name: 'Ectoplasm',     icon: '🫧', tier: 'rare' },
+  ectoplasm: { id: 'ectoplasm', name: 'Ectoplasm',     icon: '🫧', iconId: 'ingr-ectoplasm', tier: 'rare' },
 };
 export const INGREDIENT_IDS = Object.keys(INGREDIENTS);
 export const COMMON_INGREDIENT_IDS = INGREDIENT_IDS.filter(id => INGREDIENTS[id].tier === 'common');
@@ -40,19 +40,19 @@ export function spawnIngredient(spawn) {
 //   combat -> applies for the next `fights` Pit fights (damagePct / hype / regenPct / petFree)
 //   coins  -> +pct coins from world payouts for `hours`
 export const RECIPES = [
-  { id: 'bone-broth', name: 'Bone Broth', icon: '🍲', needs: { marrow: 2, salt: 1 }, cookMin: 15,
+  { id: 'bone-broth', iconId: 'dish-broth', name: 'Bone Broth', icon: '🍲', needs: { marrow: 2, salt: 1 }, cookMin: 15,
     buff: { kind: 'combat', regenPct: 0.06, fights: 2 }, desc: 'Heals 6% HP each turn, next 2 fights' },
-  { id: 'hearty-hash', name: 'Hearty Hash', icon: '🥘', needs: { graveroot: 1, bog: 1, salt: 1 }, cookMin: 30,
+  { id: 'hearty-hash', iconId: 'dish-hash', name: 'Hearty Hash', icon: '🥘', needs: { graveroot: 1, bog: 1, salt: 1 }, cookMin: 30,
     buff: { kind: 'combat', hype: 25, fights: 3 }, desc: 'Start your next 3 fights at +25 Hype' },
-  { id: 'marrow-stew', name: 'Marrow Stew', icon: '🍜', needs: { marrow: 2, graveroot: 1 }, cookMin: 45,
+  { id: 'marrow-stew', iconId: 'dish-stew', name: 'Marrow Stew', icon: '🍜', needs: { marrow: 2, graveroot: 1 }, cookMin: 45,
     buff: { kind: 'combat', damagePct: 0.10, fights: 3 }, desc: '+10% your damage, next 3 fights' },
-  { id: 'hunters-skewer', name: "Hunter's Skewer", icon: '🍢', needs: { sinew: 2, ember: 1 }, cookMin: 45,
+  { id: 'hunters-skewer', iconId: 'dish-skewer', name: "Hunter's Skewer", icon: '🍢', needs: { sinew: 2, ember: 1 }, cookMin: 45,
     buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special has no cooldown, next 2 fights" },
-  { id: 'zombie-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
+  { id: 'zombie-fajita', iconId: 'dish-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
     buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
-  { id: 'necro-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 180,
+  { id: 'necro-feast', iconId: 'dish-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 180,
     buff: { kind: 'combat', damagePct: 0.15, hype: 20, fights: 3 }, desc: '+15% damage AND +20 Hype start, next 3 fights (needs rare Ectoplasm)' },
-  { id: 'bonemeal-kibble', name: 'Bonemeal Kibble', icon: '🦴', needs: { marrow: 1, sinew: 1, bog: 1 }, cookMin: 60,
+  { id: 'bonemeal-kibble', iconId: 'dish-kibble', name: 'Bonemeal Kibble', icon: '🦴', needs: { marrow: 1, sinew: 1, bog: 1 }, cookMin: 60,
     buff: { kind: 'combat', petHpPct: 0.30, petDamagePct: 0.25, fights: 3 }, desc: 'Feeds your pet: +30% pet HP and +25% pet damage, next 3 fights' },
 ];
 export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));

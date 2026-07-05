@@ -17,6 +17,7 @@ import {
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
+import { bhIcon, hasBhIcon } from './icons-pack.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
@@ -88,11 +89,16 @@ function spawnIcon(type, s = 20) {
 }
 
 function crateIcon(kind, s = 22) {
-  if (kind === 'golden') return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="13" rx="2.6" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><path d="M2.5 11.4h19" stroke="#3a2b12" stroke-width="1.4"/><rect x="10.3" y="9.6" width="3.4" height="4.8" rx="1.1" fill="#f2e9d7" stroke="#3a2b12" stroke-width="1.2"/></svg>`;
-  if (kind === 'egg') return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.8c3.6 0 6.5 4.6 6.5 9.3 0 4.4-2.9 7.4-6.5 7.4s-6.5-3-6.5-7.4c0-4.7 2.9-9.3 6.5-9.3z" fill="#e8f7d0" stroke="#2a3313" stroke-width="1.6"/><path d="M8.5 10.5l2 1.8 1.8-2 2 2.1 1.7-1.6" fill="none" stroke="#93b45e" stroke-width="1.3" stroke-linecap="round"/></svg>`;
-  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.6" fill="#a9825a" stroke="#2e2113" stroke-width="1.6"/><rect x="3" y="9.6" width="18" height="3.2" fill="#8a6845" stroke="#2e2113" stroke-width="1.1"/><circle cx="12" cy="16.4" r="1.8" fill="#f2e9d7" stroke="#2e2113" stroke-width="1.1"/></svg>`;
+  const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
+  return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
-function consumableIcon(type, s = 20) { return type === 'freeze' ? ICONS.freeze(s) : ICONS.boltIco(s); }
+function consumableIcon(type, s = 20) { return `<span class="bhi-wrap">${bhIcon(type === 'freeze' ? 'freeze' : 'charm', s)}</span>`; }
+// pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
+function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
+function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+// badges: map the emoji to a pack icon where we have one (else keep the emoji)
+const BADGE_ICON = { '💀': 'badge-skull', '👑': 'badge-crown', '🏆': 'badge-trophy', '🥊': 'badge-boxing', '🎯': 'badge-target', '💪': 'badge-muscle', '🗺': 'badge-map' };
+function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').replace(/️/g, '')]; return id ? `<span class="bhi-wrap">${bhIcon(id, s)}</span>` : (emoji || ''); }
 
 /* ================= splash montage ================= */
 
@@ -392,7 +398,7 @@ async function renderToday(el) {
     ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
 
     <div class="hero-top">
-      <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${ICONS.flame(15)}</span> <b>${streak}</b></button>
+      <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${bhIcon('flame', 15)}</span> <b>${streak}</b></button>
       <div class="hero-top-right">
         <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
@@ -709,7 +715,7 @@ function kitchenCardHtml(cook, ingCount, buffs) {
   if (!cook || !cook.ready) return '';
   return `<div class="card kitchen-card" id="kitchenCard">
     <div class="card-title">KITCHEN <span class="link">Collect</span></div>
-    <div class="kc-line"><b style="color:var(--accent)">${cook.recipe.icon} ${esc(cook.recipe.name)} is ready!</b></div>
+    <div class="kc-line"><b style="color:var(--accent)">${recipeIconHtml(cook.recipe,18)} ${esc(cook.recipe.name)} is ready!</b></div>
   </div>`;
 }
 
@@ -727,20 +733,20 @@ async function openKitchen() {
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">The pot</div>
-      ${cook ? `<div class="crate-row cookpot ${cook.ready ? 'ready' : ''}"><span class="crate-ico">${cook.recipe.icon}</span>
+      ${cook ? `<div class="crate-row cookpot ${cook.ready ? 'ready' : ''}"><span class="crate-ico">${recipeIconHtml(cook.recipe,26)}</span>
           <div style="flex:1"><b>${esc(cook.recipe.name)}</b><small>${cook.ready ? 'Ready to serve!' : 'Cooking · ' + fmtCookTime(cook.remainingMs) + ' left'}</small></div>
           ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : '<span class="q-frac">🔥</span>'}</div>`
         : '<p class="note" style="margin:2px 2px 12px">The pot is empty. Pick a recipe below.</p>'}
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${'🪙'}</button></div>
       <div class="ingredient-grid">
-        ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${INGREDIENTS[id].icon}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
+        ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
       <div class="sect-h">Recipes</div>
       ${RECIPES.map(r => {
         const have = canCook(r, inv);
-        const needStr = Object.entries(r.needs).map(([id, n]) => `${INGREDIENTS[id].icon}${(inv[id] || 0)}/${n}`).join('  ');
+        const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id,13)}${(inv[id] || 0)}/${n}`).join('  ');
         const canStart = have && !cook;
-        return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${r.icon}</span>
+        return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r,26)}</span>
           <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
           <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>Cook</button></div>`;
       }).join('')}`;
@@ -1652,7 +1658,8 @@ async function renderSettings(el) {
 
   <p class="note" style="text-align:center;margin-top:18px">
     Boneheadz Gym v4 · data lives only on this device<br>
-    Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a>
+    Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
+    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0)
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {
@@ -1912,7 +1919,7 @@ function maybeCelebrate() {
 async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null }) {
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
-  for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${b.icon}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
+  for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
   if (!levelUp && !bits.length) return;
   confettiRain();
   levelSound(S.sounds);
@@ -1949,7 +1956,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
 function badgesGridHtml(earned, newIds = new Set()) {
   return `<div class="badge-grid">${BADGES.map(b => `
     <button class="badge ${earned.has(b.id) ? '' : 'locked'} ${newIds.has(b.id) ? 'new' : ''}" data-badge="${b.id}">
-      <span class="bicon">${b.icon}</span>${esc(b.name)}
+      <span class="bicon">${badgeIconHtml(b.icon,22)}</span>${esc(b.name)}
     </button>`).join('')}</div>`;
 }
 
@@ -2208,7 +2215,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="sect-h">Kitchen · food &amp; buffs</div>
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${cook && cook.recipe ? `<div class="crate-row"><span class="crate-ico">${cook.ready ? '✅' : '🍳'}</span><div style="flex:1"><b>${cook.ready ? 'Dish ready!' : 'Cooking...'}</b><small>${esc(cook.recipe.name)}</small></div></div>` : ''}
-      ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${INGREDIENTS[id].icon}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
+      ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="sect-h">Shop</div>
       <div class="grid2">
@@ -2332,7 +2339,7 @@ async function openCrateReveal(result) {
           }
           if (r.type === 'ingredient') {
             const ing = INGREDIENTS[r.ingredient];
-            return `<div class="reveal-card r-common"><span class="reveal-ico" style="font-size:30px">${ing.icon}</span><div><b>${esc(ing.name)}</b><small>Cooking ingredient</small></div></div>`;
+            return `<div class="reveal-card r-common"><span class="reveal-ico">${ingIconHtml(ing.id,34)}</span><div><b>${esc(ing.name)}</b><small>Cooking ingredient</small></div></div>`;
           }
           if (r.type === 'gear' || r.type === 'geardupe') {
             const g = r.gear, grar = RARITIES[g.rarity];
@@ -2717,7 +2724,7 @@ async function openMap() {
         if (!rec) {
           const el = document.createElement('div');
           el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''}`;
-          el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${INGREDIENTS[spawnIngredient(s).id].icon}</span>`;
+          el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${ingIconHtml(spawnIngredient(s).id,15)}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         } else {
@@ -2737,7 +2744,7 @@ async function openMap() {
       if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
       const ro = $('#mapReadout', body);
       if (ro) ro.innerHTML = nearest
-        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> ${(() => { const ing = INGREDIENTS[spawnIngredient(nearest).id]; return `<span class="ro-ing">${ing.icon} ${esc(ing.name)}</span>`; })()} · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
+        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> ${(() => { const ing = INGREDIENTS[spawnIngredient(nearest).id]; return `<span class="ro-ing">${ingIconHtml(ing.id,15)} ${esc(ing.name)}</span>`; })()} · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
         : 'All spawns collected. Legend. Fresh bones at midnight.';
       const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
