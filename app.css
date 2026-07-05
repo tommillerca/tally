@@ -1282,6 +1282,15 @@ body::before {
 .weap-cta { display: flex; justify-content: flex-end; }
 .weap-cta .q-frac { align-self: center; }
 
+/* ===== Pit victory reward pills ===== */
+.reward-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 auto 4px; max-width: 320px; }
+.reward-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  font-weight: 800; font-size: 13px; color: var(--text, #f2e9d7);
+}
+.reward-pill svg { flex: none; }
+
 /* ===== egg hatch cinematic (bone egg -> shards -> pet) ===== */
 .hatch-stage { position: relative; height: 200px; display: grid; place-items: center; margin: 0 auto 4px; }
 .hatch-glow {
@@ -1621,7 +1630,7 @@ body::before {
 /* pet/add as a battle body: a small companion that stands on the ground BESIDE
    the fighter (absolute so it never pushes the avatar up off the floor) */
 .pet-fighter { position: absolute; bottom: 2px; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 3; }
-.you-side .pet-fighter { left: 104px; transform: scale(0.92); }        /* your pet: right of you, toward center */
+.you-side .pet-fighter { left: 6px; transform: scale(0.92); }          /* your pet: at your side, on your half */
 .foe-side .pet-fighter.add { right: 104px; transform: scale(0.9); }    /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
 .pet-fighter.fainted .fstage.petmini { transform: rotate(68deg) translateY(8px); }

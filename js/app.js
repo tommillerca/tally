@@ -168,6 +168,7 @@ async function boot() {
   await ingestHkFromUrl();
   backupNudge();
   nativeAutoSync();
+  setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   onAppResume(() => { nativeAutoSync(); });
 
   window.addEventListener('hashchange', route);
@@ -407,7 +408,7 @@ async function renderToday(el) {
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
     <button class="hero-act" id="kitchenActBtn"><span class="hero-emoji">🍲</span><span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
+    <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
 
@@ -2368,6 +2369,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   }
   if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
   const game = await onHealthSync(payload.date, { steps: payload.steps });
+  await checkPetLevelUp();
   const bits = [];
   if (payload.steps != null) bits.push(`${payload.steps.toLocaleString()} steps`);
   if (payload.activeKcal != null) bits.push(`${payload.activeKcal.toLocaleString()} active kcal`);
@@ -2379,6 +2381,29 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     if (game.newBadges.length) { queueCelebration({ newBadges: game.newBadges }); maybeCelebrate(); }
   }
   return bits;
+}
+
+// Pets level up from walking; when a new tier unlocks (Lv 2/4/6) the player
+// earns a pet talent to pick. Make that obvious with a toast + celebration.
+// First sighting records silently (no retroactive spam).
+async function checkPetLevelUp() {
+  const eq = await equipped();
+  if (!eq.C) return;
+  const cur = petLevel(await petStepsSince(eq.C));
+  const seen = (await kvGet('petSeenLevel', {})) || {};
+  const prev = seen[eq.C];
+  if (prev == null) { seen[eq.C] = cur; await kvSet('petSeenLevel', seen); return; }
+  if (cur <= prev) return;
+  const newTalent = unlockedTiers(cur).length > unlockedTiers(prev).length;
+  seen[eq.C] = cur; await kvSet('petSeenLevel', seen);
+  const petName = (BH_BY_ID[eq.C] && BH_BY_ID[eq.C].name) || 'Your pet';
+  if (newTalent) {
+    confettiRain(60); levelSound(S.sounds);
+    toast(`🐾 ${petName} reached Lv ${cur} and unlocked a new talent — pick it in Wardrobe (tap your pet)!`, 4600);
+  } else {
+    popSound(S.sounds);
+    toast(`🐾 ${petName} reached Lv ${cur}!`, 3000);
+  }
 }
 
 async function ingestHkFromUrl() {
@@ -3257,6 +3282,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const pg = el('petG'); if (pg) pg.classList.add('fainted');
       floatNode('🐾 DOWN', 'p', 'stamp dim');
       hitSound(S.sounds, 'thud');
+    } else if (ev.t === 'aoe') {
+      const arena = $('#arena'); if (arena) pulse(arena, 'quake', fxMs + 200);
+      pulse(el('foeStage'), 'lunge-l', fxMs);
+      if (ev.dmgYou > 0) floatNode(`-${ev.dmgYou}`, 'p', 'dmg');
+      const petStage = el('petStage');
+      if (petStage && ev.dmgPet > 0) { setTimeout(() => { pulse(petStage, 'hurt', fxMs); floatNode(`🐾 -${ev.dmgPet}`, 'p', 'dmg bleed'); }, 120); }
+      floatNode('SWEEP!', 'f', 'stamp hot');
+      hitSound(S.sounds, 'thud');
     } else if (ev.t === 'shove') {
       pulse(atkStage, lungeCls, fxMs);
       setTimeout(() => pulse(vicStage, 'hurt', fxMs), fxMs * 0.5);
@@ -3327,6 +3360,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;
+    if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep — ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
     if (ev.t === 'shove') return `${who} shoved ${them} back`;
     if (ev.t === 'advance') return `${who} closed in`;
     if (ev.t === 'taunt') return `${who} talked trash`;
@@ -3366,7 +3400,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const defenseRow = () => {
       let h = '';
       const g = get('guard');
-      if (g) h += btn(g, { hint: `shield: absorbs ~${guardAmt}`, glow: (!!fight.telegraph && (player.ward || 0) <= 0) || player.hp < player.d.maxHp * 0.4 });
+      if (g) h += btn(g, { hint: `shield ~${guardAmt} · +stamina`, glow: (!!fight.telegraph && (player.ward || 0) <= 0) || player.hp < player.d.maxHp * 0.4 || player.wind < 20 });
       const r = get('rattle');
       if (r) h += btn(r, { hint: '-18% their dmg · saps stamina', weak: !!foe.weaken });
       return h;
@@ -3581,14 +3615,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await coinsAdd(coins);
     }
     const title = won ? 'VICTORY' : fight.over.winner === 'draw' ? 'DOUBLE KO' : 'DOWN, NOT OUT';
-    const sub = won
-      ? [`+${coins} coins`, xp ? `+${xp} XP` : '', ...extras].filter(Boolean).join(' · ')
-      : fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`;
+    const rewardHtml = won
+      ? `<div class="sect-h" style="text-align:center;margin:10px 0 6px">You won</div>
+         <div class="reward-row">
+           <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
+           ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
+           ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
+         </div>`
+      : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
-          <p class="note" style="margin:8px 0 16px">${esc(sub)}</p>
+          ${rewardHtml}
+          <div style="height:12px"></div>
           ${bossLoot ? `
           <div class="loot-choice">
             <div class="sect-h" style="text-align:center">THE BOSS DROPPED · PICK ONE</div>

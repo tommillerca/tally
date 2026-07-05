@@ -116,6 +116,31 @@ test('pet food (Bonemeal Kibble): bigger pet HP + harder pet hits', () => {
   assert.equal(plainPet.petDamagePct || 0, 0);
 });
 
+test('Bone Guard restores stamina (the new way to refuel)', () => {
+  const st = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
+  const fight = createFight({ player: makeFighter({ name: 'P', stats: st }), foe: makeFighter({ name: 'F', stats: st }), seed: 5 });
+  fight.p.wind = 30;
+  applyAction(fight, 'guard');
+  assert.equal(fight.p.wind, 30 - 12 + 22); // spent 12 on the move, caught +22 stamina = 40
+  assert.ok(fight.p.ward > 0, 'and raised a shield');
+});
+
+test('boss AoE sweep can hit both you and your pet', () => {
+  const st = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
+  let sawAoe = false;
+  for (let s = 1; s <= 80 && !sawAoe; s++) {
+    const petDesc = { name: 'Pet', level: 5, family: 'hound', picks: new Set(), ability: null };
+    const player = makeFighter({ name: 'You', stats: st, pet: petDesc });
+    const foe = makeFighter({ name: 'Boss', stats: scaleStats(st, 1.2) });
+    const fight = createFight({ player, foe, seed: s, aiLevel: 5 });
+    fight.range = 'close'; fight.active = 'f'; fight.ap = foe.d.ap;
+    const evs = aiTakeTurn(fight);
+    const aoe = evs.find(e => e.t === 'aoe');
+    if (aoe) { sawAoe = true; assert.ok(aoe.dmgYou >= 0 && aoe.dmgPet >= 0, 'sweep hits both bodies'); }
+  }
+  assert.ok(sawAoe, 'a boss with a living pet eventually sweeps the team');
+});
+
 test('armor: Marrow blunts physical, Reflex blunts magic, gear adds on top', () => {
   // physical armor from Marrow
   const beefy = makeFighter({ name: 'B', stats: { power: 0, marrow: 100, wind: 0, reflex: 0, hype: 0 } });

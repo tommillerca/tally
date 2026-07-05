@@ -260,6 +260,7 @@ const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export const REGEN_PER_TURN = 20; // higher now that Brace is gone: Stamina refills passively
 export const GUARD_BASE = 16;     // Bone Guard absorb floor; scales with Marrow
+export const GUARD_STAMINA = 22;  // Bone Guard also lets you catch your breath (active Stamina)
 export const TAUNT_CURVE = [8, 5, 3, 2, 1];
 export const SIGNATURE_HYPE = 100;
 export const HIT_TAKEN_HYPE = 4;
@@ -614,9 +615,11 @@ export function applyAction(fight, actionId) {
 
   switch (actionId) {
     case 'guard': {
-      // Bone Guard: raise an absorb pool (Marrow-scaled). Active defense, not a wait.
+      // Bone Guard: raise an absorb pool (Marrow-scaled) AND catch your breath
+      // (restore Stamina) — this is how you recover fuel now that Brace is gone.
       const shield = Math.round(GUARD_BASE + me.stats.marrow * 0.15);
       me.ward = Math.max(me.ward || 0, shield);
+      me.wind = Math.min(me.d.maxWind, me.wind + GUARD_STAMINA);
       gainHype(me, a.hype);
       events.push({ t: 'status', who: fight.active, kind: 'guard', shield });
       break;
@@ -952,12 +955,14 @@ export function planTelegraph(fight) {
 // run one enemy fighter's whole turn (captain or add), pushing events
 function actForEnemy(fight, who, events) {
   const f = fighterOf(fight, who), p = fight.p;
-  // pick a target for this turn: usually the player, but sometimes go after a
-  // living pet to strip its aura (more tempting the lower the pet already is)
+  f._sweptThisTurn = false;
+  const petUp = () => fight.pAux && !fight.pAux.fainted && fight.pAux.hp > 0 && p.pet;
+  // pick a target for this turn: usually the player, but often go after a living
+  // pet to strip its aura (more tempting the lower the pet already is)
   fight.fTarget = 'p';
-  if (fight.pAux && !fight.pAux.fainted && fight.pAux.hp > 0 && p.pet) {
+  if (petUp()) {
     const petLow = fight.pAux.hp <= fight.pAux.d.maxHp * 0.4;
-    if (fight.rng() < (petLow ? 0.25 : 0.06)) fight.fTarget = 'pa';
+    if (fight.rng() < (petLow ? 0.35 : 0.15)) fight.fTarget = 'pa';
   }
   let guard = 0;
   while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {
@@ -965,6 +970,23 @@ function actForEnemy(fight, who, events) {
     if (!legal.length) break;
     const pick = (id) => legal.find(x => x.id === id);
     let choice = null;
+
+    // Boss AoE: tough foes occasionally sweep the whole team, hurting BOTH you
+    // and your pet in one blow (protect the pet — it can be downed).
+    if (fight.range === 'close' && fight.aiLevel >= 4 && petUp() && !f._sweptThisTurn
+        && fight.ap >= 1 && f.wind >= 20 && fight.rng() < 0.16) {
+      f._sweptThisTurn = true; fight.ap -= 1; f.wind -= 20;
+      const rY = resolveHit({ move: 'swing', attacker: f, defender: fight.p, rng: fight.rng });
+      const rP = resolveHit({ move: 'swing', attacker: f, defender: fight.pAux, rng: fight.rng });
+      const dmgYou = Math.round(rY.damage * 0.8), dmgPet = Math.round(rP.damage * 0.8);
+      events.push({ t: 'foeAction', id: 'sweep' });
+      events.push({ t: 'aoe', who, dmgYou, dmgPet, name: f.name });
+      dealDamage(fight, 'p', dmgYou, events);
+      dealDamage(fight, 'pa', dmgPet, events);
+      gainHype(fight.p, 4);
+      checkOver(fight);
+      continue;
+    }
 
     if (fight.telegraph === 'haymaker' && pick('haymaker')) {
       choice = 'haymaker';
