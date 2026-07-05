@@ -346,10 +346,14 @@ test('talent tiers gate by points-in-tree, ranks count (v69 deep trees)', () => 
   // single-rank stays single
   assert.ok(!canTakeTalent(taken, 'slab', idx('heavyhands')));
   assert.equal(TALENT_TREES.length, 6);
-  assert.ok(TALENT_TREES.every(t => t.nodes.length === 10), 'deep trees: 10 nodes each');
+  assert.ok(TALENT_TREES.every(t => t.nodes.length >= 10), 'deep trees: 10+ nodes each');
   assert.ok(TALENT_TREES.every(t => t.nodes.reduce((a, n) => a + (n.ranks || 1), 0) >= 22), 'each tree takes 22+ points to max');
   const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
   assert.ok(gc && gc.nodes.filter(n => n.move).length >= 4); // the caster is move-rich
+  // v70 class-identity actives are registered on their trees
+  assert.ok(TALENT_TREES.find(t => t.id === 'slab').nodes.some(n => n.id === 'rage' && n.move), 'Slab has Rage');
+  assert.ok(gc.nodes.some(n => n.id === 'raisedead' && n.move), 'Necro has Raise Dead');
+  assert.ok(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.some(n => n.id === 'totem' && n.move), 'Shaman has Spirit Totem');
 });
 
 test('gravecaller: bone bolt is any-range magic scaling off Hype', () => {
@@ -657,6 +661,60 @@ test('tempest: four alternating elemental hits, once per fight, burn + chill rid
   assert.ok(!actionsFor(fight).some(x => x.id === 'tempest'), 'tempest gone after use');
 });
 
+test('v70 Blood Rage: +35% damage while raged, bleeds 6 HP at turn start, never self-KO', () => {
+  const base = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
+  const P = makeFighter({ name: 'P', stats: base, talents: ['rage'] });
+  const F = makeFighter({ name: 'F', stats: base });
+  const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const swingBase = resolveHit({ move: 'swing', attacker: P, defender: dummy, rng: noLuck }).damage;
+  const fight = createFight({ player: P, foe: F, seed: 3 });
+  apply(fight, 'rage');
+  assert.ok(P.rage && P.rage.turns === 3, 'raging for 3 turns');
+  const swingRaged = resolveHit({ move: 'swing', attacker: P, defender: dummy, rng: noLuck }).damage;
+  assert.ok(swingRaged > swingBase && Math.abs(swingRaged - swingBase * 1.35) <= 1, `raged ~= base*1.35 (${swingBase} -> ${swingRaged})`);
+  // turn passes and comes back: bleed ticks
+  const hpBefore = P.hp;
+  endTurn(fight); // to foe
+  endTurn(fight); // back to me -> rage tick
+  assert.equal(P.hp, hpBefore - 6, 'bled 6 at turn start');
+  assert.equal(P.rage.turns, 2, 'rage counted down');
+  // rage cannot self-KO
+  P.hp = 4; P.rage.turns = 3;
+  fight.active = 'f'; endTurn(fight);
+  assert.ok(P.hp >= 1, 'rage floors at 1 HP');
+});
+
+test('v70 Raise Dead: bone minion strikes the enemy at your turn start for 3 turns', () => {
+  const base = { marrow: 40, power: 20, wind: 60, reflex: 20, hype: 60 };
+  const P = makeFighter({ name: 'P', stats: base, talents: ['raisedead'] });
+  const F = makeFighter({ name: 'F', stats: { power: 50, marrow: 80, wind: 50, reflex: 50, hype: 30 } });
+  const fight = createFight({ player: P, foe: F, seed: 7 });
+  apply(fight, 'raisedead');
+  assert.ok(P.minion && P.minion.turns === 3 && P.minion.dmg > 0, 'minion summoned');
+  const foeHp = F.hp, dmg = P.minion.dmg;
+  endTurn(fight); endTurn(fight); // back to my turn -> minion strikes
+  assert.equal(F.hp, foeHp - dmg, 'minion clawed the enemy');
+  assert.equal(P.minion.turns, 2);
+  assert.ok(fight.pendingTicks.some(t => t.t === 'minionstrike'), 'minion strike event emitted');
+  // expires after 3 ticks
+  endTurn(fight); endTurn(fight); endTurn(fight); endTurn(fight);
+  assert.equal(P.minion, null, 'minion gone after 3 turns');
+});
+
+test('v70 Spirit Totem: zaps enemy + restores your Stamina each of your turns', () => {
+  const base = { marrow: 40, power: 20, wind: 60, reflex: 20, hype: 60 };
+  const P = makeFighter({ name: 'P', stats: base, talents: ['totem'] });
+  const F = makeFighter({ name: 'F', stats: { power: 50, marrow: 80, wind: 50, reflex: 50, hype: 30 } });
+  const fight = createFight({ player: P, foe: F, seed: 9 });
+  apply(fight, 'totem');
+  assert.ok(P.totem && P.totem.turns === 3 && P.totem.dmg > 0, 'totem planted');
+  const foeHp = F.hp, zap = P.totem.dmg;
+  P.wind = 10;
+  endTurn(fight); endTurn(fight); // back to my turn -> totem ticks
+  assert.equal(F.hp, foeHp - zap, 'totem zapped the enemy');
+  assert.equal(P.wind, Math.min(P.d.maxWind, 10 + 20 + 8), 'base regen + totem +8 stamina');
+});
+
 test('totemic marrow regenerates extra wind each turn', () => {
   const base = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
   const P = makeFighter({ name: 'P', stats: base, talents: ['frostbolt', 'totemic'] });
@@ -673,13 +731,13 @@ test('six trees, ten nodes each, unique ids, new moves registered', () => {
   const ids = TALENT_TREES.flatMap(t => t.nodes.map(n => n.id));
   assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
   for (const t of TALENT_TREES) {
-    assert.equal(t.nodes.length, 10);
+    assert.ok(t.nodes.length >= 10 && t.nodes.length <= 11, t.id + ' has 10-11 nodes');
     assert.equal(t.nodes.filter(n => n.tier === 4).length, 1, t.id + ' has one capstone');
     assert.ok(t.nodes.filter(n => (n.ranks || 1) > 1).length >= 4, t.id + ' has 4+ ranked passives');
   }
   assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
   assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);
-  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest']) assert.ok(ACTIONS[id], id + ' action exists');
+  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest', 'rage', 'raisedead', 'totem']) assert.ok(ACTIONS[id], id + ' action exists');
 });
 
 /* ============ v16: anti-exploit balance ============ */

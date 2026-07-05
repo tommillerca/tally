@@ -76,6 +76,7 @@ export const TALENT_TREES = [
       { id: 'concussive', tier: 3, name: 'Concussive', desc: 'Landed haymakers always stagger (enemy loses an action).' },
       { id: 'thickskull', tier: 3, name: 'Thick Skull', desc: '+45 max HP.' },
       { id: 'ironjaw', tier: 3, ranks: 3, name: 'Iron Jaw', desc: '+4 Armor per rank (blunts incoming melee).' },
+      { id: 'rage', tier: 3, name: 'Blood Rage', move: true, desc: 'NEW MOVE: fly into a RAGE for 3 turns. You deal +35% damage but bleed 6 HP at the start of each of your turns (never below 1). You glow red.' },
       { id: 'titan', tier: 4, name: 'Titan', move: true, desc: 'NEW MOVE: once per fight, a devastating overhead slam.' },
     ],
   },
@@ -124,6 +125,7 @@ export const TALENT_TREES = [
       { id: 'hex', tier: 3, name: 'Hex of Dust', move: true, desc: 'NEW MOVE: curse the enemy to deal 20% less damage for 2 turns.' },
       { id: 'gravechill', tier: 3, name: 'Grave Chill', desc: 'Bone Bolts also drain 10 of the enemy Stamina.' },
       { id: 'lingering', tier: 3, ranks: 3, name: 'Lingering Dust', desc: 'Your Hex saps 3% more damage per rank.' },
+      { id: 'raisedead', tier: 3, name: 'Raise Dead', move: true, desc: 'NEW MOVE: raise a bone minion for 3 turns. It claws the enemy for shadow damage at the start of each of your turns.' },
       { id: 'bonestorm', tier: 4, name: 'Bone Storm', move: true, desc: 'NEW MOVE: once per fight, a whirlwind of shards: three piercing magic hits.' },
     ],
   },
@@ -156,6 +158,7 @@ export const TALENT_TREES = [
       { id: 'frostbite', tier: 3, name: 'Frostbite', desc: 'Frost Bolts hit 40% harder when the enemy is gassed (under 30 Stamina).' },
       { id: 'wildfire', tier: 3, name: 'Wildfire', desc: 'Burns tick 7 damage and last 3 turns.' },
       { id: 'conduits', tier: 3, ranks: 5, name: 'Bone Conduits', desc: 'Elemental spells cost 1 less Stamina per rank.' },
+      { id: 'totem', tier: 3, name: 'Spirit Totem', move: true, desc: 'NEW MOVE: plant a spirit totem for 3 turns. At the start of each of your turns it zaps the enemy and restores 8 of your Stamina.' },
       { id: 'tempest', tier: 4, name: 'Tempest', move: true, desc: 'NEW MOVE: once per fight, a barrage of fire and frost: four elemental hits.' },
     ],
   },
@@ -286,6 +289,10 @@ export const ACTIONS = {
   frostbolt:{ label: 'Frost Bolt', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
   firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
   tempest:  { label: 'Tempest', range: 'close', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
+  // class-identity actives (v70): a self-buff and two summons that act on your turn
+  rage:     { label: 'Rage', range: 'any', ap: 1, wind: 10, talent: 'rage' },
+  raisedead:{ label: 'Raise Dead', range: 'any', ap: 2, wind: 22, talent: 'raisedead', magic: true, school: 'shadow' },
+  totem:    { label: 'Spirit Totem', range: 'any', ap: 1, wind: 18, talent: 'totem', magic: true, school: 'nature' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
   bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
 };
@@ -435,6 +442,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (a.school === 'shadow') dmg *= 1 + rkOf(attacker, 'darkstudy') * 0.03;
   if (a.school === 'holy') dmg *= 1 + rkOf(attacker, 'devotion') * 0.03;
   if (a.school === 'fire' || a.school === 'frost') dmg *= 1 + rkOf(attacker, 'attunement') * 0.03;
+  if (attacker.rage) dmg *= 1.35; // Blood Rage: all-in aggression
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
   if (defender.marked) dmg *= 1.07; // imp Death's Mark
@@ -492,6 +500,9 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     weaken: null,     // {pct, turns} deals less damage
     blind: null,      // {pct, turns} its own physical attacks miss more
     marked: null,     // {turns} takes +10% from everything (imp Death's Mark)
+    rage: null,       // {turns} Blood Rage: +35% dmg, bleeds 6 HP/turn (Slab)
+    minion: null,     // {turns, dmg} Raise Dead: strikes enemy at your turn start (Necro)
+    totem: null,      // {turns, dmg} Spirit Totem: zaps enemy + regens you (Shaman)
     hp: d.maxHp, wind: d.maxWind, hype: Math.min(100, (tset.has('bigentrance') ? 25 : 0) + (tranks['warmup'] || 0) * 4 + (food?.hype || 0)),
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
@@ -643,6 +654,9 @@ export function actionsFor(fight) {
     if (id === 'bonestorm' && me.bonestormUsed) continue;
     if (id === 'mend' && me.mendUses <= 0) continue;
     if (id === 'tempest' && me.tempestUsed) continue;
+    if (id === 'rage' && me.rage) continue;       // already raging
+    if (id === 'raisedead' && me.minion) continue; // minion still up
+    if (id === 'totem' && me.totem) continue;      // totem still planted
     if (id === 'ward' && me.ward >= 25) continue;
     if (id === 'guard' && (me.ward || 0) >= Math.round(GUARD_BASE + me.stats.marrow * 0.15)) continue;
     let windCost = windCostFor(me, id, a);
@@ -853,6 +867,21 @@ export function applyAction(fight, actionId) {
       }
       break;
     }
+    case 'rage': {
+      me.rage = { turns: 3 };
+      events.push({ t: 'status', who: fight.active, kind: 'rage' });
+      break;
+    }
+    case 'raisedead': {
+      me.minion = { turns: 3, dmg: Math.max(6, Math.round(12 * me.d.magicMult * (1 + rkOf(me, 'darkstudy') * 0.03))) };
+      events.push({ t: 'summon', who: fight.active, kind: 'minion' });
+      break;
+    }
+    case 'totem': {
+      me.totem = { turns: 3, dmg: Math.max(4, Math.round(8 * me.d.magicMult * (1 + rkOf(me, 'attunement') * 0.03))) };
+      events.push({ t: 'summon', who: fight.active, kind: 'totem' });
+      break;
+    }
     case 'bonestorm': {
       me.bonestormUsed = true;
       for (let h = 0; h < 3 && them.hp > 0; h++) {
@@ -966,6 +995,26 @@ export function endTurn(fight) {
     ticks.push({ t: 'heal', who: next, amount: h, food: true });
   }
   tickDots(me, next, ticks);
+  // v70 class-identity ticks, at the START of this fighter's turn
+  if (me.rage && me.hp > 0) {
+    me.hp = Math.max(1, me.hp - 6); // bleed the cost; never self-KO
+    ticks.push({ t: 'ragetick', who: next, damage: 6 });
+    me.rage.turns -= 1; if (me.rage.turns <= 0) { me.rage = null; ticks.push({ t: 'ragefade', who: next }); }
+  }
+  if (me.hp > 0 && (me.minion || me.totem)) {
+    const foeWho = next === 'p' ? 'f' : 'p';
+    const foe = fighterOf(fight, foeWho);
+    const foeUp = foe && foe.hp > 0;
+    if (me.minion) {
+      if (foeUp) { foe.hp = Math.max(0, foe.hp - me.minion.dmg); ticks.push({ t: 'minionstrike', who: foeWho, damage: me.minion.dmg }); }
+      me.minion.turns -= 1; if (me.minion.turns <= 0) me.minion = null;
+    }
+    if (me.totem) {
+      if (foeUp && foe.hp > 0) { foe.hp = Math.max(0, foe.hp - me.totem.dmg); ticks.push({ t: 'totemtick', who: foeWho, damage: me.totem.dmg }); }
+      me.wind = Math.min(me.d.maxWind, me.wind + 8);
+      me.totem.turns -= 1; if (me.totem.turns <= 0) me.totem = null;
+    }
+  }
   const auxWho = next === 'p' ? 'pa' : 'fa';
   const aux = fighterOf(fight, auxWho);
   if (aux && aux.hp > 0 && !aux.fainted) {

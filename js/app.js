@@ -3277,12 +3277,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (f.ward > 0) bits.push(`GUARD ${f.ward}`);
       if (f.sunder) bits.push('SUNDERED');
       if (f.weaken) bits.push('WEAKENED');
+      if (f.rage) bits.push('RAGING');
+      if (f.minion) bits.push('MINION');
+      if (f.totem) bits.push('TOTEM');
       if (bits.length) {
         chip.hidden = false;
         chip.textContent = bits.join(' · ');
         chip.classList.toggle('stag', !!f.stagger || !!f.sunder);
+        chip.classList.toggle('raging', !!f.rage);
       } else chip.hidden = true;
     }
+    // persistent class-identity auras on the fighter stages
+    const youStg = el('youStage'), foeStg = el('foeStage');
+    if (youStg) { youStg.classList.toggle('raging', !!player.rage); youStg.classList.toggle('has-minion', !!player.minion); youStg.classList.toggle('has-totem', !!player.totem); }
+    if (foeStg) { foeStg.classList.toggle('raging', !!foe.rage); foeStg.classList.toggle('has-minion', !!foe.minion); foeStg.classList.toggle('has-totem', !!foe.totem); }
     el('teleBanner').hidden = !fight.telegraph;
     if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy. Guard or race it!`;
   }
@@ -3396,6 +3404,28 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (ev.t === 'poisontick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg poison');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+    } else if (ev.t === 'ragetick') {
+      floatNode(`-${ev.damage}`, ev.who, 'dmg rage');
+      pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'ragefx', fxMs);
+    } else if (ev.t === 'ragefade') {
+      floatNode('rage fades', ev.who, 'stamp dim');
+    } else if (ev.t === 'summon') {
+      const stage = ev.who === 'p' ? el('youStage') : el('foeStage');
+      pulse(stage, ev.kind === 'minion' ? 'summonfx' : 'totemfx', fxMs + 400);
+      impactBurst(ev.who, ev.kind === 'minion' ? 'shadow' : 'nature', true);
+      floatNode(ev.kind === 'minion' ? '☠ RISE' : '⚡ TOTEM', ev.who, ev.kind === 'minion' ? 'stamp hex' : 'stamp cool');
+      hitSound(S.sounds, 'zap');
+    } else if (ev.t === 'minionstrike') {
+      const vs = ev.who; // event carries the victim's who
+      pulse(vs === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+      impactBurst(vs, 'shadow');
+      floatNode(`☠ -${ev.damage}`, vs, 'dmg shadow');
+      hitSound(S.sounds, 'tick');
+    } else if (ev.t === 'totemtick') {
+      const vs = ev.who;
+      pulse(vs === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+      impactBurst(vs, 'nature');
+      floatNode(`⚡ -${ev.damage}`, vs, 'dmg nature');
     } else if (ev.t === 'pethit') {
       pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'petpounce', fxMs + 150);
       setTimeout(() => { impactBurst(ev.who === 'p' ? 'f' : 'p', 'phys'); floatNode(`-${ev.damage}`, ev.who === 'p' ? 'f' : 'p', 'dmg'); }, fast ? 20 : fxMs * 0.4);
@@ -3435,10 +3465,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rattle: 'RATTLED' }[ev.kind] || '';
-      floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rattle: 'RATTLED', rage: 'RAGE!' }[ev.kind] || '';
+      floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'rage' ? 'stamp rage' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
       if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind' || ev.kind === 'rattle') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
       if (ev.kind === 'ward' || ev.kind === 'guard') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.kind === 'guard' ? 'guard' : 'wardfx', fxMs + 300);
+      if (ev.kind === 'rage') { pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'ragefx', fxMs + 400); impactBurst(ev.who, 'rage', true); hitSound(S.sounds, 'thud'); }
       if (ev.kind === 'burn') impactBurst(ev.who, 'fire');
       if (ev.kind === 'blind') impactBurst(ev.who, 'phys');
     } else if (ev.t === 'bleedtick') {
@@ -3480,7 +3511,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
       if (ev.kind === 'poison') return `${who === 'You' ? 'You are' : who + ' is'} POISONED (x${ev.stacks})`;
       if (ev.kind === 'mark') return `${who === 'You' ? 'You are' : who + ' is'} MARKED for death`;
+      if (ev.kind === 'rage') return `${who === 'You' ? 'You fly' : who + ' flies'} into a RAGE`;
     }
+    if (ev.t === 'summon') return ev.kind === 'minion' ? `${who === 'You' ? 'You raise' : who + ' raises'} a bone minion` : `${who === 'You' ? 'You plant' : who + ' plants'} a spirit totem`;
+    if (ev.t === 'minionstrike') return `the bone minion claws ${who === 'You' ? 'you' : (who === 'p' ? 'you' : foe.name)} for ${ev.damage}`;
+    if (ev.t === 'totemtick') return `the totem zaps ${who === 'You' ? 'you' : (who === 'p' ? 'you' : foe.name)} for ${ev.damage}`;
+    if (ev.t === 'ragetick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} ${ev.damage} from the rage`;
+    if (ev.t === 'ragefade') return `${who === 'You' ? 'your' : who + "'s"} rage fades`;
     if (ev.t === 'secondwind') return `${who} found a SECOND WIND (+${ev.heal} HP)`;
     if (ev.t === 'bleedtick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} for ${ev.damage}`;
     if (ev.t === 'burntick') return `${who === 'You' ? 'You burn' : who + ' burns'} for ${ev.damage}`;
@@ -3561,8 +3598,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (spike) h += btn(spike, { hint: foe.blind ? 'blinds · already blind' : `~${expectedDamage('bonespike', player, null, foe)} dmg · blinds`, glow: !foe.blind });
       const hexA = get('hex');
       if (hexA) h += btn(hexA, { hint: 'curse: -20% their dmg', weak: !!foe.weaken });
+      const raise = get('raisedead');
+      if (raise) h += btn(raise, { hint: player.minion ? 'minion already up' : 'raise a bone minion · 3t', glow: !player.minion });
+      const tot = get('totem');
+      if (tot) h += btn(tot, { hint: player.totem ? 'totem already up' : 'zaps + stamina · 3t', glow: !player.totem });
       return h;
     };
+    // Blood Rage (Slab): any-range self-buff, offered in both rows
+    const rageBtn = () => { const rg = get('rage'); return rg ? btn(rg, { hint: player.rage ? 'already raging' : '+35% dmg 3t · costs HP', glow: !player.rage && player.hp > player.d.maxHp * 0.5 }) : ''; };
     if (fight.range === 'close') {
       const titan = get('titan');
       if (titan) html += btn(titan, { hint: 'big hit · once', glow: true });
@@ -3572,6 +3615,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (temp) html += btn(temp, { hint: 'fire+frost x4 · once', glow: true });
       const flurry = get('flurry');
       if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
+      html += rageBtn();
       html += casterRow();
       html += btn(get('jab'), { hint: dmgHint('jab') });
       html += btn(get('swing'), { hint: dmgHint('swing') });
@@ -3585,6 +3629,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else {
       html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
+      html += rageBtn();
       html += casterRow();
       html += defenseRow();
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });

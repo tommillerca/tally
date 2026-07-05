@@ -10,12 +10,12 @@ const TOM = { marrow: 54, power: 20, wind: 44, reflex: 20, hype: 26 };
 
 const BUILDS = {
   none:          [],
-  slab:          ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'],
+  slab:          ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'rage', 'titan'],
   greyhound:     ['lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
   ringmaster:    ['crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind', 'showstopper'],
-  gravecaller:   ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'bonestorm'],
+  gravecaller:   ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'raisedead', 'bonestorm'],
   gravewarden:   ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight'],
-  boneshaman:    ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'tempest'],
+  boneshaman:    ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'totem', 'tempest'],
   // 12-point cross-tree menaces
   kitecaster:    ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'bonestorm', 'lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
   immortal:      ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight', 'crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind', 'showstopper'],
@@ -39,6 +39,10 @@ const POLICIES = {
     }
     if (fight.telegraph === 'haymaker' && pick('guard') && (p.ward || 0) <= 0) return 'guard';
     if (pick('signature')) return 'signature';
+    // v70 class actives: raise/plant a summon while it's down, rage early
+    if (pick('raisedead') && !p.minion) return 'raisedead';
+    if (pick('totem') && !p.totem) return 'totem';
+    if (pick('rage') && !p.rage && p.hp > p.d.maxHp * 0.55) return 'rage';
     if (p.hp < p.d.maxHp * 0.4 && pick('mend')) return 'mend';
     if (pick('ward') && p.ward <= 0 && fight.rng() < 0.5) return 'ward';
     if (pick('titan')) return 'titan';
