@@ -8,7 +8,21 @@ import { award, levelFor, totalXp } from './game.js';
 import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
 import { kvGet, kvSet, db } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
+import { TALENT_TREES } from './pit.js';
 import { distanceM, bearingDeg } from './hunt.js';
+
+// the player's leaning archetype = the talent tree they've invested most in
+// (tree ids match gear archetypes). Used to bias one boss-drop choice to their spec.
+async function dominantArch() {
+  const taken = new Set((await kvGet('talents', [])) || []);
+  if (!taken.size) return null;
+  let best = null, bestN = 0;
+  for (const t of TALENT_TREES) {
+    const n = t.nodes.filter(nd => taken.has(nd.id)).length;
+    if (n > bestN) { bestN = n; best = t.id; }
+  }
+  return best;
+}
 
 export const DEN_CELL_DEG = 0.01;        // ~1.1 km cells: a few dens within any walk
 export const DEN_RADIUS_M = 60;          // enter range (a touch roomier than spawns)
@@ -133,7 +147,9 @@ const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
 // can't equip for many levels kills momentum. We'd rather drop a LOWER tier you
 // can use soon than a prestige piece you can't touch, so the level cap wins over
 // the tier floor when they conflict.
-export function rollDenLoot(den, week, ownedSet, maxLevel = 999) {
+// preferArch: bias the FIRST choice toward the player's spec so a boss drop
+// always offers "one for your build" + a different alternative — a real spec pick.
+export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = null) {
   const floor = TIER_IDX[DEN_GEAR_FLOOR[den.tier] || 'uncommon'];
   const within = g => (g.minLevel || 1) <= maxLevel;
   const fresh = GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && !ownedSet.has(g.id) && within(g));
@@ -142,8 +158,11 @@ export function rollDenLoot(den, week, ownedSet, maxLevel = 999) {
   if (pool.length < 2) pool = GEAR_ITEMS.filter(within);
   if (pool.length < 2) return null;
   const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
-  const first = pool[Math.floor(rng() * pool.length)];
-  // second choice: try for a different archetype so the pick is a real decision
+  // first choice: prefer the player's specced archetype when the pool has one
+  const specPool = preferArch ? pool.filter(g => g.arch === preferArch) : [];
+  const firstPool = specPool.length ? specPool : pool;
+  const first = firstPool[Math.floor(rng() * firstPool.length)];
+  // second choice: a DIFFERENT archetype so the pick is a real decision
   const alts = pool.filter(g => g.id !== first.id && g.arch !== first.arch);
   const second = (alts.length ? alts : pool.filter(g => g.id !== first.id))[Math.floor(rng() * (alts.length ? alts.length : pool.length - 1))];
   return second ? [first, second] : null;
@@ -161,7 +180,7 @@ export async function claimDenWin(den, week = isoWeekKey()) {
   // until picked, so closing the victory screen never eats the loot)
   const owned = await ownedGearIds();
   const lvl = levelFor(await totalXp()).level;
-  const choices = rollDenLoot(den, week, owned, lvl + 3);
+  const choices = rollDenLoot(den, week, owned, lvl + 3, await dominantArch());
   if (choices) {
     const pending = (await kvGet('denloot', [])) || [];
     if (!pending.some(p => p.key === denKey(week, den))) {

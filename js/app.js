@@ -418,7 +418,7 @@ async function renderToday(el) {
   <div class="hero-actions five">
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
-    <button class="hero-act" id="kitchenActBtn"><span class="hero-emoji">🍲</span><span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
@@ -735,9 +735,9 @@ async function openKitchen() {
       <div class="sect-h">The pot</div>
       ${cook ? `<div class="crate-row cookpot ${cook.ready ? 'ready' : ''}"><span class="crate-ico">${recipeIconHtml(cook.recipe,26)}</span>
           <div style="flex:1"><b>${esc(cook.recipe.name)}</b><small>${cook.ready ? 'Ready to serve!' : 'Cooking · ' + fmtCookTime(cook.remainingMs) + ' left'}</small></div>
-          ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : '<span class="q-frac">🔥</span>'}</div>`
+          ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : `<span class="q-frac">${bhIcon('flame',14)}</span>`}</div>`
         : '<p class="note" style="margin:2px 2px 12px">The pot is empty. Pick a recipe below.</p>'}
-      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${'🪙'}</button></div>
+      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
@@ -2344,11 +2344,11 @@ async function openCrateReveal(result) {
           if (r.type === 'gear' || r.type === 'geardupe') {
             const g = r.gear, grar = RARITIES[g.rarity];
             const dup = r.type === 'geardupe';
-            return `<div class="reveal-card gear r-${g.rarity}"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt=""><div><b>${esc(g.name)}</b><small>${dup ? `Duplicate → +${r.coins}🪙` : `GEAR · ${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`}</small><span class="rar-chip" style="color:${grar.color}">${grar.label}</span></div></div>`;
+            return `<div class="reveal-card gear r-${g.rarity}"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt=""><div><b>${esc(g.name)}</b><small>${dup ? `Duplicate → +${r.coins}${ICONS.coin(11)}` : `GEAR · ${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`}</small><span class="rar-chip" style="color:${grar.color}">${grar.label}</span></div></div>`;
           }
           const rar = RARITIES[r.item.rarity];
           if (r.type === 'dupe') {
-            return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>Duplicate → +${r.coins}🪙</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
+            return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>Duplicate → +${r.coins}${ICONS.coin(11)}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
           }
           return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>${esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || '')}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
         }).join('')}
@@ -3657,17 +3657,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
-          ${rewardHtml}
-          <div style="height:12px"></div>
           ${bossLoot ? `
           <div class="loot-choice">
-            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · PICK ONE</div>
+            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · TAP TO KEEP ONE</div>
             <div class="loot-cards">
               ${bossLoot.choices.map(g => lootCardHtml(g)).join('')}
             </div>
           </div>` : ''}
-          <button class="btn" id="fightDone">${bossLoot ? 'Decide later' : 'Back to The Pit'}</button>
+          ${rewardHtml}
+          <div style="height:12px"></div>
+          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip loot · back to the map' : 'Back to The Pit'}</button>
         </div>`);
+      const overEl = $('.fight-over', body);
+      if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
       if (bossLoot) {
         $$('.loot-card', body).forEach(card => card.addEventListener('click', async () => {
           const picked = await claimDenLoot(bossLoot.key, card.dataset.gear);
