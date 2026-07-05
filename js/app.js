@@ -97,7 +97,14 @@ function consumableIcon(type, s = 20) { return `<span class="bhi-wrap">${bhIcon(
 function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
 function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
 // badges: map the emoji to a pack icon where we have one (else keep the emoji)
-const BADGE_ICON = { '💀': 'badge-skull', '👑': 'badge-crown', '🏆': 'badge-trophy', '🥊': 'badge-boxing', '🎯': 'badge-target', '💪': 'badge-muscle', '🗺': 'badge-map' };
+const BADGE_ICON = {
+  '💀': 'badge-skull', '👑': 'badge-crown', '🏆': 'badge-trophy', '🥊': 'badge-boxing',
+  '🎯': 'badge-target', '💪': 'badge-muscle', '🦾': 'badge-muscle', '🗺': 'badge-map',
+  '🍽': 'badge-meal', '📷': 'badge-scan', '🔍': 'badge-magnify', '🔥': 'flame',
+  '🚀': 'badge-rocket', '💯': 'badge-laurels', '🛒': 'badge-cart', '⚖': 'badge-scales',
+  '👟': 'badge-footprint', '🎩': 'badge-tophat', '🧥': 'badge-coat', '🦴': 'ingr-marrow',
+  '🪧': 'badge-signpost', '🗿': 'badge-moai', '🏚': 'tombstone',
+};
 function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').replace(/️/g, '')]; return id ? `<span class="bhi-wrap">${bhIcon(id, s)}</span>` : (emoji || ''); }
 
 /* ================= splash montage ================= */
