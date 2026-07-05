@@ -41,7 +41,7 @@ const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Daily Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
-  { key: 'golden', iconId: 'crate-golden',   tag: 'GOLDEN', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
+  { key: 'golden', iconId: 'crate-golden',   tag: 'GOLD',   name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
   { key: 'freeze', iconId: 'freeze',         tag: 'Freeze', name: 'a Streak Freeze',weight: 5,  gold: false, grant: () => grantConsumable('freeze', 'wheel') },
   { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
@@ -98,11 +98,12 @@ function wheelSvg() {
     const fill = p.gold ? goldW : (i % 2 ? darkB : darkA);
     wedges += `<path d="${wedgePath(cx, cy, R, i)}" fill="${fill}" stroke="rgba(165,232,71,.28)" stroke-width="1"/>`;
     const mid = i * SEG_DEG + SEG_DEG / 2;
-    const [ex, ey] = pt(cx, cy, 68, mid);
-    const [tx, ty] = pt(cx, cy, 45, mid);
+    // one anchor per wedge: icon ABOVE, label BELOW, both upright + centered.
+    // Same treatment in every wedge (no radial side-by-side), so it stays tidy.
+    const [mx, my] = pt(cx, cy, 60, mid);
     const col = p.gold ? '#e8c24d' : '#f2e9d7';
-    labels += iconAt(p, ex, ey, 22);
-    labels += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" font-size="8.5" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em">${p.tag}</text>`;
+    labels += iconAt(p, mx, my - 8, 26);
+    labels += `<text x="${mx.toFixed(1)}" y="${(my + 17).toFixed(1)}" font-size="9" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em">${p.tag}</text>`;
   }
   return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
     <circle cx="100" cy="100" r="97" fill="none" stroke="#0d0c12" stroke-width="6"/>
