@@ -2180,27 +2180,64 @@ async function renderCharacter(wrap, tab, opts = {}) {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
-          <button class="ward-cell gear r-${g.rarity} ${gearLo[slot] === g.id ? 'equipped' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}">
+          <button class="ward-cell gear r-${g.rarity} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}">
             <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
-            <span class="gear-stat">${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>
+            <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
         }).join('')}
       </div>
+      ${(() => {
+        // Inspect panel: tap a gear cell to preview its full stats + special ability
+        // (⚡ talent + what it does), then Equip. Falls back to the equipped piece.
+        if (!GEAR_SLOTS.includes(slot)) return '';
+        const pid = S.wardrobePreview;
+        const ig = (pid && gearItems.find(x => x.id === pid)) ? GEAR_BY_ID[pid] : (gearLo[slot] ? GEAR_BY_ID[gearLo[slot]] : null);
+        if (!ig) return '<p class="note" style="text-align:center;margin-top:10px">Tap a piece to inspect its stats and special ability.</p>';
+        const locked = wLevel < ig.minLevel;
+        const isEq = gearLo[slot] === ig.id;
+        const rar = RARITIES[ig.rarity] || RARITIES.uncommon;
+        return `<div class="gear-inspect r-${ig.rarity}">
+          <img src="${bhAsset(BH_BY_ID[ig.artId])}" alt="">
+          <div class="gi-body">
+            <b>${esc(ig.name)}</b>
+            <span class="gi-stats">${gearLabel(ig)}</span>
+            ${ig.talent ? `<span class="gi-talent">⚡ ${esc(ig.talentName)}</span><small class="gi-desc">${esc(TALENT_DESC[ig.talent] || 'a special ability')}</small>` : '<small class="gi-desc">No special ability. Pure stats.</small>'}
+            <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[ig.slot]}${ig.minLevel > 1 ? ` · Lv ${ig.minLevel}` : ''}</span>
+          </div>
+          <button class="btn gi-equip ${isEq ? 'ghost' : ''}" data-equipgear-commit="${ig.id}" ${isEq || locked ? 'disabled' : ''}>${isEq ? 'Equipped' : locked ? `Locked · Lv ${ig.minLevel}` : 'Equip this'}</button>
+        </div>`;
+      })()}
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
-    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
+    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
+    // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
+    // special ability. Tapping the already-selected piece, or the panel button, equips.
     $$('[data-equipgear]', content).forEach(cell => cell.addEventListener('click', async () => {
       const g = GEAR_BY_ID[cell.dataset.equipgear];
       if (!g) return;
-      if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
-      await equipGear(slot, g.id);
+      if (S.wardrobePreview === g.id && gearLo[slot] !== g.id) {
+        if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
+        await equipGear(slot, g.id);
+        popSound(S.sounds);
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+        return;
+      }
+      S.wardrobePreview = g.id;
       popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+      requestAnimationFrame(() => $('.gear-inspect', content)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+    }));
+    $$('[data-equipgear-commit]', content).forEach(btn => btn.addEventListener('click', async () => {
+      const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
+      if (!g || wLevel < g.minLevel) return;
+      await equipGear(slot, g.id);
+      levelSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
