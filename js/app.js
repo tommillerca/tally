@@ -1958,6 +1958,61 @@ async function openCharacter(tab = 'wardrobe') {
   await renderCharacter(wrap, tab);
 }
 
+// Egg hatch: a bone egg wobbles, cracks spread, it bursts into shards and the
+// pet rises out. reducedMotion / headless skip straight to the reveal.
+function openHatchReveal(res, charWrap) {
+  const item = res.item;
+  const reduced = reducedMotion || navigator.webdriver;
+  const shards = Array.from({ length: 8 }, (_, i) => `<span class="egg-shard" style="--a:${i * 45}deg"></span>`).join('');
+  const stageHtml = item ? `
+    <div class="hatch-stage${reduced ? ' burst' : ''}" id="hatchStage">
+      <div class="hatch-glow"></div>
+      <div class="hatch-flash"></div>
+      <div class="hatch-pet r-${item.rarity}"><img src="${bhAsset(item)}" alt=""></div>
+      <div class="bone-egg" id="boneEgg">
+        <svg class="egg-cracks" viewBox="0 0 100 130" preserveAspectRatio="none" aria-hidden="true">
+          <path class="ec" d="M50 8 L45 36 L55 58 L46 82"/>
+          <path class="ec" d="M50 8 L59 32 L49 54"/>
+          <path class="ec" d="M28 62 L46 68 L38 88 L54 100"/>
+        </svg>
+        ${shards}
+      </div>
+    </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
+  const revealHtml = item
+    ? `<div class="lvl-stamp" style="font-size:30px">IT HATCHED!</div>
+       <div class="reveal-card r-${item.rarity}" style="margin:12px auto 0;max-width:320px"><img src="${bhAsset(item)}" alt=""><div><b>${esc(item.name)}</b><small>Pet · follows your bonehead</small><span class="rar-chip" style="color:${RARITIES[item.rarity].color}">${RARITIES[item.rarity].label}</span></div></div>`
+    : `<p class="note">+${res.coins} coins instead. Legend.</p>`;
+  const wrap2 = openSheet(`
+    <div class="sheet-body" style="text-align:center;padding-top:22px">
+      ${stageHtml}
+      <div class="hatch-reveal${reduced ? ' show' : ''}">
+        ${revealHtml}
+        <div style="height:16px"></div>
+        <button class="btn" id="hatchOk">${item ? 'Adopt' : 'Nice'}</button>
+      </div>
+    </div>`);
+  const stage = $('#hatchStage', wrap2);
+  const revealEl = $('.hatch-reveal', wrap2);
+  const finish = () => { revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
+  if (reduced || !item) {
+    finish();
+  } else {
+    const egg = $('#boneEgg', wrap2);
+    const cracks = $$('.egg-cracks .ec', wrap2);
+    hitSound(S.sounds, 'thud');
+    [[520, 0], [960, 1], [1400, 2]].forEach(([t, i]) => setTimeout(() => {
+      if (!egg.isConnected) return;
+      egg.classList.remove('wob'); void egg.offsetWidth; egg.classList.add('wob');
+      cracks[i]?.classList.add('draw');
+      hitSound(S.sounds, 'thud');
+    }, t));
+    setTimeout(() => { if (stage.isConnected) { stage.classList.add('burst'); hitSound(S.sounds, 'zap'); } }, 1800);
+    setTimeout(() => { if (revealEl.isConnected) finish(); }, 2350);
+  }
+  $('#hatchOk', wrap2).addEventListener('click', () => history.back());
+  setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
+}
+
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
@@ -2164,21 +2219,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
-      confettiRain(80);
-      levelSound(S.sounds);
-      const wrap2 = openSheet(`
-        <div class="sheet-body" style="text-align:center;padding-top:26px">
-          <div style="font-size:44px;line-height:1">🐣</div>
-          <div style="height:10px"></div>
-          ${res.item ? `
-            <div class="lvl-stamp" style="font-size:30px">IT HATCHED!</div>
-            <div class="reveal-card r-${res.item.rarity}" style="margin:14px auto 0;max-width:320px"><img src="${bhAsset(res.item)}" alt=""><div><b>${esc(res.item.name)}</b><small>Pet · follows your bonehead</small><span class="rar-chip" style="color:${RARITIES[res.item.rarity].color}">${RARITIES[res.item.rarity].label}</span></div></div>`
-          : `<div class="cele-big">All pets found!</div><p class="note">+${res.coins} coins instead. Legend.</p>`}
-          <div style="height:18px"></div>
-          <button class="btn" id="hatchOk">${res.item ? 'Adopt' : 'Nice'}</button>
-        </div>`);
-      $('#hatchOk', wrap2).addEventListener('click', () => history.back());
-      setTimeout(() => renderCharacter(wrap, 'crates'), 400);
+      openHatchReveal(res, wrap);
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
