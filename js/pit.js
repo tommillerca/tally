@@ -518,6 +518,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
     dmg *= 1 + Math.floor((attacker.toxicity || 0) / 10) * rkOf(attacker, 'catalyst') * 0.02; // Catalyst: ride the Toxicity
     if (attacker.talents.has('overdose') && (attacker.toxicity || 0) >= 60) dmg *= 1.15;       // Overdose
   }
+  if (attacker.elixir) dmg *= 1 + attacker.elixir.pct; // Fury potion (kitchen brew)
   if (attacker.rage) dmg *= 1.35; // Blood Rage: all-in aggression
   if (attacker.weaken) dmg *= (1 - attacker.weaken.pct);
   if (defender.sunder) dmg *= 1.15;
@@ -577,6 +578,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     weaken: null,     // {pct, turns} deals less damage
     blind: null,      // {pct, turns} its own physical attacks miss more
     marked: null,     // {turns} takes +10% from everything (imp Death's Mark)
+    elixir: null,     // {pct, turns} a drunk Fury potion: +dmg for a few turns (kitchen, universal)
     rage: null,       // {turns} Blood Rage: +35% dmg, bleeds 6 HP/turn (Slab)
     minion: null,     // {turns, dmg} Raise Dead: strikes enemy at your turn start (Necro)
     totem: null,      // {turns, dmg} Spirit Totem: zaps enemy + regens you (Shaman)
@@ -1102,6 +1104,7 @@ function tickTimers(f) {
   if (f.weaken) { f.weaken.turns -= 1; if (f.weaken.turns <= 0) f.weaken = null; }
   if (f.blind) { f.blind.turns -= 1; if (f.blind.turns <= 0) f.blind = null; }
   if (f.marked) { f.marked.turns -= 1; if (f.marked.turns <= 0) f.marked = null; }
+  if (f.elixir) { f.elixir.turns -= 1; if (f.elixir.turns <= 0) f.elixir = null; }
 }
 
 // end the active fighter's turn, start the other's

@@ -82,6 +82,8 @@ export function questCtx(period, base) {
     bossWins: countType('boss'),
     spawns: countType('spawn'),
     proteinDays: countType('protein'),
+    cookedToday: base.allXp.some(r => r.type === 'cook' && r.date === base.date),
+    cooksDone: countType('cook'),
     logDays,
   };
 }
@@ -105,6 +107,8 @@ export const DAILY_POOL = [
     progress: c => clamp(c.entries.filter(e => e.foodId && !c.priorFoodIds.has(e.foodId)).length, 1) },
   { id: 'q-weigh', name: 'Data point', desc: 'Log a weigh-in', coins: 40,
     progress: c => clamp(c.weighedToday ? 1 : 0, 1) },
+  { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50,
+    progress: c => clamp(c.cookedToday ? 1 : 0, 1) },
   { id: 'q-pit1', name: 'Pit scrap', desc: 'Win a Pit fight', coins: 60,
     progress: c => clamp(c.pitWins, 1) },
   { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80,
@@ -130,6 +134,8 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.spawns, 15) },
   { id: 'w-log', name: 'Steady logger', desc: 'Log on 5 days this week', coins: 120, crate: 'golden',
     progress: c => clamp(c.logDays, 5) },
+  { id: 'w-cook', name: 'Cauldron keeper', desc: 'Cook or brew 5 times this week', coins: 130, crate: 'golden',
+    progress: c => clamp(c.cooksDone, 5) },
 ];
 
 export const MONTHLY_POOL = [

@@ -55,7 +55,35 @@ export const RECIPES = [
   { id: 'bonemeal-kibble', iconId: 'dish-kibble', name: 'Bonemeal Kibble', icon: '🦴', needs: { marrow: 1, sinew: 1, bog: 1 }, cookMin: 60,
     buff: { kind: 'combat', petHpPct: 0.30, petDamagePct: 0.25, fights: 3 }, desc: 'Feeds your pet: +30% pet HP and +25% pet damage, next 3 fights' },
 ];
-export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
+
+// POTIONS: the kitchen also brews potions ANY class can carry and DRINK mid-fight
+// (a one-tap "beaming potion" in the Pit). These are stored ITEMS (kv 'potions'),
+// not passive dish buffs, and are separate from the Alchemist's own Toxicity kit.
+export const POTIONS = [
+  { id: 'vital-tonic',  name: 'Vital Tonic',      icon: '🧪', potion: true, needs: { graveroot: 1, bog: 1 },   cookMin: 20, effect: { heal: 0.30 }, desc: 'Drink in a fight: instantly restore 30% HP.' },
+  { id: 'fury-flask',   name: 'Fury Flask',       icon: '⚗️', potion: true, needs: { ember: 2, sinew: 1 },     cookMin: 30, effect: { dmgPct: 0.25, turns: 3 }, desc: 'Drink in a fight: +25% damage for 3 turns.' },
+  { id: 'stoneskin',    name: 'Stoneskin Draught', icon: '🧴', potion: true, needs: { marrow: 1, salt: 1 },     cookMin: 25, effect: { shield: 35 }, desc: 'Drink in a fight: a 35-point shield.' },
+  { id: 'second-wind',  name: 'Second-Wind Brew', icon: '🍵', potion: true, needs: { graveroot: 1, ember: 1 }, cookMin: 25, effect: { stamina: true, heal: 0.10 }, desc: 'Drink in a fight: refill Stamina + 10% HP.' },
+];
+export const POTION_BY_ID = Object.fromEntries(POTIONS.map(p => [p.id, p]));
+
+// dishes + potions are both cooked in the pot; recipes list is the union.
+export const RECIPE_BY_ID = Object.fromEntries([...RECIPES, ...POTIONS].map(r => [r.id, r]));
+
+/* ---------- brewed potion inventory (kv 'potions' = {id: count}) ---------- */
+export async function potionsInv() { return (await kvGet('potions', {})) || {}; }
+export async function grantPotion(id, n = 1) {
+  if (!POTION_BY_ID[id]) return;
+  const inv = await potionsInv(); inv[id] = (inv[id] || 0) + n; await kvSet('potions', inv);
+}
+export async function usePotion(id) {
+  const inv = await potionsInv();
+  if (!(inv[id] > 0)) return false;
+  inv[id] -= 1; if (inv[id] <= 0) delete inv[id];
+  await kvSet('potions', inv);
+  return true;
+}
+export function potionCount(inv) { return Object.values(inv || {}).reduce((a, n) => a + n, 0); }
 
 /* ---------- ingredient inventory (kv 'ingredients' = {id: count}) ---------- */
 export async function ingredients() { return (await kvGet('ingredients', {})) || {}; }
@@ -95,7 +123,8 @@ export async function collectDish(now = Date.now()) {
   const st = await cookState(now);
   if (!st || !st.ready) return null;
   await kvSet('cooking', null);
-  await addFoodBuff(st.recipe, now);
+  if (st.recipe.potion) await grantPotion(st.recipe.id); // potions go to your satchel, drunk mid-fight
+  else await addFoodBuff(st.recipe, now);                 // dishes apply as passive buffs
   return st.recipe;
 }
 

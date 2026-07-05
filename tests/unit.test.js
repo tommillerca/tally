@@ -10,7 +10,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
@@ -726,6 +726,30 @@ test('v75 mini-bosses: deterministic per day, roam daily, keyed once/day', async
   assert.match(poi.miniKey('2026-07-05', a1[0]), /^mini-2026-07-05-/);
   // tiers escalate mult; all beatable filler (well under a world-boss)
   assert.ok(poi.MINI_TIERS[0].mult < poi.MINI_TIERS[2].mult && poi.MINI_TIERS[2].mult <= 1.0, 'minis stay below world-boss strength');
+});
+
+test('v78 kitchen potions: brewable by anyone, each has a mid-fight effect + ingredient cost', () => {
+  assert.ok(POTIONS.length >= 3, 'several potions');
+  for (const p of POTIONS) {
+    assert.ok(p.potion === true, `${p.id} flagged as potion`);
+    assert.ok(p.needs && Object.keys(p.needs).length, `${p.id} costs ingredients`);
+    assert.ok(p.cookMin > 0, `${p.id} takes time to brew`);
+    const e = p.effect || {};
+    assert.ok(e.heal || e.dmgPct || e.shield || e.stamina, `${p.id} does something in a fight`);
+    assert.ok(Object.keys(p.needs).every(id => INGREDIENTS[id]), `${p.id} uses real ingredients`);
+  }
+  // potions are their own thing, NOT dishes (no passive buff kind)
+  assert.ok(POTIONS.every(p => !p.buff), 'potions are not passive dish buffs');
+  assert.ok(POTION_BY_ID['fury-flask'] && POTION_BY_ID['fury-flask'].effect.dmgPct > 0, 'Fury Flask buffs damage');
+  assert.equal(potionCount({ 'vital-tonic': 2, 'fury-flask': 1 }), 3);
+});
+test('v78 cooking quests exist (daily + weekly), driven by the cook ledger', () => {
+  assert.ok(DAILY_POOL.find(q => q.id === 'q-cook'), 'daily cook quest');
+  assert.ok(WEEKLY_POOL.find(q => q.id === 'w-cook'), 'weekly cook quest');
+  const dq = DAILY_POOL.find(q => q.id === 'q-cook');
+  assert.deepEqual(dq.progress({ cookedToday: true }), { cur: 1, target: 1 });
+  assert.deepEqual(dq.progress({ cookedToday: false }), { cur: 0, target: 1 });
+  assert.deepEqual(WEEKLY_POOL.find(q => q.id === 'w-cook').progress({ cooksDone: 3 }), { cur: 3, target: 5 });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -794,6 +794,22 @@ test('v77 Alchemist: potions build Toxicity, Toxicity powers alchemy, it decays 
   assert.equal(P.toxicity, 26, 'toxicity bled off 10');
 });
 
+test('v78 Fury potion: elixir buffs damage for a few turns, then wears off', () => {
+  const s = { power: 60, marrow: 50, wind: 50, reflex: 40, hype: 40 };
+  const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  const P = makeFighter({ name: 'P', stats: s });
+  const F = makeFighter({ name: 'F', stats: s });
+  const base = resolveHit({ move: 'swing', attacker: P, defender: dummy, rng: noLuck }).damage;
+  P.elixir = { pct: 0.25, turns: 2 };
+  const buffed = resolveHit({ move: 'swing', attacker: P, defender: dummy, rng: noLuck }).damage;
+  assert.ok(buffed > base && Math.abs(buffed - base * 1.25) <= 1, `elixir ~= +25% (${base} -> ${buffed})`);
+  // it decays on the drinker's turn starts
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  P.elixir = { pct: 0.25, turns: 1 };
+  et(fight); et(fight); // back to P -> tickTimers decrements
+  assert.equal(P.elixir, null, 'elixir wore off');
+});
+
 /* ============ v16: anti-exploit balance ============ */
 
 test('shove costs escalate: kiting is a window, not a lock', () => {

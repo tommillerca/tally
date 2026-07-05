@@ -32,6 +32,7 @@ import { refreshPitEnergy, spendPitFight, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  POTIONS, POTION_BY_ID, potionsInv, usePotion, potionCount,
 } from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -724,6 +725,14 @@ function foodBuffLabel(b) {
   if (b.petFree) bits.push('pet special free');
   return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
 }
+function potionShort(p) {
+  const e = p.effect || {};
+  if (e.heal && e.stamina) return 'refill + heal';
+  if (e.heal) return `heal ${Math.round(e.heal * 100)}%`;
+  if (e.dmgPct) return `+${Math.round(e.dmgPct * 100)}% dmg`;
+  if (e.shield) return `+${e.shield} shield`;
+  return 'potion';
+}
 
 // a Today alert card, ONLY when a dish is ready to collect (access lives in the
 // shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
@@ -738,38 +747,62 @@ function kitchenCardHtml(cook, ingCount, buffs) {
 async function openKitchen() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="kitchenBody"></div>`, { cls: '' });
+    <div class="sheet-body" id="kitchenBody"></div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
   async function render() {
     if (!body.isConnected) return;
-    const [inv, cook, buffs] = await Promise.all([ingredients(), cookState(), activeFoodBuffs()]);
+    const [inv, cook, buffs, potInv] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv()]);
+    const pct = cook && !cook.ready ? Math.max(0, Math.min(100, Math.round((1 - cook.remainingMs / Math.max(1, cook.readyAt - cook.startedAt)) * 100))) : (cook && cook.ready ? 100 : 0);
+    const cauldronState = cook ? (cook.ready ? 'ready' : 'cooking') : 'idle';
+    const recipeCard = r => {
+      const have = canCook(r, inv);
+      const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 13)}${(inv[id] || 0)}/${n}`).join('  ');
+      const canStart = have && !cook;
+      return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
+        <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
+        <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${r.potion ? 'Brew' : 'Cook'}</button></div>`;
+    };
     body.innerHTML = `
-      <p class="note" style="margin-bottom:12px">Scavenge ingredients on the map, then cook them into a dish. Each dish grants a temporary buff. One pot at a time.</p>
+      <div class="kitchen-hero">
+        <div class="kitchen-atmos"><span class="k-embers"></span><span class="k-steam l"></span><span class="k-steam r"></span></div>
+        <div class="kitchen-hero-title">THE HAUNTED KITCHEN</div>
+        <div class="kitchen-quote">Something is always simmering.</div>
+      </div>
+      <div class="cauldron-stage ${cauldronState}">
+        <div class="cauldron">
+          <div class="cauldron-brew"></div>
+          <span class="c-bub c1"></span><span class="c-bub c2"></span><span class="c-bub c3"></span>
+          <div class="cauldron-fire"></div>
+        </div>
+        <div class="cauldron-status">
+          ${cook ? `<b>${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)}</b>
+            ${cook.ready ? '<span class="cauldron-ready">Ready to serve!</span>'
+              : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(cook.remainingMs)} left · ${pct}%</small>`}`
+            : '<b>The cauldron is cold</b><small>Pick a recipe below to get it bubbling.</small>'}
+        </div>
+        ${cook && cook.ready ? '<button class="btn cauldron-serve" id="collectDish">Serve it</button>' : ''}
+      </div>
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
-      <div class="sect-h">The pot</div>
-      ${cook ? `<div class="crate-row cookpot ${cook.ready ? 'ready' : ''}"><span class="crate-ico">${recipeIconHtml(cook.recipe,26)}</span>
-          <div style="flex:1"><b>${esc(cook.recipe.name)}</b><small>${cook.ready ? 'Ready to serve!' : 'Cooking · ' + fmtCookTime(cook.remainingMs) + ' left'}</small></div>
-          ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : `<span class="q-frac">${bhIcon('flame',14)}</span>`}</div>`
-        : '<p class="note" style="margin:2px 2px 12px">The pot is empty. Pick a recipe below.</p>'}
+      ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
+        <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
-      <div class="sect-h">Recipes</div>
-      ${RECIPES.map(r => {
-        const have = canCook(r, inv);
-        const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id,13)}${(inv[id] || 0)}/${n}`).join('  ');
-        const canStart = have && !cook;
-        return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r,26)}</span>
-          <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
-          <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>Cook</button></div>`;
-      }).join('')}`;
+      <div class="sect-h">Dishes · passive buffs for your next fights</div>
+      ${RECIPES.map(recipeCard).join('')}
+      <div class="sect-h">Potions · drink one mid-fight, any class</div>
+      ${POTIONS.map(recipeCard).join('')}`;
     $('#collectDish', body)?.addEventListener('click', async () => {
       const dish = await collectDish();
-      if (dish) { confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds); toast(`${dish.icon} ${dish.name} served! Buff active.`, 3200); }
-      render(); refresh();
+      if (dish) {
+        await award(`cook-${Date.now().toString(36)}`, 'cook', 8, `Cooked ${dish.name}`); // small XP + powers cooking quests
+        confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds);
+        toast(dish.potion ? `${dish.icon} ${dish.name} brewed! Drink it mid-fight.` : `${dish.icon} ${dish.name} served! Buff active.`, 3200);
+      }
+      render();
     });
     $('#forageBtn', body)?.addEventListener('click', async () => {
       const FORAGE_COST = 45;
@@ -779,14 +812,14 @@ async function openKitchen() {
       await grantIngredient(ing);
       popSound(S.sounds);
       toast(`Foraged ${INGREDIENTS[ing].icon} ${INGREDIENTS[ing].name}.`, 2400);
-      render(); refresh();
+      render();
     });
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
       const res = await startCook(btn.dataset.cook);
       if (res.ok) { popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
       else if (res.reason === 'busy') toast('The pot is already cooking something.');
       else toast('Not enough ingredients for that dish.');
-      render(); refresh();
+      render();
     }));
   }
   await render();
@@ -3264,6 +3297,7 @@ const PIT_VENUES = {
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
+  let potionInv = await potionsInv(); // brewed potions you can drink mid-fight
   const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food, gearArmor: fighter.gearArmor });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
@@ -3793,11 +3827,42 @@ async function openFight(pitWrap, fighter, foeCfg) {
       html += defenseRow();
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
     }
+    // Potions: any brewed potion can be DRUNK mid-fight (1 AP), any class. This is
+    // the kitchen's "beaming potion" — separate from the Alchemist's Toxicity kit.
+    for (const p of POTIONS) {
+      const n = potionInv[p.id] || 0;
+      if (n <= 0) continue;
+      const enabled = fight.active === 'p' && fight.ap >= 1 && !fight.over;
+      html += `<button class="fight-act potion" data-potion="${p.id}" ${enabled ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${n} · ${esc(potionShort(p))}</small></button>`;
+    }
     html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
     factions.innerHTML = html;
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
+    $$('[data-potion]', factions).forEach(b => b.addEventListener('click', () => drinkPotion(b.dataset.potion)));
     $('#moreBtn', factions)?.addEventListener('click', () => { showMore = !showMore; renderActions(); });
     $('#endTurn', factions)?.addEventListener('click', endPlayerBody);
+  }
+
+  async function drinkPotion(id) {
+    if (fight.over || fight.active !== 'p' || fight.ap < 1) return;
+    const p = POTION_BY_ID[id];
+    if (!p || !(potionInv[id] > 0)) return;
+    if (!(await usePotion(id))) return;
+    potionInv[id] -= 1; // keep local satchel in sync for the button count
+    fight.ap -= 1;
+    const e = p.effect || {};
+    const floats = [];
+    if (e.heal) { const h = Math.round(player.d.maxHp * e.heal); player.hp = Math.min(player.d.maxHp, player.hp + h); floats.push(`+${h}`); }
+    if (e.stamina) { player.wind = player.d.maxWind; floats.push('+stamina'); }
+    if (e.shield) { player.ward = Math.max(player.ward || 0, e.shield); floats.push(`+${e.shield} shield`); }
+    if (e.dmgPct) { player.elixir = { pct: e.dmgPct, turns: (e.turns || 3) + 1 }; floats.push('FURY!'); }
+    pulse(el('youStage'), e.dmgPct ? 'ragefx' : (e.shield ? 'wardfx' : 'mendfx'), fxMs + 300);
+    floatNode(`${p.icon}`, 'p', 'stamp warm');
+    floats.forEach((t, i) => setTimeout(() => floatNode(t, 'p', e.dmgPct ? 'stamp rage' : 'dmg heal'), 120 * (i + 1)));
+    levelSound(S.sounds);
+    setLog(`You drink a ${p.name}.`);
+    refreshAll();
+    if (fight.ap <= 0) endPlayerBody();
   }
 
   function setLog(msg) { const f = el('flog'); if (f) f.textContent = msg || '...'; }
