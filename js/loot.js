@@ -339,7 +339,13 @@ export async function buyShopItem(shopId) {
 
 /* ---------- weapons (bought with coins, one-each) ---------- */
 // Bonecrusher is the Champion's prize, not for sale. The rest reward a spec.
-export const WEAPON_COST = { rapier: 500, shivs: 500, scepter: 900 };
+// The Bone Merchant's tiered stock (v71) is a deliberate gold sink: the endgame
+// pieces cost thousands, so weapons are a long-term goal, not a quick clear.
+export const WEAPON_COST = {
+  rapier: 500, shivs: 500, scepter: 900,
+  wand: 700, cleaver: 1500, crook: 1600,   // entry / mid tier
+  maul: 3400, lichfocus: 3400, censer: 3200, // legendary gold sinks
+};
 
 export async function ownedWeaponIds() {
   const inv = await db.all('inv');

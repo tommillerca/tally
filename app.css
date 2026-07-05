@@ -1327,6 +1327,20 @@ body::before {
 .weap-desc { display: block; margin: 5px 0 8px; font-size: 12px; line-height: 1.35; color: var(--text-2, #cfc6d6); }
 .weap-cta { display: flex; justify-content: flex-end; }
 .weap-cta .q-frac { align-self: center; }
+.weap-card.owned { opacity: 0.92; }
+.weap-tier { font-size: 10px; letter-spacing: -1px; }
+.weap-tier.t1 { color: #60a5fa; } .weap-tier.t2 { color: #c084fc; } .weap-tier.t3 { color: #ffc961; }
+
+/* ===== The Bone Merchant (v71) ===== */
+.wallet-line { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; padding: 8px 12px; border-radius: 11px; background: var(--surface-2); }
+.wallet-line b { font-family: var(--display); font-size: 17px; letter-spacing: 0.5px; }
+.merch-group { margin-bottom: 16px; }
+.merch-group.rec { border: 1px solid rgba(165, 232, 71, 0.35); border-radius: 14px; padding: 10px; background: rgba(165, 232, 71, 0.04); }
+.merch-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.merch-head b { font-family: var(--display); font-size: 16px; letter-spacing: 0.5px; }
+.merch-head small { color: var(--text-3); font-size: 11.5px; }
+.merch-ico { font-size: 15px; align-self: center; }
+.merch-rec { margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(165, 232, 71, 0.5); padding: 2px 7px; border-radius: 999px; }
 
 /* ===== The Crew: online identity card ===== */
 .crew-id { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

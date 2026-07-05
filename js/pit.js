@@ -229,37 +229,83 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArm
 // `spec` = the stat it rewards; `rarity` drives shop cost + the chip's ring.
 export const WEAPONS = {
   starter: {
-    id: 'starter', name: 'Taped Pipe', rarity: 'common', spec: null,
+    id: 'starter', name: 'Taped Pipe', rarity: 'common', spec: null, arch: null,
     desc: 'Where every bonehead starts. No bonus, no penalty; the honest baseline.',
     mult: () => 1.0,
     windCostMult: () => 1.0,
   },
   rapier: {
-    id: 'rapier', name: 'Femur Rapier', rarity: 'rare', spec: 'reflex',
+    id: 'rapier', name: 'Femur Rapier', rarity: 'rare', spec: 'reflex', arch: 'melee',
     desc: 'A keen, quick edge. +12% crit chance, and Swings cost less Stamina. Rewards Reflex duelists.',
     mult: () => 1.0,
     windCostMult: (move) => move === 'swing' ? 0.8 : 1.0,
     critBonus: 0.12,
   },
   shivs: {
-    id: 'shivs', name: 'Twin Shivs', rarity: 'rare', spec: 'wind',
+    id: 'shivs', name: 'Twin Shivs', rarity: 'rare', spec: 'wind', arch: 'melee',
     desc: 'Two blades, endless motion. Every close strike (Jab, Swing, Haymaker) costs 20% less Stamina. Rewards high-Stamina tempo.',
     mult: () => 1.0,
     windCostMult: (move) => (move === 'jab' || move === 'swing' || move === 'haymaker') ? 0.8 : 1.0,
   },
   scepter: {
-    id: 'scepter', name: 'Skull Scepter', rarity: 'epic', spec: 'hype',
+    id: 'scepter', name: 'Skull Scepter', rarity: 'epic', spec: 'hype', arch: 'caster',
     desc: 'A focus for bone-magic. Your spells (bolts, heals, Bone Storm) hit 30% harder. Rewards Hype casters.',
     mult: () => 1.0,
     windCostMult: () => 1.0,
     magicBonus: 0.30,
   },
   bonecrusher: {
-    id: 'bonecrusher', name: 'Bonecrusher', rarity: 'legendary', spec: 'power',
+    id: 'bonecrusher', name: 'Bonecrusher', rarity: 'legendary', spec: 'power', arch: 'melee',
     desc: 'Feast-or-famine bombs. Swing and Haymaker scale off Power; Haymaker costs more Stamina. The Champion’s prize.',
     mult: (move, s) => move === 'haymaker' ? 1 + 0.40 * (s.power / 100)
       : move === 'swing' ? 1 + 0.10 * (s.power / 100) : 1.0,
     windCostMult: (move) => move === 'haymaker' ? 1.3 : 1.0,
+  },
+  // ---- The Bone Merchant's stock (v71): build-specific, tiered gold sinks ----
+  // MELEE
+  cleaver: {
+    id: 'cleaver', name: 'Ribsplitter Cleaver', rarity: 'epic', spec: 'power', arch: 'melee', vendor: true, tier: 2,
+    desc: 'A butcher\'s edge. Swings bite 15% harder and Haymakers scale off Power. Rewards Power bruisers.',
+    mult: (move, s) => move === 'swing' ? 1.15 : move === 'haymaker' ? 1 + 0.25 * (s.power / 100) : 1.0,
+    windCostMult: () => 1.0,
+  },
+  maul: {
+    id: 'maul', name: 'Gravemarrow Maul', rarity: 'legendary', spec: 'power', arch: 'melee', vendor: true, tier: 3,
+    desc: 'Two-handed ruin. Haymakers scale hard off Power and land steadier, but cost more Stamina. The bruiser\'s endgame.',
+    mult: (move, s) => move === 'haymaker' ? 1 + 0.5 * (s.power / 100) : move === 'swing' ? 1.1 : 1.0,
+    windCostMult: (move) => move === 'haymaker' ? 1.25 : 1.0,
+    critBonus: 0.05,
+  },
+  // CASTER
+  wand: {
+    id: 'wand', name: 'Bonecarver Wand', rarity: 'rare', spec: 'hype', arch: 'caster', vendor: true, tier: 1,
+    desc: 'A starter focus. Spells hit 15% harder and cost a little less Stamina. An affordable step into casting.',
+    mult: () => 1.0,
+    windCostMult: (move) => 1.0,
+    magicBonus: 0.15,
+  },
+  lichfocus: {
+    id: 'lichfocus', name: 'Lich\'s Focus', rarity: 'legendary', spec: 'hype', arch: 'caster', vendor: true, tier: 3,
+    desc: 'A skull socketed with a cold star. Spells hit 45% harder with a touch more crit. The caster\'s endgame.',
+    mult: () => 1.0,
+    windCostMult: () => 1.0,
+    magicBonus: 0.45,
+    critBonus: 0.05,
+  },
+  // SUPPORT (magicBonus lifts heals + wards; cheaper sustain)
+  crook: {
+    id: 'crook', name: 'Warden\'s Crook', rarity: 'epic', spec: 'marrow', arch: 'support', vendor: true, tier: 2,
+    desc: 'A shepherd\'s staff for the dead. Heals and holy magic hit 20% harder, and Mend, Ward and Smite cost 20% less Stamina. Rewards menders.',
+    mult: () => 1.0,
+    windCostMult: (move) => (move === 'mend' || move === 'ward' || move === 'smite') ? 0.8 : 1.0,
+    magicBonus: 0.20,
+  },
+  censer: {
+    id: 'censer', name: 'Sanctifier Censer', rarity: 'legendary', spec: 'marrow', arch: 'support', vendor: true, tier: 3,
+    desc: 'Swinging incense that never gutters. Your magic hits 30% harder and every cast costs 25% less Stamina. The support endgame.',
+    mult: () => 1.0,
+    windCostMult: () => 0.75,
+    magicBonus: 0.30,
   },
 };
 

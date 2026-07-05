@@ -124,8 +124,8 @@ const POLICIES = {
   },
 };
 
-function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
-  const player = makeFighter({ name: 'P', stats, talents, pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || []) : null });
+function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
+  const player = makeFighter({ name: 'P', stats, talents, weaponId: weaponId || 'starter', pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || []) : null });
   const foe = makeFighter({
     name: 'F',
     stats: scaleStats(stats, foeCfg.mult),
@@ -173,10 +173,10 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
 }
 
 const N = 200;
-function cell({ stats, talents, foeCfg, policy }) {
+function cell({ stats, talents, foeCfg, policy, weaponId }) {
   let w = 0, d = 0, turns = 0, hp = 0, atk = 0, act = 0, brace = 0, fw = 0;
   for (let i = 0; i < N; i++) {
-    const r = runFight({ stats, talents, foeCfg, seed: 9000 + i * 7, policy });
+    const r = runFight({ stats, talents, foeCfg, seed: 9000 + i * 7, policy, weaponId });
     if (r.winner === 'p') { w++; hp += r.hpLeft; }
     else if (r.winner === 'draw') d++;
     turns += r.turns;
@@ -221,3 +221,24 @@ for (const [pname, policy] of Object.entries(POLICIES)) {
     console.log(row.join(' '));
   }
 }
+
+// ---- v71: the Bone Merchant's endgame weapons must not break the exploit bar ----
+// The strongest realistic weapon+build vs the Champion under the smart policy must
+// still stay under 90% (weapons multiply effort, they don't trivialise the ladder).
+const champFoe = FOES.find(f => f.champ);
+const WEAPONIZED = [
+  { name: 'maul+slab', weaponId: 'maul', talents: BUILDS.slab },
+  { name: 'lich+necro', weaponId: 'lichfocus', talents: BUILDS.gravecaller },
+  { name: 'censer+warden', weaponId: 'censer', talents: BUILDS.gravewarden },
+  { name: 'lich+shaman', weaponId: 'lichfocus', talents: BUILDS.boneshaman },
+];
+console.log('\n--- v71 weapon exploit check (smart policy vs Champion) ---');
+let weaponBarOk = true;
+for (const b of WEAPONIZED) {
+  const r = cell({ stats, talents: b.talents, foeCfg: champFoe, policy: POLICIES.smart, weaponId: b.weaponId });
+  const flag = r.win >= 90 ? '  <<< OVER 90% BAR' : '';
+  if (r.win >= 90) weaponBarOk = false;
+  console.log(`  ${b.name.padEnd(16)} vs Champion: ${String(r.win).padStart(3)}% win${flag}`);
+}
+console.log(weaponBarOk ? '  PASS: all weaponized builds stay under the 90% exploit bar' : '  FAIL: a weaponized build exceeds 90% vs the Champion');
+if (!weaponBarOk) process.exitCode = 1;

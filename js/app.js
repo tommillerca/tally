@@ -3835,6 +3835,31 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
 /* ================= talents ================= */
 
+// The Bone Merchant reads your build and recommends an archetype of weapon.
+const ARCH_META = {
+  melee:   { label: 'Melee', blurb: 'Power & Marrow bruisers', ico: '🦴' },
+  caster:  { label: 'Caster', blurb: 'Hype spellcasters', ico: '☠' },
+  support: { label: 'Support', blurb: 'Menders, wards & totems', ico: '✚' },
+};
+const ARCH_SIGNALS = {
+  melee: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'titan', 'rage', 'flurry', 'kite', 'bleedout', 'lightfeet'],
+  caster: ['bonebolt', 'darkstudy', 'gravechill', 'bonestorm', 'frostbolt', 'firebolt', 'attunement', 'tempest', 'raisedead', 'bonespike'],
+  support: ['mend', 'ward', 'smite', 'radiance', 'hallowed', 'blessedward', 'sanctified', 'totem', 'totemic', 'soulsiphon'],
+};
+function recommendArch(fighter) {
+  const tals = new Set(fighter.fightTalents || fighter.talents || []);
+  const score = { melee: 0, caster: 0, support: 0 };
+  for (const [arch, ids] of Object.entries(ARCH_SIGNALS)) for (const id of ids) if (tals.has(id)) score[arch]++;
+  let best = null, top = 0;
+  for (const a of ['melee', 'caster', 'support']) if (score[a] > top) { top = score[a]; best = a; }
+  if (best) return best;
+  // no talent signal yet: fall back to the dominant stat
+  const s = fighter.stats || {};
+  if ((s.hype || 0) >= (s.power || 0) && (s.hype || 0) >= (s.marrow || 0)) return 'caster';
+  if ((s.marrow || 0) > (s.power || 0)) return 'support';
+  return 'melee';
+}
+
 async function openTalents(pitWrap) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Talents</h2><button class="sheet-close">Done</button></div>
@@ -3853,6 +3878,7 @@ async function renderTalents(wrap) {
   const unspent = Math.max(0, points - takenArr.length);
   const fightArr = fighter.fightTalents || fighter.talents;
   const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fightArr), fighter.gearArmor, talentRanks(fightArr));
+  const recArch = recommendArch(fighter);
 
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
   const statBlock = `
@@ -3888,26 +3914,41 @@ async function renderTalents(wrap) {
       </div>
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
-    <div class="sect-h">Weapon</div>
-    <p class="note" style="margin:2px 2px 8px">Each weapon amplifies a different build. It multiplies your effort; it never replaces it.</p>
-    <div class="weap-rack">
-      ${Object.values(WEAPONS).map(w => {
+    <div class="sect-h">The Bone Merchant</div>
+    <p class="note" style="margin:2px 2px 10px">The old skeleton lays out his wares by fighting style. He nods at your build: <b style="color:var(--accent)">${ARCH_META[recArch].label}</b> suits you. Weapons multiply your effort; they never replace it.</p>
+    <div class="wallet-line"><span class="note">Your coins</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()}</b></div>
+    ${(() => {
+      const weaponCard = w => {
         const ownedW = fighter.owned.includes(w.id);
         const on = fighter.loadout === w.id;
         const cost = WEAPON_COST[w.id];
+        const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
         const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
         const cta = ownedW
           ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
           : cost != null
-            ? `<button class="btn small" data-buyweapon="${w.id}" ${coinBal < cost ? 'disabled' : ''}>${ICONS.coin(13)} ${cost}</button>`
+            ? `<button class="btn small" data-buyweapon="${w.id}" ${coinBal < cost ? 'disabled' : ''}>${ICONS.coin(13)} ${cost.toLocaleString()}</button>`
             : `<span class="q-frac">Champion drop</span>`;
-        return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''}">
-          <div class="weap-top"><b>${esc(w.name)}</b>${specTag}</div>
+        return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''} ${ownedW ? 'owned' : ''}">
+          <div class="weap-top"><b>${esc(w.name)} ${tierTag}</b>${specTag}</div>
           <small class="weap-desc">${esc(w.desc)}</small>
           <div class="weap-cta">${cta}</div>
         </div>`;
-      }).join('')}
-    </div>
+      };
+      const all = Object.values(WEAPONS);
+      const baseline = all.find(w => !w.arch);
+      const order = [recArch, ...['melee', 'caster', 'support'].filter(a => a !== recArch)];
+      return `${baseline ? `<div class="weap-rack">${weaponCard(baseline)}</div>` : ''}
+      ${order.map(arch => {
+        const list = all.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (WEAPON_COST[a.id] || 9999) - (WEAPON_COST[b.id] || 9999));
+        if (!list.length) return '';
+        const rec = arch === recArch;
+        return `<div class="merch-group${rec ? ' rec' : ''}">
+          <div class="merch-head"><span class="merch-ico">${ARCH_META[arch].ico}</span><b>${ARCH_META[arch].label}</b><small>${ARCH_META[arch].blurb}</small>${rec ? '<span class="merch-rec">for your build</span>' : ''}</div>
+          <div class="weap-rack">${list.map(weaponCard).join('')}</div>
+        </div>`;
+      }).join('')}`;
+    })()}
     ${(() => {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);

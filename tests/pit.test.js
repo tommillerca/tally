@@ -715,6 +715,33 @@ test('v70 Spirit Totem: zaps enemy + restores your Stamina each of your turns', 
   assert.equal(P.wind, Math.min(P.d.maxWind, 10 + 20 + 8), 'base regen + totem +8 stamina');
 });
 
+test('v71 Bone Merchant weapons: bonuses actually hook into the engine', () => {
+  const s = { power: 80, marrow: 50, wind: 50, reflex: 40, hype: 80 };
+  const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
+  // Gravemarrow Maul: haymaker scales harder off Power than the starter pipe
+  const maulHay = rh({ move: 'haymaker', attacker: mf({ name: 'M', stats: s, weaponId: 'maul' }), defender: dummy, rng: noLuck }).damage;
+  const pipeHay = rh({ move: 'haymaker', attacker: mf({ name: 'P', stats: s, weaponId: 'starter' }), defender: dummy, rng: noLuck }).damage;
+  assert.ok(maulHay > pipeHay, `maul ${maulHay} > pipe ${pipeHay}`);
+  // Lich's Focus: +45% magic beats the +30% Skull Scepter on a bolt
+  const lich = mf({ name: 'L', stats: s, weaponId: 'lichfocus', talents: ['bonebolt'] });
+  const scep = mf({ name: 'S', stats: s, weaponId: 'scepter', talents: ['bonebolt'] });
+  const lichBolt = rh({ move: 'bonebolt', attacker: lich, defender: dummy, rng: noLuck }).damage;
+  const scepBolt = rh({ move: 'bonebolt', attacker: scep, defender: dummy, rng: noLuck }).damage;
+  assert.ok(lichBolt > scepBolt, `lich ${lichBolt} > scepter ${scepBolt}`);
+  // Warden's Crook: Mend costs 20% less Stamina
+  const crook = mf({ name: 'C', stats: s, weaponId: 'crook', talents: ['mend'] });
+  const plainMend = mf({ name: 'P2', stats: s, weaponId: 'starter', talents: ['mend'] });
+  const cf1 = cf({ player: crook, foe: mf({ name: 'F', stats: MID }), seed: 1 });
+  const cf2 = cf({ player: plainMend, foe: mf({ name: 'F', stats: MID }), seed: 1 });
+  const crookCost = acts(cf1).find(a => a.id === 'mend').windCost;
+  const plainCost = acts(cf2).find(a => a.id === 'mend').windCost;
+  assert.ok(crookCost < plainCost, `crook mend ${crookCost} < plain ${plainCost}`);
+  // every vendor weapon is registered with an archetype
+  const vendorArch = Object.values(WEAPONS).filter(w => w.vendor);
+  assert.ok(vendorArch.length >= 6, 'six+ vendor weapons');
+  assert.ok(vendorArch.every(w => ['melee', 'caster', 'support'].includes(w.arch)), 'each vendor weapon has an arch');
+});
+
 test('totemic marrow regenerates extra wind each turn', () => {
   const base = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
   const P = makeFighter({ name: 'P', stats: base, talents: ['frostbolt', 'totemic'] });
