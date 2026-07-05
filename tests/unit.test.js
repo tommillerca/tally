@@ -13,7 +13,10 @@ import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
-import { dailyQuests, questState, weekKeyOf, weekDates, QUEST_POOL } from '../js/quests.js';
+import {
+  dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
+  weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
+} from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
@@ -322,35 +325,64 @@ test('parseHkPayload weight sanity bounds', () => {
 });
 
 // ---- quests ----
-test('daily quests: deterministic, three distinct, hk-gated', () => {
-  const a = dailyQuests('2026-07-03', { hkConnected: true });
-  const b = dailyQuests('2026-07-03', { hkConnected: true });
+test('quest tiers: deterministic, distinct, gated', () => {
+  const opts = { hkConnected: true, huntEnabled: true };
+  const a = dailyQuests('2026-07-03', opts), b = dailyQuests('2026-07-03', opts);
   assert.deepEqual(a.map(q => q.id), b.map(q => q.id));
   assert.equal(new Set(a.map(q => q.id)).size, 3);
-  const noHk = dailyQuests('2026-07-03', { hkConnected: false });
-  assert.ok(noHk.every(q => !q.needsHk));
-  // rotation actually rotates across a week
+  assert.equal(weeklyQuests('2026-07-03', opts).length, 3);
+  assert.equal(monthlyQuests('2026-07-03', opts).length, 2);
+  // gating drops steps/hunt quests when those systems are off
+  const off = dailyQuests('2026-07-03', { hkConnected: false, huntEnabled: false });
+  assert.ok(off.every(q => q.need !== 'hk' && q.need !== 'hunt'));
+  // daily rotation actually rotates across a week
   const week = new Set();
-  for (let i = 0; i < 7; i++) dailyQuests(`2026-07-0${i + 1}`, { hkConnected: true }).forEach(q => week.add(q.id));
+  for (let i = 0; i < 7; i++) dailyQuests(`2026-07-0${i + 1}`, opts).forEach(q => week.add(q.id));
   assert.ok(week.size >= 6, String(week.size));
 });
-test('quest progress measures real data', () => {
-  const q3 = QUEST_POOL.find(q => q.id === 'q-3meals');
-  const ctx = { date: '2026-07-03', entries: [{ meal: 0 }, { meal: 1 }], xpRows: [], targets: { p: 180 }, priorFoodIds: new Set(), weighedToday: false };
-  const st = questState(q3, ctx, []);
-  assert.equal(st.cur, 2); assert.equal(st.target, 3); assert.ok(!st.done);
-  const qp = QUEST_POOL.find(q => q.id === 'q-protein-half');
-  const ctx2 = { ...ctx, entries: [{ meal: 0, p: 50 }, { meal: 1, p: 45 }, { meal: 2, p: 100 }] };
-  const st2 = questState(qp, ctx2, []);
-  assert.equal(st2.target, 90);
-  assert.ok(st2.done, JSON.stringify(st2)); // 95g by lunch >= 90
-  const claimed = questState(q3, ctx, [{ key: 'quest-2026-07-03-q-3meals' }]);
-  assert.ok(claimed.claimed);
+test('questCtx aggregates period-scoped ledger data', () => {
+  const allXp = [
+    { type: 'fight', date: '2026-06-29' }, { type: 'fight', date: '2026-07-01' },
+    { type: 'fight', date: '2026-07-13' }, // next week: excluded from this week
+    { type: 'boss', date: '2026-06-30' }, { type: 'protein', date: '2026-07-01' },
+    { type: 'spawn', date: '2026-07-02' },
+  ];
+  const healthRows = [
+    { date: '2026-06-29', steps: 9000 }, { date: '2026-07-01', steps: 12000 },
+    { date: '2026-07-13', steps: 5000 },
+  ];
+  const base = { date: '2026-07-03', entries: [], allXp, allLog: [], healthRows, targets: { p: 150 }, priorFoodIds: new Set(), weighedToday: false };
+  const wk = questCtx('week', base); // week of 2026-06-29..07-05
+  assert.equal(wk.pitWins, 2, 'two fights this week');
+  assert.equal(wk.bossWins, 1);
+  assert.equal(wk.spawns, 1);
+  assert.equal(wk.proteinDays, 1);
+  assert.equal(wk.steps, 21000, 'steps summed within the week only');
+  const day = questCtx('day', base);
+  assert.equal(day.pitWins, 0, 'no fights on the exact day');
 });
-test('week helpers', () => {
+test('quest progress + claim state', () => {
+  const q3 = DAILY_POOL.find(q => q.id === 'q-3meals');
+  const base = { date: '2026-07-03', entries: [{ meal: 0 }, { meal: 1 }], allXp: [], allLog: [], healthRows: [], targets: { p: 180 }, priorFoodIds: new Set(), weighedToday: false };
+  const ctx = questCtx('day', base);
+  const st = questState(q3, ctx);
+  assert.equal(st.cur, 2); assert.equal(st.target, 3); assert.ok(!st.done);
+  const wpit = WEEKLY_POOL.find(q => q.id === 'w-pit');
+  assert.equal(wpit.progress({ pitWins: 12 }).target, 12);
+  const mboss = MONTHLY_POOL.find(q => q.id === 'm-boss');
+  assert.equal(mboss.progress({ bossWins: 8 }).cur, 8);
+  // claimed detection reads the period-keyed ledger row
+  const claimedBase = { ...base, allXp: [{ key: 'quest-2026-07-03-q-3meals' }] };
+  assert.ok(questState(q3, questCtx('day', claimedBase)).claimed);
+});
+test('period key helpers', () => {
   assert.equal(weekKeyOf('2026-07-03'), '2026-06-29'); // Friday -> Monday
   assert.equal(weekKeyOf('2026-06-29'), '2026-06-29');
   assert.equal(weekDates('2026-06-29').length, 7);
+  assert.equal(monthKeyOf('2026-07-03'), '2026-07');
+  assert.equal(monthDates('2026-07-03').length, 31);
+  assert.equal(monthDates('2026-02-15').length, 28);
+  assert.equal(periodKeyOf('month', '2026-07-03'), '2026-07');
   assert.equal(weekDates('2026-06-29')[6], '2026-07-05');
 });
 

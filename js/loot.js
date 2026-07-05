@@ -23,15 +23,20 @@ export const CRATES = {
 
 export const CONSUMABLES = {
   freeze: { label: 'Streak Freeze', icon: '🧊', desc: 'Auto-protects your streak the next day you forget to log' },
-  xp2:    { label: 'XP Boost',      icon: '⚡️', desc: 'Double XP on your next 5 logged foods' },
+  // Battle Charm reuses the old 'xp2' storage key so any owned charges convert
+  // 1:1 for free. It no longer touches logging; it pays out on Pit wins.
+  xp2:    { label: 'Battle Charm',  icon: '🧿', desc: 'Your next 5 Pit wins pay +25% coins' },
 };
 
 export const SHOP = [
   { id: 'crate-daily', label: 'Daily Crate', icon: '📦', cost: 150 },
   { id: 'crate-golden', label: 'Golden Crate', icon: '🧰', cost: 400 },
   { id: 'freeze', label: 'Streak Freeze', icon: '🧊', cost: 120 },
-  { id: 'xp2', label: 'XP Boost', icon: '⚡️', cost: 100 },
+  { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
 ];
+
+// Coin bonus a Battle Charm charge adds to a Pit win.
+export const BATTLE_CHARM_BONUS = 0.25;
 
 function rng() {
   const a = new Uint32Array(1);
@@ -321,8 +326,10 @@ export async function equipGear(slot, gearId) {
   return lo;
 }
 
-/* ---------- XP boost ---------- */
-export async function activateXpBoost() {
+/* ---------- Battle Charm (formerly XP Boost) ----------
+   Charges live in kv buffs.xp2 (key kept so old charges convert 1:1). A charge
+   is spent on a Pit WIN and adds BATTLE_CHARM_BONUS to that win's coins. */
+export async function activateBattleCharm() {
   const inv = await inventory();
   const row = inv.find(r => r.kind === 'xp2');
   if (!row) return false;
@@ -333,18 +340,18 @@ export async function activateXpBoost() {
   return true;
 }
 
-export async function xpBoostCharges() {
+export async function battleCharmCharges() {
   const buffs = await kvGet('buffs', {});
   return buffs.xp2 || 0;
 }
 
-// Consume one charge for a newly logged food. Returns the multiplier (1 or 2).
-export async function consumeXpBoostCharge() {
+// Consume one charge on a Pit win. Returns the coin bonus fraction (0 if none).
+export async function consumeBattleCharmCharge() {
   const buffs = await kvGet('buffs', {});
-  if (!buffs.xp2 || buffs.xp2 <= 0) return 1;
+  if (!buffs.xp2 || buffs.xp2 <= 0) return 0;
   buffs.xp2 -= 1;
   await kvSet('buffs', buffs);
-  return 2;
+  return BATTLE_CHARM_BONUS;
 }
 
 /* ---------- streak freeze ---------- */

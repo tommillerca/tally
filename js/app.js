@@ -8,12 +8,12 @@ import {
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
-  unopenedCrates, openCrate, buyShopItem, equipped, equip, activateXpBoost,
+  unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
-  xpBoostCharges, consumableCount,
+  battleCharmCharges, consumeBattleCharmCharge, consumableCount,
 } from './loot.js';
-import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, claimWeekly, WEEKLY } from './quests.js';
+import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
@@ -326,15 +326,21 @@ async function renderToday(el) {
   const coinBal = await coins();
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
-  const dateXp = allXp.filter(r => r.date === S.date);
   const huntEnabled = !!(await kvGet('hunt-enabled'));
-  const quests = dailyQuests(S.date, { hkConnected: !!S.settings.hkConnected, huntEnabled });
-  const qctx = {
-    date: S.date, entries, xpRows: dateXp, health: hk, targets: S.settings.targets,
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled };
+  const healthRows = await db.all('health');
+  const qbase = {
+    date: S.date, entries, allXp, allLog, healthRows, targets: S.settings.targets,
     priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
     weighedToday: !!(await db.get('weights', S.date)),
+    hkConnected: qopts.hkConnected, huntEnabled,
   };
-  const weekly = weeklyState(allXp, S.date);
+  // three quest tiers, each with its own period-scoped context
+  const questTiers = [
+    { period: 'day', label: "TODAY'S QUESTS", quests: dailyQuests(S.date, qopts), ctx: questCtx('day', qbase) },
+    { period: 'week', label: 'THIS WEEK', quests: weeklyQuests(S.date, qopts), ctx: questCtx('week', qbase) },
+    { period: 'month', label: 'THIS MONTH', quests: monthlyQuests(S.date, qopts), ctx: questCtx('month', qbase) },
+  ];
   const tot = dayTotals(entries);
   const remaining = Math.round(t.kcal - tot.kcal);
   const pct = Math.min(1, tot.kcal / t.kcal);
@@ -413,31 +419,27 @@ async function renderToday(el) {
 
   ${isToday ? `
   <div class="card q-card">
-    <div class="card-title">TODAY'S QUESTS <button class="link" id="qProg">Progress</button></div>
-    <div class="q-list">
-      ${quests.map(q => {
-        const st = questState(q, qctx, dateXp);
+    <div class="card-title">QUESTS <button class="link" id="qProg">Progress</button></div>
+    ${questTiers.map(tier => `
+    <div class="q-tier ${tier.period}">
+      <div class="q-tier-h">${tier.label}</div>
+      <div class="q-list">
+      ${tier.quests.map(q => {
+        const st = questState(q, tier.ctx);
         const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
-        return `<div class="q-row">
+        return `<div class="q-row ${tier.period !== 'day' ? 'longterm' : ''}">
           <div class="q-main">
-            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}</span></div>
-            <div class="q-bar"><i style="width:${pct}%"></i></div>
+            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}</span></div>
+            <div class="q-desc">${esc(q.desc)}</div>
+            <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
           ${st.claimed ? '<span class="q-done">✓</span>'
-            : st.done ? `<button class="q-claim" data-claim="${q.id}">Claim</button>`
-            : `<span class="q-frac">${st.target > 9 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
+            : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
+            : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
         </div>`;
       }).join('')}
-      <div class="q-row weekly">
-        <div class="q-main">
-          <div class="q-name">Weekly: ${esc(WEEKLY.name)} <span class="q-coins">${crateIcon('golden', 13)}</span></div>
-          <div class="q-bar gold"><i style="width:${Math.min(100, (weekly.cur / weekly.target) * 100)}%"></i></div>
-        </div>
-        ${weekly.claimed ? '<span class="q-done">✓</span>'
-          : weekly.done ? '<button class="q-claim" id="claimWeekly">Claim</button>'
-          : `<span class="q-frac">${weekly.cur}/${weekly.target}</span>`}
       </div>
-    </div>
+    </div>`).join('')}
   </div>` : ''}
 
   ${healthCardHtml(hk, isToday)}
@@ -490,26 +492,25 @@ async function renderToday(el) {
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
-    const q = quests.find(x => x.id === b.dataset.claim);
+    const period = b.dataset.period || 'day';
+    const tier = questTiers.find(t => t.period === period);
+    const q = tier?.quests.find(x => x.id === b.dataset.claim);
     if (!q) return;
-    const res = await claimQuest(S.date, q);
+    const res = await claimQuest(b.dataset.pkey, q, period);
     if (!res) return;
-    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, 14);
-    popSound(S.sounds);
-    const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
-    const bonus = await claimAllBonusIfDue(S.date, quests, dateXp2);
-    toast(bonus ? `Quest done · +${res.xp + bonus.xp} XP · +${res.coins} coins · Daily Crate earned!`
-      : `Quest done · +${res.xp} XP · +${res.coins} coins`, 2800);
+    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
+    period === 'day' ? popSound(S.sounds) : levelSound(S.sounds);
+    let msg = `Quest done · +${res.xp} XP · +${res.coins} coins`;
+    if (res.crate) msg += ` · ${res.crate === 'golden' ? 'Golden Crate' : res.crate === 'egg' ? 'Step Egg' : 'Daily Crate'} earned!`;
+    // daily all-clear bonus crate
+    if (period === 'day') {
+      const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
+      const bonus = await claimAllBonusIfDue(S.date, tier.quests, dateXp2);
+      if (bonus) msg = `Quest done · +${res.xp + bonus.xp} XP · +${res.coins} coins · Daily Crate earned!`;
+    }
+    toast(msg, 2800);
     refresh();
   }));
-  $('#claimWeekly')?.addEventListener('click', async ev => {
-    const res = await claimWeekly(weekly.weekKey);
-    if (!res) return;
-    confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, 22);
-    levelSound(S.sounds);
-    toast(`Weekly complete · +${res.xp} XP · +${res.coins} coins · Golden Crate earned!`, 3200);
-    refresh();
-  });
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
@@ -941,7 +942,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       confettiBurst(r.left + r.width / 2, r.top, 18);
       popSound(S.sounds);
     }
-    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP${game.boosted ? ' ⚡️x2' : ''}` : ''}`);
+    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !editing;
     queueCelebration(game);
     closeAllSheetsViaHistory();
@@ -1017,7 +1018,7 @@ function openQuickAdd(getMeal, entry = null) {
       confettiBurst(r.left + r.width / 2, r.top, 16);
       popSound(S.sounds);
     }
-    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP${game.boosted ? ' ⚡️x2' : ''}` : ''}`);
+    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !entry;
     queueCelebration(game);
     closeAllSheetsViaHistory();
@@ -1824,7 +1825,7 @@ async function openCharacter(tab = 'wardrobe') {
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
-  const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), xpBoostCharges()]);
+  const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges()]);
   const lvl = levelFor(xp);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   const freezes = inv.filter(r => r.kind === 'freeze').length;
@@ -1998,9 +1999,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
       <div class="sect-h">Consumables</div>
       <div class="crate-row"><span class="crate-ico">${ICONS.freeze(24)}</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
-      <div class="crate-row"><span class="crate-ico">${ICONS.boltIco(24)}</span><div style="flex:1"><b>XP Boost</b><small>${CONSUMABLES.xp2.desc}</small></div>
+      <div class="crate-row"><span class="crate-ico">${CONSUMABLES.xp2.icon}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
-      ${boost ? `<p class="note" style="margin:6px 2px">${ICONS.boltIco(13)} Boost active: ${boost} double-XP log${boost === 1 ? '' : 's'} remaining</p>` : ''}
+      ${boost ? `<p class="note" style="margin:6px 2px">${CONSUMABLES.xp2.icon} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="sect-h">Shop</div>
       <div class="grid2">
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
@@ -2042,7 +2043,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
-      if (await activateXpBoost()) { popSound(S.sounds); toast('XP Boost active: next 5 logs give double XP'); }
+      if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       renderCharacter(wrap, 'crates');
     });
     $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
@@ -3230,6 +3231,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
             extras.push('the BONECRUSHER', 'a Golden Crate');
           } else coins = foeCfg.repeatCoins;
         } else coins = foeCfg.repeatCoins;
+      }
+      // Battle Charm: spend a charge on the win for +25% coins.
+      if (coins > 0) {
+        const bonusPct = await consumeBattleCharmCharge();
+        if (bonusPct > 0) {
+          const bonus = Math.round(coins * bonusPct);
+          coins += bonus;
+          extras.push(`Battle Charm +${bonus} coins`);
+        }
       }
       if (coins) await coinsAdd(coins);
       const badges = await evaluateBadges();

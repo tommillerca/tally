@@ -448,6 +448,11 @@ a { color: var(--accent); text-decoration: none; }
 .q-done { color: var(--accent); font-weight: 800; flex: none; font-size: 14px; }
 .q-frac { color: var(--text-3); font-size: 11px; font-weight: 700; flex: none; font-variant-numeric: tabular-nums; }
 .q-row.weekly { padding-top: 3px; border-top: 1px dashed var(--line); }
+.q-tier + .q-tier { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.q-tier-h { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--text-3); text-transform: uppercase; margin-bottom: 7px; }
+.q-tier.week .q-tier-h, .q-tier.month .q-tier-h { color: var(--carbs); }
+.q-desc { font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.q-coins svg { vertical-align: -1px; }
 
 .bh-hero { display: grid; justify-items: center; gap: 8px; }
 .bh-hero.mini { grid-template-columns: auto 1fr; justify-items: start; align-items: center; gap: 14px; }

@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { consumeXpBoostCharge, consumeFreeze, grantCrate, grantConsumable, coinsAdd } from './loot.js';
+import { consumeFreeze, grantCrate, grantConsumable, coinsAdd } from './loot.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days protected by a Streak Freeze marker.
@@ -223,18 +223,10 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
     gained += await award(`meals3-${entry.date}`, 'meals', 20, 'All meals logged', entry.date);
   }
 
-  // XP Boost: one charge per genuinely new log, doubles this action's xp.
-  // The bonus is written to the ledger so totals stay a pure sum of events.
-  let boosted = false;
-  if (logXp > 0 && gained > 0) {
-    const factor = await consumeXpBoostCharge();
-    if (factor > 1) {
-      const bonus = gained * (factor - 1);
-      await award(`boost-${entry.id}`, 'boost', bonus, 'XP Boost x2', entry.date);
-      gained += bonus;
-      boosted = true;
-    }
-  }
+  // Logging pays its base XP only. The old double-XP-for-logging perk was
+  // retired (the fun is walking + the Pit, not a logging bonus); the item that
+  // powered it is now the Battle Charm, spent on Pit wins instead.
+  const boosted = false;
 
   const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
   const streak = streakFrom([...streakDateSet(log, xpRows)], dateKey());
