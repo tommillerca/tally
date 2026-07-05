@@ -11,7 +11,7 @@ import {
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
-  battleCharmCharges, consumeBattleCharmCharge, consumableCount,
+  battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
@@ -1576,6 +1576,15 @@ async function renderSettings(el) {
   <h1 class="page-h1">Settings</h1>
 
   <div class="card">
+    <div class="card-title">REDEEM A CODE</div>
+    <p class="note" style="margin:0 0 10px">Got a code from a friend? Redeem it for a pet.</p>
+    <div style="display:flex;gap:8px">
+      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;text-transform:uppercase">
+      <button class="btn small" id="redeemBtn">Redeem</button>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-title">DAILY TARGETS <button class="link" id="recalc">Recalculate</button></div>
     <div class="grid4">
       <div class="field"><label>kcal</label><input id="tKcal" type="text" inputmode="numeric" value="${t.kcal}"></div>
@@ -1638,6 +1647,17 @@ async function renderSettings(el) {
     S.settings.targets = { ...S.settings.targets, kcal: Math.round(kcal), p: Math.round(p2 || 0), c: Math.round(c || 0), f: Math.round(f || 0) };
     await kvSet('settings', S.settings);
     toast('Targets saved');
+  });
+  $('#redeemBtn', el)?.addEventListener('click', async () => {
+    const res = await redeemCode($('#redeemInput', el).value);
+    if (!res.ok) {
+      toast(res.reason === 'used' ? 'That code was already redeemed.' : res.reason === 'invalid' ? "That code isn't valid." : 'Enter a code first.');
+      return;
+    }
+    confettiBurst(innerWidth / 2, innerHeight * 0.35, 24); levelSound(S.sounds);
+    toast(res.pet ? `${res.pet.name} unlocked! Equip it in your Wardrobe.${res.coins ? ` +${res.coins} coins.` : ''}`
+      : `Code redeemed!${res.dupe ? ' (pet already owned — coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
+    renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());
   $('#uLb').addEventListener('click', async () => { S.settings.units = 'lb'; await kvSet('settings', S.settings); refresh(); });

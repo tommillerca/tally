@@ -131,6 +131,55 @@ export async function hatchEgg(invId) {
 }
 
 // The steps a pet has walked since it hatched (drives its battle level).
+// Grant a pet directly (petId, or 'random' for a random unowned one), anchoring
+// its battle level to now. Returns the granted item, or null if already owned /
+// no fresh pets. Shared by hatching and code redemption.
+export async function grantPet(petId, source = 'code') {
+  const owned = await ownedCosmeticIds();
+  const pets = BH_ITEMS.filter(i => i.slot === 'C');
+  let pick;
+  if (petId === 'random') {
+    const fresh = pets.filter(i => !owned.has(i.id));
+    if (!fresh.length) return null;
+    const pool = fresh.filter(i => i.rarity !== 'common');
+    pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
+  } else {
+    pick = BH_BY_ID[petId];
+    if (!pick || pick.slot !== 'C' || owned.has(petId)) return null;
+  }
+  await grantCosmetic(pick.id, source);
+  const pets2 = (await kvGet('pets', {})) || {};
+  if (!pets2[pick.id]) { pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() }; await kvSet('pets', pets2); }
+  return pick;
+}
+
+// Redeem-a-code (web stopgap so friends can get a pet before TestFlight). Each
+// code works ONCE per device (kv 'redeemed'). Share the codes you want.
+export const REDEEM_CODES = {
+  BONEHEADZ:  { pet: 'random', coins: 50 }, // welcome: a random pet + coins
+  COSMICPET:  { pet: 'C1' },
+  ETERNALPET: { pet: 'C2' },
+  CORNERPET:  { pet: 'C3' },
+  BASICPET:   { pet: 'C4' },
+  TIDYPET:    { pet: 'C5' },
+};
+export async function redeemCode(raw) {
+  const code = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!code) return { ok: false, reason: 'empty' };
+  const def = REDEEM_CODES[code];
+  if (!def) return { ok: false, reason: 'invalid' };
+  const done = (await kvGet('redeemed', [])) || [];
+  if (done.includes(code)) return { ok: false, reason: 'used' };
+  let pet = null, coins = 0, dupe = false;
+  if (def.pet) {
+    pet = await grantPet(def.pet, 'code:' + code);
+    if (!pet) { dupe = true; coins += 120; await coinsAdd(120); } // already owned -> coins
+  }
+  if (def.coins) { coins += def.coins; await coinsAdd(def.coins); }
+  done.push(code); await kvSet('redeemed', done);
+  return { ok: true, pet, coins, dupe };
+}
+
 export async function petStepsSince(petId) {
   const pets = (await kvGet('pets', {})) || {};
   const rec = pets[petId];
