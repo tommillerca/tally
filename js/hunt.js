@@ -8,8 +8,8 @@ import { coinsAdd, grantCrate } from './loot.js';
 import { dateKey } from './nutrition.js';
 
 const CELL_DEG = 0.005;           // ~550 m grid
-export const COLLECT_RADIUS_M = 45;
-export const VIEW_RADIUS_M = 600;
+export const COLLECT_RADIUS_M = 55;   // a touch roomier (Tom)
+export const VIEW_RADIUS_M = 1200;    // show spawns from farther so routes plan ahead
 
 function hashStr(s) {
   let h = 2166136261;
@@ -84,15 +84,15 @@ export function spawnsForCell(date, cx, cy) {
 export function spawnsNear(date, lat, lng) {
   const { cx, cy } = cellOf(lat, lng);
   const all = [];
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
       all.push(...spawnsForCell(date, cx + dx, cy + dy));
     }
   }
   return all
     .map(s => ({ ...s, dist: distanceM(lat, lng, s.lat, s.lng), bearing: bearingDeg(lat, lng, s.lat, s.lng) }))
     .sort((a, b) => a.dist - b.dist)
-    .slice(0, 9);
+    .slice(0, 14);
 }
 
 export function spawnKey(date, spawn) { return `spawn-${date}-${spawn.id}`; }

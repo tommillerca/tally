@@ -448,7 +448,7 @@ test('hunt: distance and bearing math', () => {
 });
 test('hunt: spawnsNear returns nearest-first annotated set', () => {
   const near = huntMod.spawnsNear('2026-07-03', 49.28, -123.12);
-  assert.ok(near.length > 0 && near.length <= 9);
+  assert.ok(near.length > 0 && near.length <= 14);
   for (let i = 1; i < near.length; i++) assert.ok(near[i].dist >= near[i - 1].dist);
   for (const s of near) { assert.ok(isFinite(s.dist) && isFinite(s.bearing)); }
 });
@@ -478,50 +478,74 @@ test('level rewards scale with level', () => {
   assert.ok(levelCoins(11) > levelCoins(10));
 });
 
-// ---- gear: statted head/chest/weapon equipment ----
+// ---- gear: statted equipment on all wearable slots ----
 const gear = await import('../js/gear.js');
-test('gear: catalog is deterministic and only covers H/T/IR', () => {
-  assert.ok(gear.GEAR_ITEMS.length > 50, String(gear.GEAR_ITEMS.length));
+test('gear: catalog covers all wearable slots in 4 tiers', () => {
+  assert.ok(gear.GEAR_ITEMS.length > 100, String(gear.GEAR_ITEMS.length));
+  assert.equal(gear.GEAR_SLOTS.length, 6, 'stats only on weapon/off-hand/chest/kicks/undies/socks');
+  const tiers = new Set(gear.GEAR_ITEMS.map(g => g.rarity));
+  assert.deepEqual([...tiers].sort(), ['legendary', 'rare', 'uncommon'], 'statted tiers only; common = plain armor');
   for (const g of gear.GEAR_ITEMS) {
     assert.ok(gear.GEAR_SLOTS.includes(g.slot), g.id);
-    assert.ok(gear.GEAR_ARCHETYPES[g.arch], g.id);
     assert.ok(BH_BY_ID[g.artId], 'art exists ' + g.id);
   }
-  const again = new Set(gear.GEAR_ITEMS.map(g => g.id));
-  assert.equal(again.size, gear.GEAR_ITEMS.length, 'ids unique');
+  const ids = new Set(gear.GEAR_ITEMS.map(g => g.id));
+  assert.equal(ids.size, gear.GEAR_ITEMS.length, 'ids unique');
 });
-test('gear: same art, different stats (saves illustration)', () => {
+test('gear: slot impact weights budgets (chest > socks)', () => {
+  const sum = g => Object.values(g.stats).reduce((a, b) => a + b, 0);
+  for (const tier of ['uncommon', 'rare', 'legendary']) {
+    const chest = gear.GEAR_ITEMS.find(g => g.slot === 'T' && g.rarity === tier);
+    const socks = gear.GEAR_ITEMS.find(g => g.slot === 'S' && g.rarity === tier);
+    if (chest && socks) assert.ok(sum(chest) > sum(socks), `${tier}: chest ${sum(chest)} > socks ${sum(socks)}`);
+  }
+  const legChest = gear.GEAR_ITEMS.find(g => g.slot === 'T' && g.rarity === 'legendary');
+  assert.equal(Object.values(legChest.stats).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.legendary, 'full-weight slot spends the whole budget');
+});
+test('gear: same art two variants, distinct archetypes, tier bump', () => {
   const byArt = {};
   for (const g of gear.GEAR_ITEMS) (byArt[g.artId] = byArt[g.artId] || []).push(g);
   const arts = Object.values(byArt);
   assert.ok(arts.every(v => v.length === 2), 'two variants per art');
-  const differing = arts.filter(([a, b]) => a.arch !== b.arch);
-  assert.equal(differing.length, arts.length, 'variants use distinct archetypes');
-  const rarityBumped = arts.filter(([a, b]) => a.rarity !== b.rarity);
-  assert.ok(rarityBumped.length > arts.length * 0.7, 'second variant usually a tier up');
+  assert.ok(arts.every(([a, b]) => a.arch !== b.arch), 'distinct archetypes');
 });
-test('gear: rarity scales budgets and level gates', () => {
-  const order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
-  for (let i = 1; i < order.length; i++) {
-    assert.ok(gear.GEAR_BUDGET[order[i]] > gear.GEAR_BUDGET[order[i - 1]], 'budget ascends');
-    assert.ok(gear.GEAR_MIN_LEVEL[order[i]] > gear.GEAR_MIN_LEVEL[order[i - 1]], 'gate ascends');
-  }
-  for (const g of gear.GEAR_ITEMS) {
-    const total = Object.values(g.stats).reduce((a, b) => a + b, 0);
-    assert.equal(total, gear.GEAR_BUDGET[g.rarity], g.id + ' spends its exact budget');
-    assert.equal(g.minLevel, gear.GEAR_MIN_LEVEL[g.rarity], g.id);
-    const [p, s2] = gear.GEAR_ARCHETYPES[g.arch].stats;
-    assert.ok(g.stats[p] >= g.stats[s2], 'primary stat leads');
-  }
+test('gear: affixes: legendary always, rare sometimes, capstones never', () => {
+  const legs = gear.GEAR_ITEMS.filter(g => g.rarity === 'legendary');
+  assert.ok(legs.every(g => g.talent), 'every legendary carries a talent');
+  const rares = gear.GEAR_ITEMS.filter(g => g.rarity === 'rare');
+  const withAffix = rares.filter(g => g.talent).length;
+  assert.ok(withAffix > 0 && withAffix < rares.length, `rares mixed: ${withAffix}/${rares.length}`);
+  const capstones = new Set(['titan', 'flurry', 'showstopper', 'bonestorm', 'lastlight', 'tempest']);
+  assert.ok(gear.GEAR_ITEMS.every(g => !g.talent || !capstones.has(g.talent)), 'no capstone affixes');
+  const uncommons = gear.GEAR_ITEMS.filter(g => g.rarity === 'uncommon');
+  assert.ok(uncommons.every(g => !g.talent), 'uncommons never affix');
 });
-test('gear: gearStats validates ownership, slot, and level', () => {
-  const g = gear.GEAR_ITEMS.find(x => x.rarity === 'epic');
+test('gear: level gates ascend and gearStats validates', () => {
+  assert.ok(gear.GEAR_MIN_LEVEL.uncommon < gear.GEAR_MIN_LEVEL.rare && gear.GEAR_MIN_LEVEL.rare < gear.GEAR_MIN_LEVEL.legendary);
+  const g = gear.GEAR_ITEMS.find(x => x.rarity === 'legendary' && x.slot === 'T');
   const lo = { [g.slot]: g.id };
   const zero = { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 };
   assert.deepEqual(gear.gearStats(lo, new Set(), 20), zero, 'unowned = nothing');
   assert.deepEqual(gear.gearStats(lo, new Set([g.id]), g.minLevel - 1), zero, 'underleveled = nothing');
   const on = gear.gearStats(lo, new Set([g.id]), g.minLevel);
-  assert.equal(Object.values(on).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.epic, 'at level = full budget');
+  assert.equal(Object.values(on).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.legendary);
+});
+test('den loot: two-piece gamble rolls distinct choices with tier floors', async () => {
+  const poi = await import('../js/poi.js');
+  const wk = '2026-W27';
+  const dens = poi.densNear(wk, 49.2827, -123.1207);
+  assert.equal(dens.length, 9);
+  for (const den of dens) {
+    const pair = poi.rollDenLoot(den, wk, new Set());
+    assert.ok(pair && pair.length === 2, den.id);
+    assert.ok(pair[0].id !== pair[1].id, 'distinct pieces');
+    const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+    const floor = den.tier >= 5 ? 3 : den.tier >= 2 ? 2 : 1;
+    assert.ok(pair.every(g => TIER_IDX[g.rarity] >= floor), `tier ${den.tier} floor holds`);
+    // deterministic
+    const again = poi.rollDenLoot(den, wk, new Set());
+    assert.deepEqual(pair.map(g => g.id), again.map(g => g.id));
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

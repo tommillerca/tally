@@ -17,7 +17,7 @@ export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
 export const CRATES = {
   daily:  { label: 'Daily Crate',  icon: '📦', rolls: 1, floor: 0, coins: [20, 40], consumableChance: 0.12 },
-  golden: { label: 'Golden Crate', icon: '🧰', rolls: 2, floor: 2, coins: [60, 120], consumableChance: 0.25 },
+  golden: { label: 'Golden Crate', icon: '🧰', rolls: 3, floor: 2, coins: [10, 25], consumableChance: 0.18 },
   egg:    { label: 'Step Egg',     icon: '🥚', rolls: 1, floor: 1, coins: [20, 50], slotBias: ['FW', 'S', 'C'], consumableChance: 0.15 },
 };
 

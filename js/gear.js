@@ -7,8 +7,18 @@
 import { BH_ITEMS } from '../data/boneheadz.js';
 import { TALENT_TREES } from './pit.js';
 
-export const GEAR_SLOTS = ['H', 'T', 'IR'];
-export const GEAR_SLOT_LABELS = { H: 'Head', T: 'Chest', IR: 'Weapon' };
+// Every WEARABLE slot carries gear now, weighted by impact: a chest piece
+// rolls more stat points than socks. Scene slots (Background, Yard) and Pets
+// stay pure cosmetics. FOUR gear tiers: common is plain armor (no stats);
+// uncommon/rare/legendary add stats, and the top tiers can carry a talent.
+// Only these slots carry stats (Tom's call): weapon, off-hand, chest, kicks,
+// undies, socks. Everything else (hats, skulls, eyes, pets, scenes) is pure look.
+export const GEAR_SLOTS = ['IR', 'IL', 'T', 'FW', 'U', 'S'];
+export const GEAR_SLOT_LABELS = {
+  IR: 'Weapon', IL: 'Off-hand', T: 'Chest', FW: 'Kicks', U: 'Undies', S: 'Socks',
+};
+// impact weights: main gear > kicks > underthings
+export const SLOT_WEIGHT = { T: 1.0, IR: 1.0, IL: 0.7, FW: 0.6, U: 0.35, S: 0.3 };
 
 // Archetypes mirror the talent trees, so gear pushes the build you spec.
 export const GEAR_ARCHETYPES = {
@@ -21,11 +31,10 @@ export const GEAR_ARCHETYPES = {
 };
 const ARCH_KEYS = Object.keys(GEAR_ARCHETYPES);
 
-// Total stat points by rarity, split ~60/40 across the archetype's two stats.
-export const GEAR_BUDGET = { common: 4, uncommon: 6, rare: 9, epic: 13, legendary: 18 };
-// Player level required to EQUIP (drops can arrive early and tease).
-export const GEAR_MIN_LEVEL = { common: 1, uncommon: 4, rare: 8, epic: 12, legendary: 16 };
-const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+// FOUR gear tiers (cosmetic rarities stay 5-tier; gear maps into these).
+export const GEAR_TIERS = ['common', 'uncommon', 'rare', 'legendary'];
+export const GEAR_BUDGET = { uncommon: 6, rare: 11, legendary: 18 };  // x slot weight
+export const GEAR_MIN_LEVEL = { common: 1, uncommon: 3, rare: 8, legendary: 14 };
 
 function hashStr(s) {
   let h = 2166136261;
@@ -33,37 +42,45 @@ function hashStr(s) {
   return h >>> 0;
 }
 
-function statSplit(arch, rarity) {
-  const budget = GEAR_BUDGET[rarity];
+function statSplit(arch, tier, slot) {
+  const budget = Math.max(1, Math.round(GEAR_BUDGET[tier] * (SLOT_WEIGHT[slot] || 0.5)));
   const [a, b] = GEAR_ARCHETYPES[arch].stats;
   const primary = Math.ceil(budget * 0.6);
-  return { [a]: primary, [b]: budget - primary };
+  const out = { [a]: primary };
+  if (budget - primary > 0) out[b] = budget - primary;
+  return out;
 }
 
-function bumpRarity(r) {
-  return RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, RARITY_ORDER.indexOf(r) + 1)];
+// art rarity (5-tier) -> gear tier (4-tier)
+function tierOfArt(r) {
+  if (r === 'legendary' || r === 'epic') return 'legendary';
+  if (r === 'rare') return 'rare';
+  return 'uncommon';
+}
+function bumpTier(t) {
+  return GEAR_TIERS[Math.min(GEAR_TIERS.length - 1, GEAR_TIERS.indexOf(t) + 1)];
 }
 
 const TREE_BY_ID = Object.fromEntries(TALENT_TREES.map(t => [t.id, t]));
 
-function variant(art, arch, rarity) {
+function variant(art, arch, tier) {
   const g = {
     id: `g-${art.id}-${arch}`,
     artId: art.id,
     slot: art.slot,
     arch,
-    rarity,
-    minLevel: GEAR_MIN_LEVEL[rarity],
-    stats: statSplit(arch, rarity),
+    rarity: tier,
+    minLevel: GEAR_MIN_LEVEL[tier],
+    stats: statSplit(arch, tier, art.slot),
     name: `${GEAR_ARCHETYPES[arch].epithet} ${art.name}`,
   };
-  // Diablo-style affix: epic+ gear carries a talent from its archetype's tree
-  // (tiers 1-3 only: capstones stay earned). Works even unspecced; stacks
-  // nothing if you already took the talent.
-  if (rarity === 'epic' || rarity === 'legendary') {
+  // Diablo-style affix: legendary always carries a talent from its archetype's
+  // tree; rares roll one about half the time (tiers 1-3: capstones stay earned).
+  const affixRoll = hashStr('affix:' + art.id + ':' + arch);
+  if (tier === 'legendary' || (tier === 'rare' && affixRoll % 2 === 0)) {
     const nodes = (TREE_BY_ID[arch]?.nodes || []).filter(n => n.tier <= 3);
     if (nodes.length) {
-      const pick = nodes[hashStr('affix:' + art.id + ':' + arch) % nodes.length];
+      const pick = nodes[affixRoll % nodes.length];
       g.talent = pick.id;
       g.talentName = pick.name;
     }
@@ -82,8 +99,9 @@ export const GEAR_ITEMS = (() => {
     let i2 = (h >>> 3) % ARCH_KEYS.length;
     if (i2 === i1) i2 = (i2 + 1) % ARCH_KEYS.length;
     const a1 = ARCH_KEYS[i1], a2 = ARCH_KEYS[i2];
-    out.push(variant(art, a1, art.rarity));
-    out.push(variant(art, a2, bumpRarity(art.rarity)));
+    const t1 = tierOfArt(art.rarity);
+    out.push(variant(art, a1, t1));
+    out.push(variant(art, a2, bumpTier(t1)));
   }
   return out;
 })();

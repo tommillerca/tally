@@ -17,7 +17,7 @@ import { dailyQuests, questState, claimQuest, claimAllBonusIfDue, weeklyState, c
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, isoWeekKey, DEN_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M } from './poi.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
@@ -1815,7 +1815,7 @@ function bindBadgeTaps(wrap) {
 async function openCharacter(tab = 'wardrobe') {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Your Bonehead</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="chBody"></div>`, { cls: 'full' });
+    <div class="sheet-body" id="chBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
   await renderCharacter(wrap, tab);
 }
 
@@ -1828,6 +1828,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const freezes = inv.filter(r => r.kind === 'freeze').length;
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
+  const takenTal = await kvGet('talents', []);
+  const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
 
   const curtains = tab === 'wardrobe' && !reducedMotion && !opts.instant;
   body.innerHTML = `
@@ -1837,7 +1839,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="bh-pills">
           <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
-          <span class="bh-pill">${ICONS.bone(14)} ${ownedCount}/${BH_ITEMS.length}</span>
+<span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
           ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
         </div>
       </div>
@@ -1849,7 +1851,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
         <div class="bh-pills">
           <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
-          <span class="bh-pill">${ICONS.bone(14)} ${ownedCount}/${BH_ITEMS.length}</span>
+<span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
           ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
         </div>
       </div>
@@ -1857,6 +1859,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
       <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Loot</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Talents</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
     </div>
     <div id="chContent"></div>`;
@@ -1924,7 +1927,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }).join('')}
       </div>
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder.</p>' : ''}
-      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">${lockedCount} more ${slotMeta.label.toLowerCase()} item${lockedCount === 1 ? '' : 's'} still in crates somewhere</p>` : ''}`;
+      ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
@@ -1940,11 +1943,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
   }
+  if (tab === 'talents') {
+    content.innerHTML = '<div id="talBody" style="margin-top:6px"></div>';
+    await renderTalents(content);
+  }
+
   if (tab === 'crates') {
     await migrateLegacyEggs();
-    const [invAll, lifeSteps] = await Promise.all([inventory(), lifetimeStepsSum()]);
+    const [invAll, lifeSteps, pendingLoot] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', [])]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     content.innerHTML = `
+      ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · pick one per drop</div>
+      ${pendingLoot.map(p => `
+        <div class="loot-pending">
+          <small>${esc(p.den)} dropped:</small>
+          <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : '').join('')}</div>
+        </div>`).join('')}` : ''}
       ${eggs.length ? `<div class="sect-h" style="margin-top:2px">Eggs · hatch by walking</div>
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
@@ -1978,6 +1992,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
           <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
       </div>`;
+    $$('.loot-pending .loot-card', content).forEach(card => card.addEventListener('click', async () => {
+      const entry = (await kvGet('denloot', [])).find(p => p.choices.includes(card.dataset.gear));
+      if (!entry) return;
+      const picked = await claimDenLoot(entry.key, card.dataset.gear);
+      if (!picked) return;
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
+      popSound(S.sounds);
+      toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
+      renderCharacter(wrap, 'crates');
+    }));
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
@@ -2042,6 +2066,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
 // kept as an alias: some entry points still ask for "progress"
 function openProgressSheet() { return openCharacter('progress'); }
+
+function lootCardHtml(g) {
+  const rar = RARITIES[g.rarity] || RARITIES.uncommon;
+  return `<button class="loot-card r-${g.rarity}" data-gear="${g.id}">
+    <img src="${bhAsset(BH_BY_ID[g.artId])}" alt="">
+    <b>${esc(g.name)}</b>
+    <span class="loot-stats">${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>
+    <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}</span>
+  </button>`;
+}
 
 async function openCrateReveal(result) {
   const def = result.def;
@@ -2485,7 +2519,9 @@ async function openMap() {
       refreshWorld();
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
-  $('#mapStart', wrap).addEventListener('click', startMap);
+  $('#mapStart', wrap).addEventListener('click', () => { kvSet('map-seen', true); startMap(); });
+  // been here before + location already allowed: go straight to the map
+  if (await kvGet('map-seen', false)) startMap();
 }
 
 const bearingArrow = b => ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][Math.round(b / 45) % 8];
@@ -2572,18 +2608,12 @@ async function renderPit(wrap) {
       </div>
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
-    <button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">Talents · ${unspent > 0 ? unspent + ' point' + (unspent === 1 ? '' : 's') + ' to spend!' : fighter.talents.length ? fighter.talents.length + ' taken' : 'choose a spec'}</button>
+    ${unspent > 0 ? `<button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">${unspent} talent point${unspent === 1 ? '' : 's'} waiting · spec on your character</button>` : ''}
     <div class="sect-h">Gear</div>
-    <div class="gear-row">
-      ${GEAR_SLOTS.map(sl => {
-        const g = GEAR_BY_ID[fighter.gearLo[sl]];
-        return `<div class="gear-chip ${g ? 'on r-' + g.rarity : ''}">
-          <small>${GEAR_SLOT_LABELS[sl]}</small>
-          <b>${g ? esc(g.name) : 'empty'}</b>
-          ${g ? `<span>${gearLabel(g)}${g.talent ? ` · ⚡${esc(g.talentName)}` : ''}</span>` : '<span>equip in Wardrobe</span>'}
-        </div>`;
-      }).join('')}
-    </div>
+    <p class="note" style="margin:2px 2px 10px">${(() => {
+      const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
+      return parts.length ? `Worn gear grants ${parts.join(' · ')}. Manage it in your Wardrobe.` : 'No statted gear equipped. Crates and boss dens drop it; equip in your Wardrobe.';
+    })()}</p>
     <div class="sect-h">Weapon</div>
     <div class="chips">
       ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
@@ -2625,7 +2655,7 @@ async function renderPit(wrap) {
   $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
   $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
   $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderPit(wrap); });
-  $('#talentsBtn', body)?.addEventListener('click', () => openTalents(wrap));
+  $('#talentsBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
   $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon);
     renderPit(wrap);
@@ -2912,7 +2942,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'hit') {
       if (ev.titan) return `${who} brought down the TITAN SLAM on ${them} for ${ev.damage}`;
       if (ev.storm) {
-        const [label, last] = ({ bonestorm: ['BONE STORM', 3], bonerain: ['BONE RAIN', 3], tempest: ['TEMPEST', 4] })[ev.move] || ['BONE STORM', 3];
+        const [label, last] = ({ bonestorm: ['BONE STORM', 3], tempest: ['TEMPEST', 4] })[ev.move] || ['BONE STORM', 3];
         const val = ev.whiffed ? 'miss' : ev.damage;
         return ev.hitNo === 1 ? `${who} called down the ${label}: ${val}...` : `...${val}${ev.hitNo === last ? '!' : '...'}`;
       }
@@ -2989,6 +3019,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (mendA) h += btn(mendA, { hint: `heal · ${player.mendUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.mendUses > 0 });
       const wardA = get('ward');
       if (wardA) h += btn(wardA, { hint: 'shield: absorbs 25' });
+      const spike = get('bonespike');
+      if (spike) h += btn(spike, { hint: foe.blind ? 'blinds · already blind' : `~${expectedDamage('bonespike', player, null, foe)} dmg · blinds`, glow: !foe.blind });
       const hexA = get('hex');
       if (hexA) h += btn(hexA, { hint: 'curse: -20% their dmg', weak: !!foe.weaken });
       return h;
@@ -3006,7 +3038,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       html += btn(get('jab'), { hint: dmgHint('jab'), glow: foeDodging, weak: foeBlocking });
       html += btn(get('swing'), { hint: dmgHint('swing'), weak: foeBlocking || foeDodging });
       html += btn(get('haymaker'), { hint: foeBlocking ? 'BREAKS GUARD!' : dmgHint('haymaker'), glow: foeBlocking, weak: foeDodging });
-      html += btn(get('bonespike'), { hint: foe.blind ? 'blinds · already blind' : 'blinds them · they miss more', glow: !foe.blind });
       html += btn(get('block'), { hint: 'guards swings + spells' });
       html += btn(get('dodge'), { hint: fight.telegraph ? 'SLIP THE HEAVY!' : 'slips haymakers', glow: !!fight.telegraph });
       if (player.wind < 20) html += btn(get('brace'), { hint: '+40 stamina', glow: player.wind < 12 });
@@ -3018,7 +3049,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else {
       html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
       html += btn(get('throwb'), { hint: dmgHint('throwb') });
-      html += btn(get('bonerain'), { hint: '3 bone hits · from range', glow: player.wind > player.d.maxWind * 0.6 });
       html += casterRow();
       html += btn(get('brace'), { hint: '+40 stamina' });
       html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
@@ -3096,7 +3126,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
     renderActions();
-    let coins = 0, xp = 0, extras = [];
+    let coins = 0, xp = 0, extras = [], bossLoot = null;
     if (won) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
       xp += 10;
@@ -3109,7 +3139,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (r.crate) {
             extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
           }
-          if (r.gear) extras.push(`${r.gear.name} (${r.gear.rarity.toUpperCase()} gear)`);
+          if (r.gearChoices) bossLoot = { key: denKey(foeCfg.week, foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
         } else coins = 10; // den already cracked this week: pocket change
       }
       else if (foeCfg.mode === 'rung') {
@@ -3145,8 +3175,27 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="fight-over">
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
           <p class="note" style="margin:8px 0 16px">${esc(sub)}</p>
-          <button class="btn" id="fightDone">Back to The Pit</button>
+          ${bossLoot ? `
+          <div class="loot-choice">
+            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · PICK ONE</div>
+            <div class="loot-cards">
+              ${bossLoot.choices.map(g => lootCardHtml(g)).join('')}
+            </div>
+          </div>` : ''}
+          <button class="btn" id="fightDone">${bossLoot ? 'Decide later' : 'Back to The Pit'}</button>
         </div>`);
+      if (bossLoot) {
+        $$('.loot-card', body).forEach(card => card.addEventListener('click', async () => {
+          const picked = await claimDenLoot(bossLoot.key, card.dataset.gear);
+          if (!picked) return;
+          $$('.loot-card', body).forEach(c => c.classList.toggle('taken', c === card));
+          $$('.loot-card', body).forEach(c => { c.disabled = true; });
+          confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
+          popSound(S.sounds);
+          toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
+          const fd = $('#fightDone', body); if (fd) fd.textContent = 'Back to the map';
+        }));
+      }
       $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
     }, fast ? 80 : 750);
   }
@@ -3165,7 +3214,7 @@ async function openTalents(pitWrap) {
 }
 
 async function renderTalents(wrap) {
-  const body = $('#talBody', wrap);
+  const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
   const [xpRows, takenArr] = await Promise.all([db.all('xp'), kvGet('talents', [])]);
   const taken = new Set(takenArr);

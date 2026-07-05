@@ -6,10 +6,11 @@
 // later, exactly like hunt spawns.
 import { award } from './game.js';
 import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
+import { kvGet, kvSet } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { distanceM, bearingDeg } from './hunt.js';
 
-export const DEN_CELL_DEG = 0.018;       // ~2 km cells: sparse, walkable-to landmarks
+export const DEN_CELL_DEG = 0.01;        // ~1.1 km cells: a few dens within any walk
 export const DEN_RADIUS_M = 60;          // enter range (a touch roomier than spawns)
 
 // Reward ladder carried over from the old ROAD_STOPS table (same economy),
@@ -107,21 +108,22 @@ export function denRewardLabel(r) {
   return bits.join(' + ');
 }
 
-// Open-world bosses drop better gear: rarity floor rises with den tier.
-const DEN_GEAR_FLOOR = ['rare', 'rare', 'rare', 'epic', 'epic', 'legendary', 'legendary'];
-const RAR_IDX = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+// Open-world bosses drop LOOT CHOICES: two random pieces, keep one.
+// No class-locking: the gamble is the fun. Rarity floor rises with den tier.
+const DEN_GEAR_FLOOR = ['uncommon', 'uncommon', 'rare', 'rare', 'rare', 'legendary', 'legendary'];
+const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
 
-function rollDenGear(den, week, ownedSet) {
-  const floor = RAR_IDX[DEN_GEAR_FLOOR[den.tier] || 'rare'];
-  // themed loot: the den's archetype first, anything qualifying as fallback
-  const pools = [
-    GEAR_ITEMS.filter(g => g.arch === den.theme.arch && RAR_IDX[g.rarity] >= floor && !ownedSet.has(g.id)),
-    GEAR_ITEMS.filter(g => RAR_IDX[g.rarity] >= floor && !ownedSet.has(g.id)),
-  ];
-  const pool = pools.find(p => p.length);
-  if (!pool) return null; // everything owned: coins instead
+export function rollDenLoot(den, week, ownedSet) {
+  const floor = TIER_IDX[DEN_GEAR_FLOOR[den.tier] || 'uncommon'];
+  const fresh = GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && !ownedSet.has(g.id));
+  const pool = fresh.length >= 2 ? fresh : GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor);
+  if (pool.length < 2) return null;
   const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
-  return pool[Math.floor(rng() * pool.length)];
+  const first = pool[Math.floor(rng() * pool.length)];
+  // second choice: try for a different archetype so the pick is a real decision
+  const alts = pool.filter(g => g.id !== first.id && g.arch !== first.arch);
+  const second = (alts.length ? alts : pool.filter(g => g.id !== first.id))[Math.floor(rng() * (alts.length ? alts.length : pool.length - 1))];
+  return second ? [first, second] : null;
 }
 
 // Called after a boss-den victory. Idempotent per den per week.
@@ -131,14 +133,28 @@ export async function claimDenWin(den, week = isoWeekKey()) {
   if (xp === 0) return null;
   if (r.coins) await coinsAdd(r.coins);
   if (r.crate) await grantCrate(r.crate, 'boss-den');
-  // 65% chance the boss also drops themed high-floor gear
-  let gear = null;
-  const chanceRng = mulberry32(hashStr(`dendrop:${week}:${den.id}`));
-  if (chanceRng() < 0.65) {
-    const owned = await ownedGearIds();
-    gear = rollDenGear(den, week, owned);
-    if (gear) await grantGear(gear.id, 'boss-den');
-    else await coinsAdd(60); // full collection consolation
+  // every boss drops two pieces: the player keeps ONE (chooser persists in kv
+  // until picked, so closing the victory screen never eats the loot)
+  const owned = await ownedGearIds();
+  const choices = rollDenLoot(den, week, owned);
+  if (choices) {
+    const pending = (await kvGet('denloot', [])) || [];
+    if (!pending.some(p => p.key === denKey(week, den))) {
+      pending.push({ key: denKey(week, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() });
+      await kvSet('denloot', pending.slice(-6));
+    }
+  } else {
+    await coinsAdd(60); // full collection consolation
   }
-  return { xp, ...r, gear };
+  return { xp, ...r, gearChoices: choices };
+}
+
+// Player picked a piece from a pending boss drop. Grants + clears the entry.
+export async function claimDenLoot(key, gearId) {
+  const pending = (await kvGet('denloot', [])) || [];
+  const entry = pending.find(p => p.key === key);
+  if (!entry || !entry.choices.includes(gearId)) return null;
+  await kvSet('denloot', pending.filter(p => p.key !== key));
+  const g = await grantGear(gearId, 'boss-den');
+  return g || GEAR_ITEMS.find(x => x.id === gearId) || null;
 }
