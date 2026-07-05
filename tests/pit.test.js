@@ -4,7 +4,7 @@ import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
-  petActionsFor, applyPetAction, dealDamage, armorDR,
+  petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -101,6 +101,19 @@ test('Bone Guard raises a Marrow-scaled absorb pool that soaks damage', () => {
   const evs = []; dealDamage(fight, 'p', 10, evs);
   assert.equal(fight.p.hp, hpBefore); // fully soaked
   assert.equal(fight.p.ward, shield - 10);
+});
+
+test('pet food (Bonemeal Kibble): bigger pet HP + harder pet hits', () => {
+  const st = { power: 50, marrow: 50, wind: 50, reflex: 50, hype: 50 };
+  const petDesc = { name: 'Fido', level: 4, family: 'hound', picks: new Set(), ability: null };
+  const plainOwner = makeFighter({ name: 'P', stats: st, pet: petDesc });
+  const fedOwner = makeFighter({ name: 'P', stats: st, pet: petDesc, food: { petHpPct: 0.30, petDamagePct: 0.25 } });
+  const plainPet = makePetBody(petDesc, plainOwner);
+  const fedPet = makePetBody(petDesc, fedOwner);
+  assert.ok(fedPet.d.maxHp > plainPet.d.maxHp, `${fedPet.d.maxHp} > ${plainPet.d.maxHp}`);
+  assert.ok(Math.abs(fedPet.d.maxHp / plainPet.d.maxHp - 1.30) < 0.05, 'about +30% HP');
+  assert.equal(fedPet.petDamagePct, 0.25);
+  assert.equal(plainPet.petDamagePct || 0, 0);
 });
 
 test('armor: Marrow blunts physical, Reflex blunts magic, gear adds on top', () => {

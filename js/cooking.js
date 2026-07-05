@@ -52,6 +52,8 @@ export const RECIPES = [
     buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
   { id: 'necro-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 180,
     buff: { kind: 'combat', damagePct: 0.15, hype: 20, fights: 3 }, desc: '+15% damage AND +20 Hype start, next 3 fights (needs rare Ectoplasm)' },
+  { id: 'bonemeal-kibble', name: 'Bonemeal Kibble', icon: '🦴', needs: { marrow: 1, sinew: 1, bog: 1 }, cookMin: 60,
+    buff: { kind: 'combat', petHpPct: 0.30, petDamagePct: 0.25, fights: 3 }, desc: 'Feeds your pet: +30% pet HP and +25% pet damage, next 3 fights' },
 ];
 export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
 
@@ -122,12 +124,14 @@ export async function foodCoinMult(now = Date.now()) {
 // combat bundle to hand to a fight
 export async function foodCombatBuff(now = Date.now()) {
   const live = await activeFoodBuffs(now);
-  const out = { damagePct: 0, hype: 0, regenPct: 0, petFree: false };
+  const out = { damagePct: 0, hype: 0, regenPct: 0, petFree: false, petHpPct: 0, petDamagePct: 0 };
   for (const b of live) if (b.kind === 'combat') {
     out.damagePct += b.damagePct || 0;
     out.hype += b.hype || 0;
     out.regenPct = Math.max(out.regenPct, b.regenPct || 0);
     out.petFree = out.petFree || !!b.petFree;
+    out.petHpPct += b.petHpPct || 0;
+    out.petDamagePct += b.petDamagePct || 0;
   }
   return out;
 }

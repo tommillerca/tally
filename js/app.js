@@ -1997,7 +1997,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     </div>`}
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
-      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Loot</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
     </div>
@@ -2104,7 +2104,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'crates') {
     await migrateLegacyEggs();
-    const [invAll, lifeSteps, pendingLoot] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', [])]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     content.innerHTML = `
       ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · pick one per drop</div>
@@ -2141,6 +2141,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="crate-row"><span class="crate-ico">${CONSUMABLES.xp2.icon}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
       ${boost ? `<p class="note" style="margin:6px 2px">${CONSUMABLES.xp2.icon} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
+      <div class="sect-h">Kitchen · food &amp; buffs</div>
+      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
+      ${cook && cook.recipe ? `<div class="crate-row"><span class="crate-ico">${cook.ready ? '✅' : '🍳'}</span><div style="flex:1"><b>${cook.ready ? 'Dish ready!' : 'Cooking...'}</b><small>${esc(cook.recipe.name)}</small></div></div>` : ''}
+      ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${INGREDIENTS[id].icon}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
+      <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="sect-h">Shop</div>
       <div class="grid2">
         ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
@@ -2185,6 +2190,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       renderCharacter(wrap, 'crates');
     });
+    $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
     $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
       const r = await buyShopItem(b.dataset.buy);
       if (!r.ok) { toast('Not enough coins yet'); return; }

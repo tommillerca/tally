@@ -301,7 +301,7 @@ export function applyPetAction(fight, actionId) {
     const fx = petAbilityEffect(pet, me, foe);
     if (fx.kind === 'pethit') {
       for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
-        let dmg = fx.damage;
+        let dmg = Math.round(fx.damage * (1 + (body.petDamagePct || 0)));
         if (fx.crit && fight.rng() < 0.25) dmg *= 2;
         dealDamage(fight, foeWho, dmg, events);
         if (fx.lifesteal) me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal));
@@ -337,7 +337,7 @@ export function applyPetAction(fight, actionId) {
       me.hp = Math.min(me.d.maxHp, me.hp + heal);
       events.push({ t: 'petshield', who: 'p', shield: 0, heal, name: pet.name });
     } else {
-      const dmg = Math.round((0.5 + lvl * 0.15) * me.d.powerMult);
+      const dmg = Math.round((0.5 + lvl * 0.15) * me.d.powerMult * (1 + (body.petDamagePct || 0)));
       if (foe && foe.hp > 0) dealDamage(fight, foeWho, dmg, events);
       events.push({ t: 'pethit', who: 'p', damage: dmg, name: pet.name });
       if (pet.family === 'imp') gainHype(me, 2);
@@ -426,6 +426,8 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     foodDamagePct: food?.damagePct || 0,
     foodRegenPct: food?.regenPct || 0,
     foodPetFree: !!food?.petFree,
+    foodPetHpPct: food?.petHpPct || 0,      // Bonemeal Kibble: pet HP up
+    foodPetDamagePct: food?.petDamagePct || 0, // Bonemeal Kibble: pet damage up
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false,
     sigsUsed: 0, shoveCount: 0,
@@ -456,11 +458,13 @@ export function makePetBody(petDescriptor, owner) {
   const L = petDescriptor.level || 1;
   const petStats = { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0 };
   const body = makeFighter({ name: petDescriptor.name, stats: petStats });
-  const maxHp = 40 + L * 8 + Math.round((owner.stats.marrow || 40) * 0.25);
+  const hpBoost = 1 + (owner.foodPetHpPct || 0); // Bonemeal Kibble
+  const maxHp = Math.round((40 + L * 8 + Math.round((owner.stats.marrow || 40) * 0.25)) * hpBoost);
   body.d = { ...body.d, maxHp };
   body.hp = maxHp;
   body.isPet = true;
   body.side = 'p';
+  body.petDamagePct = owner.foodPetDamagePct || 0; // Bonemeal Kibble: pet hits harder
   body.kit = petDescriptor;   // family/ability/picks used by resolvePet
   return body;
 }
