@@ -1997,7 +1997,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
       <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Loot</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Talents</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
     </div>
     <div id="chContent"></div>`;
@@ -2818,42 +2818,14 @@ async function renderPit(wrap) {
   const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
 
   body.innerHTML = `
-    <p class="note" style="margin-bottom:12px">Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Spend <b>training points</b> to specialize the build your way. Fights take about a minute.</p>
-    <div class="card" style="background:var(--surface-2)">
-      <div class="card-title">YOUR FIGHTER · ${d.maxHp} HP · ${d.maxWind} STAMINA ${wins ? `· ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
-      ${STAT_META.map(m => {
-        const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
-        return `
-        <div class="macro" style="margin-bottom:8px">
-          <div class="row">
-            <span>${m.label} <span class="q-coins">${esc(m.fedBy)}</span></span>
-            <span class="val">${fighter.stats[m.key]}${bonus ? ` <span class="stat-bonus">+${bonus}</span>` : ''}</span>
-          </div>
-          <div class="statline">
-            <div class="bar pitstat" style="flex:1"><i style="width:${fighter.stats[m.key]}%"></i>${bonus ? `<span class="statbase" style="left:${fighter.baseStats[m.key]}%"></span>` : ''}</div>
-            <button class="tp-btn" data-tpminus="${m.key}" ${(fighter.alloc[m.key] || 0) <= 0 ? 'disabled' : ''}>−</button>
-            <button class="tp-btn" data-tpplus="${m.key}" ${fighter.tpAvail <= 0 ? 'disabled' : ''}>+</button>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="tp-bar">
-        <span><b>Training points</b> · earned from protein hits + closing days on budget</span>
-        <span class="tp-count">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span>
-      </div>
-      ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
+    <div class="pit-hero">
+      <div class="pit-hero-atmos"><span class="pit-flags"></span><span class="pit-flags two"></span><span class="pit-crowd"></span><span class="pit-torch l"></span><span class="pit-torch r"></span></div>
+      <img class="pit-emblem" src="assets/brand/sword.png" alt="" draggable="false">
+      <div class="pit-hero-title">THE PIT</div>
+      <div class="pit-hero-sub">${d.maxHp} HP · ${d.maxWind} STAMINA${wins ? ` · ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
     </div>
-    ${unspent > 0 ? `<button class="btn ghost" id="talentsBtn" style="margin:2px 0 4px">${unspent} talent point${unspent === 1 ? '' : 's'} waiting · spec on your character</button>` : ''}
-    <div class="sect-h">Gear</div>
-    <p class="note" style="margin:2px 2px 10px">${(() => {
-      const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
-      return parts.length ? `Worn gear grants ${parts.join(' · ')}. Manage it in your Wardrobe.` : 'No statted gear equipped. Crates and boss dens drop it; equip in your Wardrobe.';
-    })()}</p>
-    ${(fighter.setInfo?.sets || []).some(s => s.tiers.length) ? `<div class="set-note">${fighter.setInfo.sets.filter(s => s.tiers.length).map(s => `<div class="set-row"><b>${esc(s.epithet)} Set (${s.pieces})</b>${s.tiers.map(t => `<small>${t}pc: ${esc(setBonusLabel(s.arch, t))}</small>`).join('')}</div>`).join('')}</div>` : ''}
-    <div class="sect-h">Weapon</div>
-    <div class="chips">
-      ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
-    </div>
-    <p class="note" style="margin:6px 2px">${esc(WEAPONS[fighter.loadout].desc)} Weapons multiply effort; they never replace it.</p>
+    <p class="note" style="margin:12px 2px 8px">Step into the ring. Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Pick your fight below.</p>
+    <button class="btn ghost" id="buildBtn" style="margin:2px 0 6px">${ICONS.pit(18)} Shape your build · stats, weapon &amp; talents${unspent > 0 ? ` <i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     <div class="sect-h">Sparring · no stakes</div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
@@ -2891,24 +2863,7 @@ async function renderPit(wrap) {
       <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
     </div>`}`;
 
-  async function adjustAlloc(key, delta) {
-    const alloc = { ...(await kvGet('trainalloc', {})) };
-    const cur = alloc[key] || 0;
-    if (delta > 0 && fighter.tpAvail <= 0) return;
-    if (delta < 0 && cur <= 0) return;
-    alloc[key] = Math.max(0, cur + delta);
-    await kvSet('trainalloc', alloc);
-    popSound(S.sounds);
-    renderPit(wrap);
-  }
-  $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
-  $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
-  $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderPit(wrap); });
-  $('#talentsBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
-  $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
-    await kvSet('loadout', b.dataset.weapon);
-    renderPit(wrap);
-  }));
+  $('#buildBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
     start({ mode: 'spar', name: b.dataset.name, mult: Number(b.dataset.spar) })));
@@ -3617,15 +3572,60 @@ async function openTalents(pitWrap) {
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
-  const [xpRows, takenArr] = await Promise.all([db.all('xp'), kvGet('talents', [])]);
+  const [xpRows, takenArr, fighter] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter()]);
   const taken = new Set(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const points = talentPoints(lvl.level);
   const unspent = Math.max(0, points - taken.size);
+  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
+
+  // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
+  const statBlock = `
+    <div class="sect-h">Your Fighter · ${d.maxHp} HP · ${d.maxWind} Stamina</div>
+    <p class="note" style="margin:2px 2px 10px">Your base stats grow from your real habits. Spend <b>training points</b> to lean into a stat and shape your build. Every point here is a choice about how you fight.</p>
+    <div class="stat-build">
+      ${STAT_META.map(m => {
+        const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
+        const gb = fighter.gearBonus?.[m.key] || 0;
+        return `
+        <div class="statx">
+          <div class="statx-top">
+            <span class="statx-name">${m.label}</span>
+            <span class="statx-val">${fighter.stats[m.key]}${bonus ? ` <span class="stat-bonus">+${bonus}</span>` : ''}${gb ? ` <span class="stat-gear">+${gb} gear</span>` : ''}</span>
+          </div>
+          <div class="statline">
+            <div class="bar pitstat" style="flex:1"><i style="width:${fighter.stats[m.key]}%"></i>${bonus ? `<span class="statbase" style="left:${fighter.baseStats[m.key]}%"></span>` : ''}</div>
+            <button class="tp-btn" data-tpminus="${m.key}" ${(fighter.alloc[m.key] || 0) <= 0 ? 'disabled' : ''}>−</button>
+            <button class="tp-btn" data-tpplus="${m.key}" ${fighter.tpAvail <= 0 ? 'disabled' : ''}>+</button>
+          </div>
+          <div class="statx-do">${esc(m.combat)}</div>
+          <div class="statx-spec"><b>Good for:</b> ${esc(m.spec)} <span class="statx-from">· grows from ${esc(m.fedBy)}</span></div>
+        </div>`;
+      }).join('')}
+      <div class="tp-bar">
+        <span><b>Training points</b> · earned from protein hits + closing days</span>
+        <span class="tp-count">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span>
+      </div>
+      ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
+    </div>
+    <div class="sect-h">Weapon</div>
+    <div class="chips">
+      ${fighter.owned.map(id => `<button class="chip ${fighter.loadout === id ? 'on' : ''}" data-weapon="${id}">${WEAPONS[id].name}</button>`).join('')}
+    </div>
+    <p class="note" style="margin:6px 2px">${esc(WEAPONS[fighter.loadout].desc)} Weapons multiply effort; they never replace it.</p>
+    ${(() => {
+      const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
+      const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);
+      if (!parts.length && !setActive) return '';
+      return `<div class="sect-h">Gear bonuses</div>
+      ${parts.length ? `<p class="note" style="margin:2px 2px 8px">Worn gear grants ${parts.join(' · ')}. Equip pieces in your Wardrobe.</p>` : ''}
+      ${setActive ? `<div class="set-note">${fighter.setInfo.sets.filter(s => s.tiers.length).map(s => `<div class="set-row"><b>${esc(s.epithet)} Set (${s.pieces})</b>${s.tiers.map(t => `<small>${t}pc: ${esc(setBonusLabel(s.arch, t))}</small>`).join('')}</div>`).join('')}</div>` : ''}`;
+    })()}`;
 
   body.innerHTML = `
-    <div class="tal-head">
-      <div><b style="font-family:var(--display);font-size:24px;letter-spacing:1px">${unspent}</b> <span class="note">point${unspent === 1 ? '' : 's'} to spend</span></div>
+    ${statBlock}
+    <div class="tal-head" style="margin-top:14px">
+      <div><b style="font-family:var(--display);font-size:24px;letter-spacing:1px">${unspent}</b> <span class="note">talent point${unspent === 1 ? '' : 's'} to spend</span></div>
       <span class="note">1 point per level · Lv ${lvl.level}</span>
     </div>
     <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
@@ -3656,6 +3656,23 @@ async function renderTalents(wrap) {
       </div>`).join('')}
     ${taken.size ? '<button class="btn danger" id="respecBtn">Respec (free) · refund all points</button>' : ''}`;
 
+  async function adjustAlloc(key, delta) {
+    const alloc = { ...(await kvGet('trainalloc', {})) };
+    const cur = alloc[key] || 0;
+    if (delta > 0 && fighter.tpAvail <= 0) return;
+    if (delta < 0 && cur <= 0) return;
+    alloc[key] = Math.max(0, cur + delta);
+    await kvSet('trainalloc', alloc);
+    popSound(S.sounds);
+    renderTalents(wrap);
+  }
+  $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
+  $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
+  $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderTalents(wrap); });
+  $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
+    await kvSet('loadout', b.dataset.weapon);
+    renderTalents(wrap);
+  }));
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const t = new Set(await kvGet('talents', []));
     if (!canTakeTalent(t, b.dataset.tree, Number(b.dataset.idx))) return;

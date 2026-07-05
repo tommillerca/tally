@@ -24,12 +24,25 @@ export function deriveStats(b) {
   };
 }
 
+// Each stat carries three plain-English lines so players know WHAT it does in a
+// fight and WHICH build it powers (not just where it comes from). `combat` = the
+// mechanical effect; `spec` = the playstyle it leans into.
 export const STAT_META = [
-  { key: 'power', label: 'Power', role: 'attack damage', fedBy: 'hitting your protein target' },
-  { key: 'marrow', label: 'Marrow', role: 'max HP', fedBy: 'streaks + closing days on budget' },
-  { key: 'wind', label: 'Stamina', role: 'move fuel per turn', fedBy: 'steps + active burn' },
-  { key: 'reflex', label: 'Reflex', role: 'crits + glances', fedBy: 'Boneyard collecting + step eggs' },
-  { key: 'hype', label: 'Hype', role: 'signature meter speed', fedBy: 'quests + logging variety' },
+  { key: 'power', label: 'Power', role: 'attack damage', fedBy: 'hitting your protein target',
+    combat: 'Multiplies every physical hit (Jab, Swing, Haymaker) and your Signature.',
+    spec: 'Bruisers who win with raw melee.' },
+  { key: 'marrow', label: 'Marrow', role: 'max HP', fedBy: 'streaks + closing days on budget',
+    combat: 'Your HP pool. More Marrow means more hits before you drop.',
+    spec: 'Tanks and clerics who outlast the fight.' },
+  { key: 'wind', label: 'Stamina', role: 'move fuel per turn', fedBy: 'steps + active burn',
+    combat: 'Move fuel. Every action spends Stamina; run dry and you can only Jab or catch your breath.',
+    spec: 'Fast fighters who chain lots of moves.' },
+  { key: 'reflex', label: 'Reflex', role: 'crits + glances', fedBy: 'Boneyard collecting + step eggs',
+    combat: 'More crits on your hits, and more incoming hits glance off you for half.',
+    spec: 'Duelists who win on finesse.' },
+  { key: 'hype', label: 'Hype', role: 'spell power + signature', fedBy: 'quests + logging variety',
+    combat: 'Powers your spells (bolts, heals) and fills your Signature meter faster.',
+    spec: 'Casters and showstoppers.' },
 ];
 
 // Hybrid customization: your habits set the BASE (deriveStats); training points
