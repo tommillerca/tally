@@ -14,12 +14,14 @@ import {
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
-import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel } from './hunt.js';
+import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { snapToWalkable } from './geo.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
+import { showGateIntro } from './gateintro.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -400,9 +402,10 @@ async function renderToday(el) {
     </div>
   </div>
 
-  <div class="hero-actions">
+  <div class="hero-actions five">
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
+    <button class="hero-act" id="kitchenActBtn"><span class="hero-emoji">🍲</span><span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Crates${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
@@ -492,6 +495,7 @@ async function renderToday(el) {
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#huntBtn')?.addEventListener('click', openMap);
+  $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
@@ -639,7 +643,11 @@ function avatarLayersHtml(eq, opts = {}) {
     if (skip.has(s.code)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
-    return `<img src="${bhAsset(BH_BY_ID[itemId])}" alt="" loading="lazy" decoding="async">`;
+    const item = BH_BY_ID[itemId];
+    // weapon / off-hand glow by rarity (epic/legendary)
+    const glow = (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary')
+      ? ` class="wpn-glow r-${item.rarity}"` : '';
+    return `<img${glow} src="${bhAsset(item)}" alt="" loading="lazy" decoding="async">`;
   }).join('');
   const yd = !opts.noYard && eq.YD && BH_BY_ID[eq.YD]
     ? `<img class="yard-decor" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : '';
@@ -685,17 +693,13 @@ function foodBuffLabel(b) {
   return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
 }
 
-// the small Today card: only shows once you have ingredients / a dish cooking / a buff
+// a Today alert card, ONLY when a dish is ready to collect (access lives in the
+// shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
 function kitchenCardHtml(cook, ingCount, buffs) {
-  if (!cook && ingCount === 0 && !buffs.length) return '';
-  const line = cook
-    ? (cook.ready ? `<b style="color:var(--accent)">${cook.recipe.icon} ${esc(cook.recipe.name)} is ready!</b>`
-      : `${cook.recipe.icon} Cooking ${esc(cook.recipe.name)} · <b>${fmtCookTime(cook.remainingMs)}</b> left`)
-    : buffs.length ? `${buffs[0].icon} ${esc(foodBuffLabel(buffs[0]))}`
-    : `${ingCount} ingredient${ingCount === 1 ? '' : 's'} gathered · cook a buff`;
+  if (!cook || !cook.ready) return '';
   return `<div class="card kitchen-card" id="kitchenCard">
-    <div class="card-title">KITCHEN <span class="link">Open</span></div>
-    <div class="kc-line">${line}</div>
+    <div class="card-title">KITCHEN <span class="link">Collect</span></div>
+    <div class="kc-line"><b style="color:var(--accent)">${cook.recipe.icon} ${esc(cook.recipe.name)} is ready!</b></div>
   </div>`;
 }
 
@@ -2566,6 +2570,7 @@ async function openMap() {
     const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
+    const spawnSnap = new Map();    // id -> {lat,lng} snapped onto walkable ground
     const denMarkers = new Map();   // id -> {marker, el, den}
     let lastNearest = null;
 
@@ -2603,6 +2608,25 @@ async function openMap() {
 
     function refreshSpawns() {
       const live = spawnsNear(date, lat, lng).filter(s => !collected.has(spawnKey(date, s)));
+      // Snap each spawn onto the nearest walkable feature (road/path/park) so none
+      // sit in a backyard or building. The seeded anchor (ledger key) is untouched;
+      // only the shown + collectible position moves. Cached per id once found.
+      if (map.loaded()) {
+        const c = map.getCanvas();
+        for (const s of live) {
+          let snap = spawnSnap.get(s.id);
+          if (!snap) {
+            const pt = map.project([s.lng, s.lat]);
+            if (pt.x > -60 && pt.y > -60 && pt.x < c.clientWidth + 60 && pt.y < c.clientHeight + 60) {
+              const feats = map.queryRenderedFeatures([[pt.x - 55, pt.y - 55], [pt.x + 55, pt.y + 55]]);
+              snap = snapToWalkable({ lat: s.lat, lng: s.lng }, feats, 40);
+              if (snap) spawnSnap.set(s.id, snap);
+            }
+          }
+          if (snap) { s.lat = snap.lat; s.lng = snap.lng; s.dist = distanceM(lat, lng, s.lat, s.lng); s.bearing = bearingDeg(lat, lng, s.lat, s.lng); }
+        }
+        live.sort((a, b) => a.dist - b.dist);
+      }
       const liveIds = new Set(live.map(s => s.id));
       for (const [id, rec] of spawnMarkers) {
         if (!liveIds.has(id)) { rec.marker.remove(); spawnMarkers.delete(id); }
@@ -2615,6 +2639,8 @@ async function openMap() {
           el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${INGREDIENTS[spawnIngredient(s).id].icon}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
+        } else {
+          rec.marker.setLngLat([s.lng, s.lat]); // keep marker on its snapped position
         }
         rec.spawn = s;
         rec.el.classList.toggle('inrange', s.dist <= COLLECT_RADIUS_M);
@@ -2940,24 +2966,36 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
   if (!fast && !reducedMotion) {
-    const vs = document.createElement('div');
-    vs.className = 'vs-card quake';
-    vs.innerHTML = `
-      <div class="vs-inner">
-        <div class="vs-name">YOU</div>
-        <div class="vs-bones">
-          <span class="vs-bone l">${ICONS.bone(46)}</span>
-          <span class="vs-bone r">${ICONS.bone(46)}</span>
-          <div class="vs-impact"></div>
-        </div>
-        <div class="vs-vs">VS</div>
-        <div class="vs-name foe">${esc(foeCfg.name.toUpperCase())}</div>
-        <div class="vs-venue">at ${esc(venue)}</div>
-      </div>`;
-    document.body.appendChild(vs);
-    setTimeout(() => hitSound(S.sounds, 'thud'), 430);
-    setTimeout(() => { vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
-    setTimeout(() => vs.remove(), 1420);
+    if (foeCfg.mode === 'boss') {
+      // world-map Boneyard dens get the full gate cinematic: the boss breaches
+      // the tomb portal. Fire-and-forget overlay (z-index 200 covers the sheet
+      // building underneath); tap-to-skip. Reduced motion / webdriver no-op.
+      showGateIntro({
+        foeName: foeCfg.name,
+        venue,
+        spriteHtml: avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] }),
+        sounds: S.sounds,
+      });
+    } else {
+      const vs = document.createElement('div');
+      vs.className = 'vs-card quake';
+      vs.innerHTML = `
+        <div class="vs-inner">
+          <div class="vs-name">YOU</div>
+          <div class="vs-bones">
+            <span class="vs-bone l">${ICONS.bone(46)}</span>
+            <span class="vs-bone r">${ICONS.bone(46)}</span>
+            <div class="vs-impact"></div>
+          </div>
+          <div class="vs-vs">VS</div>
+          <div class="vs-name foe">${esc(foeCfg.name.toUpperCase())}</div>
+          <div class="vs-venue">at ${esc(venue)}</div>
+        </div>`;
+      document.body.appendChild(vs);
+      setTimeout(() => hitSound(S.sounds, 'thud'), 430);
+      setTimeout(() => { vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
+      setTimeout(() => vs.remove(), 1420);
+    }
   }
   let settled = false;
   let showMore = false;

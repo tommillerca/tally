@@ -11,6 +11,7 @@ import {
   assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime } from '../js/cooking.js';
+import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
@@ -414,6 +415,30 @@ test('recipes reference real ingredients; canCook + timer helpers', () => {
   assert.equal(ingredientCount({ marrow: 2, salt: 1 }), 3);
   assert.equal(fmtCookTime(15 * 60000), '15m');
   assert.equal(fmtCookTime(90 * 60000), '1h 30m');
+});
+
+// ---- map spawn placement (snap to walkable) ----
+test('walkable classifier: roads/paths/parks yes, motorway/buildings no', () => {
+  assert.ok(isWalkableFeature({ sourceLayer: 'transportation', properties: { class: 'residential' } }));
+  assert.ok(isWalkableFeature({ sourceLayer: 'transportation', properties: { class: 'footway' } }));
+  assert.ok(isWalkableFeature({ sourceLayer: 'park', properties: {} }));
+  assert.ok(isWalkableFeature({ sourceLayer: 'landuse', properties: { class: 'grass' } }));
+  assert.ok(!isWalkableFeature({ sourceLayer: 'transportation', properties: { class: 'motorway' } }));
+  assert.ok(!isWalkableFeature({ sourceLayer: 'building', properties: {} }));
+  assert.ok(!isWalkableFeature({ sourceLayer: 'water', properties: {} }));
+});
+test('snapToWalkable: snaps to a nearby road, respects the max distance, sits inside a park', () => {
+  const anchor = { lat: 40, lng: -74 };
+  const roadAt = m => ({ sourceLayer: 'transportation', properties: { class: 'residential' },
+    geometry: { type: 'LineString', coordinates: [[-74.001, 40 + m / 110540], [-73.999, 40 + m / 110540]] } });
+  const near = snapToWalkable(anchor, [roadAt(10)], 35);
+  assert.ok(near && Math.abs(near.dist - 10) < 3, JSON.stringify(near));
+  assert.ok(near.lat > anchor.lat, 'snapped toward the road (north)');
+  assert.equal(snapToWalkable(anchor, [roadAt(100)], 35), null, 'too far -> no snap');
+  const park = { sourceLayer: 'park', properties: {}, geometry: { type: 'Polygon',
+    coordinates: [[[-74.001, 39.999], [-73.999, 39.999], [-73.999, 40.001], [-74.001, 40.001], [-74.001, 39.999]]] } };
+  const inPark = snapToWalkable(anchor, [park], 35);
+  assert.ok(inPark && inPark.inside && inPark.lat === anchor.lat, 'inside a park -> keep the anchor');
 });
 
 // ---- loot data ----

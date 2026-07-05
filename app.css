@@ -730,6 +730,13 @@ body::before {
   white-space: nowrap; overflow: hidden;
 }
 .hero-act:active { background: var(--surface-2); }
+.hero-actions.five { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.hero-actions.five .hero-act { font-size: 9.5px; padding: 10px 1px 8px; }
+.hero-emoji { font-size: 22px; line-height: 23px; }
+.hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
+/* weapon / off-hand rarity glow on the avatar (epic/legendary held items) */
+.bh-anim img.wpn-glow.r-epic { filter: drop-shadow(0 0 5px rgba(192, 132, 252, 0.85)); }
+.bh-anim img.wpn-glow.r-legendary { filter: drop-shadow(0 0 6px rgba(255, 201, 97, 0.95)); }
 
 .splash-mark { width: min(78%, 320px); }
 
