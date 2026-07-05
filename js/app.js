@@ -25,6 +25,7 @@ import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMIL
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
+import { attachWalk } from './walk.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -2658,6 +2659,7 @@ async function openMap() {
     youEl.className = 'map-you';
     youEl.innerHTML = `<div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
+    const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
 
     const date = dateKey();
     const week = isoWeekKey();
@@ -2834,6 +2836,7 @@ async function openMap() {
         if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(heading)}deg)`; }
       }
       youMarker.setLngLat([lng, lat]);
+      youWalk.move(lat, lng);
       if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
       refreshWorld();
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
