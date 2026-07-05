@@ -147,7 +147,8 @@ export async function claimDenWin(den, week = isoWeekKey()) {
   const r = den.reward;
   const xp = await award(denKey(week, den), 'boss', r.xp || 50, `Boss den: ${den.name}`);
   if (xp === 0) return null;
-  if (r.coins) await coinsAdd(r.coins);
+  // coins are added by the caller (settle) so the Battle Charm + food coin boost
+  // apply uniformly; adding them here too was a double-pay bug.
   if (r.crate) await grantCrate(r.crate, 'boss-den');
   // every boss drops two pieces: the player keeps ONE (chooser persists in kv
   // until picked, so closing the victory screen never eats the loot)

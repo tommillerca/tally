@@ -1,0 +1,126 @@
+// Food-ingredient collectibles + timed home cooking -> food buffs.
+// You scavenge ingredients on the map (spawns), then cook a recipe back home on a
+// real-time timer; the finished dish grants a buff. This is a GAME crafting loop
+// (stew / zombie-fajita flavor), fully separate from real calorie logging, and
+// buffs only ever ADD (wellbeing-safe: nothing here rewards eating less).
+
+import { kvGet, kvSet } from './db.js';
+
+export const INGREDIENTS = {
+  marrow:    { id: 'marrow',    name: 'Marrow',       icon: '🦴' },
+  graveroot: { id: 'graveroot', name: 'Graveroot',    icon: '🌿' },
+  ember:     { id: 'ember',     name: 'Ember Pepper',  icon: '🌶️' },
+  bog:       { id: 'bog',       name: 'Bog Mushroom',  icon: '🍄' },
+  sinew:     { id: 'sinew',     name: 'Sinew',         icon: '🥩' },
+  salt:      { id: 'salt',      name: 'Grave Salt',    icon: '🧂' },
+};
+export const INGREDIENT_IDS = Object.keys(INGREDIENTS);
+
+// buff kinds:
+//   combat -> applies for the next `fights` Pit fights (damagePct / hype / regenPct / petFree)
+//   coins  -> +pct coins from world payouts for `hours`
+export const RECIPES = [
+  { id: 'bone-broth', name: 'Bone Broth', icon: '🍲', needs: { marrow: 2, salt: 1 }, cookMin: 15,
+    buff: { kind: 'combat', regenPct: 0.06, fights: 2 }, desc: 'Heals 6% HP each turn, next 2 fights' },
+  { id: 'hearty-hash', name: 'Hearty Hash', icon: '🥘', needs: { graveroot: 1, bog: 1, salt: 1 }, cookMin: 30,
+    buff: { kind: 'combat', hype: 25, fights: 3 }, desc: 'Start your next 3 fights at +25 Hype' },
+  { id: 'marrow-stew', name: 'Marrow Stew', icon: '🍜', needs: { marrow: 2, graveroot: 1 }, cookMin: 45,
+    buff: { kind: 'combat', damagePct: 0.10, fights: 3 }, desc: '+10% your damage, next 3 fights' },
+  { id: 'hunters-skewer', name: "Hunter's Skewer", icon: '🍢', needs: { sinew: 2, ember: 1 }, cookMin: 45,
+    buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special has no cooldown, next 2 fights" },
+  { id: 'zombie-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
+    buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
+];
+export const RECIPE_BY_ID = Object.fromEntries(RECIPES.map(r => [r.id, r]));
+
+/* ---------- ingredient inventory (kv 'ingredients' = {id: count}) ---------- */
+export async function ingredients() { return (await kvGet('ingredients', {})) || {}; }
+export async function grantIngredient(id, n = 1) {
+  if (!INGREDIENTS[id]) return;
+  const inv = await ingredients();
+  inv[id] = (inv[id] || 0) + n;
+  await kvSet('ingredients', inv);
+}
+export function canCook(recipe, inv) {
+  return Object.entries(recipe.needs).every(([id, n]) => (inv[id] || 0) >= n);
+}
+export function ingredientCount(inv) {
+  return Object.values(inv || {}).reduce((a, n) => a + n, 0);
+}
+
+/* ---------- the cooking pot (single slot, real-time timer) ---------- */
+export async function cookState(now = Date.now()) {
+  const c = await kvGet('cooking', null);
+  if (!c) return null;
+  const r = RECIPE_BY_ID[c.recipeId];
+  if (!r) return null;
+  return { recipe: r, startedAt: c.startedAt, readyAt: c.readyAt, ready: now >= c.readyAt, remainingMs: Math.max(0, c.readyAt - now) };
+}
+export async function startCook(recipeId, now = Date.now()) {
+  const r = RECIPE_BY_ID[recipeId];
+  if (!r) return { ok: false, reason: 'unknown' };
+  if (await kvGet('cooking', null)) return { ok: false, reason: 'busy' };
+  const inv = await ingredients();
+  if (!canCook(r, inv)) return { ok: false, reason: 'ingredients' };
+  for (const [id, n] of Object.entries(r.needs)) inv[id] -= n;
+  await kvSet('ingredients', inv);
+  await kvSet('cooking', { recipeId, startedAt: now, readyAt: now + r.cookMin * 60e3 });
+  return { ok: true };
+}
+export async function collectDish(now = Date.now()) {
+  const st = await cookState(now);
+  if (!st || !st.ready) return null;
+  await kvSet('cooking', null);
+  await addFoodBuff(st.recipe, now);
+  return st.recipe;
+}
+
+/* ---------- active food buffs (kv 'foodbuffs' = []) ---------- */
+export async function foodBuffs() { return (await kvGet('foodbuffs', [])) || []; }
+async function addFoodBuff(recipe, now = Date.now()) {
+  const buffs = await foodBuffs();
+  const b = { recipe: recipe.id, name: recipe.name, icon: recipe.icon, ...recipe.buff };
+  if (b.kind === 'coins') b.untilMs = now + b.hours * 3600e3;
+  if (b.kind === 'combat') b.fightsLeft = b.fights;
+  buffs.push(b);
+  await kvSet('foodbuffs', buffs);
+}
+// prune spent/expired buffs; return the live list
+export async function activeFoodBuffs(now = Date.now()) {
+  const buffs = await foodBuffs();
+  const live = buffs.filter(b => b.kind === 'combat' ? (b.fightsLeft > 0) : (b.untilMs > now));
+  if (live.length !== buffs.length) await kvSet('foodbuffs', live);
+  return live;
+}
+// coin multiplier from active coin buffs (e.g. 1.25)
+export async function foodCoinMult(now = Date.now()) {
+  const live = await activeFoodBuffs(now);
+  return 1 + live.filter(b => b.kind === 'coins').reduce((a, b) => a + b.pct, 0);
+}
+// combat bundle to hand to a fight
+export async function foodCombatBuff(now = Date.now()) {
+  const live = await activeFoodBuffs(now);
+  const out = { damagePct: 0, hype: 0, regenPct: 0, petFree: false };
+  for (const b of live) if (b.kind === 'combat') {
+    out.damagePct += b.damagePct || 0;
+    out.hype += b.hype || 0;
+    out.regenPct = Math.max(out.regenPct, b.regenPct || 0);
+    out.petFree = out.petFree || !!b.petFree;
+  }
+  return out;
+}
+// after a fight ends: spend one charge off each active combat buff
+export async function consumeFightFoodBuffs(now = Date.now()) {
+  const buffs = await foodBuffs();
+  let changed = false;
+  for (const b of buffs) if (b.kind === 'combat' && b.fightsLeft > 0) { b.fightsLeft -= 1; changed = true; }
+  const live = buffs.filter(b => b.kind === 'combat' ? b.fightsLeft > 0 : b.untilMs > now);
+  if (changed || live.length !== buffs.length) await kvSet('foodbuffs', live);
+}
+
+export function fmtCookTime(ms) {
+  const m = Math.ceil(ms / 60000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}

@@ -225,10 +225,11 @@ function gainHype(f, amt) {
 export function petActionsFor(fight) {
   const pet = fight.p && fight.p.pet, body = fight.pAux;
   if (!pet || !body || body.fainted || body.hp <= 0 || fight.over) return [];
+  const petFree = !!(fight.p && fight.p.foodPetFree); // Hunter's Skewer
   return petActionMeta(pet.family).map(a => ({
     ...a,
-    cd: a.kind === 'special' ? (pet.specialCd || 0) : 0,
-    enabled: a.kind !== 'special' || (pet.specialCd || 0) <= 0,
+    cd: a.kind === 'special' && !petFree ? (pet.specialCd || 0) : 0,
+    enabled: a.kind !== 'special' || petFree || (pet.specialCd || 0) <= 0,
   }));
 }
 
@@ -238,12 +239,13 @@ export function applyPetAction(fight, actionId) {
   if (!pet || !body || body.fainted || fight.over) return events;
   const meta = petActionMeta(pet.family).find(a => a.id === actionId);
   if (!meta) return events;
-  if (meta.kind === 'special' && (pet.specialCd || 0) > 0) return events;
+  const petFree = !!me.foodPetFree; // Hunter's Skewer: special ignores cooldown
+  if (meta.kind === 'special' && !petFree && (pet.specialCd || 0) > 0) return events;
   const foeWho = targetWhoFor(fight, 'p');
   const foe = fighterOf(fight, foeWho);
 
   if (meta.kind === 'special') {
-    pet.specialCd = meta.cd;
+    if (!petFree) pet.specialCd = meta.cd;
     const fx = petAbilityEffect(pet, me, foe);
     if (fx.kind === 'pethit') {
       for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
@@ -349,6 +351,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (defender.marked) dmg *= 1.07; // imp Death's Mark
   if (attacker.pet && attacker.pet.passive === 'yourDamage') dmg *= (1 + attacker.pet.passivePct);
   if (defender.pet && defender.pet.passive === 'damageTaken') dmg *= (1 - defender.pet.passivePct);
+  if (attacker.foodDamagePct) dmg *= (1 + attacker.foodDamagePct); // Marrow Stew etc.
   const crit = rng() < attacker.d.critChance;
   if (crit) dmg *= 1.5;
   const glance = !immune && rng() < defender.d.glanceChance;
@@ -371,13 +374,17 @@ export function expectedDamage(move, attacker, defenderState, defender) {
 
 /* ================= fight state ================= */
 
-export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null }) {
+export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null, food = null }) {
   const weapon = WEAPONS[weaponId] || WEAPONS.starter;
   const tset = new Set(talents);
   const d = derived(stats, weapon, tset);
   return {
     name, stats, weapon, d, outfit, talents: tset,
     pet: pet ? { ...pet, specialCd: 0, lastStandUsed: false } : null,
+    // food-dish buffs (temporary, from the kitchen); only ever on the player
+    foodDamagePct: food?.damagePct || 0,
+    foodRegenPct: food?.regenPct || 0,
+    foodPetFree: !!food?.petFree,
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false,
     sigsUsed: 0, shoveCount: 0,
@@ -390,7 +397,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     weaken: null,     // {pct, turns} deals less damage
     blind: null,      // {pct, turns} its own physical attacks miss more
     marked: null,     // {turns} takes +10% from everything (imp Death's Mark)
-    hp: d.maxHp, wind: d.maxWind, hype: tset.has('bigentrance') ? 25 : 0,
+    hp: d.maxHp, wind: d.maxWind, hype: Math.min(100, (tset.has('bigentrance') ? 25 : 0) + (food?.hype || 0)),
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
     offBalance: false,
@@ -837,6 +844,12 @@ export function endTurn(fight) {
   me.wind = Math.min(me.d.maxWind, me.wind + REGEN_PER_TURN + (me.talents.has('totemic') ? 5 : 0));
   // DoTs tick for the captain AND any living aux (pet / add) on this side
   const ticks = [];
+  // Bone Broth: heal a little at the start of your turn
+  if (me.foodRegenPct && me.hp > 0) {
+    const h = Math.round(me.d.maxHp * me.foodRegenPct);
+    me.hp = Math.min(me.d.maxHp, me.hp + h);
+    ticks.push({ t: 'heal', who: next, amount: h, food: true });
+  }
   tickDots(me, next, ticks);
   const auxWho = next === 'p' ? 'pa' : 'fa';
   const aux = fighterOf(fight, auxWho);

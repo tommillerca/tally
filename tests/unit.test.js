@@ -10,6 +10,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime } from '../js/cooking.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
@@ -399,6 +400,20 @@ test('period key helpers', () => {
   assert.equal(monthDates('2026-02-15').length, 28);
   assert.equal(periodKeyOf('month', '2026-07-03'), '2026-07');
   assert.equal(weekDates('2026-06-29')[6], '2026-07-05');
+});
+
+// ---- cooking ----
+test('recipes reference real ingredients; canCook + timer helpers', () => {
+  for (const r of RECIPES) {
+    assert.ok(r.cookMin > 0 && r.buff && r.buff.kind, r.id);
+    for (const id of Object.keys(r.needs)) assert.ok(INGREDIENTS[id], `${r.id} needs real ingredient ${id}`);
+  }
+  const stew = RECIPES.find(r => r.id === 'marrow-stew'); // needs marrow:2 graveroot:1
+  assert.ok(!canCook(stew, { marrow: 1, graveroot: 1 }), 'not enough marrow');
+  assert.ok(canCook(stew, { marrow: 2, graveroot: 1, salt: 5 }), 'enough to cook');
+  assert.equal(ingredientCount({ marrow: 2, salt: 1 }), 3);
+  assert.equal(fmtCookTime(15 * 60000), '15m');
+  assert.equal(fmtCookTime(90 * 60000), '1h 30m');
 });
 
 // ---- loot data ----

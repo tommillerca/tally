@@ -20,6 +20,10 @@ import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLa
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount } from './poi.js';
+import {
+  INGREDIENTS, INGREDIENT_IDS, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
+  cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+} from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
@@ -327,6 +331,9 @@ async function renderToday(el) {
   // activity level already assumes (BMR x (factor-1)), credited at 50%.
   const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
+  const cook = await cookState();
+  const foodbuffs = await activeFoodBuffs();
+  const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
   const coinBal = await coins();
   const crates = await unopenedCrates();
@@ -447,6 +454,7 @@ async function renderToday(el) {
     </div>`).join('')}
   </div>` : ''}
 
+  ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs) : ''}
   ${healthCardHtml(hk, isToday)}
 
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
@@ -484,6 +492,7 @@ async function renderToday(el) {
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#huntBtn')?.addEventListener('click', openMap);
+  $('#kitchenCard')?.addEventListener('click', openKitchen);
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
   if (!window.__automapRan && new URLSearchParams(location.search).has('automap')) {
@@ -664,6 +673,81 @@ function healthCardHtml(hk, isToday) {
       '<p class="note">No sync yet today. Run your "Sync Boneheadz" shortcut, then tap Sync.</p>'}
   </div>`;
 }
+
+// ---- Kitchen: cook scavenged ingredients into buff dishes ----
+function foodBuffLabel(b) {
+  if (b.kind === 'coins') return `+${Math.round(b.pct * 100)}% coins · ${fmtCookTime(Math.max(0, b.untilMs - Date.now()))} left`;
+  const bits = [];
+  if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
+  if (b.hype) bits.push(`+${b.hype} Hype start`);
+  if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
+  if (b.petFree) bits.push('pet special free');
+  return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
+}
+
+// the small Today card: only shows once you have ingredients / a dish cooking / a buff
+function kitchenCardHtml(cook, ingCount, buffs) {
+  if (!cook && ingCount === 0 && !buffs.length) return '';
+  const line = cook
+    ? (cook.ready ? `<b style="color:var(--accent)">${cook.recipe.icon} ${esc(cook.recipe.name)} is ready!</b>`
+      : `${cook.recipe.icon} Cooking ${esc(cook.recipe.name)} · <b>${fmtCookTime(cook.remainingMs)}</b> left`)
+    : buffs.length ? `${buffs[0].icon} ${esc(foodBuffLabel(buffs[0]))}`
+    : `${ingCount} ingredient${ingCount === 1 ? '' : 's'} gathered · cook a buff`;
+  return `<div class="card kitchen-card" id="kitchenCard">
+    <div class="card-title">KITCHEN <span class="link">Open</span></div>
+    <div class="kc-line">${line}</div>
+  </div>`;
+}
+
+async function openKitchen() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="kitchenBody"></div>`, { cls: '' });
+  const body = $('#kitchenBody', wrap);
+
+  async function render() {
+    if (!body.isConnected) return;
+    const [inv, cook, buffs] = await Promise.all([ingredients(), cookState(), activeFoodBuffs()]);
+    body.innerHTML = `
+      <p class="note" style="margin-bottom:12px">Scavenge ingredients on the map, then cook them into a dish. Each dish grants a temporary buff. One pot at a time.</p>
+      ${buffs.length ? `<div class="sect-h">Active dishes</div>
+        ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
+      <div class="sect-h">The pot</div>
+      ${cook ? `<div class="crate-row cookpot ${cook.ready ? 'ready' : ''}"><span class="crate-ico">${cook.recipe.icon}</span>
+          <div style="flex:1"><b>${esc(cook.recipe.name)}</b><small>${cook.ready ? 'Ready to serve!' : 'Cooking · ' + fmtCookTime(cook.remainingMs) + ' left'}</small></div>
+          ${cook.ready ? '<button class="btn small" id="collectDish">Collect</button>' : '<span class="q-frac">🔥</span>'}</div>`
+        : '<p class="note" style="margin:2px 2px 12px">The pot is empty. Pick a recipe below.</p>'}
+      <div class="sect-h">Ingredients</div>
+      <div class="ingredient-grid">
+        ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${INGREDIENTS[id].icon}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
+      </div>
+      <div class="sect-h">Recipes</div>
+      ${RECIPES.map(r => {
+        const have = canCook(r, inv);
+        const needStr = Object.entries(r.needs).map(([id, n]) => `${INGREDIENTS[id].icon}${(inv[id] || 0)}/${n}`).join('  ');
+        const canStart = have && !cook;
+        return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${r.icon}</span>
+          <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
+          <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>Cook</button></div>`;
+      }).join('')}`;
+    $('#collectDish', body)?.addEventListener('click', async () => {
+      const dish = await collectDish();
+      if (dish) { confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds); toast(`${dish.icon} ${dish.name} served! Buff active.`, 3200); }
+      render(); refresh();
+    });
+    $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const res = await startCook(btn.dataset.cook);
+      if (res.ok) { popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
+      else if (res.reason === 'busy') toast('The pot is already cooking something.');
+      else toast('Not enough ingredients for that dish.');
+      render(); refresh();
+    }));
+  }
+  await render();
+  // live countdown while the sheet is open
+  const timer = setInterval(() => { if (body.isConnected) render(); else clearInterval(timer); }, 1000);
+}
+
 
 // how the day's calorie target splits across meals (a per-meal cap you can see)
 const MEAL_SPLIT = [0.25, 0.35, 0.30, 0.10]; // breakfast / lunch / dinner / snacks
@@ -2545,8 +2629,16 @@ async function openMap() {
       await kvSet('hunt-enabled', true);
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       popSound(S.sounds);
+      // scavenging drops a cooking ingredient (RAREs drop 2); deterministic per spawn
+      const ingId = INGREDIENT_IDS[[...rec.spawn.id].reduce((a, c) => a + c.charCodeAt(0), 0) % INGREDIENT_IDS.length];
+      const ingN = rec.spawn.type === 'rare' ? 2 : 1;
+      await grantIngredient(ingId, ingN);
+      // active feast buff boosts the spawn's coins too
+      const fcm = await foodCoinMult();
+      if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
       const bits = [`+${res.xp} XP`];
       if (res.coins) bits.push(`+${res.coins} coins`);
+      bits.push(`${INGREDIENTS[ingId].icon} ${INGREDIENTS[ingId].name}${ingN > 1 ? ' x' + ingN : ''}`);
       if (res.crate) bits.push((res.crate === 'egg' ? 'Step Egg' : 'Daily Crate') + ' added to your stash');
       toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
       const badges = await evaluateBadges();
@@ -2784,7 +2876,8 @@ const PIT_VENUES = {
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet });
+  const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
+  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
@@ -3322,6 +3415,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   async function settle() {
     if (settled) return; settled = true;
+    await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
@@ -3372,6 +3466,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
           coins += bonus;
           extras.push(`Battle Charm +${bonus} coins`);
         }
+      }
+      // Food dish coin boost (Zombie Fajita etc.)
+      const fcm = await foodCoinMult();
+      if (coins > 0 && fcm > 1) {
+        const bonus = Math.round(coins * (fcm - 1));
+        coins += bonus;
+        extras.push(`Feast +${bonus} coins`);
       }
       if (coins) await coinsAdd(coins);
       const badges = await evaluateBadges();
