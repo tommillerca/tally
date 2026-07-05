@@ -14,18 +14,38 @@ import { dateKey } from './nutrition.js';
 import { coinsAdd, grantCrate, grantConsumable, coins } from './loot.js';
 import { grantIngredient, INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
 import { popSound, levelSound, reducedMotion } from './fx.js';
+import { bhIconRaw } from './icons-pack.js';
+
+// the app's bone-coin (self-colored), so coin prizes match the rest of the UI
+const COIN_RAW = { vb: '0 0 24 24', tint: 'currentColor', inner: '<circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g>' };
+// resolve a prize to a raw icon (pack icon, or the coin/ingredient art)
+function prizeRaw(p) {
+  if (p.coin) return COIN_RAW;
+  if (p.iconId === 'ingredient') return bhIconRaw('ingr-sinew') || COIN_RAW; // "fresh scrap"
+  return bhIconRaw(p.iconId) || COIN_RAW;
+}
+// an SVG icon positioned inside the wheel's own <svg> (nested svg scales the viewBox)
+function iconAt(p, cx, cy, size) {
+  const r = prizeRaw(p);
+  return `<svg x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="${r.vb}" style="color:${r.tint}" overflow="visible">${r.inner}</svg>`;
+}
+// a standalone SVG icon for HTML contexts (the reveal)
+function iconHtml(p, size) {
+  const r = prizeRaw(p);
+  return `<svg viewBox="${r.vb}" width="${size}" height="${size}" style="color:${r.tint};filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))">${r.inner}</svg>`;
+}
 
 // ---- prize table (wheel order; adjacent segments differ in value) ----
 // weights sum to 100. jackpot (Golden Crate) is the gold wedge.
 const PRIZES = [
-  { key: 'c30',    emoji: '🪙', tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
-  { key: 'daily',  emoji: '📦', tag: 'Crate',  name: 'Daily Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
-  { key: 'ingr',   emoji: '🍖', tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
-  { key: 'golden', emoji: '🧰', tag: 'GOLDEN', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
-  { key: 'c75',    emoji: '🪙', tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
-  { key: 'freeze', emoji: '🧊', tag: 'Freeze', name: 'a Streak Freeze',weight: 5,  gold: false, grant: () => grantConsumable('freeze', 'wheel') },
-  { key: 'c150',   emoji: '🪙', tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
-  { key: 'charm',  emoji: '🧿', tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
+  { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
+  { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Daily Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
+  { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
+  { key: 'golden', iconId: 'crate-golden',   tag: 'GOLDEN', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
+  { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
+  { key: 'freeze', iconId: 'freeze',         tag: 'Freeze', name: 'a Streak Freeze',weight: 5,  gold: false, grant: () => grantConsumable('freeze', 'wheel') },
+  { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
+  { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
 ];
 const SEG = PRIZES.length;                 // 8
 const SEG_DEG = 360 / SEG;                  // 45
@@ -81,7 +101,7 @@ function wheelSvg() {
     const [ex, ey] = pt(cx, cy, 68, mid);
     const [tx, ty] = pt(cx, cy, 45, mid);
     const col = p.gold ? '#e8c24d' : '#f2e9d7';
-    labels += `<text x="${ex.toFixed(1)}" y="${ey.toFixed(1)}" font-size="17" text-anchor="middle" dominant-baseline="central">${p.emoji}</text>`;
+    labels += iconAt(p, ex, ey, 22);
     labels += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" font-size="8.5" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em">${p.tag}</text>`;
   }
   return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -183,7 +203,7 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
     await prize.grant(rng);
     coinDelta = (await coins()) - before;
   }
-  const result = { emoji: prize.emoji, name: prize.name, gold: prize.gold, coinDelta };
+  const result = { iconHtml: iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta };
   return showWheel(idx, prize, result, { sounds });
 }
 
@@ -225,7 +245,7 @@ function showWheel(idx, prize, result, { sounds }) {
       card.querySelector('.dw-cta')?.remove();
       const r = document.createElement('div');
       r.className = 'dw-result' + (result.gold ? ' gold' : '');
-      r.innerHTML = `<div class="ri">${result.emoji}</div><div class="rl">${detail}</div>`;
+      r.innerHTML = `<div class="ri">${result.iconHtml}</div><div class="rl">${detail}</div>`;
       sub.replaceWith(r);
       const collect = document.createElement('button');
       collect.className = 'dw-cta'; collect.textContent = 'COLLECT';

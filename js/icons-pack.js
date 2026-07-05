@@ -40,3 +40,5 @@ export function bhIcon(id, size = 22, tint) {
   return `<svg class="bhi" viewBox="${it.vb}" width="${size}" height="${size}" style="color:${color}" aria-hidden="true">${it.p}</svg>`;
 }
 export function hasBhIcon(id) { return !!RAW[id]; }
+// raw pieces for callers that build their own SVG (e.g. nested inside another svg)
+export function bhIconRaw(id) { const it = RAW[id]; return it ? { vb: it.vb, inner: it.p, tint: BH_ICON_TINTS[id] || 'currentColor' } : null; }
