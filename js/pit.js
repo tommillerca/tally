@@ -1,4 +1,4 @@
-import { petAbilityEffect } from './pets.js';
+import { petAbilityEffect, petActionMeta } from './pets.js';
 
 // The Pit: turn-based combat engine. Pure module (no DOM, injected RNG),
 // implementing boneheadz-combat-math-spec v0.1 exactly. Every constant here
@@ -219,44 +219,82 @@ function gainHype(f, amt) {
   f.hype = Math.min(SIGNATURE_HYPE, f.hype + Math.round(amt * mult));
 }
 
-// The equipped pet fights alongside you: an on-use ability on a cooldown,
-// resolved at the START of its owner's turn (reuses the pendingTicks pipeline).
-function resolvePet(fight, ownerWho, ticks) {
-  const me = fighterOf(fight, ownerWho);
-  const foe = opponentOf(fight, ownerWho);
-  const foeWho = ownerWho === 'p' ? 'f' : 'p';
-  if (!me.pet || fight.over) return;
-  if (--me.pet.cd > 0) return;
-  me.pet.cd = me.pet.cooldown;
-  const fx = petAbilityEffect(me.pet, me, foe);
-  if (fx.kind === 'pethit') {
-    for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
-      let dmg = fx.damage;
-      if (fx.crit && fight.rng() < 0.25) dmg *= 2;
-      dealDamage(fight, foeWho, dmg, ticks);
-      if (fx.lifesteal) { me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal)); }
-      ticks.push({ t: 'pethit', who: ownerWho, damage: dmg, name: me.pet.name });
+// The pet takes its OWN turn each round: you pick one action from its kit. The
+// SPECIAL is the tuned petAbilityEffect on a short cooldown; BASIC is a light
+// every-turn move; GUARD steadies the pet. The pet hits YOUR current target.
+export function petActionsFor(fight) {
+  const pet = fight.p && fight.p.pet, body = fight.pAux;
+  if (!pet || !body || body.fainted || body.hp <= 0 || fight.over) return [];
+  return petActionMeta(pet.family).map(a => ({
+    ...a,
+    cd: a.kind === 'special' ? (pet.specialCd || 0) : 0,
+    enabled: a.kind !== 'special' || (pet.specialCd || 0) <= 0,
+  }));
+}
+
+export function applyPetAction(fight, actionId) {
+  const events = [];
+  const me = fight.p, pet = me && me.pet, body = fight.pAux;
+  if (!pet || !body || body.fainted || fight.over) return events;
+  const meta = petActionMeta(pet.family).find(a => a.id === actionId);
+  if (!meta) return events;
+  if (meta.kind === 'special' && (pet.specialCd || 0) > 0) return events;
+  const foeWho = targetWhoFor(fight, 'p');
+  const foe = fighterOf(fight, foeWho);
+
+  if (meta.kind === 'special') {
+    pet.specialCd = meta.cd;
+    const fx = petAbilityEffect(pet, me, foe);
+    if (fx.kind === 'pethit') {
+      for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
+        let dmg = fx.damage;
+        if (fx.crit && fight.rng() < 0.25) dmg *= 2;
+        dealDamage(fight, foeWho, dmg, events);
+        if (fx.lifesteal) me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal));
+        events.push({ t: 'pethit', who: 'p', damage: dmg, name: pet.name });
+      }
+      if (foe.hp > 0 && fx.poison) {
+        const cur = foe.poison ? foe.poison.stacks : 0;
+        foe.poison = { per: fx.poison.per, stacks: Math.min(3, cur + fx.poison.stacks), turns: fx.poison.turns };
+        events.push({ t: 'status', who: foeWho, kind: 'poison', stacks: foe.poison.stacks });
+      }
+    } else if (fx.kind === 'petshield') {
+      me.ward = Math.max(me.ward, 0) + fx.shield;
+      if (fx.heal) me.hp = Math.min(me.d.maxHp, me.hp + fx.heal);
+      if (fx.stamina) me.wind = Math.min(me.d.maxWind, me.wind + fx.stamina);
+      if (fx.cleanse) { me.bleed = null; me.burn = null; me.poison = null; }
+      if (pet.picks.has('w-laststand')) pet.lastStandArmed = true;
+      events.push({ t: 'petshield', who: 'p', shield: fx.shield, heal: fx.heal, name: pet.name });
+    } else if (fx.kind === 'petdebuff') {
+      if (foe.hp > 0) {
+        if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
+        if (fx.blind) foe.blind = { pct: 0.30, turns: 2 };
+        if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
+        if (fx.mark) foe.marked = { turns: 3 };
+        if (fx.stagger) foe.stagger = true;
+      }
+      events.push({ t: 'petdebuff', who: foeWho, name: pet.name });
     }
-    if (foe.hp > 0 && fx.poison) {
-      const cur = foe.poison ? foe.poison.stacks : 0;
-      foe.poison = { per: fx.poison.per, stacks: Math.min(3, cur + fx.poison.stacks), turns: fx.poison.turns };
-      ticks.push({ t: 'status', who: foeWho, kind: 'poison', stacks: foe.poison.stacks });
+  } else if (meta.kind === 'basic') {
+    const lvl = pet.level;
+    // basics are light filler (the pet acts every round now): the SPECIAL is the payoff
+    if (pet.family === 'warden') {
+      const heal = Math.round(me.d.maxHp * 0.025);
+      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      events.push({ t: 'petshield', who: 'p', shield: 0, heal, name: pet.name });
+    } else {
+      const dmg = Math.round((0.5 + lvl * 0.15) * me.d.powerMult);
+      if (foe && foe.hp > 0) dealDamage(fight, foeWho, dmg, events);
+      events.push({ t: 'pethit', who: 'p', damage: dmg, name: pet.name });
+      if (pet.family === 'imp') gainHype(me, 2);
     }
-  } else if (fx.kind === 'petshield') {
-    me.ward = Math.max(me.ward, 0) + fx.shield;
-    if (fx.heal) me.hp = Math.min(me.d.maxHp, me.hp + fx.heal);
-    if (fx.stamina) me.wind = Math.min(me.d.maxWind, me.wind + fx.stamina);
-    if (fx.cleanse) { me.bleed = null; me.burn = null; me.poison = null; }
-    if (me.pet.picks.has('w-laststand')) me.pet.lastStandArmed = true;
-    ticks.push({ t: 'petshield', who: ownerWho, shield: fx.shield, heal: fx.heal, name: me.pet.name });
-  } else if (fx.kind === 'petdebuff') {
-    if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
-    if (fx.blind) foe.blind = { pct: 0.30, turns: 2 };
-    if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
-    if (fx.mark) foe.marked = { turns: 3 };
-    if (fx.stagger) foe.stagger = true;
-    ticks.push({ t: 'petdebuff', who: foeWho, name: me.pet.name });
+  } else { // guard
+    const heal = Math.round(body.d.maxHp * 0.15);
+    body.hp = Math.min(body.d.maxHp, body.hp + heal);
+    events.push({ t: 'petguard', who: 'p', name: pet.name });
   }
+  checkOver(fight);
+  return events;
 }
 export const TURN_CAP = 30;
 
@@ -339,7 +377,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
   const d = derived(stats, weapon, tset);
   return {
     name, stats, weapon, d, outfit, talents: tset,
-    pet: pet ? { ...pet, cd: 1, lastStandUsed: false } : null,
+    pet: pet ? { ...pet, specialCd: 0, lastStandUsed: false } : null,
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false,
     sigsUsed: 0, shoveCount: 0,
@@ -810,9 +848,9 @@ export function endTurn(fight) {
     }
   }
   checkOver(fight);
-  // the owner's pet acts as their turn begins (pushes into the same tick stream)
-  if (!fight.over) resolvePet(fight, next, ticks);
-  checkOver(fight);
+  // the pet no longer auto-acts; it takes its own player-driven turn (petActionsFor
+  // / applyPetAction). Its special cooldown ticks down at the start of your turn.
+  if (next === 'p' && fight.p.pet && fight.p.pet.specialCd > 0) fight.p.pet.specialCd -= 1;
   fight.pendingTick = ticks[0] || null;
   fight.pendingTicks = ticks;
   tickTimers(me);

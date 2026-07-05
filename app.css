@@ -1424,17 +1424,20 @@ body::before {
 .fstage.petpounce { animation: petpounce .4s ease; }
 @keyframes petpounce { 40% { transform: translateY(-8px) scale(1.04); filter: drop-shadow(0 0 10px rgba(165,232,71,.6)); } }
 
-/* pet as a battle body: a small companion plate beside you */
-.pet-fighter { display: grid; justify-items: center; gap: 2px; margin-top: -4px; transform: translateX(26px) scale(0.72); transform-origin: top center; transition: opacity .4s, filter .4s; }
+/* pet/add as a battle body: a small companion that stands on the ground BESIDE
+   the fighter (absolute so it never pushes the avatar up off the floor) */
+.pet-fighter { position: absolute; bottom: 2px; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 3; }
+.you-side .pet-fighter { left: 100px; transform: scale(0.6); }        /* your pet: right of you, toward center */
+.foe-side .pet-fighter.add { right: 100px; transform: scale(0.62); }  /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
 .pet-fighter.fainted .fstage.petmini { transform: rotate(68deg) translateY(8px); }
-.fstage.petmini { width: 64px; height: 64px; min-height: 64px; }
+.fstage.petmini { width: 66px; height: 66px; min-height: 66px; }
 .fstage.petmini img { width: 100%; height: 100%; object-fit: contain; }
 .petplate { display: grid; gap: 2px; justify-items: center; }
 .petname { font-size: 9px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
-.bar.fhp.mini { width: 52px; height: 4px; }
-/* the add (2v1 world boss) sits beside the boss, toward center */
-.pet-fighter.add { transform: translateX(-18px) scale(0.74); }
+.bar.fhp.mini { width: 48px; height: 4px; }
+.pet-turn-h { text-align: center; font-family: var(--display); font-size: 15px; color: var(--accent); padding: 2px 0 6px; letter-spacing: .02em; }
+.fight-act.petmove { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 /* tap-to-target: pointer + a focus ring on the current target */
 .foe-side[data-target], .pet-fighter.add[data-target] { cursor: pointer; }
 .fighterG.foe-side.targeted > .fstage, .pet-fighter.add.targeted > .fstage { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }

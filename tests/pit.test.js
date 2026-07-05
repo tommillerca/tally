@@ -4,6 +4,7 @@ import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
+  petActionsFor, applyPetAction,
 } from '../js/pit.js';
 
 let passed = 0, failed = 0;
@@ -718,31 +719,32 @@ test('pets: Hound passive raises your damage; Warden passive lowers damage taken
   assert.ok(vsWarden < without, `warden owner takes less (${vsWarden} < ${without})`);
 });
 
-test('pets: Hound bite fires on cooldown, deals damage + applies poison that ticks', () => {
+test('pets: manual Hound Bite deals damage + applies poison that ticks; special on cooldown', () => {
   const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C3', 6, ['h-rabid']) });
   const F = makeFighter({ name: 'F', stats: { ...MID, marrow: 99 } });
   const fight = createFight({ player: P, foe: F, seed: 7 });
   fight.rng = () => 0.99;
   const foeHp0 = F.hp;
-  // pet cd initialises to 1; the player's next turn begins via two endTurns (p->f->p)
-  endTurn(fight); // to foe
-  endTurn(fight); // back to player: pet acts here
-  const petEvents = fight.pendingTicks.filter(e => e.t === 'pethit');
-  assert.ok(petEvents.length >= 1, 'the hound bit');
+  // Bite is available immediately (specialCd starts 0)
+  assert.ok(petActionsFor(fight).find(a => a.id === 'bite').enabled, 'bite ready at fight start');
+  const evs = applyPetAction(fight, 'bite');
+  assert.ok(evs.some(e => e.t === 'pethit'), 'the hound bit');
   assert.ok(F.hp < foeHp0, 'bite dealt damage');
   assert.ok(F.poison && F.poison.stacks === 2, 'rabid applied 2 poison stacks');
+  // special now on cooldown; a basic (nip) is still available
+  assert.ok(!petActionsFor(fight).find(a => a.id === 'bite').enabled, 'bite on cooldown after use');
+  assert.ok(petActionsFor(fight).find(a => a.id === 'nip').enabled, 'nip (basic) always available');
+  // poison ticks when the foe's turn begins
   const hpBeforeTick = F.hp;
-  endTurn(fight); endTurn(fight); // cycle: poison ticks on the foe's turn start
-  // find any poisontick
-  const anyPoison = fight.pendingTicks.some(e => e.t === 'poisontick') || F.hp < hpBeforeTick;
-  assert.ok(anyPoison || F.poison === null, 'poison ticked (or wore off)');
+  endTurn(fight); // to foe -> ticks foe DoTs
+  assert.ok(fight.pendingTicks.some(e => e.t === 'poisontick') || F.hp < hpBeforeTick, 'poison ticked');
 });
 
-test('pets: Warden shields its owner when it acts', () => {
+test('pets: manual Warden Shield wards its owner', () => {
   const P = makeFighter({ name: 'P', stats: MID, pet: buildBattlePet('C2', 6, ['w-bulwark']) });
   const F = makeFighter({ name: 'F', stats: MID });
   const fight = createFight({ player: P, foe: F, seed: 7 });
-  endTurn(fight); endTurn(fight); // back to player: warden acts
+  applyPetAction(fight, 'shield');
   assert.ok(P.ward > 0, `warden granted a shield (${P.ward})`);
 });
 

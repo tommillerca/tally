@@ -109,6 +109,29 @@ export function buildBattlePet(petId, level = 1, picks = []) {
   };
 }
 
+// The pet's manual kit: on its own turn you pick ONE of these. Each family has a
+// SPECIAL (its signature, on a short cooldown), a light BASIC (every turn), and
+// GUARD (the pet steadies itself, recovering some HP). The special reuses the
+// tuned petAbilityEffect below.
+export const PET_ACTIONS = {
+  hound: [
+    { id: 'bite', name: 'Bite', kind: 'special', cd: 2, desc: 'Savage bite: damage + poison' },
+    { id: 'nip', name: 'Nip', kind: 'basic', desc: 'Quick chip damage' },
+    { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
+  ],
+  warden: [
+    { id: 'shield', name: 'Shield', kind: 'special', cd: 2, desc: 'Ward + mend you' },
+    { id: 'tend', name: 'Tend', kind: 'basic', desc: 'Small heal for you' },
+    { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
+  ],
+  imp: [
+    { id: 'hex', name: 'Hex', kind: 'special', cd: 2, desc: 'Curse: weaken + blind/mark' },
+    { id: 'zap', name: 'Zap', kind: 'basic', desc: 'Chip damage + a little Hype for you' },
+    { id: 'guard', name: 'Guard', kind: 'guard', desc: 'Steady up (heal a little)' },
+  ],
+};
+export function petActionMeta(family) { return PET_ACTIONS[family] || PET_ACTIONS.hound; }
+
 // Resolve the pet's on-use ability. Pure: returns a list of intents the engine
 // applies (so the engine keeps its dealDamage/status authority). `self`/`foe`
 // are the fighters; `atkDamageBase` scales the hound bite off the owner's power.

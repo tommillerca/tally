@@ -25,6 +25,7 @@ import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
   applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
+  petActionsFor, applyPetAction,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
@@ -2845,7 +2846,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
         </div>
-        <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG'] })}</div>
+        <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
           <div class="bh-stage fstage petmini" id="petStage">${petArtId && BH_BY_ID[petArtId] ? `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">` : ''}</div>
@@ -3045,6 +3046,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'wardfx', fxMs + 250);
       floatNode(ev.laststand ? 'LAST STAND!' : (ev.shield ? `+${ev.shield} ward` : '+heal'), ev.who, 'stamp holy');
       if (ev.heal) floatNode(`+${ev.heal}`, ev.who, 'dmg heal');
+    } else if (ev.t === 'petguard') {
+      pulse(el('petStage') || el('youStage'), 'wardfx', fxMs + 200);
+      floatNode('🐾 steady', ev.who, 'stamp cool');
     } else if (ev.t === 'petdebuff') {
       pulse(ev.who === 'p' ? (el('petStage') || el('youStage')) : el('foeStage'), 'hexfx', fxMs + 250);
       floatNode('🐾 cursed', ev.who, 'stamp hex');
@@ -3119,6 +3123,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'pethit') return `${esc(ev.name)} savaged ${who === 'You' ? foe.name : 'you'} for ${ev.damage}`;
     if (ev.t === 'petshield') return ev.laststand ? `${esc(ev.name)} threw itself in front of the blow!` : `${esc(ev.name)} shielded ${who === 'You' ? 'you' : foe.name}`;
     if (ev.t === 'petdebuff') return `${esc(ev.name)} cursed ${who === 'You' ? 'you' : foe.name}`;
+    if (ev.t === 'petguard') return `${esc(ev.name)} steadies itself`;
     if (ev.t === 'faint') return `${esc(ev.name)} went down! You fight on alone.`;
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
@@ -3137,6 +3142,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const playerTurn = fight.active === 'p' && !fight.over;
     if (!playerTurn) {
       factions.innerHTML = `<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">${fight.over ? '' : esc(foe.name) + ' is acting...'}</p>`;
+      return;
+    }
+    if (petPhase) {           // your pet's turn: pick one of its moves
+      const acts = petActionsFor(fight);
+      let ph = `<p class="pet-turn-h" style="grid-column:1/-1">🐾 ${esc(petBody ? petBody.name : 'Pet')}'S TURN · pick a move</p>`;
+      ph += acts.map(a => `<button class="fight-act petmove" data-petmove="${a.id}" ${a.enabled ? '' : 'disabled'}>
+        <b>${a.name}</b><small>${a.enabled ? esc(a.desc) : `ready in ${a.cd}`}</small></button>`).join('');
+      factions.innerHTML = ph;
+      $$('[data-petmove]', factions).forEach(b => b.addEventListener('click', () => petAct(b.dataset.petmove)));
       return;
     }
     const legal = actionsFor(fight);
@@ -3209,7 +3223,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     factions.innerHTML = html;
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     $('#moreBtn', factions)?.addEventListener('click', () => { showMore = !showMore; renderActions(); });
-    $('#endTurn', factions)?.addEventListener('click', finishPlayerTurn);
+    $('#endTurn', factions)?.addEventListener('click', endPlayerBody);
   }
 
   function setLog(msg) { const f = el('flog'); if (f) f.textContent = msg || '...'; }
@@ -3222,18 +3236,37 @@ async function openFight(pitWrap, fighter, foeCfg) {
   }
 
   let pendingEnd = null;
+  let petPhase = false;   // after your body's turn, you drive the pet's turn
   function playerAct(id) {
-    if (fight.active !== 'p' || fight.over) return;
+    if (fight.active !== 'p' || fight.over || petPhase) return;
     const evs = applyAction(fight, id);
     if (!evs.length) return;
     evs.forEach(playFx);
     refreshAll(evs.map(describe).filter(Boolean).join(' · '));
     if (fight.over) return settle();
-    if (fight.ap <= 0 && !pendingEnd) pendingEnd = setTimeout(finishPlayerTurn, fast ? 120 : 500);
+    if (fight.ap <= 0 && !pendingEnd) pendingEnd = setTimeout(endPlayerBody, fast ? 120 : 500);
   }
 
-  function finishPlayerTurn() {
+  // your body's turn is done -> hand control to the pet (its own turn), or end
+  function endPlayerBody() {
     if (pendingEnd) { clearTimeout(pendingEnd); pendingEnd = null; }
+    if (fight.active !== 'p' || fight.over || petPhase) return;
+    if (petActionsFor(fight).length) { petPhase = true; refreshAll("Your pet's turn."); return; }
+    doEndTurn();
+  }
+
+  function petAct(id) {
+    if (!petPhase || fight.over) return;
+    petPhase = false;
+    const evs = applyPetAction(fight, id);
+    evs.forEach(playFx);
+    updateBars();
+    if (evs.length) setLog(evs.map(describe).filter(Boolean).join(' · '));
+    if (fight.over) return settle();
+    setTimeout(doEndTurn, fast ? 100 : 520);
+  }
+
+  function doEndTurn() {
     if (fight.active !== 'p' || fight.over) return;
     endTurn(fight);
     for (const tick of (fight.pendingTicks || [])) playFx(tick);
