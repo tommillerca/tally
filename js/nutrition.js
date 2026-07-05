@@ -33,6 +33,21 @@ export function computeTargets(profile) {
   return { kcal, p, c, f, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
+// Your activity level IS an assumed daily active burn: BMR x (factor - 1). That
+// amount is already baked into your target, so only measured active energy ABOVE
+// it is genuinely "extra" and earns calories back.
+export const ACTIVE_CREDIT_FRACTION = 0.5; // credit half of the excess (watches over-read burn)
+export function assumedActiveBurn(profile) {
+  const act = ACTIVITY_LEVELS.find(a => a.id === profile.activity) || ACTIVITY_LEVELS[1];
+  return Math.round(bmrMifflin(profile) * (act.factor - 1));
+}
+// Calories to add back to today's allowance given measured active energy (kcal).
+export function activeCalorieBonus(profile, activeKcal, fraction = ACTIVE_CREDIT_FRACTION) {
+  if (!profile || activeKcal == null || !isFinite(activeKcal)) return 0;
+  const excess = activeKcal - assumedActiveBurn(profile);
+  return excess > 0 ? Math.round(excess * fraction) : 0;
+}
+
 // ---- Food model ----
 // food = {
 //   id, name, brand?, source: 'generic'|'off'|'fdc'|'custom', barcode?,

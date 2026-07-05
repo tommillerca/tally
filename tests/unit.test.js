@@ -8,6 +8,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
   dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
+  assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
@@ -46,6 +47,20 @@ test('computeTargets male recomp', () => {
 test('computeTargets female floor', () => {
   const t = computeTargets({ sex: 'f', age: 45, heightCm: 158, weightKg: 52, activity: 'sedentary', goal: 'cut' });
   assert.ok(t.kcal >= 1200);
+});
+test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%', () => {
+  const p = { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };
+  const bmr = bmrMifflin(p);
+  const assumed = assumedActiveBurn(p);
+  assert.equal(assumed, Math.round(bmr * (1.55 - 1)), 'baseline = BMR x (factor-1)');
+  // below/at baseline -> nothing back (target already covers it)
+  assert.equal(activeCalorieBonus(p, assumed - 50), 0);
+  assert.equal(activeCalorieBonus(p, assumed), 0);
+  // above baseline -> half the excess
+  assert.equal(activeCalorieBonus(p, assumed + 600), 300);
+  // missing data -> 0, never negative
+  assert.equal(activeCalorieBonus(p, null), 0);
+  assert.equal(activeCalorieBonus(p, 0), 0);
 });
 
 // ---- portion math ----

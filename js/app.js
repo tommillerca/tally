@@ -32,6 +32,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
+  activeCalorieBonus, assumedActiveBurn,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { fetchOffProduct, fetchFdcByBarcode, searchFdc } from './sources.js';
@@ -315,7 +316,6 @@ function foodDefaultKcal(food) {
 /* ================= today ================= */
 
 async function renderToday(el) {
-  const t = S.settings.targets;
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
   const allLog = await db.all('log');
@@ -323,6 +323,10 @@ async function renderToday(el) {
   const xp = await totalXp();
   const lvl = levelFor(xp);
   const hk = await db.get('health', S.date);
+  // extra-active days earn calories back: measured active energy ABOVE what your
+  // activity level already assumes (BMR x (factor-1)), credited at 50%.
+  const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
+  const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
   const eq = await equipped();
   const coinBal = await coins();
   const crates = await unopenedCrates();
@@ -649,7 +653,13 @@ function healthCardHtml(hk, isToday) {
             <div class="bar steps" style="margin-top:5px"><i style="width:${stepPct}%"></i></div>
           </div>
         </div>
-        ${active != null ? `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn <span style="color:var(--text-3);font-weight:500">· shown for context, your target already covers activity</span></div></div>` : ''}
+        ${active != null ? (() => {
+          const bonus = activeCalorieBonus(S.settings.profile, active);
+          const note = bonus > 0
+            ? `<span style="color:var(--accent);font-weight:700">· +${bonus} kcal earned back</span>`
+            : `<span style="color:var(--text-3);font-weight:500">· within your activity baseline</span>`;
+          return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
+        })() : ''}
       </div>` :
       '<p class="note">No sync yet today. Run your "Sync Boneheadz" shortcut, then tap Sync.</p>'}
   </div>`;
