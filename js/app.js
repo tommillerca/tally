@@ -2748,8 +2748,9 @@ async function renderPit(wrap) {
   const ceiling = endlessCeiling(denWins);
   const endlessBeaten = xpRows.filter(r => r.type === 'endless').length;
   const nextRank = endlessBeaten + 1;
-  const endlessOpen = nextRank <= ceiling;
-  const nextFoe = endlessFoe(nextRank);
+  const canNewRank = nextRank <= ceiling;           // a fresh rank is available
+  const fightRank = canNewRank ? nextRank : Math.max(1, ceiling); // else rematch the cap rank
+  const fightFoe = endlessFoe(fightRank);
   const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
   const wins = xpRows.filter(r => r.type === 'fight').length;
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
@@ -2813,14 +2814,20 @@ async function renderPit(wrap) {
       <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
       ${champOpen ? `<button class="btn small" id="champBtn">Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>
-    ${champBeaten ? `
     <div class="sect-h">Endless · The Gauntlet</div>
-    <p class="note" style="margin:2px 2px 8px">Never runs dry: foes scale forever. Cleared <b>${endlessBeaten}</b> · climb ceiling <b>${ceiling}</b>. Beat <b>world bosses</b> on the map to raise the ceiling (${denWins} beaten).</p>
+    ${champBeaten ? `
+    <p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b> — the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'}.${canNewRank ? '' : ` You've hit the current cap: <b>beat a world boss</b> to unlock rank ${ceiling + 1}.`}</p>
     <div class="crate-row">
-      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:${endlessOpen ? 'var(--accent)' : 'var(--text-3)'}">${nextRank}</span>
-      <div style="flex:1"><b>${esc(nextFoe.name)}</b><small>${Math.round(nextFoe.mult * 100)}% stats · ${nextFoe.xp} XP + ${nextFoe.coins} coins</small></div>
-      ${endlessOpen ? `<button class="btn small" id="endlessBtn">Fight</button>` : `<button class="btn small ghost" id="endlessGate">Beat a world boss</button>`}
-    </div>` : ''}`;
+      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:var(--accent)">${fightRank}</span>
+      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `rematch · +${fightFoe.repeatCoins} coins`}</small></div>
+      <button class="btn small" id="endlessBtn">Fight</button>
+    </div>
+    ${canNewRank ? '' : `<button class="link" id="endlessGate" style="margin:4px 2px 0">Go beat a world boss to climb higher →</button>`}`
+    : `
+    <div class="crate-row" style="opacity:.75">
+      <span class="crate-ico">🔒</span>
+      <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
+    </div>`}`;
 
   async function adjustAlloc(key, delta) {
     const alloc = { ...(await kvGet('trainalloc', {})) };
@@ -2850,7 +2857,7 @@ async function renderPit(wrap) {
   $('#champBtn', body)?.addEventListener('click', () =>
     start({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
-    start({ mode: 'endless', rank: nextFoe.rank, name: nextFoe.name, mult: nextFoe.mult, talents: nextFoe.talents, weaponId: nextFoe.weaponId, aiLevel: nextFoe.aiLevel, coins: nextFoe.coins, repeatCoins: nextFoe.repeatCoins, xp: nextFoe.xp, venue: 'The Gauntlet' }));
+    start({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet' }));
   $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); history.back(); setTimeout(openMap, 250); });
 }
 

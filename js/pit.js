@@ -1001,14 +1001,23 @@ export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapo
 /* ================= ladder ================= */
 
 export const LADDER = [
-  { rung: 1, name: 'Rattles', mult: 0.6, coins: 60, repeatCoins: 15, xp: 40 },
-  { rung: 2, name: 'Knuckles', mult: 0.75, coins: 70, repeatCoins: 15, xp: 40 },
-  { rung: 3, name: 'Big Femur', mult: 0.9, coins: 80, repeatCoins: 20, xp: 50 },
-  { rung: 4, name: 'The Gravekeeper', mult: 1.05, coins: 90, repeatCoins: 20, xp: 50 },
-  { rung: 5, name: 'Two-Ton Tibia', mult: 1.2, coins: 110, repeatCoins: 25, xp: 60 },
+  { rung: 1, name: 'Rattles', mult: 0.55, coins: 60, repeatCoins: 15, xp: 40 },
+  { rung: 2, name: 'Knuckles', mult: 0.68, coins: 70, repeatCoins: 15, xp: 40 },
+  { rung: 3, name: 'Big Femur', mult: 0.8, coins: 80, repeatCoins: 20, xp: 45 },
+  { rung: 4, name: 'The Gravekeeper', mult: 0.92, coins: 90, repeatCoins: 20, xp: 50 },
+  { rung: 5, name: 'Two-Ton Tibia', mult: 1.02, coins: 110, repeatCoins: 25, xp: 55 },
+  { rung: 6, name: 'Skullcracker', mult: 1.1, coins: 130, repeatCoins: 25, xp: 60 },
+  { rung: 7, name: 'The Bonecollector', mult: 1.18, coins: 150, repeatCoins: 30, xp: 70 },
+  { rung: 8, name: 'Ribcage Ricky', mult: 1.26, coins: 175, repeatCoins: 30, xp: 80 },
 ];
 export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, weaponId: 'bonecrusher', talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'] };
-export const RUNG_TALENTS = { 4: ['heavyhands'], 5: ['heavyhands', 'marrowlust'] };
+export const RUNG_TALENTS = {
+  4: ['heavyhands'],
+  5: ['heavyhands', 'marrowlust'],
+  6: ['heavyhands', 'marrowlust', 'bonebreaker'],
+  7: ['lightfeet', 'counterstep', 'kite', 'bleedout'],
+  8: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull'],
+};
 
 // Endless ladder: past the Champion, foes scale forever so the Pit never runs
 // dry. First-clear XP is real; repeat coins diminish so it's not a farm exploit.
@@ -1039,7 +1048,7 @@ export function endlessFoe(rank) {
   };
 }
 // How high you may climb: 3 free ranks, then +2 per distinct world-boss den beaten.
-export function endlessCeiling(denWins) { return 3 + 2 * Math.max(0, denWins); }
+export function endlessCeiling(denWins) { return 5 + 3 * Math.max(0, denWins); }
 
 export function scaleStats(stats, mult) {
   const out = {};

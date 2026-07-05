@@ -174,7 +174,9 @@ test('ladder scaling floors and caps', () => {
   const s = scaleStats({ power: 50, marrow: 50, wind: 50, reflex: 40, hype: 30 }, 0.6);
   assert.equal(s.power, 30);
   assert.ok(Object.values(scaleStats({ power: 10, marrow: 10, wind: 10, reflex: 10, hype: 10 }, 0.6)).every(v => v >= 5));
-  assert.equal(LADDER.length, 5);
+  assert.equal(LADDER.length, 8);
+  assert.ok(LADDER.every((r, i) => i === 0 || r.mult > LADDER[i - 1].mult), 'rung mults ascend');
+  assert.ok(LADDER[LADDER.length - 1].mult < CHAMPION.mult, 'champion tops the ladder');
   assert.equal(CHAMPION.weaponId, 'bonecrusher');
 });
 
