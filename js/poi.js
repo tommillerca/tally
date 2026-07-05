@@ -4,7 +4,7 @@
 // cell + ISO week). Everything is deterministic and idempotent: the ledger key
 // `boss-<week>-<denId>` makes each den claimable once per week, server-verifiable
 // later, exactly like hunt spawns.
-import { award } from './game.js';
+import { award, levelFor, totalXp } from './game.js';
 import { coinsAdd, grantCrate, grantGear, ownedGearIds } from './loot.js';
 import { kvGet, kvSet, db } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
@@ -129,10 +129,17 @@ export function denRewardLabel(r) {
 const DEN_GEAR_FLOOR = ['uncommon', 'uncommon', 'rare', 'rare', 'rare', 'legendary', 'legendary'];
 const TIER_IDX = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
 
-export function rollDenLoot(den, week, ownedSet) {
+// maxLevel caps how far ahead a drop can be gated (current level + 3): loot you
+// can't equip for many levels kills momentum. We'd rather drop a LOWER tier you
+// can use soon than a prestige piece you can't touch, so the level cap wins over
+// the tier floor when they conflict.
+export function rollDenLoot(den, week, ownedSet, maxLevel = 999) {
   const floor = TIER_IDX[DEN_GEAR_FLOOR[den.tier] || 'uncommon'];
-  const fresh = GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && !ownedSet.has(g.id));
-  const pool = fresh.length >= 2 ? fresh : GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor);
+  const within = g => (g.minLevel || 1) <= maxLevel;
+  const fresh = GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && !ownedSet.has(g.id) && within(g));
+  let pool = fresh.length >= 2 ? fresh : GEAR_ITEMS.filter(g => TIER_IDX[g.rarity] >= floor && within(g));
+  if (pool.length < 2) pool = GEAR_ITEMS.filter(g => !ownedSet.has(g.id) && within(g)); // drop the tier floor
+  if (pool.length < 2) pool = GEAR_ITEMS.filter(within);
   if (pool.length < 2) return null;
   const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
   const first = pool[Math.floor(rng() * pool.length)];
@@ -153,7 +160,8 @@ export async function claimDenWin(den, week = isoWeekKey()) {
   // every boss drops two pieces: the player keeps ONE (chooser persists in kv
   // until picked, so closing the victory screen never eats the loot)
   const owned = await ownedGearIds();
-  const choices = rollDenLoot(den, week, owned);
+  const lvl = levelFor(await totalXp()).level;
+  const choices = rollDenLoot(den, week, owned, lvl + 3);
   if (choices) {
     const pending = (await kvGet('denloot', [])) || [];
     if (!pending.some(p => p.key === denKey(week, den))) {

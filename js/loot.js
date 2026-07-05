@@ -292,7 +292,11 @@ export async function openCrate(invId) {
     const { item, dupe } = rollCosmetic(owned, floor, def.slotBias);
     // gear-slot art has a 55% chance to drop as a STATTED variant of the same look
     if (GEAR_SLOTS.includes(item.slot) && rng() < 0.55) {
-      const variants = GEAR_ITEMS.filter(g => g.artId === item.id);
+      // never drop gear gated more than 3 levels ahead (dead loot kills momentum);
+      // if no variant qualifies, fall through to the plain cosmetic instead
+      const { totalXp: _txp, levelFor: _lf } = await import('./game.js');
+      const cap = _lf(await _txp()).level + 3;
+      const variants = GEAR_ITEMS.filter(g => g.artId === item.id && (g.minLevel || 1) <= cap);
       const gOwned = await ownedGearIds();
       const pick = variants.find(g => !gOwned.has(g.id)) || variants[Math.floor(rng() * variants.length)];
       if (pick && !gOwned.has(pick.id)) {

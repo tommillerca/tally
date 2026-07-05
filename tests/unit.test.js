@@ -675,6 +675,19 @@ test('den loot: two-piece gamble rolls distinct choices with tier floors', async
     assert.deepEqual(pair.map(g => g.id), again.map(g => g.id));
   }
 });
+test('den loot never drops gear gated more than 3 levels ahead', async () => {
+  const poi = await import('../js/poi.js');
+  const wk = '2026-W27';
+  const dens = poi.densNear(wk, 49.2827, -123.1207);
+  for (const lvl of [1, 3, 6, 10]) {
+    const cap = lvl + 3;
+    for (const den of dens) {
+      const pair = poi.rollDenLoot(den, wk, new Set(), cap);
+      if (!pair) continue; // acceptable if nothing fits the cap
+      assert.ok(pair.every(g => (g.minLevel || 1) <= cap), `Lv${lvl} den ${den.id}: ${pair.map(g => g.minLevel)}`);
+    }
+  }
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
