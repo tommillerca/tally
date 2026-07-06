@@ -16,6 +16,7 @@ import {
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
+import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
 import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
@@ -85,6 +86,9 @@ const ICONS = {
 ICONS.pit = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
+ICONS.water = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2s6.2 6.6 6.2 10.8A6.2 6.2 0 0 1 5.8 14C5.8 9.8 12 3.2 12 3.2z" fill="#7cc4ff" stroke="#173a52" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.4 13.6a2.6 2.6 0 0 0 2.6 2.6" fill="none" stroke="#e8f5ff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+ICONS.bed = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#f2e9d7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3H9v3" fill="rgba(242,233,215,0.12)"/><path d="M5.5 11V9.4a1.6 1.6 0 0 1 1.6-1.6" /></svg>`;
+ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z" fill="#b6a8e8" stroke="#2a2340" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16.5" cy="7.5" r="0.9" fill="#f0ecff"/></svg>`;
 
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
@@ -371,6 +375,7 @@ async function renderToday(el) {
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
+  const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled };
   const healthRows = await db.all('health');
   const qbase = {
@@ -490,6 +495,7 @@ async function renderToday(el) {
     </div>
   </div>
 
+  ${isToday ? wellnessCardHtml(wellness) : ''}
   ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs) : ''}
   ${healthCardHtml(hk, isToday)}
 
@@ -530,6 +536,10 @@ async function renderToday(el) {
   $('#huntBtn')?.addEventListener('click', openMap);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
+  // daily wellness (pure-positive self-care: only ever adds a reward)
+  $('#wWater')?.addEventListener('click', async () => { const w = await addWater(1); popSound(S.sounds); if (w.water >= WATER_GOAL) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); toast('Hydrated! Claim the quest for coins.', 2600); } refresh(); });
+  $('#wBed')?.addEventListener('click', async () => { await markBed(); popSound(S.sounds); toast('Bed made. Small win banked.', 2200); refresh(); });
+  $('#wSleep')?.addEventListener('click', async () => { await markSleep(); popSound(S.sounds); toast('Good sleep logged. Rest is training too.', 2400); refresh(); });
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
   if (!window.__automapRan && new URLSearchParams(location.search).has('automap')) {
@@ -736,6 +746,24 @@ function potionShort(p) {
 
 // a Today alert card, ONLY when a dish is ready to collect (access lives in the
 // shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
+function wellnessCardHtml(w) {
+  if (!w) return '';
+  const waterDone = w.water >= WATER_GOAL;
+  const row = (cls, ico, title, doneLbl, todoLbl, done, btnId, btnLabel, extra = '') => `
+    <div class="well-row ${done ? 'done' : ''}">
+      <span class="well-ico">${ico}</span>
+      <div class="well-body"><b>${title}</b><small>${done ? doneLbl : todoLbl}</small>${extra}</div>
+      ${done ? '<span class="well-check">✓</span>' : `<button class="btn small ${cls}" id="${btnId}">${btnLabel}</button>`}
+    </div>`;
+  const waterBar = `<div class="well-bar"><i style="width:${Math.round(w.water / WATER_GOAL * 100)}%"></i></div>`;
+  return `<div class="card wellness-card">
+    <div class="sect-h" style="margin:0 0 4px">Daily wellness</div>
+    ${row('', ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
+    ${row('ghost', ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
+    ${row('ghost', ICONS.moon(22), 'Good sleep', 'Logged. Rest is training too.', 'Log a solid night of sleep', w.sleep, 'wSleep', 'Log it')}
+  </div>`;
+}
+
 function kitchenCardHtml(cook, ingCount, buffs) {
   if (!cook || !cook.ready) return '';
   return `<div class="card kitchen-card" id="kitchenCard">

@@ -84,6 +84,10 @@ export function questCtx(period, base) {
     proteinDays: countType('protein'),
     cookedToday: base.allXp.some(r => r.type === 'cook' && r.date === base.date),
     cooksDone: countType('cook'),
+    bedToday: base.allXp.some(r => r.key === `bed-${base.date}`),
+    waterToday: base.allXp.some(r => r.key === `water-${base.date}`),
+    sleepToday: base.allXp.some(r => r.key === `sleep-${base.date}`),
+    wellnessDays: new Set(base.allXp.filter(r => r.type === 'wellness' && inP(r)).map(r => r.date)).size,
     logDays,
   };
 }
@@ -109,6 +113,12 @@ export const DAILY_POOL = [
     progress: c => clamp(c.weighedToday ? 1 : 0, 1) },
   { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50,
     progress: c => clamp(c.cookedToday ? 1 : 0, 1) },
+  { id: 'q-water', name: 'Stay watered', desc: 'Drink 8 cups of water', coins: 45,
+    progress: c => clamp(c.waterToday ? 1 : 0, 1) },
+  { id: 'q-bed', name: 'Make your bed', desc: 'Start the day right: make your bed', coins: 40,
+    progress: c => clamp(c.bedToday ? 1 : 0, 1) },
+  { id: 'q-sleep', name: 'Rest up', desc: 'Log a good night of sleep', coins: 55,
+    progress: c => clamp(c.sleepToday ? 1 : 0, 1) },
   { id: 'q-pit1', name: 'Pit scrap', desc: 'Win a Pit fight', coins: 60,
     progress: c => clamp(c.pitWins, 1) },
   { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80,
@@ -136,6 +146,8 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.logDays, 5) },
   { id: 'w-cook', name: 'Cauldron keeper', desc: 'Cook or brew 5 times this week', coins: 130, crate: 'golden',
     progress: c => clamp(c.cooksDone, 5) },
+  { id: 'w-wellness', name: 'Look after yourself', desc: 'Hit a wellness habit (water/bed/sleep) on 5 days', coins: 150, crate: 'golden',
+    progress: c => clamp(c.wellnessDays, 5) },
 ];
 
 export const MONTHLY_POOL = [

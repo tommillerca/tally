@@ -752,5 +752,16 @@ test('v78 cooking quests exist (daily + weekly), driven by the cook ledger', () 
   assert.deepEqual(WEEKLY_POOL.find(q => q.id === 'w-cook').progress({ cooksDone: 3 }), { cur: 3, target: 5 });
 });
 
+test('v80 wellness quests: water/bed/sleep daily + weekly self-care, all pure-positive', () => {
+  for (const id of ['q-water', 'q-bed', 'q-sleep']) assert.ok(DAILY_POOL.find(q => q.id === id), id + ' exists');
+  assert.ok(WEEKLY_POOL.find(q => q.id === 'w-wellness'), 'weekly wellness quest');
+  assert.deepEqual(DAILY_POOL.find(q => q.id === 'q-bed').progress({ bedToday: true }), { cur: 1, target: 1 });
+  assert.deepEqual(DAILY_POOL.find(q => q.id === 'q-water').progress({ waterToday: false }), { cur: 0, target: 1 });
+  assert.deepEqual(DAILY_POOL.find(q => q.id === 'q-sleep').progress({ sleepToday: true }), { cur: 1, target: 1 });
+  assert.deepEqual(WEEKLY_POOL.find(q => q.id === 'w-wellness').progress({ wellnessDays: 3 }), { cur: 3, target: 5 });
+  // every wellness quest is a reward-only add (never a penalty / no negative target)
+  for (const id of ['q-water', 'q-bed', 'q-sleep', 'w-wellness']) { const q = [...DAILY_POOL, ...WEEKLY_POOL].find(x => x.id === id); assert.ok(q.coins > 0, id + ' pays coins'); }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
