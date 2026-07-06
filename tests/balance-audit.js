@@ -17,6 +17,7 @@ const BUILDS = {
   gravewarden:   ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight'],
   boneshaman:    ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'totem', 'tempest'],
   alchemist:     ['fireflask', 'potency', 'acidvial', 'swallow', 'concoction', 'catalyst', 'corrode', 'overdose', 'deathbomb'],
+  crowlord:      ['callcrows', 'sharpbeaks', 'peckeyes', 'carrion', 'flock', 'scavenge', 'omen', 'frenzy', 'murder'],
   // 12-point cross-tree menaces
   kitecaster:    ['bonebolt', 'soulsiphon', 'gravechill', 'mend', 'hex', 'bonestorm', 'lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
   immortal:      ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight', 'crowdwork', 'bigentrance', 'heckle', 'ovation', 'secondwind', 'showstopper'],
@@ -52,6 +53,9 @@ const POLICIES = {
     if (pick('deathbomb') && p.toxicity >= 40) return 'deathbomb'; // dump the bomb at high Toxicity
     if (pick('acidvial') && !fight.f.sunder) return 'acidvial';
     if (pick('fireflask') && !fight.f.burn) return 'fireflask';
+    if (pick('murder') && (p.flock || 0) >= 5) return 'murder';       // unleash a big flock
+    if (pick('peckeyes') && !fight.f.blind) return 'peckeyes';
+    if (pick('callcrows') && (p.flock || 0) < (4 + 3)) return 'callcrows'; // grow the flock
     if (p.wind < 18 && pick('brace')) return 'brace';
     if (pick('firebolt') && !fight.f.burn) return 'firebolt';
     if (pick('frostbolt') && fight.f.wind < 30) return 'frostbolt';

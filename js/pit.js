@@ -179,6 +179,23 @@ export const TALENT_TREES = [
       { id: 'deathbomb', tier: 4, name: 'Fury Bomb', move: true, desc: 'NEW MOVE: once per fight, a three-stage alchemical bomb whose damage scales with your Toxicity.' },
     ],
   },
+  {
+    id: 'crowlord', name: 'The Crow Lord', tag: 'The Murder', color: '#6f86c9',
+    flavor: 'Command a murder of crows. Call them to your Flock and they peck the enemy every turn — then unleash the whole Murder at once.',
+    nodes: [
+      { id: 'callcrows', tier: 1, name: 'Call the Murder', move: true, desc: 'NEW MOVE: summon 2 crows to your Flock (any range). Your Flock pecks the enemy at the start of each of your turns.' },
+      { id: 'sharpbeaks', tier: 1, ranks: 5, name: 'Sharp Beaks', desc: 'Each crow pecks +1 damage per rank.' },
+      { id: 'peckeyes', tier: 2, name: 'Peck the Eyes', move: true, desc: 'NEW MOVE: the flock dives — damage, BLIND the enemy for 2 turns, and add a crow to your Flock.' },
+      { id: 'carrion', tier: 2, name: 'Carrion Feast', desc: 'Your crows heal you for 30% of their peck damage.' },
+      { id: 'flock', tier: 2, ranks: 3, name: 'Growing Flock', desc: 'Your Flock holds +1 more crow per rank (base 4).' },
+      { id: 'roost', tier: 2, ranks: 5, name: 'Dark Roost', desc: '+4 max HP per rank.' },
+      { id: 'scavenge', tier: 3, ranks: 3, name: 'Scavenge', desc: 'Your crows also drain 1 enemy Stamina per crow, per rank, when they peck.' },
+      { id: 'omen', tier: 3, name: 'Ill Omen', desc: 'While your Flock is 4+, the harried enemy deals 15% less damage.' },
+      { id: 'nightwing', tier: 3, name: 'Nightwing', desc: 'Your Blind lasts 3 turns instead of 2.' },
+      { id: 'frenzy', tier: 3, ranks: 5, name: 'Feeding Frenzy', desc: '+2% crit chance per rank.' },
+      { id: 'murder', tier: 4, name: 'Unleash the Murder', move: true, desc: 'NEW MOVE: once per fight, every crow in your Flock strikes at once (damage scales with Flock size), then the Flock scatters.' },
+    ],
+  },
 ];
 
 export function talentPoints(level) { return Math.max(0, level - 1); }
@@ -230,7 +247,7 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArm
     ap: 2 + (weapon.apBonus || 0) + (talents && talents.has('lightfeet') ? 1 : 0),
     powerMult: 1 + (stats.power / 100) * 1.5,
     magicMult: 1 + (stats.hype / 100) * 1.5 + (weapon.magicBonus || 0),
-    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0) + rk('comboartist') * 0.02),
+    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0) + rk('comboartist') * 0.02 + rk('frenzy') * 0.02),
     glanceChance: (stats.reflex / 100) * 0.25 + rk('footwork') * 0.01,
     armor: armorDR(physPts),        // cuts incoming physical damage
     spellArmor: armorDR(spellPts),  // cuts incoming magic damage
@@ -362,6 +379,10 @@ export const ACTIONS = {
   acidvial: { label: 'Acid Vial', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'acidvial', magic: true, school: 'alchemy' },
   swallow:  { label: 'Swallow', range: 'any', ap: 1, wind: 18, talent: 'swallow', magic: true, school: 'alchemy' },
   deathbomb:{ label: 'Fury Bomb', range: 'close', ap: 2, wind: 40, base: 12, talent: 'deathbomb', magic: true, school: 'alchemy' },
+  // The Crow Lord (v79): grow a Flock that pecks every turn, then unleash it.
+  callcrows:{ label: 'Call the Murder', range: 'any', ap: 1, wind: 14, talent: 'callcrows' },
+  peckeyes: { label: 'Peck the Eyes', range: 'any', ap: 1, wind: 18, base: 12, hype: 6, talent: 'peckeyes', magic: true, school: 'shadow' },
+  murder:   { label: 'Unleash the Murder', range: 'any', ap: 2, wind: 30, base: 8, talent: 'murder', magic: true, school: 'shadow' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
   bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
 };
@@ -570,6 +591,8 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     sigsUsed: 0, shoveCount: 0,
     mendUses: 3, swallowUses: 3,
     toxicity: 0,      // Alchemist: builds from potions, powers alchemy dmg, decays each turn
+    flock: 0,         // Crow Lord: crows in your Flock; peck each turn, unleashed by Murder
+    murderUsed: false,
     ward: 0,          // holy shield pool, absorbs damage first
     burn: null,       // {per, turns}
     bleed: null,      // {stacks, turns}
@@ -738,6 +761,7 @@ export function actionsFor(fight) {
     if (id === 'totem' && me.totem) continue;      // totem still planted
     if (id === 'swallow' && me.swallowUses <= 0) continue;
     if (id === 'deathbomb' && me.deathbombUsed) continue;
+    if (id === 'murder' && (me.murderUsed || me.flock <= 0)) continue; // need a Flock to unleash
     if (id === 'ward' && me.ward >= 25) continue;
     if (id === 'guard' && (me.ward || 0) >= Math.round(GUARD_BASE + me.stats.marrow * 0.15)) continue;
     let windCost = windCostFor(me, id, a);
@@ -998,6 +1022,39 @@ export function applyAction(fight, actionId) {
       events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.swallowUses, toxicity: me.toxicity });
       break;
     }
+    case 'callcrows': {
+      const cap = 4 + rkOf(me, 'flock');
+      me.flock = Math.min(cap, (me.flock || 0) + 2);
+      events.push({ t: 'summon', who: fight.active, kind: 'crows', crows: me.flock });
+      break;
+    }
+    case 'peckeyes': {
+      const r = resolveHit({ move: 'peckeyes', attacker: me, defender: them, rng: fight.rng });
+      dealDamage(fight, defWho, r.damage, events);
+      if (r.damage > 0) {
+        gainHype(me, a.hype || 0);
+        gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
+        them.blind = { pct: 0.30, turns: me.talents.has('nightwing') ? 3 : 2 };
+        events.push({ t: 'status', who: defWho, kind: 'blind' });
+      }
+      const cap = 4 + rkOf(me, 'flock');
+      me.flock = Math.min(cap, (me.flock || 0) + 1); // the diving flock grows
+      events.push({ t: 'hit', who: fight.active, move: 'peckeyes', ...r, magic: true, crows: me.flock });
+      break;
+    }
+    case 'murder': {
+      me.murderUsed = true;
+      const crows = me.flock || 0;
+      me.flock = 0; // the Murder scatters after it strikes
+      const hits = Math.max(1, Math.min(6, crows));
+      for (let h = 0; h < hits && them.hp > 0; h++) {
+        const r = resolveHit({ move: 'murder', attacker: me, defender: them, rng: fight.rng });
+        dealDamage(fight, defWho, r.damage, events);
+        if (r.damage > 0) { gainHype(me, 4); gainHype(them, them.talents.has('ovation') ? 6 : 4); }
+        events.push({ t: 'hit', who: fight.active, move: 'murder', damage: r.damage, crit: r.crit, glance: false, storm: true, hitNo: h + 1, whiffed: !!r.whiffed });
+      }
+      break;
+    }
     case 'deathbomb': {
       me.deathbombUsed = true;
       addToxicity(me, 30);
@@ -1130,6 +1187,19 @@ export function endTurn(fight) {
     me.hp = Math.max(1, me.hp - 6); // bleed the cost; never self-KO
     ticks.push({ t: 'ragetick', who: next, damage: 6 });
     me.rage.turns -= 1; if (me.rage.turns <= 0) { me.rage = null; ticks.push({ t: 'ragefade', who: next }); }
+  }
+  if (me.hp > 0 && me.flock > 0) { // Crow Lord: the Flock pecks at the start of your turn
+    const foeWho = next === 'p' ? 'f' : 'p';
+    const foe = fighterOf(fight, foeWho);
+    if (foe && foe.hp > 0) {
+      const perCrow = Math.max(2, 2 + rkOf(me, 'sharpbeaks') + Math.floor((me.d.magicMult - 1) * 4));
+      const dmg = me.flock * perCrow;
+      foe.hp = Math.max(0, foe.hp - dmg);
+      ticks.push({ t: 'crowpeck', who: foeWho, damage: dmg, crows: me.flock });
+      if (rkOf(me, 'scavenge')) foe.wind = Math.max(0, foe.wind - me.flock * rkOf(me, 'scavenge'));
+      if (me.talents.has('carrion')) { const h = Math.round(dmg * 0.3 * healMult(me)); me.hp = Math.min(me.d.maxHp, me.hp + h); ticks.push({ t: 'heal', who: next, amount: h }); }
+      if (me.talents.has('omen') && me.flock >= 4 && (!foe.weaken || foe.weaken.pct < 0.15)) foe.weaken = { pct: 0.15, turns: 2 };
+    }
   }
   if (me.hp > 0 && (me.minion || me.totem)) {
     const foeWho = next === 'p' ? 'f' : 'p';

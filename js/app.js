@@ -3464,6 +3464,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (f.minion) bits.push('MINION');
       if (f.totem) bits.push('TOTEM');
       if (f.toxicity > 0) bits.push(`TOXIC ${f.toxicity}`);
+      if (f.flock > 0) bits.push(`FLOCK ${f.flock}`);
       if (bits.length) {
         chip.hidden = false;
         chip.textContent = bits.join(' · ');
@@ -3595,10 +3596,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode('rage fades', ev.who, 'stamp dim');
     } else if (ev.t === 'summon') {
       const stage = ev.who === 'p' ? el('youStage') : el('foeStage');
-      pulse(stage, ev.kind === 'minion' ? 'summonfx' : 'totemfx', fxMs + 400);
-      impactBurst(ev.who, ev.kind === 'minion' ? 'shadow' : 'nature', true);
-      floatNode(ev.kind === 'minion' ? '☠ RISE' : '⚡ TOTEM', ev.who, ev.kind === 'minion' ? 'stamp hex' : 'stamp cool');
+      pulse(stage, ev.kind === 'totem' ? 'totemfx' : 'summonfx', fxMs + 400);
+      impactBurst(ev.who, ev.kind === 'totem' ? 'nature' : 'shadow', true);
+      floatNode(ev.kind === 'minion' ? '☠ RISE' : ev.kind === 'crows' ? `🐦 FLOCK ${ev.crows}` : '⚡ TOTEM', ev.who, ev.kind === 'totem' ? 'stamp cool' : 'stamp hex');
       hitSound(S.sounds, 'zap');
+    } else if (ev.t === 'crowpeck') {
+      const vs = ev.who;
+      pulse(vs === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
+      impactBurst(vs, 'shadow');
+      floatNode(`🐦 -${ev.damage}`, vs, 'dmg shadow');
+      hitSound(S.sounds, 'tick');
     } else if (ev.t === 'minionstrike') {
       const vs = ev.who; // event carries the victim's who
       pulse(vs === 'p' ? el('youStage') : el('foeStage'), 'hurt', fxMs);
@@ -3697,7 +3704,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'mark') return `${who === 'You' ? 'You are' : who + ' is'} MARKED for death`;
       if (ev.kind === 'rage') return `${who === 'You' ? 'You fly' : who + ' flies'} into a RAGE`;
     }
-    if (ev.t === 'summon') return ev.kind === 'minion' ? `${who === 'You' ? 'You raise' : who + ' raises'} a bone minion` : `${who === 'You' ? 'You plant' : who + ' plants'} a spirit totem`;
+    if (ev.t === 'summon') return ev.kind === 'minion' ? `${who === 'You' ? 'You raise' : who + ' raises'} a bone minion` : ev.kind === 'crows' ? `${who === 'You' ? 'You call' : who + ' calls'} crows (Flock ${ev.crows})` : `${who === 'You' ? 'You plant' : who + ' plants'} a spirit totem`;
+    if (ev.t === 'crowpeck') return `the flock pecks ${who === 'You' ? 'you' : (who === 'p' ? 'you' : foe.name)} for ${ev.damage}`;
     if (ev.t === 'minionstrike') return `the bone minion claws ${who === 'You' ? 'you' : (who === 'p' ? 'you' : foe.name)} for ${ev.damage}`;
     if (ev.t === 'totemtick') return `the totem zaps ${who === 'You' ? 'you' : (who === 'p' ? 'you' : foe.name)} for ${ev.damage}`;
     if (ev.t === 'ragetick') return `${who === 'You' ? 'You bleed' : who + ' bleeds'} ${ev.damage} from the rage`;
@@ -3795,6 +3803,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (swal) h += btn(swal, { hint: `heal · ${player.swallowUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.swallowUses > 0 });
       const dbomb = get('deathbomb');
       if (dbomb) h += btn(dbomb, { hint: `bomb x3 · scales with Toxicity (${player.toxicity})`, glow: (player.toxicity || 0) >= 40 });
+      // Crow Lord: grow the Flock, blind, then unleash the Murder
+      const crows = get('callcrows');
+      if (crows) h += btn(crows, { hint: `+2 crows · Flock ${player.flock || 0} pecks each turn`, glow: (player.flock || 0) < 2 });
+      const peck = get('peckeyes');
+      if (peck) h += btn(peck, { hint: `~${expectedDamage('peckeyes', player, null, foe)} dmg · blinds · +1 crow`, weak: !!foe.blind });
+      const mrdr = get('murder');
+      if (mrdr) h += btn(mrdr, { hint: `unleash ${player.flock || 0} crows · once`, glow: (player.flock || 0) >= 4 });
       return h;
     };
     // Blood Rage (Slab): any-range self-buff, offered in both rows
@@ -4201,12 +4216,12 @@ async function renderTalents(wrap) {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);
       const treeIn = tree.nodes.reduce((a, n) => a + Math.min(tranks[n.id] || 0, nodeRanks(n)), 0);
       return `
-      <div class="tal-tree">
-        <div class="tal-tree-head">
+      <details class="tal-tree" ${treeIn > 0 ? 'open' : ''}>
+        <summary class="tal-tree-head">
           <b style="color:${tree.color}">${tree.name}</b>
           <span class="tal-tag">${tree.tag}</span>
           <span class="note" style="margin-left:auto">${treeIn}/${treeMax} pts</span>
-        </div>
+        </summary>
         <p class="note" style="margin:0 2px 8px">${tree.flavor}</p>
         ${[1, 2, 3, 4].map(tier => {
           const nodes = tree.nodes.map((n, i) => ({ n, i })).filter(x => x.n.tier === tier);
@@ -4230,7 +4245,7 @@ async function renderTalents(wrap) {
           }).join('');
           return `${gateTxt}<div class="tal-tier ${nodes.length > 1 ? 'pair' : ''}">${cards}</div>`;
         }).join('')}
-      </div>`; }).join('')}
+      </details>`; }).join('')}
     ${taken.size ? '<button class="btn danger" id="respecBtn">Respec (free) · refund all points</button>' : ''}`;
 
   async function adjustAlloc(key, delta) {

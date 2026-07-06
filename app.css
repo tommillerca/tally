@@ -953,6 +953,12 @@ body::before {
 /* ---------- talents ---------- */
 .tal-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
 .tal-tree { background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; padding: 13px; margin-bottom: 12px; }
+/* collapsible: the head is a tappable summary (8 trees would be a huge scroll open) */
+.tal-tree > summary.tal-tree-head { cursor: pointer; list-style: none; }
+.tal-tree > summary.tal-tree-head::-webkit-details-marker { display: none; }
+.tal-tree:not([open]) { padding-bottom: 13px; }
+.tal-tree > summary.tal-tree-head::after { content: '▾'; margin-left: 6px; color: var(--text-3); font-size: 12px; transition: transform 0.2s ease; }
+.tal-tree:not([open]) > summary.tal-tree-head::after { transform: rotate(-90deg); }
 .tal-tree-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .tal-tree-head b { font-family: var(--display); font-size: 19px; letter-spacing: 1px; }
 .tal-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }

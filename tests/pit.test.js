@@ -345,7 +345,7 @@ test('talent tiers gate by points-in-tree, ranks count (v69 deep trees)', () => 
   assert.ok(!canTakeTalent(taken, 'slab', idx('steadyhands')));
   // single-rank stays single
   assert.ok(!canTakeTalent(taken, 'slab', idx('heavyhands')));
-  assert.equal(TALENT_TREES.length, 7); // +Alchemist (v77)
+  assert.equal(TALENT_TREES.length, 8); // +Alchemist (v77) +Crow Lord (v79)
   assert.ok(TALENT_TREES.every(t => t.nodes.length >= 10), 'deep trees: 10+ nodes each');
   assert.ok(TALENT_TREES.every(t => t.nodes.reduce((a, n) => a + (n.ranks || 1), 0) >= 22), 'each tree takes 22+ points to max');
   const gc = TALENT_TREES.find(t => t.id === 'gravecaller');
@@ -754,7 +754,7 @@ test('totemic marrow regenerates extra wind each turn', () => {
 });
 
 test('six trees, ten nodes each, unique ids, new moves registered', () => {
-  assert.equal(TALENT_TREES.length, 7); // +Alchemist (v77)
+  assert.equal(TALENT_TREES.length, 8); // +Alchemist (v77) +Crow Lord (v79)
   const ids = TALENT_TREES.flatMap(t => t.nodes.map(n => n.id));
   assert.equal(new Set(ids).size, ids.length, 'no duplicate node ids');
   for (const t of TALENT_TREES) {
@@ -764,8 +764,31 @@ test('six trees, ten nodes each, unique ids, new moves registered', () => {
   }
   assert.equal(TALENT_TREES.find(t => t.id === 'gravewarden').nodes.find(n => n.id === 'lastlight').tier, 4);
   assert.equal(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.find(n => n.id === 'tempest').tier, 4);
-  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest', 'rage', 'raisedead', 'totem', 'fireflask', 'acidvial', 'swallow', 'deathbomb']) assert.ok(ACTIONS[id], id + ' action exists');
+  for (const id of ['smite', 'ward', 'frostbolt', 'firebolt', 'tempest', 'rage', 'raisedead', 'totem', 'fireflask', 'acidvial', 'swallow', 'deathbomb', 'callcrows', 'peckeyes', 'murder']) assert.ok(ACTIONS[id], id + ' action exists');
   assert.ok(TALENT_TREES.find(t => t.id === 'alchemist'), 'the Alchemist tree exists');
+  assert.ok(TALENT_TREES.find(t => t.id === 'crowlord'), 'the Crow Lord tree exists');
+});
+
+test('v79 Crow Lord: a growing Flock pecks each turn, then Murder unleashes + scatters it', () => {
+  const base = { power: 0, marrow: 50, wind: 99, reflex: 20, hype: 80 };
+  const P = makeFighter({ name: 'C', stats: base, talents: ['callcrows', 'sharpbeaks', 'sharpbeaks', 'carrion', 'scavenge', 'flock', 'murder'] });
+  const F = makeFighter({ name: 'F', stats: { power: 40, marrow: 120, wind: 60, reflex: 40, hype: 20 } });
+  const fight = createFight({ player: P, foe: F, seed: 5 });
+  apply(fight, 'callcrows');
+  assert.equal(P.flock, 2, 'called 2 crows');
+  P.hp = P.d.maxHp - 40;
+  const foeHp = F.hp, foeWind = F.wind, myHp = P.hp;
+  et(fight); et(fight); // back to my turn -> the flock pecks
+  assert.ok(F.hp < foeHp, 'crows pecked the enemy');
+  assert.ok(F.wind < foeWind, 'scavenge drained enemy stamina');
+  assert.ok(P.hp > myHp, 'carrion healed me from the peck');
+  assert.ok(fight.pendingTicks.some(t => t.t === 'crowpeck'), 'crowpeck event emitted');
+  // Murder unleashes one strike per crow, then the flock scatters + it is spent
+  P.flock = 6; fight.ap = 2; P.wind = 99;
+  const before = F.hp; const evs = apply(fight, 'murder');
+  assert.ok(evs.filter(e => e.t === 'hit').length >= 5 && F.hp < before, 'Murder struck for each crow');
+  assert.equal(P.flock, 0, 'the Murder scattered');
+  assert.ok(!actionsFor(fight).some(a => a.id === 'murder' && a.enabled), 'Murder is once per fight');
 });
 
 test('v77 Alchemist: potions build Toxicity, Toxicity powers alchemy, it decays each turn', () => {
