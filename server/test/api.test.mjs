@@ -106,5 +106,21 @@ await test('/me returns identity after restore', async () => {
   assert.equal(r.friendCode, player.friendCode);
 });
 
+await test('analytics: /events ingests an anonymous batch', async () => {
+  const device = 'devtest-' + Math.random().toString(36).slice(2);
+  const r = await (await fetch(BASE + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV: 'v80', events: [{ name: 'app_open' }, { name: 'pit_win', props: { level: 8 } }, { name: 'food_log' }] }) })).json();
+  assert.ok(r.ok && r.accepted === 3, JSON.stringify(r));
+});
+
+await test('analytics: /stats is admin-gated + aggregates', async () => {
+  assert.equal((await fetch(BASE + '/stats')).status, 401);
+  const ok = await fetch(BASE + '/stats?token=devtoken');
+  assert.equal(ok.status, 200);
+  const s = await ok.json();
+  assert.ok(s.totalDevices >= 1 && s.totalEvents >= 3, JSON.stringify(s));
+  assert.ok(s.byName.some(e => e.name === 'pit_win'), 'event names aggregated');
+  assert.ok(s.dau >= 1, 'DAU counts today');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

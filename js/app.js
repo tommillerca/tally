@@ -21,6 +21,7 @@ import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtD
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
+import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
@@ -197,7 +198,8 @@ async function boot() {
   social.initFromQuery().then(() => social.autoSync(socialSnapshot, APP_SOCIAL_V).then(r => {
     if (r && r.applied > 0) { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived. Check your Backpack.`, 3600); refresh(); }
   }));
-  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V); });
+  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V); flushAnalytics(); });
+  initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -1145,6 +1147,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    if (!editing) trackEvent('food_log', { via: via || 'search' });
     if (!editing && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
       confettiBurst(r.left + r.width / 2, r.top, 18);
@@ -3998,6 +4001,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     let coins = 0, xp = 0, extras = [], bossLoot = null;
     if (won) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
+      trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
       else if (foeCfg.mode === 'boss') {

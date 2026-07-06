@@ -53,3 +53,19 @@ CREATE TABLE IF NOT EXISTS grants (
   UNIQUE (player_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_grants_player ON grants (player_id, id);
+
+-- Anonymous product analytics. Keyed to a random per-device id (NOT the player
+-- pubkey, NOT linked to identity). Event names + coarse props only; never food,
+-- weight, health, or any personal data. Powers "how many are playing" + usage.
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device TEXT NOT NULL,   -- anonymous random device id
+  name TEXT NOT NULL,     -- app_open | food_log | pit_win | boss_win | level_up | cook | wellness | ...
+  props TEXT,             -- small JSON, coarse only (e.g. {"level":8})
+  app_v TEXT,
+  day TEXT NOT NULL,      -- YYYY-MM-DD (UTC) for daily rollups
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_day ON events (day);
+CREATE INDEX IF NOT EXISTS idx_events_device_day ON events (device, day);
+CREATE INDEX IF NOT EXISTS idx_events_name ON events (name);

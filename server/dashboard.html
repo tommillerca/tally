@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boneheadz Gym — Analytics</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0d0c12; color: #e8e2d6; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 18px 80px; }
+  h1 { font-size: 24px; letter-spacing: 0.5px; }
+  .setup { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 22px; }
+  input { flex: 1; min-width: 200px; background: #17151f; border: 1px solid #2a2733; color: #e8e2d6; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  button { background: #a5e847; color: #10130a; border: none; border-radius: 10px; padding: 10px 18px; font-weight: 800; cursor: pointer; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .card { background: #17151f; border: 1px solid #2a2733; border-radius: 14px; padding: 16px; }
+  .card .n { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
+  .card .l { color: #9a94a6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  h2 { font-size: 15px; color: #a5e847; margin: 30px 0 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+  .bar-row .k { width: 130px; font-size: 13px; color: #cfc6d6; text-align: right; flex: none; }
+  .bar-row .bar { flex: 1; background: #221f2c; border-radius: 5px; overflow: hidden; height: 20px; }
+  .bar-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#6f86c9,#a5e847); border-radius: 5px; }
+  .bar-row .v { width: 46px; font-weight: 800; font-size: 13px; }
+  .note { color: #6f6a7a; font-size: 12px; margin-top: 8px; }
+  .err { color: #ff8080; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎮 Boneheadz Gym — Analytics</h1>
+  <div class="setup">
+    <input id="api" placeholder="Worker URL, e.g. https://bonez-api.you.workers.dev">
+    <input id="token" placeholder="Admin token" type="password">
+    <button id="go">Load</button>
+  </div>
+  <div id="out"></div>
+  <p class="note">Private. Your Worker URL + admin token are saved in this browser only. Numbers are anonymous device counts.</p>
+</main>
+<script>
+  const $ = s => document.querySelector(s);
+  $('#api').value = localStorage.bhApi || '';
+  $('#token').value = localStorage.bhTok || '';
+  const bar = (k, v, max) => `<div class="bar-row"><span class="k">${k}</span><span class="bar"><i style="width:${max ? Math.round(v / max * 100) : 0}%"></i></span><span class="v">${v}</span></div>`;
+  async function load() {
+    const api = $('#api').value.trim().replace(/\/$/, ''), tok = $('#token').value.trim();
+    if (!api || !tok) { $('#out').innerHTML = '<p class="err">Enter your Worker URL and admin token.</p>'; return; }
+    localStorage.bhApi = api; localStorage.bhTok = tok;
+    $('#out').innerHTML = 'Loading...';
+    try {
+      const r = await fetch(api + '/stats?token=' + encodeURIComponent(tok));
+      if (!r.ok) { $('#out').innerHTML = `<p class="err">${r.status === 401 ? 'Wrong admin token.' : 'Error ' + r.status}</p>`; return; }
+      const s = await r.json();
+      const actMax = Math.max(1, ...s.activeByDay.map(d => d.n));
+      const nameMax = Math.max(1, ...s.byName.map(d => d.n));
+      $('#out').innerHTML = `
+        <div class="cards">
+          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Players (all time)</div></div>
+          <div class="card"><div class="n">${s.dau}</div><div class="l">Active today</div></div>
+          <div class="card"><div class="n">${s.wau}</div><div class="l">Active this week</div></div>
+          <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Total events</div></div>
+        </div>
+        <h2>Active players by day</h2>${s.activeByDay.map(d => bar(d.day, d.n, actMax)).join('') || '<p class="note">No data yet.</p>'}
+        <h2>New players by day</h2>${s.newByDay.map(d => bar(d.day, d.n, Math.max(1, ...s.newByDay.map(x => x.n)))).join('') || '<p class="note">No data yet.</p>'}
+        <h2>What people do</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
+        <p class="note">Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
+    } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
+  }
+  $('#go').onclick = load;
+  if (localStorage.bhApi && localStorage.bhTok) load();
+</script>
+</body>
+</html>

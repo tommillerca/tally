@@ -6,7 +6,7 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*', // signature auth, no cookies: * is safe (and native WKWebView needs it)
   'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
-  'Access-Control-Allow-Headers': 'content-type,x-bh-player,x-bh-ts,x-bh-sig',
+  'Access-Control-Allow-Headers': 'content-type,x-bh-player,x-bh-ts,x-bh-sig,x-bh-admin',
   'Access-Control-Max-Age': '86400',
 };
 const json = (obj, status = 200) =>
@@ -116,6 +116,46 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const row = await env.DB.prepare('SELECT handle, friend_code, created_at FROM players WHERE id = ?').bind(auth.playerId).first();
         return json({ handle: row.handle, friendCode: row.friend_code, createdAt: row.created_at });
+      }
+
+      // Anonymous analytics ingest. Unsigned (events carry only a random device
+      // id + coarse event names, no identity/PII), but capped to resist spam.
+      if (path === '/events' && request.method === 'POST') {
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body.device !== 'string' || !Array.isArray(body.events)) return json({ error: 'bad body' }, 400);
+        const device = body.device.slice(0, 64);
+        const appV = String(body.appV || '').slice(0, 16);
+        const batch = body.events.slice(0, 50); // cap per request
+        const now = Date.now();
+        const stmt = env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)');
+        const ops = [];
+        for (const e of batch) {
+          if (!e || typeof e.name !== 'string') continue;
+          const ts = Number(e.ts) || now;
+          const day = new Date(ts).toISOString().slice(0, 10);
+          const props = e.props ? JSON.stringify(e.props).slice(0, 300) : null;
+          ops.push(stmt.bind(device, e.name.slice(0, 40), props, appV, day, ts));
+        }
+        if (ops.length) await env.DB.batch(ops);
+        return json({ ok: true, accepted: ops.length });
+      }
+
+      // Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
+      if (path === '/stats' && request.method === 'GET') {
+        const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
+        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const today = new Date().toISOString().slice(0, 10);
+        const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+        const q = async (sql, ...b) => (await env.DB.prepare(sql).bind(...b).first());
+        const all = async (sql, ...b) => ((await env.DB.prepare(sql).bind(...b).all()).results || []);
+        const totalDevices = (await q('SELECT COUNT(DISTINCT device) n FROM events')).n;
+        const dau = (await q('SELECT COUNT(DISTINCT device) n FROM events WHERE day = ?', today)).n;
+        const wau = (await q('SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ?', weekAgo)).n;
+        const totalEvents = (await q('SELECT COUNT(*) n FROM events')).n;
+        const byName = await all('SELECT name, COUNT(*) n FROM events GROUP BY name ORDER BY n DESC LIMIT 30');
+        const activeByDay = await all('SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? GROUP BY day ORDER BY day', new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
+        const newByDay = await all('SELECT day, COUNT(*) n FROM (SELECT device, MIN(day) day FROM events GROUP BY device) GROUP BY day ORDER BY day DESC LIMIT 14');
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, generatedAt: Date.now() });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).
