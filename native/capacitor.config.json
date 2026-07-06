@@ -2,6 +2,10 @@
   "appId": "com.boneheadz.gym",
   "appName": "Boneheadz Gym",
   "webDir": "www",
+  "server": {
+    "url": "https://tommillerca.github.io/tally/",
+    "cleartext": false
+  },
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#0d0c12"
