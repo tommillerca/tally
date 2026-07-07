@@ -1919,7 +1919,7 @@ body::before {
 .pa-lizard .pa-art { position: absolute; left: 24px; top: 24px; width: 225px; height: 170px; }
 .pa-lizard .pa-creature { position: absolute; inset: 0; }
 .pa-base, .pa-mouthline, .pa-drool, .pa-lid, .pa-tongue { left: 0; top: 0; }
-.pa-lid { opacity: 0; animation: paEyelid 3s ease-in-out infinite; animation-delay: -0.3s; transform-origin: 60% 14.7%; }
+.pa-lid { opacity: 0; animation: paEyelid 3s ease-in-out infinite; animation-delay: -0.3s; transform-origin: 60% 13.8%; }
 @keyframes paEyelid { 0%,89%{transform:scaleY(0);opacity:0} 91%,92.5%{transform:scaleY(1);opacity:1} 95%,100%{transform:scaleY(0);opacity:0} }
 .pa-tongueclip { position: absolute; left: 0; top: 0; width: 225px; height: 170px;
   clip-path: polygon(0px 70px, 120px 70.8px, 128px 64.8px, 132px 61.8px, 136px 59.8px, 140px 56.8px, 144px 53.8px, 148px 51.8px, 152px 48.8px, 156px 45.8px, 164px 42.8px, 225px 42px, 225px 170px, 0px 170px); }
