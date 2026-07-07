@@ -2758,7 +2758,7 @@ function packCardHtml(c, { selectable = false } = {}) {
   const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
   const art = c.imgSrc ? `<canvas class="pc-canvas" width="360" height="360" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3 ? '<span class="pc-spark k1">✦</span><span class="pc-spark k2">✧</span><span class="pc-spark k3">✦</span><span class="pc-spark k4">✧</span>' : '';
-  const inner = `<div class="pc-foil"></div>${sparks}<div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
+  const inner = `<div class="pc-foil"></div><div class="pc-glare"></div>${sparks}<div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
   return selectable
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
@@ -2784,25 +2784,43 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     function renderCard() {
       const c = cards[i];
       if (countEl) countEl.textContent = `${i + 1} / ${cards.length}`;
-      stage.innerHTML = packCardHtml(c);
-      const card = $('.pack-card', stage);
+      const tier = RAR_ORDER.indexOf(c.rarity);
+      const reduced = reducedMotion || navigator.webdriver;
+      // god-rays behind rare+, a bloom flash for epic+, then the tiltable card
+      stage.innerHTML =
+        (tier >= 2 ? `<div class="pack-rays r-${c.rarity}"></div>` : '') +
+        (tier >= 3 ? '<div class="pack-flash"></div>' : '') +
+        `<div class="pack-tilt${reduced ? '' : ' swaying'}">${packCardHtml(c)}</div>`;
+      const tilt = $('.pack-tilt', stage), card = $('.pack-card', stage), glare = $('.pc-glare', stage);
       hydratePackArt(stage);
       requestAnimationFrame(() => card.classList.add('in'));
-      const tier = RAR_ORDER.indexOf(c.rarity);
       if (tier >= 4) { confettiRain(95); levelSound(S.sounds); }              // legendary
-      else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); } // rare/epic
-      else sparkleSound(S.sounds);                                            // common/uncommon
-      // tap / swipe to advance
+      else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); }
+      else sparkleSound(S.sounds);
+
       let sx = 0, dx = 0, pid = null;
-      card.addEventListener('pointerdown', e => { pid = e.pointerId; sx = e.clientX; dx = 0; try { card.setPointerCapture(pid); } catch {} card.style.transition = 'none'; });
-      card.addEventListener('pointermove', e => { if (pid == null) return; dx = e.clientX - sx; card.style.transform = `translateX(${dx}px) rotate(${(dx * 0.04).toFixed(2)}deg)`; });
+      const settle = () => { tilt.style.transform = ''; if (!reduced) tilt.classList.add('swaying'); if (glare) glare.style.opacity = 0; };
+      tilt.addEventListener('pointerdown', e => { pid = e.pointerId; sx = e.clientX; dx = 0; try { tilt.setPointerCapture(pid); } catch {} tilt.classList.remove('swaying'); tilt.style.transition = 'none'; });
+      tilt.addEventListener('pointermove', e => {
+        if (pid != null) { // dragging → fling
+          dx = e.clientX - sx; tilt.style.transform = `translateX(${dx}px) rotate(${(dx * 0.05).toFixed(2)}deg)`; return;
+        }
+        if (reduced) return; // hover → 3D tilt + moving glare (desktop/pointer)
+        const r = tilt.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+        tilt.classList.remove('swaying');
+        tilt.style.transition = 'transform .08s ease-out';
+        tilt.style.transform = `rotateX(${((0.5 - py) * 16).toFixed(1)}deg) rotateY(${((px - 0.5) * 18).toFixed(1)}deg)`;
+        if (glare) { glare.style.setProperty('--mx', (px * 100).toFixed(0) + '%'); glare.style.setProperty('--my', (py * 100).toFixed(0) + '%'); glare.style.opacity = 1; }
+      });
       const end = () => {
-        if (pid == null) return; pid = null; card.style.transition = '';
-        if (Math.abs(dx) > 80) { card.style.transform = `translateX(${dx > 0 ? 640 : -640}px) rotate(${dx > 0 ? 20 : -20}deg)`; card.style.opacity = '0'; setTimeout(advance, 170); }
-        else card.style.transform = '';
+        if (pid == null) return; pid = null; tilt.style.transition = '';
+        if (Math.abs(dx) > 80) { tilt.style.transform = `translateX(${dx > 0 ? 680 : -680}px) rotate(${dx > 0 ? 20 : -20}deg)`; tilt.style.opacity = '0'; setTimeout(advance, 170); }
+        else settle();
       };
-      card.addEventListener('pointerup', end);
-      card.addEventListener('pointercancel', end);
+      tilt.addEventListener('pointerup', end);
+      tilt.addEventListener('pointercancel', end);
+      tilt.addEventListener('pointerleave', () => { if (pid == null) settle(); });
       card.addEventListener('click', () => { if (Math.abs(dx) < 6) advance(); });
     }
     const start = () => { if (cards.length) renderCard(); else setTimeout(done, 700); };

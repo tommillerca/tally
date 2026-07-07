@@ -1976,16 +1976,35 @@ body::before {
 /* ---- pack-crack loot reveal ---- */
 .pack-reveal { display: flex; flex-direction: column; align-items: center; min-height: 78vh; padding: 10px 16px 24px; }
 .pack-count { font-size: 12px; font-weight: 700; color: var(--text-3); letter-spacing: .08em; margin: 2px 0 6px; }
-.pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; touch-action: pan-y; }
+.pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; position: relative; perspective: 1100px; touch-action: pan-y; }
 .pack-crate { display: grid; place-items: center; }
+/* tilt wrapper: owns the 3D pointer-tilt + idle sway + drag fling */
+.pack-tilt { position: relative; z-index: 1; transform-style: preserve-3d; will-change: transform; cursor: grab; }
+.pack-tilt.swaying { animation: idleSway 4.8s ease-in-out infinite; }
+@keyframes idleSway { 0%,100% { transform: rotateY(-6deg) rotateX(2.5deg); } 50% { transform: rotateY(6deg) rotateX(-2.5deg); } }
 .pack-card {
   position: relative; width: min(78vw, 300px); aspect-ratio: 3 / 4.2; border-radius: 20px;
   background: linear-gradient(165deg, var(--surface-2), var(--surface-3));
   border: 2.5px solid rgba(159,172,159,.4); box-shadow: 0 12px 34px rgba(0,0,0,.5);
   display: flex; flex-direction: column; align-items: center; padding: 16px 14px 14px; overflow: hidden;
-  opacity: 0; transform: scale(.82) translateY(14px); transition: transform .28s cubic-bezier(.2,1.2,.4,1), opacity .28s ease; cursor: pointer; user-select: none;
+  /* entrance via TRANSITION (transform/opacity) so the rarity glow can own `animation` */
+  opacity: 0; transform: scale(.8) rotateY(-30deg); transition: opacity .45s ease, transform .55s cubic-bezier(.2,1.1,.35,1); user-select: none;
 }
 .pack-card.in { opacity: 1; transform: none; }
+/* glare hotspot that tracks the pointer (set via --mx/--my in JS) */
+.pc-glare { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .2s; mix-blend-mode: overlay;
+  background: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,.5), rgba(255,255,255,.12) 26%, transparent 46%); }
+/* god-rays behind rare+ pulls */
+.pack-rays { position: absolute; z-index: 0; top: 50%; left: 50%; width: 150%; aspect-ratio: 1; transform: translate(-50%,-50%); pointer-events: none; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.10) 0deg 5deg, transparent 5deg 17deg); animation: raySpin 14s linear infinite; opacity: .5;
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 68%); mask: radial-gradient(circle, #000 20%, transparent 68%); }
+.pack-rays.r-rare { background: repeating-conic-gradient(from 0deg, rgba(111,208,255,.16) 0deg 5deg, transparent 5deg 17deg); opacity: .55; }
+.pack-rays.r-epic { background: repeating-conic-gradient(from 0deg, rgba(192,132,252,.2) 0deg 5deg, transparent 5deg 16deg); opacity: .7; }
+.pack-rays.r-legendary { background: repeating-conic-gradient(from 0deg, rgba(var(--gold-rgb),.26) 0deg 5deg, transparent 5deg 15deg); opacity: .9; animation-duration: 10s; }
+@keyframes raySpin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+/* one-shot bloom flash on epic+ reveal */
+.pack-flash { position: absolute; z-index: 3; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.9), transparent 55%); opacity: 0; animation: bloom .6s ease-out 1; }
+@keyframes bloom { 0% { opacity: 0; transform: scale(.6); } 20% { opacity: .85; } 100% { opacity: 0; transform: scale(1.4); } }
 .pack-card.r-uncommon { border-color: rgba(74,222,128,.6); }
 /* rarity fanfare: a pulsing glow that intensifies by tier. common/uncommon: none. */
 .pack-card.r-rare { border-color: rgba(111,208,255,.7); animation: glowRare 2.3s ease-in-out infinite; }
@@ -2022,7 +2041,13 @@ body::before {
 .pack-hint { font-size: 12px; color: var(--text-3); letter-spacing: .04em; animation: hintPulse 1.8s ease-in-out infinite; }
 .pack-coins { font-size: 15px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
 @keyframes hintPulse { 0%,100% { opacity: .45; } 50% { opacity: .9; } }
-@media (prefers-reduced-motion: reduce) { .pack-card { transition: opacity .2s; transform: none; } .pack-card.in .pc-foil, .pack-card.holo .pc-foil, .pack-card.r-rare, .pack-card.r-epic, .pack-card.r-legendary, .pc-spark { animation: none; } .pack-hint { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pack-card { transition: opacity .2s; transform: none; }
+  .pack-card.in { opacity: 1; transform: none; }
+  .pack-card.in .pc-foil, .pack-card.holo .pc-foil, .pack-card.r-rare, .pack-card.r-epic, .pack-card.r-legendary,
+  .pc-spark, .pack-tilt.swaying, .pack-rays, .pack-flash { animation: none; }
+  .pack-flash { display: none; } .pack-hint { animation: none; }
+}
 
 /* bigger, centered hatched pet (source PNG parks art in a corner) */
 .hatch-prize .hatch-art { width: 200px; height: 200px; filter: drop-shadow(0 8px 9px rgba(0,0,0,.5)); }
