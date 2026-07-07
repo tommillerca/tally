@@ -1948,3 +1948,30 @@ body::before {
   .pet-shiny, .shiny-spark { animation: none; }
   .pet-shiny { filter: drop-shadow(0 0 7px rgba(255,206,84,.8)); }
 }
+
+/* ---- Trends: week recap ---- */
+.recap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 6px; }
+.recap-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px 4px; text-align: center; }
+.recap-pill .rp-v { font-size: 22px; font-weight: 800; line-height: 1; }
+.recap-pill .rp-v small { font-size: 12px; font-weight: 700; opacity: .7; }
+.recap-pill .rp-s { font-size: 10.5px; color: var(--text-3); letter-spacing: .02em; }
+.recap-lvl { margin-top: 4px; }
+.recap-lvl .rl-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; font-size: 13px; }
+@media (max-width: 380px) { .recap-pill .rp-v { font-size: 19px; } }
+
+/* ---- Trends: consistency heatmap ---- */
+.heatmap { display: flex; gap: 4px; justify-content: space-between; }
+.hm-col { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.hm-cell { aspect-ratio: 1; width: 100%; border-radius: 3px; background: var(--surface-3); }
+.hm-0 { background: var(--surface-3); opacity: .5; }
+.hm-1 { background: var(--accent); opacity: .35; }
+.hm-2 { background: var(--accent); opacity: .65; }
+.hm-3 { background: var(--amber); opacity: .95; }
+.hm-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 8px; }
+.hm-legend .hm-cell { width: 12px; height: 12px; flex: none; }
+.hm-legend .note { font-size: 10.5px; }
+
+/* ---- wellness: sleep hour chips ---- */
+.sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+.hchip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.hchip.on { background: #8f7ad6; border-color: #8f7ad6; color: #fff; }

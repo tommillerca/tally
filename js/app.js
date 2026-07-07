@@ -578,10 +578,11 @@ async function renderToday(el) {
     const { xp } = await markBed(); chimeSound(S.sounds);
     toast(xp > 0 ? `Bed made. +${xp} XP banked.` : 'Already made today.', 2200); refresh();
   });
-  $('#wSleep')?.addEventListener('click', async () => {
-    const { xp } = await markSleep(); chimeSound(S.sounds);
-    toast(xp > 0 ? `Good sleep logged. +${xp} XP. Rest is training too.` : 'Already logged today.', 2400); refresh();
-  });
+  $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
+    const hours = Number(b.dataset.sleep);
+    const { xp } = await markSleep(hours); chimeSound(S.sounds);
+    toast(xp > 0 ? `${hours}h logged. +${xp} XP. Rest is training too.` : `Updated to ${hours}h.`, 2400); refresh();
+  }));
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
   if (!window.__automapRan && new URLSearchParams(location.search).has('automap')) {
@@ -802,8 +803,26 @@ function wellnessCardHtml(w) {
     <div class="sect-h" style="margin:0 0 4px">Daily wellness</div>
     ${row('', ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
     ${row('ghost', ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
-    ${row('ghost', ICONS.moon(22), 'Good sleep', 'Logged. Rest is training too.', 'Log a solid night of sleep', w.sleep, 'wSleep', 'Log it')}
+    ${sleepRowHtml(w)}
   </div>`;
+}
+
+// Sleep logs HOURS (tracked over time), not a yes/no. Tapping a chip logs/updates
+// the night; the chosen hours highlights. Wellbeing: never scolds a short night.
+function sleepRowHtml(w) {
+  const logged = w.sleepHours != null;
+  const chips = [5, 6, 7, 8, 9].map(h =>
+    `<button class="hchip ${w.sleepHours === h ? 'on' : ''}" data-sleep="${h}">${h === 9 ? '9+' : h}h</button>`).join('');
+  return `
+    <div class="well-row ${logged ? 'done' : ''}">
+      <span class="well-ico">${ICONS.moon(22)}</span>
+      <div class="well-body">
+        <b>Sleep</b>
+        <small>${logged ? `${w.sleepHours} h logged. Rest is training too.` : 'How many hours did you get?'}</small>
+        <div class="sleep-picks">${chips}</div>
+      </div>
+      ${logged ? '<span class="well-check">✓</span>' : ''}
+    </div>`;
 }
 
 function kitchenCardHtml(cook, ingCount, buffs) {
@@ -1513,6 +1532,8 @@ function scalePer100(per100, grams) {
 
 /* ================= trends ================= */
 
+const STEP_REF = 10000; // step reference line on the activity chart (matches the home step goal)
+
 async function renderTrends(el) {
   const t = S.settings.targets;
   const weights = (await db.all('weights')).sort((a, b) => a.date.localeCompare(b.date));
@@ -1525,28 +1546,73 @@ async function renderTrends(el) {
   const log = await db.all('log');
   const byDate = {};
   for (const e of log) { (byDate[e.date] = byDate[e.date] || []).push(e); }
-  const days14 = [];
-  for (let i = 13; i >= 0; i--) {
+  const health = await db.all('health');
+  const hByDate = {};
+  for (const h of health) hByDate[h.date] = h;
+
+  // 56-day window (8 weeks) for the heatmap; slices for the charts + week recap
+  const N = 56, days = [];
+  for (let i = N - 1; i >= 0; i--) {
     const dk = addDays(dateKey(), -i);
-    days14.push({ date: dk, tot: dayTotals(byDate[dk] || []) });
+    const tot = dayTotals(byDate[dk] || []);
+    const h = hByDate[dk] || {};
+    days.push({ date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0, steps: h.steps || 0, sleepHours: h.sleepHours ?? null });
   }
-  const days7 = days14.slice(-7);
-  const pAvg = days7.reduce((a, d) => a + d.tot.p, 0) / 7;
-  const loggedDays7 = days7.filter(d => d.tot.kcal > 0).length;
+  const days14 = days.slice(-14), days7 = days.slice(-7);
+
+  // week recap
+  const loggedWk = days7.filter(d => d.logged).length;
+  const stepsWk = days7.reduce((a, d) => a + d.steps, 0);
+  const kmWk = stepsWk * 0.000762;
+  const sleepWk = days7.filter(d => d.sleepHours != null);
+  const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) { if (days[i].logged || days[i].steps >= 3000) streak++; else break; }
 
   const xp = await totalXp();
   const lvl = levelFor(xp);
   const earned = await earnedBadgeIds();
+  const pAvg = days7.reduce((a, d) => a + d.p, 0) / 7;
+  const loggedDays7 = days7.filter(d => d.logged).length;
+  const kcalLogged14 = days14.filter(d => d.logged);
+
+  const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
 
   el.innerHTML = `
-  <h1 class="page-h1">Trends<span class="sub">Progress, weight, and intake</span></h1>
+  <h1 class="page-h1">Trends<span class="sub">Your week, your streak, your data</span></h1>
+
+  <div class="card recap-card">
+    <div class="card-title">THIS WEEK</div>
+    <div class="recap-grid">
+      ${pill(`${loggedWk}<small>/7</small>`, 'days logged')}
+      ${pill(stepsWk ? `${kmWk.toFixed(1)}<small>km</small>` : '·', 'walked (7d)')}
+      ${pill(avgSleep != null ? `${avgSleep.toFixed(1)}<small>h</small>` : '·', 'avg sleep')}
+      ${pill(`${streak}<small>🔥</small>`, 'day streak')}
+    </div>
+    <div class="recap-lvl">
+      <div class="rl-top"><b>Lv ${lvl.level} · ${esc(lvl.name)}</b><span class="note">${(lvl.need - lvl.into).toLocaleString()} XP to Lv ${lvl.level + 1}</span></div>
+      <div class="xp-bar"><i style="width:${lvl.pct}%"></i></div>
+    </div>
+  </div>
 
   <div class="card">
-    <div class="card-title">PROGRESS <button class="link" id="openProg">Details</button></div>
-    <div class="big-stat"><span class="v">Lv ${lvl.level}</span><span class="d">${esc(lvl.name)} · ${xp.toLocaleString()} XP</span></div>
-    <div class="xp-bar"><i style="width:${lvl.pct}%"></i></div>
-    <p class="note" style="margin-top:7px">${(lvl.need - lvl.into).toLocaleString()} XP to level ${lvl.level + 1}</p>
-    ${badgesGridHtml(earned)}
+    <div class="card-title">CONSISTENCY · LAST 8 WEEKS</div>
+    ${heatmapHtml(days)}
+    <p class="note" style="margin-top:9px">Each square is a day. Brighter = you logged food and moved. Streaks build themselves.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ACTIVITY · LAST 14 DAYS</div>
+    <div class="big-stat"><span class="v">${stepsWk ? Math.round(days14.reduce((a, d) => a + d.steps, 0) / 14).toLocaleString() : '·'}</span><span class="d">avg steps / day</span></div>
+    <div class="chart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}</div>
+    <p class="note" style="margin-top:8px">${stepsWk ? `Line = ${(STEP_REF / 1000)}k steps. Walking is what levels your bonehead and hatches eggs.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">SLEEP · LAST 14 DAYS</div>
+    <div class="big-stat"><span class="v">${avgSleep != null ? avgSleep.toFixed(1) : '·'}<span class="d" style="margin-left:4px">h avg (7d)</span></span></div>
+    <div class="chart">${barChart(days14, d => d.sleepHours, { target: 8, color: '#8f7ad6', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}</div>
+    <p class="note" style="margin-top:8px">${sleepWk.length ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
   </div>
 
   <div class="card">
@@ -1564,22 +1630,58 @@ async function renderTrends(el) {
   </div>
 
   <div class="card">
-    <div class="card-title">CALORIES · LAST 14 DAYS</div>
-    <div class="big-stat"><span class="v">${(() => { const logged = days14.filter(d => d.tot.kcal > 0); return logged.length ? Math.round(logged.reduce((a, d) => a + d.tot.kcal, 0) / logged.length).toLocaleString() : '·'; })()}</span><span class="d">avg / logged day · target ${t.kcal.toLocaleString()}</span></div>
-    <div class="chart">${kcalChart(days14, t.kcal)}</div>
-    <p class="note" style="margin-top:8px">Line = your ${t.kcal.toLocaleString()} kcal target.</p>
+    <div class="card-title">INTAKE · CALORIES 14D · PROTEIN 7D</div>
+    <div class="big-stat"><span class="v">${kcalLogged14.length ? Math.round(kcalLogged14.reduce((a, d) => a + d.kcal, 0) / kcalLogged14.length).toLocaleString() : '·'}</span><span class="d">avg kcal / logged day · target ${t.kcal.toLocaleString()}</span></div>
+    <div class="chart">${kcalChart(days14.map(d => ({ date: d.date, tot: { kcal: d.kcal } })), t.kcal)}</div>
+    <div class="big-stat" style="margin-top:12px"><span class="v">${Math.round(pAvg)} g</span><span class="d">protein avg / day · target ${t.p} g</span></div>
+    <div class="chart">${proteinChart(days7.map(d => ({ date: d.date, tot: { p: d.p } })), t.p)}</div>
+    ${loggedDays7 < 5 ? '<p class="note" style="margin-top:8px">Log most days for a meaningful average.</p>' : ''}
   </div>
 
   <div class="card">
-    <div class="card-title">PROTEIN · LAST 7 DAYS</div>
-    <div class="big-stat"><span class="v">${Math.round(pAvg)} g</span><span class="d">avg / day · target ${t.p} g</span></div>
-    <div class="chart">${proteinChart(days7, t.p)}</div>
-    ${loggedDays7 < 5 ? '<p class="note" style="margin-top:8px">Log most days for a meaningful average.</p>' : ''}
+    <div class="card-title">BADGES <button class="link" id="openProg">Details</button></div>
+    ${badgesGridHtml(earned)}
   </div>`;
 
   $('#logWeight').addEventListener('click', openWeightSheet);
   $('#openProg').addEventListener('click', openProgressSheet);
   bindBadgeTaps(el);
+}
+
+// GitHub-style consistency grid: 8 week-columns x 7 day-rows, brighter with more
+// engagement (logged food + steps). Positive-only: an empty day is never "bad".
+function heatmapHtml(days) {
+  const intensity = d => (d.logged ? 1 : 0) + (d.steps >= 3000 ? 1 : 0) + (d.steps >= 8000 ? 1 : 0);
+  const cols = [];
+  for (let w = 0; w < 8; w++) {
+    const cells = days.slice(w * 7, w * 7 + 7).map(d => {
+      const lv = intensity(d);
+      const title = `${d.date}: ${d.logged ? Math.round(d.kcal) + ' kcal' : 'no log'}${d.steps ? ' · ' + d.steps.toLocaleString() + ' steps' : ''}`;
+      return `<span class="hm-cell hm-${lv}" title="${title}"></span>`;
+    }).join('');
+    cols.push(`<div class="hm-col">${cells}</div>`);
+  }
+  return `<div class="heatmap">${cols.join('')}</div>
+    <div class="hm-legend"><span class="note">less</span><span class="hm-cell hm-0"></span><span class="hm-cell hm-1"></span><span class="hm-cell hm-2"></span><span class="hm-cell hm-3"></span><span class="note">more</span></div>`;
+}
+
+// Generic bar chart. pick(d) -> value|null; opts: target line, color, fmt, band [lo,hi].
+function barChart(days, pick, opts = {}) {
+  const W = 560, H = 150, P = 8, gap = 5;
+  const vals = days.map(pick);
+  const maxV = Math.max(opts.target || 0, ...vals.map(v => v || 0), 1);
+  const top = maxV * 1.15;
+  const n = days.length, bw = (W - 2 * P - gap * (n - 1)) / n;
+  const y = v => P + (1 - v / top) * (H - 2 * P);
+  let bandRect = '';
+  if (opts.band) bandRect = `<rect x="0" y="${y(opts.band[1]).toFixed(1)}" width="${W}" height="${(y(opts.band[0]) - y(opts.band[1])).toFixed(1)}" fill="${opts.color}" opacity="0.12"/>`;
+  const bars = days.map((d, i) => {
+    const v = pick(d); if (!v) return '';
+    const x = P + i * (bw + gap), h = H - P - y(v);
+    return `<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${opts.color}" opacity="0.9"/>`;
+  }).join('');
+  const tl = opts.target ? `<line x1="0" y1="${y(opts.target).toFixed(1)}" x2="${W}" y2="${y(opts.target).toFixed(1)}" stroke="var(--text-3)" stroke-width="1.5" stroke-dasharray="5 5"/>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}">${bandRect}${bars}${tl}</svg>`;
 }
 
 function weightChart(points, toUnit) {
@@ -4392,11 +4494,14 @@ async function seedDemo() {
   const profile = { sex: 'm', age: 33, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };
   const settings = { profile, targets: computeTargets(profile), units: 'lb', fdcKey: null, hkConnected: true, createdAt: Date.now() };
   await kvSet('settings', settings);
-  for (let i = 0; i < 4; i++) {
+  const demoSteps = [8421, 11250, 6480, 9902, 7300, 12010, 5400, 9100, 10250, 6800, 8800, 11500, 7000, 9600];
+  const demoSleep = [7, 8, 6.5, 7.5, 6, 8, 5.5, 7, 8, 6.5, 7, 9, 6, 7.5];
+  for (let i = 0; i < demoSteps.length; i++) {
     await db.put('health', {
       date: addDays(dateKey(), -i),
-      steps: [8421, 11250, 6480, 9902][i],
-      activeKcal: [512, 640, 388, 545][i],
+      steps: demoSteps[i],
+      activeKcal: Math.round(demoSteps[i] * 0.06),
+      sleepHours: demoSleep[i],
     });
   }
   await kvSet('coins', 340);
