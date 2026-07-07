@@ -18,7 +18,7 @@ import {
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
-import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg, currentWave } from './hunt.js';
+import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
@@ -3045,6 +3045,8 @@ function stopHuntWatch() {
   huntWatchId = null;
 }
 
+const APPROACH_LOCK_M = 400; // within this, a spawn is "yours": it won't move/despawn until collected
+
 async function openMap() {
   const eq = await equipped();
   let map = null, maplibregl = null;
@@ -3151,6 +3153,8 @@ async function openMap() {
       }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
+    // panning/zooming to plan a route: re-snap + reveal spawns in the new view
+    map.on('moveend', () => { if (typeof refreshSpawns === 'function') refreshSpawns(); });
     $('#mapRecenter', body).addEventListener('click', () => {
       follow = true; $('#mapRecenter', body).hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
@@ -3237,17 +3241,25 @@ async function openMap() {
       refreshMinis();
     }
 
-    let shownWave = currentWave();
+    const raresCued = new Set(); // rares we've already announced this session
     function refreshSpawns() {
-      const wave = currentWave();
-      if (wave !== shownWave) { // the field just re-seeded: fresh spawns nearby
-        shownWave = wave; spawnSnap.clear();
-        toast('The Boneyard shifted. Fresh spawns nearby.', 3000);
+      const live = spawnsForRoute(date, lat, lng).filter(s => !collected.has(spawnKey(date, s)));
+      const liveById = new Set(live.map(s => s.id));
+      // LOCK-ON-APPROACH: a spawn you're closing in on must never vanish or move
+      // when its 45m slot rolls. Any shown, uncollected spawn within COLLECT..lock
+      // range is kept alive (re-measured to you) even if it dropped out of `live`.
+      for (const [, rec] of spawnMarkers) {
+        if (liveById.has(rec.spawn.id) || rec.spawn.far) continue;
+        if (collected.has(spawnKey(date, rec.spawn))) continue;
+        const d = distanceM(lat, lng, rec.spawn.lat, rec.spawn.lng);
+        if (d <= APPROACH_LOCK_M) {
+          live.push({ ...rec.spawn, dist: d, bearing: bearingDeg(lat, lng, rec.spawn.lat, rec.spawn.lng) });
+          liveById.add(rec.spawn.id);
+        }
       }
-      const live = spawnsNear(date, lat, lng, wave).filter(s => !collected.has(spawnKey(date, s)));
-      // Snap each spawn onto the nearest walkable feature (road/path/park) so none
-      // sit in a backyard or building. The seeded anchor (ledger key) is untouched;
-      // only the shown + collectible position moves. Cached per id once found.
+      // Snap on-screen spawns onto the nearest walkable feature (road/path/park)
+      // so none sit in a backyard/building. The seeded anchor (ledger key) is
+      // untouched; only the shown + collectible position moves. Cached per id.
       if (map.loaded()) {
         const c = map.getCanvas();
         for (const s of live) {
@@ -3264,6 +3276,14 @@ async function openMap() {
         }
         live.sort((a, b) => a.dist - b.dist);
       }
+      // Rare cue: the ONLY interruption. Fires once per rare when it surfaces nearby.
+      for (const s of live) {
+        if (s.type === 'rare' && s.dist <= RARE_CUE_M && !raresCued.has(s.id)) {
+          raresCued.add(s.id);
+          toast(`A rare stirs ${fmtDist(s.dist)} ${compassLabel(s.bearing)}. Track it down.`, 4000);
+          sparkleSound(S.sounds);
+        }
+      }
       const liveIds = new Set(live.map(s => s.id));
       for (const [id, rec] of spawnMarkers) {
         if (!liveIds.has(id)) { rec.marker.remove(); spawnMarkers.delete(id); }
@@ -3272,7 +3292,7 @@ async function openMap() {
         let rec = spawnMarkers.get(s.id);
         if (!rec) {
           const el = document.createElement('div');
-          el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''}`;
+          el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''} ${s.far ? 'far' : ''}`;
           el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${ingIconHtml(spawnIngredient(s).id,15)}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
@@ -3282,8 +3302,9 @@ async function openMap() {
         rec.spawn = s;
         rec.el.classList.toggle('inrange', s.dist <= COLLECT_RADIUS_M);
       }
-      // readout + collect button
-      const nearest = live.length ? live.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
+      // readout + collect button (drive off the near field, not distant beacons)
+      const reachable = live.filter(s => !s.far);
+      const nearest = reachable.length ? reachable.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
       let trend = '';
       if (nearest && lastNearest && lastNearest.id === nearest.id) {
         const d = nearest.dist - lastNearest.dist;
@@ -3294,7 +3315,7 @@ async function openMap() {
       const ro = $('#mapReadout', body);
       if (ro) ro.innerHTML = nearest
         ? `<b>${SPAWN_TYPES[nearest.type].label}</b> ${(() => { const ing = INGREDIENTS[spawnIngredient(nearest).id]; return `<span class="ro-ing">${ingIconHtml(ing.id,15)} ${esc(ing.name)}</span>`; })()} · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
-        : 'All spawns collected. Legend. Fresh bones at midnight.';
+        : 'Cleared nearby. Keep walking, spawns keep surfacing across the map.';
       const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
       if (btn) {

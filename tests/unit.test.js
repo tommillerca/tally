@@ -535,7 +535,7 @@ test('hunt: distance and bearing math', () => {
 });
 test('hunt: spawnsNear returns nearest-first annotated set', () => {
   const near = huntMod.spawnsNear('2026-07-03', 49.28, -123.12);
-  assert.ok(near.length > 0 && near.length <= 14);
+  assert.ok(near.length > 0 && near.length <= 20);
   for (let i = 1; i < near.length; i++) assert.ok(near[i].dist >= near[i - 1].dist);
   for (const s of near) { assert.ok(isFinite(s.dist) && isFinite(s.bearing)); }
 });

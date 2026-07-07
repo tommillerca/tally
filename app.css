@@ -1659,6 +1659,11 @@ body::before {
 }
 .map-spawn.rare { border-color: var(--amber); box-shadow: 0 0 14px rgba(255, 180, 84, 0.75); animation: rarePulse 1.6s ease-in-out infinite; }
 .map-spawn.inrange { border-color: var(--accent); animation: blipready 0.9s ease-in-out infinite; }
+/* distant route-planning beacons: smaller + dimmer so they read as "over there",
+   not "collect now". Rares stay bright even when far (worth the walk). */
+.map-spawn.far { width: 26px; height: 26px; opacity: 0.62; border-width: 2px; }
+.map-spawn.far .spawn-ing { display: none; }
+.map-spawn.far.rare { opacity: 0.95; }
 
 @media (prefers-reduced-motion: reduce) { .map-spawn.rare, .map-spawn.inrange { animation: none; } }
 

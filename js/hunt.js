@@ -1,13 +1,16 @@
 // The Boneyard: GPS spawn hunt. Spawns are generated deterministically from
-// (date, WAVE, neighborhood grid cell), so every device computes the same field
+// (date, grid cell, per-slot instance), so every device computes the same field
 // offline and a future server could verify collections. Location is used only
 // in-memory to measure distance; coordinates are never persisted or uploaded.
 //
-// WAVES: the field re-seeds every WAVE_HOURS through the day. Each wave moves the
-// spawns to new spots (and re-rolls their types + rare chance), so coming back to
-// the same zone a couple hours later is a fresh hunt. Collections are per-wave
-// (the wave is baked into the spawn id -> ledger key), so you can't farm one spot
-// back-to-back within a wave, but exploration across the day keeps paying out.
+// STAGGERED RESPAWN (no global reset): each cell has a few spawn "slots"; every
+// slot lives SPAWN_TTL_MIN (~45m) then RELOCATES to a fresh spot with a fresh
+// type. Crucially the slots are PHASE-STAGGERED, so they flip at different times
+// and the field drifts continuously instead of resetting all at once. Combined
+// with the map's lock-on-approach (a spawn you're walking toward never moves
+// until you grab it or leave), you're never robbed of a target mid-approach.
+// The instance is baked into each spawn id -> ledger key, so a spot can't be
+// farmed back-to-back within its 45m life, but exploration keeps paying out.
 
 import { award } from './game.js';
 import { coinsAdd, grantCrate } from './loot.js';
@@ -15,21 +18,19 @@ import { dateKey } from './nutrition.js';
 
 const CELL_DEG = 0.005;           // ~550 m grid
 export const COLLECT_RADIUS_M = 55;   // a touch roomier (Tom)
-export const VIEW_RADIUS_M = 1200;    // show spawns from farther so routes plan ahead
-export const WAVE_HOURS = 2;          // the whole field refreshes this often
+export const SPAWN_TTL_MIN = 45;      // each spawn slot lives this long, then relocates
+const SLOTS = 3;                      // spawn slots per cell
+export const NEAR_M = 1600;           // full-density hunt radius around you
+export const FAR_M = 6000;            // route-planning: crates/rares shown this far out
+export const RARE_CUE_M = 1500;       // a rare within this range earns a "stirs nearby" cue
 
-// Which intraday wave we're in (0-based slot of the local day). Derived from the
-// clock so the map naturally rolls to a fresh field as the day goes on.
-export function currentWave(d = new Date()) {
-  return Math.floor((d.getHours() * 60 + d.getMinutes()) / (WAVE_HOURS * 60));
-}
-// ms until the next wave (so the map can schedule a refresh right on the flip).
-export function msToNextWave(d = new Date()) {
-  const slot = WAVE_HOURS * 60;
-  const mins = d.getHours() * 60 + d.getMinutes();
-  const next = (Math.floor(mins / slot) + 1) * slot;
-  return (next - mins) * 60000 - d.getSeconds() * 1000 - d.getMilliseconds();
-}
+// live minutes since local midnight (fractional). Instances use floor(), so a
+// slot only actually flips on its 45-minute boundary.
+function nowMins(d = new Date()) { return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
+// deterministic phase offset per slot so slots DON'T flip together (staggered)
+function slotPhase(cx, cy, k) { return hashStr(`ph:${cx}:${cy}:${k}`) % SPAWN_TTL_MIN; }
+// which 45-min instance a slot is on right now (monotonic through the local day)
+function slotInstance(cx, cy, k, mins) { return Math.floor((mins + SPAWN_TTL_MIN - slotPhase(cx, cy, k)) / SPAWN_TTL_MIN); }
 
 function hashStr(s) {
   let h = 2166136261;
@@ -74,47 +75,66 @@ export const SPAWN_TYPES = {
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
 };
 
-// 3 spawns per cell per WAVE, deterministic. Rare appears in a given cell on
-// ~1 wave in 3, so "a rare showed up nearby" is a real event, not a constant.
-// The wave is part of the seed AND every id, so each refresh relocates the
-// spawns and starts them uncollected again.
-export function spawnsForCell(date, cx, cy, wave = currentWave()) {
-  const rand = mulberry32(hashStr(`${date}:w${wave}:${cx}:${cy}`));
+const SPAWN_WEIGHTS = ['bones', 'bones', 'bones', 'bones', 'coins', 'coins', 'crate'];
+
+// Spawns for one cell at time `mins`. Each slot re-rolls its type + position on
+// its own instance, and a rare occasionally surfaces on its own slow instance.
+export function spawnsForCell(date, cx, cy, mins = nowMins()) {
   const out = [];
-  const types = ['bones', 'bones', 'bones', 'bones', 'coins', 'coins', 'crate'];
-  for (let i = 0; i < 3; i++) {
-    const type = types[Math.floor(rand() * types.length)];
+  for (let k = 0; k < SLOTS; k++) {
+    const inst = slotInstance(cx, cy, k, mins);
+    const r = mulberry32(hashStr(`${date}:${cx}:${cy}:s${k}:i${inst}`));
     out.push({
-      id: `${cx}_${cy}_w${wave}_${i}`,
-      type, wave,
-      lat: (cx + (rand() - 0.5) * 0.92) * CELL_DEG,
-      lng: (cy + (rand() - 0.5) * 0.92) * CELL_DEG,
+      id: `${cx}_${cy}_s${k}_i${inst}`, slot: k, inst,
+      type: SPAWN_WEIGHTS[Math.floor(r() * SPAWN_WEIGHTS.length)],
+      lat: (cx + (r() - 0.5) * 0.92) * CELL_DEG,
+      lng: (cy + (r() - 0.5) * 0.92) * CELL_DEG,
     });
   }
-  if (rand() < 0.34) {
+  // rare: scarce, its own 45m instance so "a rare stirs nearby" is a real event.
+  const rInst = Math.floor(mins / SPAWN_TTL_MIN);
+  const rr = mulberry32(hashStr(`${date}:${cx}:${cy}:rare:i${rInst}`));
+  if (rr() < 0.03) {
     out.push({
-      id: `${cx}_${cy}_w${wave}_rare`,
-      type: 'rare', wave,
-      lat: (cx + (rand() - 0.5) * 0.92) * CELL_DEG,
-      lng: (cy + (rand() - 0.5) * 0.92) * CELL_DEG,
+      id: `${cx}_${cy}_rare_i${rInst}`, slot: 'rare', inst: rInst, type: 'rare', rare: true,
+      lat: (cx + (rr() - 0.5) * 0.92) * CELL_DEG,
+      lng: (cy + (rr() - 0.5) * 0.92) * CELL_DEG,
     });
   }
   return out;
 }
 
-// All spawns in the neighborhood for the CURRENT wave, nearest first, annotated.
-export function spawnsNear(date, lat, lng, wave = currentWave()) {
+// The hunt field for route planning: FULL density within NEAR_M, plus just the
+// worth-walking-to targets (crates + rares) out to FAR_M as distant "beacons",
+// so the map shows where a multi-hour walk could head without thousands of pins.
+export function spawnsForRoute(date, lat, lng, mins = nowMins()) {
   const { cx, cy } = cellOf(lat, lng);
-  const all = [];
-  for (let dx = -2; dx <= 2; dx++) {
-    for (let dy = -2; dy <= 2; dy++) {
-      all.push(...spawnsForCell(date, cx + dx, cy + dy, wave));
+  const R = Math.ceil(FAR_M / (CELL_DEG * 111000)) + 1; // cells covering FAR_M
+  const near = [], far = [];
+  for (let dx = -R; dx <= R; dx++) {
+    for (let dy = -R; dy <= R; dy++) {
+      for (const s of spawnsForCell(date, cx + dx, cy + dy, mins)) {
+        const dist = distanceM(lat, lng, s.lat, s.lng);
+        const o = { ...s, dist, bearing: bearingDeg(lat, lng, s.lat, s.lng) };
+        if (dist <= NEAR_M) near.push(o);
+        else if (dist <= FAR_M && (s.type === 'rare' || s.type === 'crate')) { o.far = true; far.push(o); }
+      }
     }
   }
+  near.sort((a, b) => a.dist - b.dist);
+  far.sort((a, b) => a.dist - b.dist);
+  return near.slice(0, 80).concat(far.slice(0, 50));
+}
+
+// Back-compat: nearest spawns around a point (used by quests/tests).
+export function spawnsNear(date, lat, lng, mins = nowMins()) {
+  const { cx, cy } = cellOf(lat, lng);
+  const all = [];
+  for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) all.push(...spawnsForCell(date, cx + dx, cy + dy, mins));
   return all
     .map(s => ({ ...s, dist: distanceM(lat, lng, s.lat, s.lng), bearing: bearingDeg(lat, lng, s.lat, s.lng) }))
     .sort((a, b) => a.dist - b.dist)
-    .slice(0, 14);
+    .slice(0, 20);
 }
 
 export function spawnKey(date, spawn) { return `spawn-${date}-${spawn.id}`; }
