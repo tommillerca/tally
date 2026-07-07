@@ -2658,7 +2658,7 @@ function gearToCard(g) {
   return {
     id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`,
-    stats: `${gearLabel(g)}${g.talent ? `<br>⚡ ${esc(g.talentName)}` : ''}`,
+    stats: `${gearLabel(g)}${g.talent ? `<div class="pc-perk">⚡ ${esc(g.talentName)}</div><div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : ''}`,
   };
 }
 function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
@@ -2757,7 +2757,8 @@ function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
   const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
   const art = c.imgSrc ? `<canvas class="pc-canvas" width="360" height="360" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
-  const inner = `<div class="pc-foil"></div><div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
+  const sparks = RAR_ORDER.indexOf(c.rarity) >= 3 ? '<span class="pc-spark k1">✦</span><span class="pc-spark k2">✧</span><span class="pc-spark k3">✦</span><span class="pc-spark k4">✧</span>' : '';
+  const inner = `<div class="pc-foil"></div>${sparks}<div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
   return selectable
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
@@ -2787,8 +2788,10 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const card = $('.pack-card', stage);
       hydratePackArt(stage);
       requestAnimationFrame(() => card.classList.add('in'));
-      const rareTier = RAR_ORDER.indexOf(c.rarity) >= 2;
-      if (rareTier) { confettiBurst(innerWidth / 2, innerHeight * 0.42, 20); levelSound(S.sounds); } else sparkleSound(S.sounds);
+      const tier = RAR_ORDER.indexOf(c.rarity);
+      if (tier >= 4) { confettiRain(95); levelSound(S.sounds); }              // legendary
+      else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); } // rare/epic
+      else sparkleSound(S.sounds);                                            // common/uncommon
       // tap / swipe to advance
       let sx = 0, dx = 0, pid = null;
       card.addEventListener('pointerdown', e => { pid = e.pointerId; sx = e.clientX; dx = 0; try { card.setPointerCapture(pid); } catch {} card.style.transition = 'none'; });
