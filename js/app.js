@@ -180,6 +180,19 @@ async function boot() {
   S.sounds = (await kvGet('sounds', true)) !== false;
   equipped().then(eq => showSplash(eq)).catch(() => {});
 
+  // Cloud restore (fresh / wiped / new phone): pull the encrypted backup BEFORE
+  // the onboarding gate, so a reinstalled or reset device comes back to its
+  // progress instead of a blank slate. ensureIdentity inside bootSync recovers
+  // the account key from the OS keychain first. Inert until the backend is
+  // configured (apiBase '' -> returns immediately), so this is a no-op today.
+  await social.initFromQuery();
+  const cloudRestore = await social.bootSync().catch(() => null);
+  if (cloudRestore && cloudRestore.restored) {
+    S.settings = await kvGet('settings');
+    S.userFoods = await db.all('foods');
+    setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
+  }
+
   if (!S.settings) { renderOnboarding(); return; }
 
   const init = await initGameIfNeeded(S.settings.targets);
@@ -195,10 +208,11 @@ async function boot() {
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
-  // social: push the game snapshot + pull server grants (opt-in, throttled, silent)
-  social.initFromQuery().then(() => social.autoSync(socialSnapshot, APP_SOCIAL_V).then(r => {
+  // social: push the game snapshot + encrypted backup, pull server grants
+  // (throttled, silent). initFromQuery + bootSync already ran above.
+  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(r => {
     if (r && r.applied > 0) { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived. Check your Backpack.`, 3600); refresh(); }
-  }));
+  });
   onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V); flushAnalytics(); });
   initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
@@ -1675,6 +1689,11 @@ async function renderSettings(el) {
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
+  const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
+  const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
+  const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
+    : backupAt ? `On · last backup ${Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago'}`
+    : 'On · backing up automatically';
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
 
@@ -1686,9 +1705,13 @@ async function renderSettings(el) {
       <div class="crew-handle">${esc(me.handle)}</div>
       <button class="crew-code" id="copyCode" title="Copy friend code">${esc(me.friendCode)} ⧉</button>
     </div>
-    <p class="note" style="margin:8px 0 0">Share your friend code so friends can add you. Your game profile syncs when you open the app. Food logs, weight, and location never leave this phone. Your backup export carries your account: restore it on a new phone to keep this identity.</p>`
+    <div class="settings-row" style="margin-top:12px">
+      <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
+      <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
+    </div>
+    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). Reinstall the app or get a new phone and your progress comes back on its own. Share your friend code so friends can add you.</p>`
     : `
-    <p class="note" style="margin:0 0 10px">Go online to join the Crew: friend codes, and soon trading and PvP. Only your game profile syncs (level, stats, outfit, gear, badges). Food logs, weight, and location <b>never</b> leave this phone.</p>
+    <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>`}
   </div>` : ''}
 
@@ -1754,7 +1777,7 @@ async function renderSettings(el) {
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
-    Boneheadz Gym v4 · data lives only on this device<br>
+    Boneheadz Gym v4 · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
     Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0)
   </p>`;
@@ -1773,8 +1796,20 @@ async function renderSettings(el) {
     if (!r.ok) { toast('Could not reach the Crew server. Try again in a bit.'); btn.disabled = false; btn.textContent = 'Go Online'; return; }
     confettiRain(70); levelSound(S.sounds);
     await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
+    await social.pushBackup(APP_SOCIAL_V).catch(() => {});
     const pulled = await social.pullGrants().catch(() => null);
-    toast(`You're online as ${r.me.handle}!${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    toast(`You're online as ${r.me.handle}! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    renderSettings(el);
+  });
+  $('#cbOn', el)?.addEventListener('click', async () => {
+    await social.setCloudBackup(true);
+    await social.pushBackup(APP_SOCIAL_V).catch(() => {});
+    toast('Cloud backup on. Your progress is safe.');
+    renderSettings(el);
+  });
+  $('#cbOff', el)?.addEventListener('click', async () => {
+    await social.setCloudBackup(false);
+    toast('Cloud backup off. Your progress will only live on this phone.', 3600);
     renderSettings(el);
   });
   $('#copyCode', el)?.addEventListener('click', async () => {

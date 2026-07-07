@@ -14,6 +14,7 @@ const json = (obj, status = 200) =>
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
+const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows over time)
 
 /* ---------------- handle + friend code generation ---------------- */
 const ADJ = ['Rattling', 'Grim', 'Dusty', 'Creaky', 'Hollow', 'Marrow', 'Midnight', 'Restless', 'Crooked', 'Sturdy', 'Swift', 'Lucky', 'Feral', 'Ancient', 'Jolly', 'Sneaky'];
@@ -97,6 +98,31 @@ export default {
         await env.DB.prepare('UPDATE players SET profile = ?, app_v = ?, last_seen = ? WHERE id = ?')
           .bind(JSON.stringify(body.snapshot), String(body.appV || ''), Date.now(), auth.playerId).run();
         return json({ ok: true });
+      }
+
+      // Signed: store the full ENCRYPTED save backup (client-side AES-GCM; the
+      // server never has the key and cannot read it). One row per player.
+      if (path === '/backup' && request.method === 'PUT') {
+        const bodyText = await request.text();
+        if (bodyText.length > MAX_BACKUP_BYTES) return json({ error: 'backup too large' }, 413);
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const body = JSON.parse(bodyText || '{}');
+        if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
+        const now = Date.now();
+        await env.DB.prepare('INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
+          'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at')
+          .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+        return json({ ok: true, updatedAt: now });
+      }
+
+      // Signed: pull the encrypted backup back down (fresh install / new phone).
+      if (path === '/backup' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const row = await env.DB.prepare('SELECT blob, app_v, updated_at FROM backups WHERE player_id = ?').bind(auth.playerId).first();
+        if (!row) return json({ error: 'no backup' }, 404);
+        return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at });
       }
 
       // Signed: pull server-issued ledger events (idempotent on the client by key).

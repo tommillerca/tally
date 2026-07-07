@@ -122,5 +122,34 @@ await test('analytics: /stats is admin-gated + aggregates', async () => {
   assert.ok(s.dau >= 1, 'DAU counts today');
 });
 
+await test('backup: PUT stores ciphertext, GET returns it verbatim', async () => {
+  const blob = 'AAAA' + Buffer.from('pretend-ciphertext-' + Math.random()).toString('base64');
+  const put = await signedFetch(kp, player.playerId, 'PUT', '/backup', JSON.stringify({ blob, appV: 'v84' }));
+  assert.equal(put.status, 200);
+  const got = await (await signedFetch(kp, player.playerId, 'GET', '/backup')).json();
+  assert.equal(got.blob, blob, 'blob round-trips byte-for-byte');
+  assert.equal(got.appV, 'v84');
+});
+
+await test('backup: PUT overwrites the previous row (one per player)', async () => {
+  const blob2 = 'BBBB' + Buffer.from('second-' + Math.random()).toString('base64');
+  await signedFetch(kp, player.playerId, 'PUT', '/backup', JSON.stringify({ blob: blob2 }));
+  const got = await (await signedFetch(kp, player.playerId, 'GET', '/backup')).json();
+  assert.equal(got.blob, blob2);
+});
+
+await test('backup: GET 404 when a player has none', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const r = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
+  assert.equal(r.status, 404);
+});
+
+await test('backup: PUT requires a valid signature (wrong key rejected)', async () => {
+  const other = await makeKeys();
+  const r = await signedFetch(other.kp, player.playerId, 'PUT', '/backup', JSON.stringify({ blob: 'x' }));
+  assert.equal(r.status, 401);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

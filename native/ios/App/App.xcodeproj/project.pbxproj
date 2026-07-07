@@ -17,6 +17,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		B0NEHEAD00000000000001AB /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000001AA /* HealthPlugin.swift */; };
 		B0NEHEAD00000000000002AB /* BoneheadzViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */; };
+		B0NEHEAD00000000000004AB /* BhVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000004AA /* BhVault.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		B0NEHEAD00000000000001AA /* HealthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthPlugin.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoneheadzViewController.swift; sourceTree = "<group>"; };
+		B0NEHEAD00000000000004AA /* BhVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BhVault.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000003AA /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -70,6 +72,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				B0NEHEAD00000000000001AA /* HealthPlugin.swift */,
+				B0NEHEAD00000000000004AA /* BhVault.swift */,
 				B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */,
 				B0NEHEAD00000000000003AA /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -165,6 +168,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				B0NEHEAD00000000000001AB /* HealthPlugin.swift in Sources */,
+				B0NEHEAD00000000000004AB /* BhVault.swift in Sources */,
 				B0NEHEAD00000000000002AB /* BoneheadzViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

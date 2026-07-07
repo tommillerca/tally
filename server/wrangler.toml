@@ -11,7 +11,7 @@ compatibility_date = "2026-06-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "bonez"
-database_id = "00000000-0000-0000-0000-000000000000" # placeholder until deploy
+database_id = "703a4e46-7643-490c-8d3f-26bc4e277eba"
 
 [vars]
 # DEV enables /dev/* test endpoints. NEVER set in production.

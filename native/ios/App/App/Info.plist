@@ -22,20 +22,22 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Boneheadz Gym uses the camera to scan barcodes and read nutrition labels so you can log food fast. Images stay on this phone.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Boneheadz Gym can read a nutrition label from a photo you choose. Photos stay on this phone.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Boneheadz uses your location to draw the Boneyard map and place nearby spawns and dens. Location is used on this phone only, never stored, never uploaded.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>Boneheadz uses the compass to show which way you are facing on the Boneyard map.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Boneheadz Gym reads your steps, active energy, and weight so your skeleton earns XP, eggs, and Bone Road progress from real activity.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Used only by development builds to write test samples.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Boneheadz uses your location to draw the Boneyard map and place nearby spawns and dens. Location is used on this phone only, never stored, never uploaded.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Boneheadz uses the compass to show which way you are facing on the Boneyard map.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Boneheadz Gym can read a nutrition label from a photo you choose. Photos stay on this phone.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

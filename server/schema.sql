@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS pvp_fights (
   ts INTEGER NOT NULL
 );
 
+-- Full end-to-end-ENCRYPTED save backup. The blob is AES-GCM ciphertext the
+-- client encrypts on-device with a key the server never sees, so the server
+-- stores opaque bytes (food/weight/health included, but unreadable here). One
+-- row per player, overwritten on each backup. This is what makes progress
+-- survive a reinstall / wiped device / new phone.
+CREATE TABLE IF NOT EXISTS backups (
+  player_id TEXT PRIMARY KEY,
+  blob TEXT NOT NULL,      -- base64(iv || AES-GCM ciphertext); opaque to the server
+  app_v TEXT,
+  size INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- Server-issued ledger events the client ingests idempotently by key.
 CREATE TABLE IF NOT EXISTS grants (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
