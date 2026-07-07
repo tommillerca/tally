@@ -18,7 +18,7 @@ import {
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
-import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { spawnsNear, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, fmtDist, compassLabel, distanceM, bearingDeg, currentWave } from './hunt.js';
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
@@ -3237,8 +3237,14 @@ async function openMap() {
       refreshMinis();
     }
 
+    let shownWave = currentWave();
     function refreshSpawns() {
-      const live = spawnsNear(date, lat, lng).filter(s => !collected.has(spawnKey(date, s)));
+      const wave = currentWave();
+      if (wave !== shownWave) { // the field just re-seeded: fresh spawns nearby
+        shownWave = wave; spawnSnap.clear();
+        toast('The Boneyard shifted. Fresh spawns nearby.', 3000);
+      }
+      const live = spawnsNear(date, lat, lng, wave).filter(s => !collected.has(spawnKey(date, s)));
       // Snap each spawn onto the nearest walkable feature (road/path/park) so none
       // sit in a backyard or building. The seeded anchor (ledger key) is untouched;
       // only the shown + collectible position moves. Cached per id once found.

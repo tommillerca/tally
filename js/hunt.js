@@ -1,7 +1,13 @@
-// The Boneyard: daily GPS spawn hunt. Spawns are generated deterministically
-// from (date, neighborhood grid cell), so every device computes the same field
+// The Boneyard: GPS spawn hunt. Spawns are generated deterministically from
+// (date, WAVE, neighborhood grid cell), so every device computes the same field
 // offline and a future server could verify collections. Location is used only
 // in-memory to measure distance; coordinates are never persisted or uploaded.
+//
+// WAVES: the field re-seeds every WAVE_HOURS through the day. Each wave moves the
+// spawns to new spots (and re-rolls their types + rare chance), so coming back to
+// the same zone a couple hours later is a fresh hunt. Collections are per-wave
+// (the wave is baked into the spawn id -> ledger key), so you can't farm one spot
+// back-to-back within a wave, but exploration across the day keeps paying out.
 
 import { award } from './game.js';
 import { coinsAdd, grantCrate } from './loot.js';
@@ -10,6 +16,20 @@ import { dateKey } from './nutrition.js';
 const CELL_DEG = 0.005;           // ~550 m grid
 export const COLLECT_RADIUS_M = 55;   // a touch roomier (Tom)
 export const VIEW_RADIUS_M = 1200;    // show spawns from farther so routes plan ahead
+export const WAVE_HOURS = 2;          // the whole field refreshes this often
+
+// Which intraday wave we're in (0-based slot of the local day). Derived from the
+// clock so the map naturally rolls to a fresh field as the day goes on.
+export function currentWave(d = new Date()) {
+  return Math.floor((d.getHours() * 60 + d.getMinutes()) / (WAVE_HOURS * 60));
+}
+// ms until the next wave (so the map can schedule a refresh right on the flip).
+export function msToNextWave(d = new Date()) {
+  const slot = WAVE_HOURS * 60;
+  const mins = d.getHours() * 60 + d.getMinutes();
+  const next = (Math.floor(mins / slot) + 1) * slot;
+  return (next - mins) * 60000 - d.getSeconds() * 1000 - d.getMilliseconds();
+}
 
 function hashStr(s) {
   let h = 2166136261;
@@ -54,25 +74,27 @@ export const SPAWN_TYPES = {
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
 };
 
-// 3 spawns per cell per day, deterministic. Rare appears in a given cell on
-// ~1 day in 3, so "a rare showed up nearby" is a real event, not a constant.
-export function spawnsForCell(date, cx, cy) {
-  const rand = mulberry32(hashStr(`${date}:${cx}:${cy}`));
+// 3 spawns per cell per WAVE, deterministic. Rare appears in a given cell on
+// ~1 wave in 3, so "a rare showed up nearby" is a real event, not a constant.
+// The wave is part of the seed AND every id, so each refresh relocates the
+// spawns and starts them uncollected again.
+export function spawnsForCell(date, cx, cy, wave = currentWave()) {
+  const rand = mulberry32(hashStr(`${date}:w${wave}:${cx}:${cy}`));
   const out = [];
   const types = ['bones', 'bones', 'bones', 'bones', 'coins', 'coins', 'crate'];
   for (let i = 0; i < 3; i++) {
     const type = types[Math.floor(rand() * types.length)];
     out.push({
-      id: `${cx}_${cy}_${i}`,
-      type,
+      id: `${cx}_${cy}_w${wave}_${i}`,
+      type, wave,
       lat: (cx + (rand() - 0.5) * 0.92) * CELL_DEG,
       lng: (cy + (rand() - 0.5) * 0.92) * CELL_DEG,
     });
   }
   if (rand() < 0.34) {
     out.push({
-      id: `${cx}_${cy}_rare`,
-      type: 'rare',
+      id: `${cx}_${cy}_w${wave}_rare`,
+      type: 'rare', wave,
       lat: (cx + (rand() - 0.5) * 0.92) * CELL_DEG,
       lng: (cy + (rand() - 0.5) * 0.92) * CELL_DEG,
     });
@@ -80,13 +102,13 @@ export function spawnsForCell(date, cx, cy) {
   return out;
 }
 
-// All spawns in the 3x3 neighborhood, nearest first, annotated with live geometry.
-export function spawnsNear(date, lat, lng) {
+// All spawns in the neighborhood for the CURRENT wave, nearest first, annotated.
+export function spawnsNear(date, lat, lng, wave = currentWave()) {
   const { cx, cy } = cellOf(lat, lng);
   const all = [];
   for (let dx = -2; dx <= 2; dx++) {
     for (let dy = -2; dy <= 2; dy++) {
-      all.push(...spawnsForCell(date, cx + dx, cy + dy));
+      all.push(...spawnsForCell(date, cx + dx, cy + dy, wave));
     }
   }
   return all
