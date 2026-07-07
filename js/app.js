@@ -19,6 +19,7 @@ import {
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
@@ -231,7 +232,8 @@ async function boot() {
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery);
-  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery); flushAnalytics(); });
+  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery); flushAnalytics(); refreshNotifSchedules(); });
+  refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
   window.addEventListener('hashchange', route);
@@ -1835,6 +1837,14 @@ async function renderSettings(el) {
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
     : backupAt ? `On · last backup ${Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago'}`
     : 'On · backing up automatically';
+  const np = await notifPrefs();
+  const notifPlat = notifPlatform();
+  const notifPerm = await notifPermissionState();
+  const notifRow = (key, label, sub) => `
+    <div class="settings-row">
+      <div class="lab"><b>${label}</b><span>${sub}</span></div>
+      <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}">On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}">Off</button></div>
+    </div>`;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
 
@@ -1854,6 +1864,26 @@ async function renderSettings(el) {
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>`}
+  </div>` : ''}
+
+  ${notifPlat !== 'none' ? `
+  <div class="card">
+    <div class="card-title">NOTIFICATIONS</div>
+    <div class="settings-row">
+      <div class="lab"><b>Notifications</b><span>${np.enabled ? (notifPerm === 'denied' ? 'Blocked in system settings' : 'On') : 'Off: nothing gets pushed to you'}</span></div>
+      <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
+    </div>
+    ${np.enabled ? `
+    ${notifRow('rares', 'Rare spawns', 'Get pinged when a rare surfaces near you')}
+    ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
+    ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
+    <div class="notif-presets">
+      <button class="btn small ghost" id="notifAll">Everything (power user)</button>
+      <button class="btn small ghost" id="notifEss">Just essentials</button>
+    </div>
+    <button class="btn small ghost" id="notifTest" style="margin-top:8px">Send a test notification</button>
+    ${notifPlat === 'web' ? '<p class="note" style="margin:8px 2px 0">In a browser only immediate notifications work; scheduled rare + reminder pushes need the installed app.</p>' : ''}
+    ${notifPerm === 'denied' ? '<p class="note" style="margin:8px 2px 0">Notifications are blocked. Enable Boneheadz Gym in your device Settings, then flip this back on.</p>' : ''}` : ''}
   </div>` : ''}
 
   <div class="card">
@@ -1957,6 +1987,40 @@ async function renderSettings(el) {
     const me = await social.socialMe();
     try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); }
     catch { toast(me.friendCode, 4000); }
+  });
+  // ---- notifications ----
+  const applyNotifs = async (prefs, note) => {
+    await setNotifPrefs(prefs);
+    await syncNotifications();
+    const loc = await kvGet('lastLoc', null);
+    if (loc) await scheduleRares(loc.lat, loc.lng);
+    if (note) toast(note, 2600);
+    renderSettings(el);
+  };
+  $$('[data-noti]', el).forEach(b => b.addEventListener('click', async () => {
+    const key = b.dataset.noti, on = b.dataset.on === '1';
+    const prefs = await notifPrefs();
+    if (key === 'enabled' && on) {
+      const ok = await requestNotifPermission();
+      if (!ok) { toast('Notifications need permission. Allow them when prompted, or enable in system settings.', 3600); renderSettings(el); return; }
+    }
+    prefs[key] = on;
+    if (key === 'enabled' && on && !prefs.rares && !prefs.reminder && !prefs.streak) { prefs.rares = prefs.reminder = prefs.streak = true; }
+    await applyNotifs(prefs);
+  }));
+  $('#notifAll', el)?.addEventListener('click', async () => {
+    const ok = await requestNotifPermission();
+    if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
+    await applyNotifs({ enabled: true, rares: true, reminder: true, streak: true }, 'All notifications on. You will hear about every rare.');
+  });
+  $('#notifEss', el)?.addEventListener('click', async () => {
+    const ok = await requestNotifPermission();
+    if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
+    await applyNotifs({ enabled: true, rares: false, reminder: true, streak: true }, 'Essentials only: reminders + streak saver.');
+  });
+  $('#notifTest', el)?.addEventListener('click', async () => {
+    const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
+    toast(fired ? (notifPlatform() === 'native' ? 'Sent. Background the app to see it.' : 'Test notification sent.') : 'Could not send. Check permission.', 3200);
   });
   $('#redeemBtn', el)?.addEventListener('click', async () => {
     const res = await redeemCode($('#redeemInput', el).value);
@@ -3119,6 +3183,8 @@ async function openMap() {
     }
 
     let lat = boot.coords.latitude, lng = boot.coords.longitude;
+    // remember where we are so notifications can predict rares near you later
+    kvSet('lastLoc', { lat, lng, at: Date.now() }).then(() => scheduleRares(lat, lng)).catch(() => {});
     body.innerHTML = `
       <div class="map-stage" id="mapStage">
         <div class="map-canvas" id="mapCanvas"></div>
@@ -3485,6 +3551,16 @@ function presentGrantDelivery(r) {
   }
   if (cards.length) openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh);
   else { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh(); }
+}
+
+// Keep local notifications in sync with prefs: recurring reminders + the next
+// few upcoming rare pushes computed from the last place you opened the map.
+async function refreshNotifSchedules() {
+  try {
+    await syncNotifications();
+    const loc = await kvGet('lastLoc', null);
+    if (loc) await scheduleRares(loc.lat, loc.lng);
+  } catch { /* fails silent */ }
 }
 
 async function socialSnapshot() {

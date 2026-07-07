@@ -2089,6 +2089,10 @@ body::before {
 .settle-cards { margin: 10px auto 4px; max-width: 340px; }
 .settle-cards.one { grid-template-columns: minmax(0, 62%); justify-content: center; }
 
+/* notification preset buttons */
+.notif-presets { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.notif-presets .btn { flex: 1; min-width: 130px; }
+
 /* ---- wellness: sleep hour chips ---- */
 .sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 .hchip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; }

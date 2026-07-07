@@ -137,6 +137,21 @@ export function spawnsNear(date, lat, lng, mins = nowMins()) {
     .slice(0, 20);
 }
 
+// Rares within cue range at time `mins` (used to schedule "rare nearby" pushes
+// deterministically for upcoming 45-min windows near a last-known location).
+export function raresNear(date, lat, lng, mins) {
+  const { cx, cy } = cellOf(lat, lng);
+  const out = [];
+  for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
+    for (const s of spawnsForCell(date, cx + dx, cy + dy, mins)) {
+      if (s.type !== 'rare') continue;
+      const dist = distanceM(lat, lng, s.lat, s.lng);
+      if (dist <= RARE_CUE_M) out.push({ ...s, dist });
+    }
+  }
+  return out.sort((a, b) => a.dist - b.dist);
+}
+
 export function spawnKey(date, spawn) { return `spawn-${date}-${spawn.id}`; }
 
 // Collect a spawn (caller has verified proximity). Idempotent via the ledger.
