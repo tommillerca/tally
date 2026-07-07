@@ -2011,6 +2011,18 @@ body::before {
 .hatch-prize .hatch-art { width: 200px; height: 200px; filter: drop-shadow(0 8px 9px rgba(0,0,0,.5)); }
 .hatch-prize.is-shiny .hatch-art { filter: drop-shadow(0 0 14px rgba(255,206,84,.9)) drop-shadow(0 8px 9px rgba(0,0,0,.45)); }
 
+/* boss loot: two pack cards side-by-side, pick one */
+.loot-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px; align-items: stretch; }
+.loot-cards .pack-card { width: 100%; aspect-ratio: 3 / 4.4; padding: 12px 9px 10px; opacity: 1; transform: none; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.loot-cards .pc-canvas { width: 84%; }
+.loot-cards .pc-name { font-size: 14.5px; }
+.loot-cards .pc-rar { font-size: 11px; }
+.loot-cards .pc-stats { font-size: 10.5px; margin-top: 4px; }
+.pack-card.selectable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pack-card.selectable.selected { transform: translateY(-4px) scale(1.02); box-shadow: 0 10px 26px rgba(0,0,0,.5), 0 0 0 2.5px var(--accent); }
+.pack-card.selectable.taken { opacity: .45; filter: grayscale(.5); }
+.loot-cards .pack-card.in .pc-foil { animation: none; }
+
 /* ---- wellness: sleep hour chips ---- */
 .sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 .hchip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; }

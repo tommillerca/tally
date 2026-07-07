@@ -2653,22 +2653,22 @@ function openProgressSheet() { return openCharacter('progress'); }
 // what each gear-granted talent actually DOES (so loot can be compared, not just named)
 const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
 
-function lootCardHtml(g) {
-  const rar = RARITIES[g.rarity] || RARITIES.uncommon;
-  return `<button class="loot-card r-${g.rarity}" data-gear="${g.id}" aria-pressed="false">
-    <img src="${bhAsset(BH_BY_ID[g.artId])}" alt="">
-    <b>${esc(g.name)}</b>
-    <span class="loot-stats">${gearLabel(g)}</span>
-    ${g.talent ? `<span class="loot-talent">⚡ ${esc(g.talentName)}</span><span class="loot-talent-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</span>` : ''}
-    <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}</span>
-  </button>`;
+// Turn a gear def into a pack card (same format as the loot reveal).
+function gearToCard(g) {
+  return {
+    id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
+    kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`,
+    stats: `${gearLabel(g)}${g.talent ? `<br>⚡ ${esc(g.talentName)}` : ''}`,
+  };
 }
+function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
 
-// Select-then-confirm for a boss loot drop: tapping a card PREVIEWS/selects it
-// (never commits), an explicit Keep button claims. `scope` wraps the .loot-cards
-// + a .loot-keep button. claimFn(gearId) -> picked|null; onDone(picked) after.
+// Select-then-confirm for a boss loot drop: the choices show side-by-side as pack
+// cards; tapping PREVIEWS/selects (never commits), an explicit Keep button claims.
+// `scope` wraps the .loot-cards + a .loot-keep button. claimFn(gearId) -> picked|null.
 function wireLootChoice(scope, claimFn, onDone) {
-  const cards = $$('.loot-card', scope);
+  hydratePackArt(scope);
+  const cards = $$('.pack-card.selectable', scope);
   const keep = $('.loot-keep', scope);
   let sel = null, busy = false;
   const select = card => {
@@ -2751,17 +2751,30 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
   });
 }
 
+// Shared pack-card markup. card: {imgSrc?|iconHtml?, name, rarity, kind, stats, id?}.
+// Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
+function packCardHtml(c, { selectable = false } = {}) {
+  const rar = RARITIES[c.rarity] || RARITIES.common;
+  const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
+  const art = c.imgSrc ? `<canvas class="pc-canvas" width="360" height="360" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
+  const inner = `<div class="pc-foil"></div><div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
+  return selectable
+    ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
+    : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
+}
+function hydratePackArt(scope) { $$('.pc-canvas[data-art]', scope).forEach(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'))); }
+
 // Pokemon-pack-crack reveal: cards you flip through one at a time, big centered
 // art, rarity foil (holo for rare+), name + stats. Tap or swipe to advance; the
 // last card dismisses. cards: [{imgSrc?|iconHtml?, name, rarity, kind, stats}].
-function openPackReveal(cards, { coins = 0, crate = null } = {}) {
+function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
   return new Promise(resolve => {
     const wrap = openSheet(`
       <div class="pack-reveal" id="packReveal">
         ${cards.length ? '<div class="pack-count" id="packCount"></div>' : ''}
         <div class="pack-stage" id="packStage"></div>
-        <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
+        <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
       </div>`);
     const stage = $('#packStage', wrap), countEl = $('#packCount', wrap);
     let i = 0;
@@ -2770,19 +2783,9 @@ function openPackReveal(cards, { coins = 0, crate = null } = {}) {
     function renderCard() {
       const c = cards[i];
       if (countEl) countEl.textContent = `${i + 1} / ${cards.length}`;
-      const rar = RARITIES[c.rarity] || RARITIES.common;
-      const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
-      stage.innerHTML = `
-        <div class="pack-card r-${c.rarity}${holo}" id="packCard">
-          <div class="pc-foil"></div>
-          <div class="pc-kind">${esc(c.kind || '')}</div>
-          <div class="pc-art">${c.imgSrc ? '<canvas class="pc-canvas" width="380" height="380"></canvas>' : `<div class="pc-icon">${c.iconHtml || ''}</div>`}</div>
-          <div class="pc-name">${esc(c.name)}</div>
-          <div class="pc-rar" style="color:${rar.color}">${rar.label}</div>
-          ${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}
-        </div>`;
-      const card = $('#packCard', wrap);
-      if (c.imgSrc) drawTrimmedArt($('.pc-canvas', card), c.imgSrc);
+      stage.innerHTML = packCardHtml(c);
+      const card = $('.pack-card', stage);
+      hydratePackArt(stage);
       requestAnimationFrame(() => card.classList.add('in'));
       const rareTier = RAR_ORDER.indexOf(c.rarity) >= 2;
       if (rareTier) { confettiBurst(innerWidth / 2, innerHeight * 0.42, 20); levelSound(S.sounds); } else sparkleSound(S.sounds);
@@ -3283,11 +3286,11 @@ async function openMap() {
       // active feast buff boosts the spawn's coins too
       const fcm = await foodCoinMult();
       if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
-      const bits = [`+${res.xp} XP`];
-      if (res.coins) bits.push(`+${res.coins} coins`);
-      bits.push(`${INGREDIENTS[ingId].icon} ${INGREDIENTS[ingId].name}${ingN > 1 ? ' x' + ingN : ''}`);
-      if (res.crate) bits.push((res.crate === 'egg' ? 'Step Egg' : 'Daily Crate') + ' added to your stash');
-      toast(`${res.label} collected · ${bits.join(' · ')}`, 3400);
+      // reveal the item(s) earned as pack cards (ingredient always; crate if any)
+      const ing = INGREDIENTS[ingId];
+      const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
+      if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Daily Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+      openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
       refreshWorld();
