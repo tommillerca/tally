@@ -244,6 +244,31 @@ async function boot() {
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+  maybePromptName();
+}
+
+// First run online: actively invite the player to pick their own Crew name
+// instead of silently living with the random bone-name handle the server hands
+// out as a fallback. Fires once ever (kv flag), only when online with no chosen
+// name, and never over the splash / daily wheel / an open sheet.
+async function maybePromptName() {
+  try {
+    if (navigator.webdriver) return;
+    if (await kvGet('namePrompted', false)) return;
+    const me = await social.socialMe();
+    if (!me || me.name) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet('namePrompted', true);
+      toast('Welcome to the Crew! Pick a name so friends know who you are.', 3600);
+      openNameBuilder();
+    };
+    setTimeout(tick, 2000);
+  } catch { /* noop */ }
 }
 
 async function backupNudge() {
@@ -2176,8 +2201,11 @@ async function renderSettings(el) {
     await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
     await social.pushBackup(APP_SOCIAL_V).catch(() => {});
     const pulled = await social.pullGrants().catch(() => null);
-    toast(`You're online as ${r.me.handle}! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    toast(`You're in the Crew! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
     renderSettings(el);
+    // straight into picking a name (they just joined; don't leave them as the
+    // random fallback handle). namePrompted stops the boot nudge double-firing.
+    if (!(await social.socialMe())?.name) { await kvSet('namePrompted', true); setTimeout(() => openNameBuilder(() => renderSettings(el)), 500); }
   });
   $('#cbOn', el)?.addEventListener('click', async () => {
     await social.setCloudBackup(true);
