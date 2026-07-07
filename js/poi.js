@@ -133,7 +133,7 @@ export async function denWinsCount() {
 
 export function denRewardLabel(r) {
   const bits = [];
-  if (r.crate) bits.push(r.crate === 'golden' ? 'Golden Crate' : r.crate === 'egg' ? 'Step Egg' : 'Daily Crate');
+  if (r.crate) bits.push(r.crate === 'golden' ? 'Golden Crate' : r.crate === 'egg' ? 'Step Egg' : 'Common Crate');
   if (r.coins) bits.push(`${r.coins} coins`);
   if (r.xp) bits.push(`${r.xp} XP`);
   return bits.join(' + ');

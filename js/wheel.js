@@ -39,7 +39,7 @@ function iconHtml(p, size) {
 // weights sum to 100. jackpot (Golden Crate) is the gold wedge.
 const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
-  { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Daily Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
+  { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
   { key: 'golden', iconId: 'crate-golden',   tag: 'GOLD',   name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },

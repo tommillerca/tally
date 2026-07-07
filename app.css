@@ -1763,7 +1763,7 @@ body::before {
 
 /* ===== eggs: step incubation ===== */
 .egg-row .q-bar.egg-bar { height: 7px; margin: 5px 0 3px; }
-.egg-row .q-bar.egg-bar i { background: linear-gradient(90deg, #7a6b3f, var(--accent)); }
+.egg-row .q-bar.egg-bar i { background: var(--accent); }
 
 /* ===== wardrobe: paperdoll (WoW-style equip screen) ===== */
 .paperdoll { display: grid; grid-template-columns: 66px 1fr 66px; gap: 8px; align-items: start; margin-top: 4px; }
@@ -2069,6 +2069,20 @@ body::before {
 .pack-card.selectable.selected { transform: translateY(-4px) scale(1.02); outline: 3px solid var(--accent); outline-offset: 1px; }
 .pack-card.selectable.taken { opacity: .45; filter: grayscale(.5); }
 .loot-cards .pack-card.in .pc-foil { animation: none; }
+
+/* ---- Build tab: collapsible sections (same pattern as talent trees/quests) ---- */
+.bsect { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+.bsect > summary.bsect-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.bsect > summary.bsect-head::-webkit-details-marker { display: none; }
+.bsect-head b { font-family: var(--display); font-weight: 400; letter-spacing: .6px; font-size: 16.5px; }
+.bsect-head .note { margin-left: auto; text-align: right; font-size: 11.5px; line-height: 1.25; }
+.bsect-head::after { content: '▸'; margin-left: 6px; color: var(--text-3); transition: transform 0.2s; }
+.bsect[open] > .bsect-head::after { transform: rotate(90deg); }
+.bsect-body { padding: 2px 12px 12px; }
+
+/* settle: item rewards as mini pack cards */
+.settle-cards { margin: 10px auto 4px; max-width: 340px; }
+.settle-cards.one { grid-template-columns: minmax(0, 62%); justify-content: center; }
 
 /* ---- wellness: sleep hour chips ---- */
 .sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }

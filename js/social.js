@@ -228,15 +228,16 @@ export async function pullGrants() {
   if (!r.ok) return { applied: 0 };
   const data = await r.json();
   let applied = 0;
+  const appliedGrants = []; // the grants that actually landed (for the reveal UI)
   const seen = new Set((await kvGet('grantsSeen', [])) || []);
   for (const g of data.grants || []) {
     if (seen.has(g.key)) continue; // belt AND suspenders next to award()'s key check
-    if (await applyGrant(g)) applied++;
+    if (await applyGrant(g)) { applied++; appliedGrants.push(g); }
     seen.add(g.key);
   }
   await kvSet('grantsSeen', [...seen].slice(-500));
   if (data.cursor && data.cursor !== since) await kvSet('grantCursor', data.cursor);
-  return { applied, grants: data.grants || [] };
+  return { applied, appliedGrants, grants: data.grants || [] };
 }
 
 /* ---------------- boot: auto-online + restore-once ---------------- */

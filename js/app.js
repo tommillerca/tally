@@ -223,17 +223,15 @@ async function boot() {
   if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Daily Crate earned", 3600), 2400);
+  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
   await ingestHkFromUrl();
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(r => {
-    if (r && r.applied > 0) { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived. Check your Backpack.`, 3600); refresh(); }
-  });
-  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V); flushAnalytics(); });
+  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery);
+  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery); flushAnalytics(); });
   initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
   window.addEventListener('hashchange', route);
@@ -408,7 +406,7 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
-  const coinBal = await coins();
+  const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
@@ -460,6 +458,8 @@ async function renderToday(el) {
       <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${bhIcon('flame', 15)}</span> <b>${streak}</b></button>
       <div class="hero-top-right">
         <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
+        <button class="bh-coin" id="dustBtn" title="Bone Dust"><span class="dust-ico">◆</span> <b>${dustBal.toLocaleString()}</b></button>
+        <button class="bh-coin" id="vigorBtn" title="Pit fights ready">${ICONS.boltIco(13)} <b>${pitEnergy.ready}</b></button>
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
       </div>
     </div>
@@ -569,6 +569,8 @@ async function renderToday(el) {
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
+  $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#huntBtn')?.addEventListener('click', openMap);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
@@ -610,16 +612,22 @@ async function renderToday(el) {
     if (!res) return;
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
     period === 'day' ? questSound(S.sounds) : levelSound(S.sounds);
-    let msg = `Quest done · +${res.xp} XP · +${res.coins} coins`;
-    if (res.crate) msg += ` · ${res.crate === 'golden' ? 'Golden Crate' : res.crate === 'egg' ? 'Step Egg' : 'Daily Crate'} earned!`;
+    let bonusXp = 0;
+    const crates2 = [];
+    if (res.crate) crates2.push(res.crate);
     // daily all-clear bonus crate
     if (period === 'day') {
       const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
       const bonus = await claimAllBonusIfDue(S.date, tier.quests, dateXp2);
-      if (bonus) msg = `Quest done · +${res.xp + bonus.xp} XP · +${res.coins} coins · Daily Crate earned!`;
+      if (bonus) { bonusXp = bonus.xp; crates2.push('daily'); }
     }
-    toast(msg, 2800);
-    refresh();
+    if (crates2.length) {
+      // item rewards pop as pack cards; coins/XP ride the footer
+      openPackReveal(crates2.map(k => ({ iconHtml: crateIcon(k, 120), name: CRATES[k].label, rarity: k === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: k === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' })), { coins: res.coins, footerNote: `+${res.xp + bonusXp} XP` }).then(refresh);
+    } else {
+      toast(`Quest done · +${res.xp} XP · +${res.coins} coins`, 2800);
+      refresh();
+    }
   }));
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
@@ -2553,9 +2561,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
       <div class="sect-h">Consumables</div>
       <div class="crate-row"><span class="crate-ico">${ICONS.freeze(24)}</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
-      <div class="crate-row"><span class="crate-ico">${CONSUMABLES.xp2.icon}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
+      <div class="crate-row"><span class="crate-ico">${consumableIcon('xp2', 24)}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
-      ${boost ? `<p class="note" style="margin:6px 2px">${CONSUMABLES.xp2.icon} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
+      ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="sect-h">Kitchen · food &amp; buffs</div>
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${cook && cook.recipe ? `<div class="crate-row"><span class="crate-ico">${cook.ready ? '✅' : '🍳'}</span><div style="flex:1"><b>${cook.ready ? 'Dish ready!' : 'Cooking...'}</b><small>${esc(cook.recipe.name)}</small></div></div>` : ''}
@@ -2611,7 +2619,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const res = await buyWithDust(btn.dataset.dustbuy);
       if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
       popSound(S.sounds);
-      toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Daily Crate added. Open it above.' : 'Added to your consumables.', 2800);
+      toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it above.' : 'Added to your consumables.', 2800);
       renderCharacter(wrap, 'crates');
     }));
     $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
@@ -3330,7 +3338,7 @@ async function openMap() {
       // reveal the item(s) earned as pack cards (ingredient always; crate if any)
       const ing = INGREDIENTS[ingId];
       const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
-      if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Daily Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+      if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
       openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
@@ -3435,6 +3443,23 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
+// Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
+// footer); pure coin/XP deliveries keep the light toast so boot stays calm.
+function presentGrantDelivery(r) {
+  if (!r || !(r.applied > 0)) return;
+  const cards = [];
+  let coinsSum = 0, xpSum = 0;
+  for (const g of r.appliedGrants || []) {
+    const p = g.payload || {};
+    coinsSum += p.coins || 0; xpSum += p.xp || 0;
+    if (p.crate && CRATES[p.crate]) cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind: 'CREW DELIVERY', stats: esc(p.note || 'From the Crew') });
+    if (p.gearId && GEAR_BY_ID[p.gearId]) cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind: 'CREW DELIVERY' });
+    if (p.consumable && CONSUMABLES[p.consumable]) cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind: 'CREW DELIVERY', stats: esc(p.note || CONSUMABLES[p.consumable].desc) });
+  }
+  if (cards.length) openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh);
+  else { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh(); }
+}
+
 async function socialSnapshot() {
   const [fighter, eq, xp, gOwned, earned] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds()]);
   const lvl = levelFor(xp);
@@ -4269,7 +4294,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (loserStage) loserStage.classList.add('ko');
     if (fight.over.winner === 'p' && add && el('addStage')) el('addStage').classList.add('ko'); // both enemies drop
     renderActions();
-    let coins = 0, xp = 0, extras = [], bossLoot = null;
+    let coins = 0, xp = 0, extras = [], extraCards = [], bossLoot = null;
+    // item rewards render as pack cards (extras keeps coin-modifier notes only)
+    const crateCard = kind => ({ iconHtml: crateIcon(kind, 120), name: CRATES[kind].label, rarity: kind === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: kind === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' });
     if (won) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
@@ -4280,22 +4307,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (r) {
           xp += r.xp || 0;
           coins = r.coins || 0;
-          if (r.crate) {
-            extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
-          }
+          if (r.crate) extraCards.push(crateCard(r.crate));
           if (r.gearChoices) bossLoot = { key: denKey(foeCfg.week, foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
           // world bosses are the other source of the RARE cooking ingredient
           const eN = foeCfg.add ? 2 : 1;
           await grantIngredient(RARE_INGREDIENT, eN);
-          extras.push(`${INGREDIENTS[RARE_INGREDIENT].icon} Ectoplasm${eN > 1 ? ' x' + eN : ''}`);
+          extraCards.push({ iconHtml: ingIconHtml(RARE_INGREDIENT, 120), name: `Ectoplasm${eN > 1 ? ' x' + eN : ''}`, rarity: 'rare', kind: 'INGREDIENT', stats: 'Rare cooking ingredient' });
         } else coins = 10; // den already cracked this week: pocket change
       }
       else if (foeCfg.mode === 'mini') {
         const r = await claimMiniWin(foeCfg.mini, foeCfg.date);
         if (r) {
           xp += r.xp || 0; coins = r.coins || 0;
-          if (r.crate) extras.push(r.crate === 'golden' ? 'a Golden Crate' : r.crate === 'egg' ? 'a Step Egg' : 'a Daily Crate');
-          if (r.dust) extras.push(`${r.dust} Bone Dust`);
+          if (r.crate) extraCards.push(crateCard(r.crate));
+          if (r.dust) extraCards.push({ iconHtml: '<span class="dust-ico" style="font-size:76px;line-height:1">◆</span>', name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it at the Salvage Bench' });
         } else coins = 8; // already beaten today
       }
       else if (foeCfg.mode === 'rung') {
@@ -4310,7 +4335,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
             xp += g; coins = foeCfg.coins;
             await grantCrate('golden', 'pit-champion');
             await db.put('inv', { id: newId(), kind: 'weapon', weaponId: 'bonecrusher', source: 'pit-champion', ts: Date.now() });
-            extras.push('the BONECRUSHER', 'a Golden Crate');
+            extraCards.push(
+              { iconHtml: '<img src="assets/brand/sword.png" style="width:118px;height:118px;object-fit:contain">', name: 'The Bonecrusher', rarity: 'legendary', kind: 'WEAPON', stats: 'Champion weapon · equip it in Build' },
+              crateCard('golden'));
           } else coins = foeCfg.repeatCoins;
         } else coins = foeCfg.repeatCoins;
       } else if (foeCfg.mode === 'endless') {
@@ -4349,7 +4376,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
            <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
-         </div>`
+         </div>
+         ${extraCards.length ? `<div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>` : ''}`
       : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
@@ -4430,9 +4458,16 @@ async function renderTalents(wrap) {
   const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fightArr), fighter.gearArmor, talentRanks(fightArr));
   const recArch = recommendArch(fighter);
 
+  // Collapsible build sections (same <details> pattern as the talent trees /
+  // quests). Open state survives the wholesale re-render on every tap.
+  const prevOpen = new Map($$('.bsect', body).map(el => [el.dataset.bsect, el.open]));
+  const sectOpen = (key, dflt = false) => (prevOpen.has(key) ? prevOpen.get(key) : dflt) ? 'open' : '';
+
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
   const statBlock = `
-    <div class="sect-h">Your Fighter · ${d.maxHp} HP · ${d.maxWind} Stamina</div>
+    <details class="bsect" data-bsect="fighter" ${sectOpen('fighter', true)}>
+    <summary class="bsect-head"><b>Your Fighter</b><span class="note">${d.maxHp} HP · ${d.maxWind} Stamina · ${fighter.tpAvail} TP</span></summary>
+    <div class="bsect-body">
     <p class="note" style="margin:2px 2px 10px">Your base stats grow from your real habits. Spend <b>training points</b> to lean into a stat and shape your build. Every point here is a choice about how you fight.</p>
     <div class="def-readout">
       <span class="def-chip"><small>Armor</small><b>${Math.round(d.armor * 100)}%</b><i>vs melee</i></span>
@@ -4464,7 +4499,10 @@ async function renderTalents(wrap) {
       </div>
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
-    <div class="sect-h">The Bone Merchant</div>
+    </div></details>
+    <details class="bsect" data-bsect="merchant" ${sectOpen('merchant')}>
+    <summary class="bsect-head"><b>The Bone Merchant</b><span class="note">${fighter.owned.length}/${Object.keys(WEAPONS).length} weapons · ${ARCH_META[recArch].label} suits you</span></summary>
+    <div class="bsect-body">
     <p class="note" style="margin:2px 2px 10px">The old skeleton lays out his wares by fighting style. He nods at your build: <b style="color:var(--accent)">${ARCH_META[recArch].label}</b> suits you. Weapons multiply your effort; they never replace it.</p>
     <div class="wallet-line"><span class="note">Your coins</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()}</b></div>
     ${(() => {
@@ -4499,13 +4537,17 @@ async function renderTalents(wrap) {
         </div>`;
       }).join('')}`;
     })()}
+    </div></details>
     ${(() => {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);
       if (!parts.length && !setActive) return '';
-      return `<div class="sect-h">Gear bonuses</div>
+      return `<details class="bsect" data-bsect="gearbonus" ${sectOpen('gearbonus')}>
+      <summary class="bsect-head"><b>Gear bonuses</b><span class="note">${parts.length ? parts.join(' · ') : 'set bonuses active'}</span></summary>
+      <div class="bsect-body">
       ${parts.length ? `<p class="note" style="margin:2px 2px 8px">Worn gear grants ${parts.join(' · ')}. Equip pieces in your Wardrobe.</p>` : ''}
-      ${setActive ? `<div class="set-note">${fighter.setInfo.sets.filter(s => s.tiers.length).map(s => `<div class="set-row"><b>${esc(s.epithet)} Set (${s.pieces})</b>${s.tiers.map(t => `<small>${t}pc: ${esc(setBonusLabel(s.arch, t))}</small>`).join('')}</div>`).join('')}</div>` : ''}`;
+      ${setActive ? `<div class="set-note">${fighter.setInfo.sets.filter(s => s.tiers.length).map(s => `<div class="set-row"><b>${esc(s.epithet)} Set (${s.pieces})</b>${s.tiers.map(t => `<small>${t}pc: ${esc(setBonusLabel(s.arch, t))}</small>`).join('')}</div>`).join('')}</div>` : ''}
+      </div></details>`;
     })()}`;
 
   body.innerHTML = `

@@ -17,7 +17,7 @@ export const RARITIES = {
 export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
 export const CRATES = {
-  daily:  { label: 'Daily Crate',  icon: '📦', rolls: 1, floor: 0, coins: [20, 40], consumableChance: 0.12 },
+  daily:  { label: 'Common Crate',  icon: '📦', rolls: 1, floor: 0, coins: [20, 40], consumableChance: 0.12 },
   golden: { label: 'Golden Crate', icon: '🧰', rolls: 3, floor: 2, coins: [10, 25], consumableChance: 0.18 },
   egg:    { label: 'Step Egg',     icon: '🥚', rolls: 1, floor: 1, coins: [20, 50], slotBias: ['FW', 'S', 'C'], consumableChance: 0.15 },
 };
@@ -30,7 +30,7 @@ export const CONSUMABLES = {
 };
 
 export const SHOP = [
-  { id: 'crate-daily', label: 'Daily Crate', icon: '📦', cost: 150 },
+  { id: 'crate-daily', label: 'Common Crate', icon: '📦', cost: 150 },
   { id: 'crate-golden', label: 'Golden Crate', icon: '🧰', cost: 400 },
   { id: 'freeze', label: 'Streak Freeze', icon: '🧊', cost: 120 },
   { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
@@ -139,7 +139,7 @@ export async function salvagePet(petId) {
 // Bone Dust shop: spend salvage on a fresh shot at pets / crates / consumables.
 export const DUST_SHOP = [
   { id: 'egg', label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' },
-  { id: 'crate-daily', label: 'Daily Crate', cost: 40, desc: 'A roll of loot' },
+  { id: 'crate-daily', label: 'Common Crate', cost: 40, desc: 'A roll of loot' },
   { id: 'freeze', label: 'Streak Freeze', cost: 25, desc: 'Protect a missed day' },
   { id: 'charm', label: 'Battle Charm', cost: 25, desc: 'Next Pit win pays more' },
 ];
