@@ -18,12 +18,25 @@ function ensureCanvas() {
 }
 
 // On-theme burst: tumbling bones, flipping gold coins, and the odd skull —
-// not party confetti. (Function names kept for all the existing call sites.)
-const BONE = '#f2e9d7', BONE_SH = '#cdbfa6', GOLD = '#ffc961', GOLD_RIM = '#a9781f', SKULL = '#efe6d2', SOCKET = '#221f2b';
-const PART_TYPES = ['bone', 'bone', 'bone', 'coin', 'coin', 'skull']; // mostly bones + coins
+// not party confetti. Particles are rasterized SVG sprites drawn in the game's
+// art style (thick #3a2b12 outline + flat fill; the coin reuses the app's coin
+// icon), so they match Cam's illustrations. (Names kept for all call sites.)
+const PART_TYPES = ['bone', 'bone', 'bone', 'coin', 'coin', 'skull'];
+// silhouette-outline trick: a slightly-scaled dark copy behind the flat fill,
+// so the whole shape gets one clean cartoon outline (no internal seams).
+const BONE_SHAPES = '<rect x="6" y="9.6" width="12" height="4.8" rx="2.2"/><circle cx="6.8" cy="8.6" r="2.9"/><circle cx="6.8" cy="15.4" r="2.9"/><circle cx="17.2" cy="8.6" r="2.9"/><circle cx="17.2" cy="15.4" r="2.9"/>';
+const SKULL_SHAPES = '<circle cx="12" cy="10" r="6.3"/><rect x="7.6" y="12.6" width="8.8" height="5.4" rx="2"/>';
+const SVG = {
+  coin: '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.7"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>',
+  bone: `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 24 24"><g fill="#3a2b12" transform="translate(12 12) scale(1.28) translate(-12 -12)">${BONE_SHAPES}</g><g fill="#f2e9d7">${BONE_SHAPES}</g><g fill="#d8ccb2"><circle cx="6.8" cy="8.6" r="1" opacity=".8"/><circle cx="17.2" cy="15.4" r="1" opacity=".8"/></g></svg>`,
+  skull: `<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 24 24"><g fill="#3a2b12" transform="translate(12 12) scale(1.24) translate(-12 -12)">${SKULL_SHAPES}</g><g fill="#efe6d2">${SKULL_SHAPES}</g><g fill="#2a2130"><circle cx="9.4" cy="10.2" r="2"/><circle cx="14.6" cy="10.2" r="2"/><path d="M12 12.2l1.5 2.6h-3z"/><rect x="9.3" y="15.4" width="1.4" height="2.4" rx=".5"/><rect x="13.3" y="15.4" width="1.4" height="2.4" rx=".5"/></g></svg>`,
+};
+let sprites = null;
+function makeSprite(svg) { const img = new Image(); img.src = 'data:image/svg+xml,' + encodeURIComponent(svg); return img; }
+function ensureSprites() { if (!sprites) sprites = { coin: makeSprite(SVG.coin), bone: makeSprite(SVG.bone), skull: makeSprite(SVG.skull) }; }
 
 function spawn(x, y, count, power) {
-  ensureCanvas();
+  ensureCanvas(); ensureSprites();
   const dpr = devicePixelRatio;
   for (let i = 0; i < count; i++) {
     const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
@@ -31,41 +44,13 @@ function spawn(x, y, count, power) {
     parts.push({
       x: x * dpr, y: y * dpr,
       vx: Math.cos(a) * v * dpr / 60, vy: Math.sin(a) * v * dpr / 60,
-      s: (9 + Math.random() * 7) * dpr,
+      s: (13 + Math.random() * 9) * dpr,
       rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.5,
       type: PART_TYPES[(Math.random() * PART_TYPES.length) | 0],
       life: 0, maxLife: 55 + Math.random() * 35,
     });
   }
   if (!raf) loop();
-}
-
-function drawBone(c, s) {
-  const L = s * 1.5, kr = s * 0.32, ko = s * 0.28;
-  c.fillStyle = BONE;
-  c.fillRect(-L / 2, -s * 0.15, L, s * 0.3);              // shaft
-  for (const ex of [-L / 2, L / 2]) {                     // two knobs at each end
-    c.beginPath(); c.arc(ex, -ko, kr, 0, 7); c.fill();
-    c.beginPath(); c.arc(ex, ko, kr, 0, 7); c.fill();
-  }
-  c.fillStyle = BONE_SH;
-  c.fillRect(-L / 2 + kr, s * 0.02, L - kr * 2, s * 0.07); // faint underside shading
-}
-function drawCoin(c, s, rot) {
-  const rx = Math.abs(Math.cos(rot * 1.7)) * (s * 0.5), ry = s * 0.5;
-  if (rx < s * 0.06) { c.fillStyle = GOLD_RIM; c.fillRect(-s * 0.05, -ry, s * 0.1, ry * 2); return; } // edge-on
-  c.fillStyle = GOLD_RIM; c.beginPath(); c.ellipse(0, 0, rx + s * 0.06, ry, 0, 0, 7); c.fill();
-  c.fillStyle = GOLD; c.beginPath(); c.ellipse(0, 0, rx, ry - s * 0.06, 0, 0, 7); c.fill();
-  c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(-rx * 0.3, -ry * 0.32, rx * 0.28, ry * 0.22, 0, 0, 7); c.fill();
-}
-function drawSkull(c, s) {
-  c.fillStyle = SKULL;
-  c.beginPath(); c.arc(0, -s * 0.05, s * 0.46, 0, 7); c.fill();     // cranium
-  c.fillRect(-s * 0.3, s * 0.18, s * 0.6, s * 0.24);                // jaw
-  c.fillStyle = SOCKET;
-  c.beginPath(); c.arc(-s * 0.18, -s * 0.05, s * 0.14, 0, 7); c.fill();
-  c.beginPath(); c.arc(s * 0.18, -s * 0.05, s * 0.14, 0, 7); c.fill();
-  c.fillRect(-s * 0.05, s * 0.1, s * 0.1, s * 0.12);               // nose
 }
 
 function loop() {
@@ -81,11 +66,18 @@ function loop() {
     p.x += p.vx; p.y += p.vy;
     p.rot += p.vr;
     const fade = 1 - Math.max(0, (p.life - p.maxLife * 0.6) / (p.maxLife * 0.4));
+    const img = sprites && sprites[p.type];
+    if (!img || !img.complete || !img.naturalWidth) continue;
     ctx.save();
     ctx.globalAlpha = fade;
     ctx.translate(p.x, p.y);
-    if (p.type === 'coin') { drawCoin(ctx, p.s, p.rot); }
-    else { ctx.rotate(p.rot); p.type === 'skull' ? drawSkull(ctx, p.s) : drawBone(ctx, p.s); }
+    if (p.type === 'coin') { // flip about the vertical axis
+      const flip = Math.max(0.1, Math.abs(Math.cos(p.rot * 1.7)));
+      ctx.drawImage(img, -p.s * flip / 2, -p.s / 2, p.s * flip, p.s);
+    } else {
+      ctx.rotate(p.rot);
+      ctx.drawImage(img, -p.s / 2, -p.s / 2, p.s, p.s);
+    }
     ctx.restore();
   }
 }
