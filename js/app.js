@@ -78,11 +78,17 @@ const S = {
 // S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
 function petSpriteHtml(petId, px) {
   if (S.shinyPets.has(petId)) {
-    return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">✨</span></div>`;
+    return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
   return animatedPetHtml(petId, px) || `<img src="${bhAsset(BH_BY_ID[petId])}" alt="">`;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
+
+// 4-point sparkle in the game's art style (flat gold fill, thick dark outline).
+// Replaces ✨/✦ emoji + text glyphs so decorations match Cam's illustrations.
+function sparkIco(s = 14, fill = '#ffe08a') {
+  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+}
 
 const ICONS = {
   mapmark: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#8fd0ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 21c-4.4-4.5-6.6-8-6.6-11A6.6 6.6 0 0 1 12 3.4 6.6 6.6 0 0 1 18.6 10c0 3-2.2 6.5-6.6 11z" fill="rgba(143,208,255,0.14)"/><circle cx="9.8" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><circle cx="14.2" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><path d="M10.4 12.6h3.2" stroke-width="1.6"/></svg>`,
@@ -1587,7 +1593,7 @@ async function renderTrends(el) {
       ${pill(`${loggedWk}<small>/7</small>`, 'days logged')}
       ${pill(stepsWk ? `${kmWk.toFixed(1)}<small>km</small>` : '·', 'walked (7d)')}
       ${pill(avgSleep != null ? `${avgSleep.toFixed(1)}<small>h</small>` : '·', 'avg sleep')}
-      ${pill(`${streak}<small>🔥</small>`, 'day streak')}
+      ${pill(`${streak}<small>${ICONS.flame(13)}</small>`, 'day streak')}
     </div>
     <div class="recap-lvl">
       <div class="rl-top"><b>Lv ${lvl.level} · ${esc(lvl.name)}</b><span class="note">${(lvl.need - lvl.into).toLocaleString()} XP to Lv ${lvl.level + 1}</span></div>
@@ -2269,10 +2275,10 @@ function openHatchReveal(res, charWrap) {
       </div>
     </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? '✨ SHINY! ✨' : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
-         <canvas class="hatch-art" width="320" height="320"></canvas>
-         <b>${esc(item.name)}${res.shiny ? ' <span class="shiny-tag">✨ SHINY</span>' : ''}</b>
+         <canvas class="hatch-art" width="512" height="512"></canvas>
+         <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
@@ -2658,7 +2664,7 @@ function gearToCard(g) {
   return {
     id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`,
-    stats: `${gearLabel(g)}${g.talent ? `<div class="pc-perk">⚡ ${esc(g.talentName)}</div><div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : ''}`,
+    stats: `${gearLabel(g)}${g.talent ? `<div class="pc-perk">${ICONS.boltIco(13)} ${esc(g.talentName)}</div><div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : ''}`,
   };
 }
 function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
@@ -2700,7 +2706,7 @@ function petPanelHtml(petId, fighter) {
     <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}${S.shinyPets.has(petId) ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
-        <b>${esc(fam.name)}${S.shinyPets.has(petId) ? ' <span class="shiny-tag">✨ SHINY</span>' : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <b>${esc(fam.name)}${S.shinyPets.has(petId) ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small>Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
         <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.</span>
       </div>
@@ -2739,11 +2745,23 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
-      const scale = Math.min(cw * p / bw, ch * p / bh);
+      // Upscale cap + two-step scaling keep small source art (e.g. a 43px
+      // grillz) BOLD and crisp instead of smoothing it into mush: an integer
+      // nearest-neighbor step preserves the hard cartoon outlines, then one
+      // small smooth pass removes the jaggies. (Art style: clean thick lines.)
+      const scale = Math.min(cw * p / bw, ch * p / bh, 4.5);
       const dw = bw * scale, dh = bh * scale;
       const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, cw, ch);
+      let src = img, sx = x0, sy = y0, sw = bw, sh = bh;
+      const k = Math.min(3, Math.floor(scale));
+      if (k >= 2) {
+        const off2 = document.createElement('canvas'); off2.width = bw * k; off2.height = bh * k;
+        const o2 = off2.getContext('2d'); o2.imageSmoothingEnabled = false;
+        o2.drawImage(img, x0, y0, bw, bh, 0, 0, bw * k, bh * k);
+        src = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
+      }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, x0, y0, bw, bh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      ctx.drawImage(src, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
       res();
     };
     img.onerror = () => res();
@@ -2756,8 +2774,10 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
   const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
-  const art = c.imgSrc ? `<canvas class="pc-canvas" width="360" height="360" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
-  const sparks = RAR_ORDER.indexOf(c.rarity) >= 3 ? '<span class="pc-spark k1">✦</span><span class="pc-spark k2">✧</span><span class="pc-spark k3">✦</span><span class="pc-spark k4">✧</span>' : '';
+  const art = c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
+  const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
+    ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
+    : '';
   const inner = `<div class="pc-foil"></div><div class="pc-glare"></div>${sparks}<div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
   return selectable
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
@@ -2839,7 +2859,7 @@ function crateResultToCard(r) {
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
     return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: dup ? 'GEAR · DUPE' : 'GEAR',
-      stats: dup ? `Duplicate → +${r.coins} ${ICONS.coin(11)}` : `${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}${g.talent ? `<br>⚡ ${esc(g.talentName)}` : ''}` };
+      stats: dup ? `Duplicate → +${r.coins} ${ICONS.coin(11)}` : `${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}${g.talent ? `<br>${ICONS.boltIco(12)} ${esc(g.talentName)}` : ''}` };
   }
   const isPet = r.item && r.item.slot === 'C';
   if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };

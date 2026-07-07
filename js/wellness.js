@@ -11,7 +11,7 @@ export const WATER_GOAL = 8; // cups
 export async function getWellness(date = dateKey()) {
   const w = await kvGet('wellness', null);
   if (!w || w.date !== date) return { date, water: 0, bed: false, sleep: false, sleepHours: null };
-  if (w.sleepHours === undefined) w.sleepHours = w.sleep ? null : null; // legacy bool rows: no hours on record
+  if (w.sleepHours === undefined) w.sleepHours = null; // legacy bool rows: no hours on record
   return w;
 }
 async function save(w) { await kvSet('wellness', w); }
