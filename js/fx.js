@@ -17,7 +17,10 @@ function ensureCanvas() {
   ctx = canvas.getContext('2d');
 }
 
-const COLORS = ['#b9ef4a', '#f2f5f2', '#6fd0ff', '#ffc961', '#ff9fb9'];
+// On-theme burst: tumbling bones, flipping gold coins, and the odd skull —
+// not party confetti. (Function names kept for all the existing call sites.)
+const BONE = '#f2e9d7', BONE_SH = '#cdbfa6', GOLD = '#ffc961', GOLD_RIM = '#a9781f', SKULL = '#efe6d2', SOCKET = '#221f2b';
+const PART_TYPES = ['bone', 'bone', 'bone', 'coin', 'coin', 'skull']; // mostly bones + coins
 
 function spawn(x, y, count, power) {
   ensureCanvas();
@@ -28,13 +31,41 @@ function spawn(x, y, count, power) {
     parts.push({
       x: x * dpr, y: y * dpr,
       vx: Math.cos(a) * v * dpr / 60, vy: Math.sin(a) * v * dpr / 60,
-      w: (4 + Math.random() * 5) * dpr, h: (7 + Math.random() * 6) * dpr,
-      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.4,
-      color: COLORS[(Math.random() * COLORS.length) | 0],
+      s: (9 + Math.random() * 7) * dpr,
+      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.5,
+      type: PART_TYPES[(Math.random() * PART_TYPES.length) | 0],
       life: 0, maxLife: 55 + Math.random() * 35,
     });
   }
   if (!raf) loop();
+}
+
+function drawBone(c, s) {
+  const L = s * 1.5, kr = s * 0.32, ko = s * 0.28;
+  c.fillStyle = BONE;
+  c.fillRect(-L / 2, -s * 0.15, L, s * 0.3);              // shaft
+  for (const ex of [-L / 2, L / 2]) {                     // two knobs at each end
+    c.beginPath(); c.arc(ex, -ko, kr, 0, 7); c.fill();
+    c.beginPath(); c.arc(ex, ko, kr, 0, 7); c.fill();
+  }
+  c.fillStyle = BONE_SH;
+  c.fillRect(-L / 2 + kr, s * 0.02, L - kr * 2, s * 0.07); // faint underside shading
+}
+function drawCoin(c, s, rot) {
+  const rx = Math.abs(Math.cos(rot * 1.7)) * (s * 0.5), ry = s * 0.5;
+  if (rx < s * 0.06) { c.fillStyle = GOLD_RIM; c.fillRect(-s * 0.05, -ry, s * 0.1, ry * 2); return; } // edge-on
+  c.fillStyle = GOLD_RIM; c.beginPath(); c.ellipse(0, 0, rx + s * 0.06, ry, 0, 0, 7); c.fill();
+  c.fillStyle = GOLD; c.beginPath(); c.ellipse(0, 0, rx, ry - s * 0.06, 0, 0, 7); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(-rx * 0.3, -ry * 0.32, rx * 0.28, ry * 0.22, 0, 0, 7); c.fill();
+}
+function drawSkull(c, s) {
+  c.fillStyle = SKULL;
+  c.beginPath(); c.arc(0, -s * 0.05, s * 0.46, 0, 7); c.fill();     // cranium
+  c.fillRect(-s * 0.3, s * 0.18, s * 0.6, s * 0.24);                // jaw
+  c.fillStyle = SOCKET;
+  c.beginPath(); c.arc(-s * 0.18, -s * 0.05, s * 0.14, 0, 7); c.fill();
+  c.beginPath(); c.arc(s * 0.18, -s * 0.05, s * 0.14, 0, 7); c.fill();
+  c.fillRect(-s * 0.05, s * 0.1, s * 0.1, s * 0.12);               // nose
 }
 
 function loop() {
@@ -53,9 +84,8 @@ function loop() {
     ctx.save();
     ctx.globalAlpha = fade;
     ctx.translate(p.x, p.y);
-    ctx.rotate(p.rot);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+    if (p.type === 'coin') { drawCoin(ctx, p.s, p.rot); }
+    else { ctx.rotate(p.rot); p.type === 'skull' ? drawSkull(ctx, p.s) : drawBone(ctx, p.s); }
     ctx.restore();
   }
 }
