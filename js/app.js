@@ -1611,7 +1611,7 @@ async function renderTrends(el) {
   <div class="card">
     <div class="card-title">SLEEP · LAST 14 DAYS</div>
     <div class="big-stat"><span class="v">${avgSleep != null ? avgSleep.toFixed(1) : '·'}<span class="d" style="margin-left:4px">h avg (7d)</span></span></div>
-    <div class="chart">${barChart(days14, d => d.sleepHours, { target: 8, color: '#8f7ad6', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}</div>
+    <div class="chart">${barChart(days14, d => d.sleepHours, { target: 8, color: 'var(--protein)', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}</div>
     <p class="note" style="margin-top:8px">${sleepWk.length ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
   </div>
 
@@ -2269,12 +2269,12 @@ function openHatchReveal(res, charWrap) {
       </div>
     </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:#ffce54' : ''}">${res.shiny ? '✨ SHINY! ✨' : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? '✨ SHINY! ✨' : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="320" height="320"></canvas>
          <b>${esc(item.name)}${res.shiny ? ' <span class="shiny-tag">✨ SHINY</span>' : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
-         <span class="rar-chip" style="color:${res.shiny ? '#ffce54' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
+         <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
     : `<p class="note">+${res.coins} coins instead. Legend.</p>`;
   const wrap2 = openSheet(`

@@ -25,6 +25,8 @@
   --fat: #ff9dc7;
   --danger: #ff6d5e;
   --amber: #ffb454;
+  --gold: #ffc961;
+  --gold-rgb: 255, 201, 97;
   --display: 'Bangers', 'Arial Black', system-ui, sans-serif;
   --radius: 20px;
   --radius-sm: 13px;
@@ -1936,23 +1938,23 @@ body::before {
 .pet-shiny-wrap { position: relative; display: inline-flex; }
 .pet-shiny { object-fit: contain; animation: shinyPulse 2.4s ease-in-out infinite; }
 @keyframes shinyPulse {
-  0%,100% { filter: drop-shadow(0 0 5px rgba(255,206,84,.7)) drop-shadow(0 0 12px rgba(255,206,84,.4)); }
-  50%     { filter: drop-shadow(0 0 9px rgba(255,206,84,1)) drop-shadow(0 0 20px rgba(255,206,84,.65)); }
+  0%,100% { filter: drop-shadow(0 0 5px rgba(var(--gold-rgb),.7)) drop-shadow(0 0 12px rgba(var(--gold-rgb),.4)); }
+  50%     { filter: drop-shadow(0 0 9px rgba(var(--gold-rgb),1)) drop-shadow(0 0 20px rgba(var(--gold-rgb),.65)); }
 }
 .shiny-spark { position: absolute; top: -2px; right: -2px; font-size: 15px; animation: shinySpark 1.8s ease-in-out infinite; pointer-events: none; }
 @keyframes shinySpark { 0%,100% { opacity: .5; transform: scale(.85) rotate(-8deg); } 50% { opacity: 1; transform: scale(1.15) rotate(8deg); } }
-.shiny-tag { font-size: 10px; font-weight: 800; color: #ffce54; letter-spacing: .04em; vertical-align: middle; }
-.pet-card.is-shiny, .petmini.is-shiny { box-shadow: 0 0 0 2px rgba(255,206,84,.6), 0 0 16px rgba(255,206,84,.35); }
-.hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(255,206,84,.9)); }
+.shiny-tag { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: .04em; vertical-align: middle; }
+.pet-card.is-shiny, .petmini.is-shiny { box-shadow: 0 0 0 2px rgba(var(--gold-rgb),.6), 0 0 16px rgba(var(--gold-rgb),.35); }
+.hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(var(--gold-rgb),.9)); }
 @media (prefers-reduced-motion: reduce) {
   .pet-shiny, .shiny-spark { animation: none; }
-  .pet-shiny { filter: drop-shadow(0 0 7px rgba(255,206,84,.8)); }
+  .pet-shiny { filter: drop-shadow(0 0 7px rgba(var(--gold-rgb),.8)); }
 }
 
 /* ---- Trends: week recap ---- */
 .recap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 6px; }
 .recap-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px 4px; text-align: center; }
-.recap-pill .rp-v { font-size: 22px; font-weight: 800; line-height: 1; }
+.recap-pill .rp-v { font-family: var(--display); font-weight: 400; letter-spacing: .5px; font-size: 25px; line-height: 1; }
 .recap-pill .rp-v small { font-size: 12px; font-weight: 700; opacity: .7; }
 .recap-pill .rp-s { font-size: 10.5px; color: var(--text-3); letter-spacing: .02em; }
 .recap-lvl { margin-top: 4px; }
@@ -1995,7 +1997,7 @@ body::before {
 /* floating sparkles on epic+ */
 .pc-spark { position: absolute; font-size: 15px; color: #fff; opacity: 0; pointer-events: none; text-shadow: 0 0 6px rgba(255,255,255,.7); }
 .pack-card.r-epic .pc-spark, .pack-card.r-legendary .pc-spark { animation: sparkTwinkle 2.2s ease-in-out infinite; }
-.pack-card.r-legendary .pc-spark { color: #ffe6a3; text-shadow: 0 0 7px rgba(255,206,84,.9); }
+.pack-card.r-legendary .pc-spark { color: #ffe6a3; text-shadow: 0 0 7px rgba(var(--gold-rgb),.9); }
 .pc-spark.k1 { top: 12%; left: 12%; animation-delay: 0s; }
 .pc-spark.k2 { top: 20%; right: 14%; animation-delay: .5s; font-size: 12px; }
 .pc-spark.k3 { bottom: 26%; left: 16%; animation-delay: 1.1s; font-size: 13px; }
@@ -2011,10 +2013,10 @@ body::before {
 .pc-canvas { width: 88%; height: auto; max-height: 100%; filter: drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
 .pc-icon { font-size: 96px; display: grid; place-items: center; }
 .pc-icon .bhi-wrap svg, .pc-icon svg { width: 108px; height: 108px; }
-.pc-name { font-family: var(--display, inherit); font-weight: 800; font-size: 20px; text-align: center; line-height: 1.1; margin-top: 2px; }
+.pc-name { font-family: var(--display); font-weight: 400; letter-spacing: .5px; font-size: 22px; text-align: center; line-height: 1.05; margin-top: 2px; }
 .pc-rar { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; margin-top: 3px; }
 .pc-stats { font-size: 12px; color: var(--text-2); text-align: center; margin-top: 6px; line-height: 1.35; }
-.pc-perk { font-size: 12.5px; font-weight: 800; color: #ffce54; margin-top: 7px; }
+.pc-perk { font-size: 12.5px; font-weight: 800; color: var(--gold); margin-top: 7px; }
 .pc-perk-desc { font-size: 11px; color: var(--text-3); line-height: 1.3; margin-top: 1px; }
 .pack-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; min-height: 22px; }
 .pack-hint { font-size: 12px; color: var(--text-3); letter-spacing: .04em; animation: hintPulse 1.8s ease-in-out infinite; }
@@ -2024,7 +2026,7 @@ body::before {
 
 /* bigger, centered hatched pet (source PNG parks art in a corner) */
 .hatch-prize .hatch-art { width: 200px; height: 200px; filter: drop-shadow(0 8px 9px rgba(0,0,0,.5)); }
-.hatch-prize.is-shiny .hatch-art { filter: drop-shadow(0 0 14px rgba(255,206,84,.9)) drop-shadow(0 8px 9px rgba(0,0,0,.45)); }
+.hatch-prize.is-shiny .hatch-art { filter: drop-shadow(0 0 14px rgba(var(--gold-rgb),.9)) drop-shadow(0 8px 9px rgba(0,0,0,.45)); }
 
 /* boss loot: two pack cards side-by-side, pick one */
 .loot-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px; align-items: stretch; }
@@ -2043,4 +2045,4 @@ body::before {
 /* ---- wellness: sleep hour chips ---- */
 .sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 .hchip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
-.hchip.on { background: #8f7ad6; border-color: #8f7ad6; color: #fff; }
+.hchip.on { background: var(--protein); border-color: var(--protein); color: var(--bg); }
