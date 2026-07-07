@@ -1931,3 +1931,20 @@ body::before {
 @keyframes paDrool { 0%,46%{opacity:1} 49.5%,78%{opacity:0} 87%,100%{opacity:1} }
 .pa-fly { animation: paBuzz 6s ease-in-out infinite; }
 @keyframes paBuzz { 0%{transform:translate(0,0)} 20%{transform:translate(-38px,-6px)} 40%{transform:translate(-73px,0)} 55%{transform:translate(-58px,-9px)} 72%{transform:translate(-23px,-4px)} 100%{transform:translate(0,0)} }
+
+/* ---- ultra-rare SHINY pet variant ---- */
+.pet-shiny-wrap { position: relative; display: inline-flex; }
+.pet-shiny { object-fit: contain; animation: shinyPulse 2.4s ease-in-out infinite; }
+@keyframes shinyPulse {
+  0%,100% { filter: drop-shadow(0 0 5px rgba(255,206,84,.7)) drop-shadow(0 0 12px rgba(255,206,84,.4)); }
+  50%     { filter: drop-shadow(0 0 9px rgba(255,206,84,1)) drop-shadow(0 0 20px rgba(255,206,84,.65)); }
+}
+.shiny-spark { position: absolute; top: -2px; right: -2px; font-size: 15px; animation: shinySpark 1.8s ease-in-out infinite; pointer-events: none; }
+@keyframes shinySpark { 0%,100% { opacity: .5; transform: scale(.85) rotate(-8deg); } 50% { opacity: 1; transform: scale(1.15) rotate(8deg); } }
+.shiny-tag { font-size: 10px; font-weight: 800; color: #ffce54; letter-spacing: .04em; vertical-align: middle; }
+.pet-card.is-shiny, .petmini.is-shiny { box-shadow: 0 0 0 2px rgba(255,206,84,.6), 0 0 16px rgba(255,206,84,.35); }
+.hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(255,206,84,.9)); }
+@media (prefers-reduced-motion: reduce) {
+  .pet-shiny, .shiny-spark { animation: none; }
+  .pet-shiny { filter: drop-shadow(0 0 7px rgba(255,206,84,.8)); }
+}

@@ -14,6 +14,7 @@ import {
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
   WEAPON_COST, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
+  shinyPetIds,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
@@ -69,7 +70,19 @@ const S = {
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
   sounds: true,
+  shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
 };
+
+// Pet sprite: shiny -> static recolored variant (+ glow); else the animated
+// layer stack (C1/C4) or the plain base image. Shiny state is cached in
+// S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
+function petSpriteHtml(petId, px) {
+  if (S.shinyPets.has(petId)) {
+    return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">✨</span></div>`;
+  }
+  return animatedPetHtml(petId, px) || `<img src="${bhAsset(BH_BY_ID[petId])}" alt="">`;
+}
+async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
 
 const ICONS = {
   mapmark: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#8fd0ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 21c-4.4-4.5-6.6-8-6.6-11A6.6 6.6 0 0 1 12 3.4 6.6 6.6 0 0 1 18.6 10c0 3-2.2 6.5-6.6 11z" fill="rgba(143,208,255,0.14)"/><circle cx="9.8" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><circle cx="14.2" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><path d="M10.4 12.6h3.2" stroke-width="1.6"/></svg>`,
@@ -199,6 +212,7 @@ async function boot() {
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  await refreshShinyPets();
   const frozen = await checkStreakFreeze();
   if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
   const closed = await awardDayCloseIfDue(S.settings.targets);
@@ -2153,12 +2167,12 @@ function openHatchReveal(res, charWrap) {
       </div>
     </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px">IT HATCHED!</div>
-       <div class="hatch-prize r-${item.rarity}">
-         <img src="${bhAsset(item)}" alt="">
-         <b>${esc(item.name)}</b>
-         <small>Pet · follows your bonehead</small>
-         <span class="rar-chip" style="color:${RARITIES[item.rarity].color}">${RARITIES[item.rarity].label}</span>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:#ffce54' : ''}">${res.shiny ? '✨ SHINY! ✨' : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
+       <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
+         <img src="${res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)}" alt="">
+         <b>${esc(item.name)}${res.shiny ? ' <span class="shiny-tag">✨ SHINY</span>' : ''}</b>
+         <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
+         <span class="rar-chip" style="color:${res.shiny ? '#ffce54' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
     : `<p class="note">+${res.coins} coins instead. Legend.</p>`;
   const wrap2 = openSheet(`
@@ -2460,6 +2474,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
+      await refreshShinyPets();
       openHatchReveal(res, wrap);
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
@@ -2578,10 +2593,10 @@ function petPanelHtml(petId, fighter) {
   const tree = PET_TREES[fam.key];
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   return `
-    <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}">
-      ${animatedPetHtml(petId, 60) || `<img src="${bhAsset(BH_BY_ID[petId])}" alt="">`}
+    <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}${S.shinyPets.has(petId) ? ' is-shiny' : ''}">
+      ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
-        <b>${esc(fam.name)} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <b>${esc(fam.name)}${S.shinyPets.has(petId) ? ' <span class="shiny-tag">✨ SHINY</span>' : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small>Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
         <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.</span>
       </div>
@@ -3470,7 +3485,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? (animatedPetHtml(petArtId, 88) || `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">`) : ''}</div>
+          <div class="bh-stage fstage petmini r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 88) : ''}</div>
           <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>

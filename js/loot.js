@@ -175,6 +175,11 @@ export function eggProgress(row, lifetime) {
   return { walked: Math.min(walked, row.goal || EGG_GOAL_STEPS), goal: row.goal || EGG_GOAL_STEPS, ready: walked >= (row.goal || EGG_GOAL_STEPS) };
 }
 
+// Odds a hatch comes out SHINY (an ultra-rare recolored variant). Stays
+// obtainable even after you own every pet: a shiny roll on a dupe upgrades an
+// owned pet to shiny instead of paying coins.
+export const SHINY_CHANCE = 0.03;
+
 // Crack a ready egg: rolls a PET (slot C), unowned first, dupe pays coins.
 export async function hatchEgg(invId) {
   const inv = await inventory();
@@ -186,7 +191,19 @@ export async function hatchEgg(invId) {
   const pets = BH_ITEMS.filter(i => i.slot === 'C');
   const fresh = pets.filter(i => !owned.has(i.id));
   await db.del('inv', row.id);
+  const isShiny = rng() < SHINY_CHANCE;
+  const pets2 = (await kvGet('pets', {})) || {};
   if (!fresh.length) {
+    // Own them all: a shiny roll upgrades a not-yet-shiny pet; otherwise coins.
+    if (isShiny) {
+      const upg = pets.filter(i => !pets2[i.id]?.shiny);
+      if (upg.length) {
+        const pick = upg[Math.floor(rng() * upg.length)];
+        pets2[pick.id] = { ...(pets2[pick.id] || { hatchedAtSteps: await lifetimeStepsSum() }), shiny: true };
+        await kvSet('pets', pets2);
+        return { ready: true, dupe: true, shiny: true, item: pick };
+      }
+    }
     await coinsAdd(120);
     return { ready: true, dupe: true, coins: 120 };
   }
@@ -195,9 +212,20 @@ export async function hatchEgg(invId) {
   const pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
   await grantCosmetic(pick.id, 'egg');
   // anchor its battle level to now: pet level = steps walked SINCE this moment
+  if (!pets2[pick.id]) pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() };
+  if (isShiny) pets2[pick.id].shiny = true;
+  await kvSet('pets', pets2);
+  return { ready: true, item: pick, shiny: isShiny };
+}
+
+// Is an owned pet the shiny variant?
+export async function isPetShiny(petId) {
   const pets2 = (await kvGet('pets', {})) || {};
-  if (!pets2[pick.id]) { pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() }; await kvSet('pets', pets2); }
-  return { ready: true, item: pick };
+  return !!pets2[petId]?.shiny;
+}
+export async function shinyPetIds() {
+  const pets2 = (await kvGet('pets', {})) || {};
+  return Object.keys(pets2).filter(id => pets2[id]?.shiny);
 }
 
 // The steps a pet has walked since it hatched (drives its battle level).
