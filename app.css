@@ -1879,3 +1879,55 @@ body::before {
 .foe-side[data-target], .pet-fighter.add[data-target] { cursor: pointer; }
 .fighterG.foe-side.targeted > .fstage, .pet-fighter.add.targeted > .fstage { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }
 @media (prefers-reduced-motion: reduce) { .fstage.petpounce { animation: none; } }
+
+/* ===== Animated pets (C1 cloud, C4 lizard) — see js/petanim.js ===== */
+/* .petanim reserves the scaled box; .pa-stage is the native-px stage, scaled by JS. */
+.petanim { position: relative; overflow: hidden; flex: none; margin: auto; }
+.pa-stage { position: absolute; top: 0; left: 0; transform-origin: top left; }
+/* Override the generic ".bh-stage img" rule (width/height 100%, object-fit cover, inset 0)
+   with !important — it out-orders our rules inside the fight petmini. Full-canvas layers
+   ARE 100% of their .pa-art box (correct); small sprites set their own px below. */
+.pa-stage img { position: absolute !important; inset: auto !important; object-fit: fill !important;
+                image-rendering: auto; filter: none !important; pointer-events: none; }
+.pa-cloud .pa-body, .pa-cloud .pa-eyes, .pa-cloud .pa-closed,
+.pa-lizard .pa-base, .pa-lizard .pa-mouthline, .pa-lizard .pa-drool,
+.pa-lizard .pa-lid, .pa-lizard .pa-tongue, .pa-lizard .pa-fly {
+  width: 100% !important; height: 100% !important; }
+.pa-cloud { width: 222px; height: 219px; }
+.pa-lizard { width: 273px; height: 218px; }
+
+/* --- cloud --- */
+.pa-cloud .pa-art { position: absolute; left: 18px; top: 18px; width: 186px; height: 183px; }
+.pa-cloud .pa-body, .pa-cloud .pa-eyes, .pa-cloud .pa-closed { left: 0; top: 0; }
+.pa-cloud .pa-shadow { left: 65px; top: 166px; width: 57px !important; height: auto !important;
+             transform-origin: 50% 50%; animation: paShadow 3s ease-in-out infinite; }
+@keyframes paShadow { 0%{transform:scale(1);opacity:.85} 50%{transform:scale(.9);opacity:.6} 100%{transform:scale(1);opacity:.85} }
+.pa-bob { position: absolute; inset: 0; animation: paBob 3s ease-in-out infinite; }
+@keyframes paBob { 0%{transform:translateY(0)} 50%{transform:translateY(-5px)} 100%{transform:translateY(0)} }
+.pa-eyes { animation: paEyesOpen 3s infinite; transform-origin: 50% 33%; }
+@keyframes paEyesOpen { 0%,84%{transform:scaleY(1);opacity:1} 88%,90%{transform:scaleY(.02);opacity:0} 94%,100%{transform:scaleY(1);opacity:1} }
+.pa-closed { opacity: 0; animation: paEyesClosed 3s infinite; }
+@keyframes paEyesClosed { 0%,85.5%{opacity:0} 88%,90%{opacity:1} 92.5%,100%{opacity:0} }
+.pa-cloud .pa-drop { width: 11px !important; height: auto !important; animation: paFall 1.5s cubic-bezier(.45,.05,.85,.6) infinite; }
+.pa-cloud .pa-d1 { left: 60px; top: 131px; animation-delay: 0s; }
+.pa-cloud .pa-d2 { left: 80px; top: 129px; width: 9px !important; animation-delay: -.42s; }
+.pa-cloud .pa-d3 { left: 94px; top: 133px; animation-delay: -.8s; }
+.pa-cloud .pa-d4 { left: 116px; top: 129px; width: 10px !important; animation-delay: -1.14s; }
+@keyframes paFall { 0%{transform:translateY(0) scaleY(.7);opacity:0} 14%{opacity:1} 70%{opacity:1} 100%{transform:translateY(30px) scaleY(1.1);opacity:0} }
+
+/* --- lizard --- */
+.pa-lizard .pa-art { position: absolute; left: 24px; top: 24px; width: 225px; height: 170px; }
+.pa-lizard .pa-creature { position: absolute; inset: 0; }
+.pa-base, .pa-mouthline, .pa-drool, .pa-lid, .pa-tongue { left: 0; top: 0; }
+.pa-lid { opacity: 0; animation: paEyelid 3s ease-in-out infinite; animation-delay: -0.3s; transform-origin: 60% 14.7%; }
+@keyframes paEyelid { 0%,89%{transform:scaleY(0);opacity:0} 91%,92.5%{transform:scaleY(1);opacity:1} 95%,100%{transform:scaleY(0);opacity:0} }
+.pa-tongueclip { position: absolute; left: 0; top: 0; width: 225px; height: 170px;
+  clip-path: polygon(0px 70px, 120px 70.8px, 128px 64.8px, 132px 61.8px, 136px 59.8px, 140px 56.8px, 144px 53.8px, 148px 51.8px, 152px 48.8px, 156px 45.8px, 164px 42.8px, 225px 42px, 225px 170px, 0px 170px); }
+.pa-tongue { animation: paSlurp 6s infinite; }
+@keyframes paSlurp { 0%,46%{transform:translateY(0)} 50.5%{transform:translateY(-46px)} 72.2%{transform:translateY(-46px)} 76.2%,100%{transform:translateY(0)} }
+.pa-mouthline { animation: paMouth 6s infinite; }
+@keyframes paMouth { 0%,49.7%{opacity:1} 49.9%,72.5%{opacity:0} 72.9%,100%{opacity:1} }
+.pa-drool { animation: paDrool 6s infinite; }
+@keyframes paDrool { 0%,46%{opacity:1} 49.5%,78%{opacity:0} 87%,100%{opacity:1} }
+.pa-fly { animation: paBuzz 6s ease-in-out infinite; }
+@keyframes paBuzz { 0%{transform:translate(0,0)} 20%{transform:translate(-38px,-6px)} 40%{transform:translate(-73px,0)} 55%{transform:translate(-58px,-9px)} 72%{transform:translate(-23px,-4px)} 100%{transform:translate(0,0)} }

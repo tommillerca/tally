@@ -44,6 +44,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { animatedPetHtml } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
@@ -2532,7 +2533,7 @@ function petPanelHtml(petId, fighter) {
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   return `
     <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}">
-      <img src="${bhAsset(BH_BY_ID[petId])}" alt="">
+      ${animatedPetHtml(petId, 60) || `<img src="${bhAsset(BH_BY_ID[petId])}" alt="">`}
       <div class="pet-card-meta">
         <b>${esc(fam.name)} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small>Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
@@ -3423,7 +3424,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">` : ''}</div>
+          <div class="bh-stage fstage petmini r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? (animatedPetHtml(petArtId, 88) || `<img src="${bhAsset(BH_BY_ID[petArtId])}" alt="">`) : ''}</div>
           <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>
