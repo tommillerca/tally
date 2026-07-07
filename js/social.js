@@ -161,8 +161,51 @@ export async function goOnline() {
   });
   if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
   const me = await r.json();
-  await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, onlineAt: Date.now() });
+  await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
   return { ok: true, me };
+}
+
+// Your display name for the UI: the curated name if set, else the bone-name.
+export async function displayName() {
+  const me = await kvGet('social', null);
+  return me ? (me.name || me.handle) : null;
+}
+
+/* ---------------- friends + name ---------------- */
+// Set the curated display name from word-list indices (no free text uploaded).
+export async function setName(adj, noun, num) {
+  const r = await signedFetch('POST', '/name', { adj, noun, num });
+  if (!r.ok) return { ok: false };
+  const data = await r.json();
+  const me = (await kvGet('social', null)) || {};
+  me.name = data.name; await kvSet('social', me);
+  return { ok: true, name: data.name };
+}
+export async function friendRequest(code) {
+  try { const r = await signedFetch('POST', '/friends/request', { code }); const d = await r.json().catch(() => ({})); return { ok: r.ok, ...d }; }
+  catch { return { ok: false }; }
+}
+export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
+export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
+
+// Private, local-only nicknames: what YOU call a friend so a generic bone-name
+// is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's
+// free text with nothing to moderate (it never leaves this phone except inside
+// the user's own end-to-end-encrypted backup). Keyed by the friend's playerId.
+export async function setFriendAlias(playerId, alias) {
+  const map = (await kvGet('friendAliases', null)) || {};
+  const clean = String(alias || '').trim().replace(/\s+/g, ' ').slice(0, 24);
+  if (clean) map[playerId] = clean; else delete map[playerId];
+  await kvSet('friendAliases', map);
+  return clean;
+}
+export async function listFriends() {
+  let data;
+  try { const r = await signedFetch('GET', '/friends', null); if (!r.ok) return { friends: [], incoming: [], outgoing: [] }; data = await r.json(); }
+  catch { return { friends: [], incoming: [], outgoing: [] }; }
+  const aliases = (await kvGet('friendAliases', null)) || {};
+  for (const bucket of ['friends', 'incoming', 'outgoing']) for (const f of (data[bucket] || [])) f.alias = aliases[f.playerId] || null;
+  return data;
 }
 
 /* ---------------- profile snapshot up ---------------- */

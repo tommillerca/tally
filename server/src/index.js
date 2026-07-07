@@ -16,19 +16,31 @@ const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
 const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows over time)
 
-/* ---------------- handle + friend code generation ---------------- */
-const ADJ = ['Rattling', 'Grim', 'Dusty', 'Creaky', 'Hollow', 'Marrow', 'Midnight', 'Restless', 'Crooked', 'Sturdy', 'Swift', 'Lucky', 'Feral', 'Ancient', 'Jolly', 'Sneaky'];
-const NOUN = ['Rex', 'Femur', 'Knuckles', 'Molar', 'Sternum', 'Tibia', 'Scapula', 'Phalange', 'Vertebrae', 'Clavicle', 'Patella', 'Mandible', 'Rib', 'Talus', 'Hyoid', 'Coccyx'];
+/* ---------------- names + friend codes ----------------
+   NAME_ADJ / NAME_NOUN power the curated name builder: the client sends INDICES,
+   the server reconstructs the string from these lists. No free text ever crosses
+   the wire, so no offensive names are possible and there is nothing to moderate.
+   KEEP IN SYNC with tally/js/names.js (identical order). */
+const ADJ = ['Rattling', 'Grim', 'Dusty', 'Creaky', 'Hollow', 'Marrow', 'Midnight', 'Restless', 'Crooked', 'Sturdy', 'Swift', 'Lucky', 'Feral', 'Ancient', 'Jolly', 'Sneaky', 'Iron', 'Cursed', 'Phantom', 'Rowdy', 'Chrome', 'Vicious', 'Gnarly', 'Wicked', 'Bony', 'Rugged', 'Shadow', 'Fresh', 'Savage', 'Brutal', 'Twisted', 'Jagged', 'Ragged', 'Grisly', 'Ghastly', 'Ghoulish', 'Spectral', 'Sinister', 'Vile', 'Rotten', 'Withered', 'Charred', 'Frozen', 'Blazing', 'Molten', 'Rusty', 'Frostbit', 'Toxic', 'Venomous', 'Rabid', 'Feisty', 'Reckless', 'Hungry', 'Ironclad', 'Swole', 'Ripped', 'Chiseled', 'Massive', 'Mighty', 'Beastly', 'Prowling', 'Nocturnal', 'Eerie', 'Murky', 'Gloomy', 'Silent', 'Menacing', 'Lurking', 'Snarling', 'Howling', 'Grinning', 'Neon', 'Golden', 'Obsidian', 'Cracked', 'Grave', 'Wretched', 'Thunderous', 'Stormy', 'Electric'];
+const NOUN = ['Rex', 'Femur', 'Knuckles', 'Molar', 'Sternum', 'Tibia', 'Scapula', 'Phalange', 'Vertebrae', 'Clavicle', 'Patella', 'Mandible', 'Rib', 'Talus', 'Hyoid', 'Coccyx', 'Skull', 'Spine', 'Reaper', 'Ripper', 'Jawbone', 'Cranium', 'Gains', 'Crypt', 'Ghoul', 'Wraith', 'Fang', 'Hustle', 'Bruiser', 'Brawler', 'Slugger', 'Crusher', 'Basher', 'Smasher', 'Chomper', 'Gnasher', 'Stomper', 'Wrecker', 'Mauler', 'Ravager', 'Menace', 'Terror', 'Nightmare', 'Specter', 'Wight', 'Lich', 'Revenant', 'Banshee', 'Gargoyle', 'Golem', 'Titan', 'Brute', 'Fiend', 'Demon', 'Gremlin', 'Goblin', 'Warlock', 'Bonesaw', 'Skeleton', 'Bonehead', 'Ossuary', 'Casket', 'Coffin', 'Tombstone', 'Boneyard', 'Ribcage', 'Kneecap', 'Backbone', 'Humerus', 'Ulna', 'Pelvis', 'Sacrum', 'Fibula', 'Tusk', 'Claw', 'Talon', 'Horn', 'Spike', 'Deadlift', 'Pump'];
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L lookalikes
 
 function randPick(arr) { return arr[crypto.getRandomValues(new Uint32Array(1))[0] % arr.length]; }
 function makeHandle() { return `${randPick(ADJ)} ${randPick(NOUN)}`; }
+// Reconstruct a curated name from indices. Returns null if out of range (tamper).
+function buildName(a, n, num) {
+  const adj = ADJ[a | 0], noun = NOUN[n | 0];
+  if (!adj || !noun) return null;
+  const suffix = (Number.isInteger(num) && num >= 0 && num <= 99) ? ` #${num}` : '';
+  return `${adj} ${noun}${suffix}`;
+}
 function makeFriendCode() {
   const r = crypto.getRandomValues(new Uint8Array(8));
   const c = [...r].map(b => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
   return `BONE-${c.slice(0, 4)}-${c.slice(4)}`;
 }
 function newId() { return crypto.randomUUID(); }
+function pairKey(x, y) { return x < y ? [x, y] : [y, x]; } // canonical a<b for friendships
 
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
@@ -68,8 +80,8 @@ export default {
         const jwk = body && body.pubkey;
         if (!jwk || jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) return json({ error: 'bad pubkey' }, 400);
         const pub = JSON.stringify({ kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y });
-        const existing = await env.DB.prepare('SELECT id, handle, friend_code FROM players WHERE pubkey = ?').bind(pub).first();
-        if (existing) return json({ playerId: existing.id, handle: existing.handle, friendCode: existing.friend_code, existing: true });
+        const existing = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
+        if (existing) return json({ playerId: existing.id, handle: existing.handle, friendCode: existing.friend_code, name: existing.name || null, existing: true });
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
@@ -136,12 +148,100 @@ export default {
         return json({ grants, cursor: grants.length ? grants[grants.length - 1].id : since });
       }
 
-      // Signed: who am I (handle/code lookup, used by the client after restore).
+      // Signed: set your display name from curated indices (no free text -> no
+      // moderation). Server reconstructs the string from its own word lists.
+      if (path === '/name' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const b = JSON.parse(bodyText || '{}');
+        const name = buildName(b.adj, b.noun, b.num);
+        if (!name) return json({ error: 'bad name indices' }, 400);
+        await env.DB.prepare('UPDATE players SET name = ?, last_seen = ? WHERE id = ?').bind(name, Date.now(), auth.playerId).run();
+        return json({ ok: true, name });
+      }
+
+      // Signed: request a friend by their friend code. If they already requested
+      // you, this accepts. Idempotent.
+      if (path === '/friends/request' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const code = String((JSON.parse(bodyText || '{}').code) || '').toUpperCase().trim();
+        const target = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
+        if (!target) return json({ error: 'no player with that code' }, 404);
+        if (target.id === auth.playerId) return json({ error: 'that is your own code' }, 400);
+        const [a, b] = pairKey(auth.playerId, target.id);
+        const ex = await env.DB.prepare('SELECT status, requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        const now = Date.now();
+        if (ex && ex.status === 'accepted') return json({ ok: true, status: 'accepted' });
+        if (ex && ex.requested_by !== auth.playerId) { // they already asked me -> accept
+          await env.DB.prepare('UPDATE friendships SET status = ? , ts = ? WHERE a = ? AND b = ?').bind('accepted', now, a, b).run();
+          return json({ ok: true, status: 'accepted' });
+        }
+        if (!ex) await env.DB.prepare('INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,?,?,?)').bind(a, b, 'pending', auth.playerId, now).run();
+        return json({ ok: true, status: 'pending' });
+      }
+
+      // Signed: accept an incoming request.
+      if (path === '/friends/accept' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const other = String(JSON.parse(bodyText || '{}').id || '');
+        const [a, b] = pairKey(auth.playerId, other);
+        const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        if (!ex) return json({ error: 'no such request' }, 404);
+        if (ex.requested_by === auth.playerId) return json({ error: 'cannot accept your own request' }, 400);
+        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', Date.now(), a, b).run();
+        return json({ ok: true });
+      }
+
+      // Signed: remove a friend / decline a request.
+      if (path === '/friends/remove' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const [a, b] = pairKey(auth.playerId, String(JSON.parse(bodyText || '{}').id || ''));
+        await env.DB.prepare('DELETE FROM friendships WHERE a = ? AND b = ?').bind(a, b).run();
+        return json({ ok: true });
+      }
+
+      // Signed: my friends + pending, each with the other player's public profile.
+      if (path === '/friends' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const rows = await env.DB.prepare(
+          'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
+          'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, ' +
+          'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v ' +
+          'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
+          'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT 100').bind(auth.playerId, auth.playerId).all();
+        const friends = [], incoming = [], outgoing = [];
+        for (const r of rows.results || []) {
+          const meIsA = r.a === auth.playerId;
+          const other = {
+            playerId: meIsA ? r.b : r.a,
+            name: (meIsA ? r.b_name : r.a_name) || (meIsA ? r.b_handle : r.a_handle),
+            handle: meIsA ? r.b_handle : r.a_handle,
+            friendCode: meIsA ? r.b_code : r.a_code,
+            appV: meIsA ? r.b_v : r.a_v,
+            profile: (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })(),
+            since: r.ts,
+          };
+          if (r.status === 'accepted') friends.push(other);
+          else if (r.requested_by === auth.playerId) outgoing.push(other);
+          else incoming.push(other);
+        }
+        return json({ friends, incoming, outgoing });
+      }
+
+      // Signed: who am I (handle/code/name lookup, used by the client after restore).
       if (path === '/me' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
-        const row = await env.DB.prepare('SELECT handle, friend_code, created_at FROM players WHERE id = ?').bind(auth.playerId).first();
-        return json({ handle: row.handle, friendCode: row.friend_code, createdAt: row.created_at });
+        const row = await env.DB.prepare('SELECT handle, friend_code, name, created_at FROM players WHERE id = ?').bind(auth.playerId).first();
+        return json({ handle: row.handle, friendCode: row.friend_code, name: row.name || null, createdAt: row.created_at });
       }
 
       // Anonymous analytics ingest. Unsigned (events carry only a random device

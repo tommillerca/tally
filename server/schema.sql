@@ -3,8 +3,9 @@
 CREATE TABLE IF NOT EXISTS players (
   id TEXT PRIMARY KEY,
   pubkey TEXT NOT NULL UNIQUE,       -- JSON JWK (ECDSA P-256 public key)
-  handle TEXT NOT NULL,              -- generated bone-name, no free text
-  friend_code TEXT NOT NULL UNIQUE,  -- BONE-XXXX-XXXX
+  handle TEXT NOT NULL,              -- generated bone-name fallback
+  name TEXT,                         -- curated display name (adj+noun[+#]) player picks
+  friend_code TEXT NOT NULL UNIQUE,  -- BONE-XXXX-XXXX (the real add-key)
   profile TEXT,                      -- JSON game snapshot (never food data)
   app_v TEXT,                        -- app version of last snapshot
   created_at INTEGER NOT NULL,

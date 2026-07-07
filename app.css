@@ -1434,6 +1434,93 @@ body::before {
   color: var(--text, #f2e9d7); background: var(--surface-2); border: 1px solid var(--line-strong, #2c2936);
   border-radius: 999px; padding: 7px 12px; cursor: pointer; letter-spacing: 0.06em;
 }
+.crew-name-wrap { display: flex; flex-direction: column; gap: 1px; }
+.crew-editname { align-self: flex-start; font-size: 12px; font-weight: 650; padding: 2px 0; }
+.crew-friends {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  margin-top: 12px; padding: 12px 14px; border-radius: 14px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  font-size: 14.5px; font-weight: 650; cursor: pointer;
+}
+.crew-friends:active { transform: scale(0.99); }
+.crew-friends-r { display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+.crew-chev { color: var(--text-3); font-size: 20px; line-height: 1; font-weight: 400; }
+.req-badge {
+  background: var(--accent); color: #12140b; font-size: 11px; font-weight: 800;
+  border-radius: 999px; padding: 2px 8px; letter-spacing: 0.02em;
+}
+
+/* ---- name builder sheet ---- */
+.nb-preview {
+  font-family: var(--display); font-size: 30px; letter-spacing: 0.5px; text-align: center;
+  color: var(--accent); background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 16px; padding: 20px 12px; margin-bottom: 12px; min-height: 34px;
+  overflow-wrap: anywhere;
+}
+.nb-shuffle { width: 100%; margin-bottom: 14px; }
+.nb-group { margin-bottom: 12px; }
+.nb-lab { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin: 0 2px 6px; font-weight: 700; }
+.nb-chips {
+  display: flex; gap: 7px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.nb-chips::-webkit-scrollbar { display: none; }
+.nb-chip { flex: none; scroll-snap-align: center; white-space: nowrap; }
+.nb-numrow { display: flex; align-items: center; gap: 12px; margin: 4px 2px 16px; }
+.nb-numtog { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }
+.nb-numtog input { width: 18px; height: 18px; accent-color: var(--accent); }
+.nb-save { width: 100%; }
+
+/* ---- friends sheet ---- */
+.friends-add { display: flex; gap: 8px; margin-bottom: 8px; }
+.friends-add input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 11px 13px; color: var(--text); font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.friends-add input::placeholder { text-transform: none; letter-spacing: 0; color: var(--text-3); }
+.friends-mynote { margin: 0 2px 14px; }
+.friends-loading { text-align: center; color: var(--text-3); padding: 24px 0; }
+.friends-empty { text-align: center; padding: 18px 8px 8px; }
+.fe-title { font-family: var(--display); font-size: 20px; letter-spacing: 0.5px; color: var(--text); margin-bottom: 6px; }
+.fl-sect { margin-bottom: 16px; }
+.fl-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); font-weight: 700; margin: 0 2px 8px; }
+.fl-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 10px 12px; margin-bottom: 8px; color: var(--text);
+}
+.fl-row.tap { cursor: pointer; }
+.fl-row.tap:active { transform: scale(0.99); }
+.fl-av { width: 46px; height: 46px; flex: none; border-radius: 11px; overflow: hidden; background: var(--surface); position: relative; }
+.fl-av .bh-anim { position: absolute; inset: 0; }
+.fl-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.fl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fl-main b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-main span { font-size: 12px; color: var(--text-3); }
+.fl-actions { display: flex; gap: 6px; flex: none; }
+
+/* ---- friend profile sheet ---- */
+.fp-hero { display: flex; justify-content: center; margin: 4px 0 6px; }
+.fp-title { text-align: center; margin-bottom: 10px; }
+.fp-lvl { font-family: var(--display); font-size: 24px; letter-spacing: 0.5px; color: var(--accent); }
+.fp-class { font-size: 13px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.fp-facts { display: flex; gap: 10px; margin: 14px 0 6px; }
+.fp-fact {
+  flex: 1; text-align: center; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 14px; padding: 12px 6px;
+}
+.fp-fact b { display: block; font-size: 18px; font-weight: 800; }
+.fp-fact span { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
+.fp-real { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.fp-alias { margin-top: 16px; }
+.fp-alias .nb-lab { display: flex; align-items: baseline; gap: 6px; }
+.fp-alias-hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-3); }
+.fp-alias-row { display: flex; gap: 8px; }
+.fp-alias-row input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 11px 13px; color: var(--text); font-size: 15px;
+}
+.fp-remove { width: 100%; margin-top: 14px; }
 
 /* ===== icon pack (game-icons.net, flat no-rim + soft shadow) ===== */
 .bhi-wrap { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }

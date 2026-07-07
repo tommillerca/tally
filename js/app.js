@@ -23,6 +23,7 @@ import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notif
 import { snapToWalkable } from './geo.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
+import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
@@ -1824,6 +1825,202 @@ async function renderFoods(el) {
 
 /* ================= settings ================= */
 
+/* ================= social: name builder + friends ================= */
+
+function parseDisplayName(name) {
+  if (!name) return null;
+  const parts = String(name).trim().split(/\s+/);
+  const adj = NAME_ADJ.indexOf(parts[0]);
+  const noun = NAME_NOUN.indexOf(parts[1]);
+  if (adj < 0 || noun < 0) return null;
+  const num = parts[2] && parts[2][0] === '#' ? parseInt(parts[2].slice(1), 10) : null;
+  return { adj, noun, num: Number.isInteger(num) ? num : null };
+}
+
+async function openNameBuilder(after) {
+  const me = await social.socialMe();
+  let sel = parseDisplayName(me && me.name) || randomName();
+  const chipRow = (list) => list.map((w, i) => `<button class="nb-chip chip" data-i="${i}">${esc(w)}</button>`).join('');
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Your Bonehead name</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:0 0 12px">This is how the Crew sees you. Build it from the bone pile: no typing, so there's nothing to moderate and nothing rude gets through.</p>
+      <div class="nb-preview" id="nbPreview"></div>
+      <button class="btn ghost nb-shuffle" id="nbShuffle">Shuffle</button>
+      <div class="nb-group"><div class="nb-lab">First</div><div class="nb-chips" id="nbAdj">${chipRow(NAME_ADJ)}</div></div>
+      <div class="nb-group"><div class="nb-lab">Last</div><div class="nb-chips" id="nbNoun">${chipRow(NAME_NOUN)}</div></div>
+      <div class="nb-numrow">
+        <label class="nb-numtog"><input type="checkbox" id="nbNumOn"> Lucky number</label>
+        <button class="nb-chip chip" id="nbNumVal" hidden></button>
+      </div>
+      <button class="btn primary nb-save" id="nbSave">Save name</button>
+    </div>
+  `, { cls: 'sheet-namebuild', onClose: after });
+
+  const paint = () => {
+    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+    $$('#nbAdj .nb-chip', wrap).forEach((c, i) => c.classList.toggle('on', i === sel.adj));
+    $$('#nbNoun .nb-chip', wrap).forEach((c, i) => c.classList.toggle('on', i === sel.noun));
+    const numOn = sel.num != null;
+    $('#nbNumOn', wrap).checked = numOn;
+    const nv = $('#nbNumVal', wrap); nv.hidden = !numOn; if (numOn) nv.textContent = '#' + sel.num;
+    // keep the picked chips in view
+    $('#nbAdj .nb-chip.on', wrap)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    $('#nbNoun .nb-chip.on', wrap)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  };
+
+  $('#nbAdj', wrap).addEventListener('click', e => { const c = e.target.closest('.nb-chip'); if (c) { sel.adj = +c.dataset.i; paint(); } });
+  $('#nbNoun', wrap).addEventListener('click', e => { const c = e.target.closest('.nb-chip'); if (c) { sel.noun = +c.dataset.i; paint(); } });
+  $('#nbShuffle', wrap).addEventListener('click', () => { sel = randomName(); popSound(S.sounds); paint(); });
+  $('#nbNumOn', wrap).addEventListener('change', e => { sel.num = e.target.checked ? Math.floor(Math.random() * 100) : null; paint(); });
+  $('#nbNumVal', wrap).addEventListener('click', () => { sel.num = Math.floor(Math.random() * 100); paint(); });
+  $('#nbSave', wrap).addEventListener('click', async () => {
+    const btn = $('#nbSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
+    const r = await social.setName(sel.adj, sel.noun, sel.num);
+    if (!r.ok) { btn.disabled = false; btn.textContent = 'Save name'; toast('Could not save your name. Try again in a bit.'); return; }
+    social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
+    confettiRain(40); chimeSound(S.sounds);
+    toast(`You're now ${r.name}!`, 3000);
+    history.back(); // closes sheet -> onClose(after) refreshes settings
+  });
+  paint();
+}
+
+function friendRowAvatar(f) {
+  const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
+  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+}
+
+function friendsListHtml(data) {
+  const { friends, incoming, outgoing } = data;
+  if (!friends.length && !incoming.length && !outgoing.length) {
+    return `<div class="friends-empty">
+      <p class="fe-title">Your Crew is empty</p>
+      <p class="note">Send a friend your code, or paste theirs above. Once you both add each other you'll see their Bonehead, gear and badges here. Trading and PvP land here next.</p>
+    </div>`;
+  }
+  let h = '';
+  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends</div>${incoming.map(f => `
+    <div class="fl-row">
+      ${friendRowAvatar(f)}
+      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
+      <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
+    </div>`).join('')}</div>`;
+  if (friends.length) h += `<div class="fl-sect"><div class="fl-h">Your Crew · ${friends.length}</div>${friends.map(f => `
+    <button class="fl-row tap" data-view="${esc(f.playerId)}">
+      ${friendRowAvatar(f)}
+      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>${f.alias ? esc(f.name) + ' · ' : ''}${f.profile ? `Lv ${f.profile.level} · ${esc(f.profile.levelName || 'Bonehead')}` : 'Tap to view'}</span></div>
+      <span class="crew-chev">›</span>
+    </button>`).join('')}</div>`;
+  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
+    <div class="fl-row">
+      ${friendRowAvatar(f)}
+      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>Waiting for them to add you back</span></div>
+      <button class="btn small ghost" data-remove="${esc(f.playerId)}">Cancel</button>
+    </div>`).join('')}</div>`;
+  return h;
+}
+
+async function openFriendsSheet(after) {
+  const me = await social.socialMe();
+  let data = { friends: [], incoming: [], outgoing: [] };
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Friends</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div class="friends-add">
+        <input id="friendCode" type="text" placeholder="Enter a friend's code" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <button class="btn small" id="friendAddBtn">Add</button>
+      </div>
+      <p class="note friends-mynote">Your code: <b>${esc(me.friendCode)}</b> <button class="link" id="friendsCopy">copy</button></p>
+      <div id="friendsList"><div class="friends-loading">Loading...</div></div>
+    </div>
+  `, { cls: 'sheet-friends', onClose: after });
+
+  const paint = async () => {
+    data = await social.listFriends();
+    const list = $('#friendsList', wrap);
+    if (list) list.innerHTML = friendsListHtml(data);
+  };
+
+  const submitCode = async () => {
+    const inp = $('#friendCode', wrap);
+    const code = (inp.value || '').toUpperCase().trim();
+    if (!code) return;
+    const btn = $('#friendAddBtn', wrap); btn.disabled = true; btn.textContent = '...';
+    const r = await social.friendRequest(code);
+    btn.disabled = false; btn.textContent = 'Add';
+    if (!r.ok) { toast(r.error === 'that is your own code' ? "That's your own code!" : 'No Bonehead has that code. Double-check it.', 3200); return; }
+    inp.value = '';
+    if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
+    else toast('Request sent. They just add your code back to seal it.', 3600);
+    await paint();
+  };
+
+  $('#friendAddBtn', wrap).addEventListener('click', submitCode);
+  $('#friendCode', wrap).addEventListener('keydown', e => { if (e.key === 'Enter') submitCode(); });
+  $('#friendsCopy', wrap).addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Code copied!'); } catch { toast(me.friendCode, 4000); } });
+  $('#friendsList', wrap).addEventListener('click', async e => {
+    const acc = e.target.closest('[data-accept]');
+    const rem = e.target.closest('[data-remove]');
+    const view = e.target.closest('[data-view]');
+    if (acc) {
+      acc.disabled = true;
+      const ok = await social.acceptFriend(acc.dataset.accept);
+      if (ok) { confettiRain(50); chimeSound(S.sounds); toast('Friend added!'); } else toast('Could not accept. Try again.');
+      await paint();
+    } else if (rem) {
+      if (await social.removeFriend(rem.dataset.remove)) { toast('Removed.'); await paint(); }
+    } else if (view) {
+      const f = [...data.friends, ...data.incoming, ...data.outgoing].find(x => x.playerId === view.dataset.view);
+      if (f) openFriendProfile(f, paint);
+    }
+  });
+
+  await paint();
+}
+
+function openFriendProfile(f, onChange) {
+  const p = f.profile || {};
+  const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
+  const statHtml = p.stats ? STAT_META.map(m => `<span class="pd-stat"><small>${m.label}</small><b>${p.stats[m.key] ?? '-'}</b></span>`).join('') : '';
+  const petName = p.pet ? ((BH_BY_ID[p.pet.id] || {}).name || 'Pet') : null;
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2 id="fpTitle">${esc(f.alias || f.name)}</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div class="fp-hero"><div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div></div>
+      <div class="fp-title"><div class="fp-lvl">Lv ${p.level ?? '?'}</div><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
+      ${statHtml ? `<div class="pd-stats fp-stats">${statHtml}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
+      <div class="fp-facts">
+        <div class="fp-fact"><b>${p.badges ?? 0}</b><span>Badges</span></div>
+        <div class="fp-fact"><b>${p.gear ? p.gear.length : 0}</b><span>Gear</span></div>
+        <div class="fp-fact"><b>${petName ? 'Lv ' + p.pet.level : '-'}</b><span>${petName ? esc(petName) : 'No pet'}</span></div>
+      </div>
+      <div class="fp-alias">
+        <div class="nb-lab">Your nickname for them <span class="fp-alias-hint">only you see this</span></div>
+        <div class="fp-alias-row">
+          <input id="fpAlias" type="text" maxlength="24" placeholder="e.g. Coach Mike" value="${esc(f.alias || '')}">
+          <button class="btn small" id="fpAliasSave">Save</button>
+        </div>
+      </div>
+      <p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>
+      <button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>
+    </div>
+  `, { cls: 'sheet-fp' });
+  $('#fpAliasSave', wrap).addEventListener('click', async () => {
+    const clean = await social.setFriendAlias(f.playerId, $('#fpAlias', wrap).value);
+    f.alias = clean || null;
+    $('#fpTitle', wrap).textContent = clean || f.name;
+    const real = $('#fpReal', wrap); real.hidden = !clean; real.textContent = 'Bonehead name: ' + f.name;
+    $('#fpAlias', wrap).value = clean;
+    popSound(S.sounds);
+    toast(clean ? `Saved. You'll see them as "${clean}".` : 'Nickname cleared.');
+    onChange && onChange();
+  });
+  $('#fpRemove', wrap).addEventListener('click', async () => {
+    if (await social.removeFriend(f.playerId)) { toast('Removed.'); onChange && onChange(); history.back(); }
+  });
+}
+
 async function renderSettings(el) {
   const t = S.settings.targets;
   const p = S.settings.profile;
@@ -1832,6 +2029,9 @@ async function renderSettings(el) {
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
+  const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
+  const incomingCount = crewData ? crewData.incoming.length : 0;
+  const friendCount = crewData ? crewData.friends.length : 0;
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
@@ -1853,9 +2053,16 @@ async function renderSettings(el) {
     <div class="card-title">THE CREW · ${me ? 'ONLINE' : 'GO ONLINE'}</div>
     ${me ? `
     <div class="crew-id">
-      <div class="crew-handle">${esc(me.handle)}</div>
+      <div class="crew-name-wrap">
+        <div class="crew-handle" id="crewName">${esc(me.name || me.handle)}</div>
+        <button class="link crew-editname" id="editName">${me.name ? 'Change name' : 'Pick a name'}</button>
+      </div>
       <button class="crew-code" id="copyCode" title="Copy friend code">${esc(me.friendCode)} ⧉</button>
     </div>
+    <button class="crew-friends" id="friendsBtn">
+      <span>${friendCount ? `${friendCount} friend${friendCount === 1 ? '' : 's'}` : 'Add friends'}</span>
+      <span class="crew-friends-r">${incomingCount ? `<span class="req-badge">${incomingCount} new</span>` : ''}<span class="crew-chev">›</span></span>
+    </button>
     <div class="settings-row" style="margin-top:12px">
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
@@ -1988,6 +2195,8 @@ async function renderSettings(el) {
     try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); }
     catch { toast(me.friendCode, 4000); }
   });
+  $('#editName', el)?.addEventListener('click', () => openNameBuilder(() => renderSettings(el)));
+  $('#friendsBtn', el)?.addEventListener('click', () => openFriendsSheet(() => renderSettings(el)));
   // ---- notifications ----
   const applyNotifs = async (prefs, note) => {
     await setNotifPrefs(prefs);

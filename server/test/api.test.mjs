@@ -151,5 +151,80 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
   assert.equal(r.status, 401);
 });
 
+// ---- curated display name ----
+await test('name: set curated display name by indices, /me reflects it', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/name', JSON.stringify({ adj: 1, noun: 0, num: 7 }));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.equal(d.name, 'Grim Rex #7', JSON.stringify(d));
+  const me = await (await signedFetch(kp, player.playerId, 'GET', '/me')).json();
+  assert.equal(me.name, 'Grim Rex #7');
+});
+
+await test('name: no number is allowed', async () => {
+  const d = await (await signedFetch(kp, player.playerId, 'POST', '/name', JSON.stringify({ adj: 0, noun: 0 }))).json();
+  assert.equal(d.name, 'Rattling Rex');
+});
+
+await test('name: out-of-range indices rejected (no free text ever)', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/name', JSON.stringify({ adj: 999, noun: 0 }));
+  assert.equal(r.status, 400);
+});
+
+// ---- friends ----
+let p2 = null, p2keys = null;
+await test('friends: request by code is pending, reciprocation auto-accepts', async () => {
+  p2keys = await makeKeys();
+  p2 = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: p2keys.pubJwk }) })).json();
+  const r1 = await (await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: p2.friendCode }))).json();
+  assert.equal(r1.status, 'pending', JSON.stringify(r1));
+  const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  assert.ok(aList.outgoing.some(x => x.playerId === p2.playerId), 'A has outgoing');
+  const bList = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/friends')).json();
+  assert.ok(bList.incoming.some(x => x.playerId === player.playerId), 'B has incoming');
+  const r2 = await (await signedFetch(p2keys.kp, p2.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }))).json();
+  assert.equal(r2.status, 'accepted', JSON.stringify(r2));
+  const aNow = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  assert.ok(aNow.friends.some(x => x.playerId === p2.playerId), 'A now friends with B');
+});
+
+await test('friends: name + public profile surface in the list', async () => {
+  await signedFetch(p2keys.kp, p2.playerId, 'POST', '/name', JSON.stringify({ adj: 2, noun: 2 })); // Dusty Knuckles
+  await signedFetch(p2keys.kp, p2.playerId, 'PUT', '/profile', JSON.stringify({ snapshot: { level: 12, levelName: 'Bruiser', outfit: { SK: 'SK0-1' } }, appV: 'v100' }));
+  const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  const b = aList.friends.find(x => x.playerId === p2.playerId);
+  assert.equal(b.name, 'Dusty Knuckles');
+  assert.equal(b.profile.level, 12);
+  assert.equal(b.friendCode, p2.friendCode);
+});
+
+await test('friends: accept endpoint seals a one-way request', async () => {
+  const p3keys = await makeKeys();
+  const p3 = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: p3keys.pubJwk }) })).json();
+  await signedFetch(p3keys.kp, p3.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  const acc = await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: p3.playerId }));
+  assert.equal(acc.status, 200);
+  const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  assert.ok(aList.friends.some(x => x.playerId === p3.playerId));
+});
+
+await test('friends: cannot friend your own code', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  assert.equal(r.status, 400);
+});
+
+await test('friends: unknown code 404', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: 'BONE-ZZZZ-ZZZZ' }));
+  assert.equal(r.status, 404);
+});
+
+await test('friends: remove drops the edge for both sides', async () => {
+  await signedFetch(kp, player.playerId, 'POST', '/friends/remove', JSON.stringify({ id: p2.playerId }));
+  const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  assert.ok(!aList.friends.some(x => x.playerId === p2.playerId), 'A no longer friends with B');
+  const bList = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/friends')).json();
+  assert.ok(!bList.friends.some(x => x.playerId === player.playerId), 'B no longer friends with A');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
