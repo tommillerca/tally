@@ -1,6 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
-import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, reducedMotion } from './fx.js';
+import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
@@ -554,9 +554,20 @@ async function renderToday(el) {
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   // daily wellness (pure-positive self-care: only ever adds a reward)
-  $('#wWater')?.addEventListener('click', async () => { const w = await addWater(1); popSound(S.sounds); if (w.water >= WATER_GOAL) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); toast('Hydrated! Claim the quest for coins.', 2600); } refresh(); });
-  $('#wBed')?.addEventListener('click', async () => { await markBed(); popSound(S.sounds); toast('Bed made. Small win banked.', 2200); refresh(); });
-  $('#wSleep')?.addEventListener('click', async () => { await markSleep(); popSound(S.sounds); toast('Good sleep logged. Rest is training too.', 2400); refresh(); });
+  $('#wWater')?.addEventListener('click', async () => {
+    const { w, xp } = await addWater(1); dropSound(S.sounds);
+    if (xp > 0) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds); toast(`Hydrated! +${xp} XP. Claim the water quest for coins.`, 2800); }
+    else toast(`Water ${w.water}/${WATER_GOAL} cups${w.water >= WATER_GOAL ? '' : ` · ${WATER_GOAL - w.water} to go for +8 XP`}`, 1800);
+    refresh();
+  });
+  $('#wBed')?.addEventListener('click', async () => {
+    const { xp } = await markBed(); chimeSound(S.sounds);
+    toast(xp > 0 ? `Bed made. +${xp} XP banked.` : 'Already made today.', 2200); refresh();
+  });
+  $('#wSleep')?.addEventListener('click', async () => {
+    const { xp } = await markSleep(); chimeSound(S.sounds);
+    toast(xp > 0 ? `Good sleep logged. +${xp} XP. Rest is training too.` : 'Already logged today.', 2400); refresh();
+  });
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
   if (!window.__automapRan && new URLSearchParams(location.search).has('automap')) {
@@ -577,7 +588,7 @@ async function renderToday(el) {
     const res = await claimQuest(b.dataset.pkey, q, period);
     if (!res) return;
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
-    period === 'day' ? popSound(S.sounds) : levelSound(S.sounds);
+    period === 'day' ? questSound(S.sounds) : levelSound(S.sounds);
     let msg = `Quest done · +${res.xp} XP · +${res.coins} coins`;
     if (res.crate) msg += ` · ${res.crate === 'golden' ? 'Golden Crate' : res.crate === 'egg' ? 'Step Egg' : 'Daily Crate'} earned!`;
     // daily all-clear bonus crate
@@ -2630,7 +2641,7 @@ async function openCrateReveal(result) {
       const res = $('#crateResults', wrap);
       if (res) res.hidden = false;
       if (best >= 3) { confettiRain(90); levelSound(S.sounds); }
-      else { confettiBurst(innerWidth / 2, innerHeight * 0.35, 22); popSound(S.sounds); }
+      else { confettiBurst(innerWidth / 2, innerHeight * 0.35, 22); sparkleSound(S.sounds); }
     }, 950);
     $('#crateOk', wrap).addEventListener('click', () => { history.back(); setTimeout(resolve, 150); });
   });
@@ -3085,7 +3096,7 @@ async function openMap() {
       collected.add(spawnKey(date, rec.spawn));
       await kvSet('hunt-enabled', true);
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
-      popSound(S.sounds);
+      coinSound(S.sounds);
       // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give Ectoplasm)
       const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
       await grantIngredient(ingId, ingN);

@@ -15,24 +15,26 @@ export async function getWellness(date = dateKey()) {
 }
 async function save(w) { await kvSet('wellness', w); }
 
-// +1 cup of water; award once when you reach the goal.
+// +1 cup of water; award once when you reach the goal. Returns { w, xp, reachedGoal }
+// so the UI can surface the reward (the XP used to land silently).
 export async function addWater(n = 1, date = dateKey()) {
   const w = await getWellness(date);
   const wasGoal = w.water >= WATER_GOAL;
   w.water = Math.max(0, Math.min(WATER_GOAL, w.water + n));
   await save(w);
-  if (!wasGoal && w.water >= WATER_GOAL) await award(`water-${date}`, 'wellness', 8, 'Drank enough water', date);
-  return w;
+  let xp = 0;
+  if (!wasGoal && w.water >= WATER_GOAL) xp = await award(`water-${date}`, 'wellness', 8, 'Drank enough water', date);
+  return { w, xp, reachedGoal: w.water >= WATER_GOAL };
 }
 
-// One-tap self-report; awards once per day.
+// One-tap self-report; awards once per day. Returns { w, xp } (xp 0 if already done).
 export async function markBed(date = dateKey()) {
-  const w = await getWellness(date);
-  if (!w.bed) { w.bed = true; await save(w); await award(`bed-${date}`, 'wellness', 5, 'Made your bed', date); }
-  return w;
+  const w = await getWellness(date); let xp = 0;
+  if (!w.bed) { w.bed = true; await save(w); xp = await award(`bed-${date}`, 'wellness', 5, 'Made your bed', date); }
+  return { w, xp };
 }
 export async function markSleep(date = dateKey()) {
-  const w = await getWellness(date);
-  if (!w.sleep) { w.sleep = true; await save(w); await award(`sleep-${date}`, 'wellness', 10, 'Got a good night of sleep', date); }
-  return w;
+  const w = await getWellness(date); let xp = 0;
+  if (!w.sleep) { w.sleep = true; await save(w); xp = await award(`sleep-${date}`, 'wellness', 10, 'Got a good night of sleep', date); }
+  return { w, xp };
 }

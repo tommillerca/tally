@@ -226,9 +226,9 @@ export const MINI_CELL_DEG = 0.008;   // ~0.9 km cells: minis a bit denser than 
 export const MINI_RADIUS_M = 55;
 
 export const MINI_TIERS = [
-  { mult: 0.6, aiLevel: 1, reward: { coins: 30, xp: 20 } },
-  { mult: 0.75, aiLevel: 1, reward: { coins: 45, xp: 30, dust: 6 } },
-  { mult: 0.9, aiLevel: 2, reward: { coins: 65, xp: 40, dust: 12 } },
+  { mult: 0.6, aiLevel: 1, reward: { coins: 30, xp: 20, crate: 'daily' } },
+  { mult: 0.75, aiLevel: 1, reward: { coins: 45, xp: 30, dust: 6, crate: 'daily' } },
+  { mult: 0.9, aiLevel: 2, reward: { coins: 65, xp: 40, dust: 12, crate: 'golden' } },
 ];
 const MINI_TIER_WEIGHTS = [4, 3, 1.5];  // mostly the weakest, occasionally a nastier one
 export const MINI_THEMES = [

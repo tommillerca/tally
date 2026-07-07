@@ -143,3 +143,33 @@ export function hitSound(enabled = true, kind = 'tick') {
     }
   } catch { /* no audio */ }
 }
+
+// A small palette so not every action is the same blip. Each is short + distinct.
+export function coinSound(enabled = true) {   // bright metallic ching (coins)
+  if (!enabled) return;
+  try { note(1568, 0, 0.06, 0.045, 'triangle'); note(2093, 0.055, 0.09, 0.04, 'triangle'); } catch { /* no audio */ }
+}
+export function chimeSound(enabled = true) {  // warm soft bell (wellness / gentle reward)
+  if (!enabled) return;
+  try { note(784, 0, 0.16, 0.05, 'sine'); note(1175, 0.07, 0.20, 0.045, 'sine'); } catch { /* no audio */ }
+}
+export function sparkleSound(enabled = true) { // rising sparkle (crate / egg open)
+  if (!enabled) return;
+  try { note(659, 0, 0.07, 0.04, 'triangle'); note(988, 0.07, 0.07, 0.04, 'triangle'); note(1319, 0.14, 0.13, 0.05, 'triangle'); } catch { /* no audio */ }
+}
+export function questSound(enabled = true) {  // short bright fanfare (quest / goal claimed)
+  if (!enabled) return;
+  try { note(784, 0, 0.1, 0.05, 'square'); note(1047, 0.08, 0.1, 0.05, 'square'); note(1319, 0.17, 0.2, 0.06, 'triangle'); } catch { /* no audio */ }
+}
+export function dropSound(enabled = true) {   // little water droplet (glide down)
+  if (!enabled) return;
+  try {
+    const c = ac(); const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(1250, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(520, c.currentTime + 0.12);
+    g.gain.setValueAtTime(0.06, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.16);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.2);
+  } catch { /* no audio */ }
+}
