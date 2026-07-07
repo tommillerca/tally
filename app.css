@@ -1971,6 +1971,46 @@ body::before {
 .hm-legend .hm-cell { width: 12px; height: 12px; flex: none; }
 .hm-legend .note { font-size: 10.5px; }
 
+/* ---- pack-crack loot reveal ---- */
+.pack-reveal { display: flex; flex-direction: column; align-items: center; min-height: 78vh; padding: 10px 16px 24px; }
+.pack-count { font-size: 12px; font-weight: 700; color: var(--text-3); letter-spacing: .08em; margin: 2px 0 6px; }
+.pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; touch-action: pan-y; }
+.pack-crate { display: grid; place-items: center; }
+.pack-card {
+  position: relative; width: min(78vw, 300px); aspect-ratio: 3 / 4.2; border-radius: 20px;
+  background: linear-gradient(165deg, var(--surface-2), var(--surface-3));
+  border: 2.5px solid rgba(159,172,159,.4); box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; align-items: center; padding: 16px 14px 14px; overflow: hidden;
+  opacity: 0; transform: scale(.82) translateY(14px); transition: transform .28s cubic-bezier(.2,1.2,.4,1), opacity .28s ease; cursor: pointer; user-select: none;
+}
+.pack-card.in { opacity: 1; transform: none; }
+.pack-card.r-uncommon { border-color: rgba(74,222,128,.6); }
+.pack-card.r-rare { border-color: rgba(111,208,255,.7); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(111,208,255,.3); }
+.pack-card.r-epic { border-color: rgba(192,132,252,.75); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 26px rgba(192,132,252,.38); }
+.pack-card.r-legendary { border-color: rgba(255,201,97,.9); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(255,201,97,.45); }
+.pc-foil { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.14) 46%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.14) 54%, transparent 70%); background-size: 250% 250%; opacity: 0; }
+.pack-card.in .pc-foil { animation: foilSweep .7s ease .12s 1; }
+.pack-card.holo .pc-foil { opacity: 1; background: linear-gradient(115deg, transparent 20%, rgba(120,200,255,.14) 38%, rgba(200,140,255,.22) 50%, rgba(255,210,120,.14) 62%, transparent 80%); background-size: 250% 250%; animation: holoShift 3.4s linear infinite; }
+@keyframes foilSweep { from { opacity: .0; background-position: 120% 0; } 20% { opacity: 1; } to { opacity: 0; background-position: -60% 0; } }
+@keyframes holoShift { 0% { background-position: 120% 0; } 100% { background-position: -60% 0; } }
+.pc-kind { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: var(--text-3); align-self: flex-start; }
+.pc-art { flex: 1; width: 100%; display: grid; place-items: center; margin: 4px 0; }
+.pc-canvas { width: 88%; height: auto; max-height: 100%; filter: drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
+.pc-icon { font-size: 96px; display: grid; place-items: center; }
+.pc-icon .bhi-wrap svg, .pc-icon svg { width: 108px; height: 108px; }
+.pc-name { font-family: var(--display, inherit); font-weight: 800; font-size: 20px; text-align: center; line-height: 1.1; margin-top: 2px; }
+.pc-rar { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; margin-top: 3px; }
+.pc-stats { font-size: 12px; color: var(--text-2); text-align: center; margin-top: 6px; line-height: 1.35; }
+.pack-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; min-height: 22px; }
+.pack-hint { font-size: 12px; color: var(--text-3); letter-spacing: .04em; animation: hintPulse 1.8s ease-in-out infinite; }
+.pack-coins { font-size: 15px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
+@keyframes hintPulse { 0%,100% { opacity: .45; } 50% { opacity: .9; } }
+@media (prefers-reduced-motion: reduce) { .pack-card { transition: opacity .2s; transform: none; } .pack-card.in .pc-foil, .pack-card.holo .pc-foil { animation: none; } .pack-hint { animation: none; } }
+
+/* bigger, centered hatched pet (source PNG parks art in a corner) */
+.hatch-prize .hatch-art { width: 200px; height: 200px; filter: drop-shadow(0 8px 9px rgba(0,0,0,.5)); }
+.hatch-prize.is-shiny .hatch-art { filter: drop-shadow(0 0 14px rgba(255,206,84,.9)) drop-shadow(0 8px 9px rgba(0,0,0,.45)); }
+
 /* ---- wellness: sleep hour chips ---- */
 .sleep-picks { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 .hchip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; }

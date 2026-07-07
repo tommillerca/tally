@@ -2271,7 +2271,7 @@ function openHatchReveal(res, charWrap) {
   const revealHtml = item
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:#ffce54' : ''}">${res.shiny ? '✨ SHINY! ✨' : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
-         <img src="${res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)}" alt="">
+         <canvas class="hatch-art" width="320" height="320"></canvas>
          <b>${esc(item.name)}${res.shiny ? ' <span class="shiny-tag">✨ SHINY</span>' : ''}</b>
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? '#ffce54' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
@@ -2288,6 +2288,8 @@ function openHatchReveal(res, charWrap) {
     </div>`);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
+  // draw the pet big + centered (the source PNG parks it in a corner)
+  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)); }
   // once the pet is revealed, retire the egg cinematic so the pet is centred
   const finish = () => { if (stage) stage.style.display = 'none'; revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
   if (reduced || !item) {
@@ -2715,53 +2717,114 @@ function petPanelHtml(petId, fighter) {
     </div>`;
 }
 
-async function openCrateReveal(result) {
-  const def = result.def;
-  const best = result.results.reduce((acc, r) => {
-    if (r.type !== 'cos' && r.type !== 'dupe') return acc;
-    const idx = ['common', 'uncommon', 'rare', 'epic', 'legendary'].indexOf(r.item.rarity);
-    return Math.max(acc, idx);
-  }, 0);
-  const wrap = openSheet(`
-    <div class="sheet-body" style="text-align:center;padding-top:24px">
-      <div class="crate-shake" id="crateAnim">${crateIcon(result.crate, 96)}</div>
-      <div id="crateResults" hidden>
-        ${result.results.map(r => {
-          if (r.type === 'consumable') {
-            const c = CONSUMABLES[r.consumable];
-            return `<div class="reveal-card r-uncommon"><span class="reveal-ico">${consumableIcon(r.consumable, 34)}</span><div><b>${c.label}</b><small>${c.desc}</small></div></div>`;
-          }
-          if (r.type === 'ingredient') {
-            const ing = INGREDIENTS[r.ingredient];
-            return `<div class="reveal-card r-common"><span class="reveal-ico">${ingIconHtml(ing.id,34)}</span><div><b>${esc(ing.name)}</b><small>Cooking ingredient</small></div></div>`;
-          }
-          if (r.type === 'gear' || r.type === 'geardupe') {
-            const g = r.gear, grar = RARITIES[g.rarity];
-            const dup = r.type === 'geardupe';
-            return `<div class="reveal-card gear r-${g.rarity}"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt=""><div><b>${esc(g.name)}</b><small>${dup ? `Duplicate → +${r.coins}${ICONS.coin(11)}` : `GEAR · ${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`}</small><span class="rar-chip" style="color:${grar.color}">${grar.label}</span></div></div>`;
-          }
-          const rar = RARITIES[r.item.rarity];
-          if (r.type === 'dupe') {
-            return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>Duplicate → +${r.coins}${ICONS.coin(11)}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
-          }
-          return `<div class="reveal-card r-${r.item.rarity}"><img src="${bhAsset(r.item)}" alt=""><div><b>${esc(r.item.name)}</b><small>${esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || '')}</small><span class="rar-chip" style="color:${rar.color}">${rar.label}</span></div></div>`;
-        }).join('')}
-        <p class="note" style="margin:10px 0 16px">+${result.coins} ${ICONS.coin(13)} coins</p>
-        <button class="btn" id="crateOk">Collect</button>
-      </div>
-      <div style="height:10px"></div>
-    </div>`);
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const anim = $('#crateAnim', wrap);
-      if (anim) anim.hidden = true;
-      const res = $('#crateResults', wrap);
-      if (res) res.hidden = false;
-      if (best >= 3) { confettiRain(90); levelSound(S.sounds); }
-      else { confettiBurst(innerWidth / 2, innerHeight * 0.35, 22); sparkleSound(S.sounds); }
-    }, 950);
-    $('#crateOk', wrap).addEventListener('click', () => { history.back(); setTimeout(resolve, 150); });
+const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+// Trim an image to its non-transparent content and draw it CENTERED + as large as
+// fits into the canvas. Fixes art (pets, gear, cosmetics) that sits parked in a
+// corner of its 640x640 sprite sheet so it fills the reveal card instead.
+function drawTrimmedArt(canvas, src, pad = 0.08) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const off = document.createElement('canvas'); off.width = iw; off.height = ih;
+      const octx = off.getContext('2d'); octx.drawImage(img, 0, 0);
+      let x0 = iw, y0 = ih, x1 = 0, y1 = 0, found = false;
+      try {
+        const d = octx.getImageData(0, 0, iw, ih).data;
+        for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+          if (d[(y * iw + x) * 4 + 3] > 14) { found = true; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+      } catch { /* tainted; use full image */ }
+      if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+      const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
+      const scale = Math.min(cw * p / bw, ch * p / bh);
+      const dw = bw * scale, dh = bh * scale;
+      const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, cw, ch);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, x0, y0, bw, bh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      res();
+    };
+    img.onerror = () => res();
+    img.src = src;
   });
+}
+
+// Pokemon-pack-crack reveal: cards you flip through one at a time, big centered
+// art, rarity foil (holo for rare+), name + stats. Tap or swipe to advance; the
+// last card dismisses. cards: [{imgSrc?|iconHtml?, name, rarity, kind, stats}].
+function openPackReveal(cards, { coins = 0, crate = null } = {}) {
+  if (!cards.length && !coins) return Promise.resolve();
+  return new Promise(resolve => {
+    const wrap = openSheet(`
+      <div class="pack-reveal" id="packReveal">
+        ${cards.length ? '<div class="pack-count" id="packCount"></div>' : ''}
+        <div class="pack-stage" id="packStage"></div>
+        <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
+      </div>`);
+    const stage = $('#packStage', wrap), countEl = $('#packCount', wrap);
+    let i = 0;
+    const done = () => { history.back(); setTimeout(resolve, 150); };
+    const advance = () => { i++; if (i >= cards.length) return done(); renderCard(); };
+    function renderCard() {
+      const c = cards[i];
+      if (countEl) countEl.textContent = `${i + 1} / ${cards.length}`;
+      const rar = RARITIES[c.rarity] || RARITIES.common;
+      const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
+      stage.innerHTML = `
+        <div class="pack-card r-${c.rarity}${holo}" id="packCard">
+          <div class="pc-foil"></div>
+          <div class="pc-kind">${esc(c.kind || '')}</div>
+          <div class="pc-art">${c.imgSrc ? '<canvas class="pc-canvas" width="380" height="380"></canvas>' : `<div class="pc-icon">${c.iconHtml || ''}</div>`}</div>
+          <div class="pc-name">${esc(c.name)}</div>
+          <div class="pc-rar" style="color:${rar.color}">${rar.label}</div>
+          ${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}
+        </div>`;
+      const card = $('#packCard', wrap);
+      if (c.imgSrc) drawTrimmedArt($('.pc-canvas', card), c.imgSrc);
+      requestAnimationFrame(() => card.classList.add('in'));
+      const rareTier = RAR_ORDER.indexOf(c.rarity) >= 2;
+      if (rareTier) { confettiBurst(innerWidth / 2, innerHeight * 0.42, 20); levelSound(S.sounds); } else sparkleSound(S.sounds);
+      // tap / swipe to advance
+      let sx = 0, dx = 0, pid = null;
+      card.addEventListener('pointerdown', e => { pid = e.pointerId; sx = e.clientX; dx = 0; try { card.setPointerCapture(pid); } catch {} card.style.transition = 'none'; });
+      card.addEventListener('pointermove', e => { if (pid == null) return; dx = e.clientX - sx; card.style.transform = `translateX(${dx}px) rotate(${(dx * 0.04).toFixed(2)}deg)`; });
+      const end = () => {
+        if (pid == null) return; pid = null; card.style.transition = '';
+        if (Math.abs(dx) > 80) { card.style.transform = `translateX(${dx > 0 ? 640 : -640}px) rotate(${dx > 0 ? 20 : -20}deg)`; card.style.opacity = '0'; setTimeout(advance, 170); }
+        else card.style.transform = '';
+      };
+      card.addEventListener('pointerup', end);
+      card.addEventListener('pointercancel', end);
+      card.addEventListener('click', () => { if (Math.abs(dx) < 6) advance(); });
+    }
+    const start = () => { if (cards.length) renderCard(); else setTimeout(done, 700); };
+    if (crate) {
+      stage.innerHTML = `<div class="crate-shake pack-crate">${crateIcon(crate, 120)}</div>`;
+      sparkleSound(S.sounds);
+      setTimeout(() => { confettiBurst(innerWidth / 2, innerHeight * 0.42, 22); start(); }, 850);
+    } else start();
+  });
+}
+
+// Normalize a crate result row into a pack card.
+function crateResultToCard(r) {
+  if (r.type === 'consumable') { const c = CONSUMABLES[r.consumable]; return { iconHtml: consumableIcon(r.consumable, 130), name: c.label, rarity: 'uncommon', kind: 'ITEM', stats: esc(c.desc) }; }
+  if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
+  if (r.type === 'gear' || r.type === 'geardupe') {
+    const g = r.gear, dup = r.type === 'geardupe';
+    return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: dup ? 'GEAR · DUPE' : 'GEAR',
+      stats: dup ? `Duplicate → +${r.coins} ${ICONS.coin(11)}` : `${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}${g.talent ? `<br>⚡ ${esc(g.talentName)}` : ''}` };
+  }
+  const isPet = r.item && r.item.slot === 'C';
+  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
+}
+
+async function openCrateReveal(result) {
+  const cards = (result.results || []).map(crateResultToCard).filter(Boolean);
+  return openPackReveal(cards, { coins: result.coins, crate: result.crate });
 }
 
 /* ================= Apple Health bridge ================= */
