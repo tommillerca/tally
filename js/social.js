@@ -208,6 +208,21 @@ export async function listFriends() {
   return data;
 }
 
+// Incoming friend requests that are NEW since the last check, for a one-time
+// notification per requester. Records the current incoming set so we never
+// re-notify. On the very first run (no baseline) it seeds silently so a
+// restored account doesn't spam a notification for every pending request.
+export async function newFriendRequests() {
+  const data = await listFriends();
+  const incoming = data.incoming || [];
+  const ids = incoming.map(f => f.playerId);
+  const prev = await kvGet('knownIncoming', null);
+  await kvSet('knownIncoming', ids);
+  if (prev === null) return { fresh: [], incoming };
+  const known = new Set(prev);
+  return { fresh: incoming.filter(f => !known.has(f.playerId)), incoming };
+}
+
 /* ---------------- profile snapshot up ---------------- */
 // snapshot comes from app.js (it owns buildFighter etc.); social.js only ships it
 export async function syncProfile(snapshot, appV = '') {

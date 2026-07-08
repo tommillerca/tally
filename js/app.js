@@ -116,7 +116,7 @@ ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
-  if (type === 'rare') return `<img class="ico" src="assets/brand/sword.png" style="width:${Math.round(s * 0.8)}px" alt="rare">`;
+  if (type === 'rare') return crateIcon('egg', s); // Mystery Egg spawn
   return ICONS.bone(s);
 }
 
@@ -232,8 +232,8 @@ async function boot() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery);
-  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery); flushAnalytics(); refreshNotifSchedules(); });
+  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
+  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
@@ -245,6 +245,8 @@ async function boot() {
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
   maybePromptName();
+  maybeRequestNotifPermission();
+  setTimeout(checkFriendRequests, 3000);
 }
 
 // First run online: actively invite the player to pick their own Crew name
@@ -268,6 +270,54 @@ async function maybePromptName() {
       openNameBuilder();
     };
     setTimeout(tick, 2000);
+  } catch { /* noop */ }
+}
+
+// Poll for NEW incoming friend requests and surface them: an OS notification
+// (if enabled, so it lands when the app is backgrounded) plus an in-app toast.
+// Cheap network call; runs at boot + on resume + after each autoSync.
+async function checkFriendRequests() {
+  try {
+    if (!(await social.isOnline())) return;
+    const { fresh } = await social.newFriendRequests();
+    if (!fresh.length) return;
+    const prefs = await notifPrefs();
+    if (prefs.enabled && prefs.friends) {
+      if (fresh.length === 1) await notifyNow('New friend request', `${fresh[0].name || 'A Bonehead'} wants to join your Crew.`);
+      else await notifyNow('New friend requests', `${fresh.length} Boneheadz want to join your Crew.`);
+    }
+    toast(fresh.length === 1 ? `${fresh[0].name || 'Someone'} wants to be friends. Open The Crew to accept.` : `${fresh.length} new friend requests. Open The Crew.`, 4200);
+    if (currentTab() === 'friends') renderFriends($('#screen'));
+  } catch { /* noop */ }
+}
+
+// New users default to notifications ON, so ask for OS permission once (guarded
+// by a kv flag) so the default actually delivers. Never over the splash / wheel
+// / an open sheet, so it doesn't interrupt onboarding or name-picking.
+async function maybeRequestNotifPermission() {
+  try {
+    if (navigator.webdriver) return;
+    if (await kvGet('notifAsked', false)) return;
+    if (notifPlatform() === 'none') { await kvSet('notifAsked', true); return; }
+    const prefs = await notifPrefs();
+    if (!prefs.enabled) { await kvSet('notifAsked', true); return; }
+    const state = await notifPermissionState();
+    if (state === 'granted' || state === 'denied' || state === 'unsupported') { await kvSet('notifAsked', true); return; }
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet('notifAsked', true);
+      const ok = await requestNotifPermission();
+      if (ok) {
+        await syncNotifications();
+        const loc = await kvGet('lastLoc', null);
+        if (loc) await scheduleRares(loc.lat, loc.lng);
+      }
+    };
+    setTimeout(tick, 3500);
   } catch { /* noop */ }
 }
 
@@ -306,6 +356,7 @@ function route() {
   const el = $('#screen');
   if (tab === 'trends') renderTrends(el);
   else if (tab === 'foods') renderFoods(el);
+  else if (tab === 'friends') renderFriends(el);
   else if (tab === 'settings') renderSettings(el);
   else renderToday(el);
   el.scrollTop = 0;
@@ -1876,7 +1927,7 @@ async function openNameBuilder(after) {
       <div class="nb-group"><div class="nb-lab">Last</div><div class="nb-chips" id="nbNoun">${chipRow(NAME_NOUN)}</div></div>
       <div class="nb-numrow">
         <label class="nb-numtog"><input type="checkbox" id="nbNumOn"> Lucky number</label>
-        <button class="nb-chip chip" id="nbNumVal" hidden></button>
+        <input id="nbNumVal" class="nb-numinput" type="text" inputmode="numeric" maxlength="3" placeholder="0-999" hidden>
       </div>
       <button class="btn primary nb-save" id="nbSave">Save name</button>
     </div>
@@ -1888,7 +1939,9 @@ async function openNameBuilder(after) {
     $$('#nbNoun .nb-chip', wrap).forEach((c, i) => c.classList.toggle('on', i === sel.noun));
     const numOn = sel.num != null;
     $('#nbNumOn', wrap).checked = numOn;
-    const nv = $('#nbNumVal', wrap); nv.hidden = !numOn; if (numOn) nv.textContent = '#' + sel.num;
+    const nv = $('#nbNumVal', wrap); nv.hidden = !numOn;
+    // don't stomp what the user is mid-typing
+    if (numOn && document.activeElement !== nv) nv.value = String(sel.num);
     // keep the picked chips in view
     $('#nbAdj .nb-chip.on', wrap)?.scrollIntoView({ block: 'nearest', inline: 'center' });
     $('#nbNoun .nb-chip.on', wrap)?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -1897,8 +1950,19 @@ async function openNameBuilder(after) {
   $('#nbAdj', wrap).addEventListener('click', e => { const c = e.target.closest('.nb-chip'); if (c) { sel.adj = +c.dataset.i; paint(); } });
   $('#nbNoun', wrap).addEventListener('click', e => { const c = e.target.closest('.nb-chip'); if (c) { sel.noun = +c.dataset.i; paint(); } });
   $('#nbShuffle', wrap).addEventListener('click', () => { sel = randomName(); popSound(S.sounds); paint(); });
-  $('#nbNumOn', wrap).addEventListener('change', e => { sel.num = e.target.checked ? Math.floor(Math.random() * 100) : null; paint(); });
-  $('#nbNumVal', wrap).addEventListener('click', () => { sel.num = Math.floor(Math.random() * 100); paint(); });
+  $('#nbNumOn', wrap).addEventListener('change', e => {
+    sel.num = e.target.checked ? (Number.isInteger(sel.num) ? sel.num : 7) : null;
+    paint();
+    if (e.target.checked) { const nv = $('#nbNumVal', wrap); nv.focus(); nv.select(); }
+  });
+  $('#nbNumVal', wrap).addEventListener('input', e => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+    e.target.value = digits;
+    sel.num = digits === '' ? null : parseInt(digits, 10);
+    // live-update the preview without repainting the field (keeps the caret)
+    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+  });
+  $('#nbNumVal', wrap).addEventListener('blur', e => { if (!e.target.value) { sel.num = null; paint(); } });
   $('#nbSave', wrap).addEventListener('click', async () => {
     const btn = $('#nbSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
     const r = await social.setName(sel.adj, sel.noun, sel.num);
@@ -1920,8 +1984,8 @@ function friendsListHtml(data) {
   const { friends, incoming, outgoing } = data;
   if (!friends.length && !incoming.length && !outgoing.length) {
     return `<div class="friends-empty">
-      <p class="fe-title">Your Crew is empty</p>
-      <p class="note">Send a friend your code, or paste theirs above. Once you both add each other you'll see their Bonehead, gear and badges here. Trading and PvP land here next.</p>
+      <p class="fe-title">No Crew yet</p>
+      <p class="note">Send a friend your code, or type theirs in above. Once you've added each other you'll see their Bonehead, gear and badges right here. Trading and PvP land here next.</p>
     </div>`;
   }
   let h = '';
@@ -1946,45 +2010,92 @@ function friendsListHtml(data) {
   return h;
 }
 
-async function openFriendsSheet(after) {
-  const me = await social.socialMe();
-  let data = { friends: [], incoming: [], outgoing: [] };
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>Friends</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body">
+// The Crew tab (full screen). Not online yet -> a Go Online prompt; online ->
+// your friend code up top (share + copy), an add-a-friend field, and your list.
+async function renderFriends(el) {
+  const apiConfigured = !!(await social.apiBase());
+  const me = apiConfigured ? await social.socialMe() : null;
+
+  if (!me) {
+    el.innerHTML = `
+      <h1 class="page-h1">The Crew</h1>
+      <div class="card">
+        <p class="note" style="margin:0 0 12px">Go online to get your friend code and build your Crew. Your whole save backs up too, end-to-end <b>encrypted</b> so only your phone can read it.</p>
+        <button class="btn" id="crewGoOnline">Go Online</button>
+      </div>`;
+    $('#crewGoOnline', el)?.addEventListener('click', async () => {
+      const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
+      const r = await social.goOnline();
+      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast('Could not connect. Try again in a bit.'); return; }
+      confettiRain(60); levelSound(S.sounds);
+      await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
+      await social.pushBackup(APP_SOCIAL_V).catch(() => {});
+      toast("You're online! Here's your friend code.", 3600);
+      renderFriends(el);
+      if (!(await social.socialMe())?.name) { await kvSet('namePrompted', true); setTimeout(() => openNameBuilder(() => renderFriends(el)), 500); }
+    });
+    return;
+  }
+
+  const dispName = me.name || me.handle;
+  el.innerHTML = `
+    <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+
+    <div class="card">
+      <div class="card-title">YOUR FRIEND CODE</div>
+      <p class="note" style="margin:0 0 12px">Share this with a friend. When they type it in, you're Crew, and you'll see each other's Bonehead, gear and badges below.</p>
+      <div class="crew-code-big" id="crewCodeBig">${esc(me.friendCode)}</div>
+      <div class="crew-code-btns">
+        <button class="btn small" id="crewShare">Share my code</button>
+        <button class="btn small ghost" id="crewCopy">Copy</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">ADD A FRIEND</div>
+      <p class="note" style="margin:0 0 10px">Got a friend's code? Enter it here to send them a request.</p>
       <div class="friends-add">
-        <input id="friendCode" type="text" placeholder="Enter a friend's code" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <input id="friendCode" type="text" placeholder="Enter their code" autocapitalize="characters" autocomplete="off" spellcheck="false">
         <button class="btn small" id="friendAddBtn">Add</button>
       </div>
-      <p class="note friends-mynote">Your code: <b>${esc(me.friendCode)}</b> <button class="link" id="friendsCopy">copy</button></p>
-      <div id="friendsList"><div class="friends-loading">Loading...</div></div>
-    </div>
-  `, { cls: 'sheet-friends', onClose: after });
+      <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
+    </div>`;
 
+  let data = { friends: [], incoming: [], outgoing: [] };
   const paint = async () => {
     data = await social.listFriends();
-    const list = $('#friendsList', wrap);
+    const list = $('#friendsList', el);
     if (list) list.innerHTML = friendsListHtml(data);
+    // seeing the tab means these requests are no longer "new" for notifications
+    await kvSet('knownIncoming', (data.incoming || []).map(f => f.playerId));
   };
 
   const submitCode = async () => {
-    const inp = $('#friendCode', wrap);
+    const inp = $('#friendCode', el);
     const code = (inp.value || '').toUpperCase().trim();
     if (!code) return;
-    const btn = $('#friendAddBtn', wrap); btn.disabled = true; btn.textContent = '...';
+    const btn = $('#friendAddBtn', el); btn.disabled = true; btn.textContent = '...';
     const r = await social.friendRequest(code);
     btn.disabled = false; btn.textContent = 'Add';
     if (!r.ok) { toast(r.error === 'that is your own code' ? "That's your own code!" : 'No Bonehead has that code. Double-check it.', 3200); return; }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    else toast('Request sent. They just add your code back to seal it.', 3600);
+    else toast('Request sent. They just enter your code back to seal it.', 3600);
     await paint();
   };
 
-  $('#friendAddBtn', wrap).addEventListener('click', submitCode);
-  $('#friendCode', wrap).addEventListener('keydown', e => { if (e.key === 'Enter') submitCode(); });
-  $('#friendsCopy', wrap).addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Code copied!'); } catch { toast(me.friendCode, 4000); } });
-  $('#friendsList', wrap).addEventListener('click', async e => {
+  const shareCode = async () => {
+    const text = `Add me on Boneheadz Gym! My friend code is ${me.friendCode}`;
+    try { if (navigator.share) { await navigator.share({ title: 'Boneheadz Gym', text }); return; } } catch { return; /* user cancelled */ }
+    try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); } catch { toast(me.friendCode, 4000); }
+  };
+
+  $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
+  $('#crewShare', el)?.addEventListener('click', shareCode);
+  $('#crewCopy', el)?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied!'); } catch { toast(me.friendCode, 4000); } });
+  $('#friendAddBtn', el).addEventListener('click', submitCode);
+  $('#friendCode', el).addEventListener('keydown', e => { if (e.key === 'Enter') submitCode(); });
+  $('#friendsList', el).addEventListener('click', async e => {
     const acc = e.target.closest('[data-accept]');
     const rem = e.target.closest('[data-remove]');
     const view = e.target.closest('[data-view]');
@@ -2106,6 +2217,7 @@ async function renderSettings(el) {
       <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
     </div>
     ${np.enabled ? `
+    ${notifRow('friends', 'Friend requests', 'Know when someone wants to join your Crew')}
     ${notifRow('rares', 'Rare spawns', 'Get pinged when a rare surfaces near you')}
     ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
     ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
@@ -2149,6 +2261,10 @@ async function renderSettings(el) {
       <div class="lab"><b>Sounds</b><span>Little pops and level-up chimes</span></div>
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
+    <button class="crew-friends" id="myFoodsRow" style="margin-top:12px">
+      <span>My foods</span>
+      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:12.5px">Custom · favorites · scans</span><span class="crew-chev">›</span></span>
+    </button>
     <div class="settings-row">
       <div class="lab"><b>USDA API key</b><span>Optional: raises online search limit to 1,000/hr. <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></span></div>
     </div>
@@ -2224,7 +2340,8 @@ async function renderSettings(el) {
     catch { toast(me.friendCode, 4000); }
   });
   $('#editName', el)?.addEventListener('click', () => openNameBuilder(() => renderSettings(el)));
-  $('#friendsBtn', el)?.addEventListener('click', () => openFriendsSheet(() => renderSettings(el)));
+  $('#friendsBtn', el)?.addEventListener('click', () => { location.hash = '#/friends'; });
+  $('#myFoodsRow', el)?.addEventListener('click', () => { location.hash = '#/foods'; });
   // ---- notifications ----
   const applyNotifs = async (prefs, note) => {
     await setNotifPrefs(prefs);
@@ -2242,18 +2359,18 @@ async function renderSettings(el) {
       if (!ok) { toast('Notifications need permission. Allow them when prompted, or enable in system settings.', 3600); renderSettings(el); return; }
     }
     prefs[key] = on;
-    if (key === 'enabled' && on && !prefs.rares && !prefs.reminder && !prefs.streak) { prefs.rares = prefs.reminder = prefs.streak = true; }
+    if (key === 'enabled' && on && !prefs.rares && !prefs.reminder && !prefs.streak && !prefs.friends) { prefs.rares = prefs.reminder = prefs.streak = prefs.friends = true; }
     await applyNotifs(prefs);
   }));
   $('#notifAll', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, rares: true, reminder: true, streak: true }, 'All notifications on. You will hear about every rare.');
+    await applyNotifs({ enabled: true, rares: true, reminder: true, streak: true, friends: true }, 'All notifications on. You will hear about every rare.');
   });
   $('#notifEss', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, rares: false, reminder: true, streak: true }, 'Essentials only: reminders + streak saver.');
+    await applyNotifs({ enabled: true, rares: false, reminder: true, streak: true, friends: true }, 'Essentials only: reminders, streak saver + friend requests.');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
     const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
@@ -3372,7 +3489,7 @@ async function openMap() {
             <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="blip-dot rare"></span><div><b>RARE</b><span class="note"> · shiny cosmetic, one-day-only spawn</span></div></div>
+            <div class="legend-row"><span class="blip-dot rare"></span><div><b>Mystery Egg</b><span class="note"> · rare spawn · walk to hatch a pet</span></div></div>
           </div>
         </div>
       </div>

@@ -91,10 +91,11 @@ export function spawnsForCell(date, cx, cy, mins = nowMins()) {
       lng: (cy + (r() - 0.5) * 0.92) * CELL_DEG,
     });
   }
-  // rare: scarce, its own 45m instance so "a rare stirs nearby" is a real event.
+  // rare (Mystery Egg): its own 45m instance so "an egg stirs nearby" is a real
+  // event. Rate tuned up so eggs (the pet pipeline) actually reach players.
   const rInst = Math.floor(mins / SPAWN_TTL_MIN);
   const rr = mulberry32(hashStr(`${date}:${cx}:${cy}:rare:i${rInst}`));
-  if (rr() < 0.03) {
+  if (rr() < 0.08) {
     out.push({
       id: `${cx}_${cy}_rare_i${rInst}`, slot: 'rare', inst: rInst, type: 'rare', rare: true,
       lat: (cx + (rr() - 0.5) * 0.92) * CELL_DEG,

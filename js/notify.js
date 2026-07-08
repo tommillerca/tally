@@ -10,7 +10,11 @@ import { isNative } from './native.js';
 import { raresNear, SPAWN_TTL_MIN } from './hunt.js';
 import { dateKey } from './nutrition.js';
 
-const DEFAULTS = { enabled: false, rares: true, reminder: true, streak: true };
+// New users have notifications ON by default (Tom's call). enabled=true only
+// takes effect once the OS grants permission (requested once at boot); until
+// then nothing fires. Existing users who deliberately turned it off saved
+// {enabled:false} and keep that.
+const DEFAULTS = { enabled: true, rares: true, reminder: true, streak: true, friends: true };
 export async function notifPrefs() { return { ...DEFAULTS, ...((await kvGet('notifPrefs', {})) || {}) }; }
 export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
 

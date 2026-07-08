@@ -31,7 +31,7 @@ function makeHandle() { return `${randPick(ADJ)} ${randPick(NOUN)}`; }
 function buildName(a, n, num) {
   const adj = ADJ[a | 0], noun = NOUN[n | 0];
   if (!adj || !noun) return null;
-  const suffix = (Number.isInteger(num) && num >= 0 && num <= 99) ? ` #${num}` : '';
+  const suffix = (Number.isInteger(num) && num >= 0 && num <= 999) ? ` #${num}` : '';
   return `${adj} ${noun}${suffix}`;
 }
 function makeFriendCode() {

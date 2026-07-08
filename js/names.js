@@ -13,7 +13,7 @@ export const NAME_NOUN = ['Rex', 'Femur', 'Knuckles', 'Molar', 'Sternum', 'Tibia
 export function buildName(adj, noun, num) {
   const a = NAME_ADJ[adj], n = NAME_NOUN[noun];
   if (!a || !n) return '';
-  return `${a} ${n}${Number.isInteger(num) && num >= 0 && num <= 99 ? ` #${num}` : ''}`;
+  return `${a} ${n}${Number.isInteger(num) && num >= 0 && num <= 999 ? ` #${num}` : ''}`;
 }
 
 // A random {adj, noun, num} selection for the reroll button.
