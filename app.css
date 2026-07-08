@@ -53,11 +53,14 @@ input, select, textarea { font: inherit; color: inherit; }
 svg { display: block; }
 [hidden] { display: none !important; }
 
-#app { max-width: 600px; margin: 0 auto; min-height: 100dvh; position: relative; }
+/* Flex column: the SCREEN scrolls, the tab bar is an in-flow child pinned at the
+   bottom. This avoids the iOS quirk where a position:fixed bottom bar (with
+   backdrop-filter) detaches and floats mid-screen during momentum scroll. */
+#app { max-width: 600px; margin: 0 auto; height: 100dvh; position: relative; display: flex; flex-direction: column; overflow: hidden; }
 
 .screen {
-  padding: calc(var(--sat) + 14px) var(--pad) calc(var(--sab) + 110px);
-  min-height: 100dvh;
+  flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: calc(var(--sat) + 14px) var(--pad) 24px;
 }
 
 /* ---------- header ---------- */
@@ -146,8 +149,7 @@ svg { display: block; }
 
 /* ---------- tab bar ---------- */
 .tabbar {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 600px;
+  flex: none; width: 100%; position: relative;
   display: flex; align-items: center; justify-content: space-around;
   padding: 8px 10px calc(var(--sab) + 8px);
   background: rgba(15, 14, 20, 0.84);
