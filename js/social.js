@@ -188,6 +188,26 @@ export async function friendRequest(code) {
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
 
+// Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
+// mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
+// delivered as a grant the friend reveals on their next open. Returns
+// { ok, status, reward?, code? }.
+export async function sendGift(toId, mode, coins) {
+  try {
+    const r = await signedFetch('POST', '/gift', { to: toId, mode, coins });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...d };
+  } catch { return { ok: false }; }
+}
+// Send a preset cheer (index into the client-side CHEERS list; no free text).
+export async function sendCheer(toId, cheer) {
+  try {
+    const r = await signedFetch('POST', '/cheer', { to: toId, cheer });
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, ...d };
+  } catch { return { ok: false }; }
+}
+
 // Private, local-only nicknames: what YOU call a friend so a generic bone-name
 // is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's
 // free text with nothing to moderate (it never leaves this phone except inside

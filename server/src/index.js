@@ -42,6 +42,16 @@ function makeFriendCode() {
 function newId() { return crypto.randomUUID(); }
 function pairKey(x, y) { return x < y ? [x, y] : [y, x]; } // canonical a<b for friendships
 
+// The free daily friend-gift roll (server-authoritative so it can't be forged).
+// Mostly coins, sometimes a crate/charm, rarely an egg.
+function rollFreeGift() {
+  const r = Math.random();
+  if (r < 0.50) return { coins: [30, 50, 60, 75][Math.floor(Math.random() * 4)] };
+  if (r < 0.80) return { crate: 'daily' };
+  if (r < 0.93) return { consumable: 'xp2' };   // Battle Charm
+  return { crate: 'egg' };
+}
+
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
@@ -236,6 +246,75 @@ export default {
         return json({ friends, incoming, outgoing });
       }
 
+      // Signed: send a gift to an accepted friend. mode 'free' = one server-rolled
+      // gift per friend per day; mode 'spend' = the sender's own coins (client
+      // deducts locally), capped 5/friend/day + 1000/gift. Delivered as a grant so
+      // it rides the recipient's normal reward-reveal on their next open.
+      if (path === '/gift' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const bd = JSON.parse(bodyText || '{}');
+        const to = String(bd.to || '');
+        const mode = bd.mode === 'spend' ? 'spend' : 'free';
+        if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
+        const [a, b] = pairKey(auth.playerId, to);
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
+        const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
+        const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
+        const day = new Date(Date.now()).toISOString().slice(0, 10);
+        let reward, key, note;
+        if (mode === 'free') {
+          key = `gift-free-${auth.playerId}-${day}`;
+          const existed = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?').bind(to, key).first();
+          if (existed) return json({ error: 'already sent today', code: 'daily-done' }, 409);
+          reward = rollFreeGift();
+          note = `${fromName} sent you a gift!`;
+        } else {
+          const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
+          // prefix-range count (no LIKE: playerIds contain '_', a LIKE wildcard)
+          const pfx = `gift-spend-${auth.playerId}-${day}-`;
+          const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
+          const n = (cnt && cnt.n) || 0;
+          if (n >= 5) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
+          key = `gift-spend-${auth.playerId}-${day}-${n}`;
+          reward = { coins };
+          note = `${fromName} sent you ${coins} coins!`;
+        }
+        const payload = JSON.stringify({ ...reward, from: fromName, note, gift: true, mode });
+        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'gift', payload, Date.now()).run();
+        return json({ ok: true, reward, mode });
+      }
+
+      // Signed: send a preset cheer/emote to an accepted friend. Index into a
+      // client-side phrase list (no free text = nothing to moderate). Capped
+      // 10/friend/day. Delivered as a reward-less grant.
+      if (path === '/cheer' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const bd = JSON.parse(bodyText || '{}');
+        const to = String(bd.to || '');
+        const cheer = Math.floor(Number(bd.cheer));
+        if (!to || to === auth.playerId) return json({ error: 'bad recipient' }, 400);
+        if (!(cheer >= 0 && cheer < 64)) return json({ error: 'bad cheer' }, 400);
+        const [a, b] = pairKey(auth.playerId, to);
+        const fr = await env.DB.prepare('SELECT status FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
+        if (!fr || fr.status !== 'accepted') return json({ error: 'not friends' }, 403);
+        const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
+        const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
+        const day = new Date(Date.now()).toISOString().slice(0, 10);
+        const pfx = `cheer-${auth.playerId}-${day}-`;
+        const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
+        const n = (cnt && cnt.n) || 0;
+        if (n >= 10) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
+        const key = `cheer-${auth.playerId}-${day}-${n}`;
+        const payload = JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` });
+        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'cheer', payload, Date.now()).run();
+        return json({ ok: true });
+      }
+
       // Signed: who am I (handle/code/name lookup, used by the client after restore).
       if (path === '/me' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
@@ -299,6 +378,7 @@ export default {
 
       return json({ error: 'not found' }, 404);
     } catch (e) {
+      console.error('handler error', e && e.stack || e);
       return json({ error: 'server error', detail: String(e).slice(0, 200) }, 500);
     }
   },

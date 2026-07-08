@@ -198,6 +198,46 @@ await test('friends: name + public profile surface in the list', async () => {
   assert.equal(b.friendCode, p2.friendCode);
 });
 
+await test('gift: free daily gift delivers a grant, second same-day 409s', async () => {
+  const r1 = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: p2.playerId, mode: 'free' }));
+  assert.equal(r1.status, 200);
+  const j1 = await r1.json();
+  assert.ok(j1.ok && j1.reward, 'returns a rolled reward');
+  const grants = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/grants?since=0')).json();
+  const gift = (grants.grants || []).find(g => g.type === 'gift' && g.payload.mode === 'free');
+  assert.ok(gift, 'recipient sees the gift grant');
+  assert.ok(gift.payload.from && gift.payload.note.includes(gift.payload.from), 'gift carries sender name');
+  const r2 = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: p2.playerId, mode: 'free' }));
+  assert.equal(r2.status, 409, 'one free gift per friend per day');
+});
+
+await test('gift: spend-coins gift delivers the exact coins', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: p2.playerId, mode: 'spend', coins: 120 }));
+  assert.equal(r.status, 200);
+  const grants = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/grants?since=0')).json();
+  const spend = (grants.grants || []).find(g => g.type === 'gift' && g.payload.mode === 'spend');
+  assert.equal(spend.payload.coins, 120);
+});
+
+await test('gift: to a non-friend is 403', async () => {
+  const stranger = await makeKeys();
+  const s = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: stranger.pubJwk }) })).json();
+  const r = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: s.playerId, mode: 'free' }));
+  assert.equal(r.status, 403);
+});
+
+await test('cheer: preset cheer delivers a reward-less grant; self + bad index rejected', async () => {
+  const r = await signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: p2.playerId, cheer: 0 }));
+  assert.equal(r.status, 200);
+  const grants = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/grants?since=0')).json();
+  const cheer = (grants.grants || []).find(g => g.type === 'cheer');
+  assert.ok(cheer && cheer.payload.cheer === 0 && !cheer.payload.coins, 'cheer carries index, no reward');
+  const self = await signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: player.playerId, cheer: 0 }));
+  assert.equal(self.status, 400);
+  const bad = await signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: p2.playerId, cheer: 999 }));
+  assert.equal(bad.status, 400);
+});
+
 await test('friends: accept endpoint seals a one-way request', async () => {
   const p3keys = await makeKeys();
   const p3 = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: p3keys.pubJwk }) })).json();

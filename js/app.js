@@ -1975,9 +1975,49 @@ async function openNameBuilder(after) {
   paint();
 }
 
+// Preset cheers: fixed emoji + phrase (the INDEX is the wire format; the server
+// only stores/validates the index, so there's no free text = nothing to
+// moderate, same stance as the name builder).
+const CHEERS = [
+  { emo: '💀', txt: 'GG!' },
+  { emo: '🔥', txt: 'Nice gains!' },
+  { emo: '💪', txt: "Let's train!" },
+  { emo: '👑', txt: "You're crushing it!" },
+  { emo: '⚡', txt: 'Boneyard run?' },
+  { emo: '🦴', txt: 'Feed the bones!' },
+  { emo: '🎯', txt: 'Beat my score!' },
+  { emo: '😤', txt: 'Rematch in the Pit!' },
+  { emo: '🥩', txt: 'Eat up, champ!' },
+  { emo: '🤝', txt: 'Welcome to the Crew!' },
+  { emo: '🎉', txt: 'Level up!' },
+  { emo: '🫡', txt: 'Respect.' },
+];
+
 function friendRowAvatar(f) {
   const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
   return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+}
+
+// Big, collectible-feeling card for an accepted friend: their Bonehead posed on
+// a stage with their pet peeking in, name, class, and quick stat chips.
+function friendCardHtml(f) {
+  const p = f.profile || {};
+  const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
+  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petSpriteHtml(p.pet.id, 40)}</div>` : '';
+  const chips = [];
+  if (p.level) chips.push(`<span class="fc-chip lvl">Lv ${p.level}</span>`);
+  if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
+  if (p.gear && p.gear.length) chips.push(`<span class="fc-chip">${p.gear.length} gear</span>`);
+  if (p.pet) chips.push(`<span class="fc-chip">🥚 Lv ${p.pet.level}</span>`);
+  return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
+    <div class="fc-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}${pet}</div>
+    <div class="fc-body">
+      <div class="fc-name">${esc(f.alias || f.name)}</div>
+      <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}${f.alias ? ` · ${esc(f.name)}` : ''}</div>
+      <div class="fc-chips">${chips.join('') || '<span class="fc-chip">Tap to view</span>'}</div>
+    </div>
+    <span class="crew-chev">›</span>
+  </button>`;
 }
 
 function friendsListHtml(data) {
@@ -1985,7 +2025,7 @@ function friendsListHtml(data) {
   if (!friends.length && !incoming.length && !outgoing.length) {
     return `<div class="friends-empty">
       <p class="fe-title">No Crew yet</p>
-      <p class="note">Send a friend your code, or type theirs in above. Once you've added each other you'll see their Bonehead, gear and badges right here. Trading and PvP land here next.</p>
+      <p class="note">Send a friend your code, or type theirs in above. Once you've added each other you'll see their Bonehead, gear and badges right here, and you can send gifts and cheers.</p>
     </div>`;
   }
   let h = '';
@@ -1995,12 +2035,7 @@ function friendsListHtml(data) {
       <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
     </div>`).join('')}</div>`;
-  if (friends.length) h += `<div class="fl-sect"><div class="fl-h">Your Crew · ${friends.length}</div>${friends.map(f => `
-    <button class="fl-row tap" data-view="${esc(f.playerId)}">
-      ${friendRowAvatar(f)}
-      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>${f.alias ? esc(f.name) + ' · ' : ''}${f.profile ? `Lv ${f.profile.level} · ${esc(f.profile.levelName || 'Bonehead')}` : 'Tap to view'}</span></div>
-      <span class="crew-chev">›</span>
-    </button>`).join('')}</div>`;
+  if (friends.length) h += `<div class="fl-sect"><div class="fl-h">Your Crew · ${friends.length}</div><div class="fc-grid">${friends.map(friendCardHtml).join('')}</div></div>`;
   if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
@@ -2118,19 +2153,35 @@ async function renderFriends(el) {
 function openFriendProfile(f, onChange) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const statHtml = p.stats ? STAT_META.map(m => `<span class="pd-stat"><small>${m.label}</small><b>${p.stats[m.key] ?? '-'}</b></span>`).join('') : '';
   const petName = p.pet ? ((BH_BY_ID[p.pet.id] || {}).name || 'Pet') : null;
+  const statBars = p.stats ? STAT_META.map(m => {
+    const v = p.stats[m.key] ?? 0;
+    return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
+  }).join('') : '';
   const wrap = openSheet(`
     <div class="sheet-head"><h2 id="fpTitle">${esc(f.alias || f.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <div class="fp-hero"><div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div></div>
-      <div class="fp-title"><div class="fp-lvl">Lv ${p.level ?? '?'}</div><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
-      ${statHtml ? `<div class="pd-stats fp-stats">${statHtml}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
+      <div class="fp-hero">
+        <div class="fp-hero-bg"></div>
+        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 80)}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
+      </div>
+      <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
+
+      <div class="fp-actions">
+        <button class="btn fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
+        <button class="btn ghost fp-cheer" id="fpCheer">📣 Cheer</button>
+      </div>
+
       <div class="fp-facts">
         <div class="fp-fact"><b>${p.badges ?? 0}</b><span>Badges</span></div>
         <div class="fp-fact"><b>${p.gear ? p.gear.length : 0}</b><span>Gear</span></div>
         <div class="fp-fact"><b>${petName ? 'Lv ' + p.pet.level : '-'}</b><span>${petName ? esc(petName) : 'No pet'}</span></div>
       </div>
+
+      ${statBars ? `<div class="fp-stats-h">Stats</div><div class="fp-statbars">${statBars}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
+
       <div class="fp-alias">
         <div class="nb-lab">Your nickname for them <span class="fp-alias-hint">only you see this</span></div>
         <div class="fp-alias-row">
@@ -2142,6 +2193,8 @@ function openFriendProfile(f, onChange) {
       <button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>
     </div>
   `, { cls: 'sheet-fp' });
+  $('#fpGift', wrap).addEventListener('click', () => openGiftSheet(f));
+  $('#fpCheer', wrap).addEventListener('click', () => openCheerSheet(f));
   $('#fpAliasSave', wrap).addEventListener('click', async () => {
     const clean = await social.setFriendAlias(f.playerId, $('#fpAlias', wrap).value);
     f.alias = clean || null;
@@ -2154,6 +2207,93 @@ function openFriendProfile(f, onChange) {
   });
   $('#fpRemove', wrap).addEventListener('click', async () => {
     if (await social.removeFriend(f.playerId)) { toast('Removed.'); onChange && onChange(); history.back(); }
+  });
+}
+
+function giftRewardLabel(reward) {
+  if (!reward) return 'a gift';
+  if (reward.crate === 'egg') return 'a Mystery Egg';
+  if (reward.crate) return CRATES[reward.crate] ? CRATES[reward.crate].label : 'a crate';
+  if (reward.consumable) return CONSUMABLES[reward.consumable] ? CONSUMABLES[reward.consumable].label : 'an item';
+  if (reward.coins) return `${reward.coins} coins`;
+  return 'a gift';
+}
+
+// Send-a-gift sheet: one free server-rolled gift/day, plus spend-your-own coins.
+async function openGiftSheet(f) {
+  const bal = await coins();
+  const day = dateKey();
+  const freeMap = (await kvGet('giftFreeSent', {})) || {};
+  const alreadyFree = freeMap[f.playerId] === day;
+  const amts = [25, 50, 100, 250, 500];
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Send a gift</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. Gifts land in their Backpack the next time they open the app.</p>
+      <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
+        <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
+        <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? 'Sent ✓' : 'Send'}</button>
+      </div>
+      <div class="gift-spend">
+        <div class="nb-lab">Or send your own coins <span class="fp-alias-hint" id="giftBal">you have ${bal}</span></div>
+        <div class="gift-amts">${amts.map(a => `<button class="chip gift-amt" data-amt="${a}"${a > bal ? ' disabled' : ''}>${ICONS.coin(14)} ${a}</button>`).join('')}</div>
+        <p class="note" style="margin:10px 2px 0">Up to 5 coin gifts per friend a day.</p>
+      </div>
+    </div>
+  `, { cls: 'sheet-gift' });
+
+  $('#giftFree', wrap).addEventListener('click', async () => {
+    const btn = $('#giftFree', wrap); btn.disabled = true; btn.textContent = '...';
+    const r = await social.sendGift(f.playerId, 'free');
+    if (r.ok) {
+      const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
+      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent ✓';
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 20); coinSound(S.sounds);
+      toast(`You sent ${esc(f.alias || f.name)} ${giftRewardLabel(r.reward)}!`, 3600);
+    } else if (r.status === 409) {
+      const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
+      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent ✓';
+      toast(`You already sent ${esc(f.alias || f.name)} their free gift today.`, 3400);
+    } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
+  });
+
+  $('.gift-amts', wrap).addEventListener('click', async e => {
+    const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return;
+    const amt = +b.dataset.amt;
+    const have = await coins();
+    if (amt > have) { toast("You don't have that many coins."); return; }
+    b.disabled = true;
+    await coinsAdd(-amt); // deduct locally first; refund if the send fails
+    const r = await social.sendGift(f.playerId, 'spend', amt);
+    if (r.ok) {
+      coinSound(S.sounds);
+      toast(`You sent ${esc(f.alias || f.name)} ${amt} coins!`, 3400);
+      const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
+      $$('.gift-amt', wrap).forEach(x => { x.disabled = (+x.dataset.amt) > nb; });
+    } else {
+      await coinsAdd(amt); // refund
+      b.disabled = false;
+      toast(r.status === 429 ? "That's the daily coin-gift limit for this friend." : 'Could not send. Your coins were not spent.', 3400);
+    }
+  });
+}
+
+// Send-a-cheer sheet: preset emoji + phrase, no free text.
+function openCheerSheet(f) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Send a cheer</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. A quick shout, no typing.</p>
+      <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
+    </div>
+  `, { cls: 'sheet-cheer' });
+  $('.cheer-grid', wrap).addEventListener('click', async e => {
+    const b = e.target.closest('[data-cheer]'); if (!b) return;
+    const i = +b.dataset.cheer;
+    $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
+    const r = await social.sendCheer(f.playerId, i);
+    if (r.ok) { popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
   });
 }
 
@@ -3896,15 +4036,31 @@ function presentGrantDelivery(r) {
   if (!r || !(r.applied > 0)) return;
   const cards = [];
   let coinsSum = 0, xpSum = 0;
+  const cheers = [];      // reward-less friend cheers
+  const coinGifts = [];   // coins-only gifts (shown as a line, not a card)
   for (const g of r.appliedGrants || []) {
     const p = g.payload || {};
+    if (g.type === 'cheer') { cheers.push(p); continue; }
     coinsSum += p.coins || 0; xpSum += p.xp || 0;
-    if (p.crate && CRATES[p.crate]) cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind: 'CREW DELIVERY', stats: esc(p.note || 'From the Crew') });
-    if (p.gearId && GEAR_BY_ID[p.gearId]) cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind: 'CREW DELIVERY' });
-    if (p.consumable && CONSUMABLES[p.consumable]) cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind: 'CREW DELIVERY', stats: esc(p.note || CONSUMABLES[p.consumable].desc) });
+    const kind = p.gift ? 'GIFT' : 'CREW DELIVERY';
+    const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
+    let hadCard = false;
+    if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
+    if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
+    if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
-  if (cards.length) openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh);
-  else { toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh(); }
+  // cheers: friendly stacked toasts (staggered so multiple are readable)
+  cheers.forEach((c, i) => {
+    const em = CHEERS[c.cheer] ? CHEERS[c.cheer].emo : '📣';
+    const tx = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
+    setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
+  });
+  if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
+  if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); refresh(); return; }
+  if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); refresh(); return; }
+  if (cheers.length) { refresh(); return; } // cheers already toasted, nothing else to reveal
+  toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh();
 }
 
 // Keep local notifications in sync with prefs: recurring reminders + the next
