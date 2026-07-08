@@ -2357,7 +2357,7 @@ async function renderSettings(el) {
       <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
     </div>
     ${np.enabled ? `
-    ${notifRow('friends', 'Friend requests', 'Know when someone wants to join your Crew')}
+    ${notifRow('friends', 'Crew activity', 'Friend requests, gifts and cheers')}
     ${notifRow('rares', 'Rare spawns', 'Get pinged when a rare surfaces near you')}
     ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
     ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
@@ -4038,11 +4038,13 @@ function presentGrantDelivery(r) {
   let coinsSum = 0, xpSum = 0;
   const cheers = [];      // reward-less friend cheers
   const coinGifts = [];   // coins-only gifts (shown as a line, not a card)
+  const giftInfos = [];   // every gift (for the OS notification)
   for (const g of r.appliedGrants || []) {
     const p = g.payload || {};
     if (g.type === 'cheer') { cheers.push(p); continue; }
     coinsSum += p.coins || 0; xpSum += p.xp || 0;
     const kind = p.gift ? 'GIFT' : 'CREW DELIVERY';
+    if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
     if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
@@ -4050,6 +4052,9 @@ function presentGrantDelivery(r) {
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
+  // OS notification for friend gifts + cheers (so it feels like an event, not
+  // just an in-app toast). Fire-and-forget; gated on the Crew notif pref.
+  maybeNotifyFriendGrants(giftInfos, cheers);
   // cheers: friendly stacked toasts (staggered so multiple are readable)
   cheers.forEach((c, i) => {
     const em = CHEERS[c.cheer] ? CHEERS[c.cheer].emo : '📣';
@@ -4061,6 +4066,23 @@ function presentGrantDelivery(r) {
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); refresh(); return; }
   if (cheers.length) { refresh(); return; } // cheers already toasted, nothing else to reveal
   toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh();
+}
+
+// Push a local notification when a friend sends a gift or cheer. Gated on the
+// same 'friends' (Crew) notif pref as friend requests. Aggregates so a batch
+// pull doesn't fire a dozen banners.
+async function maybeNotifyFriendGrants(gifts, cheers) {
+  try {
+    if (!gifts.length && !cheers.length) return;
+    const prefs = await notifPrefs();
+    if (!prefs.enabled || !prefs.friends) return;
+    if (gifts.length === 1) await notifyNow('🎁 A gift arrived', `${gifts[0].from || 'A friend'} sent you ${gifts[0].label}.`);
+    else if (gifts.length > 1) await notifyNow('🎁 Gifts arrived', `Your Crew sent you ${gifts.length} gifts.`);
+    if (cheers.length === 1) {
+      const c = cheers[0]; const ph = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
+      await notifyNow('📣 A cheer', `${c.from || 'A friend'}: ${ph}`);
+    } else if (cheers.length > 1) await notifyNow('📣 Cheers', `${cheers.length} cheers from your Crew.`);
+  } catch { /* noop */ }
 }
 
 // Keep local notifications in sync with prefs: recurring reminders + the next
