@@ -2035,7 +2035,7 @@ function friendCardHtml(f) {
   if (p.gear && p.gear.length) chips.push(`<span class="fc-chip">${p.gear.length} gear</span>`);
   if (p.pet) chips.push(`<span class="fc-chip">🥚 Lv ${p.pet.level}</span>`);
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
-    <div class="fc-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}${pet}</div>
+    <div class="fc-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}</div>
     <div class="fc-body">
       <div class="fc-name">${esc(f.alias || f.name)}</div>
       <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}${f.alias ? ` · ${esc(f.name)}` : ''}</div>
@@ -2188,7 +2188,7 @@ function openFriendProfile(f, onChange) {
     <div class="sheet-body">
       <div class="fp-hero">
         <div class="fp-hero-bg"></div>
-        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>
+        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 80)}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
@@ -4073,7 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v114'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v115'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
