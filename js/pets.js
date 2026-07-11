@@ -38,11 +38,11 @@ export const PET_ASSIGN = {
 };
 export function familyOf(petId) { return PET_FAMILIES[PET_ASSIGN[petId] || 'hound']; }
 
-// Pets that HOVER in mid-air in combat (airborne creatures — the duck C2, the
-// flying bug C3). The cloud (C1) also flies but carries a baked ground shadow,
-// so it bottom-aligns like grounded pets; walkers (lizard C4, dog C5) stand on
-// the floor. Hand-assigned like PET_ASSIGN — add new airborne pets here.
-export const HOVER_PETS = new Set(['C2', 'C3']);
+// Pets that HOVER in mid-air in combat — only genuinely airborne creatures (the
+// flying duck C2). The cloud (C1) also flies but carries a baked ground shadow so
+// it bottom-aligns; the catfish (C3), lizard (C4) and dog (C5) are not airborne
+// and stand on the floor. Hand-assigned like PET_ASSIGN — add new flyers here.
+export const HOVER_PETS = new Set(['C2']);
 export function petHovers(petId) { return HOVER_PETS.has(petId); }
 
 // ---- mini-trees: 3 tiers, ONE-OF-TWO per tier, unlocked at pet level 2/4/6 ----
