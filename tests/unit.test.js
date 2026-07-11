@@ -21,7 +21,8 @@ import {
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue,
-  migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps } from '../js/loot.js';
+  migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
+  removeInstance, breedOffspring, breedCost } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
 
@@ -827,6 +828,32 @@ test('pet leveling: steps credit ONLY the equipped species (benched pets frozen)
   const before = { C1: 1300 };
   assert.deepEqual(creditSteps(before, 'C1', 0), before, 'zero delta is a no-op');
   assert.deepEqual(creditSteps(before, null, 500), before, 'no equipped pet -> nothing banked');
+});
+
+test('breeding: offspring takes the chosen species at max(parent lineage)+1, inherits shiny', () => {
+  const a = { iid: 'a', sp: 'C1', lineage: 2, shiny: false };
+  const b = { iid: 'b', sp: 'C3', lineage: 4, shiny: true };
+  const off = breedOffspring(a, b, 'C1', 'new1');
+  assert.equal(off.sp, 'C1', 'offspring is the chosen species');
+  assert.equal(off.lineage, 5, 'lineage = higher parent (4) + 1');
+  assert.equal(off.shiny, true, 'inherits shiny if either parent was');
+  assert.equal(off.iid, 'new1');
+  const off2 = breedOffspring({ iid: 'x', sp: 'C4', lineage: 0, shiny: false }, { iid: 'y', sp: 'C4', lineage: 0, shiny: false }, 'C4', 'n2');
+  assert.equal(off2.lineage, 1, 'two lineage-0 pets breed a lineage-1');
+  assert.equal(off2.shiny, false);
+});
+
+test('breeding: cost escalates with the offspring lineage', () => {
+  assert.ok(breedCost(2) > breedCost(1), 'higher lineage costs more');
+  assert.equal(breedCost(1), 60);
+});
+
+test('breeding: removeInstance drops exactly the targeted iid', () => {
+  const list = [{ iid: 'a', sp: 'C1' }, { iid: 'b', sp: 'C1' }, { iid: 'c', sp: 'C2' }];
+  const r = removeInstance(list, 'b');
+  assert.equal(r.removed.iid, 'b');
+  assert.deepEqual(r.instances.map(x => x.iid), ['a', 'c']);
+  assert.equal(removeInstance(list, 'zzz').removed, null, 'missing iid -> null');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

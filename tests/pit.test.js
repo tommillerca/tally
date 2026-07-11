@@ -1172,6 +1172,16 @@ test('pet stats: a common at level 1 preserves the pre-v124 generic floor', () =
   assert.ok(Math.abs(c3.reflex - 30) <= 1, 'reflex ~= old floor');
 });
 
+test('pet stats: lineage (breeding) adds a stacking bump on top of everything', () => {
+  const l0 = petBattleStats('C3', 6, false, 0);
+  const l3 = petBattleStats('C3', 6, false, 3);
+  assert.equal(l0.lineage, 0);
+  assert.equal(l3.lineage, 3);
+  assert.ok(l3.power > l0.power && l3.hp > l0.hp, 'lineage lifts power + hp');
+  // +5%/tier: lineage 3 ~= +15%
+  assert.ok(Math.abs(l3.power / l0.power - 1.15) < 0.03, 'roughly +15% at lineage 3');
+});
+
 test('pet stats: shiny grants a real bump on every stat', () => {
   const base = petBattleStats('C2', 6, false);
   const shiny = petBattleStats('C2', 6, true);

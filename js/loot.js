@@ -248,6 +248,72 @@ export function removeWorstInstance(instances, sp) {
   return { instances: instances.filter((_, i) => i !== idx), removed: instances[idx] };
 }
 export function addInstance(instances, inst) { return [...(instances || []), inst]; }
+export function removeInstance(instances, iid) {
+  const idx = (instances || []).findIndex(x => x.iid === iid);
+  if (idx < 0) return { instances: instances || [], removed: null };
+  return { instances: instances.filter((_, i) => i !== idx), removed: instances[idx] };
+}
+
+/* ============ v128: BREEDING ============
+ * Fuse two owned pets: BOTH are consumed, producing one offspring of a chosen
+ * parent's species at lineage = max(parents) + 1 (a permanent stat bump + glow).
+ * Costs Bone Dust (escalating with the target lineage) plus a steps cooldown so
+ * it stays tied to walking. The offspring inherits shiny if either parent was. */
+export const BREED_COOLDOWN_STEPS = 6000;
+export function breedCost(offspringLineage) { return 30 + Math.max(1, offspringLineage) * 30; }
+// pure: the offspring instance from two parents (iid supplied by the caller)
+export function breedOffspring(a, b, offspringSp, iid) {
+  const lineage = Math.max(a.lineage || 0, b.lineage || 0) + 1;
+  return { iid, sp: offspringSp, lineage, shiny: !!(a.shiny || b.shiny), hatchedAtSteps: 0 };
+}
+
+// Live status for the breeding UI (dust, cooldown, whether you have >=2 pets).
+export async function breedStatus() {
+  const [list, dust, lifetime, credit] = await Promise.all([
+    petInstances(), boneDust(), lifetimeStepsSum(), kvGet('petBreedCredit', null),
+  ]);
+  const walkedSince = credit == null ? BREED_COOLDOWN_STEPS : Math.max(0, lifetime - credit);
+  const cooldownLeft = Math.max(0, BREED_COOLDOWN_STEPS - walkedSince);
+  return { total: list.length, dust, cooldownLeft, ready: cooldownLeft <= 0 };
+}
+
+// Breed two instances by iid. offspringSp must be one of the two parents' species.
+export async function breedPets(iidA, iidB, offspringSp) {
+  if (!iidA || !iidB || iidA === iidB) return { ok: false, reason: 'pick-two' };
+  let list = await petInstances();
+  const a = list.find(x => x.iid === iidA);
+  const b = list.find(x => x.iid === iidB);
+  if (!a || !b) return { ok: false, reason: 'gone' };
+  if (offspringSp !== a.sp && offspringSp !== b.sp) return { ok: false, reason: 'bad-species' };
+  const lifetime = await lifetimeStepsSum();
+  const credit = await kvGet('petBreedCredit', null);
+  if (credit != null && lifetime - credit < BREED_COOLDOWN_STEPS) {
+    return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
+  }
+  const offLineage = Math.max(a.lineage || 0, b.lineage || 0) + 1;
+  const cost = breedCost(offLineage);
+  if ((await boneDust()) < cost) return { ok: false, reason: 'dust', cost };
+  // consume both parents, add the offspring
+  const off = breedOffspring(a, b, offspringSp, newIid(offspringSp));
+  list = removeInstance(list, iidA).instances;
+  list = removeInstance(list, iidB).instances;
+  list = addInstance(list, off);
+  await savePetInstances(list);
+  await boneDustAdd(-cost);
+  await kvSet('petBreedCredit', lifetime);
+  // a parent species may now be extinct: drop ownership + unequip
+  for (const sp of [a.sp, b.sp]) {
+    if (speciesCount(list, sp) === 0) {
+      const inv = await db.all('inv');
+      const row = inv.find(r => r.kind === 'cos' && r.itemId === sp);
+      if (row) await db.del('inv', row.id);
+      const eq = await equipped();
+      if (eq.C === sp) await equip('C', null);
+      const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[sp]; await kvSet('pets', petsRec);
+    }
+  }
+  return { ok: true, offspring: off, cost };
+}
 
 let _iidSeq = 0;
 function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSeq}-${sp}`; }
@@ -287,6 +353,11 @@ export async function isPetShiny(petId) {
 }
 export async function shinyPetIds() {
   return [...new Set((await petInstances()).filter(x => x.shiny).map(x => x.sp))];
+}
+// The lineage of the instance the game fights with for a species (best copy).
+export async function bestPetLineage(petId) {
+  const b = bestInstance(await petInstances(), petId);
+  return b ? (b.lineage || 0) : 0;
 }
 // How many copies of each species you hold (backpack shows this).
 export async function petCounts() {

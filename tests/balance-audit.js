@@ -113,7 +113,7 @@ const POLICIES = {
 };
 
 function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
-  const player = makeFighter({ name: 'P', stats, talents, weaponId: weaponId || 'starter', pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || []) : null });
+  const player = makeFighter({ name: 'P', stats, talents, weaponId: weaponId || 'starter', pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || [], { lineage: pet.lineage || 0, shiny: pet.shiny || false }) : null });
   const foe = makeFighter({
     name: 'F',
     stats: scaleStats(stats, foeCfg.mult),
@@ -255,6 +255,19 @@ for (const wins of [0, 3, 6, 9, 12, 18, 30]) {
   const spam = cellPet({ stats, foeCfg, policy: POLICIES.spamMelee, pet: escPet });
   const addTag = e.add ? 'yes' : ' no';
   console.log(`  ${String(wins).padStart(4)}  ${String(foeCfg.mult).padStart(6)}  ${e.aiLevel}   ${addTag}   ${String(smart.win).padStart(8)}%   ${String(spam.win).padStart(7)}%   ${String(smart.turns).padStart(10)}`);
+}
+// v128 breeding sanity: a bred (high-lineage) pet should be a real boost but must
+// not trivialize a low-progression boss (wins 0) — the endgame stays in the bosses'
+// scaling, not in a maxed pet. Shows smart-win% vs the wins-0 boss at lineage 0/3/6.
+console.log('\n--- v128 lineage boost vs a low-progression boss (wins 0) ---');
+console.log('  lineage  smart-win%   (should climb but not hit ~100%)');
+{
+  const e0 = escalateDen(ESC_DEN, 0);
+  const foeCfg0 = { key: 'boss', mult: e0.bossMult != null ? e0.bossMult : e0.mult, rung: e0.aiLevel, talents: ESC_DEN.talents, add: e0.add };
+  for (const lin of [0, 3, 6]) {
+    const r = cellPet({ stats, foeCfg: foeCfg0, policy: POLICIES.smart, pet: { id: 'C3', level: 6, picks: [], lineage: lin } });
+    console.log(`  ${String(lin).padStart(7)}  ${String(r.win).padStart(8)}%`);
+  }
 }
 // helper: cell() with a pet attached to the player
 function cellPet({ stats, foeCfg, policy, pet }) {

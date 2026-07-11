@@ -2048,6 +2048,23 @@ body::before {
 .pet-card-meta b { font-size: 14px; }
 .pet-role { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .pet-count { position: absolute; right: -4px; bottom: -3px; background: var(--accent); color: #10210a; font-size: 10px; font-weight: 800; line-height: 1; padding: 2px 4px; border-radius: 7px; border: 1.5px solid var(--bg, #0c0f0a); }
+/* v128 breeding: lineage tag + a glow that brightens with each bred tier */
+.lin-tag { font-size: 10px; font-weight: 800; color: #ffd34d; letter-spacing: .03em; vertical-align: middle; }
+.lin-1 { filter: drop-shadow(0 0 3px rgba(255, 211, 77, .45)); }
+.lin-2 { filter: drop-shadow(0 0 5px rgba(255, 211, 77, .55)); }
+.lin-3 { filter: drop-shadow(0 0 7px rgba(255, 200, 90, .65)); }
+.lin-4 { filter: drop-shadow(0 0 9px rgba(255, 180, 110, .72)); }
+.lin-5 { filter: drop-shadow(0 0 11px rgba(255, 150, 140, .8)); }
+.lin-6 { filter: drop-shadow(0 0 14px rgba(255, 120, 170, .88)); }
+.pet-card.lin-1, .pet-card.lin-2, .pet-card.lin-3, .pet-card.lin-4, .pet-card.lin-5, .pet-card.lin-6 { filter: none; } /* card itself stays flat; glow rides the sprite */
+.breed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; margin: 8px 2px; }
+.breed-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 6px; background: rgba(255, 255, 255, .05); border: 2px solid transparent; border-radius: 12px; cursor: pointer; }
+.breed-tile.sel { border-color: var(--accent); background: rgba(165, 232, 71, .14); }
+.breed-lin { font-size: 10px; font-weight: 800; color: #ffd34d; letter-spacing: .03em; }
+.breed-out { margin: 6px 2px; }
+.breed-sp { display: flex; gap: 8px; flex-wrap: wrap; }
+.breed-sp .chip { padding: 6px 12px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 2px solid transparent; font-weight: 700; font-size: 13px; cursor: pointer; }
+.breed-sp .chip.on { border-color: var(--accent); background: rgba(165, 232, 71, .14); }
 .crate-ico { position: relative; }
 .pet-stats { font-size: 11.5px; letter-spacing: .02em; color: var(--muted); }
 .pet-stats b { font-size: 12.5px; font-weight: 800; color: var(--ink); }

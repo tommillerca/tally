@@ -27,7 +27,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petStepsSince, petPicks, setPetPick, petCounts, creditEquippedPetSteps } from './loot.js';
+import { petStepsSince, petPicks, setPetPick, petCounts, creditEquippedPetSteps, bestPetLineage, petInstances, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -3130,6 +3130,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
+    const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
       ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
       ${pendingLoot.map((p, i) => `
@@ -3180,6 +3181,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
       <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Feed pets you don't want here. Bad drops and dupe eggs still pay off.</p>
       ${ownedPets.length ? ownedPets.map(p => { const n = pCounts[p.id] || 1; return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(p)}" alt="" style="width:27px;height:27px;object-fit:contain">${n > 1 ? `<span class="pet-count">×${n}</span>` : ''}</span><div style="flex:1"><b>${esc(p.name)}</b><small>${RARITIES[p.rarity].label} pet${n > 1 ? ` · ${n} copies` : ''}</small></div><button class="btn small danger" data-salvage="${p.id}">+${petDustValue(p)} dust</button></div>`; }).join('') : '<p class="note" style="margin:2px 2px 8px">No pets to salvage. Hatch eggs by walking.</p>'}
+      <div class="sect-h">Breeding Pen · fuse two pets into a stronger one</div>
+      <p class="note" style="margin:0 2px 8px">Combine two pets (both are used up) into one offspring with a higher <b>lineage</b>: a permanent stat boost and brighter glow, stackable forever. Costs Bone Dust + a walk between breeds.</p>
+      <button class="btn small" id="openBreed" ${(pCountTotal || 0) < 2 ? 'disabled' : ''}>${(pCountTotal || 0) < 2 ? 'Need 2+ pets to breed' : 'Open Breeding Pen'}</button>
       <div class="sect-h">Bone Dust Shop</div>
       <div class="grid2">
         ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
@@ -3216,6 +3220,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2800);
       renderCharacter(wrap, 'crates');
     }));
+    $('#openBreed', content)?.addEventListener('click', () => openBreedPen(wrap));
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
       btn.disabled = true;
       const res = await buyWithDust(btn.dataset.dustbuy);
@@ -3314,17 +3319,18 @@ function petPanelHtml(petId, fighter) {
   const tree = PET_TREES[fam.key];
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   const shiny = S.shinyPets.has(petId);
+  const lineage = meta.lineage || 0;
   const rarity = (BH_BY_ID[petId] || {}).rarity || 'common';
-  const bs = petBattleStats(petId, lvl, shiny); // intrinsic battle stats (rarity + tilt + shiny)
+  const bs = petBattleStats(petId, lvl, shiny, lineage); // intrinsic battle stats (rarity + tilt + shiny + lineage)
   const statLine = `<span class="pet-stats"><b>${bs.power}</b> PWR · <b>${bs.hp}</b> HP · <b>${bs.reflex}</b> REF</span>`;
   return `
-    <div class="pet-card r-${rarity}${shiny ? ' is-shiny' : ''}">
+    <div class="pet-card r-${rarity} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
-        <b>${esc(fam.name)}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">★${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8% to all stats.' : ''}</span>
+        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8%.' : ''}${lineage ? ` Lineage ★${lineage}: +${lineage * 5}% to all stats.` : ''}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -3569,6 +3575,88 @@ function openPetLevelUp(petId, level, prevLevel, newTalent) {
   $('#celeOk', wrap).addEventListener('click', () => history.back());
   const tb = $('#petTalentBtn', wrap);
   if (tb) tb.addEventListener('click', () => { history.back(); openCharacter('wardrobe'); });
+}
+
+const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those pets is no longer here.', 'bad-species': 'Choose the offspring species.', cooldown: 'Walk a bit more before breeding again.', dust: 'Not enough Bone Dust.' };
+
+// The Breeding Pen: pick two pets, both are consumed, out comes a higher-lineage
+// offspring. Selection state lives in this closure and the sheet re-renders on tap.
+async function openBreedPen(charWrap) {
+  let sel = [];      // up to two selected iids
+  let offSp = null;  // chosen offspring species
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Breeding Pen</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="breedBody"></div>`, { cls: 'full' });
+  async function render() {
+    const body = $('#breedBody', wrap);
+    if (!body) return;
+    const [insts, st] = await Promise.all([petInstances(), breedStatus()]);
+    sel = sel.filter(iid => insts.some(x => x.iid === iid)); // drop stale picks
+    const a = sel[0] ? insts.find(x => x.iid === sel[0]) : null;
+    const b = sel[1] ? insts.find(x => x.iid === sel[1]) : null;
+    const pair = a && b;
+    if (pair && offSp !== a.sp && offSp !== b.sp) offSp = a.sp;
+    const offLineage = pair ? Math.max(a.lineage || 0, b.lineage || 0) + 1 : 0;
+    const cost = breedCost(offLineage);
+    const afford = st.dust >= cost;
+    const canBreedNow = pair && st.ready && afford;
+    const tiles = insts.map(x => {
+      const it = BH_BY_ID[x.sp] || {};
+      return `<button class="breed-tile r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${sel.includes(x.iid) ? ' sel' : ''}${x.shiny ? ' is-shiny' : ''}" data-iid="${x.iid}">
+        ${petSpriteHtml(x.sp, 44, !petHovers(x.sp))}
+        <span class="breed-lin">${x.lineage ? '★' + x.lineage : 'L0'}${x.shiny ? ' ✦' : ''}</span>
+      </button>`;
+    }).join('');
+    const spOptions = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
+      .map(x => `<button class="chip ${offSp === x.sp ? 'on' : ''}" data-offsp="${x.sp}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}</button>`).join('') : '';
+    body.innerHTML = `
+      <p class="note">Pick two pets to fuse. Both are used up. The offspring's lineage is the higher parent + 1, a permanent stat boost you can keep stacking.</p>
+      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${st.dust.toLocaleString()}</b></div>
+      <div class="breed-grid">${tiles}</div>
+      ${pair ? `<div class="breed-out">
+          <div class="sect-h">Offspring species</div>
+          <div class="breed-sp">${spOptions}</div>
+          <p class="note" style="margin-top:6px">${esc((BH_BY_ID[offSp] || {}).name || offSp)} · <b>Lineage ★${offLineage}</b> (+${Math.round(offLineage * 5)}% to all stats)${a.shiny || b.shiny ? ' · inherits ✦ Shiny' : ''}</p>
+          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">◆</span> ${cost}${afford ? '' : ' — not enough'}</b></div>
+          ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before you can breed again.</p>`}
+          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed (consumes both)</button>
+        </div>` : '<p class="note" style="text-align:center;margin-top:12px">Select two pets above.</p>'}`;
+    $$('[data-iid]', body).forEach(t => t.addEventListener('click', () => {
+      const iid = t.dataset.iid;
+      if (sel.includes(iid)) sel = sel.filter(x => x !== iid);
+      else if (sel.length < 2) sel.push(iid);
+      else sel = [sel[1], iid];
+      offSp = null; render();
+    }));
+    $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
+    $('#doBreed', body)?.addEventListener('click', async () => {
+      const res = await breedPets(sel[0], sel[1], offSp);
+      if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
+      sel = []; offSp = null;
+      history.back();
+      openPetBreedResult(res.offspring);
+      setTimeout(() => renderCharacter(charWrap, 'crates'), 300);
+    });
+  }
+  render();
+}
+
+// Breeding pay-off reveal, styled like the level-up: the offspring on a burst of
+// rays with its new lineage star.
+function openPetBreedResult(off) {
+  const it = BH_BY_ID[off.sp] || {};
+  confettiRain(70); levelSound(S.sounds);
+  const wrap = openSheet(`
+    <div class="sheet-body" style="text-align:center;padding-top:14px">
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petSpriteHtml(off.sp, 104, !petHovers(off.sp))}</div></div>
+      <div class="lvl-stamp" style="font-size:28px">LINEAGE ★${off.lineage}!</div>
+      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
+      <div style="height:16px"></div>
+      <button class="btn" id="celeOk">Adopt</button>
+      <div style="height:6px"></div>
+    </div>`);
+  $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
 async function ingestHkFromUrl() {
@@ -4105,8 +4193,9 @@ async function buildFighter() {
     const steps = await petStepsSince(eqForPet.C);
     const pl = petLevel(steps);
     const picks = await petPicks(eqForPet.C);
-    battlePet = buildBattlePet(eqForPet.C, pl, picks, { shiny: S.shinyPets.has(eqForPet.C) });
-    petMeta = { id: eqForPet.C, level: pl, picks, steps };
+    const lineage = await bestPetLineage(eqForPet.C);
+    battlePet = buildBattlePet(eqForPet.C, pl, picks, { shiny: S.shinyPets.has(eqForPet.C), lineage });
+    petMeta = { id: eqForPet.C, level: pl, picks, steps, lineage };
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
@@ -4115,7 +4204,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v127'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v128'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4447,7 +4536,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>

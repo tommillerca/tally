@@ -117,15 +117,20 @@ export const PET_STATS = {
 // Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
 // flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.
 export const SHINY_STAT_MULT = 1.08;
+// v128 breeding: each LINEAGE tier (bred by fusing two pets) adds a flat % to every
+// stat. Stackable forever — the endless "sink two pets to make a stronger one" chase.
+export const PET_LINEAGE_STEP = 0.05; // +5% per lineage tier
 
 // The single source of truth for a battle-pet's intrinsic stat line (engine AND
 // UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
-// owner's Marrow on top. Commons at level L reproduce the pre-v124 generic line.
-export function petBattleStats(petId, level = 1, shiny = false) {
+// owner's Marrow on top. Commons at level L (lineage 0, no shiny) reproduce the
+// pre-v124 generic line.
+export function petBattleStats(petId, level = 1, shiny = false, lineage = 0) {
   const L = Math.max(1, level);
+  const lin = Math.max(0, Math.floor(lineage || 0));
   const p = PET_STATS[petId] || { rarity: 'common', mult: 1, tilt: {} };
   const t = p.tilt || {};
-  const m = p.mult * (shiny ? SHINY_STAT_MULT : 1);
+  const m = p.mult * (shiny ? SHINY_STAT_MULT : 1) * (1 + lin * PET_LINEAGE_STEP);
   return {
     power:  Math.round((10 + L * 4) * m * (t.power  || 1)),
     marrow: Math.round(20            * m * (t.marrow || 1)),
@@ -134,6 +139,7 @@ export function petBattleStats(petId, level = 1, shiny = false) {
     hype: 0,
     hp:     Math.round((40 + L * 8)  * m * (t.marrow || 1)),
     rarity: p.rarity,
+    lineage: lin,
   };
 }
 
@@ -175,7 +181,8 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
   const fam = familyOf(petId);
   const has = id => picks.includes(id);
   const shiny = !!opts.shiny;
-  const stats = petBattleStats(petId, level, shiny);
+  const lineage = Math.max(0, Math.floor(opts.lineage || 0));
+  const stats = petBattleStats(petId, level, shiny, lineage);
   return {
     id: petId,
     family: fam.key,
@@ -184,6 +191,7 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
     color: fam.color,
     level,
     shiny,
+    lineage,
     rarity: stats.rarity,
     stats,                    // intrinsic battle stats (power/marrow/wind/reflex/hp)
     passive: fam.passive,
