@@ -2058,8 +2058,8 @@ body::before {
 /* Pet stands BEHIND its owner at the lower-outer side, so the owner occludes any
    overlap (natural depth, not "stacked on top") and the cloud's rain falls behind
    the bonehead rather than over it. Floor-aligned; mostly clear to the side. */
-.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 1; }
-.fighterG > .fstage { position: relative; z-index: 2; }                /* the fighter sits in front of their pet */
+.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 3; }
+/* pet renders IN FRONT of its owner (z-index above the fighter's own stage) */
 .you-side .pet-fighter { left: -22px; }                                /* your pet: just to your lower-left */
 .foe-side .pet-fighter.add { right: 96px; }                            /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
@@ -2070,6 +2070,9 @@ body::before {
 .fstage.petmini { width: 76px; height: 76px; min-height: 76px; display: flex; align-items: flex-end; justify-content: center; }
 .fstage.petmini .petanim { margin: 0; }                 /* kill the auto-centering so flex-end grounds it */
 .fstage.petmini > img { object-position: center bottom; } /* static pet fallbacks sit on the floor too */
+/* airborne pets (duck, bug) hover in mid-air instead of standing on the floor */
+.fstage.petmini.flyer { align-items: center; }
+.fstage.petmini.flyer > img { object-position: center; }
 .fstage.petmini img { width: 100%; height: 100%; object-fit: contain; }
 /* Float the pet's name/HP ABOVE the sprite (like the fighter's own bars) instead
    of below it, so the sprite reaches the floor and the creature isn't lifted. */
