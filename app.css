@@ -2058,11 +2058,11 @@ body::before {
 /* Pet stands BEHIND its owner at the lower-outer side, so the owner occludes any
    overlap (natural depth, not "stacked on top") and the cloud's rain falls behind
    the bonehead rather than over it. Floor-aligned; mostly clear to the side. */
-.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 4; }
-/* pet renders IN FRONT of its owner (z-index 4 > the fighter's stage), at the
-   fighter's FRONT foot, toward the middle of the arena — mirroring how enemy
-   outfits place their companion (Tom's approved reference: the foe's lizard).
-   Slight leg overlap only; never on the body, never off the outer edge. */
+.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 1; }
+.fighterG > .fstage { position: relative; z-index: 2; }  /* the FIGHTER is closer to the screen; the pet tucks behind */
+/* pet at the fighter's FRONT foot, toward the middle of the arena, BEHIND its
+   owner — the fighter's leading arm/leg overlaps the pet (Tom's approved
+   reference: the foe's lizard). Never on the body, never off the outer edge. */
 .you-side .pet-fighter { left: 74px; }
 .foe-side .pet-fighter.add { right: 96px; }                            /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
