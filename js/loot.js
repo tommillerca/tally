@@ -124,16 +124,25 @@ export async function disenchantGear(gearId) {
 export async function salvagePet(petId) {
   const item = BH_BY_ID[petId];
   if (!item || item.slot !== 'C') return { ok: false, reason: 'not-a-pet' };
-  const inv = await db.all('inv');
-  const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
-  if (!row) return { ok: false, reason: 'not-owned' }; // base/default pets can't be salvaged
-  const eq = await equipped();
-  if (eq.C === petId) await equip('C', null);
-  await db.del('inv', row.id);
-  const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
-  const dust = petDustValue(item);
+  const list = await petInstances();
+  if (!speciesCount(list, petId)) return { ok: false, reason: 'not-owned' };
+  // sacrifice the WORST copy first (keeps your best / shinies); a better copy
+  // pays out more dust so salvaging a shiny or bred pet still feels fair.
+  const { instances, removed } = removeWorstInstance(list, petId);
+  await savePetInstances(instances);
+  const remaining = speciesCount(instances, petId);
+  if (remaining === 0) {
+    // last copy gone: drop ownership, unequip, clear the legacy anchor
+    const inv = await db.all('inv');
+    const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
+    if (row) await db.del('inv', row.id);
+    const eq = await equipped();
+    if (eq.C === petId) await equip('C', null);
+    const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
+  }
+  const dust = petDustValue(item) + (removed && removed.shiny ? 15 : 0) + (removed ? (removed.lineage || 0) * 8 : 0);
   await boneDustAdd(dust);
-  return { ok: true, dust, name: item.name };
+  return { ok: true, dust, name: item.name, remaining };
 }
 
 // Bone Dust shop: spend salvage on a fresh shot at pets / crates / consumables.
@@ -180,52 +189,110 @@ export function eggProgress(row, lifetime) {
 // owned pet to shiny instead of paying coins.
 export const SHINY_CHANCE = 0.03;
 
-// Crack a ready egg: rolls a PET (slot C), unowned first, dupe pays coins.
+// Crack a ready egg: rolls a PET (slot C). A NEW species if you're missing any
+// (rarity-weighted, uncommon floor), otherwise a DUPLICATE that stacks in your
+// crew as breeding stock (v126: no more coins dead-end when you own them all).
 export async function hatchEgg(invId) {
   const inv = await inventory();
   const row = inv.find(r => r.id === invId && r.kind === 'egg');
   if (!row) throw new Error('egg gone');
   const { ready } = eggProgress(row, await lifetimeStepsSum());
   if (!ready) return { ready: false };
+  await db.del('inv', row.id);
   const owned = await ownedCosmeticIds();
   const pets = BH_ITEMS.filter(i => i.slot === 'C');
   const fresh = pets.filter(i => !owned.has(i.id));
-  await db.del('inv', row.id);
   const isShiny = rng() < SHINY_CHANCE;
-  const pets2 = (await kvGet('pets', {})) || {};
-  if (!fresh.length) {
-    // Own them all: a shiny roll upgrades a not-yet-shiny pet; otherwise coins.
-    if (isShiny) {
-      const upg = pets.filter(i => !pets2[i.id]?.shiny);
-      if (upg.length) {
-        const pick = upg[Math.floor(rng() * upg.length)];
-        pets2[pick.id] = { ...(pets2[pick.id] || { hatchedAtSteps: await lifetimeStepsSum() }), shiny: true };
-        await kvSet('pets', pets2);
-        return { ready: true, dupe: true, shiny: true, item: pick };
-      }
-    }
-    await coinsAdd(120);
-    return { ready: true, dupe: true, coins: 120 };
-  }
-  // rarity-weighted among unowned pets (uncommon floor keeps hatches exciting)
-  const pool = fresh.filter(i => i.rarity !== 'common');
-  const pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
-  await grantCosmetic(pick.id, 'egg');
-  // anchor its battle level to now: pet level = steps walked SINCE this moment
-  if (!pets2[pick.id]) pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() };
-  if (isShiny) pets2[pick.id].shiny = true;
-  await kvSet('pets', pets2);
-  return { ready: true, item: pick, shiny: isShiny };
+  const isDupe = !fresh.length;
+  const poolAll = isDupe ? pets : fresh;
+  const pool = poolAll.filter(i => i.rarity !== 'common');
+  const pick = (pool.length ? pool : poolAll)[Math.floor(rng() * (pool.length ? pool.length : poolAll.length))];
+  await addPetInstance(pick.id, { shiny: isShiny });
+  return { ready: true, item: pick, shiny: isShiny, dupe: isDupe };
 }
 
-// Is an owned pet the shiny variant?
+/* ============ v126: pet INSTANCES (duplicates stack) ============
+ * Pets used to be one-per-species (binary ownership in `inv` + a per-species
+ * `pets` record for shiny/hatchedAtSteps). To support duplicates + breeding
+ * (v127 lineage) a pet is now an INSTANCE: { iid, sp, lineage, shiny,
+ * hatchedAtSteps }. The `petInst` kv is the authoritative list once migrated.
+ * `inv` 'cos' rows stay the "own >=1 of this species" flag (drives the wardrobe
+ * + equip, which are species-keyed), kept in lockstep with the instance count.
+ * The core transforms below are PURE so they can be unit-tested without a DB. */
+
+// Build the initial instance list from the legacy per-species state (one lineage-0
+// instance per owned species; carries its shiny + hatch anchor). Idempotent input.
+export function migrateInstances(ownedPetIds, petsRec = {}) {
+  return (ownedPetIds || []).map((sp, i) => ({
+    iid: `m${i}-${sp}`,
+    sp,
+    lineage: 0,
+    shiny: !!(petsRec[sp] && petsRec[sp].shiny),
+    hatchedAtSteps: (petsRec[sp] && petsRec[sp].hatchedAtSteps) || 0,
+  }));
+}
+// The instance the game FIGHTS with for a species: best lineage, then shiny.
+export function bestInstance(instances, sp) {
+  const of = (instances || []).filter(x => x.sp === sp);
+  if (!of.length) return null;
+  return of.slice().sort((a, b) => (b.lineage - a.lineage) || (Number(!!b.shiny) - Number(!!a.shiny)))[0];
+}
+export function speciesCount(instances, sp) { return (instances || []).filter(x => x.sp === sp).length; }
+// Salvage/breed sacrifices the WORST copy first (lowest lineage, non-shiny first)
+// so a player never loses their best or a shiny to a routine salvage.
+export function removeWorstInstance(instances, sp) {
+  const tagged = (instances || []).map((x, i) => ({ x, i })).filter(o => o.x.sp === sp);
+  if (!tagged.length) return { instances: instances || [], removed: null };
+  tagged.sort((a, b) => (a.x.lineage - b.x.lineage) || (Number(!!a.x.shiny) - Number(!!b.x.shiny)));
+  const idx = tagged[0].i;
+  return { instances: instances.filter((_, i) => i !== idx), removed: instances[idx] };
+}
+export function addInstance(instances, inst) { return [...(instances || []), inst]; }
+
+let _iidSeq = 0;
+function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSeq}-${sp}`; }
+
+// Read the instance list, migrating on first access (additive: never touches the
+// legacy `pets`/`inv` state, so a rollback to a pre-v126 build still works).
+export async function petInstances() {
+  let list = await kvGet('petInst', null);
+  if (Array.isArray(list)) return list;
+  const owned = await ownedCosmeticIds();
+  const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
+  const petsRec = (await kvGet('pets', {})) || {};
+  list = migrateInstances(ownedPets, petsRec);
+  await kvSet('petInst', list);
+  return list;
+}
+async function savePetInstances(list) { await kvSet('petInst', list); }
+
+// Add one instance of a species (a fresh hatch/dupe). Keeps the `inv` ownership
+// flag + legacy `pets` anchor in sync so species-keyed code keeps working.
+export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null } = {}) {
+  const list = await petInstances();
+  const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
+  const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
+  await savePetInstances(addInstance(list, inst));
+  await grantCosmetic(sp, 'hatch');                 // idempotent ownership flag
+  const petsRec = (await kvGet('pets', {})) || {};
+  if (!petsRec[sp]) { petsRec[sp] = { hatchedAtSteps: anchor }; }
+  if (shiny) petsRec[sp].shiny = true;
+  await kvSet('pets', petsRec);
+  return inst;
+}
+
+// Is an owned pet the shiny variant? (any instance of the species is shiny)
 export async function isPetShiny(petId) {
-  const pets2 = (await kvGet('pets', {})) || {};
-  return !!pets2[petId]?.shiny;
+  return (await petInstances()).some(x => x.sp === petId && x.shiny);
 }
 export async function shinyPetIds() {
-  const pets2 = (await kvGet('pets', {})) || {};
-  return Object.keys(pets2).filter(id => pets2[id]?.shiny);
+  return [...new Set((await petInstances()).filter(x => x.shiny).map(x => x.sp))];
+}
+// How many copies of each species you hold (backpack shows this).
+export async function petCounts() {
+  const counts = {};
+  for (const x of await petInstances()) counts[x.sp] = (counts[x.sp] || 0) + 1;
+  return counts;
 }
 
 // The steps a pet has walked since it hatched (drives its battle level).
@@ -238,16 +305,14 @@ export async function grantPet(petId, source = 'code') {
   let pick;
   if (petId === 'random') {
     const fresh = pets.filter(i => !owned.has(i.id));
-    if (!fresh.length) return null;
-    const pool = fresh.filter(i => i.rarity !== 'common');
-    pick = (pool.length ? pool : fresh)[Math.floor(rng() * (pool.length ? pool.length : fresh.length))];
+    const poolAll = fresh.length ? fresh : pets;   // own them all -> a stacking dupe
+    const pool = poolAll.filter(i => i.rarity !== 'common');
+    pick = (pool.length ? pool : poolAll)[Math.floor(rng() * (pool.length ? pool.length : poolAll.length))];
   } else {
     pick = BH_BY_ID[petId];
-    if (!pick || pick.slot !== 'C' || owned.has(petId)) return null;
+    if (!pick || pick.slot !== 'C') return null;   // owning it already is fine now (dupes stack)
   }
-  await grantCosmetic(pick.id, source);
-  const pets2 = (await kvGet('pets', {})) || {};
-  if (!pets2[pick.id]) { pets2[pick.id] = { hatchedAtSteps: await lifetimeStepsSum() }; await kvSet('pets', pets2); }
+  await addPetInstance(pick.id, {});
   return pick;
 }
 
@@ -279,10 +344,10 @@ export async function redeemCode(raw) {
 }
 
 export async function petStepsSince(petId) {
-  const pets = (await kvGet('pets', {})) || {};
-  const rec = pets[petId];
   const now = await lifetimeStepsSum();
-  return Math.max(0, now - (rec ? rec.hatchedAtSteps : 0)); // pre-existing pets: count all steps
+  const best = bestInstance(await petInstances(), petId);
+  const anchor = best ? best.hatchedAtSteps : (((await kvGet('pets', {})) || {})[petId]?.hatchedAtSteps || 0);
+  return Math.max(0, now - anchor); // pre-existing pets: count all steps
 }
 export async function petPicks(petId) {
   const all = (await kvGet('pettalents', {})) || {};

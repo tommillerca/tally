@@ -27,7 +27,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petStepsSince, petPicks, setPetPick } from './loot.js';
+import { petStepsSince, petPicks, setPetPick, petCounts } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -2884,11 +2884,11 @@ function openHatchReveal(res, charWrap) {
       </div>
     </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : 'IT HATCHED!'}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
-         <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
+         <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : res.dupe ? 'A duplicate · joins your crew as breeding stock' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
     : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
@@ -3127,7 +3127,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'crates') {
     await migrateLegacyEggs();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     content.innerHTML = `
@@ -3179,7 +3179,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="sect-h">Salvage Bench · nothing wasted</div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
       <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Feed pets you don't want here. Bad drops and dupe eggs still pay off.</p>
-      ${ownedPets.length ? ownedPets.map(p => `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(p)}" alt="" style="width:27px;height:27px;object-fit:contain"></span><div style="flex:1"><b>${esc(p.name)}</b><small>${RARITIES[p.rarity].label} pet</small></div><button class="btn small danger" data-salvage="${p.id}">+${petDustValue(p)} dust</button></div>`).join('') : '<p class="note" style="margin:2px 2px 8px">No pets to salvage. Hatch eggs by walking.</p>'}
+      ${ownedPets.length ? ownedPets.map(p => { const n = pCounts[p.id] || 1; return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(p)}" alt="" style="width:27px;height:27px;object-fit:contain">${n > 1 ? `<span class="pet-count">×${n}</span>` : ''}</span><div style="flex:1"><b>${esc(p.name)}</b><small>${RARITIES[p.rarity].label} pet${n > 1 ? ` · ${n} copies` : ''}</small></div><button class="btn small danger" data-salvage="${p.id}">+${petDustValue(p)} dust</button></div>`; }).join('') : '<p class="note" style="margin:2px 2px 8px">No pets to salvage. Hatch eggs by walking.</p>'}
       <div class="sect-h">Bone Dust Shop</div>
       <div class="grid2">
         ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
@@ -4114,7 +4114,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v125'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v126'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

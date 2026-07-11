@@ -20,7 +20,8 @@ import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
-import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue } from '../js/loot.js';
+import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue,
+  migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
 
@@ -761,6 +762,58 @@ test('v80 wellness quests: water/bed/sleep daily + weekly self-care, all pure-po
   assert.deepEqual(WEEKLY_POOL.find(q => q.id === 'w-wellness').progress({ wellnessDays: 3 }), { cur: 3, target: 5 });
   // every wellness quest is a reward-only add (never a penalty / no negative target)
   for (const id of ['q-water', 'q-bed', 'q-sleep', 'w-wellness']) { const q = [...DAILY_POOL, ...WEEKLY_POOL].find(x => x.id === id); assert.ok(q.coins > 0, id + ' pays coins'); }
+});
+
+/* ---- v126: pet instancing (pure core) ---- */
+test('pet instancing: migration is lossless — one lineage-0 instance per owned species, shiny + anchor preserved', () => {
+  const owned = ['C1', 'C3', 'C5'];
+  const petsRec = { C1: { hatchedAtSteps: 5000, shiny: true }, C3: { hatchedAtSteps: 0 }, C5: { hatchedAtSteps: 12000 } };
+  const inst = migrateInstances(owned, petsRec);
+  assert.equal(inst.length, 3, 'one instance per owned species');
+  assert.deepEqual(inst.map(x => x.sp).sort(), ['C1', 'C3', 'C5']);
+  assert.ok(inst.every(x => x.lineage === 0), 'all start at lineage 0');
+  const c1 = inst.find(x => x.sp === 'C1');
+  assert.equal(c1.shiny, true, 'shiny carried over');
+  assert.equal(c1.hatchedAtSteps, 5000, 'hatch anchor carried over');
+  assert.equal(inst.find(x => x.sp === 'C3').shiny, false, 'non-shiny stays non-shiny');
+});
+
+test('pet instancing: migration of an empty collection yields no instances', () => {
+  assert.deepEqual(migrateInstances([], {}), []);
+  assert.deepEqual(migrateInstances(undefined, undefined), []);
+});
+
+test('pet instancing: bestInstance prefers higher lineage, then shiny', () => {
+  const list = [
+    { iid: 'a', sp: 'C1', lineage: 0, shiny: true },
+    { iid: 'b', sp: 'C1', lineage: 2, shiny: false },
+    { iid: 'c', sp: 'C1', lineage: 0, shiny: false },
+  ];
+  assert.equal(bestInstance(list, 'C1').iid, 'b', 'lineage wins over shiny');
+  assert.equal(bestInstance([{ iid: 'x', sp: 'C1', lineage: 0, shiny: false }, { iid: 'y', sp: 'C1', lineage: 0, shiny: true }], 'C1').iid, 'y', 'shiny breaks a lineage tie');
+  assert.equal(bestInstance(list, 'C9'), null, 'no instance -> null');
+});
+
+test('pet instancing: speciesCount + addInstance track duplicates', () => {
+  let list = [{ iid: 'a', sp: 'C1', lineage: 0, shiny: false }];
+  assert.equal(speciesCount(list, 'C1'), 1);
+  list = addInstance(list, { iid: 'b', sp: 'C1', lineage: 0, shiny: false });
+  assert.equal(speciesCount(list, 'C1'), 2, 'a duplicate stacks');
+  assert.equal(speciesCount(list, 'C2'), 0);
+});
+
+test('pet instancing: salvage removes the WORST copy first (keeps best + shinies)', () => {
+  const list = [
+    { iid: 'keep-lin', sp: 'C1', lineage: 3, shiny: false },
+    { iid: 'keep-shiny', sp: 'C1', lineage: 0, shiny: true },
+    { iid: 'worst', sp: 'C1', lineage: 0, shiny: false },
+  ];
+  const r1 = removeWorstInstance(list, 'C1');
+  assert.equal(r1.removed.iid, 'worst', 'lowest-lineage non-shiny goes first');
+  assert.equal(speciesCount(r1.instances, 'C1'), 2);
+  const r2 = removeWorstInstance(r1.instances, 'C1');
+  assert.equal(r2.removed.iid, 'keep-shiny', 'shiny preferred over the lineage-3 copy when both remain');
+  assert.equal(removeWorstInstance([], 'C1').removed, null, 'nothing to remove -> null');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
