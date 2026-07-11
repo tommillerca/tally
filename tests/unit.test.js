@@ -21,7 +21,7 @@ import {
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue,
-  migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance } from '../js/loot.js';
+  migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
 
@@ -814,6 +814,19 @@ test('pet instancing: salvage removes the WORST copy first (keeps best + shinies
   const r2 = removeWorstInstance(r1.instances, 'C1');
   assert.equal(r2.removed.iid, 'keep-shiny', 'shiny preferred over the lineage-3 copy when both remain');
   assert.equal(removeWorstInstance([], 'C1').removed, null, 'nothing to remove -> null');
+});
+
+test('pet leveling: steps credit ONLY the equipped species (benched pets frozen)', () => {
+  let bank = { C1: 1000, C2: 500 };
+  bank = creditSteps(bank, 'C1', 300); // walk while C1 is equipped
+  assert.equal(bank.C1, 1300, 'equipped pet banks the steps');
+  assert.equal(bank.C2, 500, 'benched pet is untouched');
+  bank = creditSteps(bank, 'C3', 200); // equip a fresh species
+  assert.equal(bank.C3, 200, 'a newly-equipped species starts banking from 0');
+  assert.equal(bank.C1, 1300, 'the previously-equipped pet is now frozen');
+  const before = { C1: 1300 };
+  assert.deepEqual(creditSteps(before, 'C1', 0), before, 'zero delta is a no-op');
+  assert.deepEqual(creditSteps(before, null, 500), before, 'no equipped pet -> nothing banked');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

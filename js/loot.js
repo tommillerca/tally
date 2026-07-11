@@ -343,11 +343,57 @@ export async function redeemCode(raw) {
   return { ok: true, pet, coins, dupe };
 }
 
+/* ---- v127-prep: BANKED per-pet leveling. Only the EQUIPPED pet earns steps, so
+ * the player chooses which pet to invest in instead of all of them levelling in
+ * lockstep. `petLvlSteps` kv banks walked-while-equipped steps per species;
+ * `petStepCredit` is the lifetime-steps checkpoint we last credited from. ---- */
+
+// pure: add a step delta to one species' bank (used by the crediting flow + tests)
+export function creditSteps(bank, species, delta) {
+  const out = { ...(bank || {}) };
+  if (species && delta > 0) out[species] = (out[species] || 0) + delta;
+  return out;
+}
+
+// The per-species banked-step map. First access MIGRATES from the old
+// hatch-anchor model so no pet loses its current level, and sets the credit
+// checkpoint so past steps aren't retroactively dumped onto the equipped pet.
+export async function petLevelBank() {
+  let bank = await kvGet('petLvlSteps', null);
+  if (bank) return bank;
+  bank = {};
+  const insts = await petInstances();
+  const lifetime = await lifetimeStepsSum();
+  for (const sp of [...new Set(insts.map(x => x.sp))]) {
+    const best = bestInstance(insts, sp);
+    bank[sp] = Math.max(0, lifetime - (best ? best.hatchedAtSteps || 0 : 0)); // preserve current level
+  }
+  await kvSet('petLvlSteps', bank);
+  if ((await kvGet('petStepCredit', null)) == null) await kvSet('petStepCredit', lifetime);
+  return bank;
+}
+
+// Credit steps walked since the last checkpoint to the CURRENTLY EQUIPPED pet
+// only. Idempotent: advancing the checkpoint means a second call adds nothing.
+export async function creditEquippedPetSteps() {
+  await petLevelBank(); // ensure migrated + checkpoint set
+  const lifetime = await lifetimeStepsSum();
+  const credit = await kvGet('petStepCredit', lifetime);
+  const delta = Math.max(0, lifetime - credit);
+  await kvSet('petStepCredit', lifetime);
+  const eqC = (await equipped()).C;
+  if (delta > 0 && eqC) {
+    const bank = creditSteps(await petLevelBank(), eqC, delta);
+    await kvSet('petLvlSteps', bank);
+  }
+  return { delta, credited: delta > 0 ? eqC : null };
+}
+
+// Steps banked toward this species' level (drives petLevel). Only grows while
+// the species is equipped; a benched pet's progress is frozen.
 export async function petStepsSince(petId) {
-  const now = await lifetimeStepsSum();
-  const best = bestInstance(await petInstances(), petId);
-  const anchor = best ? best.hatchedAtSteps : (((await kvGet('pets', {})) || {})[petId]?.hatchedAtSteps || 0);
-  return Math.max(0, now - anchor); // pre-existing pets: count all steps
+  const bank = await petLevelBank();
+  return Math.max(0, bank[petId] || 0);
 }
 export async function petPicks(petId) {
   const all = (await kvGet('pettalents', {})) || {};

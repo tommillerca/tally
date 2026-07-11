@@ -27,7 +27,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petStepsSince, petPicks, setPetPick, petCounts } from './loot.js';
+import { petStepsSince, petPicks, setPetPick, petCounts, creditEquippedPetSteps } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -3521,6 +3521,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
 // falling back to a toast only if a sheet/fight is already open. First sighting
 // records silently (no retroactive spam).
 async function checkPetLevelUp() {
+  await creditEquippedPetSteps(); // only the equipped pet banks the steps you just walked
   const eq = await equipped();
   if (!eq.C) return;
   const cur = petLevel(await petStepsSince(eq.C));
@@ -4114,7 +4115,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v126'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v127'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
