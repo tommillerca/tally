@@ -75,14 +75,39 @@ const S = {
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
 };
 
+// The pet art PNGs draw the creature small in the lower-right of a 640² canvas,
+// so a plain <img> renders tiny. These are the measured content bounding boxes
+// (fractions of the square) so we can crop each pet to its art and scale it to
+// fill the slot — matching the tightly-framed animated pets (cloud/lizard).
+const PET_CROP = {
+  C1: { x0: 0.564, y0: 0.609, x1: 0.845, y1: 0.887 },
+  C2: { x0: 0.550, y0: 0.597, x1: 0.912, y1: 0.844 },
+  C3: { x0: 0.547, y0: 0.617, x1: 0.891, y1: 0.875 },
+  C4: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 },
+  C5: { x0: 0.542, y0: 0.644, x1: 0.836, y1: 0.873 },
+};
+// Render a static pet image cropped to its content and scaled to ~fill a px box.
+// ground=true seats the art on the box floor; else it's vertically centered (hover).
+function croppedPetImg(petId, px, ground = false) {
+  const src = bhAsset(BH_BY_ID[petId]);
+  const c = PET_CROP[petId];
+  if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
+  const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
+  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
+  const imgSize = (px * FILL) / Math.max(cw, ch);      // displayed size of the whole square image
+  const tx = (px - cw * imgSize) / 2 - c.x0 * imgSize; // center content horizontally
+  const ty = ground ? (px - c.y1 * imgSize)            // seat content bottom on the floor
+                     : ((px - ch * imgSize) / 2 - c.y0 * imgSize); // else center (hover)
+  return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt=""></span>`;
+}
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
-// layer stack (C1/C4) or the plain base image. Shiny state is cached in
+// layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
 // S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
-function petSpriteHtml(petId, px) {
+function petSpriteHtml(petId, px, ground = false) {
   if (S.shinyPets.has(petId)) {
     return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, px) || `<img src="${bhAsset(BH_BY_ID[petId])}" alt="">`;
+  return animatedPetHtml(petId, px) || croppedPetImg(petId, px, ground);
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
 
@@ -4357,7 +4382,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
           <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>

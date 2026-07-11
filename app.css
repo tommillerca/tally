@@ -2069,11 +2069,9 @@ body::before {
    meant to hover — it carries its own baked ground shadow. */
 .fstage.petmini { width: 76px; height: 76px; min-height: 76px; display: flex; align-items: flex-end; justify-content: center; }
 .fstage.petmini .petanim { margin: 0; }                 /* kill the auto-centering so flex-end grounds it */
-.fstage.petmini > img { object-position: center bottom; } /* static pet fallbacks sit on the floor too */
-/* airborne pets (duck, bug) hover in mid-air instead of standing on the floor */
-.fstage.petmini.flyer { align-items: center; }
-.fstage.petmini.flyer > img { object-position: center; }
-.fstage.petmini img { width: 100%; height: 100%; object-fit: contain; }
+/* static pets render through croppedPetImg (.petcrop) — a content-cropped, scaled
+   img whose own transform seats/centers it; the wrapper just clips to the slot. */
+.petcrop { position: relative; display: inline-block; overflow: hidden; }
 /* Float the pet's name/HP ABOVE the sprite (like the fighter's own bars) instead
    of below it, so the sprite reaches the floor and the creature isn't lifted. */
 .petplate { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; width: max-content; display: grid; gap: 2px; justify-items: center; }
