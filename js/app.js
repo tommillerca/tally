@@ -3853,7 +3853,7 @@ async function openMap() {
         if (!rec) {
           const el = document.createElement('div');
           el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''} ${s.far ? 'far' : ''}`;
-          el.innerHTML = `${spawnIcon(s.type, 20)}<span class="spawn-ing">${ingIconHtml(spawnIngredient(s).id,15)}</span>`;
+          el.innerHTML = spawnIcon(s.type, 20); // ingredient is a surprise on collect, not previewed
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         } else {
@@ -3874,7 +3874,7 @@ async function openMap() {
       if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
       const ro = $('#mapReadout', body);
       if (ro) ro.innerHTML = nearest
-        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> ${(() => { const ing = INGREDIENTS[spawnIngredient(nearest).id]; return `<span class="ro-ing">${ingIconHtml(ing.id,15)} ${esc(ing.name)}</span>`; })()} · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
+        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
         : 'Cleared nearby. Keep walking, spawns keep surfacing across the map.';
       const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
@@ -4317,10 +4317,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
   let settled = false;
   let showMore = false;
 
+  // mini + boss fights are launched from the Boneyard map, not the Pit; the
+  // done/flee copy and the return target follow from that.
+  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss';
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(foeCfg.name)}</h2><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
-    { cls: 'full', onClose: () => { if (!fight.over && !settled) toast('You slipped out of The Pit. No harm done.'); } });
+    { cls: 'full', onClose: () => { if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.'); } });
 
   const body = $('#fightBody', wrap);
   body.innerHTML = `
@@ -5028,7 +5031,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           </div>` : ''}
           ${rewardHtml}
           <div style="height:12px"></div>
-          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip loot · back to the map' : 'Back to The Pit'}</button>
+          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip loot · back to the map' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);
       const overEl = $('.fight-over', body);
       if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
@@ -5038,7 +5041,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           const fd = $('#fightDone', body); if (fd) fd.textContent = 'Back to the map';
         });
       }
-      $('#fightDone', body).addEventListener('click', () => { history.back(); setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+      $('#fightDone', body).addEventListener('click', () => { history.back(); if (!fromMap) setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
     }, fast ? 80 : 750);
   }
 

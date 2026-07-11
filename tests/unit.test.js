@@ -520,7 +520,7 @@ test('hunt: spawns are deterministic per date+cell and differ across cells/days'
   assert.notDeepEqual(a.map(s => [s.lat, s.lng]), c.map(s => [s.lat, s.lng]));
   const d = huntMod.spawnsForCell('2026-07-03', 9857, -24625);
   assert.notDeepEqual(a.map(s => [s.lat, s.lng]), d.map(s => [s.lat, s.lng]));
-  assert.ok(a.length >= 3 && a.length <= 4);
+  assert.ok(a.length >= 2 && a.length <= 3); // SLOTS=2 base + an occasional rare
   for (const s of a) assert.ok(['bones', 'coins', 'crate', 'rare'].includes(s.type));
 });
 test('hunt: distance and bearing math', () => {

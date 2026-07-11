@@ -245,7 +245,7 @@ function miniCellOf(lat, lng) { return { cx: Math.round(lat / MINI_CELL_DEG), cy
 // A mini for one cell on one day, or null (sparse — not every cell has one).
 function miniForCell(date, cx, cy) {
   const rng = mulberry32(hashStr(`mini:${date}:${cx}:${cy}`));
-  if (rng() > 0.6) return null;   // ~60% of cells hold a mini on a given day
+  if (rng() > 0.8) return null;   // ~80% of cells hold a mini (more combat than piles)
   const lat = (cx + (rng() - 0.5) * 0.86) * MINI_CELL_DEG;
   const lng = (cy + (rng() - 0.5) * 0.86) * MINI_CELL_DEG;
   const theme = MINI_THEMES[Math.floor(rng() * MINI_THEMES.length)];

@@ -19,7 +19,7 @@ import { dateKey } from './nutrition.js';
 const CELL_DEG = 0.005;           // ~550 m grid
 export const COLLECT_RADIUS_M = 55;   // a touch roomier (Tom)
 export const SPAWN_TTL_MIN = 45;      // each spawn slot lives this long, then relocates
-const SLOTS = 3;                      // spawn slots per cell
+const SLOTS = 2;                      // spawn slots per cell (fewer coin/bone piles)
 export const NEAR_M = 1600;           // full-density hunt radius around you
 export const FAR_M = 6000;            // route-planning: crates/rares shown this far out
 export const RARE_CUE_M = 1500;       // a rare within this range earns a "stirs nearby" cue
@@ -75,7 +75,7 @@ export const SPAWN_TYPES = {
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
 };
 
-const SPAWN_WEIGHTS = ['bones', 'bones', 'bones', 'bones', 'coins', 'coins', 'crate'];
+const SPAWN_WEIGHTS = ['bones', 'bones', 'coins', 'crate']; // lighter on piles; combat (minis/dens) carries the map
 
 // Spawns for one cell at time `mins`. Each slot re-rolls its type + position on
 // its own instance, and a rare occasionally surfaces on its own slow instance.

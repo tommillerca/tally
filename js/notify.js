@@ -101,8 +101,12 @@ export async function scheduleRares(lat, lng) {
   const now = new Date();
   const nowM = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
   const curInst = Math.floor(nowM / SPAWN_TTL_MIN);
+  // Cap: at most 2 upcoming rare pushes so notifications stay a treat, not a
+  // stream (rares are common enough now that scheduling every window spams).
+  const MAX_RARE_PUSHES = 2;
   const notis = [];
   for (let i = curInst + 1; i <= curInst + 8 && i * SPAWN_TTL_MIN < 1440; i++) {
+    if (notis.length >= MAX_RARE_PUSHES) break;
     const wm = i * SPAWN_TTL_MIN;
     if (!raresNear(date, lat, lng, wm + 0.1).length) continue;
     const at = new Date(now); at.setHours(Math.floor(wm / 60), Math.round(wm % 60), 0, 0);
