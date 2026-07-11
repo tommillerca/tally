@@ -1,4 +1,5 @@
 import { buildBattlePet } from '/Users/tommiller/Documents/Hyperframes Editor/tally/js/pets.js';
+import { escalateDen } from '../js/poi.js';
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {
   makeFighter, createFight, actionsFor, applyAction, endTurn,
@@ -119,7 +120,12 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
     weaponId: foeCfg.weaponId || 'starter',
     talents: foeCfg.talents || [],
   });
-  const fight = createFight({ player, foe, seed, aiLevel: foeCfg.rung || 5 });
+  const add = foeCfg.add ? makeFighter({
+    name: 'A',
+    stats: scaleStats(stats, foeCfg.add.mult),
+    talents: foeCfg.add.talents || [],
+  }) : null;
+  const fight = createFight({ player, foe, add, seed, aiLevel: foeCfg.rung || 5 });
   let guard = 0;
   const m = { foeActions: 0, foeAttacks: 0, foeBraces: 0, playerActions: 0, foeWindSum: 0, foeWindSamples: 0 };
   while (!fight.over && guard++ < 400) {
@@ -228,3 +234,32 @@ for (const b of WEAPONIZED) {
 }
 console.log(weaponBarOk ? '  PASS: all weaponized builds stay under the 90% exploit bar' : '  FAIL: a weaponized build exceeds 90% vs the Champion');
 if (!weaponBarOk) process.exitCode = 1;
+
+// v123 boss scaling: a world boss must RAMP with dens beaten so it never runs dry.
+// Model a player carrying a maxed pet (the ally body that makes 2v1 survivable) and
+// a representative mid-tier den, escalated at increasing win counts. The ramp should
+// (a) stay beatable for an engaged player under smart play, (b) NOT stay a steamroll
+// under naive play as wins climb (the point: coasting stops working). The add IS
+// modeled here (createFight gets it), so this reflects the real 2v1 the player faces.
+const ESC_DEN = { mult: 1.05, aiLevel: 2, boss: 'Gnash', talents: ['heavyhands'] };
+const escPet = { id: 'C2', level: 6, picks: [] }; // maxed warden-style ally body
+console.log('\n--- v123 boss scaling ramp (player + maxed pet, add modeled) ---');
+console.log('  wins  effMult  ai  add   smart-win%  spam-win%  smart-turns');
+for (const wins of [0, 3, 6, 9, 12, 18, 30]) {
+  const e = escalateDen(ESC_DEN, wins);
+  const foeCfg = { key: 'boss', mult: e.bossMult != null ? e.bossMult : e.mult, rung: e.aiLevel, talents: ESC_DEN.talents, add: e.add };
+  const smart = cellPet({ stats, foeCfg, policy: POLICIES.smart, pet: escPet });
+  const spam = cellPet({ stats, foeCfg, policy: POLICIES.spamMelee, pet: escPet });
+  const addTag = e.add ? 'yes' : ' no';
+  console.log(`  ${String(wins).padStart(4)}  ${String(foeCfg.mult).padStart(6)}  ${e.aiLevel}   ${addTag}   ${String(smart.win).padStart(8)}%   ${String(spam.win).padStart(7)}%   ${String(smart.turns).padStart(10)}`);
+}
+// helper: cell() with a pet attached to the player
+function cellPet({ stats, foeCfg, policy, pet }) {
+  let w = 0, turns = 0, hp = 0;
+  for (let i = 0; i < N; i++) {
+    const r = runFight({ stats, talents: [], foeCfg, seed: 4000 + i * 11, policy, pet });
+    if (r.winner === 'p') { w++; hp += r.hpLeft; }
+    turns += r.turns;
+  }
+  return { win: Math.round(100 * w / N), turns: +(turns / N).toFixed(1), hpLeft: w ? Math.round(100 * hp / w) : 0 };
+}

@@ -29,7 +29,7 @@ import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './ma
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -3934,9 +3934,10 @@ async function openMap() {
       if (!rec || rec.den.dist > DEN_RADIUS_M) return;
       const den = rec.den;
       const fighter = await buildFighter();
+      const esc = escalateDen(den, await denWinsCount());
       openFight(wrap, fighter, {
-        mode: 'boss', name: den.boss, mult: den.mult, aiLevel: den.aiLevel,
-        talents: den.talents || [], venue: den.name, den, week, add: den.add || null, bossMult: den.bossMult || null,
+        mode: 'boss', name: den.boss, mult: esc.mult, aiLevel: esc.aiLevel,
+        talents: den.talents || [], venue: den.name, den, week, add: esc.add, bossMult: esc.bossMult,
       });
     });
 
@@ -4073,7 +4074,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v122'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v123'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

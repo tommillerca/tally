@@ -6,6 +6,7 @@ import {
   simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
 } from '../js/pit.js';
+import { escalateDen } from '../js/poi.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -1063,6 +1064,39 @@ test('multi-body: win requires the WHOLE enemy side down (boss + add)', () => {
   fight.fAux.hp = 1; fight.pTarget = 'fa'; fight.ap = 2;
   applyAction(fight, 'swing'); // kill the add
   assert.ok(fight.over && fight.over.winner === 'p', 'win only once BOTH enemies are down');
+});
+
+test('escalateDen: wins=0 is the untouched base tier (early game unchanged)', () => {
+  const den = { mult: 1.05, aiLevel: 2, boss: 'Gnash' };
+  const e = escalateDen(den, 0);
+  assert.equal(e.mult, 1.05, 'base mult preserved');
+  assert.equal(e.aiLevel, 2, 'base aiLevel preserved');
+  assert.equal(e.add, null, 'no add before the 5th win');
+  assert.equal(e.bossMult, null, 'solo captain uses mult');
+});
+
+test('escalateDen: difficulty climbs monotonically and past the old 1.32 cap', () => {
+  const den = { mult: 1.32, aiLevel: 3, boss: 'Gnash' };
+  let prevMult = 0, prevAi = 0;
+  for (const w of [0, 3, 6, 9, 12, 18, 30]) {
+    const e = escalateDen(den, w);
+    assert.ok(e.mult >= prevMult, `mult non-decreasing at ${w}`);
+    assert.ok(e.aiLevel >= prevAi, `aiLevel non-decreasing at ${w}`);
+    prevMult = e.mult; prevAi = e.aiLevel;
+  }
+  assert.ok(escalateDen(den, 12).mult > 1.32, 'blows past the old 1.32 ceiling');
+  assert.ok(escalateDen(den, 100).aiLevel <= 6, 'aiLevel capped at 6');
+  assert.ok(escalateDen(den, 100).mult <= 1.32 + 1.2 + 0.001, 'ramp capped at +1.2');
+});
+
+test('escalateDen: a minion joins from the 5th win, captain eased below solo', () => {
+  const den = { mult: 1.1, aiLevel: 2, boss: 'Gnash' };
+  const before = escalateDen(den, 4);
+  const after = escalateDen(den, 5);
+  assert.equal(before.add, null, 'no add at 4 wins');
+  assert.ok(after.add && after.add.mult > 0, 'add present from 5 wins');
+  assert.ok(after.bossMult != null && after.bossMult < after.mult,
+    'paired captain is eased below the solo-equivalent mult (the pair is the threat)');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

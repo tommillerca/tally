@@ -131,6 +131,35 @@ export async function denWinsCount() {
   return xp.filter(r => r.type === 'boss').length;
 }
 
+// v123: world bosses RAMP with your progression so they never go stale. The base
+// den tier sets the floor; every den you've ever beaten pushes difficulty up:
+// higher stat multiplier (past the old 1.32 cap), smarter AI, and a minion that
+// joins from the 5th win on (the pair, not one dummy, is the real threat). Early
+// game is unchanged (wins 0 = the original tier). Returns a foeCfg-ready shape.
+export function escalateDen(den, wins) {
+  const w = Math.max(0, Math.floor(wins || 0));
+  // The escalation leans on a SMARTER boss and a SECOND body, not a runaway
+  // multiplier. The stat ramp is deliberately gentle and capped near Champion
+  // territory so an engaged player keeps a real shot while a coaster hits a wall.
+  const ramp = Math.min(0.55, w * 0.035);                   // +3.5% per den beaten, capped +0.55
+  const aiLevel = Math.min(6, (den.aiLevel || 1) + Math.floor(w / 4));
+  const soloMult = +((den.mult || 1) + ramp).toFixed(3);
+  const hasAdd = !!den.add || w >= 5;
+  if (!hasAdd) return { mult: soloMult, bossMult: null, aiLevel, add: null };
+  // paired: you carry a pet ally now, so the fight is 2v2, not the pet-less 2v1
+  // the old den tiers assumed. Only lightly ease the captain (the add is the extra
+  // threat, but a full-strength captain PLUS an add turns brutal against a pet that
+  // is weaker than a real fighter). Keep the captain near its solo strength.
+  const bossMult = +(soloMult * 0.9).toFixed(3);
+  const addBase = den.add && den.add.mult != null ? den.add.mult : (den.mult || 1) * 0.5;
+  const add = {
+    name: (den.add && den.add.name) || `${den.boss}'s Second`,
+    mult: +(addBase + ramp * 0.3).toFixed(3),
+    talents: (den.add && den.add.talents) || (w >= 12 ? ['heavyhands'] : []),
+  };
+  return { mult: soloMult, bossMult, aiLevel, add };
+}
+
 export function denRewardLabel(r) {
   const bits = [];
   if (r.crate) bits.push(r.crate === 'golden' ? 'Golden Crate' : r.crate === 'egg' ? 'Step Egg' : 'Common Crate');
