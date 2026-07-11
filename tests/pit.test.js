@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
-  simulate, LADDER, CHAMPION, scaleStats, TAUNT_CURVE, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
+  simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
 } from '../js/pit.js';
 
@@ -163,7 +163,7 @@ test('boss AoE sweep can hit both you and your pet', () => {
     const player = makeFighter({ name: 'You', stats: st, pet: petDesc });
     const foe = makeFighter({ name: 'Boss', stats: scaleStats(st, 1.2) });
     const fight = createFight({ player, foe, seed: s, aiLevel: 5 });
-    fight.range = 'close'; fight.active = 'f'; fight.ap = foe.d.ap;
+    fight.active = 'f'; fight.ap = foe.d.ap;
     const evs = aiTakeTurn(fight);
     const aoe = evs.find(e => e.t === 'aoe');
     if (aoe) { sawAoe = true; assert.ok(aoe.dmgYou >= 0 && aoe.dmgPet >= 0, 'sweep hits both bodies'); }
@@ -234,36 +234,18 @@ test('stagger economics: a staggered fighter starts next turn with 1 AP', () => 
   assert.ok(!fight.f.stagger); // consumed
 });
 
-// ---- taunt diminishing ----
-test('taunt curve diminishes 8/5/3/2/1', () => {
-  const fight = createFight({
-    player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
-    foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 50, reflex: 0, hype: 0 } }),
-    seed: 3,
-  });
-  fight.range = 'far';
-  const gains = [];
-  for (let i = 0; i < 5; i++) {
-    fight.ap = 2; fight.p.wind = 90;
-    const before = fight.p.hype;
-    applyAction(fight, 'taunt');
-    gains.push(fight.p.hype - before);
-  }
-  assert.deepEqual(gains, TAUNT_CURVE);
-});
-
 // ---- legality ----
-test('actionsFor respects range and hype gate', () => {
+test('actionsFor: core moves always offered, retired range moves gone, hype gates signature', () => {
   const fight = createFight({
     player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 50, reflex: 0, hype: 0 } }),
     foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 50, reflex: 0, hype: 0 } }),
     seed: 3,
   });
-  let ids = actionsFor(fight).map(a => a.id);
-  assert.ok(ids.includes('jab') && ids.includes('guard') && ids.includes('rattle') && !ids.includes('advance') && !ids.includes('signature'));
-  fight.range = 'far';
-  ids = actionsFor(fight).map(a => a.id);
-  assert.ok(ids.includes('advance') && ids.includes('throwb') && !ids.includes('jab'));
+  const ids = actionsFor(fight).map(a => a.id);
+  assert.ok(ids.includes('jab') && ids.includes('swing') && ids.includes('haymaker') && ids.includes('guard') && ids.includes('rattle'));
+  assert.ok(!ids.includes('signature'), 'signature gated until hype threshold');
+  for (const gone of ['shove', 'advance', 'throwb', 'taunt']) assert.ok(!ids.includes(gone), gone + ' retired');
+  assert.ok(!('shove' in ACTIONS) && !('taunt' in ACTIONS) && !('advance' in ACTIONS) && !('throwb' in ACTIONS));
 });
 
 // ---- stat derivation ----
@@ -356,14 +338,13 @@ test('talent tiers gate by points-in-tree, ranks count (v69 deep trees)', () => 
   assert.ok(TALENT_TREES.find(t => t.id === 'boneshaman').nodes.some(n => n.id === 'totem' && n.move), 'Shaman has Spirit Totem');
 });
 
-test('gravecaller: bone bolt is any-range magic scaling off Hype', () => {
+test('gravecaller: bone bolt is magic scaling off Hype', () => {
   const caster = mf({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt'] });
   const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = rh({ move: 'bonebolt', attacker: caster, defender: dummy, rng: noLuck });
   assert.equal(r.damage, Math.round(16 * (1 + 0.6 * 1.5))); // 30
   const fight = cf({ player: caster, foe: mf({ name: 'F', stats: MID }), seed: 21 });
-  fight.range = 'far';
-  assert.ok(acts(fight).some(a => a.id === 'bonebolt')); // castable at far
+  assert.ok(acts(fight).some(a => a.id === 'bonebolt'));
 });
 test('soul siphon + grave chill riders', () => {
   const caster = mf({ name: 'C', stats: { power: 0, marrow: 50, wind: 50, reflex: 0, hype: 60 }, talents: ['bonebolt', 'soulsiphon', 'mend', 'hex', 'gravechill'] });
@@ -414,11 +395,14 @@ test('bleed out stacks and ticks at turn start', () => {
   et(fight); // foe's turn starts: bleed ticks 8
   assert.equal(foe.hp, hpBefore - 8);
 });
-test('kite boosts throws 60%', () => {
+test('kite (repurposed): landed jabs sap 8 enemy Stamina', () => {
   const grey = mf({ name: 'G', stats: MID, talents: ['lightfeet', 'kite'] });
-  const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
-  const r = rh({ move: 'throwb', attacker: grey, defender: dummy, rng: noLuck });
-  assert.equal(r.damage, Math.round(14 * 1.75 * 1.6)); // 39
+  const foe = mf({ name: 'F', stats: MID });
+  const fight = cf({ player: grey, foe, seed: 27 });
+  fight.rng = noLuck;
+  const windBefore = fight.f.wind;
+  apply(fight, 'jab');
+  assert.equal(fight.f.wind, Math.max(0, windBefore - 8), 'jab sapped 8 stamina');
 });
 test('concussive: landed haymakers stagger without a block', () => {
   const slab = mf({ name: 'S', stats: MID, talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive'] });
@@ -834,22 +818,6 @@ test('v78 Fury potion: elixir buffs damage for a few turns, then wears off', () 
 });
 
 /* ============ v16: anti-exploit balance ============ */
-
-test('shove costs escalate: kiting is a window, not a lock', () => {
-  const P = makeFighter({ name: 'P', stats: MID });
-  const F = makeFighter({ name: 'F', stats: MID });
-  const fight = createFight({ player: P, foe: F, seed: 9 });
-  fight.rng = () => 0.99;
-  const costOf = () => actionsFor(fight).find(a => a.id === 'shove');
-  const c0 = costOf().windCost;
-  applyAction(fight, 'shove');
-  fight.range = 'close'; fight.ap = 3; P.wind = 100;
-  const c1 = costOf().windCost;
-  applyAction(fight, 'shove');
-  fight.range = 'close'; fight.ap = 3; P.wind = 100;
-  const c2 = costOf().windCost;
-  assert.ok(c1 === c0 * 2 && c2 === c0 * 3, `${c0} -> ${c1} -> ${c2}`);
-});
 
 test('signature encore falloff: 0.75x per prior use', () => {
   const P = makeFighter({ name: 'P', stats: MID });

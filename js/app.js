@@ -4073,7 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v116'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v117'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4359,7 +4359,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }
   }
   let settled = false;
-  let showMore = false;
 
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
@@ -4427,10 +4426,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
   }
 
   function positionFighters() {
-    const close = fight.range === 'close';
-    el('youG').style.left = close ? '12%' : '-2%';
-    el('foeG').style.right = close ? '12%' : '-2%';
-    el('rangePill').textContent = `${fight.range === 'close' ? 'CLOSE' : 'FAR'} · turn ${fight.turn}`;
+    el('youG').style.left = '12%';
+    el('foeG').style.right = '12%';
+    el('rangePill').textContent = `Turn ${fight.turn}`;
   }
 
   function updateBars() {
@@ -4653,9 +4651,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (petStage && ev.dmgPet > 0) { setTimeout(() => { pulse(petStage, 'hurt', fxMs); floatNode(`🐾 -${ev.dmgPet}`, 'p', 'dmg bleed'); }, 120); }
       floatNode('SWEEP!', 'f', 'stamp hot');
       hitSound(S.sounds, 'thud');
-    } else if (ev.t === 'shove') {
-      pulse(atkStage, lungeCls, fxMs);
-      setTimeout(() => pulse(vicStage, 'hurt', fxMs), fxMs * 0.5);
     } else if (ev.t === 'counter') {
       const vs = ev.who === 'p' ? 'f' : 'p';
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.who === 'p' ? 'lunge-r' : 'lunge-l', fxMs);
@@ -4674,8 +4669,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'blind') impactBurst(ev.who, 'phys');
     } else if (ev.t === 'bleedtick') {
       floatNode(`-${ev.damage}`, ev.who, 'dmg bleed');
-    } else if (ev.t === 'taunt') {
-      floatNode(`+${ev.gain} hype`, ev.who, 'stamp warm');
     }
   }
 
@@ -4695,7 +4688,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.move === 'firebolt') return `${who} seared ${them} with fire for ${ev.damage}`;
       if (ev.whiffed && !ev.damage) return null;
       if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
-      return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : ev.move === 'throwb' ? 'threw a bone at' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
+      return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
     }
     if (ev.t === 'counter') return `${who === 'You' ? 'You counterstep' : who + ' countersteps'} for ${ev.damage}!`;
     if (ev.t === 'heal') return ev.mend ? `${who} mended ${who === 'You' ? 'your' : 'their'} marrow (+${ev.amount} HP)` : `${who} drank the marrow (+${ev.amount} HP)`;
@@ -4732,9 +4725,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;
     if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep — ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
-    if (ev.t === 'shove') return `${who} shoved ${them} back`;
-    if (ev.t === 'advance') return `${who} closed in`;
-    if (ev.t === 'taunt') return `${who} talked trash`;
     if (ev.t === 'ko') return `${who} wins by KO`;
     return '';
   }
@@ -4762,7 +4752,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <b>${a.label}</b><small>${hint || `${'●'.repeat(a.ap)}${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
       </button>` : '';
     const dmgHint = id => {
-      const est = expectedDamage(id === 'throwb' ? 'throwb' : id, player, null, foe);
+      const est = expectedDamage(id, player, null, foe);
       const mc = MISS_CHANCE[id];
       return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : '●'.repeat(ACTIONS[id].ap)}`;
     };
@@ -4823,34 +4813,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
     };
     // Blood Rage (Slab): any-range self-buff, offered in both rows
     const rageBtn = () => { const rg = get('rage'); return rg ? btn(rg, { hint: player.rage ? 'already raging' : '+35% dmg 3t · costs HP', glow: !player.rage && player.hp > player.d.maxHp * 0.5 }) : ''; };
-    if (fight.range === 'close') {
-      const titan = get('titan');
-      if (titan) html += btn(titan, { hint: 'big hit · once', glow: true });
-      const storm = get('bonestorm');
-      if (storm) html += btn(storm, { hint: '3 magic hits · once', glow: true });
-      const temp = get('tempest');
-      if (temp) html += btn(temp, { hint: 'fire+frost x4 · once', glow: true });
-      const flurry = get('flurry');
-      if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
-      html += rageBtn();
-      html += casterRow();
-      html += btn(get('jab'), { hint: dmgHint('jab') });
-      html += btn(get('swing'), { hint: dmgHint('swing') });
-      html += btn(get('haymaker'), { hint: dmgHint('haymaker') });
-      html += defenseRow();
-      html += `<button class="fight-act" id="moreBtn"><b>More</b><small>${showMore ? 'hide' : 'shove, taunt'}</small></button>`;
-      if (showMore) {
-        html += btn(get('shove'), { hint: 'knock to far' });
-        html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
-      }
-    } else {
-      html += btn(get('advance'), { hint: 'close the gap', glow: !get('bonebolt') });
-      html += btn(get('throwb'), { hint: dmgHint('throwb') });
-      html += rageBtn();
-      html += casterRow();
-      html += defenseRow();
-      html += btn(get('taunt'), { hint: player.talents.has('heckle') ? '+hype · weakens' : '+hype' });
-    }
+    const titan = get('titan');
+    if (titan) html += btn(titan, { hint: 'big hit · once', glow: true });
+    const storm = get('bonestorm');
+    if (storm) html += btn(storm, { hint: '3 magic hits · once', glow: true });
+    const temp = get('tempest');
+    if (temp) html += btn(temp, { hint: 'fire+frost x4 · once', glow: true });
+    const flurry = get('flurry');
+    if (flurry) html += btn(flurry, { hint: `all wind · 3 hits`, glow: player.wind > player.d.maxWind * 0.7 });
+    html += rageBtn();
+    html += casterRow();
+    html += btn(get('jab'), { hint: dmgHint('jab') });
+    html += btn(get('swing'), { hint: dmgHint('swing') });
+    html += btn(get('haymaker'), { hint: dmgHint('haymaker') });
+    html += defenseRow();
     // Potions: any brewed potion can be DRUNK mid-fight (1 AP), any class. This is
     // the kitchen's "beaming potion" — separate from the Alchemist's Toxicity kit.
     for (const p of POTIONS) {
@@ -4863,7 +4839,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     factions.innerHTML = html;
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     $$('[data-potion]', factions).forEach(b => b.addEventListener('click', () => drinkPotion(b.dataset.potion)));
-    $('#moreBtn', factions)?.addEventListener('click', () => { showMore = !showMore; renderActions(); });
     $('#endTurn', factions)?.addEventListener('click', endPlayerBody);
   }
 

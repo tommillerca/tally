@@ -31,14 +31,6 @@ const POLICIES = {
   // reasonable player: defends telegraphs, spends casts, manages wind
   smart(fight, legal, pick) {
     const p = fight.p;
-    if (fight.range === 'far') {
-      if (pick('bonebolt')) return 'bonebolt';
-      if (pick('frostbolt')) return 'frostbolt';
-      if (pick('smite')) return 'smite';
-      if (p.wind < 15 && pick('brace')) return 'brace';
-      if (pick('advance')) return 'advance';
-      return legal[0]?.id ?? null;
-    }
     if (fight.telegraph === 'haymaker' && pick('guard') && (p.ward || 0) <= 0) return 'guard';
     if (pick('signature')) return 'signature';
     // v70 class actives: raise/plant a summon while it's down, rage early
@@ -69,28 +61,21 @@ const POLICIES = {
   spamBolt(fight, legal, pick) {
     for (const id of ['firebolt', 'bonebolt', 'smite', 'frostbolt']) if (pick(id)) return id;
     if (pick('brace')) return 'brace';
-    if (fight.range === 'far' && pick('advance')) return 'advance';
     if (pick('jab')) return 'jab';
     return null;
   },
   // one-button melee: biggest swing available, never defends
   spamMelee(fight, legal, pick) {
     for (const id of ['signature', 'titan', 'haymaker', 'swing', 'jab']) if (pick(id)) return id;
-    if (fight.range === 'far' && pick('advance')) return 'advance';
     if (pick('brace')) return 'brace';
     return null;
   },
-  // shove-kite: never let them stand next to you, cast from far
+  // jab-kite: stamina-denial probe — only jab (kite talent saps 8/hit) + guard
   kite(fight, legal, pick) {
-    if (fight.range === 'close') {
-      if (pick('shove')) return 'shove';
-      for (const id of ['bonebolt', 'frostbolt', 'smite', 'firebolt']) if (pick(id)) return id;
-      if (pick('jab')) return 'jab';
-      return null;
-    }
-    for (const id of ['bonebolt', 'frostbolt', 'firebolt', 'smite']) if (pick(id)) return id;
-    if (pick('throwb')) return 'throwb';
-    if (pick('brace')) return 'brace';
+    if (fight.telegraph === 'haymaker' && pick('guard') && (fight.p.ward || 0) <= 0) return 'guard';
+    if (pick('signature')) return 'signature';
+    if (pick('jab')) return 'jab';
+    if (pick('guard')) return 'guard';
     return null;
   },
   // turtle: ward + mend + Bone Guard forever, jab with spare AP
@@ -108,7 +93,6 @@ const POLICIES = {
     if (fight.f.wind >= 12 && pick('frostbolt')) return 'frostbolt';
     for (const id of ['frostbolt', 'firebolt', 'bonebolt', 'tempest']) if (pick(id)) return id;
     if (pick('brace')) return 'brace';
-    if (fight.range === 'far' && pick('advance')) return 'advance';
     if (pick('jab')) return 'jab';
     return null;
   },
@@ -117,17 +101,13 @@ const POLICIES = {
     if (!fight.f.blind && pick('bonespike')) return 'bonespike';
     for (const id of ['signature', 'haymaker', 'swing', 'bonespike', 'jab']) if (pick(id)) return id;
     if (pick('brace')) return 'brace';
-    if (fight.range === 'far' && pick('advance')) return 'advance';
     return null;
   },
-  // hype battery: taunt -> signature loop
+  // hype battery: cheapest hype-builder -> signature loop
   sigcycle(fight, legal, pick) {
     if (pick('signature')) return 'signature';
-    if (fight.range === 'close' && pick('shove')) return 'shove';
-    if (fight.range === 'far' && pick('taunt')) return 'taunt';
-    if (pick('taunt')) return 'taunt';
-    if (pick('brace')) return 'brace';
     if (pick('jab')) return 'jab';
+    if (pick('brace')) return 'brace';
     return null;
   },
 };
@@ -165,7 +145,7 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
       for (const e of evs) {
         if (e.t === 'foeAction') {
           m.foeActions++;
-          if (['jab', 'swing', 'haymaker', 'throwb', 'signature', 'titan'].includes(e.id)) m.foeAttacks++;
+          if (['jab', 'swing', 'haymaker', 'signature', 'titan'].includes(e.id)) m.foeAttacks++;
           if (e.id === 'brace') m.foeBraces++;
         }
       }

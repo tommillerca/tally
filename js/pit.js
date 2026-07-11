@@ -87,7 +87,7 @@ export const TALENT_TREES = [
       { id: 'lightfeet', tier: 1, name: 'Light Feet', desc: '+1 action point every turn.' },
       { id: 'footwork', tier: 1, ranks: 5, name: 'Footwork', desc: '+1% glance chance per rank (more hits skim off you for half).' },
       { id: 'counterstep', tier: 2, name: 'Counterstep', desc: 'When an enemy attack misses you, you snap back with a free counter-jab.' },
-      { id: 'kite', tier: 2, name: 'Kite', desc: 'Throws hit 60% harder.' },
+      { id: 'kite', tier: 2, name: 'Kite', desc: 'Hit-and-run: your Jabs also sap 8 enemy Stamina.' },
       { id: 'sharpjabs', tier: 2, ranks: 5, name: 'Sharp Jabs', desc: 'Jabs and Throws hit 4% harder per rank.' },
       { id: 'cardio', tier: 2, ranks: 3, name: 'Cardio', desc: '+5 max Stamina per rank.' },
       { id: 'bleedout', tier: 3, name: 'Bleed Out', desc: 'Jabs open wounds: 4 damage per stack at the start of their turn, stacks to 3.' },
@@ -103,7 +103,7 @@ export const TALENT_TREES = [
       { id: 'crowdwork', tier: 1, name: 'Crowd Work', desc: 'Hype builds 40% faster.' },
       { id: 'stagepresence', tier: 1, ranks: 5, name: 'Stage Presence', desc: 'All Hype you build is 6% greater per rank.' },
       { id: 'bigentrance', tier: 2, name: 'Big Entrance', desc: 'Start every fight at 25 Hype.' },
-      { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Taunts WEAKEN: the enemy deals 15% less damage for 2 turns.' },
+      { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Your Rattle cuts deeper: the enemy deals 25% less damage for 3 turns.' },
       { id: 'warmup', tier: 2, ranks: 3, name: 'Warm-Up Act', desc: 'Start every fight with +4 Hype per rank.' },
       { id: 'comboartist', tier: 2, ranks: 5, name: 'Combo Artist', desc: '+2% crit chance per rank.' },
       { id: 'ovation', tier: 3, name: 'Standing Ovation', desc: 'Getting hit builds double Hype (the comeback engine).' },
@@ -345,46 +345,46 @@ export const WEAPONS = {
 
 /* ================= actions (spec §2) ================= */
 
+// v117: the range system (Shove/Advance/Throw/Taunt + close/far gating) is GONE.
+// It was vestigial: fights always started close, the AI never shoved or taunted,
+// so far-range moves were unreachable in real play. Every action is always legal
+// (AP/Stamina permitting); Kite and Heckle were repurposed onto Jab and Rattle.
 export const ACTIONS = {
-  jab:      { label: 'Jab', range: 'close', ap: 1, wind: 8, base: 10, hype: 6 },
-  swing:    { label: 'Swing', range: 'close', ap: 1, wind: 18, base: 22, hype: 10 },
-  haymaker: { label: 'Haymaker', range: 'close', ap: 2, wind: 35, base: 40, hype: 15 },
+  jab:      { label: 'Jab', ap: 1, wind: 8, base: 10, hype: 6 },
+  swing:    { label: 'Swing', ap: 1, wind: 18, base: 22, hype: 10 },
+  haymaker: { label: 'Haymaker', ap: 2, wind: 35, base: 40, hype: 15 },
   // Active defense (no more passive Block/Dodge/Brace): a shield you raise and a
   // debuff you land. Both are proactive plays, not "turtle and wait".
-  guard:    { label: 'Bone Guard', range: 'any', ap: 1, wind: 12, shield: true, hype: 3 },
-  rattle:   { label: 'Rattle', range: 'any', ap: 1, wind: 12, debuff: true, hype: 4 },
-  shove:    { label: 'Shove', range: 'close', ap: 1, wind: 12, hype: 4 },
-  advance:  { label: 'Advance', range: 'far', ap: 1, wind: 5 },
-  throwb:   { label: 'Throw', range: 'far', ap: 1, wind: 15, base: 14, hype: 8 },
-  taunt:    { label: 'Taunt', range: 'far', ap: 1, wind: 5 },
-  signature:{ label: 'Signature', range: 'close', ap: 2, wind: 0, base: 120 },
-  titan:    { label: 'Titan', range: 'close', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
-  flurry:   { label: 'Flurry', range: 'close', ap: 2, wind: 0, base: 10, talent: 'flurry' },
-  bonebolt: { label: 'Bone Bolt', range: 'any', ap: 1, wind: 18, base: 16, hype: 6, talent: 'bonebolt', magic: true, school: 'shadow' },
-  mend:     { label: 'Mend', range: 'any', ap: 1, wind: 20, talent: 'mend', magic: true, school: 'nature' },
-  hex:      { label: 'Hex', range: 'any', ap: 1, wind: 15, talent: 'hex', magic: true, school: 'shadow' },
-  bonestorm:{ label: 'Bone Storm', range: 'close', ap: 2, wind: 40, base: 14, talent: 'bonestorm', magic: true, school: 'shadow' },
-  smite:    { label: 'Smite', range: 'any', ap: 1, wind: 18, base: 15, hype: 6, talent: 'smite', magic: true, school: 'holy' },
-  ward:     { label: 'Ward', range: 'any', ap: 1, wind: 15, talent: 'ward', magic: true, school: 'holy' },
-  frostbolt:{ label: 'Frost Bolt', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
-  firebolt: { label: 'Fire Bolt', range: 'any', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
-  tempest:  { label: 'Tempest', range: 'close', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
+  guard:    { label: 'Bone Guard', ap: 1, wind: 12, shield: true, hype: 3 },
+  rattle:   { label: 'Rattle', ap: 1, wind: 12, debuff: true, hype: 4 },
+  signature:{ label: 'Signature', ap: 2, wind: 0, base: 120 },
+  titan:    { label: 'Titan', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
+  flurry:   { label: 'Flurry', ap: 2, wind: 0, base: 10, talent: 'flurry' },
+  bonebolt: { label: 'Bone Bolt', ap: 1, wind: 18, base: 16, hype: 6, talent: 'bonebolt', magic: true, school: 'shadow' },
+  mend:     { label: 'Mend', ap: 1, wind: 20, talent: 'mend', magic: true, school: 'nature' },
+  hex:      { label: 'Hex', ap: 1, wind: 15, talent: 'hex', magic: true, school: 'shadow' },
+  bonestorm:{ label: 'Bone Storm', ap: 2, wind: 40, base: 14, talent: 'bonestorm', magic: true, school: 'shadow' },
+  smite:    { label: 'Smite', ap: 1, wind: 18, base: 15, hype: 6, talent: 'smite', magic: true, school: 'holy' },
+  ward:     { label: 'Ward', ap: 1, wind: 15, talent: 'ward', magic: true, school: 'holy' },
+  frostbolt:{ label: 'Frost Bolt', ap: 1, wind: 18, base: 14, hype: 6, talent: 'frostbolt', magic: true, school: 'frost' },
+  firebolt: { label: 'Fire Bolt', ap: 1, wind: 20, base: 18, hype: 6, talent: 'firebolt', magic: true, school: 'fire' },
+  tempest:  { label: 'Tempest', ap: 2, wind: 35, base: 10, talent: 'tempest', magic: true, school: 'fire' },
   // class-identity actives (v70): a self-buff and two summons that act on your turn
-  rage:     { label: 'Rage', range: 'any', ap: 1, wind: 10, talent: 'rage' },
-  raisedead:{ label: 'Raise Dead', range: 'any', ap: 2, wind: 22, talent: 'raisedead', magic: true, school: 'shadow' },
-  totem:    { label: 'Spirit Totem', range: 'any', ap: 1, wind: 18, talent: 'totem', magic: true, school: 'nature' },
+  rage:     { label: 'Rage', ap: 1, wind: 10, talent: 'rage' },
+  raisedead:{ label: 'Raise Dead', ap: 2, wind: 22, talent: 'raisedead', magic: true, school: 'shadow' },
+  totem:    { label: 'Spirit Totem', ap: 1, wind: 18, talent: 'totem', magic: true, school: 'nature' },
   // The Alchemist (v77): thrown potions. Their own school 'alchemy' + a Toxicity
   // ramp (own resource, NOT the kitchen). Toxicity powers alchemy damage, decays each turn.
-  fireflask:{ label: 'Fire Flask', range: 'any', ap: 1, wind: 18, base: 16, hype: 6, talent: 'fireflask', magic: true, school: 'alchemy' },
-  acidvial: { label: 'Acid Vial', range: 'any', ap: 1, wind: 18, base: 14, hype: 6, talent: 'acidvial', magic: true, school: 'alchemy' },
-  swallow:  { label: 'Swallow', range: 'any', ap: 1, wind: 18, talent: 'swallow', magic: true, school: 'alchemy' },
-  deathbomb:{ label: 'Fury Bomb', range: 'close', ap: 2, wind: 40, base: 12, talent: 'deathbomb', magic: true, school: 'alchemy' },
+  fireflask:{ label: 'Fire Flask', ap: 1, wind: 18, base: 16, hype: 6, talent: 'fireflask', magic: true, school: 'alchemy' },
+  acidvial: { label: 'Acid Vial', ap: 1, wind: 18, base: 14, hype: 6, talent: 'acidvial', magic: true, school: 'alchemy' },
+  swallow:  { label: 'Swallow', ap: 1, wind: 18, talent: 'swallow', magic: true, school: 'alchemy' },
+  deathbomb:{ label: 'Fury Bomb', ap: 2, wind: 40, base: 12, talent: 'deathbomb', magic: true, school: 'alchemy' },
   // The Crow Lord (v79): grow a Flock that pecks every turn, then unleash it.
-  callcrows:{ label: 'Call the Murder', range: 'any', ap: 1, wind: 14, talent: 'callcrows' },
-  peckeyes: { label: 'Peck the Eyes', range: 'any', ap: 1, wind: 18, base: 12, hype: 6, talent: 'peckeyes', magic: true, school: 'shadow' },
-  murder:   { label: 'Unleash the Murder', range: 'any', ap: 2, wind: 30, base: 8, talent: 'murder', magic: true, school: 'shadow' },
+  callcrows:{ label: 'Call the Murder', ap: 1, wind: 14, talent: 'callcrows' },
+  peckeyes: { label: 'Peck the Eyes', ap: 1, wind: 18, base: 12, hype: 6, talent: 'peckeyes', magic: true, school: 'shadow' },
+  murder:   { label: 'Unleash the Murder', ap: 2, wind: 30, base: 8, talent: 'murder', magic: true, school: 'shadow' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
-  bonespike:{ label: 'Bone Spike', range: 'close', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
+  bonespike:{ label: 'Bone Spike', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
 };
 export const SHOWSTOPPER_HYPE = 80;
 
@@ -401,7 +401,6 @@ function addToxicity(me, n) { me.toxicity = Math.min(100, (me.toxicity || 0) + M
 export const REGEN_PER_TURN = 20; // higher now that Brace is gone: Stamina refills passively
 export const GUARD_BASE = 16;     // Bone Guard absorb floor; scales with Marrow
 export const GUARD_STAMINA = 22;  // Bone Guard also lets you catch your breath (active Stamina)
-export const TAUNT_CURVE = [8, 5, 3, 2, 1];
 export const SIGNATURE_HYPE = 100;
 export const HIT_TAKEN_HYPE = 4;
 
@@ -525,12 +524,11 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (!a.magic) dmg *= attacker.weapon.mult(move, attacker.stats);
   dmg *= counter.mult;
   if (move === 'haymaker' && attacker.talents.has('heavyhands')) dmg *= 1.15;
-  if (move === 'throwb' && attacker.talents.has('kite')) dmg *= 1.6;
   if (move === 'smite' && attacker.talents.has('judgement') && (defender.stagger || defender.sunder)) dmg *= 1.5;
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
   // ranked synergy passives (v69): small stacking boosts per rank
   if (move === 'swing' || move === 'haymaker') dmg *= 1 + rkOf(attacker, 'followthrough') * 0.04;
-  if (move === 'jab' || move === 'throwb') dmg *= 1 + rkOf(attacker, 'sharpjabs') * 0.04;
+  if (move === 'jab') dmg *= 1 + rkOf(attacker, 'sharpjabs') * 0.04;
   if (a.school === 'shadow') dmg *= 1 + rkOf(attacker, 'darkstudy') * 0.03;
   if (a.school === 'holy') dmg *= 1 + rkOf(attacker, 'devotion') * 0.03;
   if (a.school === 'fire' || a.school === 'frost') dmg *= 1 + rkOf(attacker, 'attunement') * 0.03;
@@ -588,7 +586,7 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     foodPetDamagePct: food?.petDamagePct || 0, // Bonemeal Kibble: pet damage up
     titanUsed: false, bonestormUsed: false, secondWindUsed: false,
     tempestUsed: false, lastlightUsed: false, deathbombUsed: false,
-    sigsUsed: 0, shoveCount: 0,
+    sigsUsed: 0,
     mendUses: 3, swallowUses: 3,
     toxicity: 0,      // Alchemist: builds from potions, powers alchemy dmg, decays each turn
     flock: 0,         // Crow Lord: crows in your Flock; peck each turn, unleashed by Murder
@@ -609,7 +607,6 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
     state: null,           // 'block' | 'dodge' | null (persists through opponent's next turn)
     stagger: false,        // loses one 1-AP action next turn
     offBalance: false,
-    tauntCount: 0,
     recentCloseMoves: [],  // for AI tendency reads
     fainted: false,        // aux bodies (pet / add) can drop without ending the fight
     isPet: false,
@@ -644,7 +641,6 @@ export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) 
     pAux, fAux: add,
     // each captain's current target ('f'/'fa' for the player, 'p'/'pa' for the foe)
     pTarget: 'f', fTarget: 'p',
-    range: 'close',
     active: 'p',
     turn: 1,
     ap: player.d.ap,
@@ -740,7 +736,6 @@ function windCostFor(me, id, a) {
   let c = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
   if (a.school === 'shadow') c = Math.max(0, c - rkOf(me, 'marrowtap') * 2);   // Marrow Tap
   if (a.school === 'fire' || a.school === 'frost') c = Math.max(0, c - rkOf(me, 'conduits')); // Bone Conduits
-  if (id === 'shove') c = Math.round(c * (1 + me.shoveCount));
   return c;
 }
 
@@ -749,7 +744,6 @@ export function actionsFor(fight) {
   const me = fighterOf(fight, fight.active);
   const out = [];
   for (const [id, a] of Object.entries(ACTIONS)) {
-    if (a.range !== 'any' && a.range !== fight.range) continue;
     if (a.talent && !me.talents.has(a.talent)) continue;
     if (id === 'signature' && me.hype < sigThreshold(me)) continue;
     if (id === 'titan' && me.titanUsed) continue;
@@ -781,12 +775,11 @@ export function applyAction(fight, actionId) {
   const events = [];
   const windCost = a ? windCostFor(me, actionId, a) : 0;
   if (!a || fight.over) return events;
-  if (a.range !== 'any' && a.range !== fight.range) return events;
   if (fight.ap < a.ap || me.wind < windCost) return events;
 
   fight.ap -= a.ap;
   me.wind -= windCost;
-  if (fight.range === 'close' && ['jab', 'swing', 'haymaker', 'guard', 'rattle', 'shove'].includes(actionId)) {
+  if (['jab', 'swing', 'haymaker', 'guard', 'rattle'].includes(actionId)) {
     me.recentCloseMoves.push(actionId);
     if (me.recentCloseMoves.length > 6) me.recentCloseMoves.shift();
   }
@@ -804,34 +797,13 @@ export function applyAction(fight, actionId) {
     }
     case 'rattle': {
       // Rattle: shake the foe (weaken their damage) and jar loose some Stamina.
-      if (!them.weaken || them.weaken.pct < 0.18) them.weaken = { pct: 0.18, turns: 2 };
+      // Heckle (repurposed from the retired Taunt): the weaken cuts deeper + longer.
+      const pct = me.talents.has('heckle') ? 0.25 : 0.18;
+      const turns = me.talents.has('heckle') ? 3 : 2;
+      if (!them.weaken || them.weaken.pct < pct) them.weaken = { pct, turns };
       them.wind = Math.max(0, them.wind - 12);
       gainHype(me, a.hype);
       events.push({ t: 'status', who: defWho, kind: 'rattle' });
-      break;
-    }
-    case 'shove': {
-      fight.range = 'far';
-      them.state = null; // resets their setup
-      me.shoveCount += 1; // they get wise: each shove costs more wind
-      gainHype(me, a.hype);
-      events.push({ t: 'shove', who: fight.active });
-      break;
-    }
-    case 'advance': {
-      fight.range = 'close';
-      events.push({ t: 'advance', who: fight.active });
-      break;
-    }
-    case 'taunt': {
-      const gain = TAUNT_CURVE[Math.min(me.tauntCount, TAUNT_CURVE.length - 1)];
-      me.tauntCount += 1;
-      gainHype(me, gain);
-      if (me.talents.has('heckle')) {
-        if (!them.weaken || them.weaken.pct <= 0.15) them.weaken = { pct: 0.15, turns: 2 };
-        events.push({ t: 'status', who: defWho, kind: 'weaken' });
-      }
-      events.push({ t: 'taunt', who: fight.active, gain });
       break;
     }
     case 'signature': {
@@ -1089,8 +1061,8 @@ export function applyAction(fight, actionId) {
       events.push({ t: 'hit', who: fight.active, move: 'bonespike', ...r, magic: true });
       break;
     }
-    default: { // jab / swing / haymaker / throwb
-      const move = actionId === 'throwb' ? 'throwb' : actionId;
+    default: { // jab / swing / haymaker
+      const move = actionId;
       const r = resolveHit({ move, attacker: me, defender: them, rng: fight.rng });
       if (r.miss) {
         me.offBalance = r.whiffed ? !!r.offBalance : true;
@@ -1122,6 +1094,10 @@ export function applyAction(fight, actionId) {
           if (move === 'jab' && me.talents.has('bleedout')) {
             them.bleed = { stacks: Math.min(3, (them.bleed ? them.bleed.stacks : 0) + 1), turns: 3 };
             events.push({ t: 'status', who: defWho, kind: 'bleed', stacks: them.bleed.stacks });
+          }
+          // Kite (repurposed from the retired Throw): hit-and-run jabs sap their gas
+          if (move === 'jab' && me.talents.has('kite')) {
+            them.wind = Math.max(0, them.wind - 8);
           }
         }
         events.push({ t: 'hit', who: fight.active, move, ...r });
@@ -1254,7 +1230,7 @@ function haymakerRate(moves) {
 export function planTelegraph(fight) {
   const f = fight.f;
   fight.telegraph = null;
-  if (fight.over || fight.range !== 'close') return;
+  if (fight.over) return;
   const wantsHeavy = f.wind >= Math.round(35 * f.weapon.windCostMult('haymaker')) &&
     fight.rng() < (0.28 + fight.aiLevel * 0.04);
   if (wantsHeavy) fight.telegraph = 'haymaker';
@@ -1281,7 +1257,7 @@ function actForEnemy(fight, who, events) {
 
     // Boss AoE: tough foes occasionally sweep the whole team, hurting BOTH you
     // and your pet in one blow (protect the pet — it can be downed).
-    if (fight.range === 'close' && fight.aiLevel >= 4 && petUp() && !f._sweptThisTurn
+    if (fight.aiLevel >= 4 && petUp() && !f._sweptThisTurn
         && fight.ap >= 1 && f.wind >= 20 && fight.rng() < 0.16) {
       f._sweptThisTurn = true; fight.ap -= 1; f.wind -= 20;
       const rY = resolveHit({ move: 'swing', attacker: f, defender: fight.p, rng: fight.rng });
@@ -1303,10 +1279,6 @@ function actForEnemy(fight, who, events) {
       choice = 'signature';
     } else if (pick('titan') && fight.rng() < 0.6) {
       choice = 'titan';
-    } else if (fight.range === 'far') {
-      if (pick('advance')) choice = 'advance';
-      else if (pick('throwb')) choice = 'throwb';
-      else choice = legal[0].id;
     } else {
       // Active-defense AI: raise a Bone Guard when hurt, occasionally Rattle to
       // sap the player's offense, but mostly press the attack.
@@ -1359,8 +1331,7 @@ export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapo
         if (!legal.length) break;
         const pick = id => legal.find(x => x.id === id);
         let c;
-        if (fight.range === 'far') c = pick('advance') ? 'advance' : legal[0].id;
-        else if (fight.telegraph === 'haymaker' && (fight.p.ward || 0) <= 0 && pick('guard') && fight.rng() < 0.5) c = 'guard';
+        if (fight.telegraph === 'haymaker' && (fight.p.ward || 0) <= 0 && pick('guard') && fight.rng() < 0.5) c = 'guard';
         else if (pick('signature')) c = 'signature';
         else if (pick('swing')) c = 'swing';
         else if (pick('jab')) c = 'jab';
