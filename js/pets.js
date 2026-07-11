@@ -82,6 +82,43 @@ export const PET_TREES = {
   ],
 };
 
+// ---- per-pet identity: base stats scale with RARITY, tilted by personality ----
+// Every pet used to be a clone of its family; now each has its own stat line so a
+// legendary is meaningfully stronger than a common and two same-family pets still
+// feel different. `mult` is the rarity power budget; `tilt` redistributes it to
+// give each pet a role flavour (glass-cannon, tank, evasive...). Commons sit at
+// mult 1.0 with a light tilt so the early-game baseline is unchanged.
+export const PET_RARITY_MULT = { common: 1.0, uncommon: 1.09, rare: 1.18, epic: 1.27, legendary: 1.36 };
+export const PET_STATS = {
+  C3: { rarity: 'common',    mult: 1.00, tilt: { power: 1.05, reflex: 0.97 } },            // Corner-store hound (catfish): scrappy biter
+  C4: { rarity: 'common',    mult: 1.00, tilt: { power: 1.12, marrow: 0.85, reflex: 1.05 } }, // Basic hound (lizard): glass cannon
+  C5: { rarity: 'uncommon',  mult: 1.09, tilt: { marrow: 1.15, power: 0.92 } },            // Tidy warden (dog): sturdy guardian
+  C1: { rarity: 'epic',      mult: 1.27, tilt: { reflex: 1.12, wind: 1.06, power: 0.96 } }, // Cosmic imp (cloud): evasive utility
+  C2: { rarity: 'legendary', mult: 1.36, tilt: { marrow: 1.08, reflex: 1.02 } },           // Eternal warden (duck): best all-round
+};
+// Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
+// flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.
+export const SHINY_STAT_MULT = 1.08;
+
+// The single source of truth for a battle-pet's intrinsic stat line (engine AND
+// UI read this). `hp` is the pet's own HP floor; makePetBody adds a slice of the
+// owner's Marrow on top. Commons at level L reproduce the pre-v124 generic line.
+export function petBattleStats(petId, level = 1, shiny = false) {
+  const L = Math.max(1, level);
+  const p = PET_STATS[petId] || { rarity: 'common', mult: 1, tilt: {} };
+  const t = p.tilt || {};
+  const m = p.mult * (shiny ? SHINY_STAT_MULT : 1);
+  return {
+    power:  Math.round((10 + L * 4) * m * (t.power  || 1)),
+    marrow: Math.round(20            * m * (t.marrow || 1)),
+    wind:   Math.round(30            * m * (t.wind   || 1)),
+    reflex: Math.round((25 + L * 5)  * m * (t.reflex || 1)),
+    hype: 0,
+    hp:     Math.round((40 + L * 8)  * m * (t.marrow || 1)),
+    rarity: p.rarity,
+  };
+}
+
 // ---- leveling: pets grow as you walk ----
 export const PET_STEPS_PER_LEVEL = 3000;
 export const PET_MAX_LEVEL = 6;
@@ -97,10 +134,15 @@ export function unlockedTiers(level) {
 export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
 // Assemble the battle-pet object makeFighter() takes. picks = array of node ids.
-export function buildBattlePet(petId, level = 1, picks = []) {
+// opts.shiny flags the ultra-rare variant (a stat bump). The intrinsic stat line
+// (rarity + per-pet tilt + shiny) rides on `.stats` so pit.js's makePetBody stays
+// a pure consumer and the pet-card UI reads the exact same numbers.
+export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
   if (!petId || !PET_ASSIGN[petId]) return null;
   const fam = familyOf(petId);
   const has = id => picks.includes(id);
+  const shiny = !!opts.shiny;
+  const stats = petBattleStats(petId, level, shiny);
   return {
     id: petId,
     family: fam.key,
@@ -108,6 +150,9 @@ export function buildBattlePet(petId, level = 1, picks = []) {
     role: fam.role,
     color: fam.color,
     level,
+    shiny,
+    rarity: stats.rarity,
+    stats,                    // intrinsic battle stats (power/marrow/wind/reflex/hp)
     passive: fam.passive,
     passivePct: passivePct(level) * (fam.key === 'warden' && has('w-guardstance') ? 1.35 : 1) * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
     cooldown: fam.cooldown === 2 && has('h-pack') ? 1 : fam.cooldown,

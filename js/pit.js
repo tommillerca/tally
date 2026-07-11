@@ -617,10 +617,14 @@ export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, 
 // it still uses a full derived block so it works as a defender in resolveHit.
 export function makePetBody(petDescriptor, owner) {
   const L = petDescriptor.level || 1;
-  const petStats = { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0 };
+  // Intrinsic stat line comes from pets.js (rarity + per-pet tilt + shiny). Fall
+  // back to the pre-v124 generic line for any descriptor built without it.
+  const bs = petDescriptor.stats || { power: 10 + L * 4, marrow: 20, wind: 30, reflex: 25 + L * 5, hype: 0, hp: 40 + L * 8 };
+  const petStats = { power: bs.power, marrow: bs.marrow, wind: bs.wind, reflex: bs.reflex, hype: 0 };
   const body = makeFighter({ name: petDescriptor.name, stats: petStats });
   const hpBoost = 1 + (owner.foodPetHpPct || 0); // Bonemeal Kibble
-  const maxHp = Math.round((40 + L * 8 + Math.round((owner.stats.marrow || 40) * 0.25)) * hpBoost);
+  const petHp = bs.hp != null ? bs.hp : 40 + L * 8;
+  const maxHp = Math.round((petHp + Math.round((owner.stats.marrow || 40) * 0.25)) * hpBoost);
   body.d = { ...body.d, maxHp };
   body.hp = maxHp;
   body.isPet = true;

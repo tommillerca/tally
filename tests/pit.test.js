@@ -7,6 +7,7 @@ import {
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
 } from '../js/pit.js';
 import { escalateDen } from '../js/poi.js';
+import { petBattleStats } from '../js/pets.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -1097,6 +1098,44 @@ test('escalateDen: a minion joins from the 5th win, captain eased below solo', (
   assert.ok(after.add && after.add.mult > 0, 'add present from 5 wins');
   assert.ok(after.bossMult != null && after.bossMult < after.mult,
     'paired captain is eased below the solo-equivalent mult (the pair is the threat)');
+});
+
+test('pet stats: rarity scales power, a legendary clearly beats a common', () => {
+  const c3 = petBattleStats('C3', 6, false); // common
+  const c2 = petBattleStats('C2', 6, false); // legendary
+  assert.equal(c3.rarity, 'common');
+  assert.equal(c2.rarity, 'legendary');
+  assert.ok(c2.power > c3.power, 'legendary hits harder');
+  assert.ok(c2.hp > c3.hp, 'legendary is tankier');
+});
+
+test('pet stats: same-family pets still differ (C4 glass cannon vs C3 balanced)', () => {
+  const c3 = petBattleStats('C3', 6); // balanced common hound
+  const c4 = petBattleStats('C4', 6); // glass-cannon common hound
+  assert.ok(c4.power > c3.power, 'C4 hits harder');
+  assert.ok(c4.hp < c3.hp, 'C4 is frailer');
+});
+
+test('pet stats: a common at level 1 preserves the pre-v124 generic floor', () => {
+  const c3 = petBattleStats('C3', 1, false);
+  // old generic line: power 10+4=14, hp 40+8=48, reflex 25+5=30 (C3 tilt is light)
+  assert.ok(Math.abs(c3.power - 14) <= 1, 'power ~= old floor');
+  assert.ok(Math.abs(c3.hp - 48) <= 1, 'hp ~= old floor');
+  assert.ok(Math.abs(c3.reflex - 30) <= 1, 'reflex ~= old floor');
+});
+
+test('pet stats: shiny grants a real bump on every stat', () => {
+  const base = petBattleStats('C2', 6, false);
+  const shiny = petBattleStats('C2', 6, true);
+  assert.ok(shiny.power > base.power && shiny.hp > base.hp && shiny.reflex > base.reflex,
+    'shiny lifts power, hp, and reflex');
+});
+
+test('makePetBody consumes the intrinsic stat line (legendary body > common body)', () => {
+  const owner = makeFighter({ name: 'O', stats: MID });
+  const commonBody = makePetBody(buildBattlePet('C3', 6, []), owner);
+  const legendaryBody = makePetBody(buildBattlePet('C2', 6, []), owner);
+  assert.ok(legendaryBody.d.maxHp > commonBody.d.maxHp, 'legendary pet body has more HP');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

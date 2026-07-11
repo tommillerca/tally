@@ -28,7 +28,7 @@ import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './a
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -2882,7 +2882,7 @@ function openHatchReveal(res, charWrap) {
         </svg>
         ${shards}
       </div>
-    </div>` : `<div class="hatch-stage"><div class="cele-big">All pets found!</div></div>`;
+    </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
   const revealHtml = item
     ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'A SHINY!' : 'IT HATCHED!'}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
@@ -2891,7 +2891,8 @@ function openHatchReveal(res, charWrap) {
          <small>${res.shiny ? 'Ultra-rare variant · follows your bonehead' : 'Pet · follows your bonehead'}</small>
          <span class="rar-chip" style="color:${res.shiny ? 'var(--gold)' : RARITIES[item.rarity].color}">${res.shiny ? 'SHINY' : RARITIES[item.rarity].label}</span>
        </div>`
-    : `<p class="note">+${res.coins} coins instead. Legend.</p>`;
+    : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
+       <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
   const wrap2 = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:22px">
       ${stageHtml}
@@ -3311,13 +3312,18 @@ function petPanelHtml(petId, fighter) {
   const lvl = meta.level, picks = meta.picks;
   const tree = PET_TREES[fam.key];
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
+  const shiny = S.shinyPets.has(petId);
+  const rarity = (BH_BY_ID[petId] || {}).rarity || 'common';
+  const bs = petBattleStats(petId, lvl, shiny); // intrinsic battle stats (rarity + tilt + shiny)
+  const statLine = `<span class="pet-stats"><b>${bs.power}</b> PWR · <b>${bs.hp}</b> HP · <b>${bs.reflex}</b> REF</span>`;
   return `
-    <div class="pet-card r-${(BH_BY_ID[petId] || {}).rarity || 'common'}${S.shinyPets.has(petId) ? ' is-shiny' : ''}">
+    <div class="pet-card r-${rarity}${shiny ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
-        <b>${esc(fam.name)}${S.shinyPets.has(petId) ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
-        <small>Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.</span>
+        <b>${esc(fam.name)}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
+        ${statLine}
+        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8% to all stats.' : ''}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -4064,7 +4070,7 @@ async function buildFighter() {
   if (eqForPet.C) {
     const pl = petLevel(await petStepsSince(eqForPet.C));
     const picks = await petPicks(eqForPet.C);
-    battlePet = buildBattlePet(eqForPet.C, pl, picks);
+    battlePet = buildBattlePet(eqForPet.C, pl, picks, { shiny: S.shinyPets.has(eqForPet.C) });
     petMeta = { id: eqForPet.C, level: pl, picks };
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
@@ -4074,7 +4080,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v123'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v124'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -2041,6 +2041,14 @@ body::before {
 .pet-card-meta { display: grid; gap: 2px; min-width: 0; }
 .pet-card-meta b { font-size: 14px; }
 .pet-role { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pet-stats { font-size: 11.5px; letter-spacing: .02em; color: var(--muted); }
+.pet-stats b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.rar-lbl { font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.rar-lbl.r-common { color: #9fac9f; }
+.rar-lbl.r-uncommon { color: #4ade80; }
+.rar-lbl.r-rare { color: #6fd0ff; }
+.rar-lbl.r-epic { color: #c084fc; }
+.rar-lbl.r-legendary { color: #ffc961; }
 .pet-tree { display: grid; gap: 8px; margin: 4px 0 6px; }
 .pet-tier { display: grid; gap: 4px; }
 .pet-tier.locked { opacity: .5; }

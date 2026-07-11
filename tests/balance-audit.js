@@ -242,7 +242,10 @@ if (!weaponBarOk) process.exitCode = 1;
 // under naive play as wins climb (the point: coasting stops working). The add IS
 // modeled here (createFight gets it), so this reflects the real 2v1 the player faces.
 const ESC_DEN = { mult: 1.05, aiLevel: 2, boss: 'Gnash', talents: ['heavyhands'] };
-const escPet = { id: 'C2', level: 6, picks: [] }; // maxed warden-style ally body
+// use a COMMON pet (C3) as the conservative floor: its stat line ~= the pre-v124
+// generic pet the escalateDen ramp was tuned against, so rarer pets only make the
+// ramp easier (the incentive to collect). C3 is a common hound.
+const escPet = { id: 'C3', level: 6, picks: [] };
 console.log('\n--- v123 boss scaling ramp (player + maxed pet, add modeled) ---');
 console.log('  wins  effMult  ai  add   smart-win%  spam-win%  smart-turns');
 for (const wins of [0, 3, 6, 9, 12, 18, 30]) {
