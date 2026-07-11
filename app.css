@@ -900,8 +900,11 @@ body::before {
 /* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
 .fight-hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 16%; z-index: 6; pointer-events: none; }
 .hud-side { flex: 1; max-width: 42%; display: grid; gap: 3px; }
-.hud-side .fname { font-size: 11.5px; letter-spacing: 0.4px; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; }
-.hud-side.foe .fname { justify-content: flex-end; }
+/* fixed-height single line so BOTH HP bars sit on the same guide regardless of
+   name length (a long foe name like "Loose Bones" used to wrap taller and drop
+   its bar below yours) */
+.hud-side .fname { font-size: 11.5px; letter-spacing: 0.4px; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; height: 15px; line-height: 15px; }
+.hud-side.foe .fname { text-align: right; }
 .hud-side .bar.fhp { height: 7px; }
 .hud-pet { display: flex; align-items: center; gap: 5px; width: 72%; margin-top: 2px; transition: opacity .4s, filter .4s; }
 .hud-side.foe .hud-pet { margin-left: auto; flex-direction: row-reverse; }
@@ -1314,12 +1317,9 @@ body::before {
   border: 3px solid #100e14; border-radius: 50%;
   box-shadow: inset 0 6px 10px rgba(0, 0, 0, 0.5), inset 0 3px 0 rgba(165, 232, 71, 0.05);
 }
-.venue-tag { /* bottom-center: the top corners belong to the fight HUD now */
-  position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
-  color: rgba(242, 233, 215, 0.55); background: rgba(10, 8, 12, 0.55);
-  padding: 3px 8px; border-radius: 999px; pointer-events: none;
-}
+/* venue now rides the fight sheet header as a subtitle under the foe name */
+.fight-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.fight-venue { font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
 @keyframes torchBreathe { from { opacity: 0.7 } to { opacity: 1 } }
 @keyframes crowdSway { from { background-position: 0 0, 0 0, 0 0 } to { background-position: 6px 0, 9px 0, -7px 0 } }
 @media (prefers-reduced-motion: reduce) { .arena::before, .pit-crowd, .pit-torch, .pit-emblem { animation: none; } }

@@ -4073,7 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v120'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v121'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4364,7 +4364,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   // done/flee copy and the return target follow from that.
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss';
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>${esc(foeCfg.name)}</h2><button class="sheet-close">Flee</button></div>
+    <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
     { cls: 'full', onClose: () => { if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.'); } });
 
@@ -4377,7 +4377,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-floor"></div>
       <div class="pit-fog"></div>
       <div class="arena-floor"></div>
-      <span class="venue-tag">${esc(venue)}</span>
       <!-- fighting-game HUD: bars pinned to the arena's top corners with a
            guaranteed center gap (they used to ride the fighters and collided
            mid-arena, with the pet's bar piling under yours) -->
