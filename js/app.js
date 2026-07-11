@@ -3633,9 +3633,9 @@ async function openBreedPen(charWrap) {
       const res = await breedPets(sel[0], sel[1], offSp);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
       sel = []; offSp = null;
-      history.back();
-      openPetBreedResult(res.offspring);
-      setTimeout(() => renderCharacter(charWrap, 'crates'), 300);
+      history.back(); // close the pen, then reveal once the pop settles (avoids the sheet race)
+      setTimeout(() => openPetBreedResult(res.offspring), 260);
+      setTimeout(() => renderCharacter(charWrap, 'crates'), 320);
     });
   }
   render();
@@ -4204,7 +4204,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v128'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v129'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
