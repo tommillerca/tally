@@ -898,7 +898,7 @@ body::before {
   display: grid; gap: 6px; justify-items: center;
 }
 /* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
-.fight-hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 16%; z-index: 6; pointer-events: none; }
+.fight-hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16%; z-index: 6; pointer-events: none; }
 .hud-side { flex: 1; max-width: 42%; display: grid; gap: 3px; }
 /* fixed-height single line so BOTH HP bars sit on the same guide regardless of
    name length (a long foe name like "Loose Bones" used to wrap taller and drop
