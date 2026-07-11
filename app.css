@@ -2059,9 +2059,10 @@ body::before {
    overlap (natural depth, not "stacked on top") and the cloud's rain falls behind
    the bonehead rather than over it. Floor-aligned; mostly clear to the side. */
 .pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 4; }
-/* pet renders IN FRONT of its owner, at the fighter's feet (overlapping the lower
-   body so it clearly reads as a foreground companion, not tucked off to the side) */
-.you-side .pet-fighter { left: 6px; }
+/* pet renders IN FRONT of its owner (z-index 4 > the fighter's stage), sitting to
+   the lower-left with only a SLIGHT overlap of the fighter's leg — a foreground
+   companion, not stacked over the body and not tucked behind. */
+.you-side .pet-fighter { left: -14px; }
 .foe-side .pet-fighter.add { right: 96px; }                            /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
 .pet-fighter.fainted .fstage.petmini { transform: rotate(68deg) translateY(8px); }

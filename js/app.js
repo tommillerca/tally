@@ -218,8 +218,8 @@ async function boot() {
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first-ever install
-      if (performance.now() < 20000 && !sheetStack.length) location.reload();
-      else toast('Update ready: close and reopen to apply', 3600);
+      if (!sheetStack.length) location.reload();   // apply the new build as soon as no sheet is open
+      else toast('Update ready — leave this screen to apply', 3600);
     });
   }
   requestPersistence();
@@ -2458,10 +2458,11 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
-    Boneheadz Gym v4 · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
+    Boneheadz Gym · build ${APP_BUILD} · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
     Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0)
   </p>`;
@@ -2591,6 +2592,23 @@ async function renderSettings(el) {
     if (!confirm('Last check: your log, foods, and weights will be gone.')) return;
     for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
     location.reload();
+  });
+  // Force-fetch the latest build: drop the service worker + all caches, then
+  // reload from the network. This is the escape hatch when a stale cached build
+  // is stuck on the device (data is untouched — it lives in IndexedDB).
+  $('#updateBtn')?.addEventListener('click', async () => {
+    toast('Getting the latest build...', 2200);
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch { /* best effort */ }
+    setTimeout(() => location.reload(true), 500);
   });
 }
 
@@ -4055,6 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
+const APP_BUILD = 'v114'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
