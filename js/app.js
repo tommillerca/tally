@@ -42,7 +42,7 @@ import {
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
-  applyAction, endTurn, planTelegraph, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
+  applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
@@ -4073,7 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v117'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v118'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4404,7 +4404,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>
-      <div class="telegraph arena-tele" id="teleBanner" hidden></div>
       <div id="floats"></div>
     </div>
     <div class="fight-meta"><span class="range-pill" id="rangePill"></span><span class="fight-log" id="flog">Round one. Your turn.</span></div>
@@ -4483,8 +4482,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const youStg = el('youStage'), foeStg = el('foeStage');
     if (youStg) { youStg.classList.toggle('raging', !!player.rage); youStg.classList.toggle('has-minion', !!player.minion); youStg.classList.toggle('has-totem', !!player.totem); }
     if (foeStg) { foeStg.classList.toggle('raging', !!foe.rage); foeStg.classList.toggle('has-minion', !!foe.minion); foeStg.classList.toggle('has-totem', !!foe.totem); }
-    el('teleBanner').hidden = !fight.telegraph;
-    if (fight.telegraph) el('teleBanner').textContent = `⚠ ${foe.name} is winding up something heavy. Guard or race it!`;
   }
 
   function floatNode(html, side, cls = '') {
@@ -4660,9 +4657,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rattle: 'RATTLED', rage: 'RAGE!' }[ev.kind] || '';
+      const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rage: 'RAGE!' }[ev.kind] || '';
       floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'rage' ? 'stamp rage' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
-      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind' || ev.kind === 'rattle') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
+      if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);
       if (ev.kind === 'ward' || ev.kind === 'guard') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.kind === 'guard' ? 'guard' : 'wardfx', fxMs + 300);
       if (ev.kind === 'rage') { pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'ragefx', fxMs + 400); impactBurst(ev.who, 'rage', true); hitSound(S.sounds, 'thud'); }
       if (ev.kind === 'burn') impactBurst(ev.who, 'fire');
@@ -4699,7 +4696,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.kind === 'chill') return `the chill drains ${who === 'You' ? 'your' : 'their'} stamina`;
       if (ev.kind === 'burn') return `${who === 'You' ? 'You catch' : who + ' catches'} fire`;
       if (ev.kind === 'guard') return `${who === 'You' ? 'You raise' : who + ' raises'} a Bone Guard (absorbs ${ev.shield})`;
-      if (ev.kind === 'rattle') return `${who === 'You' ? 'You are' : who + ' is'} RATTLED: less damage, drained stamina`;
       if (ev.kind === 'ward') return `${who === 'You' ? 'You raise' : who + ' raises'} a shimmering ward`;
       if (ev.kind === 'blind') return `${who === 'You' ? 'You are' : who + ' is'} BLINDED: bone dust in the eyes`;
       if (ev.kind === 'poison') return `${who === 'You' ? 'You are' : who + ' is'} POISONED (x${ev.stacks})`;
@@ -4757,14 +4753,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : '●'.repeat(ACTIONS[id].ap)}`;
     };
     const guardAmt = Math.round(16 + player.stats.marrow * 0.15);
-    // active defense (no more Block/Dodge): raise a shield or land a debuff
+    // THE defensive move (Rattle retired): shield + stamina, heckle adds a weaken
     const defenseRow = () => {
-      let h = '';
       const g = get('guard');
-      if (g) h += btn(g, { hint: `shield ~${guardAmt} · +stamina`, glow: (!!fight.telegraph && (player.ward || 0) <= 0) || player.hp < player.d.maxHp * 0.4 || player.wind < 20 });
-      const r = get('rattle');
-      if (r) h += btn(r, { hint: '-18% their dmg · saps stamina', weak: !!foe.weaken });
-      return h;
+      if (!g) return '';
+      const hint = `shield ~${guardAmt} · +stamina${player.talents.has('heckle') ? ' · weakens' : ''}`;
+      return btn(g, { hint, glow: player.hp < player.d.maxHp * 0.4 || player.wind < 20 });
     };
 
     let html = '';
@@ -4936,7 +4930,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       endTurn(fight);
       const ticks = fight.pendingTicks || [];
       if (ticks.length) { ticks.forEach(playFx); setLog(ticks.map(describe).join(' · ')); fight.pendingTick = null; fight.pendingTicks = []; if (fight.over) return settle(); }
-      planTelegraph(fight);
       setTimeout(() => refreshAll('Your turn.'), beatMs * 0.7);
     };
     setTimeout(step, beatMs * 0.6);
@@ -5064,7 +5057,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }, fast ? 80 : 750);
   }
 
-  planTelegraph(fight);
   refreshAll('Round one. Your turn.');
 }
 

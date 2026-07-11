@@ -7,7 +7,7 @@ import { petAbilityEffect, petActionMeta } from './pets.js';
 // Core guarantees (spec):
 //   - fights resolve in ~5-7 turns
 //   - effort dominates gear (PowerMult spread 1.0-2.5 > any WeaponMult)
-//   - heavies are committal and telegraphed; reads beat mashing
+//   - heavies are committal and UNANNOUNCED; guard on reads, not banners
 
 /* ================= stats from real behavior ================= */
 // Base stats only (V1): permanent, cumulative, never lost. 0-100.
@@ -103,7 +103,7 @@ export const TALENT_TREES = [
       { id: 'crowdwork', tier: 1, name: 'Crowd Work', desc: 'Hype builds 40% faster.' },
       { id: 'stagepresence', tier: 1, ranks: 5, name: 'Stage Presence', desc: 'All Hype you build is 6% greater per rank.' },
       { id: 'bigentrance', tier: 2, name: 'Big Entrance', desc: 'Start every fight at 25 Hype.' },
-      { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Your Rattle cuts deeper: the enemy deals 25% less damage for 3 turns.' },
+      { id: 'heckle', tier: 2, name: 'Heckle', desc: 'Your Bone Guard also RATTLES the enemy: they deal 25% less damage for 3 turns.' },
       { id: 'warmup', tier: 2, ranks: 3, name: 'Warm-Up Act', desc: 'Start every fight with +4 Hype per rank.' },
       { id: 'comboartist', tier: 2, ranks: 5, name: 'Combo Artist', desc: '+2% crit chance per rank.' },
       { id: 'ovation', tier: 3, name: 'Standing Ovation', desc: 'Getting hit builds double Hype (the comeback engine).' },
@@ -356,7 +356,6 @@ export const ACTIONS = {
   // Active defense (no more passive Block/Dodge/Brace): a shield you raise and a
   // debuff you land. Both are proactive plays, not "turtle and wait".
   guard:    { label: 'Bone Guard', ap: 1, wind: 12, shield: true, hype: 3 },
-  rattle:   { label: 'Rattle', ap: 1, wind: 12, debuff: true, hype: 4 },
   signature:{ label: 'Signature', ap: 2, wind: 0, base: 120 },
   titan:    { label: 'Titan', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
   flurry:   { label: 'Flurry', ap: 2, wind: 0, base: 10, talent: 'flurry' },
@@ -646,7 +645,6 @@ export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) 
     ap: player.d.ap,
     rng: mulberry32(seed),
     aiLevel,
-    telegraph: null,   // set when the foe has pre-committed a haymaker
     log: [],
     over: null,        // {winner: 'p'|'f'|'draw'}
   };
@@ -779,31 +777,26 @@ export function applyAction(fight, actionId) {
 
   fight.ap -= a.ap;
   me.wind -= windCost;
-  if (['jab', 'swing', 'haymaker', 'guard', 'rattle'].includes(actionId)) {
+  if (['jab', 'swing', 'haymaker', 'guard'].includes(actionId)) {
     me.recentCloseMoves.push(actionId);
     if (me.recentCloseMoves.length > 6) me.recentCloseMoves.shift();
   }
 
   switch (actionId) {
     case 'guard': {
-      // Bone Guard: raise an absorb pool (Marrow-scaled) AND catch your breath
-      // (restore Stamina) — this is how you recover fuel now that Brace is gone.
+      // Bone Guard: THE defensive move (Rattle retired v118 — two defense buttons
+      // was one too many). Raise an absorb pool (Marrow-scaled) AND catch your
+      // breath (restore Stamina). Heckle folds in here: your guard also rattles
+      // the enemy — they deal 25% less damage for 3 turns.
       const shield = Math.round(GUARD_BASE + me.stats.marrow * 0.15);
       me.ward = Math.max(me.ward || 0, shield);
       me.wind = Math.min(me.d.maxWind, me.wind + GUARD_STAMINA);
       gainHype(me, a.hype);
       events.push({ t: 'status', who: fight.active, kind: 'guard', shield });
-      break;
-    }
-    case 'rattle': {
-      // Rattle: shake the foe (weaken their damage) and jar loose some Stamina.
-      // Heckle (repurposed from the retired Taunt): the weaken cuts deeper + longer.
-      const pct = me.talents.has('heckle') ? 0.25 : 0.18;
-      const turns = me.talents.has('heckle') ? 3 : 2;
-      if (!them.weaken || them.weaken.pct < pct) them.weaken = { pct, turns };
-      them.wind = Math.max(0, them.wind - 12);
-      gainHype(me, a.hype);
-      events.push({ t: 'status', who: defWho, kind: 'rattle' });
+      if (me.talents.has('heckle')) {
+        if (!them.weaken || them.weaken.pct < 0.25) them.weaken = { pct: 0.25, turns: 3 };
+        events.push({ t: 'status', who: defWho, kind: 'weaken' });
+      }
       break;
     }
     case 'signature': {
@@ -1225,17 +1218,6 @@ function haymakerRate(moves) {
   return atk.filter(m => m === 'haymaker').length / atk.length;
 }
 
-// pre-commit: does the foe wind up a haymaker for its next turn?
-// called at the START of the player's turn so heavies are telegraphed.
-export function planTelegraph(fight) {
-  const f = fight.f;
-  fight.telegraph = null;
-  if (fight.over) return;
-  const wantsHeavy = f.wind >= Math.round(35 * f.weapon.windCostMult('haymaker')) &&
-    fight.rng() < (0.28 + fight.aiLevel * 0.04);
-  if (wantsHeavy) fight.telegraph = 'haymaker';
-}
-
 // run one enemy fighter's whole turn (captain or add), pushing events
 function actForEnemy(fight, who, events) {
   const f = fighterOf(fight, who), p = fight.p;
@@ -1272,20 +1254,19 @@ function actForEnemy(fight, who, events) {
       continue;
     }
 
-    if (fight.telegraph === 'haymaker' && pick('haymaker')) {
+    // heavies are UNANNOUNCED now (no telegraph): the foe just throws one when
+    // it has the gas, so Guard is a read/rhythm call, not a reaction to a banner
+    if (pick('haymaker') && fight.rng() < (0.28 + fight.aiLevel * 0.04)) {
       choice = 'haymaker';
-      fight.telegraph = null;
     } else if (pick('signature')) {
       choice = 'signature';
     } else if (pick('titan') && fight.rng() < 0.6) {
       choice = 'titan';
     } else {
-      // Active-defense AI: raise a Bone Guard when hurt, occasionally Rattle to
-      // sap the player's offense, but mostly press the attack.
+      // Active-defense AI: raise a Bone Guard when hurt, but mostly press the attack.
       const lowHp = f.hp <= f.d.maxHp * 0.30;
       const roll = fight.rng();
       if (lowHp && (f.ward || 0) <= 0 && pick('guard') && roll < 0.45 + fight.aiLevel * 0.05) choice = 'guard';
-      else if (roll < 0.16 && pick('rattle') && !p.weaken) choice = 'rattle';
       else if (roll < 0.60 && pick('swing')) choice = 'swing';
       else if (roll < 0.82 && pick('jab')) choice = 'jab';
       else if (pick('swing')) choice = 'swing';
@@ -1324,14 +1305,14 @@ export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapo
   let guard = 0;
   while (!fight.over && guard++ < 200) {
     if (fight.active === 'p') {
-      planTelegraph(fight);
       let inner = 0;
       while (!fight.over && fight.active === 'p' && fight.ap > 0 && inner++ < 6) {
         const legal = actionsFor(fight).filter(x => x.enabled);
         if (!legal.length) break;
         const pick = id => legal.find(x => x.id === id);
         let c;
-        if (fight.telegraph === 'haymaker' && (fight.p.ward || 0) <= 0 && pick('guard') && fight.rng() < 0.5) c = 'guard';
+        // no telegraph to react to anymore: guard on a read (hurt + shield down)
+        if ((fight.p.ward || 0) <= 0 && fight.p.hp < fight.p.d.maxHp * 0.55 && pick('guard') && fight.rng() < 0.4) c = 'guard';
         else if (pick('signature')) c = 'signature';
         else if (pick('swing')) c = 'swing';
         else if (pick('jab')) c = 'jab';

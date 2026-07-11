@@ -2,7 +2,7 @@ import { buildBattlePet } from '/Users/tommiller/Documents/Hyperframes Editor/ta
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {
   makeFighter, createFight, actionsFor, applyAction, endTurn,
-  planTelegraph, aiTakeTurn, scaleStats, LADDER, CHAMPION, RUNG_TALENTS,
+  aiTakeTurn, scaleStats, LADDER, CHAMPION, RUNG_TALENTS,
 } from '../js/pit.js';
 
 const MID = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
@@ -28,10 +28,10 @@ const BUILDS = {
 // ---- player policies: from "smart" down to brainless ----
 // each returns an action id from `legal` (enabled only) or null to end turn
 const POLICIES = {
-  // reasonable player: defends telegraphs, spends casts, manages wind
+  // reasonable player: guards on reads, spends casts, manages wind
   smart(fight, legal, pick) {
     const p = fight.p;
-    if (fight.telegraph === 'haymaker' && pick('guard') && (p.ward || 0) <= 0) return 'guard';
+    if ((p.ward || 0) <= 0 && p.hp < p.d.maxHp * 0.6 && pick('guard') && fight.rng() < 0.45) return 'guard';
     if (pick('signature')) return 'signature';
     // v70 class actives: raise/plant a summon while it's down, rage early
     if (pick('raisedead') && !p.minion) return 'raisedead';
@@ -72,7 +72,7 @@ const POLICIES = {
   },
   // jab-kite: stamina-denial probe — only jab (kite talent saps 8/hit) + guard
   kite(fight, legal, pick) {
-    if (fight.telegraph === 'haymaker' && pick('guard') && (fight.p.ward || 0) <= 0) return 'guard';
+    if ((fight.p.ward || 0) <= 0 && fight.p.hp < fight.p.d.maxHp * 0.6 && pick('guard')) return 'guard';
     if (pick('signature')) return 'signature';
     if (pick('jab')) return 'jab';
     if (pick('guard')) return 'guard';
@@ -84,7 +84,6 @@ const POLICIES = {
     if (pick('ward') && p.ward <= 0) return 'ward';
     if (p.hp < p.d.maxHp * 0.7 && pick('mend')) return 'mend';
     if (pick('guard') && (p.ward || 0) <= 0) return 'guard';
-    if (pick('rattle') && !fight.f.weaken) return 'rattle';
     if (pick('jab')) return 'jab';
     return null;
   },
@@ -125,7 +124,6 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
   const m = { foeActions: 0, foeAttacks: 0, foeBraces: 0, playerActions: 0, foeWindSum: 0, foeWindSamples: 0 };
   while (!fight.over && guard++ < 400) {
     if (fight.active === 'p') {
-      planTelegraph(fight);
       let inner = 0;
       while (!fight.over && fight.active === 'p' && fight.ap > 0 && inner++ < 8) {
         const legal = actionsFor(fight).filter(x => x.enabled);

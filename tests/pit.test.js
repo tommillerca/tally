@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
-  createFight, actionsFor, applyAction, endTurn, planTelegraph, aiTakeTurn,
+  createFight, actionsFor, applyAction, endTurn, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
 } from '../js/pit.js';
@@ -82,10 +82,10 @@ test('no counter matrix: counterMult is a neutral shim', () => {
   assert.equal(counterMult('swing', 'block').mult, 1.0);
   assert.equal(counterMult('haymaker', 'dodge').mult, 1.0);
   assert.ok(!counterMult('haymaker', 'dodge').miss);
-  // the defensive moves are gone from the action set entirely
-  assert.ok(!ACTIONS.block && !ACTIONS.dodge && !ACTIONS.brace);
-  // replaced by an active shield + an active debuff
-  assert.ok(ACTIONS.guard.shield && ACTIONS.rattle.debuff);
+  // the passive defensive moves are gone from the action set entirely, and so
+  // is Rattle (v118: ONE defensive move) — Bone Guard's active shield is it
+  assert.ok(!ACTIONS.block && !ACTIONS.dodge && !ACTIONS.brace && !ACTIONS.rattle);
+  assert.ok(ACTIONS.guard.shield);
 });
 
 test('Bone Guard raises a Marrow-scaled absorb pool that soaks damage', () => {
@@ -193,16 +193,23 @@ test('armor: Marrow blunts physical, Reflex blunts magic, gear adds on top', () 
   assert.ok(geared.d.armor > beefy.d.armor && geared.d.armor <= 0.40);
 });
 
-test('Rattle weakens the foe and drains their stamina', () => {
+test('heckle: Bone Guard also weakens the foe 25% for 3 turns', () => {
   const fight = createFight({
+    player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 }, talents: ['crowdwork', 'heckle'] }),
+    foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
+    seed: 5,
+  });
+  applyAction(fight, 'guard');
+  assert.ok(fight.p.ward > 0, 'guard raised a shield');
+  assert.ok(fight.f.weaken && fight.f.weaken.pct === 0.25 && fight.f.weaken.turns === 3, 'heckle weaken landed');
+  // without heckle, guard weakens nothing
+  const plain = createFight({
     player: makeFighter({ name: 'P', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
     foe: makeFighter({ name: 'F', stats: { power: 50, marrow: 50, wind: 90, reflex: 0, hype: 0 } }),
     seed: 5,
   });
-  const foeWind = fight.f.wind;
-  applyAction(fight, 'rattle');
-  assert.ok(fight.f.weaken && fight.f.weaken.pct >= 0.18);
-  assert.equal(fight.f.wind, foeWind - 12); // target's stamina jarred loose
+  applyAction(plain, 'guard');
+  assert.ok(!plain.f.weaken, 'plain guard does not weaken');
 });
 
 // ---- spec section 5: signature ----
@@ -242,7 +249,7 @@ test('actionsFor: core moves always offered, retired range moves gone, hype gate
     seed: 3,
   });
   const ids = actionsFor(fight).map(a => a.id);
-  assert.ok(ids.includes('jab') && ids.includes('swing') && ids.includes('haymaker') && ids.includes('guard') && ids.includes('rattle'));
+  assert.ok(ids.includes('jab') && ids.includes('swing') && ids.includes('haymaker') && ids.includes('guard'));
   assert.ok(!ids.includes('signature'), 'signature gated until hype threshold');
   for (const gone of ['shove', 'advance', 'throwb', 'taunt']) assert.ok(!ids.includes(gone), gone + ' retired');
   assert.ok(!('shove' in ACTIONS) && !('taunt' in ACTIONS) && !('advance' in ACTIONS) && !('throwb' in ACTIONS));
