@@ -28,7 +28,7 @@ import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './a
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petStepsSince, petPicks, setPetPick } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -3308,8 +3308,9 @@ function wireLootChoice(scope, claimFn, onDone) {
 
 function petPanelHtml(petId, fighter) {
   const fam = familyOf(petId);
-  const meta = fighter.petMeta && fighter.petMeta.id === petId ? fighter.petMeta : { level: petLevel(0), picks: [] };
+  const meta = fighter.petMeta && fighter.petMeta.id === petId ? fighter.petMeta : { level: petLevel(0), picks: [], steps: 0 };
   const lvl = meta.level, picks = meta.picks;
+  const toNext = petStepsToNext(meta.steps || 0);
   const tree = PET_TREES[fam.key];
   const passives = { yourDamage: 'your attacks hit harder', damageTaken: 'you take less damage', hypeGain: 'you build Hype faster' };
   const shiny = S.shinyPets.has(petId);
@@ -3321,7 +3322,7 @@ function petPanelHtml(petId, fighter) {
       ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
         <b>${esc(fam.name)}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
-        <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < 6 ? ' · walk to grow' : ' · maxed'}</small>
+        <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
         <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8% to all stats.' : ''}</span>
       </div>
@@ -3514,9 +3515,11 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   return bits;
 }
 
-// Pets level up from walking; when a new tier unlocks (Lv 2/4/6) the player
-// earns a pet talent to pick. Make that obvious with a toast + celebration.
-// First sighting records silently (no retroactive spam).
+// Pets level up from walking; when a new tier unlocks (Lv 2/4/6/8/10) the player
+// earns a pet talent to pick. Leveling is a real grind now, so the pay-off has to
+// LAND: a full-screen celebration (stat gains + talent CTA) when the app is idle,
+// falling back to a toast only if a sheet/fight is already open. First sighting
+// records silently (no retroactive spam).
 async function checkPetLevelUp() {
   const eq = await equipped();
   if (!eq.C) return;
@@ -3528,13 +3531,43 @@ async function checkPetLevelUp() {
   const newTalent = unlockedTiers(cur).length > unlockedTiers(prev).length;
   seen[eq.C] = cur; await kvSet('petSeenLevel', seen);
   const petName = (BH_BY_ID[eq.C] && BH_BY_ID[eq.C].name) || 'Your pet';
-  if (newTalent) {
-    confettiRain(60); levelSound(S.sounds);
-    toast(`🐾 ${petName} reached Lv ${cur} and unlocked a new talent — pick it in Wardrobe (tap your pet)!`, 4600);
-  } else {
-    popSound(S.sounds);
-    toast(`🐾 ${petName} reached Lv ${cur}!`, 3000);
+  // if something is already on screen (a fight, another sheet) don't hijack it
+  if (sheetStack.length) {
+    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent — pick it in Wardrobe!`, 4600); }
+    else { popSound(S.sounds); toast(`🐾 ${petName} reached Lv ${cur}!`, 3000); }
+    return;
   }
+  openPetLevelUp(eq.C, cur, prev, newTalent);
+}
+
+// Full-screen pet level-up reveal: the pet rises on a burst of rays, the new level
+// stamps in, and the exact stat gains (and any freshly unlocked talent) are spelled
+// out so the moment is unmistakable.
+function openPetLevelUp(petId, level, prevLevel, newTalent) {
+  const fam = familyOf(petId);
+  const petName = (BH_BY_ID[petId] && BH_BY_ID[petId].name) || fam.name;
+  const shiny = S.shinyPets.has(petId);
+  const before = petBattleStats(petId, prevLevel, shiny);
+  const after = petBattleStats(petId, level, shiny);
+  const rows = [['PWR', before.power, after.power], ['HP', before.hp, after.hp], ['REF', before.reflex, after.reflex]];
+  const gains = rows.map(([k, b, a]) => `<span class="pet-gain">${k} <b>${a}</b>${a > b ? ` <i>+${a - b}</i>` : ''}</span>`).join('');
+  confettiRain(70); levelSound(S.sounds);
+  const wrap = openSheet(`
+    <div class="sheet-body" style="text-align:center;padding-top:12px">
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'}${shiny ? ' is-shiny' : ''}">${petSpriteHtml(petId, 104, !petHovers(petId))}</div></div>
+      <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
+      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="pet-gains">${gains}</div>
+      ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Wardrobe.</div>
+        <button class="btn" id="petTalentBtn">Pick my talent</button>
+        <div style="height:8px"></div>
+        <button class="btn ghost" id="celeOk">Later</button>`
+      : `<div style="height:16px"></div><button class="btn" id="celeOk">Nice</button>`}
+      <div style="height:6px"></div>
+    </div>`);
+  $('#celeOk', wrap).addEventListener('click', () => history.back());
+  const tb = $('#petTalentBtn', wrap);
+  if (tb) tb.addEventListener('click', () => { history.back(); openCharacter('wardrobe'); });
 }
 
 async function ingestHkFromUrl() {
@@ -4068,10 +4101,11 @@ async function buildFighter() {
   let battlePet = null, petMeta = null;
   const eqForPet = await equipped();
   if (eqForPet.C) {
-    const pl = petLevel(await petStepsSince(eqForPet.C));
+    const steps = await petStepsSince(eqForPet.C);
+    const pl = petLevel(steps);
     const picks = await petPicks(eqForPet.C);
     battlePet = buildBattlePet(eqForPet.C, pl, picks, { shiny: S.shinyPets.has(eqForPet.C) });
-    petMeta = { id: eqForPet.C, level: pl, picks };
+    petMeta = { id: eqForPet.C, level: pl, picks, steps };
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
@@ -4080,7 +4114,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v124'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v125'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

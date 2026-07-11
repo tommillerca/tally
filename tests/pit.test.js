@@ -963,7 +963,7 @@ test('Heavy Hands also steadies aim (accuracy talent)', () => {
   assert.ok(missRate(slab) < missRate(plain), 'heavy hands lands more often');
 });
 
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_ASSIGN, PET_FAMILIES, PET_TREES } from '../js/pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_ASSIGN, PET_FAMILIES, PET_TREES, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petAbilityEffect } from '../js/pets.js';
 
 /* ============ v34: pets in battle ============ */
 
@@ -971,10 +971,58 @@ test('pets: families cover all 3 roles; level curve + tier gates', () => {
   const fams = new Set(Object.keys(PET_ASSIGN).map(id => familyOf(id).key));
   assert.deepEqual([...fams].sort(), ['hound', 'imp', 'warden'], 'all three families represented');
   assert.equal(petLevel(0), 1);
-  assert.equal(petLevel(3000), 2);
-  assert.equal(petLevel(99999), 6, 'caps at 6');
+  assert.equal(petLevel(4000), 2);
+  assert.equal(petLevel(3999), 1, 'level 2 costs the full 4000 steps');
+  assert.equal(petLevel(999999), PET_MAX_LEVEL, `caps at ${PET_MAX_LEVEL}`);
+  assert.equal(PET_MAX_LEVEL, 10, 'tree now goes to level 10');
   assert.deepEqual(unlockedTiers(1), []);
-  assert.deepEqual(unlockedTiers(6), [2, 4, 6]);
+  assert.deepEqual(unlockedTiers(10), [2, 4, 6, 8, 10]);
+  assert.deepEqual(unlockedTiers(7), [2, 4, 6]);
+});
+
+test('pets: leveling is a real grind — cost escalates and reaching old max (Lv6) is harder', () => {
+  // strictly increasing thresholds = each level costs more than the last
+  for (let i = 1; i < PET_LEVEL_STEPS.length; i++) {
+    assert.ok(PET_LEVEL_STEPS[i] > PET_LEVEL_STEPS[i - 1], `threshold ${i} increases`);
+    if (i >= 2) {
+      const dPrev = PET_LEVEL_STEPS[i - 1] - PET_LEVEL_STEPS[i - 2];
+      const dHere = PET_LEVEL_STEPS[i] - PET_LEVEL_STEPS[i - 1];
+      assert.ok(dHere >= dPrev, `step cost for level ${i + 1} is not cheaper than the last`);
+    }
+  }
+  // old curve reached Lv6 at 15000 steps; the new one demands materially more
+  assert.ok(PET_LEVEL_STEPS[5] > 15000, `Lv6 now costs ${PET_LEVEL_STEPS[5]} (was 15000)`);
+  // steps-to-next drains toward zero and is 0 once maxed
+  assert.equal(petStepsToNext(0), PET_LEVEL_STEPS[1]);
+  assert.equal(petStepsToNext(999999), 0);
+});
+
+test('pets: deeper tree — every family has 5 tiers with two picks each', () => {
+  for (const fam of ['hound', 'warden', 'imp']) {
+    const tree = PET_TREES[fam];
+    assert.equal(tree.length, 5, `${fam} has 5 tiers`);
+    assert.deepEqual(tree.map(t => t.tier), [2, 4, 6, 8, 10], `${fam} tiers at 2/4/6/8/10`);
+    for (const row of tree) assert.equal(row.opts.length, 2, `${fam} tier ${row.tier} offers two picks`);
+  }
+});
+
+test('pets: tier-8/10 talents actually amplify the ability (Savage bite, Fortify shield, Deep Hex)', () => {
+  const savage = buildBattlePet('C3', 10, ['h-savage']);
+  const plainH = buildBattlePet('C3', 10, []);
+  const A = makeFighter({ name: 'A', stats: MID, pet: savage });
+  const P = makeFighter({ name: 'P', stats: MID, pet: plainH });
+  const foe = makeFighter({ name: 'F', stats: MID });
+  const savBite = petAbilityEffect(A.pet, A, foe);
+  const plnBite = petAbilityEffect(P.pet, P, foe);
+  assert.ok(savBite.damage > plnBite.damage, 'Savage bites harder');
+  const gore = petAbilityEffect(buildBattlePet('C3', 10, ['h-gore']), P, foe);
+  assert.ok(gore.poison.turns > plnBite.poison.turns, 'Gore extends poison');
+  const fort = petAbilityEffect(buildBattlePet('C5', 10, ['w-fortify']), makeFighter({ name: 'W', stats: MID }), foe);
+  const plnW = petAbilityEffect(buildBattlePet('C5', 10, []), makeFighter({ name: 'W2', stats: MID }), foe);
+  assert.ok(fort.shield > plnW.shield, 'Fortify grows the shield');
+  const deep = petAbilityEffect(buildBattlePet('C1', 10, ['i-deephex']), makeFighter({ name: 'I', stats: MID }), foe);
+  const plnI = petAbilityEffect(buildBattlePet('C1', 10, []), makeFighter({ name: 'I2', stats: MID }), foe);
+  assert.ok(deep.weakenPct > plnI.weakenPct, 'Deep Hex weakens more');
 });
 
 test('pets: Hound passive raises your damage; Warden passive lowers damage taken', () => {
@@ -1026,8 +1074,8 @@ test('pets: one pick per tier; tree gated by pet level', () => {
   // the UI enforces one-per-tier; here assert tree shape + level gating math
   for (const fam of Object.keys(PET_TREES)) {
     const tree = PET_TREES[fam];
-    assert.equal(tree.length, 3, fam + ' has 3 tiers');
-    assert.deepEqual(tree.map(t => t.tier), [2, 4, 6]);
+    assert.equal(tree.length, 5, fam + ' has 5 tiers');
+    assert.deepEqual(tree.map(t => t.tier), [2, 4, 6, 8, 10]);
     assert.ok(tree.every(t => t.opts.length === 2), 'one-of-two per tier');
   }
 });

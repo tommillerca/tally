@@ -57,6 +57,12 @@ export const PET_TREES = {
     { tier: 6, opts: [
       { id: 'h-frenzy', name: 'Frenzy', desc: 'Below 25% enemy HP, the pet bites twice.' },
       { id: 'h-maul', name: 'Maul', desc: 'Bites can crit for double.' } ] },
+    { tier: 8, opts: [
+      { id: 'h-savage', name: 'Savage', desc: 'Bites hit 35% harder.' },
+      { id: 'h-gore', name: 'Gore', desc: 'Poison lasts 2 extra turns.' } ] },
+    { tier: 10, opts: [
+      { id: 'h-plague', name: 'Plague', desc: 'Every bite lands an extra poison stack.' },
+      { id: 'h-rupture', name: 'Rupture', desc: 'Poison ticks 50% harder (stacks with Venom).' } ] },
   ],
   warden: [
     { tier: 2, opts: [
@@ -68,6 +74,12 @@ export const PET_TREES = {
     { tier: 6, opts: [
       { id: 'w-laststand', name: 'Last Stand', desc: 'The first killing blow each fight is fully absorbed.' },
       { id: 'w-devotion', name: 'Devotion', desc: 'Shields also grant you +15 Stamina.' } ] },
+    { tier: 8, opts: [
+      { id: 'w-fortify', name: 'Fortify', desc: 'Shields are a further 40% larger.' },
+      { id: 'w-renew', name: 'Renew', desc: 'Shielding also heals you 8% max HP.' } ] },
+    { tier: 10, opts: [
+      { id: 'w-immortal', name: 'Immortal', desc: 'Your passive damage reduction is 50% stronger.' },
+      { id: 'w-bastion', name: 'Bastion', desc: 'Shields also grant you +25 Stamina.' } ] },
   ],
   imp: [
     { tier: 2, opts: [
@@ -79,6 +91,12 @@ export const PET_TREES = {
     { tier: 6, opts: [
       { id: 'i-mark', name: "Death's Mark", desc: 'Cursed enemies take +10% from everything.' },
       { id: 'i-trick', name: 'Trickster', desc: 'Curse also staggers the enemy (loses an action).' } ] },
+    { tier: 8, opts: [
+      { id: 'i-deephex', name: 'Deep Hex', desc: 'Curse weakens the enemy 50% more.' },
+      { id: 'i-drain', name: 'Soul Drain', desc: 'Curse drains 16 enemy Stamina.' } ] },
+    { tier: 10, opts: [
+      { id: 'i-oblivion', name: 'Oblivion', desc: 'Curse lasts 2 extra turns.' },
+      { id: 'i-havoc', name: 'Havoc', desc: 'Curse always staggers AND blinds the enemy.' } ] },
   ],
 };
 
@@ -120,14 +138,29 @@ export function petBattleStats(petId, level = 1, shiny = false) {
 }
 
 // ---- leveling: pets grow as you walk ----
-export const PET_STEPS_PER_LEVEL = 3000;
-export const PET_MAX_LEVEL = 6;
-export function petLevel(stepsSinceHatch) {
-  return Math.max(1, Math.min(PET_MAX_LEVEL, 1 + Math.floor(Math.max(0, stepsSinceHatch) / PET_STEPS_PER_LEVEL)));
+// Maxing a pet is a long-haul goal, not a formality: the cost per level ESCALATES
+// so early levels come while you settle in and the top of the tree (Lv 10) is a
+// genuine achievement worth chasing. PET_LEVEL_STEPS[i] = lifetime steps-since-
+// hatch needed to REACH level i+1 (index 0 = level 1 = the moment it hatches).
+export const PET_LEVEL_STEPS = [0, 4000, 9000, 15000, 22000, 30000, 40000, 52000, 66000, 82000];
+export const PET_MAX_LEVEL = PET_LEVEL_STEPS.length; // 10
+// steps still needed to reach the NEXT level (0 if maxed) — drives the progress UI
+export function petStepsToNext(stepsSinceHatch) {
+  const s = Math.max(0, stepsSinceHatch || 0);
+  const lvl = petLevel(s);
+  if (lvl >= PET_MAX_LEVEL) return 0;
+  return Math.max(0, PET_LEVEL_STEPS[lvl] - s); // PET_LEVEL_STEPS[lvl] is the (lvl+1)th threshold
 }
-// tiers unlock at pet level 2 / 4 / 6
+export function petLevel(stepsSinceHatch) {
+  const s = Math.max(0, stepsSinceHatch || 0);
+  let lvl = 1;
+  for (let i = 1; i < PET_LEVEL_STEPS.length; i++) { if (s >= PET_LEVEL_STEPS[i]) lvl = i + 1; else break; }
+  return lvl;
+}
+// talent tiers unlock at pet level 2 / 4 / 6 / 8 / 10 (one choice every two levels)
+export const PET_TIERS = [2, 4, 6, 8, 10];
 export function unlockedTiers(level) {
-  return [2, 4, 6].filter(t => level >= t);
+  return PET_TIERS.filter(t => level >= t);
 }
 
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
@@ -154,7 +187,10 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
     rarity: stats.rarity,
     stats,                    // intrinsic battle stats (power/marrow/wind/reflex/hp)
     passive: fam.passive,
-    passivePct: passivePct(level) * (fam.key === 'warden' && has('w-guardstance') ? 1.35 : 1) * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
+    passivePct: passivePct(level)
+      * (fam.key === 'warden' && has('w-guardstance') ? 1.35 : 1)
+      * (fam.key === 'warden' && has('w-immortal') ? 1.5 : 1)
+      * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
     cooldown: fam.cooldown === 2 && has('h-pack') ? 1 : fam.cooldown,
     picks: new Set(picks),
     // per-fight mutable state is added by makeFighter (cd timer, lastStandUsed)
@@ -191,31 +227,37 @@ export function petAbilityEffect(pet, self, foe) {
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
   if (pet.family === 'hound') {
-    const base = Math.round((2 + lvl * 0.7) * self.d.powerMult);
+    const base = Math.round((2 + lvl * 0.7) * self.d.powerMult * (has('h-savage') ? 1.35 : 1));
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
-    const stacks = has('h-rabid') ? 2 : 1;
+    const stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
     return {
       kind: 'pethit', bites, damage: base, crit: has('h-maul'),
       lifesteal: has('h-bloodscent') ? 0.06 : 0,
-      poison: { per: Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1)), turns: 3, stacks },
+      poison: {
+        per: Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1) * (has('h-rupture') ? 1.5 : 1)),
+        turns: 3 + (has('h-gore') ? 2 : 0),
+        stacks,
+      },
     };
   }
   if (pet.family === 'warden') {
     // tuned down for the pet-as-body era: the pet already adds a soak layer, so
     // its support kit is lighter than the v34 companion version
-    const shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1));
+    const shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1) * (has('w-fortify') ? 1.4 : 1));
     return {
       kind: 'petshield', shield,
-      heal: has('w-mend') ? Math.round(self.d.maxHp * 0.06) : 0,
+      heal: (has('w-mend') ? Math.round(self.d.maxHp * 0.06) : 0) + (has('w-renew') ? Math.round(self.d.maxHp * 0.08) : 0),
       cleanse: has('w-cleanse'),
-      stamina: has('w-devotion') ? 15 : 0,
+      stamina: (has('w-devotion') ? 15 : 0) + (has('w-bastion') ? 25 : 0),
     };
   }
   // imp
-  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1);
+  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1);
   return {
-    kind: 'petdebuff', weakenPct: pct, turns: has('i-doublehex') ? 3 : 2,
-    blind: has('i-jinx'), staminaDrain: has('i-siphon') ? 8 : 0,
-    mark: has('i-mark'), stagger: has('i-trick'),
+    kind: 'petdebuff', weakenPct: pct,
+    turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 2 : 0),
+    blind: has('i-jinx') || has('i-havoc'),
+    staminaDrain: has('i-drain') ? 16 : (has('i-siphon') ? 8 : 0),
+    mark: has('i-mark'), stagger: has('i-trick') || has('i-havoc'),
   };
 }
