@@ -2095,7 +2095,7 @@ body::before {
 /* --- cloud --- */
 .pa-cloud .pa-art { position: absolute; left: 18px; top: 18px; width: 186px; height: 183px; }
 .pa-cloud .pa-body, .pa-cloud .pa-eyes, .pa-cloud .pa-closed { left: 0; top: 0; }
-.pa-cloud .pa-shadow { left: 65px; top: 166px; width: 57px !important; height: auto !important;
+.pa-cloud .pa-shadow { left: 65px !important; top: 166px !important; width: 57px !important; height: auto !important;
              transform-origin: 50% 50%; animation: paShadow 3s ease-in-out infinite; }
 @keyframes paShadow { 0%{transform:scale(1);opacity:.85} 50%{transform:scale(.9);opacity:.6} 100%{transform:scale(1);opacity:.85} }
 .pa-bob { position: absolute; inset: 0; animation: paBob 3s ease-in-out infinite; }
@@ -2105,10 +2105,10 @@ body::before {
 .pa-closed { opacity: 0; animation: paEyesClosed 3s infinite; }
 @keyframes paEyesClosed { 0%,85.5%{opacity:0} 88%,90%{opacity:1} 92.5%,100%{opacity:0} }
 .pa-cloud .pa-drop { width: 11px !important; height: auto !important; animation: paFall 1.5s cubic-bezier(.45,.05,.85,.6) infinite; }
-.pa-cloud .pa-d1 { left: 60px; top: 131px; animation-delay: 0s; }
-.pa-cloud .pa-d2 { left: 80px; top: 129px; width: 9px !important; animation-delay: -.42s; }
-.pa-cloud .pa-d3 { left: 94px; top: 133px; animation-delay: -.8s; }
-.pa-cloud .pa-d4 { left: 116px; top: 129px; width: 10px !important; animation-delay: -1.14s; }
+.pa-cloud .pa-d1 { left: 60px !important; top: 131px !important; animation-delay: 0s; }
+.pa-cloud .pa-d2 { left: 80px !important; top: 129px !important; width: 9px !important; animation-delay: -.42s; }
+.pa-cloud .pa-d3 { left: 94px !important; top: 133px !important; animation-delay: -.8s; }
+.pa-cloud .pa-d4 { left: 116px !important; top: 129px !important; width: 10px !important; animation-delay: -1.14s; }
 @keyframes paFall { 0%{transform:translateY(0) scaleY(.7);opacity:0} 14%{opacity:1} 70%{opacity:1} 100%{transform:translateY(30px) scaleY(1.1);opacity:0} }
 
 /* --- lizard --- */
