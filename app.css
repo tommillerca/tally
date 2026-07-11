@@ -897,8 +897,17 @@ body::before {
   transition: left 0.5s cubic-bezier(0.22, 1, 0.36, 1), right 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   display: grid; gap: 6px; justify-items: center;
 }
-.fplate { width: 100%; display: grid; gap: 3px; }
-.fplate .fname { font-size: 13px; justify-content: center; }
+/* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
+.fight-hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 16%; z-index: 6; pointer-events: none; }
+.hud-side { flex: 1; max-width: 42%; display: grid; gap: 3px; }
+.hud-side .fname { font-size: 11.5px; letter-spacing: 0.4px; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; }
+.hud-side.foe .fname { justify-content: flex-end; }
+.hud-side .bar.fhp { height: 7px; }
+.hud-pet { display: flex; align-items: center; gap: 5px; width: 72%; margin-top: 2px; transition: opacity .4s, filter .4s; }
+.hud-side.foe .hud-pet { margin-left: auto; flex-direction: row-reverse; }
+.hud-pet .petname { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-pet .bar { flex: 1; height: 4px; }
+.hud-pet.down { opacity: 0.35; filter: grayscale(1); }
 .microbars { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .fstage {
   width: 112px; height: 112px; min-height: 112px; border-radius: 16px;
@@ -2069,9 +2078,7 @@ body::before {
 /* static pets render through croppedPetImg (.petcrop) — a content-cropped, scaled
    img whose own transform seats/centers it; the wrapper just clips to the slot. */
 .petcrop { position: relative; display: inline-block; overflow: hidden; }
-/* Float the pet's name/HP ABOVE the sprite (like the fighter's own bars) instead
-   of below it, so the sprite reaches the floor and the creature isn't lifted. */
-.petplate { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 3px; width: max-content; display: grid; gap: 2px; justify-items: center; }
+/* pet name/HP now lives in the fight HUD (.hud-pet), not floating over the sprite */
 .petname { font-size: 9px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
 .bar.fhp.mini { width: 48px; height: 4px; }
 .pet-turn-h { text-align: center; font-family: var(--display); font-size: 15px; color: var(--accent); padding: 2px 0 6px; letter-spacing: .02em; }

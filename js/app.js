@@ -4073,7 +4073,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v118'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v119'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4378,30 +4378,35 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-fog"></div>
       <div class="arena-floor"></div>
       <span class="venue-tag">${esc(venue)}</span>
-      <div class="fighterG foe-side" id="foeG" data-target="f">
-        <div class="fplate">
+      <!-- fighting-game HUD: bars pinned to the arena's top corners with a
+           guaranteed center gap (they used to ride the fighters and collided
+           mid-arena, with the pet's bar piling under yours) -->
+      <div class="fight-hud">
+        <div class="hud-side you">
+          <div class="fname">You<span class="fstate" id="youState" hidden></span></div>
+          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
+          <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+        </div>
+        <div class="hud-side foe">
           <div class="fname">${esc(foe.name)}<span class="fstate" id="foeState" hidden></span></div>
           <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
+          ${add ? `<div class="hud-pet" id="hudAdd"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div></div>` : ''}
         </div>
+      </div>
+      <div class="fighterG foe-side" id="foeG" data-target="f">
         <div class="bh-stage fstage" id="foeStage"><div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div></div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
           <div class="bh-stage fstage petmini" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
-          <div class="petplate"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">
-        <div class="fplate">
-          <div class="fname">You<span class="fstate" id="youState" hidden></span></div>
-          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
-          <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
-        </div>
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
           <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
-          <div class="petplate"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
@@ -4439,10 +4444,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       el('petHp').style.width = Math.max(0, petBody.hp / petBody.d.maxHp * 100) + '%';
       const pg = el('petG');
       if (pg) pg.classList.toggle('fainted', !!petBody.fainted);
+      el('hudPet')?.classList.toggle('down', !!petBody.fainted);
     }
     if (add && el('addHp')) {
       el('addHp').style.width = Math.max(0, add.hp / add.d.maxHp * 100) + '%';
       const ag = el('addG'); if (ag) ag.classList.toggle('fainted', add.hp <= 0);
+      el('hudAdd')?.classList.toggle('down', add.hp <= 0);
       // auto-retarget onto a living enemy, then highlight the current target
       if (fight.pTarget === 'fa' && add.hp <= 0) fight.pTarget = 'f';
       else if (fight.pTarget === 'f' && foe.hp <= 0 && add.hp > 0) fight.pTarget = 'fa';
@@ -4638,6 +4645,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode('🐾 cursed', ev.who, 'stamp hex');
     } else if (ev.t === 'faint') {
       const pg = el('petG'); if (pg) pg.classList.add('fainted');
+      el('hudPet')?.classList.add('down');
       floatNode('🐾 DOWN', 'p', 'stamp dim');
       hitSound(S.sounds, 'thud');
     } else if (ev.t === 'aoe') {
