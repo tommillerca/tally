@@ -2058,9 +2058,10 @@ body::before {
 /* Pet stands BEHIND its owner at the lower-outer side, so the owner occludes any
    overlap (natural depth, not "stacked on top") and the cloud's rain falls behind
    the bonehead rather than over it. Floor-aligned; mostly clear to the side. */
-.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 3; }
-/* pet renders IN FRONT of its owner (z-index above the fighter's own stage) */
-.you-side .pet-fighter { left: -22px; }                                /* your pet: just to your lower-left */
+.pet-fighter { position: absolute; bottom: 0; display: grid; justify-items: center; gap: 1px; transform-origin: bottom center; transition: opacity .4s, filter .4s; z-index: 4; }
+/* pet renders IN FRONT of its owner, at the fighter's feet (overlapping the lower
+   body so it clearly reads as a foreground companion, not tucked off to the side) */
+.you-side .pet-fighter { left: 6px; }
 .foe-side .pet-fighter.add { right: 96px; }                            /* the add: left of the boss, toward center */
 .pet-fighter.fainted { opacity: 0.4; filter: grayscale(1); }
 .pet-fighter.fainted .fstage.petmini { transform: rotate(68deg) translateY(8px); }
