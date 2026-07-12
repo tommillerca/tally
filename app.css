@@ -723,7 +723,11 @@ body::before {
 }
 
 .hero-top {
-  position: absolute; top: calc(var(--sat) + 2px); left: 12px; right: 12px; z-index: 5;
+  /* The scene's top edge is ALREADY below the notch: .screen pads the safe area
+     (sat+14) and the scene's negative margin cancels exactly that padding, so the
+     scene starts under the day-head. Adding var(--sat) here double-counted the
+     notch (~59px of dead space on notched phones). Anchor to the scene instead. */
+  position: absolute; top: 10px; left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: space-between; align-items: flex-start;
 }
 .hero-top-right { display: flex; gap: 7px; }
