@@ -27,7 +27,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petStepsSince, petPicks, setPetPick, petCounts, creditEquippedPetSteps, bestPetLineage, petInstances, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -88,8 +88,8 @@ const PET_CROP = {
 };
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
-function croppedPetImg(petId, px, ground = false) {
-  const src = bhAsset(BH_BY_ID[petId]);
+function croppedPetImg(petId, px, ground = false, srcOverride = null) {
+  const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
@@ -108,6 +108,14 @@ function petSpriteHtml(petId, px, ground = false) {
     return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
   return animatedPetHtml(petId, px) || croppedPetImg(petId, px, ground);
+}
+// PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
+// no floor-seating), so a pet reads the same in a roster tile regardless of whether
+// it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
+function petPortraitHtml(petId, px, shiny = false) {
+  const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
+  const inner = croppedPetImg(petId, px, false, src);
+  return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
 
@@ -129,6 +137,7 @@ const ICONS = {
   freeze: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4.5" fill="#bfe7ff" opacity="0.92" stroke="#173a52" stroke-width="1.6"/><path d="M12 7v10M8.5 9l7 6M15.5 9l-7 6" stroke="#5fa8d8" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  paw: (s = 23) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
 };
 
 ICONS.pit = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
@@ -555,7 +564,7 @@ async function renderToday(el) {
 
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
-    <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG'], noYard: true })}</div>
+    <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petPortraitHtml(eq.C, 46, S.shinyPets.has(eq.C))}</div>` : ''}</div>
     ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
 
     <div class="hero-top">
@@ -578,9 +587,10 @@ async function renderToday(el) {
     </div>
   </div>
 
-  <div class="hero-actions five">
+  <div class="hero-actions six">
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
     <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
+    <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
     <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
@@ -669,6 +679,7 @@ async function renderToday(el) {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
   });
   $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
+  $('#stableBtn')?.addEventListener('click', openStable);
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
@@ -3004,7 +3015,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     };
     const LEFT = ['H', 'E', 'M', 'T', 'P'];
     const RIGHT = ['IR', 'IL', 'G', 'U', 'S'];
-    const BOTTOM = ['SK', 'B', 'FW', 'C', 'BG', 'YD'];
+    const BOTTOM = ['SK', 'B', 'FW', 'BG', 'YD']; // pets moved out of the paper-doll into the Stable
     const statChip = m => {
       const gb = fighter.gearBonus[m.key] || 0;
       return `<span class="pd-stat"><small>${m.label}</small><b>${fighter.stats[m.key]}</b>${gb ? `<i>+${gb}</i>` : ''}</span>`;
@@ -3014,13 +3025,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
-          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true, skip: ['C'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
         </div>
         <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
-      ${slot === 'C' && eq.C ? petPanelHtml(eq.C, fighter) : ''}
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
@@ -3179,11 +3189,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="sect-h">Salvage Bench · nothing wasted</div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
-      <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Feed pets you don't want here. Bad drops and dupe eggs still pay off.</p>
-      ${ownedPets.length ? ownedPets.map(p => { const n = pCounts[p.id] || 1; return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(p)}" alt="" style="width:27px;height:27px;object-fit:contain">${n > 1 ? `<span class="pet-count">×${n}</span>` : ''}</span><div style="flex:1"><b>${esc(p.name)}</b><small>${RARITIES[p.rarity].label} pet${n > 1 ? ` · ${n} copies` : ''}</small></div><button class="btn small danger" data-salvage="${p.id}">+${petDustValue(p)} dust</button></div>`; }).join('') : '<p class="note" style="margin:2px 2px 8px">No pets to salvage. Hatch eggs by walking.</p>'}
-      <div class="sect-h">Breeding Pen · fuse two pets into a stronger one</div>
-      <p class="note" style="margin:0 2px 8px">Combine two pets (both are used up) into one offspring with a higher <b>lineage</b>: a permanent stat boost and brighter glow, stackable forever. Costs Bone Dust + a walk between breeds.</p>
-      <button class="btn small" id="openBreed" ${(pCountTotal || 0) < 2 ? 'disabled' : ''}>${(pCountTotal || 0) < 2 ? 'Need 2+ pets to breed' : 'Open Breeding Pen'}</button>
+      <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
+      ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
       <div class="sect-h">Bone Dust Shop</div>
       <div class="grid2">
         ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
@@ -3211,16 +3218,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       renderCharacter(wrap, 'crates');
     });
-    $$('[data-salvage]', content).forEach(btn => btn.addEventListener('click', async () => {
-      // arm-then-confirm: pets are earned, so never salvage on a stray tap
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
-      const res = await salvagePet(btn.dataset.salvage);
-      if (!res.ok) { toast('Could not salvage that pet.'); return; }
-      popSound(S.sounds);
-      toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2800);
-      renderCharacter(wrap, 'crates');
-    }));
-    $('#openBreed', content)?.addEventListener('click', () => openBreedPen(wrap));
+    $('#openStableFromBp', content)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
       btn.disabled = true;
       const res = await buyWithDust(btn.dataset.dustbuy);
@@ -3527,45 +3525,47 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
 // falling back to a toast only if a sheet/fight is already open. First sighting
 // records silently (no retroactive spam).
 async function checkPetLevelUp() {
-  await creditEquippedPetSteps(); // only the equipped pet banks the steps you just walked
-  const eq = await equipped();
-  if (!eq.C) return;
-  const cur = petLevel(await petStepsSince(eq.C));
+  await creditEquippedPetSteps(); // only the equipped individual banks the steps you just walked
+  const inst = await equippedPetInstance();
+  if (!inst) return;
+  const iid = inst.iid;
+  const cur = petLevel(await petStepsForIid(iid));
   const seen = (await kvGet('petSeenLevel', {})) || {};
-  const prev = seen[eq.C];
-  if (prev == null) { seen[eq.C] = cur; await kvSet('petSeenLevel', seen); return; }
+  const prev = seen[iid];
+  if (prev == null) { seen[iid] = cur; await kvSet('petSeenLevel', seen); return; }
   if (cur <= prev) return;
   const newTalent = unlockedTiers(cur).length > unlockedTiers(prev).length;
-  seen[eq.C] = cur; await kvSet('petSeenLevel', seen);
-  const petName = (BH_BY_ID[eq.C] && BH_BY_ID[eq.C].name) || 'Your pet';
+  seen[iid] = cur; await kvSet('petSeenLevel', seen);
+  const petName = (BH_BY_ID[inst.sp] && BH_BY_ID[inst.sp].name) || 'Your pet';
   // if something is already on screen (a fight, another sheet) don't hijack it
   if (sheetStack.length) {
-    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent — pick it in Wardrobe!`, 4600); }
+    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent — pick it in the Stable!`, 4600); }
     else { popSound(S.sounds); toast(`🐾 ${petName} reached Lv ${cur}!`, 3000); }
     return;
   }
-  openPetLevelUp(eq.C, cur, prev, newTalent);
+  openPetLevelUp(inst.sp, cur, prev, newTalent, inst);
 }
 
 // Full-screen pet level-up reveal: the pet rises on a burst of rays, the new level
 // stamps in, and the exact stat gains (and any freshly unlocked talent) are spelled
 // out so the moment is unmistakable.
-function openPetLevelUp(petId, level, prevLevel, newTalent) {
+function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   const fam = familyOf(petId);
   const petName = (BH_BY_ID[petId] && BH_BY_ID[petId].name) || fam.name;
-  const shiny = S.shinyPets.has(petId);
-  const before = petBattleStats(petId, prevLevel, shiny);
-  const after = petBattleStats(petId, level, shiny);
+  const shiny = inst ? !!inst.shiny : S.shinyPets.has(petId);
+  const lineage = inst ? (inst.lineage || 0) : 0;
+  const before = petBattleStats(petId, prevLevel, shiny, lineage);
+  const after = petBattleStats(petId, level, shiny, lineage);
   const rows = [['PWR', before.power, after.power], ['HP', before.hp, after.hp], ['REF', before.reflex, after.reflex]];
   const gains = rows.map(([k, b, a]) => `<span class="pet-gain">${k} <b>${a}</b>${a > b ? ` <i>+${a - b}</i>` : ''}</span>`).join('');
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'}${shiny ? ' is-shiny' : ''}">${petSpriteHtml(petId, 104, !petHovers(petId))}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny)}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
-      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">★${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
-      ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Wardrobe.</div>
+      ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Stable.</div>
         <button class="btn" id="petTalentBtn">Pick my talent</button>
         <div style="height:8px"></div>
         <button class="btn ghost" id="celeOk">Later</button>`
@@ -3574,24 +3574,28 @@ function openPetLevelUp(petId, level, prevLevel, newTalent) {
     </div>`);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
   const tb = $('#petTalentBtn', wrap);
-  if (tb) tb.addEventListener('click', () => { history.back(); openCharacter('wardrobe'); });
+  if (tb) tb.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
 }
 
 const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those pets is no longer here.', 'bad-species': 'Choose the offspring species.', cooldown: 'Walk a bit more before breeding again.', dust: 'Not enough Bone Dust.' };
 
-// The Breeding Pen: pick two pets, both are consumed, out comes a higher-lineage
-// offspring. Selection state lives in this closure and the sheet re-renders on tap.
-async function openBreedPen(charWrap) {
-  let sel = [];      // up to two selected iids
-  let offSp = null;  // chosen offspring species
+// THE STABLE: the pet hub. Every pet you own, grouped by species, each individual
+// copy showing its own level/lineage/shiny/stats with Equip / Breed / Destroy.
+// Only the equipped pet levels. Breeding + the active pet's talent tree live here.
+async function openStable() {
+  let sel = [];      // iids flagged for breeding
+  let offSp = null;
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>Breeding Pen</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="breedBody"></div>`, { cls: 'full' });
+    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
   async function render() {
-    const body = $('#breedBody', wrap);
+    const body = $('#stableBody', wrap);
     if (!body) return;
-    const [insts, st] = await Promise.all([petInstances(), breedStatus()]);
-    sel = sel.filter(iid => insts.some(x => x.iid === iid)); // drop stale picks
+    const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
+    sel = sel.filter(iid => insts.some(x => x.iid === iid));
+    const bySp = {};
+    for (const x of insts) (bySp[x.sp] = bySp[x.sp] || []).push(x);
+    const order = Object.keys(bySp).sort((p, q) => RAR_ORDER.indexOf((BH_BY_ID[q] || {}).rarity) - RAR_ORDER.indexOf((BH_BY_ID[p] || {}).rarity));
     const a = sel[0] ? insts.find(x => x.iid === sel[0]) : null;
     const b = sel[1] ? insts.find(x => x.iid === sel[1]) : null;
     const pair = a && b;
@@ -3600,43 +3604,100 @@ async function openBreedPen(charWrap) {
     const cost = breedCost(offLineage);
     const afford = st.dust >= cost;
     const canBreedNow = pair && st.ready && afford;
-    const tiles = insts.map(x => {
-      const it = BH_BY_ID[x.sp] || {};
-      return `<button class="breed-tile r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${sel.includes(x.iid) ? ' sel' : ''}${x.shiny ? ' is-shiny' : ''}" data-iid="${x.iid}">
-        ${petSpriteHtml(x.sp, 44, !petHovers(x.sp))}
-        <span class="breed-lin">${x.lineage ? '★' + x.lineage : 'L0'}${x.shiny ? ' ✦' : ''}</span>
-      </button>`;
+
+    const sections = order.map(sp => {
+      const it = BH_BY_ID[sp] || {};
+      const cards = bySp[sp].map(x => {
+        const lvl = petLevel(bank[x.iid] || 0);
+        const toNext = petStepsToNext(bank[x.iid] || 0);
+        const bs = petBattleStats(sp, lvl, x.shiny, x.lineage || 0);
+        const isEq = x.iid === eqIid;
+        const inSel = sel.includes(x.iid);
+        return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}">
+          <div class="stable-portrait">${petPortraitHtml(sp, 60, x.shiny)}</div>
+          <div class="stable-info">
+            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">★${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}</b>
+            <small>${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
+            <div class="stable-acts">
+              ${isEq ? '<span class="stable-active-lbl">Leveling this one</span>' : `<button class="btn tiny" data-eq="${x.iid}">Equip</button>`}
+              <button class="btn tiny ${inSel ? 'on' : 'ghost'}" data-breedsel="${x.iid}">${inSel ? 'Breeding ✓' : 'Breed'}</button>
+              <button class="btn tiny danger" data-destroy="${x.iid}">Destroy</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="sect-h">${esc(it.name || sp)} <span class="rar-lbl r-${it.rarity || 'common'}">${(RARITIES[it.rarity] || {}).label || ''}</span> · ${bySp[sp].length}</div>${cards}`;
     }).join('');
-    const spOptions = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
+
+    // active pet's talent tree
+    const eqInst = insts.find(x => x.iid === eqIid);
+    let treeHtml = '';
+    if (eqInst) {
+      const fam = familyOf(eqInst.sp);
+      const lvl = petLevel(bank[eqIid] || 0);
+      const picks = await petPicks(eqInst.sp);
+      treeHtml = `<div class="sect-h" style="margin-top:14px">Active pet talents · ${esc((BH_BY_ID[eqInst.sp] || {}).name || '')}</div>
+        <div class="pet-tree">${PET_TREES[fam.key].map(row => `
+          <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
+            <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
+            <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-sp="${eqInst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
+          </div>`).join('')}</div>`;
+    }
+
+    const spChips = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
       .map(x => `<button class="chip ${offSp === x.sp ? 'on' : ''}" data-offsp="${x.sp}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}</button>`).join('') : '';
+
     body.innerHTML = `
-      <p class="note">Pick two pets to fuse. Both are used up. The offspring's lineage is the higher parent + 1, a permanent stat boost you can keep stacking.</p>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${st.dust.toLocaleString()}</b></div>
-      <div class="breed-grid">${tiles}</div>
-      ${pair ? `<div class="breed-out">
-          <div class="sect-h">Offspring species</div>
-          <div class="breed-sp">${spOptions}</div>
-          <p class="note" style="margin-top:6px">${esc((BH_BY_ID[offSp] || {}).name || offSp)} · <b>Lineage ★${offLineage}</b> (+${Math.round(offLineage * 5)}% to all stats)${a.shiny || b.shiny ? ' · inherits ✦ Shiny' : ''}</p>
+      ${pair ? `<div class="breed-bar">
+          <b>Breed these two → offspring</b>
+          <div class="breed-sp">${spChips}</div>
+          <p class="note" style="margin:4px 0">${esc((BH_BY_ID[offSp] || {}).name || offSp)} · <b>Lineage ★${offLineage}</b> (+${Math.round(offLineage * 5)}% stats)${a.shiny || b.shiny ? ' · ✦ Shiny' : ''} · both parents consumed</p>
           <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">◆</span> ${cost}${afford ? '' : ' — not enough'}</b></div>
-          ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before you can breed again.</p>`}
-          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed (consumes both)</button>
-        </div>` : '<p class="note" style="text-align:center;margin-top:12px">Select two pets above.</p>'}`;
-    $$('[data-iid]', body).forEach(t => t.addEventListener('click', () => {
-      const iid = t.dataset.iid;
+          ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
+          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed</button>
+        </div>`
+      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. Flag two with <b>Breed</b> to fuse them into a stronger one, or <b>Destroy</b> a spare for Bone Dust.</p>`}
+      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      ${treeHtml}`;
+
+    $$('[data-eq]', body).forEach(btn => btn.addEventListener('click', async () => {
+      await setEquippedPet(btn.dataset.eq);
+      popSound(S.sounds);
+      render();
+    }));
+    $$('[data-breedsel]', body).forEach(btn => btn.addEventListener('click', () => {
+      const iid = btn.dataset.breedsel;
       if (sel.includes(iid)) sel = sel.filter(x => x !== iid);
       else if (sel.length < 2) sel.push(iid);
       else sel = [sel[1], iid];
       offSp = null; render();
+    }));
+    $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Confirm?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
+      const res = await salvageInstance(btn.dataset.destroy);
+      if (!res.ok) { toast('Could not destroy that pet.'); return; }
+      popSound(S.sounds);
+      toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
+      render();
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async () => {
       const res = await breedPets(sel[0], sel[1], offSp);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
       sel = []; offSp = null;
-      history.back(); // close the pen, then reveal once the pop settles (avoids the sheet race)
-      setTimeout(() => openPetBreedResult(res.offspring), 260);
-      setTimeout(() => renderCharacter(charWrap, 'crates'), 320);
+      await render();                          // refresh the stable underneath
+      openPetBreedResult(res.offspring);       // reveal on top (Stable stays open, no race)
     });
+    $$('[data-petpick2]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const sp = btn.dataset.sp, tier = Number(btn.dataset.tier), node = btn.dataset.petpick2, lvl = Number(btn.dataset.lvl);
+      if (lvl < tier) { toast(`Reaches this at level ${tier}: keep walking.`, 2400); return; }
+      const cur = await petPicks(sp);
+      const tierNodes = (PET_TREES[familyOf(sp).key].find(t => t.tier === tier) || {}).opts.map(o => o.id);
+      await setPetPick(sp, node, [...cur.filter(id => !tierNodes.includes(id)), node]);
+      popSound(S.sounds);
+      $$(`.pet-opt[data-tier="${tier}"]`, body).forEach(o => o.classList.toggle('on', o.dataset.petpick2 === node));
+    }));
   }
   render();
 }
@@ -3648,7 +3709,7 @@ function openPetBreedResult(off) {
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:14px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petSpriteHtml(off.sp, 104, !petHovers(off.sp))}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny)}</div></div>
       <div class="lvl-stamp" style="font-size:28px">LINEAGE ★${off.lineage}!</div>
       <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
@@ -4186,16 +4247,15 @@ async function buildFighter() {
   // are single-rank moves, add them only if not already specced.
   const extraTalents = [...gearTalents(gearLo, gOwned, level), ...setInfo.talents].filter(id => !talents.includes(id));
   const fightTalents = [...talents, ...extraTalents];
-  // battle pet: equipped C slot, level from steps since hatch, its spec picks
+  // battle pet: the equipped INSTANCE (its own level, lineage, shiny)
   let battlePet = null, petMeta = null;
-  const eqForPet = await equipped();
-  if (eqForPet.C) {
-    const steps = await petStepsSince(eqForPet.C);
+  const petInst = await equippedPetInstance();
+  if (petInst) {
+    const steps = await petStepsForIid(petInst.iid);
     const pl = petLevel(steps);
-    const picks = await petPicks(eqForPet.C);
-    const lineage = await bestPetLineage(eqForPet.C);
-    battlePet = buildBattlePet(eqForPet.C, pl, picks, { shiny: S.shinyPets.has(eqForPet.C), lineage });
-    petMeta = { id: eqForPet.C, level: pl, picks, steps, lineage };
+    const picks = await petPicks(petInst.sp);
+    battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
+    petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny };
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
@@ -4204,7 +4264,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v129'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v130'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

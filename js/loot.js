@@ -295,20 +295,30 @@ export async function breedPets(iidA, iidB, offspringSp) {
   if ((await boneDust()) < cost) return { ok: false, reason: 'dust', cost };
   // consume both parents, add the offspring
   const off = breedOffspring(a, b, offspringSp, newIid(offspringSp));
+  const wasEquipped = (await kvGet('petEquipped', null));
+  const parentEquipped = wasEquipped === iidA || wasEquipped === iidB;
   list = removeInstance(list, iidA).instances;
   list = removeInstance(list, iidB).instances;
   list = addInstance(list, off);
   await savePetInstances(list);
   await boneDustAdd(-cost);
   await kvSet('petBreedCredit', lifetime);
-  // a parent species may now be extinct: drop ownership + unequip
+  // offspring inherits the higher parent's level so breeding never loses progress
+  const bank = await petLevelBank();
+  off._startSteps = Math.max(bank[iidA] || 0, bank[iidB] || 0);
+  bank[off.iid] = off._startSteps;
+  delete bank[iidA]; delete bank[iidB];
+  await kvSet('petLvlSteps', bank);
+  // if you bred away the pet you had out, the offspring takes its place
+  if (parentEquipped) { await kvSet('petEquipped', off.iid); await equip('C', off.sp); }
+  // any parent species now extinct: drop ownership + clear legacy anchor
   for (const sp of [a.sp, b.sp]) {
     if (speciesCount(list, sp) === 0) {
       const inv = await db.all('inv');
       const row = inv.find(r => r.kind === 'cos' && r.itemId === sp);
       if (row) await db.del('inv', row.id);
-      const eq = await equipped();
-      if (eq.C === sp) await equip('C', null);
+      const eqp = await equipped();
+      if (eqp.C === sp && off.sp !== sp) await equip('C', off.sp);
       const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[sp]; await kvSet('pets', petsRec);
     }
   }
@@ -334,7 +344,7 @@ async function savePetInstances(list) { await kvSet('petInst', list); }
 
 // Add one instance of a species (a fresh hatch/dupe). Keeps the `inv` ownership
 // flag + legacy `pets` anchor in sync so species-keyed code keeps working.
-export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null } = {}) {
+export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
   const list = await petInstances();
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
   const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
@@ -344,7 +354,38 @@ export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null 
   if (!petsRec[sp]) { petsRec[sp] = { hatchedAtSteps: anchor }; }
   if (shiny) petsRec[sp].shiny = true;
   await kvSet('pets', petsRec);
+  // seed this individual's level bank (a fresh hatch starts at level 1)
+  const bank = await petLevelBank();
+  bank[inst.iid] = Math.max(0, startLevelSteps || 0);
+  await kvSet('petLvlSteps', bank);
   return inst;
+}
+
+// Destroy ONE specific pet instance for Bone Dust (the Stable's "Destroy"). Drops
+// ownership + clears the legacy anchor when its species' last copy is gone, and
+// re-points the equipped pet if you just scrapped the one you had out.
+export async function salvageInstance(iid) {
+  const list = await petInstances();
+  const inst = list.find(x => x.iid === iid);
+  if (!inst) return { ok: false, reason: 'gone' };
+  const item = BH_BY_ID[inst.sp] || {};
+  const next = list.filter(x => x.iid !== iid);
+  await savePetInstances(next);
+  const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
+  if ((await kvGet('petEquipped', null)) === iid) {
+    const repl = bestInstance(next, inst.sp) || next[0] || null;
+    await kvSet('petEquipped', repl ? repl.iid : null);
+    if (repl) await equip('C', repl.sp); else await equip('C', null);
+  }
+  if (speciesCount(next, inst.sp) === 0) {
+    const inv = await db.all('inv');
+    const row = inv.find(r => r.kind === 'cos' && r.itemId === inst.sp);
+    if (row) await db.del('inv', row.id);
+    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[inst.sp]; await kvSet('pets', petsRec);
+  }
+  const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
+  await boneDustAdd(dust);
+  return { ok: true, dust, name: item.name, remaining: speciesCount(next, inst.sp) };
 }
 
 // Is an owned pet the shiny variant? (any instance of the species is shiny)
@@ -414,57 +455,91 @@ export async function redeemCode(raw) {
   return { ok: true, pet, coins, dupe };
 }
 
-/* ---- v127-prep: BANKED per-pet leveling. Only the EQUIPPED pet earns steps, so
- * the player chooses which pet to invest in instead of all of them levelling in
- * lockstep. `petLvlSteps` kv banks walked-while-equipped steps per species;
- * `petStepCredit` is the lifetime-steps checkpoint we last credited from. ---- */
+/* ---- v130: BANKED per-INSTANCE leveling + instance equip. Each individual pet
+ * (not species) levels on its own; only the equipped INSTANCE earns the steps you
+ * walk, so you pick exactly which pet to invest in. `petLvlSteps` is keyed by iid
+ * (petLvlV=2); `petEquipped` holds the equipped instance's iid; `petStepCredit` is
+ * the lifetime-steps checkpoint. ---- */
 
-// pure: add a step delta to one species' bank (used by the crediting flow + tests)
-export function creditSteps(bank, species, delta) {
+// pure: add a step delta to one key's bank (used by the crediting flow + tests)
+export function creditSteps(bank, key, delta) {
   const out = { ...(bank || {}) };
-  if (species && delta > 0) out[species] = (out[species] || 0) + delta;
+  if (key && delta > 0) out[key] = (out[key] || 0) + delta;
   return out;
 }
 
-// The per-species banked-step map. First access MIGRATES from the old
-// hatch-anchor model so no pet loses its current level, and sets the credit
+// The per-INSTANCE banked-step map (keyed by iid). Migrates losslessly from the
+// v127 per-species map (each instance inherits its species' level) or, failing
+// that, from hatch anchors — so no pet loses its current level. Sets the credit
 // checkpoint so past steps aren't retroactively dumped onto the equipped pet.
 export async function petLevelBank() {
+  const ver = await kvGet('petLvlV', 0);
   let bank = await kvGet('petLvlSteps', null);
-  if (bank) return bank;
-  bank = {};
+  if (bank && ver >= 2) return bank;
   const insts = await petInstances();
   const lifetime = await lifetimeStepsSum();
-  for (const sp of [...new Set(insts.map(x => x.sp))]) {
-    const best = bestInstance(insts, sp);
-    bank[sp] = Math.max(0, lifetime - (best ? best.hatchedAtSteps || 0 : 0)); // preserve current level
+  const next = {};
+  if (bank && ver < 2) {
+    // v127 species-keyed -> iid-keyed: every copy inherits its species' banked level
+    for (const x of insts) next[x.iid] = Math.max(0, bank[x.sp] || 0);
+  } else {
+    // pre-bank / fresh: seed each instance from its hatch anchor (preserves level)
+    for (const x of insts) next[x.iid] = Math.max(0, lifetime - (x.hatchedAtSteps || 0));
   }
-  await kvSet('petLvlSteps', bank);
+  await kvSet('petLvlSteps', next);
+  await kvSet('petLvlV', 2);
   if ((await kvGet('petStepCredit', null)) == null) await kvSet('petStepCredit', lifetime);
-  return bank;
+  return next;
 }
 
-// Credit steps walked since the last checkpoint to the CURRENTLY EQUIPPED pet
-// only. Idempotent: advancing the checkpoint means a second call adds nothing.
+// The equipped instance's iid (the battle pet). Migrates from the old species-slot
+// equip (equipped.C) by picking the best instance of that species.
+export async function equippedPetIid() {
+  let iid = await kvGet('petEquipped', null);
+  const insts = await petInstances();
+  if (iid && insts.some(x => x.iid === iid)) return iid;
+  // migrate / repair: fall back to the old paper-doll species, else the best pet owned
+  const oldSp = (await equipped()).C;
+  const target = (oldSp && bestInstance(insts, oldSp)) || bestInstance(insts, insts[0] && insts[0].sp) || insts[0] || null;
+  iid = target ? target.iid : null;
+  await kvSet('petEquipped', iid);
+  return iid;
+}
+export async function setEquippedPet(iid) {
+  const insts = await petInstances();
+  const inst = insts.find(x => x.iid === iid);
+  if (!inst) return null;
+  await kvSet('petEquipped', iid);
+  // keep the legacy paper-doll slot pointed at the species so any species-keyed
+  // render (home companion) still resolves the right art
+  await equip('C', inst.sp);
+  return inst;
+}
+export async function equippedPetInstance() {
+  const iid = await equippedPetIid();
+  return (await petInstances()).find(x => x.iid === iid) || null;
+}
+
+// Credit steps walked since the last checkpoint to the equipped INSTANCE only.
+// Idempotent: advancing the checkpoint means a second call adds nothing.
 export async function creditEquippedPetSteps() {
   await petLevelBank(); // ensure migrated + checkpoint set
   const lifetime = await lifetimeStepsSum();
   const credit = await kvGet('petStepCredit', lifetime);
   const delta = Math.max(0, lifetime - credit);
   await kvSet('petStepCredit', lifetime);
-  const eqC = (await equipped()).C;
-  if (delta > 0 && eqC) {
-    const bank = creditSteps(await petLevelBank(), eqC, delta);
+  const iid = await equippedPetIid();
+  if (delta > 0 && iid) {
+    const bank = creditSteps(await petLevelBank(), iid, delta);
     await kvSet('petLvlSteps', bank);
   }
-  return { delta, credited: delta > 0 ? eqC : null };
+  return { delta, credited: delta > 0 ? iid : null };
 }
 
-// Steps banked toward this species' level (drives petLevel). Only grows while
-// the species is equipped; a benched pet's progress is frozen.
-export async function petStepsSince(petId) {
+// Steps banked toward THIS instance's level. Only grows while it is equipped.
+export async function petStepsForIid(iid) {
   const bank = await petLevelBank();
-  return Math.max(0, bank[petId] || 0);
+  return Math.max(0, bank[iid] || 0);
 }
 export async function petPicks(petId) {
   const all = (await kvGet('pettalents', {})) || {};

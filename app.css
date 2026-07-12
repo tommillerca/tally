@@ -794,6 +794,9 @@ body::before {
 .hero-act:active { background: var(--surface-2); }
 .hero-actions.five { grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .hero-actions.five .hero-act { font-size: 9.5px; padding: 10px 1px 8px; }
+.hero-actions.six { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.hero-actions.six .hero-act { font-size: 9px; padding: 9px 1px 7px; }
+.hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
 .hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
 /* weapon / off-hand rarity glow on the avatar (epic/legendary held items) */
@@ -812,6 +815,10 @@ body::before {
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
 .hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; }
 .hero-char .bh-anim img { object-fit: contain; }
+/* equipped pet trots along beside the bonehead on the home screen */
+.hero-companion { position: absolute; right: 8%; bottom: 6%; z-index: 3; filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); animation: petBob 3.2s ease-in-out infinite; }
+@keyframes petBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .hero-companion { animation: none; } }
 .hero-yard {
   position: absolute; left: 3%; bottom: 10%; width: clamp(64px, 21%, 104px);
   z-index: 1; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
@@ -2065,6 +2072,21 @@ body::before {
 .breed-sp { display: flex; gap: 8px; flex-wrap: wrap; }
 .breed-sp .chip { padding: 6px 12px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 2px solid transparent; font-weight: 700; font-size: 13px; cursor: pointer; }
 .breed-sp .chip.on { border-color: var(--accent); background: rgba(165, 232, 71, .14); }
+/* Stable roster */
+.stable-card { display: flex; gap: 10px; align-items: center; padding: 8px; margin: 6px 0; background: rgba(255,255,255,.04); border: 2px solid rgba(255,255,255,.08); border-radius: 14px; }
+.stable-card.equipped { border-color: var(--accent); background: rgba(165,232,71,.10); }
+.stable-card.breedsel { border-color: #ffd34d; }
+.stable-portrait { width: 60px; height: 60px; flex: none; display: flex; align-items: center; justify-content: center; }
+.stable-info { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.stable-info b { font-size: 13.5px; }
+.stable-info small { color: var(--muted); font-size: 11px; }
+.stable-eqbadge { font-size: 9px; font-weight: 800; letter-spacing: .06em; color: #10210a; background: var(--accent); padding: 1px 5px; border-radius: 6px; vertical-align: middle; }
+.stable-active-lbl { font-size: 11px; color: var(--accent); font-weight: 700; align-self: center; }
+.stable-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
+.btn.tiny { width: auto; padding: 5px 10px; font-size: 11.5px; border-radius: 9px; letter-spacing: .02em; }
+.btn.tiny.ghost { background: rgba(255,255,255,.06); }
+.btn.tiny.on { background: #ffd34d; color: #2a1c00; }
+.breed-bar { background: rgba(255,211,77,.08); border: 2px solid rgba(255,211,77,.35); border-radius: 14px; padding: 10px 12px; margin: 4px 0 10px; }
 .crate-ico { position: relative; }
 .pet-stats { font-size: 11.5px; letter-spacing: .02em; color: var(--muted); }
 .pet-stats b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
