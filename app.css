@@ -723,7 +723,7 @@ body::before {
 }
 
 .hero-top {
-  position: absolute; top: calc(var(--sat) + 10px); left: 12px; right: 12px; z-index: 5;
+  position: absolute; top: calc(var(--sat) + 2px); left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: space-between; align-items: flex-start;
 }
 .hero-top-right { display: flex; gap: 7px; }
@@ -813,11 +813,7 @@ body::before {
 /* ---------- hero reframe: whole body + yard ---------- */
 .hero-scene { height: min(47vh, 400px); }
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
-/* start the bonehead BELOW the currency pills. The pills are pinned to the safe
-   area (top: sat+10, ~40px tall), and the scene is pulled up under the notch, so
-   the offset must be measured from the safe area (a % of the scene sat too high on
-   notched phones and the pills covered the face). */
-.hero-char { position: absolute; inset: calc(var(--sat) + 56px) 0 2% 0; z-index: 2; }
+.hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; } /* bonehead stays the hero: full size, prominent */
 .hero-char .bh-anim img { object-fit: contain; }
 /* equipped pet trots along beside the bonehead on the home screen */
 .hero-companion { position: absolute; right: 7%; bottom: 7%; width: 98px; height: 98px; z-index: 3; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); animation: petBob 3.2s ease-in-out infinite; }
