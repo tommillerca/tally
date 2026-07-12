@@ -813,10 +813,11 @@ body::before {
 /* ---------- hero reframe: whole body + yard ---------- */
 .hero-scene { height: min(47vh, 400px); }
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
-.hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; }
+.hero-char { position: absolute; inset: 14% 0 2% 0; z-index: 2; } /* start below the currency pills so they never cover the face */
 .hero-char .bh-anim img { object-fit: contain; }
 /* equipped pet trots along beside the bonehead on the home screen */
-.hero-companion { position: absolute; right: 8%; bottom: 6%; z-index: 3; filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); animation: petBob 3.2s ease-in-out infinite; }
+.hero-companion { position: absolute; right: 7%; bottom: 7%; width: 82px; height: 82px; z-index: 3; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); animation: petBob 3.2s ease-in-out infinite; }
+.hero-companion .petcrop, .hero-companion .pet-shiny-wrap { width: 82px !important; height: 82px !important; }
 @keyframes petBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .hero-companion { animation: none; } }
 .hero-yard {
@@ -1563,9 +1564,10 @@ body::before {
   width: 78px; height: 78px; flex: none; border-radius: 15px; overflow: hidden; position: relative;
   background: radial-gradient(circle at 50% 35%, rgba(165,232,71,0.16), rgba(0,0,0,0.25)); border: 1px solid var(--line);
 }
-.fc-stage .bh-anim { position: absolute; inset: 0; }
+.fc-stage .bh-anim { position: absolute; inset: 0; z-index: 1; }
 .fc-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.fc-pet { position: absolute; right: -2px; bottom: -2px; width: 40px; height: 40px; }
+.fc-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.fc-pet { position: absolute; right: -2px; bottom: -2px; width: 40px; height: 40px; z-index: 2; }
 .fc-pet img, .fc-pet .bh-anim { width: 100%; height: 100%; object-fit: contain; }
 .fc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .fc-name { font-family: var(--display); font-size: 19px; letter-spacing: 0.4px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1579,18 +1581,17 @@ body::before {
 .fc-chip svg { vertical-align: middle; }
 
 /* rich profile hero */
-.fp-hero { position: relative; display: flex; justify-content: center; align-items: flex-end; margin: 4px 0 8px; min-height: 216px; }
-.fp-hero-bg {
-  position: absolute; inset: 0; border-radius: 20px;
-  background: radial-gradient(circle at 50% 30%, rgba(165,232,71,0.20), rgba(0,0,0,0.35) 70%);
-  border: 1px solid var(--line);
-}
-.fp-hero .bh-stage.lg { position: relative; background: transparent; }
-.fp-pet { position: absolute; right: 8%; bottom: 4px; width: 84px; text-align: center; }
-.fp-pet img, .fp-pet .bh-anim { width: 80px; height: 80px; object-fit: contain; }
+.fp-hero { position: relative; display: flex; justify-content: center; align-items: flex-end; margin: 4px 0 8px; min-height: 216px;
+  border-radius: 20px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-2); }
+.fp-hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.fp-hero-bg { position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(circle at 50% 35%, rgba(165,232,71,0.16), rgba(0,0,0,0.30) 72%); }
+.fp-hero .bh-stage.lg { position: relative; z-index: 1; background: transparent; }
+.fp-pet { position: absolute; right: 5%; bottom: 8px; width: 66px; text-align: center; z-index: 1; filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
+.fp-pet .petcrop, .fp-pet .pet-shiny-wrap { width: 66px !important; height: 66px !important; }
 .fp-pet-lvl { display: block; font-size: 10px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
 .fp-lvlbadge {
-  position: absolute; left: 8%; top: 10px; font-family: var(--display); font-size: 18px; letter-spacing: 0.5px;
+  position: absolute; left: 8%; top: 10px; z-index: 2; font-family: var(--display); font-size: 18px; letter-spacing: 0.5px;
   color: #12140b; background: var(--accent); border-radius: 999px; padding: 3px 12px;
 }
 .fp-actions { display: flex; gap: 10px; margin: 10px 0 4px; }
@@ -1999,7 +2000,7 @@ body::before {
 .pd-slot.gear-on.r-rare { border-color: #7cc4ff; }
 .pd-slot.gear-on.r-epic { border-color: #c084fc; }
 .pd-slot.gear-on.r-legendary { border-color: #ffb454; }
-.pd-bottom { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; justify-items: center; margin-top: 8px; }
+.pd-bottom { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; justify-items: center; margin-top: 8px; }
 .pd-bottom .pd-slot { width: 100%; }
 .pd-stats { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 12px 0 2px; }
 .pd-stat {
