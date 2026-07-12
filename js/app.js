@@ -565,7 +565,7 @@ async function renderToday(el) {
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petPortraitHtml(eq.C, 82, S.shinyPets.has(eq.C))}</div>` : ''}
+    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petPortraitHtml(eq.C, 98, S.shinyPets.has(eq.C))}</div>` : ''}
     ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
 
     <div class="hero-top">
@@ -2198,10 +2198,10 @@ function openFriendProfile(f, onChange) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2 id="fpTitle">${esc(f.alias || f.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <div class="fp-hero">
-        ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : '<div class="fp-hero-bg"></div>'}
+      <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
+        ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petPortraitHtml(p.pet.id, 66)}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petPortraitHtml(p.pet.id, 70)}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
@@ -4265,7 +4265,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v132'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v133'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
