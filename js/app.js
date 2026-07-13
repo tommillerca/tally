@@ -4,7 +4,7 @@ import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSoun
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
-  BADGES, xpForDate, parseHkPayload, award,
+  BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
@@ -524,7 +524,7 @@ async function renderToday(el) {
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
-  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled };
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false) };
   const healthRows = await db.all('health');
   const qbase = {
     date: S.date, entries, allXp, allLog, healthRows, targets: S.settings.targets,
@@ -2206,8 +2206,9 @@ function openFriendProfile(f, onChange) {
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
 
+      ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       <div class="fp-actions">
-        <button class="btn fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
+        <button class="btn ghost fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
         <button class="btn ghost fp-cheer" id="fpCheer">📣 Cheer</button>
       </div>
 
@@ -2232,6 +2233,20 @@ function openFriendProfile(f, onChange) {
   `, { cls: 'sheet-fp' });
   $('#fpGift', wrap).addEventListener('click', () => openGiftSheet(f));
   $('#fpCheer', wrap).addEventListener('click', () => openCheerSheet(f));
+  $('#fpBattle', wrap)?.addEventListener('click', async () => {
+    const fighter = await buildFighter();
+    openFight(wrap, fighter, {
+      mode: 'friend',
+      friendId: f.playerId,
+      name: f.alias || f.name,
+      venue: `${esc(f.alias || f.name)}'s turf`,
+      foeStats: p.stats,
+      foeOutfit: p.outfit,
+      weaponId: p.weapon || 'starter',
+      talents: p.talents || [],
+      aiLevel: Math.max(1, Math.min(6, 1 + Math.floor((p.level || 1) / 4))),
+    });
+  });
   $('#fpAliasSave', wrap).addEventListener('click', async () => {
     const clean = await social.setFriendAlias(f.playerId, $('#fpAlias', wrap).value);
     f.alias = clean || null;
@@ -4265,7 +4280,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v135'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v136'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4500,9 +4515,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
-    stats: scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
+    // friend battles use the friend's REAL stats + outfit (a faithful AI clone);
+    // Pit/boss foes scale off the player's stats by the tier multiplier
+    stats: foeCfg.foeStats ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
     weaponId: foeCfg.weaponId || 'starter',
-    outfit: foeOutfitFor(foeCfg.name),
+    outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,
   });
   const add = foeCfg.add ? makeFighter({
@@ -5146,7 +5163,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
     let coins = 0, xp = 0, extras = [], extraCards = [], bossLoot = null;
     // item rewards render as pack cards (extras keeps coin-modifier notes only)
     const crateCard = kind => ({ iconHtml: crateIcon(kind, 120), name: CRATES[kind].label, rarity: kind === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: kind === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' });
-    if (won) {
+    if (foeCfg.mode === 'friend') {
+      // battle a friend's AI bonehead: pays once per friend per day (win > loss),
+      // never counts as a Pit win, feeds the friend quests
+      const r = await claimFriendBattle(foeCfg.friendId, won);
+      xp = r.xp; coins = r.coins; foeCfg._friendFirst = r.firstToday;
+      trackEvent('friend_battle', { won });
+      if (coins) await coinsAdd(coins);
+      if (won) {
+        confettiRain(90); levelSound(S.sounds);
+        const badges = await evaluateBadges();
+        if (badges.length) queueCelebration({ newBadges: badges });
+      }
+    } else if (won) {
       await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
@@ -5219,7 +5248,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await coinsAdd(coins);
     }
     const title = won ? 'VICTORY' : fight.over.winner === 'draw' ? 'DOUBLE KO' : 'DOWN, NOT OUT';
-    const rewardHtml = won
+    const friendRepeat = foeCfg.mode === 'friend' && !foeCfg._friendFirst;
+    const rewardHtml = friendRepeat
+      ? `<p class="note" style="margin:8px 0 16px">${won ? 'Nice win!' : 'Good scrap.'} You already claimed today's reward against ${esc(foeCfg.name)}. Battle a different friend for more coins + XP.</p>`
+      : won
       ? `<div class="sect-h" style="text-align:center;margin:10px 0 6px">You won</div>
          <div class="reward-row">
            <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
@@ -5252,7 +5284,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           const fd = $('#fightDone', body); if (fd) fd.textContent = 'Back to the map';
         });
       }
-      $('#fightDone', body).addEventListener('click', () => { history.back(); if (!fromMap) setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+      $('#fightDone', body).addEventListener('click', () => { history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
     }, fast ? 80 : 750);
   }
 

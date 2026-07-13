@@ -89,6 +89,8 @@ export function questCtx(period, base) {
     sleepToday: base.allXp.some(r => r.key === `sleep-${base.date}`),
     wellnessDays: new Set(base.allXp.filter(r => r.type === 'wellness' && inP(r)).map(r => r.date)).size,
     logDays,
+    friendBattles: countType('friendbattle'),
+    friendsBattled: new Set(base.allXp.filter(r => r.type === 'friendbattle' && inP(r) && r.friendId).map(r => r.friendId)).size,
   };
 }
 
@@ -129,6 +131,8 @@ export const DAILY_POOL = [
     progress: c => clamp(c.steps, 8000) },
   { id: 'q-steps11', name: 'Long haul', desc: 'Walk 11,000 steps', coins: 80, need: 'hk',
     progress: c => clamp(c.steps, 11000) },
+  { id: 'q-friend', name: 'Bone brawl', desc: "Battle a friend's bonehead", coins: 75, need: 'social',
+    progress: c => clamp(c.friendBattles, 1) },
 ];
 
 export const WEEKLY_POOL = [
@@ -148,6 +152,8 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.cooksDone, 5) },
   { id: 'w-wellness', name: 'Look after yourself', desc: 'Hit a wellness habit (water/bed/sleep) on 5 days', coins: 150, crate: 'golden',
     progress: c => clamp(c.wellnessDays, 5) },
+  { id: 'w-friends', name: 'Rival circuit', desc: 'Battle 3 different friends this week', coins: 170, crate: 'golden', need: 'social',
+    progress: c => clamp(c.friendsBattled, 3) },
 ];
 
 export const MONTHLY_POOL = [
@@ -161,8 +167,8 @@ export const MONTHLY_POOL = [
     progress: c => clamp(c.proteinDays, 20) },
 ];
 
-function pick(pool, seedStr, n, { hkConnected, huntEnabled } = {}) {
-  const avail = pool.filter(q => (q.need !== 'hk' || hkConnected) && (q.need !== 'hunt' || huntEnabled));
+function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn } = {}) {
+  const avail = pool.filter(q => (q.need !== 'hk' || hkConnected) && (q.need !== 'hunt' || huntEnabled) && (q.need !== 'social' || socialOn));
   const rand = mulberry32(hashStr(seedStr));
   const out = [], used = new Set();
   while (out.length < n && used.size < avail.length) {

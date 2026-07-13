@@ -67,6 +67,22 @@ export async function award(key, type, xp, label, date) {
   return xp;
 }
 
+// v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays
+// more, a loss still gives a shame-free consolation) so the incentive is to battle
+// MANY friends, not farm one. Records a `friendbattle` ledger row tagged with the
+// friendId so the daily/weekly friend quests can count total + distinct friends.
+// Returns {firstToday, coins, xp, won}; caller adds the coins.
+export async function claimFriendBattle(friendId, won, date) {
+  const d = date || dateKey();
+  const key = `friendbattle-${d}-${friendId}`;
+  if (await db.get('xp', key)) return { firstToday: false, coins: 0, xp: 0, won };
+  const xp = won ? 12 : 5;
+  await award(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  const row = await db.get('xp', key);
+  if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
+  return { firstToday: true, coins: won ? 25 : 8, xp, won };
+}
+
 export function levelCoins(level) { return 20 + level * 5; }
 
 // one reward drop per level, ever: ledger rows `levelup-N` make it idempotent,

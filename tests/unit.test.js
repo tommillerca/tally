@@ -380,6 +380,26 @@ test('questCtx aggregates period-scoped ledger data', () => {
   const day = questCtx('day', base);
   assert.equal(day.pitWins, 0, 'no fights on the exact day');
 });
+test('questCtx: friend battles count total + distinct friends (v136)', () => {
+  const allXp = [
+    { type: 'friendbattle', date: '2026-07-03', friendId: 'amy' },
+    { type: 'friendbattle', date: '2026-07-04', friendId: 'amy' },  // same friend, different day
+    { type: 'friendbattle', date: '2026-07-04', friendId: 'bo' },
+    { type: 'friendbattle', date: '2026-07-13', friendId: 'cy' },   // next week: excluded
+  ];
+  const base = { date: '2026-07-03', entries: [], allXp, allLog: [], healthRows: [], targets: {}, priorFoodIds: new Set() };
+  const wk = questCtx('week', base);
+  assert.equal(wk.friendBattles, 3, 'three battles this week');
+  assert.equal(wk.friendsBattled, 2, 'two DISTINCT friends this week (amy, bo)');
+  const day = questCtx('day', base);
+  assert.equal(day.friendBattles, 1, 'one battle on the exact day');
+  // the daily + weekly friend quests read those fields
+  const dq = DAILY_POOL.find(q => q.id === 'q-friend');
+  assert.deepEqual(dq.progress(day), { cur: 1, target: 1 });
+  const wq = WEEKLY_POOL.find(q => q.id === 'w-friends');
+  assert.deepEqual(wq.progress(wk), { cur: 2, target: 3 });
+  assert.equal(dq.need, 'social'); assert.equal(wq.need, 'social');
+});
 test('quest progress + claim state', () => {
   const q3 = DAILY_POOL.find(q => q.id === 'q-3meals');
   const base = { date: '2026-07-03', entries: [{ meal: 0 }, { meal: 1 }], allXp: [], allLog: [], healthRows: [], targets: { p: 180 }, priorFoodIds: new Set(), weighedToday: false };
