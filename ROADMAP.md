@@ -9,6 +9,25 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📥 Notes intake — 2026-07-20 (round 3) — PLAN PROPOSED, awaiting Tom's approval
+
+| # | Note | Finding | Proposed status |
+|---|------|---------|--------|
+| R1 | Recommended to buy a wand weaker than my current weapon; also the Bone Merchant is too hard to find | TWO issues. (a) BUG in my own v146 unlock nudge: `computeHomeUnlocks` suggests the CHEAPEST affordable unowned weapon regardless of whether it upgrades your loadout, so it pushed the 700-coin Wand while you run a tier-3 caster. Fix: only nudge a weapon that's a genuine upgrade over your equipped weapon (higher tier, relevant archetype), else drop the signal. (b) Merchant is buried in Pit → Build → scroll. Fix: a direct Merchant entry (Build sub-tab or hero shortcut) + the "suits you" list shouldn't headline weapons weaker than what you own. | BUG + FEATURE |
+| R2 | Patch notes should pop up on first open after an update, easily dismissible, and clearly findable afterward (currently buried in Settings) | v148 put What's New in Settings + Crew with an unseen count, but no auto-popup. Fix: on boot, if unseen entries exist since a version bump, auto-show the What's New sheet once (dismissible); keep the Settings + Crew entry points. | FEATURE (small, builds on v148) |
+| R3 | Trends tab is prime real estate but I never use it; repurpose it | Trends = data-viz (weekly recap, heatmap, activity/sleep/weight/intake charts, badges). Genuinely secondary. Needs your call on what should own that slot. Options: (a) a Bonehead/game hub (character + Pit + pets + quests at a glance), (b) a social/leaderboard hub, (c) keep charts but demote. Pairs with R8. | DECISION |
+| R4 | What currency buys the final weapon? Not shown top-right with the others | It's **Bone Dust**. It IS in the top-right HUD (◆ icon), but the prestige-weapon price I shipped uses a 🦴 bone emoji, so the two don't match and it reads as a mystery currency. Fix: one consistent Bone Dust icon + label everywhere (HUD, prices, shop) + tap-to-explain. | BUG (quick, my v145 inconsistency) |
+| R5 | Cooked food shouldn't force immediate use; want a pantry stockpile | `collectDish` immediately activates the buff (N fights / timed). No stockpile. Fix: collected dishes go into a Pantry; you activate one on demand. Additive, data-safe refactor of the cook → buff flow. | FEATURE (medium) |
+| R6 | List current ingredients for Cam: which to illustrate + alternates/future | 7 today (6 common: Marrow, Graveroot, Ember Pepper, Bog Mushroom, Sinew, Grave Salt; 1 rare: Ectoplasm), on placeholder game-icons/emoji. Built a reference sheet artifact for Cam this session. | DELIVERABLE (done) |
+| R7 | Streak Freeze feels underused + too abundant; keep it but reduce; what else in that vein? | Consumable drops are 50/50 Freeze vs Battle Charm (`loot.js` ~635), so Freeze = half of ALL consumable drops. Fix: cut Freeze's share; add 1–2 new consumables to diversify. Ideas: Lucky Bone (better next-crate odds), Forager's Charm (double next spawn), Rested Token (refill Pit energy), Trail Ration (small XP on next log). | FEATURE + balance |
+| R8 | Progress tab purpose unclear; maybe merge with Trends | Progress (level/XP + badge details) overlaps Trends' badges section. Consolidate into one. Tied to R3's IA decision. | DECISION (pairs with R3) |
+| R9 | More enticing quests | Pools are solid but rewards are almost all coins (+ a weekly golden crate). "Enticing" = varied, flashier rewards (eggs, ingredients, Bone Dust, a cosmetic, a pet shard) + a few higher-flavor objectives. | FEATURE |
+| R10 | Biggest competitors? Features they have that we're missing? | Research — answered in chat 2026-07-20. Trackers: MyFitnessPal (biggest DB, AI photo/voice logging), MacroFactor (adaptive target coaching), Cronometer (micronutrients), Lose It!/Yazio/Lifesum. Gamified: NutriBalance (streaks/XP/leagues/missions/badges), Habitica + Finch (RPG/pet habit apps = our spiritual peers). Gaps worth considering: AI photo logging, adaptive targets, a leaderboard/league, micronutrients. Our moat (deep RPG: pets/gear/combat/breeding) is unmatched by mainstream trackers. | RESEARCH (logged) |
+
+**Proposed build order (pending approval):** Batch A quick fixes (R1 wand-nudge + R4 dust icon), Batch B patch-notes auto-popup (R2), Batch C pantry (R5), Batch D quests + consumables (R9 + R7). R3/R8 (tab IA) need your direction before I touch them; R6/R10 delivered this session.
+
+---
+
 ## 📥 Notes intake — 2026-07-20 (approved; batches ship in order)
 
 ### Batch 1 — quick wins — ✅ SHIPPED v137–v140 (2026-07-20, verified live)
