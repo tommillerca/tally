@@ -391,7 +391,8 @@ function route() {
   const tab = currentTab();
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const el = $('#screen');
-  if (tab === 'trends') renderTrends(el);
+  if (tab === 'shop') renderShop(el);
+  else if (tab === 'progress' || tab === 'trends') renderTrends(el); // Trends merged into Progress (v150)
   else if (tab === 'foods') renderFoods(el);
   else if (tab === 'friends') renderFriends(el);
   else if (tab === 'settings') renderSettings(el);
@@ -703,8 +704,8 @@ async function renderToday(el) {
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
-  $('#lvlChip').addEventListener('click', () => openCharacter('progress'));
-  $('#streakChip').addEventListener('click', () => openCharacter('progress'));
+  $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
+  $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
   measureBubbleSide($('#bhStage'), eq).then(side => {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
@@ -713,7 +714,7 @@ async function renderToday(el) {
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#pitBtn')?.addEventListener('click', openPit);
-  $('#qProg')?.addEventListener('click', () => openCharacter('progress'));
+  $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
@@ -1756,6 +1757,119 @@ function scalePer100(per100, grams) {
   return out;
 }
 
+/* ================= shop (v150) ================= */
+// One home for everything you spend on: the Bone Merchant (weapons, moved out of
+// the buried Build sheet), the coin + Bone Dust shops (moved out of Backpack), a
+// route to Forage, and a placeholder for future real-money packs. Renders into
+// #screen like the other main tabs; re-renders itself after each purchase.
+async function renderShop(el) {
+  const [fighter, coinBal, dustBal] = await Promise.all([buildFighter(), coins(), boneDust()]);
+  const recArch = recommendArch(fighter);
+  const rerender = () => renderShop(el);
+
+  const weaponCard = w => {
+    const ownedW = fighter.owned.includes(w.id);
+    const on = fighter.loadout === w.id;
+    const cost = weaponCoinCost(w.id);
+    const dust = weaponDustCost(w.id);
+    const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
+    const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
+    const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">◆</span> ${dust}</span>` : ''}`;
+    const cta = ownedW
+      ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
+      : cost != null
+        ? `<button class="btn small" data-buyweapon="${w.id}" ${(coinBal < cost || dustBal < dust) ? 'disabled' : ''}>${priceLabel}</button>`
+        : `<span class="q-frac">Champion drop</span>`;
+    return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''} ${ownedW ? 'owned' : ''}">
+      <div class="weap-top"><b>${esc(w.name)} ${tierTag}</b>${specTag}</div>
+      <small class="weap-desc">${esc(w.desc)}</small>
+      <div class="weap-cta">${cta}</div>
+    </div>`;
+  };
+  const allW = Object.values(WEAPONS);
+  const baseline = allW.find(w => !w.arch);
+  const order = [recArch, ...['melee', 'caster', 'support'].filter(a => a !== recArch)];
+  const merchantHtml = `${baseline ? `<div class="weap-rack">${weaponCard(baseline)}</div>` : ''}
+    ${order.map(arch => {
+      const list = allW.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (weaponCoinCost(a.id) || 9999) - (weaponCoinCost(b.id) || 9999));
+      if (!list.length) return '';
+      const rec = arch === recArch;
+      return `<div class="merch-group${rec ? ' rec' : ''}">
+        <div class="merch-head"><span class="merch-ico">${ARCH_META[arch].ico}</span><b>${ARCH_META[arch].label}</b><small>${ARCH_META[arch].blurb}</small>${rec ? '<span class="merch-rec">for your build</span>' : ''}</div>
+        <div class="weap-rack">${list.map(weaponCard).join('')}</div>
+      </div>`;
+    }).join('')}`;
+
+  el.innerHTML = `
+  <h1 class="page-h1">Shop<span class="sub">Weapons, crates and Bone Dust</span></h1>
+
+  <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
+
+  <div class="card">
+    <div class="card-title">THE BONE MERCHANT · <span style="color:var(--accent)">${ARCH_META[recArch].label} suits you</span></div>
+    <p class="note" style="margin:0 2px 12px">Weapons multiply your effort; they never replace it. Melt spare gear at the Salvage Bench for the Bone Dust the top-tier pieces need.</p>
+    ${merchantHtml}
+  </div>
+
+  <div class="card">
+    <div class="card-title">COIN SHOP</div>
+    <div class="grid2">
+      ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
+        <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
+    </div>
+    <button class="btn ghost small" id="shopForage" style="margin-top:12px">Forage for ingredients in the Kitchen</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">BONE DUST SHOP</div>
+    <p class="note" style="margin:0 2px 10px">Spend salvage (<span class="dust-ico">◆</span> Bone Dust) on a fresh shot at pets, crates and consumables.</p>
+    <div class="grid2">
+      ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dustBal < d.cost ? 'disabled' : ''}>
+        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
+    </div>
+    <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
+  </div>
+
+  <div class="card shop-vault">
+    <div class="card-title">THE BONE VAULT</div>
+    <p class="note" style="margin:0 2px 2px">Coming soon: support Boneheadz with premium bone bundles. Everything here today is earned by playing, and always will be. No pay-to-win.</p>
+    <div class="vault-soon">Locked · in the works</div>
+  </div>`;
+
+  el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
+    await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); rerender();
+  }));
+  el.querySelectorAll('[data-buyweapon]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const res = await buyWeapon(b.dataset.buyweapon);
+    if (!res.ok) {
+      toast(res.reason === 'coins' ? 'Not enough coins for that weapon.'
+        : res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}). Melt gear at the Salvage Bench.`
+        : 'Already owned.');
+      b.disabled = false; return;
+    }
+    await kvSet('loadout', res.weaponId);
+    levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+    toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
+    rerender();
+  }));
+  el.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', async () => {
+    const r = await buyShopItem(b.dataset.buy);
+    if (!r.ok) { toast('Not enough coins yet'); return; }
+    popSound(S.sounds); toast('Purchased'); rerender();
+  }));
+  el.querySelectorAll('[data-dustbuy]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const res = await buyWithDust(btn.dataset.dustbuy);
+    if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
+    popSound(S.sounds);
+    toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it in your Backpack.' : 'Added to your consumables.', 2800);
+    rerender();
+  }));
+  $('#shopForage', el)?.addEventListener('click', openKitchen);
+  $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
+}
+
 /* ================= trends ================= */
 
 const STEP_REF = 10000; // step reference line on the activity chart (matches the home step goal)
@@ -1805,7 +1919,7 @@ async function renderTrends(el) {
   const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
 
   el.innerHTML = `
-  <h1 class="page-h1">Trends<span class="sub">Your week, your streak, your data</span></h1>
+  <h1 class="page-h1">Progress<span class="sub">Your level, streak, badges and data</span></h1>
 
   <div class="card recap-card">
     <div class="card-title">THIS WEEK</div>
@@ -3325,11 +3439,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
-      <div class="sect-h">Shop</div>
-      <div class="grid2">
-        ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
-          <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
-      </div>
       <div class="sect-h">Salvage Bench · nothing wasted</div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
       <p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
@@ -3345,11 +3454,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button></div>`;
         }).join('');
       })()}
-      <div class="sect-h">Bone Dust Shop</div>
-      <div class="grid2">
-        ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
-          <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
-      </div>`;
+      <button class="btn ghost small" id="bpToShop" style="margin-top:14px">Spend coins &amp; Bone Dust in the Shop</button>`;
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
         toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
@@ -3391,6 +3496,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     }));
     $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
+    $('#bpToShop', content)?.addEventListener('click', () => { history.back(); setTimeout(() => { location.hash = '#/shop'; }, 260); });
     $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
       const r = await buyShopItem(b.dataset.buy);
       if (!r.ok) { toast('Not enough coins yet'); return; }
@@ -4535,7 +4641,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v149'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v150'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5640,46 +5746,10 @@ async function renderTalents(wrap) {
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
     </div>
     </div></details>
-    <details class="bsect" data-bsect="merchant" ${sectOpen('merchant')}>
-    <summary class="bsect-head"><b>The Bone Merchant</b><span class="note">${fighter.owned.length}/${Object.keys(WEAPONS).length} weapons · ${ARCH_META[recArch].label} suits you</span></summary>
-    <div class="bsect-body">
-    <p class="note" style="margin:2px 2px 10px">The old skeleton lays out his wares by fighting style. He nods at your build: <b style="color:var(--accent)">${ARCH_META[recArch].label}</b> suits you. Weapons multiply your effort; they never replace it.</p>
-    <div class="wallet-line"><span class="note">Your wallet</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
-    ${(() => {
-      const weaponCard = w => {
-        const ownedW = fighter.owned.includes(w.id);
-        const on = fighter.loadout === w.id;
-        const cost = weaponCoinCost(w.id);
-        const dust = weaponDustCost(w.id);
-        const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
-        const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
-        const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">◆</span> ${dust}</span>` : ''}`;
-        const cta = ownedW
-          ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
-          : cost != null
-            ? `<button class="btn small" data-buyweapon="${w.id}" ${(coinBal < cost || dustBal < dust) ? 'disabled' : ''}>${priceLabel}</button>`
-            : `<span class="q-frac">Champion drop</span>`;
-        return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''} ${ownedW ? 'owned' : ''}">
-          <div class="weap-top"><b>${esc(w.name)} ${tierTag}</b>${specTag}</div>
-          <small class="weap-desc">${esc(w.desc)}</small>
-          <div class="weap-cta">${cta}</div>
-        </div>`;
-      };
-      const all = Object.values(WEAPONS);
-      const baseline = all.find(w => !w.arch);
-      const order = [recArch, ...['melee', 'caster', 'support'].filter(a => a !== recArch)];
-      return `${baseline ? `<div class="weap-rack">${weaponCard(baseline)}</div>` : ''}
-      ${order.map(arch => {
-        const list = all.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (weaponCoinCost(a.id) || 9999) - (weaponCoinCost(b.id) || 9999));
-        if (!list.length) return '';
-        const rec = arch === recArch;
-        return `<div class="merch-group${rec ? ' rec' : ''}">
-          <div class="merch-head"><span class="merch-ico">${ARCH_META[arch].ico}</span><b>${ARCH_META[arch].label}</b><small>${ARCH_META[arch].blurb}</small>${rec ? '<span class="merch-rec">for your build</span>' : ''}</div>
-          <div class="weap-rack">${list.map(weaponCard).join('')}</div>
-        </div>`;
-      }).join('')}`;
-    })()}
-    </div></details>
+    <button class="card bsect-link" id="toShopMerchant">
+      <div><b>The Bone Merchant</b><span class="note" style="display:block">Buy &amp; equip weapons in the Shop · you own ${fighter.owned.length}/${Object.keys(WEAPONS).length}</span></div>
+      <span class="crew-chev">›</span>
+    </button>
     ${(() => {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);
@@ -5748,26 +5818,8 @@ async function renderTalents(wrap) {
   $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
   $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
   $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderTalents(wrap); });
-  $$('[data-weapon]', body).forEach(b => b.addEventListener('click', async () => {
-    await kvSet('loadout', b.dataset.weapon);
-    popSound(S.sounds);
-    renderTalents(wrap);
-  }));
-  $$('[data-buyweapon]', body).forEach(b => b.addEventListener('click', async () => {
-    b.disabled = true;
-    const res = await buyWeapon(b.dataset.buyweapon);
-    if (!res.ok) {
-      toast(res.reason === 'coins' ? 'Not enough coins for that weapon.'
-        : res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}). Melt gear or salvage pets at the bench.`
-        : 'Already owned.');
-      b.disabled = false; return;
-    }
-    await kvSet('loadout', res.weaponId); // auto-equip the new weapon
-    levelSound(S.sounds);
-    confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
-    toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
-    renderTalents(wrap);
-  }));
+  // weapons now live in the Shop tab (v150); Build just links there
+  $('#toShopMerchant', body)?.addEventListener('click', () => { history.back(); setTimeout(() => { location.hash = '#/shop'; }, 260); });
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
     if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;

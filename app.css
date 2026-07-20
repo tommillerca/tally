@@ -1470,6 +1470,11 @@ body::before {
 /* ===== The Bone Merchant (v71) ===== */
 .wallet-line { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; padding: 8px 12px; border-radius: 11px; background: var(--surface-2); }
 .wallet-line b { font-family: var(--display); font-size: 17px; letter-spacing: 0.5px; }
+/* v150: pointer card (Build -> Shop) + Shop's future-IAP vault placeholder */
+.bsect-link { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer; }
+.bsect-link b { font-size: 14.5px; }
+.shop-vault { opacity: 0.9; border-style: dashed; }
+.vault-soon { margin-top: 10px; display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
 .merch-group { margin-bottom: 16px; }
 .merch-group.rec { border: 1px solid rgba(165, 232, 71, 0.35); border-radius: 14px; padding: 10px; background: rgba(165, 232, 71, 0.04); }
 .merch-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
