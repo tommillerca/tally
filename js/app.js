@@ -4486,19 +4486,30 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
     nudge: `${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'} to spend`,
     toast: `You earned ${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'}. Shape your build in the Pit.`,
   });
-  // cheapest affordable, unowned vendor weapon (coins AND dust both covered)
+  // affordable vendor weapon that's a genuine UPGRADE — never nudge a weapon
+  // weaker than what you already run. Only endgame pieces (tier >= 3), and only
+  // if they out-tier your best weapon in that archetype. (Non-tiered found
+  // weapons like the Skull Scepter count as tier 3 so we never suggest below them.)
   const owned = new Set(fighter.owned || []);
+  const ownedTierByArch = {};
+  for (const id of owned) {
+    const w = WEAPONS[id]; if (!w || !w.arch) continue;
+    ownedTierByArch[w.arch] = Math.max(ownedTierByArch[w.arch] || 0, w.tier || 3);
+  }
   let bestW = null;
   for (const w of Object.values(WEAPONS)) {
     if (!w.vendor || owned.has(w.id)) continue;
+    const tier = w.tier || 0;
+    if (tier < 3) continue;                                 // aspirational only, no entry weapons
+    if (tier <= (ownedTierByArch[w.arch] || 0)) continue;   // must upgrade your current kit
     const c = weaponCoinCost(w.id), d = weaponDustCost(w.id);
     if (c == null || coinBal < c || dustBal < d) continue;
-    if (!bestW || c < bestW.c) bestW = { id: w.id, name: w.name, c };
+    if (!bestW || tier > bestW.tier || (tier === bestW.tier && c < bestW.c)) bestW = { id: w.id, name: w.name, c, tier };
   }
   if (bestW) sig.push({
     key: 'wpn:' + bestW.id, hero: 'pit', action: 'talents', priority: 2,
     nudge: `You can afford the ${bestW.name}`,
-    toast: `The Bone Merchant has a weapon you can afford: ${bestW.name}.`,
+    toast: `The Bone Merchant has an upgrade you can afford: ${bestW.name}.`,
   });
   return sig.sort((a, b) => b.priority - a.priority);
 }
@@ -4524,7 +4535,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v148'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v149'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5633,7 +5644,7 @@ async function renderTalents(wrap) {
     <summary class="bsect-head"><b>The Bone Merchant</b><span class="note">${fighter.owned.length}/${Object.keys(WEAPONS).length} weapons · ${ARCH_META[recArch].label} suits you</span></summary>
     <div class="bsect-body">
     <p class="note" style="margin:2px 2px 10px">The old skeleton lays out his wares by fighting style. He nods at your build: <b style="color:var(--accent)">${ARCH_META[recArch].label}</b> suits you. Weapons multiply your effort; they never replace it.</p>
-    <div class="wallet-line"><span class="note">Your wallet</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()} <span class="wallet-dust">· 🦴 ${dustBal.toLocaleString()} dust</span></b></div>
+    <div class="wallet-line"><span class="note">Your wallet</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
     ${(() => {
       const weaponCard = w => {
         const ownedW = fighter.owned.includes(w.id);
@@ -5642,7 +5653,7 @@ async function renderTalents(wrap) {
         const dust = weaponDustCost(w.id);
         const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
         const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
-        const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ 🦴 ${dust}</span>` : ''}`;
+        const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">◆</span> ${dust}</span>` : ''}`;
         const cta = ownedW
           ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
           : cost != null
