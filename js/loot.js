@@ -27,13 +27,19 @@ export const CONSUMABLES = {
   // Battle Charm reuses the old 'xp2' storage key so any owned charges convert
   // 1:1 for free. It no longer touches logging; it pays out on Pit wins.
   xp2:    { label: 'Battle Charm',  icon: '🧿', desc: 'Your next 5 Pit wins pay +25% coins' },
+  // v153: a second "use it when you want it" item alongside the Charm, so drops
+  // aren't mostly Streak Freeze. Refills Pit energy so a good day of habits can
+  // fund a longer Pit run. Still never rewards eating less (it's a spent item).
+  vigor:  { label: 'Vigor Draught', icon: '⚡', desc: 'Drink to bank +3 Vigor (Pit energy) right now' },
 };
+export const VIGOR_DRAUGHT_AMOUNT = 3;
 
 export const SHOP = [
   { id: 'crate-daily', label: 'Common Crate', icon: '📦', cost: 150 },
   { id: 'crate-golden', label: 'Golden Crate', icon: '🧰', cost: 400 },
-  { id: 'freeze', label: 'Streak Freeze', icon: '🧊', cost: 120 },
+  { id: 'vigor', label: 'Vigor Draught', icon: '⚡', cost: 90 },
   { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
+  { id: 'freeze', label: 'Streak Freeze', icon: '🧊', cost: 120 },
 ];
 
 // Coin bonus a Battle Charm charge adds to a Pit win.
@@ -580,6 +586,15 @@ export async function consumableCount(type) {
   return (await inventory()).filter(r => r.kind === type).length;
 }
 
+// Spend one consumable of `type` (removes the oldest inv row). Returns true if
+// one was consumed. The caller applies the effect (e.g. addVigor for a Draught).
+export async function consumeConsumable(type) {
+  const row = (await inventory()).filter(r => r.kind === type).sort((a, b) => a.ts - b.ts)[0];
+  if (!row) return false;
+  await db.del('inv', row.id);
+  return true;
+}
+
 export async function unopenedCrates() {
   return (await inventory()).filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
 }
@@ -632,7 +647,11 @@ export async function openCrate(invId) {
   for (let i = 0; i < def.rolls; i++) {
     const floor = i === 0 ? def.floor : 0;
     if (rng() < def.consumableChance) {
-      const type = rng() < 0.5 ? 'freeze' : 'xp2';
+      // v153: Streak Freeze was half of every consumable drop and nobody used them
+      // all. Weighted pool drops freeze to ~20%; Battle Charm + Vigor Draught (the
+      // items people actually spend) fill the rest.
+      const pool = ['xp2', 'vigor', 'xp2', 'vigor', 'freeze'];
+      const type = pool[Math.floor(rng() * pool.length)];
       await grantConsumable(type, 'crate');
       results.push({ type: 'consumable', consumable: type });
       continue;

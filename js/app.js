@@ -11,7 +11,7 @@ import {
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
-  battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
+  battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
   shinyPetIds,
@@ -34,7 +34,7 @@ import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
-import { refreshPitEnergy, spendPitFight, FREE_FIGHTS } from './energy.js';
+import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -162,7 +162,10 @@ function crateIcon(kind, s = 22) {
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
   return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
-function consumableIcon(type, s = 20) { return `<span class="bhi-wrap">${bhIcon(type === 'freeze' ? 'freeze' : 'charm', s)}</span>`; }
+function consumableIcon(type, s = 20) {
+  if (type === 'vigor') return `<span style="font-size:${Math.round(s * 0.92)}px;line-height:1">⚡</span>`;
+  return `<span class="bhi-wrap">${bhIcon(type === 'freeze' ? 'freeze' : 'charm', s)}</span>`;
+}
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
 function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
 function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
@@ -659,7 +662,7 @@ async function renderToday(el) {
         const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
         return `<div class="q-row ${tier.period !== 'day' ? 'longterm' : ''}">
           <div class="q-main">
-            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}</span></div>
+            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}${q.dust ? ` <span class="dust-ico">◆</span>${q.dust}` : ''}${q.item ? ' ' + consumableIcon(q.item, 12) : ''}${q.ingredient ? ' ' + ingIconHtml(q.ingredient, 12) : ''}</span></div>
             <div class="q-desc">${esc(q.desc)}</div>
             <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
@@ -3242,6 +3245,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   const freezes = inv.filter(r => r.kind === 'freeze').length;
   const boosts = inv.filter(r => r.kind === 'xp2').length;
+  const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
   const takenTal = await kvGet('talents', []);
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
@@ -3468,6 +3472,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="crate-row"><span class="crate-ico">${ICONS.freeze(24)}</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
       <div class="crate-row"><span class="crate-ico">${consumableIcon('xp2', 24)}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
+      <div class="crate-row"><span class="crate-ico">${consumableIcon('vigor', 24)}</span><div style="flex:1"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
+        ${vigors ? `<button class="btn small ghost" id="useVigor">Drink (x${vigors})</button>` : `<span class="q-frac">x0</span>`}</div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="sect-h">Kitchen · food &amp; buffs</div>
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
@@ -3510,6 +3516,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
       if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
+      renderCharacter(wrap, 'crates');
+    });
+    $('#useVigor', content)?.addEventListener('click', async () => {
+      if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit fights ready.`, 3000); }
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
@@ -4676,7 +4686,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v152'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v153'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

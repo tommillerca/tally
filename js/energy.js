@@ -52,6 +52,17 @@ export async function refreshPitEnergy() {
 // Current energy without recomputing (fast read for gating a button).
 export async function pitEnergy() { return view((await kvGet('pitEnergy', {})) || {}); }
 
+// Add banked Vigor (used by the Vigor Draught consumable). Clamped to the cap;
+// returns the new energy view. Never rewards eating less — this is a spent item.
+export async function addVigor(n) {
+  const st = (await kvGet('pitEnergy', null)) || {};
+  if (st.date !== dateKey()) { await refreshPitEnergy(); }
+  const s2 = (await kvGet('pitEnergy', {})) || {};
+  s2.vigor = clampVigor((s2.vigor || 0) + n);
+  await kvSet('pitEnergy', s2);
+  return view(s2);
+}
+
 // Consume one Pit fight: spend the free floor first, then banked Vigor.
 // Returns { ok, used: 'free' | 'vigor' } or { ok: false } when tapped out.
 export async function spendPitFight() {

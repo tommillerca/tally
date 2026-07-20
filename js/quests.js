@@ -10,7 +10,8 @@
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
 import { award } from './game.js';
-import { coinsAdd, grantCrate } from './loot.js';
+import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
+import { grantIngredient } from './cooking.js';
 
 function hashStr(s) {
   let h = 2166136261;
@@ -105,7 +106,7 @@ export const DAILY_POOL = [
     progress: c => clamp(c.entries.length, 5) },
   { id: 'q-3meals', name: 'Square meals', desc: 'Log breakfast, lunch, and dinner', coins: 60,
     progress: c => clamp([0, 1, 2].filter(m => c.entries.some(e => e.meal === m)).length, 3) },
-  { id: 'q-protein', name: 'Protein bullseye', desc: 'Hit your full protein target', coins: 70,
+  { id: 'q-protein', name: 'Protein bullseye', desc: 'Hit your full protein target', coins: 70, dust: 15,
     progress: c => { const t = c.targets?.p || 150; return clamp(dayTotals(c.entries).p, t); } },
   { id: 'q-scan', name: 'Laser checkout', desc: 'Log a food by scanning its barcode', coins: 40,
     progress: c => clamp(c.scanToday ? 1 : 0, 1) },
@@ -113,7 +114,7 @@ export const DAILY_POOL = [
     progress: c => clamp(c.entries.filter(e => e.foodId && !c.priorFoodIds.has(e.foodId)).length, 1) },
   { id: 'q-weigh', name: 'Data point', desc: 'Log a weigh-in', coins: 40,
     progress: c => clamp(c.weighedToday ? 1 : 0, 1) },
-  { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50,
+  { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50, ingredient: 'salt',
     progress: c => clamp(c.cookedToday ? 1 : 0, 1) },
   { id: 'q-water', name: 'Stay watered', desc: 'Drink 8 cups of water', coins: 45,
     progress: c => clamp(c.waterToday ? 1 : 0, 1) },
@@ -123,13 +124,13 @@ export const DAILY_POOL = [
     progress: c => clamp(c.sleepToday ? 1 : 0, 1) },
   { id: 'q-pit1', name: 'Pit scrap', desc: 'Win a Pit fight', coins: 60,
     progress: c => clamp(c.pitWins, 1) },
-  { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80,
+  { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80, item: 'vigor',
     progress: c => clamp(c.pitWins, 3) },
   { id: 'q-hunt', name: 'Boneyard sweep', desc: 'Collect 2 spawns on the map', coins: 70, need: 'hunt',
     progress: c => clamp(c.spawns, 2) },
   { id: 'q-steps8', name: 'Get moving', desc: 'Walk 8,000 steps', coins: 60, need: 'hk',
     progress: c => clamp(c.steps, 8000) },
-  { id: 'q-steps11', name: 'Long haul', desc: 'Walk 11,000 steps', coins: 80, need: 'hk',
+  { id: 'q-steps11', name: 'Long haul', desc: 'Walk 11,000 steps', coins: 80, dust: 20, need: 'hk',
     progress: c => clamp(c.steps, 11000) },
   { id: 'q-friend', name: 'Bone brawl', desc: "Battle a friend's bonehead", coins: 75, need: 'social',
     progress: c => clamp(c.friendBattles, 1) },
@@ -138,13 +139,13 @@ export const DAILY_POOL = [
 export const WEEKLY_POOL = [
   { id: 'w-steps', name: 'Trailblazer', desc: 'Walk 50,000 steps this week', coins: 150, crate: 'golden', need: 'hk',
     progress: c => clamp(c.steps, 50000) },
-  { id: 'w-pit', name: 'Pit regular', desc: 'Win 12 Pit fights this week', coins: 150, crate: 'golden',
+  { id: 'w-pit', name: 'Pit regular', desc: 'Win 12 Pit fights this week', coins: 150, crate: 'golden', item: 'vigor',
     progress: c => clamp(c.pitWins, 12) },
   { id: 'w-protein', name: 'Protein week', desc: 'Hit your protein target on 5 days', coins: 150, crate: 'golden',
     progress: c => clamp(c.proteinDays, 5) },
-  { id: 'w-boss', name: 'Boss hunter', desc: 'Beat 2 world bosses this week', coins: 180, crate: 'golden',
+  { id: 'w-boss', name: 'Boss hunter', desc: 'Beat 2 world bosses this week', coins: 180, crate: 'golden', dust: 60,
     progress: c => clamp(c.bossWins, 2) },
-  { id: 'w-hunt', name: 'Scavenger', desc: 'Collect 15 spawns this week', coins: 140, crate: 'golden', need: 'hunt',
+  { id: 'w-hunt', name: 'Scavenger', desc: 'Collect 15 spawns this week', coins: 140, crate: 'golden', ingredient: 'ectoplasm', need: 'hunt',
     progress: c => clamp(c.spawns, 15) },
   { id: 'w-log', name: 'Steady logger', desc: 'Log on 5 days this week', coins: 120, crate: 'golden',
     progress: c => clamp(c.logDays, 5) },
@@ -161,7 +162,7 @@ export const MONTHLY_POOL = [
     progress: c => clamp(c.steps, 200000) },
   { id: 'm-pit', name: 'Pit veteran', desc: 'Win 50 Pit fights this month', coins: 400, crate: 'egg',
     progress: c => clamp(c.pitWins, 50) },
-  { id: 'm-boss', name: 'Boss slayer', desc: 'Beat 8 world bosses this month', coins: 500, crate: 'egg',
+  { id: 'm-boss', name: 'Boss slayer', desc: 'Beat 8 world bosses this month', coins: 500, crate: 'egg', dust: 150,
     progress: c => clamp(c.bossWins, 8) },
   { id: 'm-protein', name: 'Protein month', desc: 'Hit your protein target on 20 days', coins: 400, crate: 'egg',
     progress: c => clamp(c.proteinDays, 20) },
@@ -195,7 +196,12 @@ export async function claimQuest(periodKey, q, period = 'day') {
   if (!xp) return null;
   await coinsAdd(q.coins);
   if (q.crate) await grantCrate(q.crate, 'quests');
-  return { xp, coins: q.coins, crate: q.crate || null };
+  // v153: richer, more enticing rewards beyond coins — Bone Dust, ingredients,
+  // and consumables so the reward table isn't all coins.
+  if (q.dust) await boneDustAdd(q.dust);
+  if (q.item) await grantConsumable(q.item, 'quests');            // e.g. 'vigor'
+  if (q.ingredient) await grantIngredient(q.ingredient, q.ingredientN || 1);
+  return { xp, coins: q.coins, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
 }
 
 // Bonus daily crate when all three dailies are claimed.
