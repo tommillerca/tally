@@ -3735,7 +3735,14 @@ async function openStable() {
       const fam = familyOf(eqInst.sp);
       const lvl = petLevel(bank[eqIid] || 0);
       const picks = await petPicks(eqInst.sp);
+      // spell out the road ahead so nobody misses that the tree runs to Lv 10
+      const nextRow = PET_TREES[fam.key].find(row => lvl < row.tier);
+      const toNextTier = nextRow ? petStepsToNext(bank[eqIid] || 0) : 0; // steps to the very next level; UI nudge
+      const nextHint = nextRow
+        ? `<p class="tree-next">★ Next talent unlocks at <b>Lv ${nextRow.tier}</b> — keep walking this pet (top tier is Lv 10).</p>`
+        : `<p class="tree-next">Every talent unlocked — this pet is fully trained.</p>`;
       treeHtml = `<div class="sect-h" style="margin-top:14px">Active pet talents · ${esc((BH_BY_ID[eqInst.sp] || {}).name || '')}</div>
+        ${nextHint}
         <div class="pet-tree">${PET_TREES[fam.key].map(row => `
           <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
             <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
@@ -4365,7 +4372,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v140'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v141'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4692,7 +4699,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="foeStage"><div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div></div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
-          <div class="bh-stage fstage petmini" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
         </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">
@@ -4942,7 +4949,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode('🐾 DOWN', 'p', 'stamp dim');
       hitSound(S.sounds, 'thud');
     } else if (ev.t === 'aoe') {
-      const arena = $('#arena'); if (arena) pulse(arena, 'quake', fxMs + 200);
+      const arena = $('#arena');
+      if (arena) {
+        pulse(arena, 'quake', fxMs + 200);
+        const flash = document.createElement('div'); flash.className = 'aoe-flash';
+        arena.appendChild(flash); setTimeout(() => flash.remove(), 460);
+      }
       pulse(el('foeStage'), 'lunge-l', fxMs);
       if (ev.dmgYou > 0) floatNode(`-${ev.dmgYou}`, 'p', 'dmg');
       const petStage = el('petStage');

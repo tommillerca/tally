@@ -41,6 +41,18 @@ export const DEN_TIERS = [
 ];
 const TIER_WEIGHTS = [3, 3, 2, 2, 1.2, 0.8, 0.4]; // mostly approachable, sometimes a monster
 
+// The 2nd body a boss brings is its BEAST, not a random skeleton — named per den
+// theme so it reads as "the boss's creature" (Tom's exact instinct). Falls back to
+// a generic hound. Kept in poi.js so denForCell + escalateDen name it identically.
+const DEN_BEASTS = {
+  slab: 'Bonehound', greyhound: 'Pit Cur', gravewarden: 'Grave Wretch',
+  ringmaster: 'Circus Beast', gravecaller: 'Risen Hound', boneshaman: 'Marsh Leech',
+};
+export function denBeastName(theme) {
+  const b = DEN_BEASTS[theme && theme.arch];
+  return b ? `${theme.boss}'s ${b}` : `${(theme && theme.boss) || 'The Boss'}'s Beast`;
+}
+
 // Themes reuse the Bone Road / Pit art language.
 export const DEN_THEMES = [
   { key: 'gate', name: 'The Boneyard Gate', boss: 'The Gatekeeper', arch: 'slab' },
@@ -104,7 +116,7 @@ function denForCell(week, cx, cy) {
   if (tier >= 5) {
     const bm = tier >= 6 ? 0.9 : 0.8;
     den.bossMult = bm;
-    den.add = { name: `${theme.boss}'s Second`, mult: bm * 0.6, talents: [] };
+    den.add = { name: denBeastName(theme), beast: true, mult: bm * 0.6, talents: [] };
   }
   return den;
 }
@@ -153,7 +165,8 @@ export function escalateDen(den, wins) {
   const bossMult = +(soloMult * 0.9).toFixed(3);
   const addBase = den.add && den.add.mult != null ? den.add.mult : (den.mult || 1) * 0.5;
   const add = {
-    name: (den.add && den.add.name) || `${den.boss}'s Second`,
+    name: (den.add && den.add.name) || denBeastName(den),
+    beast: true,
     mult: +(addBase + ramp * 0.3).toFixed(3),
     talents: (den.add && den.add.talents) || (w >= 12 ? ['heavyhands'] : []),
   };

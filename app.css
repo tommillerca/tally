@@ -2068,6 +2068,16 @@ body::before {
   border: 2px solid rgba(255, 180, 84, .55); background: rgba(255, 180, 84, .10); }
 .hk-stale b { font-size: 14px; color: #ffb454; }
 .hk-stale span { font-size: 12.5px; color: var(--muted); }
+/* boss AoE sweep: a brief red wash over the arena so "it hit BOTH of you" reads */
+.aoe-flash { position: absolute; inset: 0; z-index: 30; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(circle at 50% 45%, rgba(220,60,40,.42), rgba(220,60,40,0) 70%);
+  animation: aoeFlash .45s ease-out forwards; }
+@keyframes aoeFlash { 0% { opacity: 0; } 22% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .aoe-flash { animation: none; opacity: 0; } }
+/* the boss's beast (its 2nd body) reads as a lesser summoned creature, not a rival */
+.petmini.beast { filter: saturate(.55) brightness(.82) drop-shadow(0 0 6px rgba(150,40,30,.5)); }
+.tree-next { margin: 4px 2px 8px; font-size: 12.5px; color: var(--muted); }
+.tree-next b { color: var(--accent); }
 /* v128 breeding: lineage tag + a glow that brightens with each bred tier */
 .lin-tag { font-size: 10px; font-weight: 800; color: #ffd34d; letter-spacing: .03em; vertical-align: middle; }
 .lin-1 { filter: drop-shadow(0 0 3px rgba(255, 211, 77, .45)); }

@@ -1232,7 +1232,7 @@ function actForEnemy(fight, who, events) {
   fight.fTarget = 'p';
   if (petUp()) {
     const petLow = fight.pAux.hp <= fight.pAux.d.maxHp * 0.4;
-    if (fight.rng() < (petLow ? 0.35 : 0.15)) fight.fTarget = 'pa';
+    if (fight.rng() < (petLow ? 0.45 : 0.18)) fight.fTarget = 'pa';
   }
   let guard = 0;
   while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {
@@ -1243,8 +1243,8 @@ function actForEnemy(fight, who, events) {
 
     // Boss AoE: tough foes occasionally sweep the whole team, hurting BOTH you
     // and your pet in one blow (protect the pet — it can be downed).
-    if (fight.aiLevel >= 4 && petUp() && !f._sweptThisTurn
-        && fight.ap >= 1 && f.wind >= 20 && fight.rng() < 0.16) {
+    if (fight.aiLevel >= 3 && petUp() && !f._sweptThisTurn
+        && fight.ap >= 1 && f.wind >= 20 && fight.rng() < 0.2) {
       f._sweptThisTurn = true; fight.ap -= 1; f.wind -= 20;
       const rY = resolveHit({ move: 'swing', attacker: f, defender: fight.p, rng: fight.rng });
       const rP = resolveHit({ move: 'swing', attacker: f, defender: fight.pAux, rng: fight.rng });
