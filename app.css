@@ -2078,6 +2078,15 @@ body::before {
 .petmini.beast { filter: saturate(.55) brightness(.82) drop-shadow(0 0 6px rgba(150,40,30,.5)); }
 .tree-next { margin: 4px 2px 8px; font-size: 12.5px; color: var(--muted); }
 .tree-next b { color: var(--accent); }
+/* species signature capstone — the maxed-pet payoff */
+.pet-sig { display: grid; gap: 3px; margin: 10px 2px 4px; padding: 11px 13px; border-radius: 14px;
+  border: 2px solid rgba(255,201,97,.5); background: rgba(255,201,97,.08); }
+.pet-sig.locked { opacity: .62; border-style: dashed; }
+.pet-sig-h { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #ffc961; display: flex; align-items: center; gap: 5px; }
+.pet-sig b { font-size: 15px; }
+.pet-sig small { color: var(--muted); font-size: 12.5px; }
+.pet-sig-tag { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--muted); margin-top: 2px; }
+.pet-sig.on .pet-sig-tag { color: #ffc961; }
 /* v128 breeding: lineage tag + a glow that brightens with each bred tier */
 .lin-tag { font-size: 10px; font-weight: 800; color: #ffd34d; letter-spacing: .03em; vertical-align: middle; }
 .lin-1 { filter: drop-shadow(0 0 3px rgba(255, 211, 77, .45)); }

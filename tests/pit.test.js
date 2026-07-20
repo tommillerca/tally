@@ -1025,6 +1025,36 @@ test('pets: tier-8/10 talents actually amplify the ability (Savage bite, Fortify
   assert.ok(deep.weakenPct > plnI.weakenPct, 'Deep Hex weakens more');
 });
 
+test('pets: species signatures are per-pet, auto-lit only at max level (Lv 10)', () => {
+  const foe = makeFighter({ name: 'F', stats: MID });
+  const self = makeFighter({ name: 'S', stats: MID });
+  // not active below max level
+  const c4Low = buildBattlePet('C4', 9, []);
+  assert.equal(c4Low.signatureActive, false, 'Lv9 signature dormant');
+  assert.ok(!petAbilityEffect(c4Low, self, foe).critAlways, 'no guaranteed crit before Lv10');
+  // C4 Apex Ambush at Lv10: guaranteed crit + harder bite
+  const c4 = buildBattlePet('C4', 10, []);
+  assert.equal(c4.signatureActive, true);
+  const fxC4 = petAbilityEffect(c4, self, foe);
+  const fxC4base = petAbilityEffect(buildBattlePet('C4', 9, []), self, foe);
+  assert.equal(fxC4.critAlways, true, 'Apex Ambush crits always');
+  assert.ok(fxC4.damage > fxC4base.damage, 'Apex Ambush hits harder');
+  // C3 Chum Slick: max poison stacks
+  assert.equal(petAbilityEffect(buildBattlePet('C3', 10, []), self, foe).poison.stacks, 3, 'Chum Slick = 3 poison stacks');
+  // C1 Cosmic Storm: adds burn
+  assert.ok(petAbilityEffect(buildBattlePet('C1', 10, []), self, foe).burn, 'Cosmic Storm lays burn');
+  assert.ok(!petAbilityEffect(buildBattlePet('C1', 9, []), self, foe).burn, 'no burn before Lv10');
+  // C2 Eternal Guard: arms last stand + big heal fraction
+  const fxC2 = petAbilityEffect(buildBattlePet('C2', 10, []), self, foe);
+  assert.equal(fxC2.armLastStand, true); assert.ok(fxC2.lastStandHeal >= 0.4);
+  // C5 Loyal Bulwark: much bigger shield than the same pet at Lv9
+  assert.ok(petAbilityEffect(buildBattlePet('C5', 10, []), self, foe).shield >
+            petAbilityEffect(buildBattlePet('C5', 9, []), self, foe).shield * 1.5, 'Loyal Bulwark ~doubles the shield');
+  // two same-family hounds now diverge at the top (C3 vs C4)
+  assert.notDeepEqual(petAbilityEffect(buildBattlePet('C3', 10, []), self, foe),
+                      petAbilityEffect(buildBattlePet('C4', 10, []), self, foe));
+});
+
 test('pets: Hound passive raises your damage; Warden passive lowers damage taken', () => {
   const houndPet = buildBattlePet('C3', 6, []); // hound
   const wardenPet = buildBattlePet('C2', 6, []); // warden

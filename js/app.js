@@ -28,7 +28,7 @@ import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './a
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -3748,6 +3748,16 @@ async function openStable() {
             <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
             <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-sp="${eqInst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
           </div>`).join('')}</div>`;
+      // species signature capstone — unique to THIS pet, auto-lit at max level
+      const sigObj = petSignature(eqInst.sp);
+      if (sigObj) {
+        const sigOn = lvl >= PET_MAX_LEVEL;
+        treeHtml += `<div class="pet-sig ${sigOn ? 'on' : 'locked'}">
+          <div class="pet-sig-h">${sparkIco(12)} Species Signature${sigOn ? '' : ` · Lv ${PET_MAX_LEVEL}`}</div>
+          <b>${esc(sigObj.name)}</b><small>${esc(sigObj.desc)}</small>
+          <span class="pet-sig-tag">${sigOn ? 'ACTIVE' : `unlocks when this pet hits Lv ${PET_MAX_LEVEL}`}</span>
+        </div>`;
+      }
     }
 
     const spChips = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
@@ -4372,7 +4382,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v141'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v142'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

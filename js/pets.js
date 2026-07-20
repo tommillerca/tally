@@ -169,6 +169,20 @@ export function unlockedTiers(level) {
   return PET_TIERS.filter(t => level >= t);
 }
 
+// ---- SPECIES SIGNATURE: a unique capstone per PET (not family), auto-unlocked at
+// max level. This is the deep-endgame payoff + the thing that makes two same-family
+// pets (e.g. the two hounds C3/C4) play differently. Reachable only by pouring steps
+// into ONE pet, so it's the mark of a truly maxed companion. Previewed (locked) in
+// the Stable from the start so the depth is visible. ----
+export const PET_SIGNATURE = {
+  C1: { id: 'sig-c1', name: 'Cosmic Storm', desc: 'Curse also calls down a burning storm on the enemy each turn, and weakens 20% harder.' },
+  C2: { id: 'sig-c2', name: 'Eternal Guard', desc: 'The first killing blow each fight is survived AND mends you to 40% HP.' },
+  C3: { id: 'sig-c3', name: 'Chum Slick', desc: 'Every bite floods the enemy to max poison, ticking 40% harder.' },
+  C4: { id: 'sig-c4', name: 'Apex Ambush', desc: 'Bites always crit and strike 50% harder.' },
+  C5: { id: 'sig-c5', name: 'Loyal Bulwark', desc: 'Shields are massive (+90%), refill your stamina and cleanse you.' },
+};
+export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
+
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
 export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
@@ -201,6 +215,8 @@ export function buildBattlePet(petId, level = 1, picks = [], opts = {}) {
       * (fam.key === 'imp' && has('i-showoff') ? 2 : 1),
     cooldown: fam.cooldown === 2 && has('h-pack') ? 1 : fam.cooldown,
     picks: new Set(picks),
+    signature: petSignature(petId),                 // the species capstone (for UI + effect)
+    signatureActive: level >= PET_MAX_LEVEL,         // lit only on a fully-maxed pet
     // per-fight mutable state is added by makeFighter (cd timer, lastStandUsed)
   };
 }
@@ -234,38 +250,46 @@ export function petActionMeta(family) { return PET_ACTIONS[family] || PET_ACTION
 export function petAbilityEffect(pet, self, foe) {
   const has = id => pet.picks.has(id);
   const lvl = pet.level;
+  const sig = id => pet.signatureActive && pet.id === id; // species signature is lit
   if (pet.family === 'hound') {
-    const base = Math.round((2 + lvl * 0.7) * self.d.powerMult * (has('h-savage') ? 1.35 : 1));
+    let base = Math.round((2 + lvl * 0.7) * self.d.powerMult * (has('h-savage') ? 1.35 : 1));
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
-    const stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
+    let stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
+    let per = Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1) * (has('h-rupture') ? 1.5 : 1));
+    // C4 Apex Ambush: guaranteed crit + harder bites. C3 Chum Slick: max poison, harder ticks.
+    const critAlways = sig('C4');
+    if (sig('C4')) base = Math.round(base * 1.5);
+    if (sig('C3')) { stacks = 3; per = Math.round(per * 1.4); }
     return {
-      kind: 'pethit', bites, damage: base, crit: has('h-maul'),
+      kind: 'pethit', bites, damage: base, crit: has('h-maul'), critAlways,
       lifesteal: has('h-bloodscent') ? 0.06 : 0,
-      poison: {
-        per: Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1) * (has('h-rupture') ? 1.5 : 1)),
-        turns: 3 + (has('h-gore') ? 2 : 0),
-        stacks,
-      },
+      poison: { per, turns: 3 + (has('h-gore') ? 2 : 0), stacks },
     };
   }
   if (pet.family === 'warden') {
     // tuned down for the pet-as-body era: the pet already adds a soak layer, so
     // its support kit is lighter than the v34 companion version
-    const shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1) * (has('w-fortify') ? 1.4 : 1));
+    let shield = Math.round((7 + lvl * 1.5) * (has('w-bulwark') ? 1.5 : 1) * (has('w-fortify') ? 1.4 : 1));
+    // C5 Loyal Bulwark: massive shields + stamina + cleanse. C2 Eternal Guard: auto last-stand that heals big.
+    if (sig('C5')) shield = Math.round(shield * 1.9);
     return {
       kind: 'petshield', shield,
       heal: (has('w-mend') ? Math.round(self.d.maxHp * 0.06) : 0) + (has('w-renew') ? Math.round(self.d.maxHp * 0.08) : 0),
-      cleanse: has('w-cleanse'),
-      stamina: (has('w-devotion') ? 15 : 0) + (has('w-bastion') ? 25 : 0),
+      cleanse: has('w-cleanse') || sig('C5'),
+      stamina: (has('w-devotion') ? 15 : 0) + (has('w-bastion') ? 25 : 0) + (sig('C5') ? 40 : 0),
+      armLastStand: sig('C2'),
+      lastStandHeal: sig('C2') ? 0.4 : 0,
     };
   }
   // imp
-  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1);
+  const pct = 0.12 * (has('i-doublehex') ? 1.5 : 1) * (has('i-deephex') ? 1.5 : 1) * (sig('C1') ? 1.2 : 1);
   return {
     kind: 'petdebuff', weakenPct: pct,
     turns: (has('i-doublehex') ? 3 : 2) + (has('i-oblivion') ? 2 : 0),
     blind: has('i-jinx') || has('i-havoc'),
     staminaDrain: has('i-drain') ? 16 : (has('i-siphon') ? 8 : 0),
     mark: has('i-mark'), stagger: has('i-trick') || has('i-havoc'),
+    // C1 Cosmic Storm: the curse also lays a burning storm on the foe
+    burn: sig('C1') ? { per: 6 + lvl, turns: 3 } : null,
   };
 }

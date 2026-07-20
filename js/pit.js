@@ -442,7 +442,7 @@ export function applyPetAction(fight, actionId) {
     if (fx.kind === 'pethit') {
       for (let b = 0; b < fx.bites && foe.hp > 0; b++) {
         let dmg = Math.round(fx.damage * (1 + (body.petDamagePct || 0)));
-        if (fx.crit && fight.rng() < 0.25) dmg *= 2;
+        if (fx.critAlways || (fx.crit && fight.rng() < 0.25)) dmg *= 2;
         dealDamage(fight, foeWho, dmg, events);
         if (fx.lifesteal) me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal));
         events.push({ t: 'pethit', who: 'p', damage: dmg, name: pet.name });
@@ -457,7 +457,8 @@ export function applyPetAction(fight, actionId) {
       if (fx.heal) me.hp = Math.min(me.d.maxHp, me.hp + fx.heal);
       if (fx.stamina) me.wind = Math.min(me.d.maxWind, me.wind + fx.stamina);
       if (fx.cleanse) { me.bleed = null; me.burn = null; me.poison = null; }
-      if (pet.picks.has('w-laststand')) pet.lastStandArmed = true;
+      if (pet.picks.has('w-laststand') || fx.armLastStand) pet.lastStandArmed = true;
+      if (fx.lastStandHeal) pet.lastStandHealFrac = fx.lastStandHeal; // C2 signature: heal big on the save
       events.push({ t: 'petshield', who: 'p', shield: fx.shield, heal: fx.heal, name: pet.name });
     } else if (fx.kind === 'petdebuff') {
       if (foe.hp > 0) {
@@ -466,6 +467,7 @@ export function applyPetAction(fight, actionId) {
         if (fx.staminaDrain) foe.wind = Math.max(0, foe.wind - fx.staminaDrain);
         if (fx.mark) foe.marked = { turns: 3 };
         if (fx.stagger) foe.stagger = true;
+        if (fx.burn) { foe.burn = { per: fx.burn.per, turns: fx.burn.turns }; events.push({ t: 'status', who: foeWho, kind: 'burn' }); }
       }
       events.push({ t: 'petdebuff', who: foeWho, name: pet.name });
     }
@@ -681,8 +683,8 @@ export function dealDamage(fight, victimWho, amount, events) {
   }
   if (amount >= v.hp && v.pet && v.pet.lastStandArmed && !v.pet.lastStandUsed) {
     v.pet.lastStandUsed = true; v.pet.lastStandArmed = false;
-    // a real last stand: survive the killing blow at a sliver, not a full negate
-    v.hp = Math.max(1, Math.round(v.d.maxHp * 0.15));
+    // a real last stand: survive the killing blow at a sliver (C2 Eternal Guard mends big)
+    v.hp = Math.max(1, Math.round(v.d.maxHp * (v.pet.lastStandHealFrac || 0.15)));
     events.push({ t: 'petshield', who: victimWho, shield: 0, laststand: true, name: v.pet.name });
     return;
   }
