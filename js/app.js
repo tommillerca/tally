@@ -38,6 +38,7 @@ import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, potionsInv, usePotion, potionCount,
+  MAX_POTS, nextPotPrice, addPot,
 } from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -1000,9 +1001,12 @@ function sleepRowHtml(w) {
 
 function kitchenCardHtml(cook, ingCount, buffs) {
   if (!cook || !cook.ready) return '';
+  const line = cook.readyCount > 1
+    ? `<b style="color:var(--accent)">${cook.readyCount} dishes are ready!</b>`
+    : `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`;
   return `<div class="card kitchen-card" id="kitchenCard">
     <div class="card-title">KITCHEN <span class="link">Collect</span></div>
-    <div class="kc-line"><b style="color:var(--accent)">${recipeIconHtml(cook.recipe,18)} ${esc(cook.recipe.name)} is ready!</b></div>
+    <div class="kc-line">${line}</div>
   </div>`;
 }
 
@@ -1014,36 +1018,38 @@ async function openKitchen() {
 
   async function render() {
     if (!body.isConnected) return;
-    const [inv, cook, buffs, potInv] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv()]);
-    const pct = cook && !cook.ready ? Math.max(0, Math.min(100, Math.round((1 - cook.remainingMs / Math.max(1, cook.readyAt - cook.startedAt)) * 100))) : (cook && cook.ready ? 100 : 0);
-    const cauldronState = cook ? (cook.ready ? 'ready' : 'cooking') : 'idle';
+    const [inv, cook, buffs, potInv, coinBal] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins()]);
+    const canStartAny = cook.freeCount > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
       const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 13)}${(inv[id] || 0)}/${n}`).join('  ');
-      const canStart = have && !cook;
+      const canStart = have && canStartAny;
       return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
         <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
         <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${r.potion ? 'Brew' : 'Cook'}</button></div>`;
     };
+    // one card per owned pot: idle / cooking (progress) / ready (serve)
+    const potCard = s => {
+      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">🍲</span><small>Empty pot<br>pick a recipe below</small></div>`;
+      const pct = s.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - s.remainingMs / Math.max(1, s.readyAt - s.startedAt)) * 100)));
+      return `<div class="pot-card ${s.ready ? 'ready' : 'cooking'}">
+        <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
+        <b>${esc(s.recipe.name)}</b>
+        ${s.ready ? `<button class="btn small pot-serve" data-serve="${s.index}">Serve</button>`
+          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small>`}
+      </div>`;
+    };
+    const buyPrice = nextPotPrice(cook.potsOwned);
     body.innerHTML = `
       <div class="kitchen-hero">
         <div class="kitchen-atmos"><span class="k-embers"></span><span class="k-steam l"></span><span class="k-steam r"></span></div>
         <div class="kitchen-hero-title">THE HAUNTED KITCHEN</div>
         <div class="kitchen-quote">Something is always simmering.</div>
       </div>
-      <div class="cauldron-stage ${cauldronState}">
-        <div class="cauldron">
-          <div class="cauldron-brew"></div>
-          <span class="c-bub c1"></span><span class="c-bub c2"></span><span class="c-bub c3"></span>
-          <div class="cauldron-fire"></div>
-        </div>
-        <div class="cauldron-status">
-          ${cook ? `<b>${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)}</b>
-            ${cook.ready ? '<span class="cauldron-ready">Ready to serve!</span>'
-              : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(cook.remainingMs)} left · ${pct}%</small>`}`
-            : '<b>The cauldron is cold</b><small>Pick a recipe below to get it bubbling.</small>'}
-        </div>
-        ${cook && cook.ready ? '<button class="btn cauldron-serve" id="collectDish">Serve it</button>' : ''}
+      <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
+      <div class="pot-row">
+        ${cook.slots.map(potCard).join('')}
+        ${buyPrice != null ? `<button class="pot-card buy" id="buyPot"><span class="pot-ico">➕</span><b>Extra pot</b><small>${buyPrice.toLocaleString()} ${ICONS.coin(12)}</small></button>` : ''}
       </div>
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
@@ -1057,13 +1063,23 @@ async function openKitchen() {
       ${RECIPES.map(recipeCard).join('')}
       <div class="sect-h">Potions · drink one mid-fight, any class</div>
       ${POTIONS.map(recipeCard).join('')}`;
-    $('#collectDish', body)?.addEventListener('click', async () => {
-      const dish = await collectDish();
+    $$('[data-serve]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const dish = await collectDish(Number(btn.dataset.serve));
       if (dish) {
         await award(`cook-${Date.now().toString(36)}`, 'cook', 8, `Cooked ${dish.name}`); // small XP + powers cooking quests
         confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds);
         toast(dish.potion ? `${dish.icon} ${dish.name} brewed! Drink it mid-fight.` : `${dish.icon} ${dish.name} served! Buff active.`, 3200);
       }
+      render();
+    }));
+    $('#buyPot', body)?.addEventListener('click', async () => {
+      const price = nextPotPrice(cook.potsOwned);
+      if (price == null) return;
+      if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another pot.`, 2800); return; }
+      await coinsAdd(-price);
+      await addPot();
+      popSound(S.sounds);
+      toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
       render();
     });
     $('#forageBtn', body)?.addEventListener('click', async () => {
@@ -1079,7 +1095,7 @@ async function openKitchen() {
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
       const res = await startCook(btn.dataset.cook);
       if (res.ok) { popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
-      else if (res.reason === 'busy') toast('The pot is already cooking something.');
+      else if (res.reason === 'busy') toast('Every pot is full. Serve one, or buy another pot.', 3000);
       else toast('Not enough ingredients for that dish.');
       render();
     }));
@@ -3238,7 +3254,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="sect-h">Kitchen · food &amp; buffs</div>
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
-      ${cook && cook.recipe ? `<div class="crate-row"><span class="crate-ico">${cook.ready ? '✅' : '🍳'}</span><div style="flex:1"><b>${cook.ready ? 'Dish ready!' : 'Cooking...'}</b><small>${esc(cook.recipe.name)}</small></div></div>` : ''}
+      ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="sect-h">Shop</div>
@@ -4382,7 +4398,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v142'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v143'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

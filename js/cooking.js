@@ -100,32 +100,76 @@ export function ingredientCount(inv) {
   return Object.values(inv || {}).reduce((a, n) => a + n, 0);
 }
 
-/* ---------- the cooking pot (single slot, real-time timer) ---------- */
+/* ---------- the cooking pots (v143: multiple slots, real-time timers) ----------
+ * `cooking` kv is now an ARRAY of pot slots (null = empty). `potsOwned` (default 1)
+ * caps how many you can run at once — buy the 2nd/3rd pot for coins. Reads migrate
+ * the legacy single {recipeId,...} object into a one-element array automatically. */
+export const MAX_POTS = 3;
+export const POT_PRICES = [1000, 3000]; // coins for the 2nd pot, then the 3rd
+export async function potsOwned() { return Math.min(MAX_POTS, Math.max(1, (await kvGet('potsOwned', 1)) || 1)); }
+export function nextPotPrice(owned) { return owned >= MAX_POTS ? null : POT_PRICES[owned - 1]; }
+export async function addPot() { // caller charges coins; this just grows the count
+  const owned = await potsOwned();
+  if (owned >= MAX_POTS) return owned;
+  await kvSet('potsOwned', owned + 1);
+  return owned + 1;
+}
+async function readSlots() {
+  const raw = await kvGet('cooking', null);
+  const n = await potsOwned();
+  let arr;
+  if (Array.isArray(raw)) arr = raw.slice();
+  else if (raw && raw.recipeId) arr = [raw]; // migrate the legacy single-pot object
+  else arr = [];
+  while (arr.length < n) arr.push(null);
+  if (arr.length > n) arr.length = n; // never expose more slots than pots owned
+  return arr;
+}
+async function writeSlots(arr) { await kvSet('cooking', arr); }
+
 export async function cookState(now = Date.now()) {
-  const c = await kvGet('cooking', null);
-  if (!c) return null;
-  const r = RECIPE_BY_ID[c.recipeId];
-  if (!r) return null;
-  return { recipe: r, startedAt: c.startedAt, readyAt: c.readyAt, ready: now >= c.readyAt, remainingMs: Math.max(0, c.readyAt - now) };
+  const arr = await readSlots();
+  const slots = arr.map((c, index) => {
+    const r = c && RECIPE_BY_ID[c.recipeId];
+    if (!r) return { index, empty: true };
+    return { index, empty: false, recipe: r, startedAt: c.startedAt, readyAt: c.readyAt, ready: now >= c.readyAt, remainingMs: Math.max(0, c.readyAt - now) };
+  });
+  const readySlots = slots.filter(s => !s.empty && s.ready);
+  return {
+    potsOwned: arr.length, slots,
+    freeCount: slots.filter(s => s.empty).length,
+    readyCount: readySlots.length,
+    anyCooking: slots.some(s => !s.empty && !s.ready),
+    // back-compat for the home card / badges (any pot ready + its recipe)
+    ready: readySlots.length > 0,
+    recipe: readySlots[0] ? readySlots[0].recipe : null,
+  };
 }
 export async function startCook(recipeId, now = Date.now()) {
   const r = RECIPE_BY_ID[recipeId];
   if (!r) return { ok: false, reason: 'unknown' };
-  if (await kvGet('cooking', null)) return { ok: false, reason: 'busy' };
+  const arr = await readSlots();
+  const free = arr.findIndex(c => !c);
+  if (free < 0) return { ok: false, reason: 'busy' }; // every pot occupied
   const inv = await ingredients();
   if (!canCook(r, inv)) return { ok: false, reason: 'ingredients' };
   for (const [id, n] of Object.entries(r.needs)) inv[id] -= n;
   await kvSet('ingredients', inv);
-  await kvSet('cooking', { recipeId, startedAt: now, readyAt: now + r.cookMin * 60e3 });
-  return { ok: true };
+  arr[free] = { recipeId, startedAt: now, readyAt: now + r.cookMin * 60e3 };
+  await writeSlots(arr);
+  return { ok: true, slot: free };
 }
-export async function collectDish(now = Date.now()) {
-  const st = await cookState(now);
-  if (!st || !st.ready) return null;
-  await kvSet('cooking', null);
-  if (st.recipe.potion) await grantPotion(st.recipe.id); // potions go to your satchel, drunk mid-fight
-  else await addFoodBuff(st.recipe, now);                 // dishes apply as passive buffs
-  return st.recipe;
+export async function collectDish(slotIndex = null, now = Date.now()) {
+  const arr = await readSlots();
+  let idx = slotIndex;
+  if (idx == null) idx = arr.findIndex(c => c && now >= c.readyAt); // first ready
+  if (idx < 0 || !arr[idx]) return null;
+  const r = RECIPE_BY_ID[arr[idx].recipeId];
+  if (!r || now < arr[idx].readyAt) return null;
+  arr[idx] = null; await writeSlots(arr);
+  if (r.potion) await grantPotion(r.id); // potions go to your satchel, drunk mid-fight
+  else await addFoodBuff(r, now);         // dishes apply as passive buffs
+  return r;
 }
 
 /* ---------- active food buffs (kv 'foodbuffs' = []) ---------- */

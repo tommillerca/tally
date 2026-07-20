@@ -10,7 +10,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
@@ -874,6 +874,14 @@ test('breeding: removeInstance drops exactly the targeted iid', () => {
   assert.equal(r.removed.iid, 'b');
   assert.deepEqual(r.instances.map(x => x.iid), ['a', 'c']);
   assert.equal(removeInstance(list, 'zzz').removed, null, 'missing iid -> null');
+});
+
+test('kitchen: pot pricing — 2nd = 1000g, 3rd = 3000g, capped at 3 (v143)', () => {
+  assert.equal(MAX_POTS, 3);
+  assert.deepEqual(POT_PRICES, [1000, 3000]);
+  assert.equal(nextPotPrice(1), 1000, 'buying the 2nd pot costs 1000');
+  assert.equal(nextPotPrice(2), 3000, 'buying the 3rd pot costs 3000');
+  assert.equal(nextPotPrice(3), null, 'no 4th pot');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
