@@ -9,7 +9,14 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 📥 Notes intake — 2026-07-20 (round 3) — PLAN PROPOSED, awaiting Tom's approval
+## 📥 Note — 2026-07-24 · Hybrid boss dens (fixed landmarks + roaming) — PLAN, awaiting approval
+
+Tom: dens currently never move (permanent spots, weekly boss rotation — working as designed). He wants a HYBRID: keep some permanent **landmark** dens (and let players photograph a cool real local spot to nominate it to devs, so dens feel personal) PLUS **roaming** boss dens that appear/refresh around the map to keep it fresh.
+
+- **Phase 1 — Roaming dens (buildable now, self-contained):** a 2nd den class in `poi.js` seeded by DAY (not just week) so fresh dens appear daily at random *reachable* cells that don't already hold a landmark den; beatable on a daily cadence (ledger `roamboss-<day>-<id>`). Existing weekly landmark dens stay. Visually distinct marker + "roaming" label. Re-audit loot (more beatable dens/week = more crates → economy check). No compliance risk.
+- **Phase 2 — Community landmark nominations (needs decisions first):** camera/photo + note + current location → upload to your server → you review in the dashboard → approved spots become curated permanent landmark dens near them. FLAGS: (a) **UGC photos** = Apple/Google review + moderation obligations (you gate every one before it goes live, which helps); (b) **storage** (Cloudflare R2 vs base64-in-D1); (c) **privacy** (uploading a user photo + precise location — needs policy update + data-safety); (d) global-vs-local (does an approved landmark show for everyone near it, or just the nominator's town?). Bigger build; plan/approve separately.
+
+Recommendation: build Phase 1 now; treat Phase 2 as its own planned feature given the UGC/storage/moderation weight.
 
 | # | Note | Finding | Proposed status |
 |---|------|---------|--------|
