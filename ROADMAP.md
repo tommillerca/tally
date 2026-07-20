@@ -26,12 +26,12 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 | 4a | Do enemies ever target your pet? Moves should have AoE/splash | BOTH EXIST already: enemies target your pet 15% of turns (35% when it's low), and tough foes have an AoE sweep that hits you AND your pet. It's invisible in play. Fix: telegraph it (copy + FX + floaters), extend the sweep to mini-bosses/high tiers, tune rates up slightly. | SHIPPED |
 | 4b | Pet talent tree needs more depth | Tree already goes 5 tiers to Lv 10 (v125) — tiers 8/10 need 52k/82k banked steps on ONE pet, so Tom likely hasn't seen them. Proposal: first make upcoming talents visible ("next talent at Lv 8"), then decide if species-signature capstones are still wanted. | SHIPPED — visibility (v141) + species-signature capstones (v142) |
 
-### Batch 3 — Kitchen 2.0 — 🔨 IN PROGRESS (multi-pot shipped v143)
+### Batch 3 — Kitchen 2.0 — ✅ SHIPPED (multi-pot v143 · transmute v144)
 | # | Note | Finding | Status |
 |---|------|---------|--------|
 | 1a | Cook more than one thing at once (multi-pot) | Single `cooking` slot → array of pots (potsOwned, default 1). Second pot 1,000g, third 3,000g (Tom, cap 3). Kitchen shows a pot row (idle/cooking/ready) + buy card; legacy save migrates. | SHIPPED v143 (verified live) |
-| 1b | Slow prep-cook: basic ingredients → building-block ingredients | NEXT. Needs ingredient-chain design (which basics slow-cook into which building blocks, times). | FEATURE · needs fork |
-| 1c | Once-a-day transmute: merge commons → a rare (WoW-style) | NEXT. Forks to confirm: transmute ratio (how many commons per rare) + the daily gate. | FEATURE · needs fork |
+| 1b | Slow prep-cook: basics → building blocks | Folded into the v144 transmute (commons → the rare that gates the premium feast). A literal NEW intermediate-ingredient tier is deferred — content-design fork, low priority. | DONE-ish · deeper tier deferred |
+| 1c | Once-a-day transmute: merge commons → a rare (WoW-style) | 6 commons → 1 Ectoplasm on a 20h cooldown; greedy-consume from most-abundant; Kitchen panel. | SHIPPED v144 (verified live) |
 
 ### Batch 4 — arsenal + guidance (target: v140)
 | # | Note | Finding | Status |
