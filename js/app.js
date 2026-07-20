@@ -745,15 +745,22 @@ async function renderToday(el) {
     // player back to the top while they work down the quest list
     const y = { win: scrollY, el: $('#screen')?.scrollTop || 0 };
     const holdScroll = () => {
-      let frames = 0, settled = 0;
-      const tick = () => {
+      // timer-based on purpose: rAF is throttled on some WebViews, so a
+      // rAF-driven restore can silently never run. Write immediately (route's
+      // reset already happened synchronously inside refresh()), then keep
+      // reasserting for 1.2s while the async re-render lands. A real touch
+      // hands control back to the player instantly.
+      const put = () => {
         const sc = $('#screen');
-        const onTarget = sc && Math.abs(sc.scrollTop - y.el) <= 1;
-        if (sc && !onTarget) { sc.scrollTop = y.el; settled = 0; } else settled++;
+        if (sc && Math.abs(sc.scrollTop - y.el) > 1) sc.scrollTop = y.el;
         if (y.win > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
-        if (++frames < 60 && settled < 8) requestAnimationFrame(tick);
       };
-      requestAnimationFrame(tick);
+      put();
+      const iv = setInterval(put, 50);
+      const stop = () => clearInterval(iv);
+      setTimeout(stop, 1200);
+      addEventListener('touchstart', stop, { once: true, passive: true });
+      addEventListener('wheel', stop, { once: true, passive: true });
     };
     const period = b.dataset.period || 'day';
     const tier = questTiers.find(t => t.period === period);
@@ -4358,7 +4365,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v139'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v140'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
