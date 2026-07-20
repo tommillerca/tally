@@ -19,12 +19,17 @@ async function deviceId() {
 }
 
 // Record an event (fire-and-forget). Keep names coarse + props tiny.
-export async function track(name, props) {
-  try {
+// Writes are serialized through a promise chain: bursts (e.g. screen_time then
+// screen, fired in the same tick) would otherwise race on the read-modify-write
+// of the kv queue and clobber each other, silently dropping events.
+let writeChain = Promise.resolve();
+export function track(name, props) {
+  writeChain = writeChain.then(async () => {
     const q = (await kvGet('evq', [])) || [];
     q.push({ name, props: props || undefined, ts: Date.now() });
     await kvSet('evq', q.slice(-QCAP));
-  } catch { /* analytics never breaks the app */ }
+  }).catch(() => { /* analytics never breaks the app */ });
+  return writeChain;
 }
 
 // ---- screen dwell (the "heatmap": how long testers spend on each screen) ----
