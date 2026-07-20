@@ -281,9 +281,26 @@ async function boot() {
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+  maybeShowWhatsNew();
   maybePromptName();
   maybeRequestNotifPermission();
   setTimeout(checkFriendRequests, 3000);
+}
+
+// R2 (v151): the first time the app opens after an update, pop the What's New
+// sheet once so players (and friends) actually see what changed. Gated so it
+// never nags: only when there ARE unseen entries, never over onboarding / the
+// daily wheel / any open sheet (retries next boot), and new players are seeded
+// caught-up at onboarding so they don't get the historical backlog. Opening the
+// sheet sets changelogSeen = latest, so it won't fire again until the next patch.
+async function maybeShowWhatsNew() {
+  try {
+    if (navigator.webdriver || !S.settings) return;
+    if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
+    await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
+    if ($('#sheets')?.children.length) return;   // something already open — try again next launch
+    openWhatsNew();
+  } catch { /* never block boot */ }
 }
 
 // First run online: actively invite the player to pick their own Crew name
@@ -3026,6 +3043,7 @@ async function saveInitialSettings(np) {
   };
   await kvSet('settings', S.settings);
   await kvSet('game-init', true); // fresh install: nothing to backfill
+  await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), 1200);
   $('#tabbar').style.display = '';
@@ -4641,7 +4659,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v150'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v151'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

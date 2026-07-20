@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 151, date: '2026-07-20', title: 'Patch notes find you now', items: [
+    'What\'s New now pops up the first time you open the game after an update, so you never miss what changed. Find it any time in Settings or the Crew tab too.',
+    'Cleaned up weapon suggestions (no more nudging you toward a weaker weapon), and Bone Dust now shows the same ◆ everywhere.',
+  ] },
+  { n: 150, date: '2026-07-20', title: 'A proper Shop', items: [
+    'New Shop tab in the bottom bar: the Bone Merchant (weapons), crates, and the Bone Dust shop, all in one place. No more digging for the merchant.',
+    'Your charts, streak and badges now live in Progress. Tap your level up top to see them.',
+  ] },
   { n: 148, date: '2026-07-20', title: 'This screen', items: [
     'Added What\'s New, right here, so you and your Crew can keep up with changes. The game updates a lot.',
     'Find it any time in Settings or on the Crew tab.',
