@@ -1,10 +1,27 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Release signing (upload key). Reads gitignored keystore.properties so the
+// keystore + passwords never land in git. Falls back gracefully if absent.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) { keystoreProps.load(new FileInputStream(keystorePropsFile)) }
+
 android {
     namespace = "com.boneheadz.gym"
     compileSdk = rootProject.ext.compileSdkVersion
     kotlinOptions { jvmTarget = "21" }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.boneheadz.gym"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -22,6 +39,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropsFile.exists()) { signingConfig signingConfigs.release }
         }
     }
 }
