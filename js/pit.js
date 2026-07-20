@@ -341,6 +341,34 @@ export const WEAPONS = {
     windCostMult: () => 0.75,
     magicBonus: 0.30,
   },
+  // ---- Tier-4 PRESTIGE row (v145): the arsenal's ceiling, priced in coins AND
+  // Bone Dust so the salvage economy feeds the endgame. Each is a clear step past
+  // its tier-3 legendary, built to pair with endless boss scaling (never a wall).
+  // MELEE prestige
+  warmaul: {
+    id: 'warmaul', name: 'Ossuary Warmaul', rarity: 'prestige', spec: 'power', arch: 'melee', vendor: true, tier: 4,
+    desc: 'A cathedral of bone on a haft. Haymakers scale ferociously off Power and Swings bite harder, yet the weight is balanced so heavy blows cost less Stamina than the Maul. The bruiser\'s ceiling.',
+    mult: (move, s) => move === 'haymaker' ? 1 + 0.62 * (s.power / 100) : move === 'swing' ? 1.18 : 1.0,
+    windCostMult: (move) => move === 'haymaker' ? 1.15 : 1.0,
+    critBonus: 0.08,
+  },
+  // CASTER prestige
+  voidstar: {
+    id: 'voidstar', name: 'Voidstar Focus', rarity: 'prestige', spec: 'hype', arch: 'caster', vendor: true, tier: 4,
+    desc: 'A dead star caged in a skull. Spells hit 60% harder with sharper crit, and the pull of the void shaves a little Stamina off every cast. The caster\'s ceiling.',
+    mult: () => 1.0,
+    windCostMult: () => 0.92,
+    magicBonus: 0.60,
+    critBonus: 0.08,
+  },
+  // SUPPORT prestige
+  reliquary: {
+    id: 'reliquary', name: 'Eternal Reliquary', rarity: 'prestige', spec: 'marrow', arch: 'support', vendor: true, tier: 4,
+    desc: 'A vessel of saints that never empties. Heals and holy magic hit 42% harder and every cast costs 32% less Stamina. The support ceiling.',
+    mult: () => 1.0,
+    windCostMult: () => 0.68,
+    magicBonus: 0.42,
+  },
 };
 
 /* ================= actions (spec §2) ================= */

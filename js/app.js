@@ -12,7 +12,7 @@ import {
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, redeemCode,
-  WEAPON_COST, buyWeapon,
+  WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
   shinyPetIds,
 } from './loot.js';
@@ -4412,7 +4412,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v144'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v145'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5465,7 +5465,7 @@ async function openTalents(pitWrap) {
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
-  const [xpRows, takenArr, fighter, coinBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins()]);
+  const [xpRows, takenArr, fighter, coinBal, dustBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins(), boneDust()]);
   const taken = new Set(takenArr);
   const tranks = talentRanks(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
@@ -5521,18 +5521,20 @@ async function renderTalents(wrap) {
     <summary class="bsect-head"><b>The Bone Merchant</b><span class="note">${fighter.owned.length}/${Object.keys(WEAPONS).length} weapons · ${ARCH_META[recArch].label} suits you</span></summary>
     <div class="bsect-body">
     <p class="note" style="margin:2px 2px 10px">The old skeleton lays out his wares by fighting style. He nods at your build: <b style="color:var(--accent)">${ARCH_META[recArch].label}</b> suits you. Weapons multiply your effort; they never replace it.</p>
-    <div class="wallet-line"><span class="note">Your coins</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()}</b></div>
+    <div class="wallet-line"><span class="note">Your wallet</span><b>${ICONS.coin(14)} ${coinBal.toLocaleString()} <span class="wallet-dust">· 🦴 ${dustBal.toLocaleString()} dust</span></b></div>
     ${(() => {
       const weaponCard = w => {
         const ownedW = fighter.owned.includes(w.id);
         const on = fighter.loadout === w.id;
-        const cost = WEAPON_COST[w.id];
+        const cost = weaponCoinCost(w.id);
+        const dust = weaponDustCost(w.id);
         const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
         const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
+        const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ 🦴 ${dust}</span>` : ''}`;
         const cta = ownedW
           ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
           : cost != null
-            ? `<button class="btn small" data-buyweapon="${w.id}" ${coinBal < cost ? 'disabled' : ''}>${ICONS.coin(13)} ${cost.toLocaleString()}</button>`
+            ? `<button class="btn small" data-buyweapon="${w.id}" ${(coinBal < cost || dustBal < dust) ? 'disabled' : ''}>${priceLabel}</button>`
             : `<span class="q-frac">Champion drop</span>`;
         return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''} ${ownedW ? 'owned' : ''}">
           <div class="weap-top"><b>${esc(w.name)} ${tierTag}</b>${specTag}</div>
@@ -5545,7 +5547,7 @@ async function renderTalents(wrap) {
       const order = [recArch, ...['melee', 'caster', 'support'].filter(a => a !== recArch)];
       return `${baseline ? `<div class="weap-rack">${weaponCard(baseline)}</div>` : ''}
       ${order.map(arch => {
-        const list = all.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (WEAPON_COST[a.id] || 9999) - (WEAPON_COST[b.id] || 9999));
+        const list = all.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (weaponCoinCost(a.id) || 9999) - (weaponCoinCost(b.id) || 9999));
         if (!list.length) return '';
         const rec = arch === recArch;
         return `<div class="merch-group${rec ? ' rec' : ''}">
@@ -5631,7 +5633,12 @@ async function renderTalents(wrap) {
   $$('[data-buyweapon]', body).forEach(b => b.addEventListener('click', async () => {
     b.disabled = true;
     const res = await buyWeapon(b.dataset.buyweapon);
-    if (!res.ok) { toast(res.reason === 'coins' ? 'Not enough coins for that weapon.' : 'Already owned.'); b.disabled = false; return; }
+    if (!res.ok) {
+      toast(res.reason === 'coins' ? 'Not enough coins for that weapon.'
+        : res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}). Melt gear or salvage pets at the bench.`
+        : 'Already owned.');
+      b.disabled = false; return;
+    }
     await kvSet('loadout', res.weaponId); // auto-equip the new weapon
     levelSound(S.sounds);
     confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);

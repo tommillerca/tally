@@ -223,6 +223,11 @@ const WEAPONIZED = [
   { name: 'lich+necro', weaponId: 'lichfocus', talents: BUILDS.gravecaller },
   { name: 'censer+warden', weaponId: 'censer', talents: BUILDS.gravewarden },
   { name: 'lich+shaman', weaponId: 'lichfocus', talents: BUILDS.boneshaman },
+  // v145 tier-4 prestige weapons: strongest arsenal must still stay under the bar.
+  { name: 'warmaul+slab', weaponId: 'warmaul', talents: BUILDS.slab },
+  { name: 'voidstar+necro', weaponId: 'voidstar', talents: BUILDS.gravecaller },
+  { name: 'voidstar+shaman', weaponId: 'voidstar', talents: BUILDS.boneshaman },
+  { name: 'reliquary+warden', weaponId: 'reliquary', talents: BUILDS.gravewarden },
 ];
 console.log('\n--- v71 weapon exploit check (smart policy vs Champion) ---');
 let weaponBarOk = true;

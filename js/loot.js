@@ -700,7 +700,18 @@ export const WEAPON_COST = {
   rapier: 500, shivs: 500, scepter: 900,
   wand: 700, cleaver: 1500, crook: 1600,   // entry / mid tier
   maul: 3400, lichfocus: 3400, censer: 3200, // legendary gold sinks
+  // tier-4 prestige (v145): dual-currency sinks — coins AND Bone Dust. Objects,
+  // not numbers, so the buy flow spends salvage too. weaponCoinCost() flattens
+  // either shape when only the coin figure is needed.
+  warmaul: { coins: 6000, dust: 350 },
+  voidstar: { coins: 6000, dust: 350 },
+  reliquary: { coins: 5600, dust: 330 },
 };
+
+// A cost entry is either a plain coin number or a {coins, dust} object. These
+// two helpers read whichever shape without the callers caring.
+export function weaponCoinCost(id) { const c = WEAPON_COST[id]; return c == null ? null : (typeof c === 'number' ? c : c.coins); }
+export function weaponDustCost(id) { const c = WEAPON_COST[id]; return (c && typeof c === 'object') ? (c.dust || 0) : 0; }
 
 export async function ownedWeaponIds() {
   const inv = await db.all('inv');
@@ -708,15 +719,21 @@ export async function ownedWeaponIds() {
 }
 
 export async function buyWeapon(weaponId) {
-  const cost = WEAPON_COST[weaponId];
-  if (!cost) return { ok: false, reason: 'not-for-sale' };
+  const coinCost = weaponCoinCost(weaponId);
+  if (coinCost == null) return { ok: false, reason: 'not-for-sale' };
+  const dustCost = weaponDustCost(weaponId);
   const owned = await ownedWeaponIds();
   if (owned.has(weaponId)) return { ok: false, reason: 'owned' };
   const bal = await coins();
-  if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
-  await coinsAdd(-cost);
+  if (bal < coinCost) return { ok: false, reason: 'coins', need: coinCost, have: bal };
+  if (dustCost) {
+    const dbal = await boneDust();
+    if (dbal < dustCost) return { ok: false, reason: 'dust', need: dustCost, have: dbal };
+  }
+  await coinsAdd(-coinCost);
+  if (dustCost) await boneDustAdd(-dustCost);
   await db.put('inv', { id: newId(), kind: 'weapon', weaponId, source: 'shop', ts: Date.now() });
-  return { ok: true, weaponId, cost };
+  return { ok: true, weaponId, cost: coinCost, dust: dustCost };
 }
 
 /* ---------- equipped ---------- */
