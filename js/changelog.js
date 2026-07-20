@@ -7,6 +7,9 @@ export const CHANGES = [
     'Press and hold anywhere on the Boneyard map to nominate that spot as a boss den. Know a landmark that would be perfect? Tell us why.',
     'Press and hold a coin, boss, or pile you can\'t actually reach (private property, locked gate) to flag it for review.',
   ] },
+  { n: 159, date: '2026-07-20', title: 'Boss dens on the move', items: [
+    'Roaming boss dens now appear around the map and refresh every day, so there is always somewhere new to fight. They sit alongside the permanent landmark dens.',
+  ] },
   { n: 153, date: '2026-07-20', title: 'Better quests + a new draught', items: [
     'Quests now pay more than coins: some drop Bone Dust, ingredients, or items. Win 3 Pit fights for a Vigor Draught, scavenge the map for rare Ectoplasm, and more.',
     'New Vigor Draught (⚡): drink it to instantly bank Pit energy. Streak Freeze drops less often now to make room for it.',
@@ -33,6 +36,9 @@ export const CHANGES = [
   { n: 145, date: '2026-07-20', title: 'Prestige weapons', items: [
     'The Bone Merchant now stocks a top-tier weapon for each fighting style: the Ossuary Warmaul, the Voidstar Focus, and the Eternal Reliquary.',
     'These are the strongest weapons in the game. They cost both coins and Bone Dust, so melting spare gear finally pays off at the high end.',
+  ] },
+  { n: 144, date: '2026-07-20', title: 'Turn scraps into treasure', items: [
+    'Once a day at the cauldron you can merge a handful of common ingredients into a rare one. Nothing goes to waste.',
   ] },
   { n: 143, date: '2026-07-20', title: 'A bigger kitchen', items: [
     'You can now buy a second and third cooking pot, so more dishes can simmer at once.',
@@ -71,6 +77,47 @@ export const CHANGES = [
   { n: 124, date: '2026-07-13', title: 'Pets get personal', items: [
     'Each pet species now has its own base stats, and rare shiny colourways give a small edge.',
     'Pet levels go all the way to 10, with a clearer moment when they level up.',
+  ] },
+  { n: 123, date: '2026-07-12', title: 'Tougher world bosses', items: [
+    'Boss dens out on the map now scale with your progression, so they stay a real fight instead of falling behind you.',
+  ] },
+  { n: 118, date: '2026-07-11', title: 'Cleaner combat', items: [
+    'Retired the old move-and-range system. Fights are now about reading the enemy: one solid defensive move (Bone Guard) and heavy hits you can brace for.',
+  ] },
+  { n: 103, date: '2026-07-09', title: 'Gifts and cheers', items: [
+    'Send a friend a gift or a quick cheer straight from the Crew tab.',
+    'Friend cards and profiles got a lot richer.',
+  ] },
+  { n: 102, date: '2026-07-08', title: 'The Crew tab', items: [
+    'Your friends list now has its own tab. Add friends by code and get a nudge when someone adds you.',
+    'Eggs can now drop as rewards.',
+  ] },
+  { n: 100, date: '2026-07-07', title: 'Play with friends', items: [
+    'Boneheadz is social now: pick a Crew name from a curated list, add friends by their code, and set your own private nicknames for them.',
+  ] },
+  { n: 92, date: '2026-07-05', title: 'Loot feels like loot', items: [
+    'Crates, boss drops, and new pets now open with a premium card-reveal, styled to match the game art.',
+  ] },
+  { n: 87, date: '2026-07-04', title: 'Sleep and trends', items: [
+    'Log your sleep hours, and see your habits over time in a reworked trends view.',
+  ] },
+  { n: 86, date: '2026-07-04', title: 'Shiny pets', items: [
+    'Ultra-rare shiny versions of pets can now turn up when you hatch an egg. Keep an eye out.',
+  ] },
+  { n: 85, date: '2026-07-03', title: 'Richer rewards', items: [
+    'Mini-bosses drop better loot, wellness wins give clearer XP feedback, and the whole game got a fuller sound palette.',
+  ] },
+  { n: 84, date: '2026-07-03', title: 'Never lose your progress', items: [
+    'Your save is now backed up to the cloud, end-to-end encrypted, so it survives a reinstall or a new phone. Only your device can read it.',
+  ] },
+  { n: 73, date: '2026-07-01', title: 'Boneyard mini-bosses', items: [
+    'Smaller roaming foes now appear on the map between the big boss dens for quick fights on the go.',
+  ] },
+  { n: 72, date: '2026-06-30', title: 'The Alchemist', items: [
+    'A new class that brews potions to swing a fight.',
+  ] },
+  { n: 71, date: '2026-06-30', title: 'The Bone Merchant', items: [
+    'A weapon vendor came to town. Spend your coins on real upgrades to your fighting style.',
   ] },
 ];
 

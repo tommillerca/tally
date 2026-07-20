@@ -9,6 +9,20 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📥 Notes — 2026-07-20 part 2 (4 notes) — ✅ ALL SHIPPED v161
+
+| # | Note | Root cause | Fix |
+|---|---|---|---|
+| 1 | What's New should go 30 patches back | Changelog had 17 curated entries (back to v124) | Expanded to **32 entries** back to v71 (Bone Merchant), all player-facing plain language; added v159 roaming dens + v144 transmute + 13 older milestones (social, cloud backup, shiny pets, Alchemist, combat rework, etc.). No render cap. |
+| 2 | STILL nudged to buy a weapon weaker than my current one | `computeHomeUnlocks` suggested an upgrade in ANY archetype that out-tiered your (often empty) kit in THAT style. Maining a caster → nudged toward a melee/support piece = reads as "weaker." | Now only ever suggests a weapon in the **archetype you currently WIELD** (`fighter.loadout`), and only if it **strictly out-tiers** your equipped weapon. Starter (no real weapon) still gets a first-weapon nudge. |
+| 3 | Ladder shouldn't stay open once completed; new fights should be at the top | Pit sections were fixed-order with the Ladder always `open`. | Sections now reorder: once you've **beaten the Champion**, the live **Endless/Gauntlet** fight floats to the top and opens; the finished Ladder + Champion collapse below (with ✓ + rung x/N summaries). Beaten rungs read "Rematch." |
+| 4a | Pink gravestone stuck in the top-left corner | Roaming den's `roamDrift` CSS animation set `transform` on the **marker ROOT**, overriding MapLibre's positioning transform → stranded at (0,0). Same latent bug on `.awaken` shudder + all in-range `blipready` scale pulses (dens/minis/spawns). | Den visuals + transform animations moved to an inner **`.den-fx`** wrapper; in-range emphasis switched from transform-scale to a **filter glow** (`mapMarkGlow`) that never touches position. Applied to den/mini/spawn. |
+| 4b | Too easy to accidentally open the report sheet + then trapped (only Send or force-quit) | v160 long-press was 550ms/14px and the sheet had no Cancel. | Long-press now **750ms + 8px** (a deliberate stationary hold); report sheet gained a clear **Cancel** button (plus the existing tap-outside/back dismissal). |
+
+Verify: JS syntax clean; changelog 32 entries render (no slice); Pit reorder + weapon-nudge logic are pure render (verified live after ship). Map marker fix reasoned from root cause; live-map/GPS leg needs on-device confirmation.
+
+---
+
 ## 📥 Note — 2026-07-24 · Hybrid boss dens (fixed landmarks + roaming) — PLAN, awaiting approval
 
 Tom: dens currently never move (permanent spots, weekly boss rotation — working as designed). He wants a HYBRID: keep some permanent **landmark** dens (and let players photograph a cool real local spot to nominate it to devs, so dens feel personal) PLUS **roaming** boss dens that appear/refresh around the map to keep it fresh.

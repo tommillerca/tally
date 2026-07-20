@@ -4339,7 +4339,7 @@ async function openMap() {
     // unreachable" (private property, etc.); on empty ground -> "nominate this
     // landmark for a boss den". Both send a private note to the devs.
     let lpTimer = null, lpStart = null;
-    const LP_MS = 550, LP_MOVE = 14;
+    const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold — not an accidental brush
     function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; }
     function markerAt(target) {
       const el = target && target.closest && target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
@@ -4384,7 +4384,8 @@ async function openMap() {
         ${coords ? `<p class="muted" style="font-size:12px;margin:0 0 10px">📍 ${coords}</p>` : ''}
         <textarea id="rptNote" rows="3" maxlength="280" placeholder="${esc(ph)}" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
         <div class="row" style="gap:8px;margin-top:12px">
-          <button class="btn" id="rptSend">Send to devs</button>
+          <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
+          <button class="btn" id="rptSend" style="flex:1">Send to devs</button>
         </div>
         <p class="muted" id="rptStatus" style="font-size:12px;margin:10px 0 0"></p>
       `, { cls: 'sheet-report', name: 'map_report' });
@@ -4410,7 +4411,10 @@ async function openMap() {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '');
-          el.innerHTML = `<span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span>`;
+          // visuals + animations live on .den-fx, NOT the marker root — MapLibre
+          // owns the root's transform to position the marker, so a transform-based
+          // CSS animation on the root would fight it and strand the marker at 0,0.
+          el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
         }
@@ -4721,21 +4725,24 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
     toast: `You earned ${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'}. Shape your build in the Pit.`,
   });
   // affordable vendor weapon that's a genuine UPGRADE — never nudge a weapon
-  // weaker than what you already run. Only endgame pieces (tier >= 3), and only
-  // if they out-tier your best weapon in that archetype. (Non-tiered found
-  // weapons like the Skull Scepter count as tier 3 so we never suggest below them.)
+  // weaker than what you already run. We ONLY ever suggest a weapon in the SAME
+  // fighting style you currently WIELD, and only if it strictly out-tiers your
+  // equipped weapon. Suggesting another archetype (a melee maul to a caster) is
+  // what read as "buy a weaker weapon" — a side-grade in a style you don't play.
   const owned = new Set(fighter.owned || []);
-  const ownedTierByArch = {};
-  for (const id of owned) {
-    const w = WEAPONS[id]; if (!w || !w.arch) continue;
-    ownedTierByArch[w.arch] = Math.max(ownedTierByArch[w.arch] || 0, w.tier || 3);
-  }
+  const equipped = WEAPONS[fighter.loadout] || null;
+  const equippedArch = equipped && equipped.arch ? equipped.arch : null;    // null = still on the Taped Pipe starter
+  // treat a non-tiered found weapon (e.g. the Skull Scepter) as tier 3 so we never suggest below it.
+  const equippedTier = equipped ? (equipped.tier || (equipped.arch ? 3 : 0)) : 0;
   let bestW = null;
   for (const w of Object.values(WEAPONS)) {
     if (!w.vendor || owned.has(w.id)) continue;
     const tier = w.tier || 0;
     if (tier < 3) continue;                                 // aspirational only, no entry weapons
-    if (tier <= (ownedTierByArch[w.arch] || 0)) continue;   // must upgrade your current kit
+    if (equippedArch) {
+      if (w.arch !== equippedArch) continue;                // same style you actually fight in
+      if (tier <= equippedTier) continue;                   // must strictly out-tier your equipped weapon
+    }                                                        // (no real weapon yet → any endgame piece is a fair nudge)
     const c = weaponCoinCost(w.id), d = weaponDustCost(w.id);
     if (c == null || coinBal < c || dustBal < d) continue;
     if (!bestW || tier > bestW.tier || (tier === bestW.tier && c < bestW.c)) bestW = { id: w.id, name: w.name, c, tier };
@@ -4769,7 +4776,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v160'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v161'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4889,6 +4896,60 @@ async function renderPit(wrap) {
   const tapped = energy.ready <= 0;
   const gate = tapped ? 'disabled' : '';
 
+  // Sections. The "current fight to spot" floats to the top and opens; anything
+  // you've finished collapses out of the way. Pre-Champion the Ladder leads;
+  // once you've beaten the Champion, the endless Gauntlet (your live fight) leads
+  // and the beaten Ladder/Champion tuck away below.
+  const ladderOpen = !champOpen;              // still climbing the ladder
+  const sparringSect = `
+    <details class="pit-sect"><summary>Sparring · no stakes</summary>
+    ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
+      <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
+        <div style="flex:1"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <button class="btn small ghost" data-spar="${m}" data-name="${name}">Fight</button>
+      </div>`).join('')}
+    </details>`;
+  const ladderSect = `
+    <details class="pit-sect"${ladderOpen ? ' open' : ''}><summary>The Ladder${champOpen ? ' ✓' : ` · rung ${Math.min(rungsBeaten + 1, LADDER.length)}/${LADDER.length}`}</summary>
+    ${LADDER.map(r => {
+      const done = beaten.has(`pitrung-${r.rung}`);
+      const locked = r.rung > rungsBeaten + 1;
+      return `<div class="crate-row">
+        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
+        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · first win: ${r.coins} coins + ${r.xp} XP</small></div>
+        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'Rematch' : 'Fight'}</button>`}
+      </div>`;
+    }).join('')}
+    </details>`;
+  const champSect = `
+    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion${champBeaten ? ' ✓' : ''}</summary>
+    <div class="crate-row">
+      <span class="crate-ico">${crateIcon('golden', 24)}</span>
+      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
+      ${champOpen ? `<button class="btn small ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'Rematch' : 'Fight'}</button>` : `<span class="q-frac">beat the ladder</span>`}
+    </div>
+    </details>`;
+  const endlessSect = `
+    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet${champBeaten ? ` · rank ${fightRank}` : ' 🔒'}</summary>
+    ${champBeaten ? `
+    <p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b> — the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'}.${canNewRank ? '' : ` You've hit the current cap: <b>beat a world boss</b> to unlock rank ${ceiling + 1}.`}</p>
+    <div class="crate-row">
+      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:var(--accent)">${fightRank}</span>
+      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `rematch · +${fightFoe.repeatCoins} coins`}</small></div>
+      <button class="btn small" id="endlessBtn" ${gate}>Fight</button>
+    </div>
+    ${canNewRank ? '' : `<button class="link" id="endlessGate" style="margin:4px 2px 0">Go beat a world boss to climb higher →</button>`}`
+    : `
+    <div class="crate-row" style="opacity:.75">
+      <span class="crate-ico">🔒</span>
+      <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
+    </div>`}
+    </details>`;
+  // beaten the Champion → your live endless fight leads, spent content tucks below.
+  const pitSections = (champBeaten
+    ? [endlessSect, ladderSect, champSect, sparringSect]
+    : [ladderSect, champSect, sparringSect, endlessSect]).join('');
+
   body.innerHTML = `
     <div class="pit-hero">
       <div class="pit-hero-atmos">
@@ -4914,46 +4975,7 @@ async function renderPit(wrap) {
       </div>
     </div>
     <p class="note" style="margin:6px 2px 8px">Sparring is always free. Ladder, Champion and Gauntlet fights cost one charge: ${FREE_FIGHTS} free a day, then Vigor you earn by logging food and getting your steps.</p>
-    <details class="pit-sect"><summary>Sparring · no stakes</summary>
-    ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
-      <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
-        <div style="flex:1"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
-        <button class="btn small ghost" data-spar="${m}" data-name="${name}">Fight</button>
-      </div>`).join('')}
-    </details>
-    <details class="pit-sect" open><summary>The Ladder</summary>
-    ${LADDER.map(r => {
-      const done = beaten.has(`pitrung-${r.rung}`);
-      const locked = r.rung > rungsBeaten + 1;
-      return `<div class="crate-row">
-        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
-        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · first win: ${r.coins} coins + ${r.xp} XP</small></div>
-        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>Fight</button>`}
-      </div>`;
-    }).join('')}
-    </details>
-    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion</summary>
-    <div class="crate-row">
-      <span class="crate-ico">${crateIcon('golden', 24)}</span>
-      <div style="flex:1"><b>${CHAMPION.name} ${beaten.has('pitchamp') ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
-      ${champOpen ? `<button class="btn small" id="champBtn" ${gate}>Fight</button>` : `<span class="q-frac">beat the ladder</span>`}
-    </div>
-    </details>
-    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet</summary>
-    ${champBeaten ? `
-    <p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b> — the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'}.${canNewRank ? '' : ` You've hit the current cap: <b>beat a world boss</b> to unlock rank ${ceiling + 1}.`}</p>
-    <div class="crate-row">
-      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:var(--accent)">${fightRank}</span>
-      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `rematch · +${fightFoe.repeatCoins} coins`}</small></div>
-      <button class="btn small" id="endlessBtn" ${gate}>Fight</button>
-    </div>
-    ${canNewRank ? '' : `<button class="link" id="endlessGate" style="margin:4px 2px 0">Go beat a world boss to climb higher →</button>`}`
-    : `
-    <div class="crate-row" style="opacity:.75">
-      <span class="crate-ico">🔒</span>
-      <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
-    </div>`}
-    </details>`;
+    ${pitSections}`;
 
   $('#buildBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);

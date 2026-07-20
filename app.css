@@ -1911,7 +1911,7 @@ body::before {
   box-shadow: 0 3px 9px rgba(0, 0, 0, 0.55);
 }
 .map-spawn.rare { border-color: var(--amber); box-shadow: 0 0 14px rgba(255, 180, 84, 0.75); animation: rarePulse 1.6s ease-in-out infinite; }
-.map-spawn.inrange { border-color: var(--accent); animation: blipready 0.9s ease-in-out infinite; }
+.map-spawn.inrange { border-color: var(--accent); animation: mapMarkGlow 0.9s ease-in-out infinite; }
 /* distant route-planning beacons: smaller + dimmer so they read as "over there",
    not "collect now". Rares stay bright even when far (worth the walk). */
 .map-spawn.far { width: 26px; height: 26px; opacity: 0.62; border-width: 2px; }
@@ -1921,7 +1921,13 @@ body::before {
 @media (prefers-reduced-motion: reduce) { .map-spawn.rare, .map-spawn.inrange { animation: none; } }
 
 /* ===== boss dens on the boneyard map ===== */
-.map-den-mark { position: relative; width: 46px; height: 52px; filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.6)); }
+/* MapLibre positions a DOM marker via an inline transform on its ROOT element.
+   So the marker root (.map-den-mark) carries ONLY size/position; every visual +
+   every transform-based animation lives on the inner .den-fx. Animating the
+   root's transform (as the old roam/shudder rules did) overrides MapLibre's
+   positioning transform and strands the marker at the map's top-left corner. */
+.map-den-mark { position: relative; width: 46px; height: 52px; }
+.den-fx { position: relative; width: 100%; height: 100%; display: block; filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.6)); }
 .map-den-mark img { width: 100%; height: 100%; object-fit: contain; }
 .map-den-mark .den-skulls {
   position: absolute; left: 50%; transform: translateX(-50%) rotate(-4deg); top: -10px;
@@ -1934,18 +1940,22 @@ body::before {
    "here today, gone tomorrow" versus the permanent landmark dens. */
 .map-den-mark.roaming img { filter: hue-rotate(150deg) saturate(1.25); }
 .map-den-mark.roaming .den-skulls { color: #7cc4ff; }
-.map-den-mark.roaming { animation: roamDrift 3.2s ease-in-out infinite; }
+.map-den-mark.roaming .den-fx { animation: roamDrift 3.2s ease-in-out infinite; }
 @keyframes roamDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@media (prefers-reduced-motion: reduce) { .map-den-mark.roaming { animation: none; } }
-.map-den-mark.inrange { animation: blipready 0.9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .map-den-mark.roaming .den-fx { animation: none; } }
+/* in-range emphasis: a filter GLOW on the root (filter never affects position),
+   not a transform scale — a transform would fight MapLibre and teleport it. */
+.map-den-mark.inrange { animation: mapMarkGlow 0.9s ease-in-out infinite; }
+@keyframes mapMarkGlow { 0%,100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 9px var(--accent)); } }
 /* a den STIRS: boss eyes flare green + a shudder (ambient life, not a loop) */
 .map-den-mark .den-eyes { position: absolute; top: 42%; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 2; pointer-events: none; opacity: 0; }
 .map-den-mark .den-eyes i { width: 5px; height: 5px; border-radius: 50%; background: var(--slime, #a5e847); box-shadow: 0 0 6px rgba(165, 232, 71, 0.9); }
-.map-den-mark.awaken { animation: denShudder 0.5s ease-in-out 2; }
+.map-den-mark.awaken .den-fx { animation: denShudder 0.5s ease-in-out 2; }
 .map-den-mark.awaken .den-eyes { animation: denEyes 2.6s ease-in-out; }
 @keyframes denShudder { 0%,100% { transform: translateX(0) } 20% { transform: translate(-1.5px, 0) rotate(-1.5deg) } 60% { transform: translate(1.5px, 0) rotate(1.5deg) } }
 @keyframes denEyes { 0%,100% { opacity: 0 } 15% { opacity: 1 } 30% { opacity: 0.3 } 45% { opacity: 1 } 85% { opacity: 0.9 } }
-.map-den-mark.claimed { opacity: 0.45; filter: grayscale(0.7) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.6)); }
+.map-den-mark.claimed { opacity: 0.45; }
+.map-den-mark.claimed .den-fx { filter: grayscale(0.7) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.6)); }
 
 /* Boneyard mini-bosses (v75): smaller roaming creatures, distinct from dens */
 .map-mini-mark {
@@ -1956,7 +1966,7 @@ body::before {
 }
 .map-mini-mark .mini-glyph { font-size: 15px; color: #f2e9d7; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
 .map-mini-mark.t2 { border-color: var(--amber); background: radial-gradient(circle at 50% 38%, #7a5a2a, #3a2810); filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.6)); }
-.map-mini-mark.inrange { animation: blipready 0.9s ease-in-out infinite; }
+.map-mini-mark.inrange { animation: mapMarkGlow 0.9s ease-in-out infinite; }
 .map-mini-mark.claimed { opacity: 0.4; filter: grayscale(0.8); }
 .map-den-mark.claimed::after {
   content: '✓'; position: absolute; right: -4px; top: -6px;
