@@ -168,8 +168,39 @@ export async function collectDish(slotIndex = null, now = Date.now()) {
   if (!r || now < arr[idx].readyAt) return null;
   arr[idx] = null; await writeSlots(arr);
   if (r.potion) await grantPotion(r.id); // potions go to your satchel, drunk mid-fight
-  else await addFoodBuff(r, now);         // dishes apply as passive buffs
+  else await addToPantry(r, now);         // dishes stockpile in the Pantry; activated on demand
   return r;
+}
+
+/* ---------- Pantry (v152): cooked dishes stockpile until you choose to use one ----------
+ * Old behavior force-activated a dish the moment you collected it. Now collecting
+ * banks it in the Pantry (kv 'pantry' = [{recipeId,name,icon,iconId,cookedAt}]);
+ * activatePantryDish() is what turns it into a live buff, so you can save a dish
+ * for the fight/day you actually want it. Additive + data-safe: existing active
+ * buffs (kv 'foodbuffs') are untouched; potions still go straight to the satchel. */
+export async function pantryDishes() { return (await kvGet('pantry', [])) || []; }
+async function addToPantry(recipe, now = Date.now()) {
+  const pantry = await pantryDishes();
+  pantry.push({ recipeId: recipe.id, name: recipe.name, icon: recipe.icon, iconId: recipe.iconId, cookedAt: now });
+  await kvSet('pantry', pantry);
+}
+export async function activatePantryDish(index, now = Date.now()) {
+  const pantry = await pantryDishes();
+  const item = pantry[index];
+  if (!item) return null;
+  const r = RECIPE_BY_ID[item.recipeId];
+  if (!r) { pantry.splice(index, 1); await kvSet('pantry', pantry); return null; } // stale entry
+  pantry.splice(index, 1);
+  await kvSet('pantry', pantry);
+  await addFoodBuff(r, now);
+  return r;
+}
+export async function discardPantryDish(index) {
+  const pantry = await pantryDishes();
+  if (index < 0 || index >= pantry.length) return false;
+  pantry.splice(index, 1);
+  await kvSet('pantry', pantry);
+  return true;
 }
 
 /* ---------- daily transmute: merge surplus commons -> 1 rare Ectoplasm ----------

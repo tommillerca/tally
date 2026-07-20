@@ -38,8 +38,9 @@ import { refreshPitEnergy, spendPitFight, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
-  POTIONS, POTION_BY_ID, potionsInv, usePotion, potionCount,
+  POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
+  pantryDishes, activatePantryDish, discardPantryDish,
   transmuteStatus, doTransmute, TRANSMUTE,
 } from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
@@ -1060,7 +1061,7 @@ async function openKitchen() {
 
   async function render() {
     if (!body.isConnected) return;
-    const [inv, cook, buffs, potInv, coinBal, tmute] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus()]);
+    const [inv, cook, buffs, potInv, coinBal, tmute, pantry] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes()]);
     const canStartAny = cook.freeCount > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
@@ -1095,6 +1096,12 @@ async function openKitchen() {
       </div>
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
+      <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
+      ${pantry.length
+        ? pantry.map((p, i) => { const r = RECIPE_BY_ID[p.recipeId]; return `<div class="crate-row"><span class="crate-ico">${r ? recipeIconHtml(r, 26) : (p.icon || '🍲')}</span>
+            <div style="flex:1"><b>${esc(p.name)}</b><small>${r && r.buff ? esc(foodBuffLabel({ ...r.buff, ...(r.buff.kind === 'combat' ? { fightsLeft: r.buff.fights } : {}) })) : 'Ready to eat'}</small></div>
+            <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">✕</button></div>`; }).join('')
+        : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
       <div class="sect-h">Transmute · once a day</div>
@@ -1107,7 +1114,7 @@ async function openKitchen() {
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
-      <div class="sect-h">Dishes · passive buffs for your next fights</div>
+      <div class="sect-h">Dishes · cook, then eat from your Pantry when you want the buff</div>
       ${RECIPES.map(recipeCard).join('')}
       <div class="sect-h">Potions · drink one mid-fight, any class</div>
       ${POTIONS.map(recipeCard).join('')}`;
@@ -1116,8 +1123,18 @@ async function openKitchen() {
       if (dish) {
         await award(`cook-${Date.now().toString(36)}`, 'cook', 8, `Cooked ${dish.name}`); // small XP + powers cooking quests
         confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds);
-        toast(dish.potion ? `${dish.icon} ${dish.name} brewed! Drink it mid-fight.` : `${dish.icon} ${dish.name} served! Buff active.`, 3200);
+        toast(dish.potion ? `${dish.icon} ${dish.name} brewed! Drink it mid-fight.` : `${dish.icon} ${dish.name} is in your Pantry. Eat it when you want the buff.`, 3400);
       }
+      render();
+    }));
+    $$('[data-eat]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const dish = await activatePantryDish(Number(btn.dataset.eat));
+      if (dish) { popSound(S.sounds); toast(`${dish.icon} ${dish.name} eaten. Buff active${dish.buff && dish.buff.kind === 'combat' ? ' for your next fights' : ''}.`, 3000); }
+      render();
+    }));
+    $$('[data-toss]', body).forEach(btn => btn.addEventListener('click', async () => {
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = '✓?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = '✕'; } }, 2400); return; }
+      await discardPantryDish(Number(btn.dataset.toss));
       render();
     }));
     $('#buyPot', body)?.addEventListener('click', async () => {
@@ -4659,7 +4676,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v151'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v152'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
