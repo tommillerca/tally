@@ -4326,7 +4326,7 @@ async function openMap() {
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
     const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
-    let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss').map(r => r.key));
+    let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
     const spawnSnap = new Map();    // id -> {lat,lng} snapped onto walkable ground
@@ -4335,12 +4335,15 @@ async function openMap() {
     let lastNearest = null;
 
     function refreshDens() {
-      const dens = densNear(week, lat, lng);
+      const dens = densNear(week, lat, lng, date);
+      // roaming dens are ephemeral (new set each day) — drop markers no longer live
+      const liveIds = new Set(dens.map(d => d.id));
+      for (const [id, rec] of denMarkers) { if (rec.den.roaming && !liveIds.has(id)) { rec.marker.remove(); denMarkers.delete(id); } }
       for (const d of dens) {
         let rec = denMarkers.get(d.id);
         if (!rec) {
           const el = document.createElement('div');
-          el.className = 'map-den-mark';
+          el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '');
           el.innerHTML = `<span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
@@ -4389,7 +4392,7 @@ async function openMap() {
 
     async function refreshWorld() {
       const rows = await db.all('xp');
-      claimedBoss = new Set(rows.filter(r => r.type === 'boss').map(r => r.key));
+      claimedBoss = new Set(rows.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       refreshSpawns();
       refreshDens();
@@ -4486,7 +4489,9 @@ async function openMap() {
       if (!rec || rec.den.dist > DEN_RADIUS_M) return;
       const den = rec.den;
       const fighter = await buildFighter();
-      const esc = escalateDen(den, await denWinsCount());
+      // landmark dens escalate with your progression; roaming dens use their raw
+      // daily tier (they're fresh variety, not the progression ladder).
+      const esc = den.roaming ? { mult: den.mult, aiLevel: den.aiLevel, add: null, bossMult: null } : escalateDen(den, await denWinsCount());
       openFight(wrap, fighter, {
         mode: 'boss', name: den.boss, mult: esc.mult, aiLevel: esc.aiLevel,
         talents: den.talents || [], venue: den.name, den, week, add: esc.add, bossMult: esc.bossMult,
@@ -4698,7 +4703,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v158'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v159'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5611,10 +5616,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
           coins = r.coins || 0;
           if (r.crate) extraCards.push(crateCard(r.crate));
           if (r.gearChoices) bossLoot = { key: denKey(foeCfg.week, foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
-          // world bosses are the other source of the RARE cooking ingredient
-          const eN = foeCfg.add ? 2 : 1;
-          await grantIngredient(RARE_INGREDIENT, eN);
-          extraCards.push({ iconHtml: ingIconHtml(RARE_INGREDIENT, 120), name: `Ectoplasm${eN > 1 ? ' x' + eN : ''}`, rarity: 'rare', kind: 'INGREDIENT', stats: 'Rare cooking ingredient' });
+          // landmark world bosses are the other source of the RARE cooking
+          // ingredient; roaming dens don't drop it (they stay a lighter reward).
+          if (!foeCfg.den.roaming) {
+            const eN = foeCfg.add ? 2 : 1;
+            await grantIngredient(RARE_INGREDIENT, eN);
+            extraCards.push({ iconHtml: ingIconHtml(RARE_INGREDIENT, 120), name: `Ectoplasm${eN > 1 ? ' x' + eN : ''}`, rarity: 'rare', kind: 'INGREDIENT', stats: 'Rare cooking ingredient' });
+          }
         } else coins = 10; // den already cracked this week: pocket change
       }
       else if (foeCfg.mode === 'mini') {

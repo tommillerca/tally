@@ -121,12 +121,37 @@ function denForCell(week, cx, cy) {
   return den;
 }
 
-// The dens around a position (3x3 den-cells: up to ~5-6 km out).
-export function densNear(week, lat, lng) {
+// ROAMING dens (v159): boss-grade dens that appear + relocate DAILY, alongside
+// the permanent weekly landmark dens, so the map stays fresh day to day. Only a
+// fraction of cells host one on a given day, position + boss are day-seeded (so
+// they truly move), and rewards are LIGHTER than a landmark den (mostly coins/XP,
+// occasional crate) to keep the loot faucet in check. Beatable once per day.
+export const ROAM_CHANCE = 0.4;          // ~40% of nearby cells host a roamer each day
+const ROAM_TIERS = [
+  { mult: 0.90, aiLevel: 1, reward: { coins: 45, xp: 45 } },
+  { mult: 1.08, aiLevel: 2, reward: { crate: 'daily', coins: 40, xp: 60 } },
+  { mult: 1.28, aiLevel: 3, reward: { crate: 'golden', coins: 70, xp: 90 }, talents: ['heavyhands'] },
+];
+const ROAM_TIER_WEIGHTS = [5, 3, 1.2];   // mostly light; a golden roamer is a rare event
+function roamDenForCell(date, cx, cy) {
+  const rng = mulberry32(hashStr(`roam:${date}:${cx}:${cy}`));
+  if (rng() > ROAM_CHANCE) return null;  // no roamer in this cell today
+  const lat = (cx + (rng() - 0.5) * 0.86) * DEN_CELL_DEG;
+  const lng = (cy + (rng() - 0.5) * 0.86) * DEN_CELL_DEG;
+  const theme = DEN_THEMES[Math.floor(rng() * DEN_THEMES.length)];
+  let roll = rng() * ROAM_TIER_WEIGHTS.reduce((a, b) => a + b, 0), tier = 0;
+  for (let i = 0; i < ROAM_TIER_WEIGHTS.length; i++) { roll -= ROAM_TIER_WEIGHTS[i]; if (roll <= 0) { tier = i; break; } }
+  return { id: `roam-${date}-${cx}-${cy}`, roaming: true, day: date, lat, lng, theme, tier, name: theme.name, boss: theme.boss, ...ROAM_TIERS[tier] };
+}
+
+// The dens around a position (3x3 den-cells: up to ~5-6 km out). Pass `date` to
+// also include the day's roaming dens; omit it for landmark dens only.
+export function densNear(week, lat, lng, date = null) {
   const { cx, cy } = denCellOf(lat, lng);
   const out = [];
   for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
     out.push(denForCell(week, cx + dx, cy + dy));
+    if (date) { const rd = roamDenForCell(date, cx + dx, cy + dy); if (rd) out.push(rd); }
   }
   for (const d of out) {
     d.dist = distanceM(lat, lng, d.lat, d.lng);
@@ -135,7 +160,7 @@ export function densNear(week, lat, lng) {
   return out.sort((a, b) => a.dist - b.dist);
 }
 
-export function denKey(week, den) { return `boss-${week}-${den.id}`; }
+export function denKey(week, den) { return den.roaming ? `roamboss-${den.day}-${den.id}` : `boss-${week}-${den.id}`; }
 
 // How many world-boss dens you have ever beaten (drives the endless-Pit gate).
 export async function denWinsCount() {
@@ -226,11 +251,16 @@ export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = nu
 // Called after a boss-den victory. Idempotent per den per week.
 export async function claimDenWin(den, week = isoWeekKey()) {
   const r = den.reward;
-  const xp = await award(denKey(week, den), 'boss', r.xp || 50, `Boss den: ${den.name}`);
+  // roaming dens (daily) log as 'roamboss' so they don't inflate the landmark
+  // boss count that gates the endless Pit; the day-based key caps them to once/day.
+  const type = den.roaming ? 'roamboss' : 'boss';
+  const xp = await award(denKey(week, den), type, r.xp || 50, `${den.roaming ? 'Roaming boss' : 'Boss den'}: ${den.name}`);
   if (xp === 0) return null;
   // coins are added by the caller (settle) so the Battle Charm + food coin boost
   // apply uniformly; adding them here too was a double-pay bug.
-  if (r.crate) await grantCrate(r.crate, 'boss-den');
+  if (r.crate) await grantCrate(r.crate, den.roaming ? 'roam-boss' : 'boss-den');
+  // roaming dens keep it light: crate/coins/xp only, no gear-choice drop.
+  if (den.roaming) return { xp, ...r, gearChoices: null };
   // every boss drops two pieces: the player keeps ONE (chooser persists in kv
   // until picked, so closing the victory screen never eats the loot)
   const owned = await ownedGearIds();

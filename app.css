@@ -1926,6 +1926,13 @@ body::before {
 }
 .map-den-mark.big { width: 56px; height: 64px; }
 .map-den-mark.big .den-skulls { color: var(--amber); }
+/* roaming dens (v159): daily, temporary — tinted + a faint drift so they read as
+   "here today, gone tomorrow" versus the permanent landmark dens. */
+.map-den-mark.roaming img { filter: hue-rotate(150deg) saturate(1.25); }
+.map-den-mark.roaming .den-skulls { color: #7cc4ff; }
+.map-den-mark.roaming { animation: roamDrift 3.2s ease-in-out infinite; }
+@keyframes roamDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .map-den-mark.roaming { animation: none; } }
 .map-den-mark.inrange { animation: blipready 0.9s ease-in-out infinite; }
 /* a den STIRS: boss eyes flare green + a shudder (ambient life, not a loop) */
 .map-den-mark .den-eyes { position: absolute; top: 42%; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 2; pointer-events: none; opacity: 0; }
