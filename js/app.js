@@ -523,15 +523,6 @@ async function renderToday(el) {
   const eq = await equipped();
   const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
-  // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
-  const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
-  const unlocks = isToday ? computeHomeUnlocks({
-    fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
-    gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
-  }) : [];
-  const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const wardAttn = unlocks.some(u => u.hero === 'ward');
-  const topNudge = unlocks[0] || null;
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
@@ -554,6 +545,15 @@ async function renderToday(el) {
   const pct = Math.min(1, tot.kcal / t.kcal);
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
+  // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
+  const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
+  const unlocks = isToday ? computeHomeUnlocks({
+    fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
+    gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
+  }) : [];
+  const pitAttn = unlocks.some(u => u.hero === 'pit');
+  const wardAttn = unlocks.some(u => u.hero === 'ward');
+  const topNudge = unlocks[0] || null;
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
@@ -4492,7 +4492,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v146'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v147'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
