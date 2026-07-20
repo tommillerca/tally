@@ -740,7 +740,21 @@ async function renderToday(el) {
   });
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
-    S.keepScrollY = { win: scrollY, el: $('#screen')?.scrollTop || 0 }; // claiming re-renders home; put the player back where they were
+    // claiming re-renders home; hold the reading position from THIS closure and
+    // reassert it for ~1s so the re-render (and any late layout) can't yank the
+    // player back to the top while they work down the quest list
+    const y = { win: scrollY, el: $('#screen')?.scrollTop || 0 };
+    const holdScroll = () => {
+      let frames = 0, settled = 0;
+      const tick = () => {
+        const sc = $('#screen');
+        const onTarget = sc && Math.abs(sc.scrollTop - y.el) <= 1;
+        if (sc && !onTarget) { sc.scrollTop = y.el; settled = 0; } else settled++;
+        if (y.win > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
+        if (++frames < 60 && settled < 8) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
     const period = b.dataset.period || 'day';
     const tier = questTiers.find(t => t.period === period);
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
@@ -760,28 +774,15 @@ async function renderToday(el) {
     }
     if (crates2.length) {
       // item rewards pop as pack cards; coins/XP ride the footer
-      openPackReveal(crates2.map(k => ({ iconHtml: crateIcon(k, 120), name: CRATES[k].label, rarity: k === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: k === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' })), { coins: res.coins, footerNote: `+${res.xp + bonusXp} XP` }).then(refresh);
+      openPackReveal(crates2.map(k => ({ iconHtml: crateIcon(k, 120), name: CRATES[k].label, rarity: k === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: k === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' })), { coins: res.coins, footerNote: `+${res.xp + bonusXp} XP` }).then(() => { refresh(); holdScroll(); });
     } else {
       toast(`Quest done · +${res.xp} XP · +${res.coins} coins`, 2800);
       refresh();
+      holdScroll();
     }
   }));
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
-  // a re-render triggered mid-scroll (quest claims) restores the reading position.
-  // Reassert across ~15 frames: route() zeroes #screen.scrollTop and late layout
-  // (ring animation rAFs, image loads) can zero it again after a single restore.
-  if (S.keepScrollY != null) {
-    const y = S.keepScrollY; S.keepScrollY = null;
-    let frames = 0;
-    const reassert = () => {
-      const sc = $('#screen');
-      if (sc && Math.abs(sc.scrollTop - (y.el || 0)) > 1) sc.scrollTop = y.el || 0;
-      if ((y.win || 0) > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
-      if (++frames < 15) requestAnimationFrame(reassert);
-    };
-    requestAnimationFrame(reassert);
-  }
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
     const meal = Number(b.dataset.copymeal);
     const src = yEntries.filter(e => e.meal === meal);
@@ -4357,7 +4358,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v138'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v139'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
