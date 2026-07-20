@@ -37,6 +37,12 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 | 2 | More weapons to buy (best caster already owned) | Bone Merchant stocks 3 tiers per archetype; Tom owns the tier-3 caster. Build: a tier-4 prestige row per archetype (big coin+dust sinks that pair with endless boss scaling), maybe weekly rotating stock. | FEATURE |
 | 5 | Build page hard to find; important unlocks should notify + guide you | No unlock-guidance system exists. Build: unlock moments (first gear piece, new weapon affordable, training point earned, talent unlocked) → toast + badge on the relevant hero button, deep-linking to the right screen. | FEATURE |
 
+### Batch 5 — platform + comms (new notes 2026-07-20 #2, approved)
+| # | Note | Finding | Status |
+|---|------|---------|--------|
+| 10 | Get Boneheadz on Android | No Android platform yet (Capacitor iOS-only; no `native/android`, no `@capacitor/android`). The web PWA already runs anywhere, so fastest path to "on Android" = installable PWA / Play Store TWA wrapper; a full native Capacitor Android build is the heavier option (needs Play Console $25 one-time, signing, HealthKit has no Android equivalent so steps would need Google Fit / Health Connect). Scope as its own mini-project after the app-feature batches. | FEATURE (large, platform) |
+| 11 | Easy-to-find patch notes for friends, retroactive last 15 patches | No changelog surface exists. Build: a `CHANGES` data list (js) rendered as a "What's New" screen reachable from Settings AND the Crew tab (friends live there); seed it retroactively from v126→v140 (15 entries) in player-facing language; a small "new since you last looked" dot when unseen. | FEATURE (medium) |
+
 ---
 
 ## ✅ Shipped (recent major — full history in git log)
