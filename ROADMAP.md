@@ -52,7 +52,9 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 - Native build 4: portrait lock (TestFlight); external public link approved & live
 
 ## 🧊 Parked (deliberate, don't lose)
-- Crow Lord class (Tom's idea 2026-07-05 — bird/summoner theme, design TBD)
-- Player-controlled pet actions in combat (pet stays auto for now)
-- PvP (friend battles are vs AI clones; real-time PvP unscoped)
+- Live synchronous PvP (async PvP vs friends' real builds SHIPPED as v136 friend battles; realtime duels unscoped)
 - Pet permadeath / 3+ fighters per side (rejected for now)
+
+*(Corrected 2026-07-20: Crow Lord class and player-controlled pet actions were listed
+parked but are SHIPPED — Crow Lord lives in pit.js with the Flock/Murder kit, and the
+pet takes a player-controlled turn via petActionsFor/applyPetAction.)*
