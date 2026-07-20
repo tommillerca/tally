@@ -21,6 +21,7 @@ import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellnes
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares } from './notify.js';
 import { snapToWalkable } from './geo.js';
+import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
@@ -2182,14 +2183,22 @@ function friendsListHtml(data) {
 async function renderFriends(el) {
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
+  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const whatsNewCard = `
+    <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
+      <span>What's New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</span>
+      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:12.5px">See recent updates</span><span class="crew-chev">›</span></span>
+    </button>`;
 
   if (!me) {
     el.innerHTML = `
       <h1 class="page-h1">The Crew</h1>
+      ${whatsNewCard}
       <div class="card">
         <p class="note" style="margin:0 0 12px">Go online to get your friend code and build your Crew. Your whole save backs up too, end-to-end <b>encrypted</b> so only your phone can read it.</p>
         <button class="btn" id="crewGoOnline">Go Online</button>
       </div>`;
+    $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
     $('#crewGoOnline', el)?.addEventListener('click', async () => {
       const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
       const r = await social.goOnline();
@@ -2207,6 +2216,8 @@ async function renderFriends(el) {
   const dispName = me.name || me.handle;
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+
+    ${whatsNewCard}
 
     <div class="card">
       <div class="card-title">YOUR FRIEND CODE</div>
@@ -2257,6 +2268,7 @@ async function renderFriends(el) {
     try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); } catch { toast(me.friendCode, 4000); }
   };
 
+  $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
   $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
   $('#crewShare', el)?.addEventListener('click', shareCode);
   $('#crewCopy', el)?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied!'); } catch { toast(me.friendCode, 4000); } });
@@ -2444,6 +2456,23 @@ function openCheerSheet(f) {
   });
 }
 
+// What's New: the player-facing changelog. Opening it marks everything seen so
+// the "new" dot clears. Reachable from Settings and the Crew tab.
+async function openWhatsNew() {
+  const cards = CHANGES.map(c => `
+    <div class="wn-entry">
+      <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
+      <ul class="wn-list">${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+    </div>`).join('');
+  openSheet(`
+    <div class="sheet-head"><h2>What's New</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
+      ${cards}
+    </div>`, { cls: 'full' });
+  await kvSet('changelogSeen', changelogLatest());
+}
+
 async function renderSettings(el) {
   const t = S.settings.targets;
   const p = S.settings.profile;
@@ -2463,6 +2492,7 @@ async function renderSettings(el) {
   const np = await notifPrefs();
   const notifPlat = notifPlatform();
   const notifPerm = await notifPermissionState();
+  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
   const notifRow = (key, label, sub) => `
     <div class="settings-row">
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
@@ -2580,6 +2610,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
   </div>
 
@@ -2716,6 +2747,7 @@ async function renderSettings(el) {
     location.reload();
   });
   // Force-fetch the latest build: drop the service worker + all caches, then
+  $('#whatsNewBtn')?.addEventListener('click', openWhatsNew);
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched — it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', async () => {
@@ -4492,7 +4524,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v147'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v148'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
