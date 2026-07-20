@@ -76,8 +76,14 @@
         <h2>Active players by day</h2>${s.activeByDay.map(d => bar(d.day, d.n, actMax)).join('') || '<p class="note">No data yet.</p>'}
         <h2>New players by day</h2>${s.newByDay.map(d => bar(d.day, d.n, Math.max(1, ...s.newByDay.map(x => x.n)))).join('') || '<p class="note">No data yet.</p>'}
         <h2>Every tracked action</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
-        <h2>Per-tester activity (top 20)</h2>${testers.length ? testers.map(t => bar(t.device.slice(0, 8), t.events, Math.max(1, ...testers.map(x => x.events)))).join('') : '<p class="note">No testers yet.</p>'}
-        <p class="note">Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
+        <h2>Testers by country</h2>${(s.byCountry || []).length ? s.byCountry.map(d => bar(d.country, d.n, Math.max(1, ...s.byCountry.map(x => x.n)))).join('') : '<p class="note">No geo yet (fills in as testers on the new build check in).</p>'}
+        <h2>Testers by city</h2>${(s.byCity || []).length ? s.byCity.map(d => bar([d.city, d.region, d.country].filter(Boolean).join(', ') || '?', d.n, Math.max(1, ...s.byCity.map(x => x.n)))).join('') : '<p class="note">No city data yet.</p>'}
+        <h2>Testers (top 30)</h2>${testers.length ? testers.map(t => {
+          const who = t.label || ('anon ' + t.device.slice(0, 6));
+          const loc = [t.city, t.country].filter(Boolean).join(', ');
+          return bar(who + (loc ? ' · ' + loc : ''), t.events, Math.max(1, ...testers.map(x => x.events)));
+        }).join('') : '<p class="note">No testers yet.</p>'}
+        <p class="note">Names shown for testers who went online (Crew); location is coarse (country/city from IP, no GPS). Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }
   $('#go').onclick = load;

@@ -342,6 +342,20 @@ export default {
           ops.push(stmt.bind(device, e.name.slice(0, 40), props, appV, day, ts));
         }
         if (ops.length) await env.DB.batch(ops);
+        // upsert the tester's identity (Crew name, if online) + coarse edge geo
+        // from Cloudflare (country/region/city off the request IP; no device GPS).
+        const cf = request.cf || {};
+        const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
+        await env.DB.prepare(
+          `INSERT INTO devices (device, label, country, region, city, first_seen, last_seen)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(device) DO UPDATE SET
+             label = COALESCE(excluded.label, devices.label),
+             country = COALESCE(excluded.country, devices.country),
+             region = COALESCE(excluded.region, devices.region),
+             city = COALESCE(excluded.city, devices.city),
+             last_seen = excluded.last_seen`
+        ).bind(device, label, cf.country || null, cf.region || cf.regionCode || null, cf.city || null, now, now).run();
         return json({ ok: true, accepted: ops.length });
       }
 
@@ -373,9 +387,15 @@ export default {
         // return rate: share of testers who came back on a later day than their first
         const r = await q("SELECT COUNT(*) total, SUM(CASE WHEN firstday <> lastday THEN 1 ELSE 0 END) returned FROM (SELECT device, MIN(day) firstday, MAX(day) lastday FROM events GROUP BY device)");
         const returnRate = r && r.total ? Math.round((r.returned / r.total) * 100) : 0;
-        // per-tester leaderboard (top 20 by activity)
-        const testers = await all("SELECT device, COUNT(*) events, MIN(day) first, MAX(day) last FROM events GROUP BY device ORDER BY events DESC LIMIT 20");
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, generatedAt: Date.now() });
+        // per-tester leaderboard (top 30 by activity), with Crew name + coarse geo
+        const testers = await all(
+          `SELECT e.device, COUNT(*) events, MIN(e.day) first, MAX(e.day) last,
+                  d.label, d.country, d.region, d.city
+           FROM events e LEFT JOIN devices d ON d.device = e.device
+           GROUP BY e.device ORDER BY events DESC LIMIT 30`);
+        const byCountry = await all("SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices GROUP BY country ORDER BY n DESC");
+        const byCity = await all("SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices GROUP BY city, region, country ORDER BY n DESC LIMIT 30");
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, generatedAt: Date.now() });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).

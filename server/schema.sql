@@ -83,3 +83,15 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_day ON events (day);
 CREATE INDEX IF NOT EXISTS idx_events_device_day ON events (device, day);
 CREATE INDEX IF NOT EXISTS idx_events_name ON events (name);
+
+-- one row per tester device: their chosen Crew name (if online) + coarse edge
+-- geo (from the request IP via Cloudflare; never device GPS). Upserted on ingest.
+CREATE TABLE IF NOT EXISTS devices (
+  device TEXT PRIMARY KEY,
+  label TEXT,            -- Crew/Boneheadz name, if the tester went online
+  country TEXT,
+  region TEXT,
+  city TEXT,
+  first_seen INTEGER,
+  last_seen INTEGER
+);

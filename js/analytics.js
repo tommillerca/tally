@@ -4,7 +4,7 @@
 // health, or personal data. Queued locally and flushed to YOUR OWN backend
 // (the same Cloudflare Worker as social) only when an API base is configured.
 import { kvGet, kvSet } from './db.js';
-import { apiBase } from './social.js';
+import { apiBase, socialMe } from './social.js';
 
 let appV = '';
 const QCAP = 300;
@@ -53,9 +53,14 @@ export async function flush() {
     let q = (await kvGet('evq', [])) || [];
     if (!q.length) return;
     const device = await deviceId();
+    // for online testers, attach the Crew name so the dashboard shows who's who
+    // (anonymous stays anonymous for anyone who hasn't gone online). Location is
+    // added server-side from the request's coarse edge geo, never device GPS.
+    const me = await socialMe().catch(() => null);
+    const label = me ? (me.name || me.handle || null) : null;
     while (q.length) {
       const batch = q.slice(0, 50);
-      const r = await fetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, events: batch }) });
+      const r = await fetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, label, events: batch }) });
       if (!r || !r.ok) break; // keep the queue; retry next flush
       q = q.slice(batch.length);
       await kvSet('evq', q);
