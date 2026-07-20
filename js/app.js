@@ -25,7 +25,7 @@ import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
-import { initAnalytics, track as trackEvent, flush as flushAnalytics } from './analytics.js';
+import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
@@ -410,6 +410,7 @@ function currentTab() {
 function route() {
   closeAllSheets();
   const tab = currentTab();
+  trackScreen(tab); // screen-dwell heatmap: time spent per bottom-nav screen
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const el = $('#screen');
   if (tab === 'shop') renderShop(el);
@@ -436,11 +437,16 @@ function toast(msg, ms = 2200) {
 }
 
 const sheetStack = [];
-function openSheet(html, { cls = '', onClose = null } = {}) {
+function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog"><div class="sheet-grab"></div>${html}</div>`;
   $('#sheets').appendChild(wrap);
-  const rec = { wrap, onClose };
+  // analytics: which feature-sheets get opened + how long they're held (dwell).
+  // Auto-labels from the sheet's <h2> title unless an explicit name is passed.
+  const feat = (name || (html.match(/<h2[^>]*>([^<]{1,40})<\/h2>/) || [])[1] || 'sheet').trim();
+  const openedAt = Date.now();
+  try { trackEvent('feat_open', { f: feat }); } catch { /* noop */ }
+  const rec = { wrap, onClose: () => { try { trackEvent('feat_time', { f: feat, ms: Date.now() - openedAt }); } catch { /* noop */ } try { onClose?.(); } catch { /* noop */ } } };
   sheetStack.push(rec);
   history.pushState({ sheet: sheetStack.length }, '');
   $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
@@ -815,6 +821,7 @@ async function renderToday(el) {
     if (!q) return;
     const res = await claimQuest(b.dataset.pkey, q, period);
     if (!res) return;
+    trackEvent('quest_claim', { id: q.id, period });
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
     period === 'day' ? questSound(S.sounds) : levelSound(S.sounds);
     let bonusXp = 0;
@@ -1153,6 +1160,7 @@ async function openKitchen() {
     $('#transmuteBtn', body)?.addEventListener('click', async () => {
       const res = await doTransmute();
       if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients (you have ${res.have}).`, 3000); return; }
+      trackEvent('transmute');
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 18); levelSound(S.sounds);
       toast(`${INGREDIENTS[res.yields].icon} Transmuted a rare ${INGREDIENTS[res.yields].name}!`, 3000);
       render();
@@ -1169,7 +1177,7 @@ async function openKitchen() {
     });
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
       const res = await startCook(btn.dataset.cook);
-      if (res.ok) { popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
+      if (res.ok) { trackEvent('cook', { r: btn.dataset.cook }); popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
       else if (res.reason === 'busy') toast('Every pot is full. Serve one, or buy another pot.', 3000);
       else toast('Not enough ingredients for that dish.');
       render();
@@ -1886,6 +1894,7 @@ async function renderShop(el) {
       b.disabled = false; return;
     }
     await kvSet('loadout', res.weaponId);
+    trackEvent('buy_weapon', { id: res.weaponId });
     levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
     toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
     rerender();
@@ -2354,6 +2363,7 @@ async function renderFriends(el) {
       const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
       const r = await social.goOnline();
       if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast('Could not connect. Try again in a bit.'); return; }
+      trackEvent('go_online');
       confettiRain(60); levelSound(S.sounds);
       await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
       await social.pushBackup(APP_SOCIAL_V).catch(() => {});
@@ -3505,6 +3515,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $$('[data-hatch]', content).forEach(b => b.addEventListener('click', async () => {
       const res = await hatchEgg(b.dataset.hatch);
       if (!res.ready) { toast('Keep walking: this egg is not ready yet.'); return; }
+      trackEvent('hatch');
       await refreshShinyPets();
       openHatchReveal(res, wrap);
     }));
@@ -4686,7 +4697,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v154'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v155'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4934,6 +4945,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     talents: foeCfg.add.talents || [],
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
+  trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
   const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;

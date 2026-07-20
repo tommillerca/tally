@@ -27,6 +27,17 @@ export async function track(name, props) {
   } catch { /* analytics never breaks the app */ }
 }
 
+// ---- screen dwell (the "heatmap": how long testers spend on each screen) ----
+// screen(name) closes out the previous screen's time and opens the new one.
+let curScreen = null, curScreenAt = 0;
+export function screen(name) {
+  const now = Date.now();
+  if (curScreen && curScreen !== name && curScreenAt) {
+    track('screen_time', { s: curScreen, ms: now - curScreenAt });
+  }
+  if (curScreen !== name) { curScreen = name; curScreenAt = now; track('screen', { s: name }); }
+}
+
 let flushing = false;
 export async function flush() {
   if (flushing) return;
@@ -51,6 +62,14 @@ export async function flush() {
 export async function initAnalytics(version) {
   appV = version || '';
   track('app_open');
+  track('session_start');
   flush();
   setInterval(flush, 60000); // drain while the app is open
+  // play-time heartbeat: one ping per ~45s the app is actually visible/foreground.
+  // Total play time ≈ ping count × 45s; sessions ≈ session_start count.
+  setInterval(() => { if (document.visibilityState === 'visible') track('session_ping'); }, 45000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { track('session_resume'); if (curScreen) curScreenAt = Date.now(); flush(); }
+    else if (curScreen && curScreenAt) { track('screen_time', { s: curScreen, ms: Date.now() - curScreenAt }); curScreenAt = 0; }
+  });
 }

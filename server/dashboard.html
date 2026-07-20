@@ -54,16 +54,29 @@
       const s = await r.json();
       const actMax = Math.max(1, ...s.activeByDay.map(d => d.n));
       const nameMax = Math.max(1, ...s.byName.map(d => d.n));
+      const stime = s.screenTime || [], fopen = s.featureOpens || [], ftime = s.featureTime || [], testers = s.testers || [];
+      const stMax = Math.max(1, ...stime.map(d => d.min || 0));
+      const foMax = Math.max(1, ...fopen.map(d => d.n || 0));
+      const ftMax = Math.max(1, ...ftime.map(d => d.min || 0));
+      const hrs = m => m >= 60 ? (m / 60).toFixed(1) + 'h' : m + 'm';
       $('#out').innerHTML = `
         <div class="cards">
-          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Players (all time)</div></div>
+          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers (all time)</div></div>
           <div class="card"><div class="n">${s.dau}</div><div class="l">Active today</div></div>
           <div class="card"><div class="n">${s.wau}</div><div class="l">Active this week</div></div>
+          <div class="card"><div class="n">${s.returnRate != null ? s.returnRate + '%' : '—'}</div><div class="l">Came back (retention)</div></div>
+          <div class="card"><div class="n">${s.playMinutes != null ? hrs(s.playMinutes) : '—'}</div><div class="l">Total play time</div></div>
+          <div class="card"><div class="n">${s.sessions ?? '—'}</div><div class="l">Sessions</div></div>
+          <div class="card"><div class="n">${s.avgSessionMin != null ? s.avgSessionMin + 'm' : '—'}</div><div class="l">Avg session</div></div>
           <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Total events</div></div>
         </div>
+        <h2>Screen time — where testers spend it</h2>${stime.length ? stime.map(d => bar(d.s || '?', d.min || 0, stMax)).join('') : '<p class="note">No screen-time data yet (ships in the next app update).</p>'}
+        <h2>Feature usage — opens</h2>${fopen.length ? fopen.map(d => bar(d.f || '?', d.n || 0, foMax)).join('') : '<p class="note">No feature data yet.</p>'}
+        <h2>Feature usage — minutes in each</h2>${ftime.length ? ftime.map(d => bar(d.f || '?', d.min || 0, ftMax)).join('') : '<p class="note">No feature-time data yet.</p>'}
         <h2>Active players by day</h2>${s.activeByDay.map(d => bar(d.day, d.n, actMax)).join('') || '<p class="note">No data yet.</p>'}
         <h2>New players by day</h2>${s.newByDay.map(d => bar(d.day, d.n, Math.max(1, ...s.newByDay.map(x => x.n)))).join('') || '<p class="note">No data yet.</p>'}
-        <h2>What people do</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
+        <h2>Every tracked action</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
+        <h2>Per-tester activity (top 20)</h2>${testers.length ? testers.map(t => bar(t.device.slice(0, 8), t.events, Math.max(1, ...testers.map(x => x.events)))).join('') : '<p class="note">No testers yet.</p>'}
         <p class="note">Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }

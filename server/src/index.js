@@ -360,7 +360,22 @@ export default {
         const byName = await all('SELECT name, COUNT(*) n FROM events GROUP BY name ORDER BY n DESC LIMIT 30');
         const activeByDay = await all('SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? GROUP BY day ORDER BY day', new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
         const newByDay = await all('SELECT day, COUNT(*) n FROM (SELECT device, MIN(day) day FROM events GROUP BY device) GROUP BY day ORDER BY day DESC LIMIT 14');
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, generatedAt: Date.now() });
+        // screen-dwell "heatmap": total minutes testers spent on each screen
+        const screenTime = await all("SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND props IS NOT NULL GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC");
+        // feature usage: how often each feature-sheet was opened + total minutes in it
+        const featureOpens = await all("SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND props IS NOT NULL GROUP BY f ORDER BY n DESC LIMIT 40");
+        const featureTime = await all("SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND props IS NOT NULL GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40");
+        // play time: one ping ≈ 45s of active play; sessions = session_start count
+        const pings = (await q("SELECT COUNT(*) n FROM events WHERE name='session_ping'")).n || 0;
+        const sessions = (await q("SELECT COUNT(*) n FROM events WHERE name='session_start'")).n || 0;
+        const playMinutes = Math.round(pings * 45 / 60);
+        const avgSessionMin = sessions ? Math.round((pings * 45 / sessions / 60) * 10) / 10 : 0;
+        // return rate: share of testers who came back on a later day than their first
+        const r = await q("SELECT COUNT(*) total, SUM(CASE WHEN firstday <> lastday THEN 1 ELSE 0 END) returned FROM (SELECT device, MIN(day) firstday, MAX(day) lastday FROM events GROUP BY device)");
+        const returnRate = r && r.total ? Math.round((r.returned / r.total) * 100) : 0;
+        // per-tester leaderboard (top 20 by activity)
+        const testers = await all("SELECT device, COUNT(*) events, MIN(day) first, MAX(day) last FROM events GROUP BY device ORDER BY events DESC LIMIT 20");
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, generatedAt: Date.now() });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).
