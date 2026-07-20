@@ -10,7 +10,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
@@ -882,6 +882,18 @@ test('kitchen: pot pricing — 2nd = 1000g, 3rd = 3000g, capped at 3 (v143)', ()
   assert.equal(nextPotPrice(1), 1000, 'buying the 2nd pot costs 1000');
   assert.equal(nextPotPrice(2), 3000, 'buying the 3rd pot costs 3000');
   assert.equal(nextPotPrice(3), null, 'no 4th pot');
+});
+
+test('kitchen: transmute consumes commons greedily from the most-abundant (v144)', () => {
+  assert.equal(TRANSMUTE.commons, 6);
+  assert.equal(TRANSMUTE.yields, 'ectoplasm');
+  // 6 taken from the biggest piles first; rare (ectoplasm) never touched
+  const { inv, taken } = transmuteConsume({ marrow: 5, salt: 4, graveroot: 1, ectoplasm: 2 }, 6);
+  assert.equal(taken, 6, 'takes the full cost when affordable');
+  assert.equal((inv.marrow || 0) + (inv.salt || 0) + (inv.graveroot || 0), 4, '10 commons - 6 = 4 left');
+  assert.equal(inv.ectoplasm, 2, 'rare ingredient untouched');
+  // short of 6: takes what it can (caller gates on canAfford so this is defensive)
+  assert.equal(transmuteConsume({ marrow: 2 }, 6).taken, 2);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

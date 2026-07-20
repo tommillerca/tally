@@ -561,6 +561,8 @@ a { color: var(--accent); text-decoration: none; }
 .pot-card small { font-size: 11px; color: var(--muted); }
 .pot-card .cook-bar { width: 100%; }
 .pot-serve { width: auto; padding: 5px 12px; font-size: 12px; }
+.crate-row.transmute { border: 1px solid rgba(180,140,255,.4); background: rgba(180,140,255,.07); border-radius: 12px; }
+.crate-row.transmute.lack { opacity: .72; }
 .cook-bar { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 6px 0 4px; }
 .cook-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #ff9628, #8bd450); transition: width 0.8s linear; }
 .cauldron-serve { grid-column: 1 / -1; width: 100%; }

@@ -172,6 +172,38 @@ export async function collectDish(slotIndex = null, now = Date.now()) {
   return r;
 }
 
+/* ---------- daily transmute: merge surplus commons -> 1 rare Ectoplasm ----------
+ * Tom's WoW-transmute idea + the "turn basics into the building block of others"
+ * note, unified: Ectoplasm gates the premium feast and otherwise only drops from
+ * RARE spawns / world bosses, so this gives a reliable, walk-fed path to it. Costs
+ * COMMONS commons (pulled greedily from your most-abundant), on a ~daily cooldown. */
+export const TRANSMUTE = { commons: 6, yields: RARE_INGREDIENT, cooldownMs: 20 * 3600e3 };
+// pure: greedily remove `n` commons from the most-abundant first (for the consume + tests)
+export function transmuteConsume(inv, n) {
+  const out = { ...(inv || {}) };
+  let left = n;
+  const order = COMMON_INGREDIENT_IDS.slice().sort((a, b) => (out[b] || 0) - (out[a] || 0));
+  for (const id of order) { while (left > 0 && (out[id] || 0) > 0) { out[id]--; left--; } if (!out[id]) delete out[id]; }
+  return { inv: out, taken: n - left };
+}
+export async function transmuteStatus(now = Date.now()) {
+  const last = (await kvGet('transmuteAt', 0)) || 0;
+  const msLeft = Math.max(0, last + TRANSMUTE.cooldownMs - now);
+  const inv = await ingredients();
+  const commonsHave = COMMON_INGREDIENT_IDS.reduce((a, id) => a + (inv[id] || 0), 0);
+  return { ready: msLeft <= 0, msLeft, commonsHave, need: TRANSMUTE.commons, canAfford: commonsHave >= TRANSMUTE.commons, yields: TRANSMUTE.yields };
+}
+export async function doTransmute(now = Date.now()) {
+  const st = await transmuteStatus(now);
+  if (!st.ready) return { ok: false, reason: 'cooldown', msLeft: st.msLeft };
+  if (!st.canAfford) return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
+  const { inv } = transmuteConsume(await ingredients(), TRANSMUTE.commons);
+  await kvSet('ingredients', inv);
+  await grantIngredient(TRANSMUTE.yields, 1);
+  await kvSet('transmuteAt', now);
+  return { ok: true, yields: TRANSMUTE.yields };
+}
+
 /* ---------- active food buffs (kv 'foodbuffs' = []) ---------- */
 export async function foodBuffs() { return (await kvGet('foodbuffs', [])) || []; }
 async function addFoodBuff(recipe, now = Date.now()) {

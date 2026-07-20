@@ -39,6 +39,7 @@ import {
   spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
+  transmuteStatus, doTransmute, TRANSMUTE,
 } from './cooking.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
@@ -1018,7 +1019,7 @@ async function openKitchen() {
 
   async function render() {
     if (!body.isConnected) return;
-    const [inv, cook, buffs, potInv, coinBal] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins()]);
+    const [inv, cook, buffs, potInv, coinBal, tmute] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus()]);
     const canStartAny = cook.freeCount > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
@@ -1055,6 +1056,12 @@ async function openKitchen() {
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
+      <div class="sect-h">Transmute · once a day</div>
+      <div class="crate-row transmute ${tmute.ready && tmute.canAfford ? '' : 'lack'}">
+        <span class="crate-ico">${ingIconHtml(TRANSMUTE.yields, 26)}</span>
+        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Merge ${TRANSMUTE.commons} common ingredients into 1 rare ${esc(INGREDIENTS[TRANSMUTE.yields].name)} (gates the Necromancer's Feast). You have ${tmute.commonsHave}.</small></div>
+        <button class="btn small ${tmute.ready && tmute.canAfford ? '' : 'ghost'}" id="transmuteBtn" ${tmute.ready && tmute.canAfford ? '' : 'disabled'}>${!tmute.ready ? `${fmtCookTime(tmute.msLeft)}` : !tmute.canAfford ? `Need ${TRANSMUTE.commons}` : 'Transmute'}</button>
+      </div>
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
@@ -1080,6 +1087,13 @@ async function openKitchen() {
       await addPot();
       popSound(S.sounds);
       toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
+      render();
+    });
+    $('#transmuteBtn', body)?.addEventListener('click', async () => {
+      const res = await doTransmute();
+      if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients (you have ${res.have}).`, 3000); return; }
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 18); levelSound(S.sounds);
+      toast(`${INGREDIENTS[res.yields].icon} Transmuted a rare ${INGREDIENTS[res.yields].name}!`, 3000);
       render();
     });
     $('#forageBtn', body)?.addEventListener('click', async () => {
@@ -4398,7 +4412,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v143'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v144'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
