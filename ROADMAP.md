@@ -19,14 +19,14 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 | 8 | Apple Health disconnected silently, steps stopped counting | No watchdog exists. Fix: track last successful sync; if connected but stale >36h → home banner + push notification + "Reconnect" CTA in Settings. Also investigate the root disconnect cause on Tom's device. | SHIPPED |
 | 9 | Stat point every 25,000 steps | Training points currently come ONLY from protein days + closed days, so a walking-focused player earns none. Fix: +1 TP per 25k lifetime steps, derived from step history (idempotent, additive, wellbeing-aligned). NOTE: retroactive by default — Tom's existing step history would grant a one-time batch of points. | SHIPPED |
 
-### Batch 2 — combat feel (target: v138)
+### Batch 2 — combat feel — ✅ SHIPPED v141 (2026-07-20, verified live)
 | # | Note | Finding | Status |
 |---|------|---------|--------|
-| 3 | Boss + mini-boss add feels weird ("is the second skeleton his pet?") | Adds render as a second skeleton ("Gnash's Second"). Lean into Tom's read: make the add literally the boss's CREATURE (pet-style art, "Gnash's Hound"), mirroring how the player fights with a pet. | FEATURE |
-| 4a | Do enemies ever target your pet? Moves should have AoE/splash | BOTH EXIST already: enemies target your pet 15% of turns (35% when it's low), and tough foes have an AoE sweep that hits you AND your pet. It's invisible in play. Fix: telegraph it (copy + FX + floaters), extend the sweep to mini-bosses/high tiers, tune rates up slightly. | PARTIAL |
-| 4b | Pet talent tree needs more depth | Tree already goes 5 tiers to Lv 10 (v125) — tiers 8/10 need 52k/82k banked steps on ONE pet, so Tom likely hasn't seen them. Proposal: first make upcoming talents visible ("next talent at Lv 8"), then decide if species-signature capstones are still wanted. | DECISION |
+| 3 | Boss + mini-boss add feels weird ("is the second skeleton his pet?") | Adds render as a second skeleton ("Gnash's Second"). Lean into Tom's read: make the add literally the boss's CREATURE (pet-style art, "Gnash's Hound"), mirroring how the player fights with a pet. | SHIPPED |
+| 4a | Do enemies ever target your pet? Moves should have AoE/splash | BOTH EXIST already: enemies target your pet 15% of turns (35% when it's low), and tough foes have an AoE sweep that hits you AND your pet. It's invisible in play. Fix: telegraph it (copy + FX + floaters), extend the sweep to mini-bosses/high tiers, tune rates up slightly. | SHIPPED |
+| 4b | Pet talent tree needs more depth | Tree already goes 5 tiers to Lv 10 (v125) — tiers 8/10 need 52k/82k banked steps on ONE pet, so Tom likely hasn't seen them. Proposal: first make upcoming talents visible ("next talent at Lv 8"), then decide if species-signature capstones are still wanted. | SHIPPED (visibility) · capstones still DECISION |
 
-### Batch 3 — Kitchen 2.0 (target: v139)
+### Batch 3 — Kitchen 2.0 (target: next) — ⏳ UP NEXT
 | # | Note | Finding | Status |
 |---|------|---------|--------|
 | 1 | Cook more than one thing at once; buy more pots; slow prep-cook ingredient transforms; daily rare-material transmute (WoW-style) | Kitchen is a single pot (one `cooking` kv slot). Build: (a) second pot as a coin/dust purchase, (b) prep recipes that slow-cook basic ingredients into building-block ingredients, (c) once-a-day transmute merging commons → a rare. Design forks: pot price + transmute ratio. | FEATURE |
