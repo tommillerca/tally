@@ -9,15 +9,15 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 📥 Notes intake — 2026-07-20 (planned, awaiting approval)
+## 📥 Notes intake — 2026-07-20 (approved; batches ship in order)
 
-### Batch 1 — quick wins (target: v137)
+### Batch 1 — quick wins — ✅ SHIPPED v137–v140 (2026-07-20, verified live)
 | # | Note | Finding | Status |
 |---|------|---------|--------|
-| 7 | Quest claim scrolls you back to top | CONFIRMED: claim calls `refresh()` which re-renders the whole home screen, resetting scroll. Fix: preserve scroll position across the re-render. | BUG |
-| 6 | "Melt gear" not an actual option? | EXISTS but buried: tap a gear piece in Wardrobe → inspect panel → Melt (arm-then-confirm). Fix: put a melt list right at the Salvage Bench + clearer hint in Wardrobe. | PARTIAL |
-| 8 | Apple Health disconnected silently, steps stopped counting | No watchdog exists. Fix: track last successful sync; if connected but stale >36h → home banner + push notification + "Reconnect" CTA in Settings. Also investigate the root disconnect cause on Tom's device. | BUG |
-| 9 | Stat point every 25,000 steps | Training points currently come ONLY from protein days + closed days, so a walking-focused player earns none. Fix: +1 TP per 25k lifetime steps, derived from step history (idempotent, additive, wellbeing-aligned). NOTE: retroactive by default — Tom's existing step history would grant a one-time batch of points. | FEATURE |
+| 7 | Quest claim scrolls you back to top | CONFIRMED: claim calls `refresh()` which re-renders the whole home screen, resetting scroll. Fix: preserve scroll position across the re-render. | SHIPPED |
+| 6 | "Melt gear" not an actual option? | EXISTS but buried: tap a gear piece in Wardrobe → inspect panel → Melt (arm-then-confirm). Fix: put a melt list right at the Salvage Bench + clearer hint in Wardrobe. | SHIPPED |
+| 8 | Apple Health disconnected silently, steps stopped counting | No watchdog exists. Fix: track last successful sync; if connected but stale >36h → home banner + push notification + "Reconnect" CTA in Settings. Also investigate the root disconnect cause on Tom's device. | SHIPPED |
+| 9 | Stat point every 25,000 steps | Training points currently come ONLY from protein days + closed days, so a walking-focused player earns none. Fix: +1 TP per 25k lifetime steps, derived from step history (idempotent, additive, wellbeing-aligned). NOTE: retroactive by default — Tom's existing step history would grant a one-time batch of points. | SHIPPED |
 
 ### Batch 2 — combat feel (target: v138)
 | # | Note | Finding | Status |
@@ -58,3 +58,10 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 *(Corrected 2026-07-20: Crow Lord class and player-controlled pet actions were listed
 parked but are SHIPPED — Crow Lord lives in pit.js with the Flock/Murder kit, and the
 pet takes a player-controlled turn via petActionsFor/applyPetAction.)*
+
+### Batch 1 ship notes (v137–v140)
+- Scroll fix took three attempts: root cause was rAF callbacks being THROTTLED on
+  WebViews (scheduled, never executed) — the hold is timer-based now, releases on
+  touch/wheel. Lesson: verify the RUNNING build via the Settings badge first.
+- Melt bench verified end-to-end (+dust). Watchdog verified: banner + one-shot
+  notification + clears on next good sync. TP verified retroactive (+1/25k steps).
