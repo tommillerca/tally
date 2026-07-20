@@ -2063,6 +2063,11 @@ body::before {
 .pet-card-meta b { font-size: 14px; }
 .pet-role { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .pet-count { position: absolute; right: -4px; bottom: -3px; background: var(--accent); color: #10210a; font-size: 10px; font-weight: 800; line-height: 1; padding: 2px 4px; border-radius: 7px; border: 1.5px solid var(--bg, #0c0f0a); }
+/* Health-sync watchdog banner: steps stopped flowing while connected */
+.hk-stale { display: grid; gap: 3px; width: 100%; text-align: left; cursor: pointer;
+  border: 2px solid rgba(255, 180, 84, .55); background: rgba(255, 180, 84, .10); }
+.hk-stale b { font-size: 14px; color: #ffb454; }
+.hk-stale span { font-size: 12.5px; color: var(--muted); }
 /* v128 breeding: lineage tag + a glow that brightens with each bred tier */
 .lin-tag { font-size: 10px; font-weight: 800; color: #ffd34d; letter-spacing: .03em; vertical-align: middle; }
 .lin-1 { filter: drop-shadow(0 0 3px rgba(255, 211, 77, .45)); }

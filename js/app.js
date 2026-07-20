@@ -543,6 +543,11 @@ async function renderToday(el) {
   const pct = Math.min(1, tot.kcal / t.kcal);
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
+  const hkStale = isToday ? await hkStaleInfo() : null;
+  if (hkStale && !(await kvGet('hkStaleNotified', false))) {
+    await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
+    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet — your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
+  }
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
@@ -596,6 +601,12 @@ async function renderToday(el) {
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
   </div>
+
+  ${isToday && hkStale ? `
+  <button class="card hk-stale" id="hkStaleFix">
+    <b>⚠️ Steps aren't syncing</b>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
+  </button>` : ''}
 
   ${isToday ? `
   <details class="q-collapse">
@@ -718,8 +729,18 @@ async function renderToday(el) {
     setTimeout(() => { $('#huntBtn')?.click(); setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
   }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
+  $('#hkStaleFix', el)?.addEventListener('click', async () => {
+    // best case: a manual native sync brings steps right back
+    if (isNative() && S.settings.hkNative) {
+      toast('Retrying Health sync…', 1800);
+      const ok = await nativeSyncNow({ silent: false });
+      if (ok) { toast('Steps are flowing again. All good.', 2600); refresh(); return; }
+    }
+    location.hash = '#/settings'; // reconnect / re-run the Health setup from Settings
+  });
   S.justLogged = false;
   $$('[data-claim]').forEach(b => b.addEventListener('click', async ev => {
+    S.keepScrollY = { win: scrollY, el: $('#screen')?.scrollTop || 0 }; // claiming re-renders home; put the player back where they were
     const period = b.dataset.period || 'day';
     const tier = questTiers.find(t => t.period === period);
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
@@ -747,6 +768,12 @@ async function renderToday(el) {
   }));
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
+  // a re-render triggered mid-scroll (quest claims) restores the reading position;
+  // both scrollers covered: the window AND #screen (route() resets el.scrollTop)
+  if (S.keepScrollY != null) {
+    const y = S.keepScrollY; S.keepScrollY = null;
+    requestAnimationFrame(() => { scrollTo(0, y.win || 0); const sc = $('#screen'); if (sc) sc.scrollTop = y.el || 0; });
+  }
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
     const meal = Number(b.dataset.copymeal);
     const src = yEntries.filter(e => e.meal === meal);
@@ -3153,7 +3180,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'crates') {
     await migrateLegacyEggs();
-    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts()]);
+    const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout()]);
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
@@ -3205,8 +3232,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       <div class="sect-h">Salvage Bench · nothing wasted</div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
-      <p class="note" style="margin:0 2px 8px">Melt unwanted gear in your Wardrobe (tap a piece, then Melt). Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
+      <p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
       ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
+      ${(() => {
+        const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
+          .sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
+        if (!rows.length) return '';
+        return `<div class="sect-h" style="margin-top:12px">Melt gear</div>` + rows.map(g => {
+          const worn = gearLoNow[g.slot] === g.id;
+          return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn</b>' : ''}</small></div>
+            <button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button></div>`;
+        }).join('');
+      })()}
       <div class="sect-h">Bone Dust Shop</div>
       <div class="grid2">
         ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dust < d.cost ? 'disabled' : ''}>
@@ -3235,6 +3273,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
+    $$('[data-meltbench]', content).forEach(btn => btn.addEventListener('click', async () => {
+      // arm-then-confirm, same contract as the Wardrobe melt
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
+      const res = await disenchantGear(btn.dataset.meltbench);
+      if (!res.ok) { toast('Could not melt that piece.'); return; }
+      popSound(S.sounds);
+      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2800);
+      renderCharacter(wrap, 'crates');
+    }));
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
       btn.disabled = true;
       const res = await buyWithDust(btn.dataset.dustbuy);
@@ -3509,12 +3556,32 @@ async function openCrateReveal(result) {
 
 /* ================= Apple Health bridge ================= */
 
+// Health-sync watchdog: Apple Health can silently stop delivering steps (Tom got
+// burned). Every successful steps ingest stamps hkLastSync; the home screen shows a
+// fix-it banner + fires one notification when the stamp goes stale while connected.
+const HK_STALE_MS = 36 * 3600e3;
+async function hkStaleInfo() {
+  if (!S.settings.hkConnected) return null;
+  let last = await kvGet('hkLastSync', null);
+  if (!last) {
+    // pre-watchdog installs: seed from the newest day that has steps
+    const latest = (await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
+    if (!latest) return null;
+    last = Date.parse(latest) + 24 * 3600e3;
+    await kvSet('hkLastSync', last);
+  }
+  const ms = Date.now() - last;
+  if (ms < HK_STALE_MS) return null;
+  return { hours: Math.round(ms / 3600e3), days: Math.floor(ms / 86400e3) };
+}
+
 async function ingestHealth(payload, { celebrate = true } = {}) {
   const existing = await db.get('health', payload.date);
   const row = { ...(existing || {}), date: payload.date };
   if (payload.steps != null) row.steps = payload.steps;
   if (payload.activeKcal != null) row.activeKcal = payload.activeKcal;
   await db.put('health', row);
+  if (payload.steps != null) { await kvSet('hkLastSync', Date.now()); await kvSet('hkStaleNotified', false); }
   if (payload.weightKg != null) {
     await db.put('weights', { date: payload.date, kg: payload.weightKg });
     await onWeighIn(payload.date);
@@ -4250,8 +4317,10 @@ async function buildFighter() {
   const gearedBase = {};
   for (const k of Object.keys(baseStats)) gearedBase[k] = baseStats[k] + (gBonus[k] || 0);
   const stats = allocatedStats(gearedBase, alloc);
-  // training points: one per wellbeing-safe positive day (protein hit / day closed on budget)
-  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0);
+  // training points: one per wellbeing-safe positive day (protein hit / day closed on
+  // budget) PLUS one per 25,000 lifetime steps — walking earns build power too.
+  // Derived from history, so it's retroactive and idempotent by construction.
+  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
   const tpAvail = Math.max(0, tpTotal - tpSpent);
   const inv = await inventory();
@@ -4280,7 +4349,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v136'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v137'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5374,7 +5443,7 @@ async function renderTalents(wrap) {
         </div>`;
       }).join('')}
       <div class="tp-bar">
-        <span><b>Training points</b> · earned from protein hits + closing days</span>
+        <span><b>Training points</b> · earned from protein hits, closing days + every 25,000 steps</span>
         <span class="tp-count">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span>
       </div>
       ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
