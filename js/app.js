@@ -768,11 +768,19 @@ async function renderToday(el) {
   }));
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
   $$('[data-entry]').forEach(b => b.addEventListener('click', () => openEntryEdit(b.dataset.entry)));
-  // a re-render triggered mid-scroll (quest claims) restores the reading position;
-  // both scrollers covered: the window AND #screen (route() resets el.scrollTop)
+  // a re-render triggered mid-scroll (quest claims) restores the reading position.
+  // Reassert across ~15 frames: route() zeroes #screen.scrollTop and late layout
+  // (ring animation rAFs, image loads) can zero it again after a single restore.
   if (S.keepScrollY != null) {
     const y = S.keepScrollY; S.keepScrollY = null;
-    requestAnimationFrame(() => { scrollTo(0, y.win || 0); const sc = $('#screen'); if (sc) sc.scrollTop = y.el || 0; });
+    let frames = 0;
+    const reassert = () => {
+      const sc = $('#screen');
+      if (sc && Math.abs(sc.scrollTop - (y.el || 0)) > 1) sc.scrollTop = y.el || 0;
+      if ((y.win || 0) > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
+      if (++frames < 15) requestAnimationFrame(reassert);
+    };
+    requestAnimationFrame(reassert);
   }
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
     const meal = Number(b.dataset.copymeal);
@@ -4349,7 +4357,7 @@ async function buildFighter() {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v137'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v138'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
