@@ -24,7 +24,10 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 | R9 | More enticing quests | Pools are solid but rewards are almost all coins (+ a weekly golden crate). "Enticing" = varied, flashier rewards (eggs, ingredients, Bone Dust, a cosmetic, a pet shard) + a few higher-flavor objectives. | FEATURE |
 | R10 | Biggest competitors? Features they have that we're missing? | Research — answered in chat 2026-07-20. Trackers: MyFitnessPal (biggest DB, AI photo/voice logging), MacroFactor (adaptive target coaching), Cronometer (micronutrients), Lose It!/Yazio/Lifesum. Gamified: NutriBalance (streaks/XP/leagues/missions/badges), Habitica + Finch (RPG/pet habit apps = our spiritual peers). Gaps worth considering: AI photo logging, adaptive targets, a leaderboard/league, micronutrients. Our moat (deep RPG: pets/gear/combat/breeding) is unmatched by mainstream trackers. | RESEARCH (logged) |
 
-**Proposed build order (pending approval):** Batch A quick fixes (R1 wand-nudge + R4 dust icon), Batch B patch-notes auto-popup (R2), Batch C pantry (R5), Batch D quests + consumables (R9 + R7). R3/R8 (tab IA) need your direction before I touch them; R6/R10 delivered this session.
+**Build order:** ✅ **Batch A SHIPPED v149** (R1 wand-nudge fix + R4 dust-icon unify, verified). Next: Batch B patch-notes auto-popup (R2), Batch C pantry (R5), Batch D quests + consumables (R9 + R7). R3/R8 (tab IA) need your direction before I touch them; R6/R10 delivered.
+
+- **R1 — SHIPPED v149:** home unlock nudge now only suggests genuine upgrades (vendor tier ≥ 3 that out-tiers your best weapon in that archetype); never entry weapons. Functionally verified: tier-3 caster + rich → suggests tier-4, not the wand; starter + 800c → no nudge. (Merchant discoverability itself still open — folds into the R3 tab decision.)
+- **R4 — SHIPPED v149:** every Bone Dust glyph unified to `◆` (matches the top-right HUD); prestige-weapon price + wallet now read "◆ Bone Dust". No more mystery-currency mismatch. Verified live (no 🦴 in merchant).
 
 ---
 
