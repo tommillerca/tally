@@ -43,7 +43,7 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 | # | Note | Finding | Status |
 |---|------|---------|--------|
 | 10 | Get Boneheadz on Android | No Android platform yet (Capacitor iOS-only; no `native/android`, no `@capacitor/android`). The web PWA already runs anywhere, so fastest path to "on Android" = installable PWA / Play Store TWA wrapper; a full native Capacitor Android build is the heavier option (needs Play Console $25 one-time, signing, HealthKit has no Android equivalent so steps would need Google Fit / Health Connect). Scope as its own mini-project after the app-feature batches. | FEATURE (large, platform) |
-| 11 | Easy-to-find patch notes for friends, retroactive last 15 patches | No changelog surface exists. Build: a `CHANGES` data list (js) rendered as a "What's New" screen reachable from Settings AND the Crew tab (friends live there); seed it retroactively from v126→v140 (15 entries) in player-facing language; a small "new since you last looked" dot when unseen. | FEATURE (medium) |
+| 11 | Easy-to-find patch notes for friends, retroactive last 15 patches | No changelog surface exists. Build: a `CHANGES` data list (js) rendered as a "What's New" screen reachable from Settings AND the Crew tab (friends live there); seed it retroactively in player-facing language; a small "new since you last looked" dot when unseen. | SHIPPED v148 — js/changelog.js (12 entries seeded v124→v148, newest first, plain language). What's New screen reachable from Settings + Crew tab; count badge that clears on open (changelogSeen kv = highest build viewed). Verified live: Crew card showed "12" badge, sheet renders all entries. |
 
 ---
 
