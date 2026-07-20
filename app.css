@@ -815,6 +815,16 @@ body::before {
 .hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
 .hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
+.hero-act.attn { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+/* v146 unlock nudge: a tappable card that deep-links to Build / Wardrobe */
+.unlock-nudge { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 12px; margin-top: 8px; border-left: 4px solid var(--accent); }
+.unlock-nudge .ul-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 18%, transparent); flex: 0 0 auto; }
+.unlock-nudge .ul-txt { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.unlock-nudge .ul-txt b { font-size: 13.5px; }
+.unlock-nudge .ul-txt small { font-size: 11.5px; color: var(--muted); }
+.unlock-nudge .ul-chev { color: var(--muted); font-size: 20px; font-weight: 700; flex: 0 0 auto; }
+.unlock-nudge:active { background: var(--surface-2); }
 /* weapon / off-hand rarity glow on the avatar (epic/legendary held items) */
 .bh-anim img.wpn-glow.r-epic { filter: drop-shadow(0 0 5px rgba(192, 132, 252, 0.85)); }
 .bh-anim img.wpn-glow.r-legendary { filter: drop-shadow(0 0 6px rgba(255, 201, 97, 0.95)); }

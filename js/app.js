@@ -523,6 +523,15 @@ async function renderToday(el) {
   const eq = await equipped();
   const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
+  // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
+  const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
+  const unlocks = isToday ? computeHomeUnlocks({
+    fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
+    gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
+  }) : [];
+  const pitAttn = unlocks.some(u => u.hero === 'pit');
+  const wardAttn = unlocks.some(u => u.hero === 'ward');
+  const topNudge = unlocks[0] || null;
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
@@ -597,12 +606,19 @@ async function renderToday(el) {
 
   <div class="hero-actions six">
     <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
-    <button class="hero-act" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe</span></button>
+    <button class="hero-act${wardAttn ? ' attn' : ''}" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe${wardAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
     <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
-    <button class="hero-act" id="pitBtn">${ICONS.pit(23)}<span>The Pit</span></button>
+    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(23)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
+
+  ${isToday && topNudge ? `
+  <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
+    <span class="ul-ico">${topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
+    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${topNudge.hero === 'ward' ? 'Tap to open your Wardrobe' : 'Tap to open Build and spend it'}</small></span>
+    <span class="ul-chev">›</span>
+  </button>` : ''}
 
   ${isToday && hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
@@ -702,6 +718,12 @@ async function renderToday(el) {
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#huntBtn')?.addEventListener('click', openMap);
+  $('#unlockNudge')?.addEventListener('click', () => {
+    const a = $('#unlockNudge')?.dataset.ulaction;
+    if (a === 'wardrobe') openCharacter('wardrobe');
+    else openTalents();
+  });
+  if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   // daily wellness (pure-positive self-care: only ever adds a reward)
@@ -4408,11 +4430,69 @@ async function buildFighter() {
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
+// v146: unlock guidance. The Build screen (talent trees + Bone Merchant) is buried
+// under the Pit, so "you have points to spend" or "you can afford a weapon" moments
+// were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
+// deep-linking straight to the right screen. Pure fn over already-fetched data;
+// returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount }) {
+  const sig = [];
+  // first gear owned but nothing worn — the biggest "free power you're missing"
+  if (gearOwnedCount > 0 && gearEquippedCount === 0) sig.push({
+    key: 'gear:first', hero: 'ward', action: 'wardrobe', priority: 5,
+    nudge: 'You have gear to equip',
+    toast: "You've got gear waiting. Equip it in your Wardrobe for a stat boost.",
+  });
+  const unspentTal = Math.max(0, talentPoints(level) - (fighter.talents?.length || 0));
+  if (unspentTal > 0) sig.push({
+    key: 'tal:' + unspentTal, hero: 'pit', action: 'talents', priority: 4,
+    nudge: `${unspentTal} talent point${unspentTal === 1 ? '' : 's'} to spend`,
+    toast: `New talent point${unspentTal === 1 ? '' : 's'} ready. Tap Build to spec your Bonehead.`,
+  });
+  if (fighter.tpAvail > 0) sig.push({
+    key: 'tp:' + fighter.tpAvail, hero: 'pit', action: 'talents', priority: 3,
+    nudge: `${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'} to spend`,
+    toast: `You earned ${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'}. Shape your build in the Pit.`,
+  });
+  // cheapest affordable, unowned vendor weapon (coins AND dust both covered)
+  const owned = new Set(fighter.owned || []);
+  let bestW = null;
+  for (const w of Object.values(WEAPONS)) {
+    if (!w.vendor || owned.has(w.id)) continue;
+    const c = weaponCoinCost(w.id), d = weaponDustCost(w.id);
+    if (c == null || coinBal < c || dustBal < d) continue;
+    if (!bestW || c < bestW.c) bestW = { id: w.id, name: w.name, c };
+  }
+  if (bestW) sig.push({
+    key: 'wpn:' + bestW.id, hero: 'pit', action: 'talents', priority: 2,
+    nudge: `You can afford the ${bestW.name}`,
+    toast: `The Bone Merchant has a weapon you can afford: ${bestW.name}.`,
+  });
+  return sig.sort((a, b) => b.priority - a.priority);
+}
+
+// Toast the highest-priority NEW unlock once. seenUnlocks kv is pruned to only
+// currently-active keys, so a state that goes away and returns notifies again;
+// the in-memory memo stops double-toasts across the rapid re-renders of refresh().
+async function fireUnlockToasts(unlocks) {
+  const active = unlocks.map(u => u.key);
+  const prevSeen = new Set(await kvGet('seenUnlocks', []));
+  await kvSet('seenUnlocks', active); // persist = currently active (bounded, self-pruning)
+  const fresh = unlocks.filter(u => !prevSeen.has(u.key));
+  if (!fresh.length) return;
+  const memo = S.unlockToasted || (S.unlockToasted = new Set());
+  const top = fresh.find(u => !memo.has(u.key));
+  if (!top) return;
+  fresh.forEach(u => memo.add(u.key));
+  toast(top.toast, 3600);
+  levelSound(S.sounds);
+}
+
 // The GAME-ONLY profile snapshot that syncs when online. Level, stats, outfit
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v145'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v146'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
