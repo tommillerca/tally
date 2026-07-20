@@ -69,6 +69,27 @@ export async function flush() {
   finally { flushing = false; }
 }
 
+// Player-submitted map feedback (den nominations + unreachable-spot reports).
+// Private dev channel — sent to your own server, shown only in the dashboard,
+// never to other players (so it's not public UGC). Best-effort, capped note.
+export async function sendReport(kind, data = {}) {
+  try {
+    const base = await apiBase();
+    if (!base) return { ok: false, reason: 'offline' };
+    const me = await socialMe().catch(() => null);
+    const body = {
+      device: await deviceId(), appV,
+      label: me ? (me.name || me.handle || null) : null,
+      kind,                                   // 'den-nominate' | 'unreachable'
+      lat: data.lat, lng: data.lng,
+      target: data.target ? String(data.target).slice(0, 60) : null,
+      note: data.note ? String(data.note).slice(0, 280) : null,
+    };
+    const r = await fetch(base + '/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { ok: !!(r && r.ok) };
+  } catch { return { ok: false, reason: 'error' }; }
+}
+
 export async function initAnalytics(version) {
   appV = version || '';
   track('app_open');

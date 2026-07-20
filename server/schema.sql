@@ -95,3 +95,20 @@ CREATE TABLE IF NOT EXISTS devices (
   first_seen INTEGER,
   last_seen INTEGER
 );
+
+-- player-submitted map feedback: den nominations ("this landmark should be a
+-- boss den, because...") + unreachable-spot reports ("this coin/boss is on
+-- private property"). Private dev channel; surfaced only in the admin dashboard.
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device TEXT NOT NULL,    -- anonymous random device id
+  label TEXT,              -- Crew name, if the reporter went online
+  kind TEXT NOT NULL,      -- den-nominate | unreachable
+  lat REAL, lng REAL,      -- map point (rounded to ~1m)
+  target TEXT,             -- what was long-pressed (marker label), if any
+  note TEXT,               -- the reporter's reason (capped 280 chars)
+  app_v TEXT,
+  geo TEXT,                -- coarse edge geo string (city, region, country)
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reports_ts ON reports (ts);

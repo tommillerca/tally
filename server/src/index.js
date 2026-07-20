@@ -359,6 +359,29 @@ export default {
         return json({ ok: true, accepted: ops.length });
       }
 
+      // Player-submitted map feedback: den nominations + unreachable-spot reports.
+      // Unsigned + best-effort like /events (no account needed). Private dev
+      // channel — only ever surfaced in the admin dashboard, never to players.
+      if (path === '/report' && request.method === 'POST') {
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body.device !== 'string' || typeof body.kind !== 'string') return json({ error: 'bad body' }, 400);
+        const kind = body.kind.slice(0, 24); // 'den-nominate' | 'unreachable'
+        const device = body.device.slice(0, 64);
+        const appV = String(body.appV || '').slice(0, 16);
+        const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
+        const lat = Number.isFinite(body.lat) ? Math.round(body.lat * 1e5) / 1e5 : null;
+        const lng = Number.isFinite(body.lng) ? Math.round(body.lng * 1e5) / 1e5 : null;
+        const target = (typeof body.target === 'string' && body.target) ? body.target.slice(0, 60) : null;
+        const note = (typeof body.note === 'string' && body.note) ? body.note.slice(0, 280) : null;
+        const cf = request.cf || {};
+        const city = [cf.city, cf.region || cf.regionCode, cf.country].filter(Boolean).join(', ') || null;
+        await env.DB.prepare(
+          `INSERT INTO reports (device, label, kind, lat, lng, target, note, app_v, geo, ts)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`
+        ).bind(device, label, kind, lat, lng, target, note, appV, city, Date.now()).run();
+        return json({ ok: true });
+      }
+
       // Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
       if (path === '/stats' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
@@ -395,7 +418,9 @@ export default {
            GROUP BY e.device ORDER BY events DESC LIMIT 30`);
         const byCountry = await all("SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices GROUP BY country ORDER BY n DESC");
         const byCity = await all("SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices GROUP BY city, region, country ORDER BY n DESC LIMIT 30");
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, generatedAt: Date.now() });
+        // community map feedback: newest first (den nominations + unreachable reports)
+        const reports = await all("SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device ORDER BY r.ts DESC LIMIT 100");
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, generatedAt: Date.now() });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).

@@ -25,7 +25,7 @@ import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
-import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen } from './analytics.js';
+import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
@@ -4334,6 +4334,72 @@ async function openMap() {
     const miniMarkers = new Map();  // id -> {marker, el, mini}
     let lastNearest = null;
 
+    // ---- long-press map feedback -------------------------------------------
+    // Press and hold on the map: on a marker -> "report this spot as
+    // unreachable" (private property, etc.); on empty ground -> "nominate this
+    // landmark for a boss den". Both send a private note to the devs.
+    let lpTimer = null, lpStart = null;
+    const LP_MS = 550, LP_MOVE = 14;
+    function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; }
+    function markerAt(target) {
+      const el = target && target.closest && target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
+      if (!el) return null;
+      for (const r of denMarkers.values()) if (r.el === el) return { label: r.den.name || 'Boss den', lat: r.den.lat, lng: r.den.lng };
+      for (const r of miniMarkers.values()) if (r.el === el) return { label: r.mini.name || 'Mini-boss', lat: r.mini.lat, lng: r.mini.lng };
+      for (const r of spawnMarkers.values()) if (r.el === el) return { label: (r.spawn.type === 'rare' ? 'Rare pile' : 'Bone pile'), lat: r.spawn.lat, lng: r.spawn.lng };
+      return { label: 'Map marker', lat: null, lng: null };
+    }
+    const mapEl = $('#mapCanvas', body);
+    mapEl.addEventListener('pointerdown', ev => {
+      if (ev.button && ev.button !== 0) return;
+      const startX = ev.clientX, startY = ev.clientY, tgt = ev.target;
+      lpStart = { x: startX, y: startY };
+      lpTimer = setTimeout(() => {
+        lpTimer = null;
+        const hit = markerAt(tgt);
+        if (hit) { openReportSheet('unreachable', hit); return; }
+        // empty ground: convert the press point to a coordinate on the map
+        let pt = null;
+        try { const rect = mapEl.getBoundingClientRect(); pt = map.unproject([startX - rect.left, startY - rect.top]); } catch { /* map gone */ }
+        if (pt) openReportSheet('den-nominate', { label: null, lat: pt.lat, lng: pt.lng });
+      }, LP_MS);
+    });
+    mapEl.addEventListener('pointermove', ev => {
+      if (!lpStart) return;
+      if (Math.abs(ev.clientX - lpStart.x) > LP_MOVE || Math.abs(ev.clientY - lpStart.y) > LP_MOVE) lpClear();
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => mapEl.addEventListener(t, lpClear));
+
+    function openReportSheet(kind, ctx) {
+      const isDen = kind === 'den-nominate';
+      const coords = (Number.isFinite(ctx.lat) && Number.isFinite(ctx.lng)) ? `${ctx.lat.toFixed(5)}, ${ctx.lng.toFixed(5)}` : null;
+      const title = isDen ? 'Nominate a boss den' : 'Report this spot';
+      const lead = isDen
+        ? 'Know a spot that would make a great boss den? A landmark, a park, somewhere with meaning. Tell the devs why it belongs on the map.'
+        : `Can't reach <b>${esc(ctx.label || 'this spot')}</b>? If it's on private property or otherwise off-limits, let the devs know and they'll review it.`;
+      const ph = isDen ? 'Why here? (e.g. the old lighthouse, the town square...)' : "What's wrong? (e.g. this is on private property)";
+      openSheet(`
+        <h2>${title}</h2>
+        <p class="muted" style="margin:0 0 12px">${lead}</p>
+        ${coords ? `<p class="muted" style="font-size:12px;margin:0 0 10px">📍 ${coords}</p>` : ''}
+        <textarea id="rptNote" rows="3" maxlength="280" placeholder="${esc(ph)}" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+        <div class="row" style="gap:8px;margin-top:12px">
+          <button class="btn" id="rptSend">Send to devs</button>
+        </div>
+        <p class="muted" id="rptStatus" style="font-size:12px;margin:10px 0 0"></p>
+      `, { cls: 'sheet-report', name: 'map_report' });
+      const btn = $('#rptSend'); const statusEl = $('#rptStatus');
+      btn?.addEventListener('click', async () => {
+        const note = ($('#rptNote')?.value || '').trim();
+        if (isDen && !note) { statusEl.textContent = 'Add a quick reason first.'; return; }
+        btn.disabled = true; statusEl.textContent = 'Sending...';
+        const r = await sendReport(kind, { lat: ctx.lat, lng: ctx.lng, target: ctx.label, note });
+        trackEvent(isDen ? 'den_nominate' : 'report_unreachable');
+        if (r && r.ok) { statusEl.textContent = 'Sent. Thanks for the scouting report, bonehead. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
+        else { statusEl.textContent = 'Could not reach the devs. Try again when you are online.'; btn.disabled = false; }
+      });
+    }
+
     function refreshDens() {
       const dens = densNear(week, lat, lng, date);
       // roaming dens are ephemeral (new set each day) — drop markers no longer live
@@ -4703,7 +4769,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v159'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v160'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

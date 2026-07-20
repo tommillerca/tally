@@ -24,6 +24,13 @@
   .bar-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#6f86c9,#a5e847); border-radius: 5px; }
   .bar-row .v { width: 46px; font-weight: 800; font-size: 13px; }
   .note { color: #6f6a7a; font-size: 12px; margin-top: 8px; }
+  .rpt { background: #17151f; border: 1px solid #2a2733; border-radius: 12px; padding: 12px 14px; margin: 8px 0; }
+  .rtag { display: inline-block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; padding: 2px 8px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
+  .rtag.den { background: #2e3a1a; color: #a5e847; }
+  .rtag.unreach { background: #3a2020; color: #ff9a8a; }
+  .rnote { color: #e8e2d6; }
+  .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
+  .rmeta a { color: #7cc4ff; }
   .err { color: #ff8080; }
 </style>
 </head>
@@ -43,6 +50,7 @@
   $('#api').value = localStorage.bhApi || '';
   $('#token').value = localStorage.bhTok || '';
   const bar = (k, v, max) => `<div class="bar-row"><span class="k">${k}</span><span class="bar"><i style="width:${max ? Math.round(v / max * 100) : 0}%"></i></span><span class="v">${v}</span></div>`;
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   async function load() {
     const api = $('#api').value.trim().replace(/\/$/, ''), tok = $('#token').value.trim();
     if (!api || !tok) { $('#out').innerHTML = '<p class="err">Enter your Worker URL and admin token.</p>'; return; }
@@ -83,6 +91,14 @@
           const loc = [t.city, t.country].filter(Boolean).join(', ');
           return bar(who + (loc ? ' · ' + loc : ''), t.events, Math.max(1, ...testers.map(x => x.events)));
         }).join('') : '<p class="note">No testers yet.</p>'}
+        <h2>Community map reports</h2>${(s.reports || []).length ? s.reports.map(r => {
+          const who = r.label || 'anon';
+          const isDen = r.kind === 'den-nominate';
+          const tag = isDen ? '<span class="rtag den">den idea</span>' : '<span class="rtag unreach">unreachable</span>';
+          const coords = (r.lat != null && r.lng != null) ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat}, ${r.lng}</a>` : '';
+          const meta = [esc(who), r.geo ? esc(r.geo) : '', new Date(r.ts).toLocaleString()].filter(Boolean).join(' · ');
+          return `<div class="rpt">${tag}${r.target ? `<b>${esc(r.target)}</b> ` : ''}<span class="rnote">${esc(r.note) || '<i>(no note)</i>'}</span><div class="rmeta">${meta}${coords ? ' · ' + coords : ''}</div></div>`;
+        }).join('') : '<p class="note">No reports yet. Testers can press and hold the map to nominate a den or flag an unreachable spot.</p>'}
         <p class="note">Names shown for testers who went online (Crew); location is coarse (country/city from IP, no GPS). Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }
