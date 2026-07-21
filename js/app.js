@@ -2494,7 +2494,7 @@ async function renderFriends(el) {
   let lbData = null; // one fetch shared by the podium tile + the full sheet
   const fetchLb = async () => (lbData || (lbData = await social.leaderboard()));
   const lbAvatar = (p, cls = 'lb-av') =>
-    `<div class="${cls}">${avatarLayersHtml((p.outfit && p.outfit.SK) ? p.outfit : { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG'] })}</div>`;
+    `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG'] })}</div>`;
   // the Crew-tab tile: top-3 Boneheadz on a podium (center = #1, raised)
   const hydratePodium = async () => {
     const players = await fetchLb();
