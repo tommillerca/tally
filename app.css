@@ -1552,7 +1552,28 @@ body::before {
 
 /* ---- all-players leaderboard ---- */
 .lb-open { position: relative; width: 100%; text-align: left; cursor: pointer; }
-.lb-open .ul-chev { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-3); font-size: 22px; }
+.lb-open .ul-chev { position: absolute; right: 16px; top: 14px; color: var(--text-3); font-size: 22px; }
+/* top-3 podium tile on the Crew tab: show off the Boneheadz, gold in the middle */
+.lb-podium { display: flex; align-items: flex-end; gap: 10px; margin-top: 10px; }
+.lb-pod {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 6px 8px;
+}
+.lb-pod b { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-pod small { color: var(--text-3); font-size: 11px; }
+.lb-pod-av { width: 54px; height: 54px; position: relative; border-radius: 12px; overflow: hidden; background: var(--surface); }
+.lb-pod-av .bh-anim { position: absolute; inset: 0; }
+.lb-pod-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lb-pod.p1 { padding: 13px 6px 12px; border-color: rgba(255, 215, 94, 0.5); box-shadow: 0 0 16px rgba(255, 215, 94, 0.12); }
+.lb-pod.p1 .lb-pod-av { width: 68px; height: 68px; }
+.lb-medal { font-family: var(--display); font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface); color: var(--text-3); white-space: nowrap; }
+.lb-pod.p1 .lb-medal { color: #ffd75e; }
+.lb-pod.p2 .lb-medal { color: #cfd6e4; }
+.lb-pod.p3 .lb-medal { color: #d9a05b; }
+/* sheet rows: the player's actual Bonehead next to their rank */
+.lb-av { width: 42px; height: 42px; flex: none; border-radius: 10px; overflow: hidden; background: var(--surface-2); position: relative; }
+.lb-av .bh-anim { position: absolute; inset: 0; }
+.lb-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
 .lb-row:last-child { border-bottom: 0; }
 .lb-row.me { background: rgba(165, 232, 71, 0.07); border-radius: 10px; padding-left: 8px; padding-right: 8px; }

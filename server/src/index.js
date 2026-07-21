@@ -258,6 +258,7 @@ export default {
                   CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) lvl,
                   json_extract(profile,'$.levelName') lvlName,
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
+                  json_extract(profile,'$.outfit') outfit,
                   last_seen
            FROM players ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`).all();
         const players = (rows.results || []).map(r => ({
@@ -266,6 +267,7 @@ export default {
           level: r.lvl || 1,
           levelName: r.lvlName || null,
           badges: r.badges || 0,
+          outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(), // cosmetic ids only; art renders client-side
           friendCode: r.friend_code,
           lastSeen: r.last_seen,
           you: r.id === auth.playerId,

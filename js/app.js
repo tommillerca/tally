@@ -2442,7 +2442,8 @@ async function renderFriends(el) {
 
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">🏆 LEADERBOARD</div>
-      <p class="note" style="margin:0">Every Bonehead, ranked by level. Tap to see where you stand — and add anyone as a friend.</p>
+      <div class="lb-podium" id="lbPodium" hidden></div>
+      <p class="note" style="margin:8px 0 0">Every Bonehead ranked by level. Tap to see where you stand, and add anyone as a friend.</p>
       <span class="ul-chev">›</span>
     </button>
 
@@ -2489,20 +2490,42 @@ async function renderFriends(el) {
   // The all-players leaderboard: ranked by level, one-tap add-friend on every
   // row (friend codes are share-keys; while the community is small, everyone
   // can find everyone). Adding someone who already requested you auto-accepts.
+  // Every row shows the player's actual Bonehead — the customization IS the flex.
+  let lbData = null; // one fetch shared by the podium tile + the full sheet
+  const fetchLb = async () => (lbData || (lbData = await social.leaderboard()));
+  const lbAvatar = (p, cls = 'lb-av') =>
+    `<div class="${cls}">${avatarLayersHtml((p.outfit && p.outfit.SK) ? p.outfit : { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG'] })}</div>`;
+  // the Crew-tab tile: top-3 Boneheadz on a podium (center = #1, raised)
+  const hydratePodium = async () => {
+    const players = await fetchLb();
+    const pod = $('#lbPodium', el);
+    if (!pod || !pod.isConnected || !players || !players.length) return;
+    const top = players.slice(0, 3);
+    const order = top.length === 3 ? [top[1], top[0], top[2]] : top; // silver, GOLD, bronze
+    pod.innerHTML = order.map(p => {
+      const rank = players.indexOf(p) + 1;
+      return `<div class="lb-pod p${rank}">
+        <span class="lb-medal">${rank === 1 ? '👑 1st' : rank === 2 ? '2nd' : '3rd'}</span>
+        ${lbAvatar(p, 'lb-pod-av')}
+        <b>${esc(p.name)}</b><small>Lv ${p.level}</small>
+      </div>`;
+    }).join('');
+    pod.hidden = false;
+  };
   const openLeaderboard = async () => {
     openSheet(`
       <div class="sheet-head"><h2>Leaderboard</h2><button class="sheet-close">Done</button></div>
       <div class="sheet-body" id="lbBody"><p class="note" style="text-align:center;padding:22px 0">Summoning the Boneheadz... <span class="spin"></span></p></div>
     `, { cls: 'full', name: 'Leaderboard' });
     const body = $('#lbBody');
-    const players = await social.leaderboard();
+    const players = await fetchLb();
     if (!body || !body.isConnected) return;
     if (!players) { body.innerHTML = '<p class="note" style="text-align:center;padding:22px 0">Could not reach the Crew server. Try again in a bit.</p>'; return; }
     const friendIds = new Set((data.friends || []).map(f => f.playerId));
     const outIds = new Set((data.outgoing || []).map(f => f.playerId));
     const inIds = new Set((data.incoming || []).map(f => f.playerId));
     body.innerHTML = `
-      <p class="note" style="margin:0 0 10px">Every Bonehead in the game, ranked by level. Add anyone — they accept by adding you back.</p>
+      <p class="note" style="margin:0 0 10px">Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back.</p>
       ${players.map((p, i) => {
         const btn = p.you ? '<span class="lb-tag you">You</span>'
           : friendIds.has(p.playerId) ? '<span class="lb-tag crew">✓ Crew</span>'
@@ -2510,6 +2533,7 @@ async function renderFriends(el) {
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
         return `<div class="lb-row ${p.you ? 'me' : ''}">
           <span class="lb-rank r${i + 1}">${i + 1}</span>
+          ${lbAvatar(p)}
           <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}</small></div>
           ${btn}
         </div>`;
@@ -2524,6 +2548,7 @@ async function renderFriends(el) {
     }));
   };
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
+  hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
   $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
   $('#crewShare', el)?.addEventListener('click', shareCode);
@@ -4906,7 +4931,7 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
   if (fightWins === 0) sig.push({
     key: 'fight:first', hero: 'pit', action: 'pit', priority: 6,
     nudge: 'Ready for your first fight?',
-    toast: 'The Pit is open. Sparring is free — win your first fight for coins + XP.',
+    toast: 'The Pit is open. Sparring is free, and your first win pays coins + XP.',
   });
   // first gear owned but nothing worn — the biggest "free power you're missing"
   if (gearOwnedCount > 0 && gearEquippedCount === 0) sig.push({
@@ -4977,7 +5002,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v174'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v175'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
