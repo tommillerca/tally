@@ -30,7 +30,7 @@ import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './ma
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -3317,16 +3317,23 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
 }
 
 function badgesGridHtml(earned, newIds = new Set()) {
-  return `<div class="badge-grid">${BADGES.map(b => `
+  // secret (easter-egg) badges stay masked as ??? until earned — the mystery
+  // tile IS the hint that there's something out there to find.
+  return `<div class="badge-grid">${BADGES.map(b => {
+    const hidden = b.secret && !earned.has(b.id);
+    return `
     <button class="badge ${earned.has(b.id) ? '' : 'locked'} ${newIds.has(b.id) ? 'new' : ''}" data-badge="${b.id}">
-      <span class="bicon">${badgeIconHtml(b.icon,22)}</span>${esc(b.name)}
-    </button>`).join('')}</div>`;
+      <span class="bicon">${hidden ? '❓' : badgeIconHtml(b.icon, 22)}</span>${hidden ? '???' : esc(b.name)}
+    </button>`;
+  }).join('')}</div>`;
 }
 
 function bindBadgeTaps(wrap) {
-  $$('[data-badge]', wrap).forEach(el => el.addEventListener('click', () => {
+  $$('[data-badge]', wrap).forEach(el => el.addEventListener('click', async () => {
     const b = BADGES.find(x => x.id === el.dataset.badge);
-    if (b) toast(`${b.icon} ${b.name}: ${b.desc}`, 2600);
+    if (!b) return;
+    if (b.secret && !(await earnedBadgeIds()).has(b.id)) { toast('❓ ???: Some things are only found out in the world...', 2800); return; }
+    toast(`${b.icon} ${b.name}: ${b.desc}`, 2600);
   }));
 }
 
@@ -4439,6 +4446,7 @@ async function openMap() {
         <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
         <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
+        <button class="btn map-den" id="mapSecret" hidden></button>
         <button class="btn map-mini" id="mapMini" hidden>Fight</button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
@@ -4508,6 +4516,9 @@ async function openMap() {
     const miniSnap = new Map();     // id -> {lat,lng} | null(suppressed)
     const denMarkers = new Map();   // id -> {marker, el, den}
     const miniMarkers = new Map();  // id -> {marker, el, mini}
+    const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
+    const whisperedSecrets = new Set(); // one cryptic cue per spot per map session
+    let claimedSecret = new Set(xpRows0.filter(r => r.type === 'secret').map(r => r.key));
     let lastNearest = null;
 
     // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
@@ -4693,13 +4704,54 @@ async function openMap() {
       }
     }
 
+    // Easter-egg secret dens: whisper within earshot, materialize on approach.
+    // No marker, readout or button exists beyond SECRET_REVEAL_M — the whole
+    // point is that these spread by rumor, not by map-reading.
+    function refreshSecrets() {
+      const secrets = secretsNear(lat, lng);
+      const liveKeys = new Set();
+      let inRange = null;
+      for (const s of secrets) {
+        if (s.dist <= SECRET_WHISPER_M && s.dist > SECRET_REVEAL_M && !whisperedSecrets.has(s.key)) {
+          whisperedSecrets.add(s.key);
+          toast(s.whisper, 4600);
+        }
+        if (s.dist > SECRET_REVEAL_M) continue;
+        liveKeys.add(s.key);
+        let rec = secretMarkers.get(s.key);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-den-mark secret';
+          el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">🥁</span></div>`;
+          rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el, anchor: 'bottom' }), el };
+          secretMarkers.set(s.key, rec);
+          toast(`${s.name} has been waiting for you.`, 4200);
+          sparkleSound(S.sounds);
+        }
+        rec.el.classList.toggle('claimed', claimedSecret.has(`secret-${s.bossId}`));
+        if (s.dist <= SECRET_RADIUS_M && !inRange) inRange = s;
+      }
+      for (const [key, rec] of secretMarkers) { if (!liveKeys.has(key)) { rec.marker.remove(); secretMarkers.delete(key); } }
+      const sb = $('#mapSecret', body);
+      if (sb) {
+        const denOpen = !$('#mapDen', body)?.hidden;
+        sb.hidden = !inRange || denOpen;
+        if (inRange && !denOpen) {
+          sb.textContent = claimedSecret.has(`secret-${inRange.bossId}`) ? `🥁 Rematch ${inRange.name}` : `🥁 ${inRange.name.toUpperCase()} AWAITS`;
+          sb.dataset.secretKey = inRange.key;
+        }
+      }
+    }
+
     async function refreshWorld() {
       const rows = await db.all('xp');
       claimedBoss = new Set(rows.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
+      claimedSecret = new Set(rows.filter(r => r.type === 'secret').map(r => r.key));
       refreshSpawns();
       refreshDens();
       refreshMinis();
+      refreshSecrets();
     }
 
     const raresCued = new Set(); // rares we've already announced this session
@@ -4792,6 +4844,17 @@ async function openMap() {
       openFight(wrap, fighter, {
         mode: 'boss', name: den.boss, mult: esc.mult, aiLevel: esc.aiLevel,
         talents: den.talents || [], venue: den.name, den, week, add: esc.add, bossMult: esc.bossMult,
+      });
+    });
+
+    $('#mapSecret', body).addEventListener('click', async () => {
+      const key = $('#mapSecret', body).dataset.secretKey;
+      const s = secretsNear(lat, lng).find(x => x.key === key);
+      if (!s || s.dist > SECRET_RADIUS_M) return;
+      const fighter = await buildFighter();
+      openFight(wrap, fighter, {
+        mode: 'secret', bossId: s.bossId, name: s.name, mult: s.mult, aiLevel: s.aiLevel,
+        talents: s.talents || [], venue: 'The Burial Mound',
       });
     });
 
@@ -5010,7 +5073,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v177'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v178'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5331,7 +5394,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss';
+  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret';
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
@@ -5968,6 +6031,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (r.crate) extraCards.push(crateCard(r.crate));
           if (r.dust) extraCards.push({ iconHtml: '<span class="dust-ico" style="font-size:76px;line-height:1">◆</span>', name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it at the Salvage Bench' });
         } else coins = 8; // already beaten today
+      }
+      else if (foeCfg.mode === 'secret') {
+        // easter-egg boss: the first win (at ANY of its buried spots) pays the
+        // full prize + unlocks the hidden badge via evaluateBadges below.
+        const g = await award(`secret-${foeCfg.bossId}`, 'secret', 150, `Found ${foeCfg.name}`);
+        trackEvent('secret_boss_win', { id: foeCfg.bossId, first: !!g });
+        if (g) {
+          xp += g; coins = 400;
+          await grantCrate('golden', `secret-${foeCfg.bossId}`);
+          extraCards.push(crateCard('golden'));
+        } else coins = 25; // rematch: pocket change, no re-farm
       }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {

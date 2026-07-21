@@ -2002,6 +2002,14 @@ body::before {
 .map-den-mark.roaming img { filter: hue-rotate(150deg) saturate(1.25); }
 .map-den-mark.roaming .den-skulls { color: #7cc4ff; }
 .map-den-mark.roaming .den-fx { animation: roamDrift 3.2s ease-in-out infinite; }
+/* easter-egg secret dens: materialize out of nowhere — spectral red, eyes lit */
+.map-den-mark.secret img { filter: hue-rotate(210deg) saturate(1.6) brightness(0.85); }
+.map-den-mark.secret .den-skulls { font-size: 15px; }
+.map-den-mark.secret .den-eyes { opacity: 1; }
+.map-den-mark.secret .den-eyes i { background: #ff5c5c; box-shadow: 0 0 7px rgba(255, 92, 92, 0.95); }
+.map-den-mark.secret .den-fx { animation: secretRise 0.9s ease-out; }
+@keyframes secretRise { 0% { opacity: 0; transform: translateY(14px); } 100% { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .map-den-mark.secret .den-fx { animation: none; } }
 @keyframes roamDrift { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .map-den-mark.roaming .den-fx { animation: none; } }
 /* in-range emphasis: a filter GLOW on the root (filter never affects position),

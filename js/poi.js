@@ -351,3 +351,49 @@ export async function claimMiniWin(mini, date = dateKey()) {
   if (r.dust) await boneDustAdd(r.dust);
   return { xp, ...r };
 }
+
+/* ================= easter-egg secret dens (v178) ================= */
+// Hidden bosses buried at hand-picked real-world landmarks. NOTHING renders
+// until a player is nearly on top of one: within SECRET_WHISPER_M the map
+// whispers a cryptic cue, within SECRET_REVEAL_M the den materializes, within
+// SECRET_RADIUS_M you can enter. First win (across ANY spot of that boss) pays
+// the full prize + a hidden badge; repeats pay pocket change. Pure data — the
+// fight itself reuses the boss path. Spread by rumor, never by UI.
+export const SECRET_WHISPER_M = 400;
+export const SECRET_REVEAL_M = 75;
+export const SECRET_RADIUS_M = 45;
+
+export const SECRET_DENS = [
+  {
+    id: 'tumtum', boss: 'Tum Tum Wabaloo',
+    whisper: 'You hear a distant TUM... TUM... 🥁',
+    mult: 1.15, aiLevel: 3,
+    talents: ['heavyhands', 'rage', 'concussive'],
+    spots: [
+      { id: 'gastown', lat: 49.28434, lng: -123.10884 },   // Gastown Steam Clock, Vancouver
+      { id: 'science', lat: 49.27341, lng: -123.10390 },   // Science World plaza, Vancouver
+      { id: 'lonsdale', lat: 49.30945, lng: -123.08270 },  // Lonsdale Quay, North Vancouver
+      { id: 'walton', lat: 43.95110, lng: -78.29280 },     // Walton St downtown, Port Hope ON
+      { id: 'phbeach', lat: 43.94330, lng: -78.28730 },    // Port Hope waterfront, ON
+      { id: 'jacques', lat: 45.50770, lng: -73.55330 },    // Place Jacques-Cartier, Montréal
+      { id: 'phoenix', lat: 33.44840, lng: -112.07400 },   // downtown Phoenix, AZ
+    ],
+  },
+];
+
+// Secret spots near the player (within 1.2 km), closest first.
+export function secretsNear(lat, lng) {
+  const out = [];
+  for (const s of SECRET_DENS) {
+    for (const sp of s.spots) {
+      const dist = distanceM(lat, lng, sp.lat, sp.lng);
+      if (dist <= 1200) out.push({
+        key: `${s.id}-${sp.id}`, bossId: s.id, name: s.boss, whisper: s.whisper,
+        mult: s.mult, aiLevel: s.aiLevel, talents: s.talents,
+        lat: sp.lat, lng: sp.lng, dist,
+      });
+    }
+  }
+  out.sort((a, b) => a.dist - b.dist);
+  return out;
+}

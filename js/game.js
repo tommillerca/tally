@@ -128,6 +128,8 @@ export const BADGES = [
   { id: 'pit-1', icon: '🥊', name: 'Blooded', desc: 'Win a fight in The Pit' },
   { id: 'pit-25', icon: '💀', name: 'Pit fiend', desc: 'Win 25 Pit fights' },
   { id: 'pit-champ', icon: '👑', name: 'Kingslayer', desc: 'Dethrone the Marrow King' },
+  // hidden until earned: easter-egg bosses spread by rumor, not by badge list
+  { id: 'secret-tumtum', icon: '🥁', name: 'Wabaloo Whisperer', desc: 'Found Tum Tum Wabaloo where he was buried', secret: true },
 ];
 
 export function badgeCheck(id, st) {
@@ -156,6 +158,7 @@ export function badgeCheck(id, st) {
     case 'pit-1': return st.pitWins >= 1;
     case 'pit-25': return st.pitWins >= 25;
     case 'pit-champ': return st.pitChamp;
+    case 'secret-tumtum': return st.secretTumtum;
     default: return false;
   }
 }
@@ -181,6 +184,7 @@ async function buildStats() {
     bossWins: xp.filter(r => r.type === 'boss').length,
     pitWins: xp.filter(r => r.type === 'fight').length,
     pitChamp: xp.some(r => r.type === 'pitchamp'),
+    secretTumtum: xp.some(r => r.key === 'secret-tumtum'),
     equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on
   };
 }

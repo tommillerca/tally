@@ -6,6 +6,10 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 178, date: '2026-07-21', title: 'Something stirs...', items: [
+    'Walkers in certain places have reported a faint drumming from beneath the ground. Probably nothing. 🥁',
+    'Also: a new ??? tile in your badges.',
+  ] },
   { n: 176, date: '2026-07-21', title: 'Portrait only, properly', items: [
     'Playing in the browser? Tipping your phone sideways now shows a friendly "turn me back" screen instead of a stretched mess. The installed apps were already locked.',
   ] },
