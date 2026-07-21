@@ -66,6 +66,18 @@ const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = v => { const x = parseFloat(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
+// Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
+// social sync, so "online now" = within ~6 min (accurate at session boundaries).
+function onlineLabel(lastSeen) {
+  if (!lastSeen) return { on: false, text: '' };
+  const mins = (Date.now() - lastSeen) / 60000;
+  if (mins < 6) return { on: true, text: 'online now' };
+  if (mins < 60) return { on: false, text: `${Math.max(1, Math.round(mins))}m ago` };
+  const hrs = mins / 60;
+  if (hrs < 24) return { on: false, text: `${Math.round(hrs)}h ago` };
+  const days = Math.round(hrs / 24);
+  return { on: false, text: days <= 1 ? 'yesterday' : `${days}d ago` };
+}
 
 const S = {
   settings: null,
@@ -619,6 +631,8 @@ async function renderToday(el) {
   const pct = Math.min(1, tot.kcal / t.kcal);
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
+  // quest header status: how many are claimable right now (drives the accent cue)
+  const questClaimable = questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0);
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
   const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
   const unlocks = isToday ? computeHomeUnlocks({
@@ -702,8 +716,8 @@ async function renderToday(el) {
   </button>` : ''}
 
   ${isToday ? `
-  <details class="q-collapse">
-    <summary>QUESTS${questTiers.some(tier => tier.quests.some(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; })) ? ' <i class="q-badge">!</i>' : ''}</summary>
+  <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
+    <summary><span class="q-sum-ico">${ICONS.quest ? ICONS.quest(18) : '📜'}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
     ${questTiers.map(tier => `
     <div class="q-tier ${tier.period}">
@@ -2352,10 +2366,11 @@ function friendCardHtml(f) {
   if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
   if (p.gear && p.gear.length) chips.push(`<span class="fc-chip">${p.gear.length} gear</span>`);
   if (p.pet) chips.push(`<span class="fc-chip">🥚 Lv ${p.pet.level}</span>`);
+  const ol = onlineLabel(f.lastSeen);
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
-    <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}</div>
+    <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}${ol.on ? '<span class="fc-online" title="Online now"></span>' : ''}</div>
     <div class="fc-body">
-      <div class="fc-name">${esc(f.alias || f.name)}</div>
+      <div class="fc-name">${esc(f.alias || f.name)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</div>
       <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}${f.alias ? ` · ${esc(f.name)}` : ''}</div>
       <div class="fc-chips">${chips.join('') || '<span class="fc-chip">Tap to view</span>'}</div>
     </div>
@@ -2531,10 +2546,11 @@ async function renderFriends(el) {
           : friendIds.has(p.playerId) ? '<span class="lb-tag crew">✓ Crew</span>'
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
+        const ol = onlineLabel(p.lastSeen);
         return `<div class="lb-row ${p.you ? 'me' : ''}">
           <span class="lb-rank r${i + 1}">${i + 1}</span>
           ${lbAvatar(p)}
-          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -4202,7 +4218,15 @@ async function openStable() {
       offSp = null; render();
     }));
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Confirm?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
+      const inst = insts.find(x => x.iid === btn.dataset.destroy);
+      const isShiny = !!(inst && inst.shiny);
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; const t = btn.textContent;
+        btn.textContent = isShiny ? 'Destroy SHINY?' : 'Confirm?';
+        if (isShiny) toast('⚠️ That\'s a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent. Tap again to confirm.', 4200);
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, isShiny ? 4200 : 2600);
+        return;
+      }
       const res = await salvageInstance(btn.dataset.destroy);
       if (!res.ok) { toast('Could not destroy that pet.'); return; }
       popSound(S.sounds);
@@ -4210,7 +4234,18 @@ async function openStable() {
       render();
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
-    $('#doBreed', body)?.addEventListener('click', async () => {
+    $('#doBreed', body)?.addEventListener('click', async e => {
+      // breeding CONSUMES both parents. If one is shiny, warn once — the shiny
+      // colour carries to (and overtakes any common colour in) the offspring,
+      // but the parent itself is gone. Arm-then-confirm.
+      const shinyParent = sel.some(iid => (insts.find(x => x.iid === iid) || {}).shiny);
+      const btn = e.currentTarget;
+      if (shinyParent && btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Breed with shiny?';
+        toast('✨ A shiny is in this pairing. Its colour carries to the offspring, but both parents are consumed. Tap Breed again to confirm.', 4600);
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 4600);
+        return;
+      }
       const res = await breedPets(sel[0], sel[1], offSp);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
       sel = []; offSp = null;
@@ -5073,7 +5108,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v178'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v179'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6164,7 +6199,7 @@ function recommendArch(fighter) {
 async function openTalents(pitWrap) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Talents</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="talBody"></div>`, { cls: 'full', onClose: () => pitWrap && renderPit(pitWrap) });
+    <div class="sheet-body" id="talBody"></div>`, { cls: 'full', onClose: () => { if (pitWrap) renderPit(pitWrap); else if (currentTab() === 'today') refresh(); } });
   renderTalents(wrap);
 }
 

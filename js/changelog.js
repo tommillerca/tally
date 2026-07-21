@@ -6,6 +6,12 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 179, date: '2026-07-21', title: 'Crew presence + quest polish', items: [
+    'See who\'s around: the Crew tab and leaderboard now show an "online now" dot and "last seen" for every player.',
+    'Quests on the home screen are easier to spot, with a clear "N ready" cue when something\'s claimable.',
+    'Shiny pets now warn you before you destroy or breed them (they\'re ultra-rare), and a shiny\'s colour carries down to its offspring.',
+    'Fixed a "point to spend" reminder that lingered after you\'d already spent it.',
+  ] },
   { n: 178, date: '2026-07-21', title: 'Something stirs...', items: [
     'Walkers in certain places have reported a faint drumming from beneath the ground. Probably nothing. 🥁',
     'Also: a new ??? tile in your badges.',

@@ -223,8 +223,8 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const rows = await env.DB.prepare(
           'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
-          'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, ' +
-          'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v ' +
+          'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, pa.last_seen a_seen, ' +
+          'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
           'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT 100').bind(auth.playerId, auth.playerId).all();
         const friends = [], incoming = [], outgoing = [];
@@ -238,6 +238,7 @@ export default {
             appV: meIsA ? r.b_v : r.a_v,
             profile: (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })(),
             since: r.ts,
+            lastSeen: meIsA ? r.b_seen : r.a_seen,
           };
           if (r.status === 'accepted') friends.push(other);
           else if (r.requested_by === auth.playerId) outgoing.push(other);
