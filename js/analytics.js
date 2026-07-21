@@ -8,10 +8,13 @@ import { apiBase, socialMe } from './social.js';
 
 let appV = '';
 const QCAP = 300;
-// Ignore automated browsers (headless / CI / dev verification runs set
-// navigator.webdriver). They would otherwise register as phantom "testers" and
-// inflate the counts. Real users are never under webdriver.
-const BOT = (typeof navigator !== 'undefined' && navigator.webdriver === true);
+// Never record analytics for non-real sessions: automated browsers
+// (navigator.webdriver, set by headless/CI) AND ?demo mode (used for dev
+// verification + showcasing; it runs on a separate demo DB). Both would
+// otherwise register as phantom "testers" and inflate the counts. Real users
+// hit the plain URL in a normal browser.
+const BOT = (typeof navigator !== 'undefined' && navigator.webdriver === true)
+  || (typeof location !== 'undefined' && location.search && location.search.includes('demo'));
 
 async function deviceId() {
   let id = await kvGet('analyticsId', null);
