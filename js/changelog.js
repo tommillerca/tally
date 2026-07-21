@@ -6,6 +6,9 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 171, date: '2026-07-20', title: 'Patch notes in order', items: [
+    'Fixed the What\'s New list so the newest updates always show at the top (an older note had slipped above them).',
+  ] },
   { n: 170, date: '2026-07-20', title: 'Clearer boss loot', items: [
     'After a boss den, the gear piece you keep now lights up with a "KEPT" badge and the one you leave behind greys out, so it\'s obvious which you chose (this was backwards before).',
     'Your chest and Ectoplasm are now clearly marked as earned automatically. They\'re both yours, not a choice. The only pick is which gear piece to keep.',
@@ -145,6 +148,11 @@ export const CHANGES = [
     'A weapon vendor came to town. Spend your coins on real upgrades to your fighting style.',
   ] },
 ];
+
+// Always display newest-first, regardless of the order entries were authored in
+// (a mis-placed insert once floated an old entry to the top, making the list
+// look stale). This keeps the What's New screen correct by construction.
+CHANGES.sort((a, b) => b.n - a.n);
 
 // versions the player has NOT seen since last opening the What's New screen
 export function changelogUnseen(lastSeen) {
