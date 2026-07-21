@@ -6,6 +6,10 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 174, date: '2026-07-21', title: 'The Leaderboard', items: [
+    'New in the Crew tab: every Bonehead in the game, ranked by level. See where you stand, and add anyone as a friend straight from the board.',
+    'New players now get a nudge toward their first Pit fight, and the map shares its press-and-hold tip once.',
+  ] },
   { n: 172, date: '2026-07-20', title: 'No more scroll jumps', items: [
     'Logging water, a made bed, or sleep no longer snaps the home screen back to the top. You stay right where you were.',
   ] },

@@ -243,6 +243,17 @@ export async function newFriendRequests() {
   return { fresh: incoming.filter(f => !known.has(f.playerId)), incoming };
 }
 
+// The all-players leaderboard (ranked by level, server-side). Each row carries
+// the player's friend code so the Crew tab can offer one-tap "add friend" —
+// deliberate while the community is small: everyone can find everyone.
+export async function leaderboard() {
+  try {
+    const r = await signedFetch('GET', '/leaderboard', null);
+    if (!r.ok) return null;
+    return (await r.json()).players || [];
+  } catch { return null; }
+}
+
 /* ---------------- profile snapshot up ---------------- */
 // snapshot comes from app.js (it owns buildFighter etc.); social.js only ships it
 export async function syncProfile(snapshot, appV = '') {

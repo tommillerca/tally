@@ -247,8 +247,13 @@ async function boot() {
   // progress instead of a blank slate. ensureIdentity inside bootSync recovers
   // the account key from the OS keychain first. Inert until the backend is
   // configured (apiBase '' -> returns immediately), so this is a no-op today.
+  // Never register demo/automated sessions on the real social server: each
+  // fresh ?demo or webdriver session has empty storage, so bootSync would mint
+  // a brand-new phantom player (this once put 20 fake level-8 "players" in the
+  // DB, polluting the leaderboard). Real users never run with ?demo.
+  const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
-  const cloudRestore = await social.bootSync().catch(() => null);
+  const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
     S.userFoods = await db.all('foods');
@@ -273,8 +278,8 @@ async function boot() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
-  onAppResume(() => { nativeAutoSync(); social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
+  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
+  onAppResume(() => { nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
 
@@ -619,6 +624,7 @@ async function renderToday(el) {
   const unlocks = isToday ? computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
+    fightWins: allXp.filter(r => r.type === 'fight').length,
   }) : [];
   const pitAttn = unlocks.some(u => u.hero === 'pit');
   const wardAttn = unlocks.some(u => u.hero === 'ward');
@@ -685,7 +691,7 @@ async function renderToday(el) {
   ${isToday && topNudge ? `
   <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
     <span class="ul-ico">${topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${topNudge.hero === 'ward' ? 'Tap to open your Wardrobe' : 'Tap to open Build and spend it'}</small></span>
+    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${topNudge.action === 'pit' ? 'Tap to enter The Pit' : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe' : 'Tap to open Build and spend it'}</small></span>
     <span class="ul-chev">›</span>
   </button>` : ''}
 
@@ -790,6 +796,7 @@ async function renderToday(el) {
   $('#unlockNudge')?.addEventListener('click', () => {
     const a = $('#unlockNudge')?.dataset.ulaction;
     if (a === 'wardrobe') openCharacter('wardrobe');
+    else if (a === 'pit') openPit();
     else openTalents();
   });
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
@@ -2433,6 +2440,12 @@ async function renderFriends(el) {
       </div>
     </div>
 
+    <button class="card lb-open" id="crewLeaderboard">
+      <div class="card-title">🏆 LEADERBOARD</div>
+      <p class="note" style="margin:0">Every Bonehead, ranked by level. Tap to see where you stand — and add anyone as a friend.</p>
+      <span class="ul-chev">›</span>
+    </button>
+
     <div class="card">
       <div class="card-title">ADD A FRIEND</div>
       <p class="note" style="margin:0 0 10px">Got a friend's code? Enter it here to send them a request.</p>
@@ -2473,6 +2486,44 @@ async function renderFriends(el) {
     try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); } catch { toast(me.friendCode, 4000); }
   };
 
+  // The all-players leaderboard: ranked by level, one-tap add-friend on every
+  // row (friend codes are share-keys; while the community is small, everyone
+  // can find everyone). Adding someone who already requested you auto-accepts.
+  const openLeaderboard = async () => {
+    openSheet(`
+      <div class="sheet-head"><h2>Leaderboard</h2><button class="sheet-close">Done</button></div>
+      <div class="sheet-body" id="lbBody"><p class="note" style="text-align:center;padding:22px 0">Summoning the Boneheadz... <span class="spin"></span></p></div>
+    `, { cls: 'full', name: 'Leaderboard' });
+    const body = $('#lbBody');
+    const players = await social.leaderboard();
+    if (!body || !body.isConnected) return;
+    if (!players) { body.innerHTML = '<p class="note" style="text-align:center;padding:22px 0">Could not reach the Crew server. Try again in a bit.</p>'; return; }
+    const friendIds = new Set((data.friends || []).map(f => f.playerId));
+    const outIds = new Set((data.outgoing || []).map(f => f.playerId));
+    const inIds = new Set((data.incoming || []).map(f => f.playerId));
+    body.innerHTML = `
+      <p class="note" style="margin:0 0 10px">Every Bonehead in the game, ranked by level. Add anyone — they accept by adding you back.</p>
+      ${players.map((p, i) => {
+        const btn = p.you ? '<span class="lb-tag you">You</span>'
+          : friendIds.has(p.playerId) ? '<span class="lb-tag crew">✓ Crew</span>'
+          : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
+          : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
+        return `<div class="lb-row ${p.you ? 'me' : ''}">
+          <span class="lb-rank r${i + 1}">${i + 1}</span>
+          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}</small></div>
+          ${btn}
+        </div>`;
+      }).join('')}`;
+    $$('[data-lbadd]', body).forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; b.textContent = '...';
+      const r = await social.friendRequest(b.dataset.lbadd);
+      if (!r.ok) { b.disabled = false; b.textContent = '+ Add'; toast('Could not send that request. Try again.', 2600); return; }
+      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = '<span class="lb-tag crew">✓ Crew</span>'; }
+      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
+      await paint();
+    }));
+  };
+  $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
   $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
   $('#crewShare', el)?.addEventListener('click', shareCode);
@@ -4368,6 +4419,13 @@ async function openMap() {
     }
     if (navigator.webdriver) window.__map = map;
     map.on('load', () => { loaded = true; map.resize(); });
+    // one-time discovery hint: the press-and-hold report/nominate feature is
+    // invisible otherwise (zero den nominations since launch = nobody found it)
+    kvGet('mapLpHint', false).then(seen => {
+      if (seen) return;
+      kvSet('mapLpHint', true);
+      setTimeout(() => toast('Tip: press and hold the map to suggest a boss den spot, or to report loot you can\'t reach.', 5200), 2600);
+    });
     // the sheet lays out while the map initializes: keep canvas matched to stage
     const stageEl = $('#mapStage', body);
     requestAnimationFrame(() => requestAnimationFrame(() => map && map.resize()));
@@ -4841,8 +4899,15 @@ async function buildFighter() {
 // were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
 // deep-linking straight to the right screen. Pure fn over already-fetched data;
 // returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
-function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount }) {
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1 }) {
   const sig = [];
+  // activation: brand-new players open the app, browse, and stall without ever
+  // fighting (seen in tester telemetry). One clear invitation to the core loop.
+  if (fightWins === 0) sig.push({
+    key: 'fight:first', hero: 'pit', action: 'pit', priority: 6,
+    nudge: 'Ready for your first fight?',
+    toast: 'The Pit is open. Sparring is free — win your first fight for coins + XP.',
+  });
   // first gear owned but nothing worn — the biggest "free power you're missing"
   if (gearOwnedCount > 0 && gearEquippedCount === 0) sig.push({
     key: 'gear:first', hero: 'ward', action: 'wardrobe', priority: 5,
@@ -4912,7 +4977,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v173'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v174'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

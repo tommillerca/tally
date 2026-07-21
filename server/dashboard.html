@@ -87,10 +87,13 @@
         <h2>Every tracked action</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
         <h2>Testers by country</h2>${(s.byCountry || []).length ? s.byCountry.map(d => bar(d.country, d.n, Math.max(1, ...s.byCountry.map(x => x.n)))).join('') : '<p class="note">No geo yet (fills in as testers on the new build check in).</p>'}
         <h2>Testers by city</h2>${(s.byCity || []).length ? s.byCity.map(d => bar([d.city, d.region, d.country].filter(Boolean).join(', ') || '?', d.n, Math.max(1, ...s.byCity.map(x => x.n)))).join('') : '<p class="note">No city data yet.</p>'}
-        <h2>Testers (top 30)</h2>${testers.length ? testers.map(t => {
+        <h2>Testers (top 30)</h2>
+        <p class="note">"Played" counts real gameplay (meals logged, fights won, cooks, hatches) — telemetry-only devices show as browsed.</p>
+        ${testers.length ? testers.map(t => {
           const who = t.label || ('anon ' + t.device.slice(0, 6));
           const loc = [t.city, t.country].filter(Boolean).join(', ');
-          return bar(who + (loc ? ' · ' + loc : ''), t.events, Math.max(1, ...testers.map(x => x.events)));
+          const play = (t.played || 0) > 0 ? `⚔ ${t.played} played` : 'browsed only';
+          return bar(`${who}${loc ? ' · ' + loc : ''} · ${play}`, t.events, Math.max(1, ...testers.map(x => x.events)));
         }).join('') : '<p class="note">No testers yet.</p>'}
         <h2>Community feedback &amp; reports</h2>${(s.reports || []).length ? s.reports.map(r => {
           const who = r.label || 'anon';

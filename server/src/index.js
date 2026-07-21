@@ -246,6 +246,33 @@ export default {
         return json({ friends, incoming, outgoing });
       }
 
+      // Signed: the all-players leaderboard. Ranked by snapshot level. Includes
+      // each player's friend code so anyone can add anyone straight from the
+      // board (deliberate while the community is small — codes are share-keys,
+      // not secrets, and names are curated so there's no PII here).
+      if (path === '/leaderboard' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const rows = await env.DB.prepare(
+          `SELECT id, handle, name, friend_code,
+                  CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) lvl,
+                  json_extract(profile,'$.levelName') lvlName,
+                  CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
+                  last_seen
+           FROM players ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`).all();
+        const players = (rows.results || []).map(r => ({
+          playerId: r.id,
+          name: r.name || r.handle,
+          level: r.lvl || 1,
+          levelName: r.lvlName || null,
+          badges: r.badges || 0,
+          friendCode: r.friend_code,
+          lastSeen: r.last_seen,
+          you: r.id === auth.playerId,
+        }));
+        return json({ players });
+      }
+
       // Signed: send a gift to an accepted friend. mode 'free' = one server-rolled
       // gift per friend per day; mode 'spend' = the sender's own coins (client
       // deducts locally), capped 5/friend/day + 1000/gift. Delivered as a grant so
@@ -419,6 +446,7 @@ export default {
         // per-tester leaderboard (top 30 by activity), with Crew name + coarse geo
         const testers = await all(
           `SELECT e.device, COUNT(*) events, MIN(e.day) first, MAX(e.day) last,
+                  SUM(CASE WHEN e.name IN ('food_log','pit_win','boss_win','mini_win','cook','hatch','quest_claim','friend_battle','buy_weapon','transmute') THEN 1 ELSE 0 END) played,
                   d.label, d.country, d.region, d.city
            FROM events e LEFT JOIN devices d ON d.device = e.device
            WHERE ${nin('e.device')}
