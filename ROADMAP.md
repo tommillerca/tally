@@ -9,6 +9,20 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📥 Easy-wins batch + Leaderboard — 2026-07-21 — ✅ SHIPPED v174
+
+Data-driven batch (Tom approved): telemetry showed new players open + browse but never fight; feedback tools undiscovered (0 nominations); "who actually plays?" needed hand SQL.
+
+| Item | Ship |
+|---|---|
+| All-players **Leaderboard** (Tom's ask) | Signed `GET /leaderboard` (level-ranked, top 100, includes friend codes deliberately while community is small); Crew-tab card → sheet with rank/level/badges + one-tap **+Add** on every row (auto-accepts if they'd requested you). Verified: SQL output on D1, 401 unsigned, sheet renders + degrades gracefully; happy-path add needs Tom's phone. |
+| First-fight nudge | `computeHomeUnlocks` fires "Ready for your first fight?" (priority 6, deep-links to The Pit) when career fight wins = 0. Verified live on a fresh profile. |
+| "Played" column | `/stats` testers now carry real-gameplay counts (food_log/pit_win/boss/mini/cook/hatch/quest/friend_battle/buy_weapon/transmute); dashboard + artifact show "⚔ N played" vs "browsed only". Verified: 128-event device = 84 played, Spectral Basher = 0. |
+| Map press-and-hold hint | One-time toast on Boneyard open (kv `mapLpHint`). |
+| **Phantom-player hygiene** | Discovered every fresh `?demo`/webdriver boot auto-registered a NEW level-8 phantom player (analytics was gated in v166, social wasn't). Root-fixed (bootSync/autoSync gated by `NOSOCIAL`); purged 20 phantom rows + their backups from D1 (backed up to session scratchpad first). 15 real players remain. CORRECTION: "Spectral Basher" was one of these phantoms (a Claude verification session), not a real tester. |
+
+---
+
 ## 📥 Notes — 2026-07-20 part 2 (4 notes) — ✅ ALL SHIPPED v161
 
 | # | Note | Root cause | Fix |
