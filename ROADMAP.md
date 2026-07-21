@@ -9,6 +9,20 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🥁 Easter-egg bosses — 2026-07-21 — ✅ Tum Tum Wabaloo SHIPPED v178
+
+Tom's ask: hidden bosses friends can FIND. Chosen mechanic: secret map dens (hybrid of Tom's "hidden map spot, scattered because Brock's in Ontario").
+
+- **7 buried spots**, no UI hint anywhere: Gastown Steam Clock + Science World (Vancouver), Lonsdale Quay (North Van), Walton St + waterfront (Port Hope ON = Brock), Place Jacques-Cartier (Montréal), downtown Phoenix AZ (the two new testers' cities from analytics geo).
+- **Discovery gradient** (`poi.js SECRET_DENS/secretsNear`): cryptic toast within 400m ("You hear a distant TUM... TUM... 🥁"), den materializes at 75m (spectral red tombstone, lit eyes, rise animation), enterable at 45m via a dedicated #mapSecret button. Nothing renders beyond 75m — spreads by rumor.
+- **Fight**: mode:'secret', 1.15x player stats, aiLevel 3, melee kit; venue "The Burial Mound".
+- **Reward**: first win at ANY spot = 150 XP + 400 coins + golden crate + hidden badge **Wabaloo Whisperer** (ledger `secret-tumtum`, idempotent). Badge renders as a **??? tile** until earned (the only in-app breadcrumb). Rematches 25c. Analytics `secret_boss_win`.
+- Patch notes: cryptic teaser only ("faint drumming from beneath the ground").
+- **Verified on live v178** (GPS stubbed to the Steam Clock): whisper/reveal radii, marker materializes, AWAITS button, fight opens at Burial Mound (screenshot), award idempotent, badge flips ??? → earned. Real-world walk-up = Tom's phone whenever he's in Gastown.
+- Extending later = one new entry in SECRET_DENS + a badge row (data-only).
+
+---
+
 ## 📥 Easy-wins batch + Leaderboard — 2026-07-21 — ✅ SHIPPED v174
 
 Data-driven batch (Tom approved): telemetry showed new players open + browse but never fight; feedback tools undiscovered (0 nominations); "who actually plays?" needed hand SQL.
