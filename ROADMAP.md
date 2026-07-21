@@ -23,6 +23,22 @@ Verify: JS syntax clean; changelog 32 entries render (no slice); Pit reorder + w
 
 ---
 
+## 📥 Note — 2026-07-20 part 3 · POI placement (loot in ocean / private property) — PLAN, awaiting approval
+
+Trigger: Tom's own long-press reports (v160 feature working) surfaced 4 real bad placements in Vancouver — a bone pile "in the ocean", a rare pile + a mini-boss (Cinder Shade) + a den (The Boneyard Gate) all on "private property". Also v162 SHIPPED: fixed the press-and-hold report stacking multiple dialogues (single-pointer guard + one-sheet lock).
+
+Root cause (`js/geo.js snapToWalkable` + `js/app.js` refreshSpawns/refreshDens/refreshMinis):
+- **Dens + minis never snap** — only spawns run through `snapToWalkable`. So dens/minis land wherever the cell seed drops them (backyards, etc.).
+- **Snapper fails open** — if no walkable feature (road/path/park) is within ~40m, it returns null and the caller renders the POI at its RAW seed point. It never tests for water, so a coastal point with no nearby road stays in the ocean.
+
+Proposed fix (v163, needs on-device GPS/coastline verify):
+1. Run dens + minis through the SAME `queryRenderedFeatures` + `snapToWalkable` path spawns already use.
+2. Make snapping robust: widen the query box + maxMeters fallback; if STILL nothing walkable (truly remote / open water), **suppress** that POI for the session rather than dropping it at the raw point.
+3. Explicit water reject: if the raw/snapped point is inside a water polygon (natural=water / water layer via queryRenderedFeatures), force relocate-or-suppress.
+4. Private property is only best-effort: snapping to public roads/paths/parks inherently avoids most private lots; we can't perfectly detect "private" from OSM tags. Acceptable + the report tool remains the safety net.
+
+---
+
 ## 📥 Note — 2026-07-24 · Hybrid boss dens (fixed landmarks + roaming) — PLAN, awaiting approval
 
 Tom: dens currently never move (permanent spots, weekly boss rotation — working as designed). He wants a HYBRID: keep some permanent **landmark** dens (and let players photograph a cool real local spot to nominate it to devs, so dens feel personal) PLUS **roaming** boss dens that appear/refresh around the map to keep it fresh.
