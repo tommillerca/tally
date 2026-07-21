@@ -9,7 +9,14 @@ function n(v) { const x = typeof v === 'string' ? parseFloat(v) : v; return isFi
 
 export function mapOffProduct(json) {
   if (!json || json.status !== 1 || !json.product) return null;
-  const p = json.product;
+  return mapOffP(json.product);
+}
+
+// Map a bare OFF product object (from the barcode endpoint's .product OR a
+// search result in .products[]) to the app food model. Returns null if there's
+// no usable energy figure.
+export function mapOffP(p) {
+  if (!p || !p.code) return null;
   const nu = p.nutriments || {};
   const kcal100 = n(nu['energy-kcal_100g']) != null ? n(nu['energy-kcal_100g'])
     : (n(nu['energy_100g']) != null ? n(nu['energy_100g']) / 4.184 : null);
@@ -164,6 +171,42 @@ export async function searchFdc(query, apiKey = 'DEMO_KEY', fetchFn = fetch) {
   if (!r.ok) throw new Error(`fdc_http_${r.status}`);
   const j = await r.json();
   return rankFdcResults((j.foods || []).map(mapFdcFood), query).slice(0, 15);
+}
+
+// Open Food Facts TEXT search (not just barcodes). Huge named/branded coverage
+// (café drinks, brand items) that USDA misses. No API key, no per-user rate cap.
+export async function searchOff(query, fetchFn = fetch) {
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl'
+    + `?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1`
+    + `&page_size=30&fields=${OFF_FIELDS}`;
+  // OFF's search backend 503s intermittently under load — one quick retry.
+  let r = await fetchFn(url);
+  if (r.status >= 500) { await new Promise(res => setTimeout(res, 700)); r = await fetchFn(url); }
+  if (!r.ok) throw new Error(`off_http_${r.status}`);
+  const j = await r.json();
+  const foods = (j.products || [])
+    .map(mapOffP)
+    .filter(f => f && f.name !== 'Unnamed product')
+    .map(f => ({ ...f, quality: (f.per100 && kcalConsistent(f.per100)) ? 1 : 0 }));
+  return rankFdcResults(foods, query).slice(0, 15);
+}
+
+// One online search across BOTH sources, merged + ranked. Resilient: if one
+// source fails (USDA rate limit, OFF hiccup) the other still returns. Only
+// throws rate_limit when USDA is limited AND OFF gave nothing.
+export async function searchOnline(query, apiKey = 'DEMO_KEY', fetchFn = fetch) {
+  const [fdc, off] = await Promise.allSettled([
+    searchFdc(query, apiKey, fetchFn),
+    searchOff(query, fetchFn),
+  ]);
+  const fdcFoods = fdc.status === 'fulfilled' ? fdc.value : [];
+  const offFoods = off.status === 'fulfilled' ? off.value : [];
+  if (!fdcFoods.length && !offFoods.length) {
+    if (fdc.status === 'rejected' && fdc.reason && fdc.reason.message === 'rate_limit') throw new Error('rate_limit');
+    return [];
+  }
+  // OFF first (better for named café/brand items), then USDA; rank dedups.
+  return rankFdcResults([...offFoods, ...fdcFoods], query).slice(0, 20);
 }
 
 // Barcode fallback: FDC text search by GTIN digits.

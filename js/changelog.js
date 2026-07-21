@@ -6,6 +6,10 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 169, date: '2026-07-20', title: 'Better food search', items: [
+    'Added flat whites, cortados, mochas, cold brew, iced lattes, chai + matcha lattes and more common café drinks to the built-in library.',
+    'Online search now covers Open Food Facts too (millions of named and branded products), not just USDA, so far more foods turn up by name.',
+  ] },
   { n: 168, date: '2026-07-20', title: 'Show off your gear instantly', items: [
     'When you equip a new weapon, outfit, gear piece or pet, your Crew sees it on your profile right away instead of after the next background sync.',
   ] },

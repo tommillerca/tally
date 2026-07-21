@@ -59,7 +59,7 @@ import {
   activeCalorieBonus, assumedActiveBurn,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { fetchOffProduct, fetchFdcByBarcode, searchFdc } from './sources.js';
+import { fetchOffProduct, fetchFdcByBarcode, searchOnline } from './sources.js';
 import { parseNutritionText } from './labelparse.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -1316,7 +1316,7 @@ function openAdd(meal = 0) {
     try {
       let foods = S.onlineCache.get(q.toLowerCase());
       if (!foods) {
-        foods = await searchFdc(q, S.settings.fdcKey || 'DEMO_KEY');
+        foods = await searchOnline(q, S.settings.fdcKey || 'DEMO_KEY');
         S.onlineCache.set(q.toLowerCase(), foods);
       }
       if (input.value.trim() !== q) return;
@@ -1342,7 +1342,7 @@ function openAdd(meal = 0) {
       const local = searchFoods(allSearchableFoods(), q, 25);
       results.innerHTML =
         (local.length ? local.map(foodRowHtml).join('') : '<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>') +
-        `<div id="onlineSect">${q.length >= 3 ? `<button class="food-row" data-online><div class="n"><div class="name" style="color:var(--accent)">Search online for "${esc(q)}"</div><div class="sub">USDA branded + generic database</div></div></button>` : ''}</div>`;
+        `<div id="onlineSect">${q.length >= 3 ? `<button class="food-row" data-online><div class="n"><div class="name" style="color:var(--accent)">Search online for "${esc(q)}"</div><div class="sub">USDA + Open Food Facts databases</div></div></button>` : ''}</div>`;
       bindRows();
     }, 120);
   });
@@ -4886,7 +4886,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v168'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v169'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
