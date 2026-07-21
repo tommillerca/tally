@@ -2786,6 +2786,14 @@ async function renderSettings(el) {
   const units = S.settings.units;
   const lastExport = await kvGet('lastExportAt', 0);
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
+  // native shell build (TestFlight/APK build number) — the WEB build updates by
+  // itself, so without this there's no way to tell which SHELL a device runs
+  // (needed to diagnose shell-level bugs like the portrait-lock regression).
+  let shellV = '';
+  try {
+    const AppPlug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+    if (AppPlug && AppPlug.getInfo) { const i = await AppPlug.getInfo(); shellV = ` · shell ${i.version} (${i.build})`; }
+  } catch { /* web: no shell */ }
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
@@ -2919,7 +2927,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
-    <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -5002,7 +5010,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v176'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v177'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
