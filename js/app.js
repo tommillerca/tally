@@ -4338,9 +4338,9 @@ async function openMap() {
     // Press and hold on the map: on a marker -> "report this spot as
     // unreachable" (private property, etc.); on empty ground -> "nominate this
     // landmark for a boss den". Both send a private note to the devs.
-    let lpTimer = null, lpStart = null;
+    let lpTimer = null, lpStart = null, lpPointer = null, reportOpen = false;
     const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold — not an accidental brush
-    function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; }
+    function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; lpPointer = null; }
     function markerAt(target) {
       const el = target && target.closest && target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
       if (!el) return null;
@@ -4352,23 +4352,31 @@ async function openMap() {
     const mapEl = $('#mapCanvas', body);
     mapEl.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
+      // one long-press at a time: ignore secondary touch points (multi-touch),
+      // a press already being tracked, or any press while a report sheet is open.
+      if (ev.isPrimary === false || lpTimer || lpStart || reportOpen) return;
       const startX = ev.clientX, startY = ev.clientY, tgt = ev.target;
       lpStart = { x: startX, y: startY };
+      lpPointer = ev.pointerId;
       lpTimer = setTimeout(() => {
-        lpTimer = null;
+        lpTimer = null; lpStart = null; lpPointer = null;
+        if (reportOpen) return;                    // don't stack a second dialogue
         const hit = markerAt(tgt);
-        if (hit) { openReportSheet('unreachable', hit); return; }
+        if (hit) { reportOpen = true; openReportSheet('unreachable', hit); return; }
         // empty ground: convert the press point to a coordinate on the map
         let pt = null;
         try { const rect = mapEl.getBoundingClientRect(); pt = map.unproject([startX - rect.left, startY - rect.top]); } catch { /* map gone */ }
-        if (pt) openReportSheet('den-nominate', { label: null, lat: pt.lat, lng: pt.lng });
+        if (pt) { reportOpen = true; openReportSheet('den-nominate', { label: null, lat: pt.lat, lng: pt.lng }); }
       }, LP_MS);
     });
     mapEl.addEventListener('pointermove', ev => {
-      if (!lpStart) return;
+      if (!lpStart || (lpPointer != null && ev.pointerId !== lpPointer)) return;
       if (Math.abs(ev.clientX - lpStart.x) > LP_MOVE || Math.abs(ev.clientY - lpStart.y) > LP_MOVE) lpClear();
     });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => mapEl.addEventListener(t, lpClear));
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => mapEl.addEventListener(t, ev => {
+      if (lpPointer != null && ev.pointerId !== lpPointer) return;
+      lpClear();
+    }));
 
     function openReportSheet(kind, ctx) {
       const isDen = kind === 'den-nominate';
@@ -4388,7 +4396,7 @@ async function openMap() {
           <button class="btn" id="rptSend" style="flex:1">Send to devs</button>
         </div>
         <p class="muted" id="rptStatus" style="font-size:12px;margin:10px 0 0"></p>
-      `, { cls: 'sheet-report', name: 'map_report' });
+      `, { cls: 'sheet-report', name: 'map_report', onClose: () => { reportOpen = false; } });
       const btn = $('#rptSend'); const statusEl = $('#rptStatus');
       btn?.addEventListener('click', async () => {
         const note = ($('#rptNote')?.value || '').trim();
@@ -4776,7 +4784,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v161'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v162'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
