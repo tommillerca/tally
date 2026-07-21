@@ -8,6 +8,10 @@ import { apiBase, socialMe } from './social.js';
 
 let appV = '';
 const QCAP = 300;
+// Ignore automated browsers (headless / CI / dev verification runs set
+// navigator.webdriver). They would otherwise register as phantom "testers" and
+// inflate the counts. Real users are never under webdriver.
+const BOT = (typeof navigator !== 'undefined' && navigator.webdriver === true);
 
 async function deviceId() {
   let id = await kvGet('analyticsId', null);
@@ -24,6 +28,7 @@ async function deviceId() {
 // of the kv queue and clobber each other, silently dropping events.
 let writeChain = Promise.resolve();
 export function track(name, props) {
+  if (BOT) return writeChain;
   writeChain = writeChain.then(async () => {
     const q = (await kvGet('evq', [])) || [];
     q.push({ name, props: props || undefined, ts: Date.now() });
@@ -36,6 +41,7 @@ export function track(name, props) {
 // screen(name) closes out the previous screen's time and opens the new one.
 let curScreen = null, curScreenAt = 0;
 export function screen(name) {
+  if (BOT) return;
   const now = Date.now();
   if (curScreen && curScreen !== name && curScreenAt) {
     track('screen_time', { s: curScreen, ms: now - curScreenAt });
@@ -45,7 +51,7 @@ export function screen(name) {
 
 let flushing = false;
 export async function flush() {
-  if (flushing) return;
+  if (BOT || flushing) return;
   flushing = true;
   try {
     const base = await apiBase();
@@ -73,6 +79,7 @@ export async function flush() {
 // Private dev channel — sent to your own server, shown only in the dashboard,
 // never to other players (so it's not public UGC). Best-effort, capped note.
 export async function sendReport(kind, data = {}) {
+  if (BOT) return { ok: false, reason: 'bot' };
   try {
     const base = await apiBase();
     if (!base) return { ok: false, reason: 'offline' };
@@ -91,6 +98,7 @@ export async function sendReport(kind, data = {}) {
 }
 
 export async function initAnalytics(version) {
+  if (BOT) return; // automated/verification browsers never count as testers
   appV = version || '';
   track('app_open');
   track('session_start');
