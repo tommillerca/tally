@@ -390,36 +390,43 @@ export default {
         const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
         const q = async (sql, ...b) => (await env.DB.prepare(sql).bind(...b).first());
         const all = async (sql, ...b) => ((await env.DB.prepare(sql).bind(...b).all()).results || []);
-        const totalDevices = (await q('SELECT COUNT(DISTINCT device) n FROM events')).n;
-        const dau = (await q('SELECT COUNT(DISTINCT device) n FROM events WHERE day = ?', today)).n;
-        const wau = (await q('SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ?', weekAgo)).n;
-        const totalEvents = (await q('SELECT COUNT(*) n FROM events')).n;
-        const byName = await all('SELECT name, COUNT(*) n FROM events GROUP BY name ORDER BY n DESC LIMIT 30');
-        const activeByDay = await all('SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? GROUP BY day ORDER BY day', new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
-        const newByDay = await all('SELECT day, COUNT(*) n FROM (SELECT device, MIN(day) day FROM events GROUP BY device) GROUP BY day ORDER BY day DESC LIMIT 14');
+        // Exclude the developer's own device(s) so one heavy in-house tester
+        // (Tom = "Wretched Goblin") doesn't skew the numbers. Reversible: edit
+        // EX_IDS to re-include or add devices. IDs are sanitised then inlined.
+        const EX_IDS = ['fb31564c-22cc-49e8-836b-2da8fbf8531f'];
+        const inList = EX_IDS.map(id => `'${String(id).replace(/[^a-f0-9-]/gi, '')}'`).join(',') || "''";
+        const nin = col => `${col} NOT IN (${inList})`;
+        const totalDevices = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE ${nin('device')}`)).n;
+        const dau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day = ? AND ${nin('device')}`, today)).n;
+        const wau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')}`, weekAgo)).n;
+        const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE ${nin('device')}`)).n;
+        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`);
+        const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY day ORDER BY day`, new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
+        const newByDay = await all(`SELECT day, COUNT(*) n FROM (SELECT device, MIN(day) day FROM events WHERE ${nin('device')} GROUP BY device) GROUP BY day ORDER BY day DESC LIMIT 14`);
         // screen-dwell "heatmap": total minutes testers spent on each screen
-        const screenTime = await all("SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND props IS NOT NULL GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC");
+        const screenTime = await all(`SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND props IS NOT NULL AND ${nin('device')} GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC`);
         // feature usage: how often each feature-sheet was opened + total minutes in it
-        const featureOpens = await all("SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND props IS NOT NULL GROUP BY f ORDER BY n DESC LIMIT 40");
-        const featureTime = await all("SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND props IS NOT NULL GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40");
+        const featureOpens = await all(`SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY n DESC LIMIT 40`);
+        const featureTime = await all(`SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40`);
         // play time: one ping ≈ 45s of active play; sessions = session_start count
-        const pings = (await q("SELECT COUNT(*) n FROM events WHERE name='session_ping'")).n || 0;
-        const sessions = (await q("SELECT COUNT(*) n FROM events WHERE name='session_start'")).n || 0;
+        const pings = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_ping' AND ${nin('device')}`)).n || 0;
+        const sessions = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_start' AND ${nin('device')}`)).n || 0;
         const playMinutes = Math.round(pings * 45 / 60);
         const avgSessionMin = sessions ? Math.round((pings * 45 / sessions / 60) * 10) / 10 : 0;
         // return rate: share of testers who came back on a later day than their first
-        const r = await q("SELECT COUNT(*) total, SUM(CASE WHEN firstday <> lastday THEN 1 ELSE 0 END) returned FROM (SELECT device, MIN(day) firstday, MAX(day) lastday FROM events GROUP BY device)");
+        const r = await q(`SELECT COUNT(*) total, SUM(CASE WHEN firstday <> lastday THEN 1 ELSE 0 END) returned FROM (SELECT device, MIN(day) firstday, MAX(day) lastday FROM events WHERE ${nin('device')} GROUP BY device)`);
         const returnRate = r && r.total ? Math.round((r.returned / r.total) * 100) : 0;
         // per-tester leaderboard (top 30 by activity), with Crew name + coarse geo
         const testers = await all(
           `SELECT e.device, COUNT(*) events, MIN(e.day) first, MAX(e.day) last,
                   d.label, d.country, d.region, d.city
            FROM events e LEFT JOIN devices d ON d.device = e.device
+           WHERE ${nin('e.device')}
            GROUP BY e.device ORDER BY events DESC LIMIT 30`);
-        const byCountry = await all("SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices GROUP BY country ORDER BY n DESC");
-        const byCity = await all("SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices GROUP BY city, region, country ORDER BY n DESC LIMIT 30");
-        // community map feedback: newest first (den nominations + unreachable reports)
-        const reports = await all("SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device ORDER BY r.ts DESC LIMIT 100");
+        const byCountry = await all(`SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY country ORDER BY n DESC`);
+        const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
+        // community map feedback: newest first (den nominations + unreachable reports + general feedback)
+        const reports = await all(`SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device WHERE ${nin('r.device')} ORDER BY r.ts DESC LIMIT 100`);
         return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, generatedAt: Date.now() });
       }
 

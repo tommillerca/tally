@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
+    'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
+  ] },
   { n: 163, date: '2026-07-20', title: 'Loot you can actually reach', items: [
     'Boss dens and mini-bosses now snap to real paths, roads and parks like the bone piles already did, so they stop landing in backyards.',
     'Anything with nowhere reachable nearby (out in the water) is now hidden instead of stranded in the sea.',

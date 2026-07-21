@@ -28,6 +28,7 @@
   .rtag { display: inline-block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; padding: 2px 8px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
   .rtag.den { background: #2e3a1a; color: #a5e847; }
   .rtag.unreach { background: #3a2020; color: #ff9a8a; }
+  .rtag.fb { background: #1e2f3a; color: #7cc4ff; }
   .rnote { color: #e8e2d6; }
   .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
   .rmeta a { color: #7cc4ff; }
@@ -91,10 +92,10 @@
           const loc = [t.city, t.country].filter(Boolean).join(', ');
           return bar(who + (loc ? ' · ' + loc : ''), t.events, Math.max(1, ...testers.map(x => x.events)));
         }).join('') : '<p class="note">No testers yet.</p>'}
-        <h2>Community map reports</h2>${(s.reports || []).length ? s.reports.map(r => {
+        <h2>Community feedback &amp; reports</h2>${(s.reports || []).length ? s.reports.map(r => {
           const who = r.label || 'anon';
           const isDen = r.kind === 'den-nominate';
-          const tag = isDen ? '<span class="rtag den">den idea</span>' : '<span class="rtag unreach">unreachable</span>';
+          const tag = isDen ? '<span class="rtag den">den idea</span>' : r.kind === 'feedback' ? '<span class="rtag fb">feedback</span>' : '<span class="rtag unreach">unreachable</span>';
           const coords = (r.lat != null && r.lng != null) ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat}, ${r.lng}</a>` : '';
           const meta = [esc(who), r.geo ? esc(r.geo) : '', new Date(r.ts).toLocaleString()].filter(Boolean).join(' · ');
           return `<div class="rpt">${tag}${r.target ? `<b>${esc(r.target)}</b> ` : ''}<span class="rnote">${esc(r.note) || '<i>(no note)</i>'}</span><div class="rmeta">${meta}${coords ? ' · ' + coords : ''}</div></div>`;

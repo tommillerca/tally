@@ -2617,6 +2617,32 @@ function openCheerSheet(f) {
   });
 }
 
+// General tester feedback: a free-text note straight to the developer (reuses
+// the same private /report channel as the map reports; kind='feedback', no
+// coords). Not shown to other players. Surveys + identity opt-in come later.
+function openFeedbackSheet() {
+  openSheet(`
+    <h2>Send feedback</h2>
+    <p class="muted" style="margin:0 0 12px">What's fun, what's confusing, what you'd change. This goes straight to the developer, not to other players.</p>
+    <textarea id="fbNote" rows="4" maxlength="280" placeholder="What's on your mind?" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+    <div class="row" style="gap:8px;margin-top:12px">
+      <button class="btn ghost sheet-close" style="flex:0 0 auto">Cancel</button>
+      <button class="btn" id="fbSend" style="flex:1">Send</button>
+    </div>
+    <p class="muted" id="fbStatus" style="font-size:12px;margin:10px 0 0"></p>
+  `, { cls: 'sheet-report', name: 'feedback' });
+  const btn = $('#fbSend'), st = $('#fbStatus');
+  btn?.addEventListener('click', async () => {
+    const note = ($('#fbNote')?.value || '').trim();
+    if (!note) { if (st) st.textContent = 'Type something first.'; return; }
+    btn.disabled = true; if (st) st.textContent = 'Sending...';
+    const r = await sendReport('feedback', { note });
+    trackEvent('feedback_send');
+    if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks — every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
+    else { if (st) st.textContent = 'Could not send. Try again when you are online.'; btn.disabled = false; }
+  });
+}
+
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
 async function openWhatsNew() {
@@ -2771,6 +2797,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
   </div>
@@ -2909,6 +2936,7 @@ async function renderSettings(el) {
   });
   // Force-fetch the latest build: drop the service worker + all caches, then
   $('#whatsNewBtn')?.addEventListener('click', openWhatsNew);
+  $('#feedbackBtn')?.addEventListener('click', openFeedbackSheet);
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched — it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', async () => {
@@ -4835,7 +4863,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v163'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v164'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
