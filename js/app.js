@@ -774,20 +774,40 @@ async function renderToday(el) {
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   // daily wellness (pure-positive self-care: only ever adds a reward)
+  // These re-render home via refresh(), which resets scroll to the top. Wellness
+  // lives BELOW the fold, so logging water/bed/sleep would yank the player up.
+  // refreshHold() captures the reading position at tap time and reasserts it for
+  // ~1.2s across the async re-render (same fix as the quest-claim handler; timer-
+  // based because rAF is throttled on some WebViews). A real scroll hands back.
+  const refreshHold = () => {
+    const y = { win: scrollY, el: $('#screen')?.scrollTop || 0 };
+    refresh();
+    const put = () => {
+      const sc = $('#screen');
+      if (sc && Math.abs(sc.scrollTop - y.el) > 1) sc.scrollTop = y.el;
+      if (y.win > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
+    };
+    put();
+    const iv = setInterval(put, 50);
+    const stop = () => clearInterval(iv);
+    setTimeout(stop, 1200);
+    addEventListener('touchstart', stop, { once: true, passive: true });
+    addEventListener('wheel', stop, { once: true, passive: true });
+  };
   $('#wWater')?.addEventListener('click', async () => {
     const { w, xp } = await addWater(1); dropSound(S.sounds);
     if (xp > 0) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds); toast(`Hydrated! +${xp} XP. Claim the water quest for coins.`, 2800); }
     else toast(`Water ${w.water}/${WATER_GOAL} cups${w.water >= WATER_GOAL ? '' : ` · ${WATER_GOAL - w.water} to go for +8 XP`}`, 1800);
-    refresh();
+    refreshHold();
   });
   $('#wBed')?.addEventListener('click', async () => {
     const { xp } = await markBed(); chimeSound(S.sounds);
-    toast(xp > 0 ? `Bed made. +${xp} XP banked.` : 'Already made today.', 2200); refresh();
+    toast(xp > 0 ? `Bed made. +${xp} XP banked.` : 'Already made today.', 2200); refreshHold();
   });
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
     const hours = Number(b.dataset.sleep);
     const { xp } = await markSleep(hours); chimeSound(S.sounds);
-    toast(xp > 0 ? `${hours}h logged. +${xp} XP. Rest is training too.` : `Updated to ${hours}h.`, 2400); refresh();
+    toast(xp > 0 ? `${hours}h logged. +${xp} XP. Rest is training too.` : `Updated to ${hours}h.`, 2400); refreshHold();
   }));
   // dev hook: ?automap=1 walks straight into the map with stubbed coords
   // (simulator smoke tests: no permission prompts, deterministic location)
@@ -4888,7 +4908,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v171'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v172'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

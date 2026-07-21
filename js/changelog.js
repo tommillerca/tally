@@ -6,6 +6,9 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 172, date: '2026-07-20', title: 'No more scroll jumps', items: [
+    'Logging water, a made bed, or sleep no longer snaps the home screen back to the top. You stay right where you were.',
+  ] },
   { n: 171, date: '2026-07-20', title: 'Patch notes in order', items: [
     'Fixed the What\'s New list so the newest updates always show at the top (an older note had slipped above them).',
   ] },
