@@ -1550,6 +1550,21 @@ body::before {
 .crew-code-btns { display: flex; gap: 8px; }
 .crew-code-btns .btn { flex: 1; }
 
+/* ---- phone-landscape blocker (browsers ignore the manifest's portrait lock) ---- */
+#rotateLock { display: none; }
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 540px) {
+  #rotateLock {
+    display: grid; place-items: center; position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg, #0d0c12); text-align: center;
+  }
+  .rl-inner { padding: 20px; }
+  .rl-skull { font-size: 54px; animation: rlWiggle 1.6s ease-in-out infinite; }
+  .rl-title { font-family: var(--display); font-size: 30px; color: var(--accent); letter-spacing: 1px; margin-top: 8px; }
+  #rotateLock p { color: var(--text-3); margin: 6px 0 0; font-size: 14px; }
+}
+@keyframes rlWiggle { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) { .rl-skull { animation: none; } }
+
 /* ---- all-players leaderboard ---- */
 .lb-open { position: relative; width: 100%; text-align: left; cursor: pointer; }
 .lb-open .ul-chev { position: absolute; right: 16px; top: 14px; color: var(--text-3); font-size: 22px; }

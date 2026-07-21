@@ -16,6 +16,17 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<!-- Phone-landscape blocker: native apps are hard-locked to portrait, but
+     browsers (iOS Safari especially) ignore the manifest's orientation. This
+     cover only matches coarse-pointer devices with a short landscape viewport
+     (phones) — desktops and tablets never see it. Pure CSS, no JS. -->
+<div id="rotateLock" aria-hidden="true">
+  <div class="rl-inner">
+    <div class="rl-skull">💀</div>
+    <div class="rl-title">TURN ME BACK</div>
+    <p>Boneheadz Gym is a portrait kind of game.</p>
+  </div>
+</div>
 <div id="app">
   <main id="screen" class="screen"></main>
   <nav id="tabbar" class="tabbar" aria-label="Main">
