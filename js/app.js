@@ -1900,7 +1900,7 @@ async function renderShop(el) {
   </div>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
-    await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); rerender();
+    await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
   }));
   el.querySelectorAll('[data-buyweapon]').forEach(b => b.addEventListener('click', async () => {
     b.disabled = true;
@@ -1912,6 +1912,7 @@ async function renderShop(el) {
       b.disabled = false; return;
     }
     await kvSet('loadout', res.weaponId);
+    pushProfileSoon();
     trackEvent('buy_weapon', { id: res.weaponId });
     levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
     toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
@@ -3432,7 +3433,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
-      popSound(S.sounds);
+      popSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
@@ -3443,7 +3444,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (S.wardrobePreview === g.id && gearLo[slot] !== g.id) {
         if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
         await equipGear(slot, g.id);
-        popSound(S.sounds);
+        popSound(S.sounds); pushProfileSoon();
         renderCharacter(wrap, 'wardrobe', { instant: true });
         return;
       }
@@ -3456,7 +3457,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
       if (!g || wLevel < g.minLevel) return;
       await equipGear(slot, g.id);
-      levelSound(S.sounds);
+      levelSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     $$('[data-melt-gear]', content).forEach(btn => btn.addEventListener('click', async () => {
@@ -4073,7 +4074,7 @@ async function openStable() {
 
     $$('[data-eq]', body).forEach(btn => btn.addEventListener('click', async () => {
       await setEquippedPet(btn.dataset.eq);
-      popSound(S.sounds);
+      popSound(S.sounds); pushProfileSoon();
       render();
     }));
     $$('[data-breedsel]', body).forEach(btn => btn.addEventListener('click', () => {
@@ -4885,7 +4886,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v167'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v168'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -4966,6 +4967,20 @@ async function socialSnapshot() {
     badges: earned.size ?? [...earned].length,
     pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level } : null,
   };
+}
+
+// Push the public profile snapshot to the server RIGHT AWAY after the player
+// changes what friends see (equip a weapon / outfit / gear / pet), instead of
+// waiting for the 5-min throttled background sync. Debounced ~1.2s so a flurry
+// of equips coalesces into one upload. The Crew tab already pulls live on open,
+// so friends see new gear within seconds. No-op when offline.
+let _profilePushT = null;
+function pushProfileSoon() {
+  if (_profilePushT) clearTimeout(_profilePushT);
+  _profilePushT = setTimeout(async () => {
+    _profilePushT = null;
+    try { if (await social.isOnline()) await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V); } catch { /* best-effort */ }
+  }, 1200);
 }
 
 function pitBeatKeys(xpRows) {

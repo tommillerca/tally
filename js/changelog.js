@@ -6,6 +6,9 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 168, date: '2026-07-20', title: 'Show off your gear instantly', items: [
+    'When you equip a new weapon, outfit, gear piece or pet, your Crew sees it on your profile right away instead of after the next background sync.',
+  ] },
   { n: 167, date: '2026-07-20', title: 'Cleaner map, clearer Crew', items: [
     'Loot no longer strays into water or backyards, even as you pan around. Coins, dens and bosses only show where you can actually reach them.',
     'The Crew tab now shows a badge when someone wants to be your friend, so you know to head there and accept.',
