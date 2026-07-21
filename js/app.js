@@ -3675,8 +3675,10 @@ function wireLootChoice(scope, claimFn, onDone) {
     busy = true;
     const picked = await claimFn(sel);
     if (!picked) { busy = false; return; }
-    cards.forEach(c => { const won = c.dataset.gear === sel; c.classList.toggle('taken', won); c.classList.remove('selected'); c.disabled = true; });
-    if (keep) { keep.disabled = true; keep.textContent = `${picked.name} kept`; }
+    // the piece you KEPT stays bright + gets a "kept" ring; the one you left
+    // behind greys out. (Previously inverted: it greyed the kept one.)
+    cards.forEach(c => { const won = c.dataset.gear === sel; c.classList.toggle('kept', won); c.classList.toggle('taken', !won); c.classList.remove('selected'); c.disabled = true; });
+    if (keep) { keep.disabled = true; keep.textContent = `✓ ${picked.name} kept`; }
     confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
     popSound(S.sounds);
     onDone?.(picked);
@@ -4886,7 +4888,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v169'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v170'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5902,23 +5904,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
          </div>
-         ${extraCards.length ? `<div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>` : ''}`
+         ${extraCards.length ? `<div class="sect-h" style="text-align:center;margin:14px 0 2px;color:var(--text-2)">${bossLoot ? 'Also earned (added automatically)' : 'Your loot'}</div><div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>` : ''}`
       : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
+          ${rewardHtml}
           ${bossLoot ? `
           <div class="loot-choice">
-            <div class="sect-h" style="text-align:center">THE BOSS DROPPED · TAP TO COMPARE</div>
+            <div class="sect-h" style="text-align:center;color:var(--accent)">⚔ CHOOSE ONE TO KEEP</div>
+            <p class="note" style="text-align:center;margin:2px 0 4px">The boss dropped two pieces. Tap to compare, then keep one, the other is left behind.</p>
             <div class="loot-cards">
               ${bossLoot.choices.map(g => lootCardHtml(g)).join('')}
             </div>
-            <button class="btn loot-keep" disabled>Tap a piece to preview</button>
+            <button class="btn loot-keep" disabled>Tap a piece to choose</button>
           </div>` : ''}
-          ${rewardHtml}
           <div style="height:12px"></div>
-          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip loot · back to the map' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
+          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);
       const overEl = $('.fight-over', body);
       if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));

@@ -6,6 +6,10 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 170, date: '2026-07-20', title: 'Clearer boss loot', items: [
+    'After a boss den, the gear piece you keep now lights up with a "KEPT" badge and the one you leave behind greys out, so it\'s obvious which you chose (this was backwards before).',
+    'Your chest and Ectoplasm are now clearly marked as earned automatically. They\'re both yours, not a choice. The only pick is which gear piece to keep.',
+  ] },
   { n: 169, date: '2026-07-20', title: 'Better food search', items: [
     'Added flat whites, cortados, mochas, cold brew, iced lattes, chai + matcha lattes and more common café drinks to the built-in library.',
     'Online search now covers Open Food Facts too (millions of named and branded products), not just USDA, so far more foods turn up by name.',
