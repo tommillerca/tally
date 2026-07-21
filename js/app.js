@@ -20,7 +20,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares } from './notify.js';
-import { snapToWalkable, pointInWater } from './geo.js';
+import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
@@ -334,10 +334,28 @@ async function maybePromptName() {
 // Poll for NEW incoming friend requests and surface them: an OS notification
 // (if enabled, so it lands when the app is backgrounded) plus an in-app toast.
 // Cheap network call; runs at boot + on resume + after each autoSync.
+// Badge on the Crew tab: a count of PENDING incoming friend requests, so a new
+// request visibly points you to the Crew tab. Persists until you accept/decline
+// (not just until you glance at it).
+function setCrewBadge(n) {
+  const el = $('#crewBadge');
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
+  else el.hidden = true;
+}
+async function refreshCrewBadge() {
+  try {
+    if (!(await social.isOnline())) { setCrewBadge(0); return; }
+    const d = await social.listFriends();
+    setCrewBadge((d.incoming || []).length);
+  } catch { /* noop */ }
+}
+
 async function checkFriendRequests() {
   try {
     if (!(await social.isOnline())) return;
-    const { fresh } = await social.newFriendRequests();
+    const { fresh, incoming } = await social.newFriendRequests();
+    setCrewBadge((incoming || []).length); // keep the tab badge current even when nothing is "new"
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
@@ -2405,6 +2423,7 @@ async function renderFriends(el) {
     data = await social.listFriends();
     const list = $('#friendsList', el);
     if (list) list.innerHTML = friendsListHtml(data);
+    setCrewBadge((data.incoming || []).length); // keep the tab badge in sync after accept/decline/add
     // seeing the tab means these requests are no longer "new" for notifications
     await kvSet('knownIncoming', (data.incoming || []).map(f => f.playerId));
   };
@@ -4337,13 +4356,16 @@ async function openMap() {
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
-    map.on('moveend', () => {
-      // re-run placement as tiles for the new view load, so off-screen POIs snap
-      // (and water ones suppress) once their map features are actually queryable.
+    const rerunPlacement = () => {
+      // 'idle' fires after the camera settles AND tiles finish loading, so
+      // queryRenderedFeatures actually has the water/road features — the moment
+      // to resolve which POIs snap to a path vs stay hidden (water/backyard).
       if (typeof refreshSpawns === 'function') refreshSpawns();
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
-    });
+    };
+    map.on('moveend', rerunPlacement);
+    map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
     $('#mapRecenter', body).addEventListener('click', () => {
       follow = true; $('#mapRecenter', body).hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
@@ -4370,27 +4392,27 @@ async function openMap() {
     const miniMarkers = new Map();  // id -> {marker, el, mini}
     let lastNearest = null;
 
-    // Place a POI onto reachable ground. Snaps the seeded point to the nearest
-    // walkable feature (road/path/park) within ~80m; if there is none AND the
-    // point sits in open water, returns null so the caller SUPPRESSES it (better
-    // no loot than loot in the sea / a backyard). Result cached per id; only
-    // cached once we've actually queried features on-screen, so off-screen POIs
-    // re-evaluate when the map pans to them. The seeded ledger key never moves.
+    // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
+    // it snaps to a walkable feature (road / path / park) within ~80m; otherwise
+    // it stays hidden (returns null → caller skips it). This is the robust rule:
+    // water and backyards never snap, so they never show. Crucially we cache ONLY
+    // successes — an undecided point (off-screen, or tiles still loading so
+    // queryRenderedFeatures is empty) returns null WITHOUT caching, so it keeps
+    // retrying on the next refresh/idle until its tiles load and it either snaps
+    // (appears on the nearest path) or stays hidden (water). The seeded ledger key
+    // never moves; only the shown position does.
     function placeWalkable(raw, cache, id) {
-      if (cache.has(id)) return cache.get(id);
-      if (!map.loaded()) return raw;                 // too early to query; show raw, retry next refresh
+      const cached = cache.get(id);
+      if (cached) return cached;                     // already resolved to a walkable spot
+      if (!map.loaded()) return null;                // not ready → hide for now, retry
       const c = map.getCanvas();
       const pt = map.project([raw.lng, raw.lat]);
-      const onScreen = pt.x > -90 && pt.y > -90 && pt.x < c.clientWidth + 90 && pt.y < c.clientHeight + 90;
-      if (!onScreen) return raw;                     // can't query off-screen tiles; decide when it pans in
+      const onScreen = pt.x > -120 && pt.y > -120 && pt.x < c.clientWidth + 120 && pt.y < c.clientHeight + 120;
+      if (!onScreen) return null;                    // can't query off-screen tiles → hide until it pans in
       const feats = map.queryRenderedFeatures([[pt.x - 95, pt.y - 95], [pt.x + 95, pt.y + 95]]);
       const snap = snapToWalkable(raw, feats, 80);
-      let result;
-      if (snap) result = { lat: snap.lat, lng: snap.lng };
-      else if (pointInWater(raw, feats)) result = null;   // open water, nothing reachable → suppress
-      else result = raw;                                  // on land, just no path within 80m (rare in-town)
-      cache.set(id, result);
-      return result;
+      if (snap) { const r = { lat: snap.lat, lng: snap.lng }; cache.set(id, r); return r; }
+      return null;                                   // no reachable ground yet (water / backyard / tiles loading) → hide
     }
 
     // ---- long-press map feedback -------------------------------------------
@@ -4863,7 +4885,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v166'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v167'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

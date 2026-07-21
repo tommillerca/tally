@@ -6,6 +6,10 @@ export const CHANGES = [
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },
+  { n: 167, date: '2026-07-20', title: 'Cleaner map, clearer Crew', items: [
+    'Loot no longer strays into water or backyards, even as you pan around. Coins, dens and bosses only show where you can actually reach them.',
+    'The Crew tab now shows a badge when someone wants to be your friend, so you know to head there and accept.',
+  ] },
   { n: 163, date: '2026-07-20', title: 'Loot you can actually reach', items: [
     'Boss dens and mini-bosses now snap to real paths, roads and parks like the bone piles already did, so they stop landing in backyards.',
     'Anything with nowhere reachable nearby (out in the water) is now hidden instead of stranded in the sea.',
