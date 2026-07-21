@@ -20,7 +20,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares } from './notify.js';
-import { snapToWalkable } from './geo.js';
+import { snapToWalkable, pointInWater } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
@@ -4309,7 +4309,13 @@ async function openMap() {
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
-    map.on('moveend', () => { if (typeof refreshSpawns === 'function') refreshSpawns(); });
+    map.on('moveend', () => {
+      // re-run placement as tiles for the new view load, so off-screen POIs snap
+      // (and water ones suppress) once their map features are actually queryable.
+      if (typeof refreshSpawns === 'function') refreshSpawns();
+      if (typeof refreshDens === 'function') refreshDens();
+      if (typeof refreshMinis === 'function') refreshMinis();
+    });
     $('#mapRecenter', body).addEventListener('click', () => {
       follow = true; $('#mapRecenter', body).hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
@@ -4329,10 +4335,35 @@ async function openMap() {
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
-    const spawnSnap = new Map();    // id -> {lat,lng} snapped onto walkable ground
+    const spawnSnap = new Map();    // id -> {lat,lng} | null(suppressed), placed onto walkable ground
+    const denSnap = new Map();      // id -> {lat,lng} | null(suppressed)
+    const miniSnap = new Map();     // id -> {lat,lng} | null(suppressed)
     const denMarkers = new Map();   // id -> {marker, el, den}
     const miniMarkers = new Map();  // id -> {marker, el, mini}
     let lastNearest = null;
+
+    // Place a POI onto reachable ground. Snaps the seeded point to the nearest
+    // walkable feature (road/path/park) within ~80m; if there is none AND the
+    // point sits in open water, returns null so the caller SUPPRESSES it (better
+    // no loot than loot in the sea / a backyard). Result cached per id; only
+    // cached once we've actually queried features on-screen, so off-screen POIs
+    // re-evaluate when the map pans to them. The seeded ledger key never moves.
+    function placeWalkable(raw, cache, id) {
+      if (cache.has(id)) return cache.get(id);
+      if (!map.loaded()) return raw;                 // too early to query; show raw, retry next refresh
+      const c = map.getCanvas();
+      const pt = map.project([raw.lng, raw.lat]);
+      const onScreen = pt.x > -90 && pt.y > -90 && pt.x < c.clientWidth + 90 && pt.y < c.clientHeight + 90;
+      if (!onScreen) return raw;                     // can't query off-screen tiles; decide when it pans in
+      const feats = map.queryRenderedFeatures([[pt.x - 95, pt.y - 95], [pt.x + 95, pt.y + 95]]);
+      const snap = snapToWalkable(raw, feats, 80);
+      let result;
+      if (snap) result = { lat: snap.lat, lng: snap.lng };
+      else if (pointInWater(raw, feats)) result = null;   // open water, nothing reachable → suppress
+      else result = raw;                                  // on land, just no path within 80m (rare in-town)
+      cache.set(id, result);
+      return result;
+    }
 
     // ---- long-press map feedback -------------------------------------------
     // Press and hold on the map: on a marker -> "report this spot as
@@ -4411,10 +4442,22 @@ async function openMap() {
 
     function refreshDens() {
       const dens = densNear(week, lat, lng, date);
-      // roaming dens are ephemeral (new set each day) — drop markers no longer live
-      const liveIds = new Set(dens.map(d => d.id));
-      for (const [id, rec] of denMarkers) { if (rec.den.roaming && !liveIds.has(id)) { rec.marker.remove(); denMarkers.delete(id); } }
+      // snap each den onto reachable ground; drop ones with nowhere reachable
+      // (open water). Distance is recomputed from the placed spot so "in range"
+      // and the Enter button match the marker you actually see.
+      const shown = [];
       for (const d of dens) {
+        const placed = placeWalkable({ lat: d.lat, lng: d.lng }, denSnap, d.id);
+        if (placed === null) continue;                 // suppressed (unreachable / in water)
+        d.lat = placed.lat; d.lng = placed.lng;
+        d.dist = distanceM(lat, lng, d.lat, d.lng);
+        d.bearing = bearingDeg(lat, lng, d.lat, d.lng);
+        shown.push(d);
+      }
+      // remove markers no longer shown (roaming rotated out, or now suppressed)
+      const liveIds = new Set(shown.map(d => d.id));
+      for (const [id, rec] of denMarkers) { if (!liveIds.has(id)) { rec.marker.remove(); denMarkers.delete(id); } }
+      for (const d of shown) {
         let rec = denMarkers.get(d.id);
         if (!rec) {
           const el = document.createElement('div');
@@ -4425,13 +4468,15 @@ async function openMap() {
           el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
+        } else {
+          rec.marker.setLngLat([d.lng, d.lat]); // reposition if the snap resolved after first render
         }
         rec.den = d;
         rec.el.classList.toggle('claimed', claimedBoss.has(denKey(week, d)));
         rec.el.classList.toggle('inrange', d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
         rec.el.classList.toggle('big', d.tier >= 4);
       }
-      const openDen = dens.find(d => d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
+      const openDen = shown.find(d => d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
       const db2 = $('#mapDen', body);
       if (db2) {
         db2.hidden = !openDen;
@@ -4442,9 +4487,19 @@ async function openMap() {
 
     function refreshMinis() {
       const minis = minisNear(date, lat, lng);
-      const liveIds = new Set(minis.map(m => m.id));
-      for (const [id, rec] of miniMarkers) { if (!liveIds.has(id)) { rec.marker.remove(); miniMarkers.delete(id); } }
+      // snap onto reachable ground; suppress ones with nowhere reachable (water)
+      const shown = [];
       for (const m of minis) {
+        const placed = placeWalkable({ lat: m.lat, lng: m.lng }, miniSnap, m.id);
+        if (placed === null) continue;
+        m.lat = placed.lat; m.lng = placed.lng;
+        m.dist = distanceM(lat, lng, m.lat, m.lng);
+        m.bearing = bearingDeg(lat, lng, m.lat, m.lng);
+        shown.push(m);
+      }
+      const liveIds = new Set(shown.map(m => m.id));
+      for (const [id, rec] of miniMarkers) { if (!liveIds.has(id)) { rec.marker.remove(); miniMarkers.delete(id); } }
+      for (const m of shown) {
         let rec = miniMarkers.get(m.id);
         if (!rec) {
           const el = document.createElement('div');
@@ -4452,13 +4507,15 @@ async function openMap() {
           el.innerHTML = `<span class="mini-glyph">☠</span>`;
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
+        } else {
+          rec.marker.setLngLat([m.lng, m.lat]); // reposition if the snap resolved after first render
         }
         rec.mini = m;
         rec.el.classList.toggle('claimed', claimedMini.has(miniKey(date, m)));
         rec.el.classList.toggle('inrange', m.dist <= MINI_RADIUS_M && !claimedMini.has(miniKey(date, m)));
         rec.el.classList.toggle('t2', m.tier >= 2);
       }
-      const open = minis.find(m => m.dist <= MINI_RADIUS_M && !claimedMini.has(miniKey(date, m)));
+      const open = shown.find(m => m.dist <= MINI_RADIUS_M && !claimedMini.has(miniKey(date, m)));
       const mb = $('#mapMini', body);
       if (mb) {
         // den takes precedence over a mini if both are in range (bosses are the event)
@@ -4494,21 +4551,15 @@ async function openMap() {
         }
       }
       // Snap on-screen spawns onto the nearest walkable feature (road/path/park)
-      // so none sit in a backyard/building. The seeded anchor (ledger key) is
-      // untouched; only the shown + collectible position moves. Cached per id.
+      // so none sit in a backyard/building, and SUPPRESS any that would land in
+      // open water with nothing reachable nearby. The seeded anchor (ledger key)
+      // is untouched; only the shown + collectible position moves. Cached per id.
       if (map.loaded()) {
-        const c = map.getCanvas();
-        for (const s of live) {
-          let snap = spawnSnap.get(s.id);
-          if (!snap) {
-            const pt = map.project([s.lng, s.lat]);
-            if (pt.x > -60 && pt.y > -60 && pt.x < c.clientWidth + 60 && pt.y < c.clientHeight + 60) {
-              const feats = map.queryRenderedFeatures([[pt.x - 55, pt.y - 55], [pt.x + 55, pt.y + 55]]);
-              snap = snapToWalkable({ lat: s.lat, lng: s.lng }, feats, 40);
-              if (snap) spawnSnap.set(s.id, snap);
-            }
-          }
-          if (snap) { s.lat = snap.lat; s.lng = snap.lng; s.dist = distanceM(lat, lng, s.lat, s.lng); s.bearing = bearingDeg(lat, lng, s.lat, s.lng); }
+        for (let i = live.length - 1; i >= 0; i--) {
+          const s = live[i];
+          const placed = placeWalkable({ lat: s.lat, lng: s.lng }, spawnSnap, s.id);
+          if (placed === null) { live.splice(i, 1); continue; } // in the sea → drop it
+          s.lat = placed.lat; s.lng = placed.lng; s.dist = distanceM(lat, lng, s.lat, s.lng); s.bearing = bearingDeg(lat, lng, s.lat, s.lng);
         }
         live.sort((a, b) => a.dist - b.dist);
       }
@@ -4784,7 +4835,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v162'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v163'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

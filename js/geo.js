@@ -24,6 +24,24 @@ export function isWalkableFeature(f) {
   return false;
 }
 
+// Water polygons (OpenMapTiles "water" source layer: ocean, lake, river...).
+// Used to reject a POI that sits in open water when no walkable ground is near.
+export function isWaterFeature(f) { return !!f && f.sourceLayer === 'water'; }
+// Is the anchor {lat,lng} inside any water polygon in `features`?
+export function pointInWater(anchor, features) {
+  for (const f of features || []) {
+    if (!isWaterFeature(f)) continue;
+    const g = f.geometry; if (!g) continue;
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : null;
+    if (!polys) continue;
+    for (const poly of polys) {
+      const ring = poly[0].map(c => toXY(c[1], c[0], anchor.lat, anchor.lng));
+      if (originInRing(ring)) return true;
+    }
+  }
+  return false;
+}
+
 const M_PER_DEG_LAT = 110540;
 function mPerDegLng(lat) { return 111320 * Math.cos((lat * Math.PI) / 180); }
 function toXY(lat, lng, oLat, oLng) { return { x: (lng - oLng) * mPerDegLng(oLat), y: (lat - oLat) * M_PER_DEG_LAT }; }

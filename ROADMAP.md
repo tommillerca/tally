@@ -23,7 +23,7 @@ Verify: JS syntax clean; changelog 32 entries render (no slice); Pit reorder + w
 
 ---
 
-## 📥 Note — 2026-07-20 part 3 · POI placement (loot in ocean / private property) — PLAN, awaiting approval
+## 📥 Note — 2026-07-20 part 3 · POI placement (loot in ocean / private property) — ✅ SHIPPED v163
 
 Trigger: Tom's own long-press reports (v160 feature working) surfaced 4 real bad placements in Vancouver — a bone pile "in the ocean", a rare pile + a mini-boss (Cinder Shade) + a den (The Boneyard Gate) all on "private property". Also v162 SHIPPED: fixed the press-and-hold report stacking multiple dialogues (single-pointer guard + one-sheet lock).
 
