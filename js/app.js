@@ -178,6 +178,26 @@ function crateIcon(kind, s = 22) {
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
   return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
+// The Boneyard map key: every marker type that can appear out there, rendered with
+// the EXACT same marker markup the map draws (so the legend and the map never drift).
+// Covers spawns + all three den looks incl. the pink secret dens.
+function mapLegendHtml() {
+  const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">☠☠</span></div></div>`;
+  const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type)}</div>`;
+  const mini = `<div class="map-mini-mark"><span class="mini-glyph">☠</span></div>`;
+  const rows = [
+    [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
+    [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
+    [spawn('crate'), 'Buried crate', 'A common crate of loot'],
+    [spawn('rare', ' rare'), 'Mystery egg', 'Rare — walk to hatch a pet'],
+    [mini, 'Mini-boss', 'A quick fight for coins + XP'],
+    [den(), 'Boss den', 'A landmark boss — rare gear'],
+    [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
+    [den(' secret'), 'Secret den', 'A hidden boss — only where one is buried'],
+  ];
+  return `<div class="leg-h">MAP KEY</div>${rows.map(([m, n, d]) =>
+    `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
+}
 function consumableIcon(type, s = 20) {
   if (type === 'vigor') return `<span style="font-size:${Math.round(s * 0.92)}px;line-height:1">⚡</span>`;
   return `<span class="bhi-wrap">${bhIcon(type === 'freeze' ? 'freeze' : 'charm', s)}</span>`;
@@ -4646,6 +4666,8 @@ async function openMap() {
       <div class="map-stage" id="mapStage">
         <div class="map-canvas" id="mapCanvas"></div>
         <div class="map-attrib">© OpenStreetMap</div>
+        <button class="map-key-btn" id="mapKeyBtn" aria-label="Map key">?</button>
+        <div class="map-legend" id="mapLegend" hidden>${mapLegendHtml()}</div>
         <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
         <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
@@ -4653,6 +4675,11 @@ async function openMap() {
         <button class="btn map-mini" id="mapMini" hidden>Fight</button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
+
+    // Map key: toggle the legend; tapping the map closes it.
+    const legendEl = $('#mapLegend', body);
+    $('#mapKeyBtn', body)?.addEventListener('click', e => { e.stopPropagation(); legendEl.hidden = !legendEl.hidden; });
+    $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
 
     let loaded = false, follow = true;
     try {
@@ -5276,7 +5303,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v185'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v186'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

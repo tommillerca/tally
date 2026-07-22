@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 186, date: '2026-07-22', title: 'A Boneyard map key', items: [
+    'Tap the ? on the map for a key that explains every marker: bone caches, coin piles, crates, mystery eggs, mini-bosses, and all the den types (landmark, the daily roaming dens, and the rare hidden ones).',
+    'The key uses the exact same art the map draws, so there\'s no guessing what a pin is anymore.',
+  ] },
   { n: 185, date: '2026-07-22', title: 'Workouts, by type', items: [
     'Now the KIND of workout matters: each session your watch logs (bike, run, strength, yoga, and more) drops a themed reward, cardio hands you a Vigor Draught, strength a Battle Charm, flexibility some Bone Dust.',
     'Completed workouts and exercise minutes earn XP and coins on top of your steps and calories.',
