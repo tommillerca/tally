@@ -2884,20 +2884,23 @@ function showDayOneReveal(granted) {
 }
 
 // Boot trigger: invite engaged players to the survey once. Gated so it never nags
-// — not for brand-new players (needs a few DAYS of play to form an opinion), never
-// over onboarding / the splash / the daily wheel / any open sheet (retries next
-// boot), snoozes on "Maybe later", and NEVER returns once submitted. Skips
-// webdriver/demo.
+// — the few-days wait is ONLY for brand-new accounts (they need time to form an
+// opinion); established players (older account OR already levelled up) see it right
+// away. Never over onboarding / the splash / the daily wheel / any open sheet
+// (retries next boot), snoozes on "Maybe later", and NEVER returns once submitted.
+// Skips webdriver/demo.
 async function maybeShowSurvey() {
   try {
     if (navigator.webdriver || !S.settings) return;
     if (await kvGet('surveyDone', false)) return;
-    // engagement gate: only after the app has been OPENED on 3 distinct days (so a
-    // player has actually lived with it for a few days, not 3 opens in one sitting).
-    let days = (await kvGet('surveyDays', [])) || [];
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, local-ish
-    if (!days.includes(today)) { days = [...days, today].slice(-14); await kvSet('surveyDays', days); }
-    if (days.length < 3) return;
+    // Established-player check: an account created 3+ days ago (or with a missing
+    // createdAt = pre-dates the field = old account) OR already past level 2 is
+    // "established" and eligible now. Only a genuinely new account has to wait.
+    const created = S.settings.createdAt || 0;
+    const ageDays = created ? (Date.now() - created) / 86400e3 : 999;
+    let established = ageDays >= 3;
+    if (!established) { try { established = levelFor(await totalXp()) >= 3; } catch { /* noop */ } }
+    if (!established) return;
     // "Maybe later" snooze: wait ~4 days before asking again
     const snooze = await kvGet('surveySnoozeAt', 0);
     if (snooze && Date.now() - snooze < 4 * 86400e3) return;
@@ -5245,7 +5248,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v180'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v181'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
