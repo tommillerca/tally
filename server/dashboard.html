@@ -29,7 +29,19 @@
   .rtag.den { background: #2e3a1a; color: #a5e847; }
   .rtag.unreach { background: #3a2020; color: #ff9a8a; }
   .rtag.fb { background: #1e2f3a; color: #7cc4ff; }
+  .rtag.no { background: #2a2733; color: #9a94a6; }
   .rnote { color: #e8e2d6; }
+  .lead-sum { background: #17151f; border: 1px solid #2a2733; border-radius: 12px; padding: 12px 14px; margin: 6px 0 10px; font-size: 14px; }
+  .lead-sum b { color: #d7a6ff; }
+  .mini { font-size: 12px; padding: 5px 10px; margin-left: 8px; background: #b96cf0; color: #1a0f26; border-radius: 8px; }
+  .rpt.lead .lead-head { font-size: 15px; margin-bottom: 6px; }
+  .lead-field { display: flex; gap: 8px; margin: 4px 0; }
+  .lead-k { flex: none; width: 78px; color: #9a94a6; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+  .lead-v { color: #e8e2d6; }
+  .lead-feats { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+  .feat-chip { display: inline-block; font-size: 12px; background: #241b30; color: #d7a6ff; border: 1px solid #3a2d4d; border-radius: 999px; padding: 3px 9px; }
+  .feat-chip b { color: #fff; margin-left: 2px; }
+  .feat-tally { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
   .rmeta a { color: #7cc4ff; }
   .err { color: #ff8080; }
@@ -68,6 +80,32 @@
       const foMax = Math.max(1, ...fopen.map(d => d.n || 0));
       const ftMax = Math.max(1, ...ftime.map(d => d.min || 0));
       const hrs = m => m >= 60 ? (m / 60).toFixed(1) + 'h' : m + 'm';
+      // ---- survey leads digest: a summary line + one clean card per response ----
+      const FEAT_LABELS = { log:'Logging food', steps:'Walking / steps', pit:'The Pit', boneyard:'The Boneyard', pets:'Pets / Stable', kitchen:'The Kitchen', crew:'The Crew', quests:'Quests / wheel' };
+      const featList = l => (l.features ? String(l.features).split(',').filter(Boolean) : []);
+      const leads = s.leads || [];
+      const optedEmails = [...new Set(leads.filter(l => l.optin && l.email).map(l => l.email))];
+      const withEmail = leads.filter(l => l.email).length;
+      // feature-usage tally across all responses, most-used first
+      const featTally = {};
+      leads.forEach(l => featList(l).forEach(f => { featTally[f] = (featTally[f] || 0) + 1; }));
+      const featRows = Object.entries(featTally).sort((a,b) => b[1]-a[1])
+        .map(([f,n]) => `<span class="feat-chip">${esc(FEAT_LABELS[f] || f)} <b>${n}</b></span>`).join('');
+      const leadsSummary = leads.length
+        ? `<div class="lead-sum"><b>${leads.length}</b> response${leads.length === 1 ? '' : 's'} · <b>${withEmail}</b> left an email · <b>${optedEmails.length}</b> opted in to updates${optedEmails.length ? ` <button id="copyEmails" class="mini">Copy ${optedEmails.length} opted-in email${optedEmails.length === 1 ? '' : 's'}</button>` : ''}${featRows ? `<div class="feat-tally">Features in use: ${featRows}</div>` : ''}</div>`
+        : '';
+      const leadsHtml = leads.length ? leads.map(l => {
+        const who = l.name || l.label || 'anonymous';
+        const mail = l.email
+          ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>${l.optin ? ' <span class="rtag den">opted in</span>' : ' <span class="rtag no">no updates</span>'}`
+          : '<span class="rmeta">no email</span>';
+        const feats = featList(l);
+        const featChips = feats.length ? `<div class="lead-feats">${feats.map(f => `<span class="feat-chip">${esc(FEAT_LABELS[f] || f)}</span>`).join('')}</div>` : '';
+        const fb = l.feedback ? `<div class="lead-field"><span class="lead-k">Thinks</span><span class="lead-v">${esc(l.feedback)}</span></div>` : '';
+        const want = l.mostWanted ? `<div class="lead-field"><span class="lead-k">Wants next</span><span class="lead-v">${esc(l.mostWanted)}</span></div>` : '';
+        const meta = [l.label ? 'Crew: ' + esc(l.label) : '', l.geo ? esc(l.geo) : '', new Date(l.ts).toLocaleString()].filter(Boolean).join(' · ');
+        return `<div class="rpt lead"><div class="lead-head"><b>${esc(who)}</b> · ${mail}</div>${featChips}${fb}${want}<div class="rmeta">${meta}</div></div>`;
+      }).join('') : '<p class="note">No survey responses yet.</p>';
       $('#out').innerHTML = `
         <div class="cards">
           <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers (all time)</div></div>
@@ -103,7 +141,13 @@
           const meta = [esc(who), r.geo ? esc(r.geo) : '', new Date(r.ts).toLocaleString()].filter(Boolean).join(' · ');
           return `<div class="rpt">${tag}${r.target ? `<b>${esc(r.target)}</b> ` : ''}<span class="rnote">${esc(r.note) || '<i>(no note)</i>'}</span><div class="rmeta">${meta}${coords ? ' · ' + coords : ''}</div></div>`;
         }).join('') : '<p class="note">No reports yet. Testers can press and hold the map to nominate a den or flag an unreachable spot.</p>'}
+        <h2>Survey leads 💜</h2>${leadsSummary}${leadsHtml}
         <p class="note">Names shown for testers who went online (Crew); location is coarse (country/city from IP, no GPS). Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
+      const copyBtn = document.getElementById('copyEmails');
+      if (copyBtn) copyBtn.onclick = async () => {
+        try { await navigator.clipboard.writeText(optedEmails.join(', ')); copyBtn.textContent = 'Copied ✓'; }
+        catch { copyBtn.textContent = optedEmails.join(', '); }
+      };
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }
   $('#go').onclick = load;

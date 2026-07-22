@@ -373,8 +373,8 @@ export const SECRET_DENS = [
       { id: 'gastown', lat: 49.28434, lng: -123.10884 },   // Gastown Steam Clock, Vancouver
       { id: 'science', lat: 49.27341, lng: -123.10390 },   // Science World plaza, Vancouver
       { id: 'lonsdale', lat: 49.30945, lng: -123.08270 },  // Lonsdale Quay, North Vancouver
-      { id: 'walton', lat: 43.95110, lng: -78.29280 },     // Walton St downtown, Port Hope ON
-      { id: 'phbeach', lat: 43.94330, lng: -78.28730 },    // Port Hope waterfront, ON
+      { id: 'walton', lat: 43.95110, lng: -78.29280 },     // Walton St downtown, Port Hope ON (Cam + Brock)
+      { id: 'phbeach', lat: 43.94330, lng: -78.28730 },    // Port Hope waterfront, ON (Cam + Brock)
       { id: 'jacques', lat: 45.50770, lng: -73.55330 },    // Place Jacques-Cartier, Montréal
       { id: 'phoenix', lat: 33.44840, lng: -112.07400 },   // downtown Phoenix, AZ
     ],

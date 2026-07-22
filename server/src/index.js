@@ -412,6 +412,35 @@ export default {
         return json({ ok: true });
       }
 
+      // One-time in-app survey lead: name/email/feedback/most-wanted + an explicit
+      // opt-in to update emails. Unsigned + best-effort like /report (no account
+      // needed). Email is contact info -> declared in the store data-safety forms.
+      // Private dev channel; only ever surfaced in the admin dashboard.
+      if (path === '/survey' && request.method === 'POST') {
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body.device !== 'string') return json({ error: 'bad body' }, 400);
+        const device = body.device.slice(0, 64);
+        const player = (typeof body.player === 'string' && body.player) ? body.player.slice(0, 200) : null;
+        const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
+        const name = (typeof body.name === 'string' && body.name) ? body.name.trim().slice(0, 60) : null;
+        const email = (typeof body.email === 'string' && body.email) ? body.email.trim().slice(0, 120) : null;
+        const optin = body.emailOptin ? 1 : 0;
+        const feedback = (typeof body.feedback === 'string' && body.feedback) ? body.feedback.slice(0, 500) : null;
+        const mostWanted = (typeof body.mostWanted === 'string' && body.mostWanted) ? body.mostWanted.slice(0, 280) : null;
+        // features they said they use: an array of short slugs -> stored comma-joined
+        const features = Array.isArray(body.features)
+          ? body.features.filter(f => typeof f === 'string').slice(0, 20).map(f => f.slice(0, 24)).join(',') || null
+          : null;
+        const appV = String(body.appV || '').slice(0, 16);
+        const cf = request.cf || {};
+        const city = [cf.city, cf.region || cf.regionCode, cf.country].filter(Boolean).join(', ') || null;
+        await env.DB.prepare(
+          `INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, app_v, geo, ts)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).bind(device, player, label, name, email, optin, feedback, mostWanted, features, appV, city, Date.now()).run();
+        return json({ ok: true });
+      }
+
       // Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
       if (path === '/stats' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
@@ -458,7 +487,9 @@ export default {
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
         // community map feedback: newest first (den nominations + unreachable reports + general feedback)
         const reports = await all(`SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device WHERE ${nin('r.device')} ORDER BY r.ts DESC LIMIT 100`);
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, generatedAt: Date.now() });
+        // survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
+        const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, generatedAt: Date.now() });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).

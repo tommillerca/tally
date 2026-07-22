@@ -25,10 +25,10 @@ import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
-import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport } from './analytics.js';
+import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -120,7 +120,9 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
 // S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
 function petSpriteHtml(petId, px, ground = false) {
-  if (S.shinyPets.has(petId)) {
+  // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
+  // special look, so always render its animated self even if the instance is shiny.
+  if (petId !== 'CX' && S.shinyPets.has(petId)) {
     return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
   return animatedPetHtml(petId, px) || croppedPetImg(petId, px, ground);
@@ -129,6 +131,7 @@ function petSpriteHtml(petId, px, ground = false) {
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
 function petPortraitHtml(petId, px, shiny = false) {
+  if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
   const inner = croppedPetImg(petId, px, false, src);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
@@ -305,6 +308,7 @@ async function boot() {
   maybeShowWhatsNew();
   maybePromptName();
   maybeRequestNotifPermission();
+  maybeShowSurvey();
   setTimeout(checkFriendRequests, 3000);
 }
 
@@ -2779,6 +2783,136 @@ function openFeedbackSheet() {
   });
 }
 
+// One-time founding-player survey. Prize-led: fill it out (name, email, what you
+// think, the one thing that would make you play more) and you keep the exclusive
+// amethyst Day One Lizard: a pet nobody can hatch or buy. Email is optional
+// contact info with an explicit opt-in (declared in the store data-safety forms);
+// the pet is granted LOCALLY on submit whether or not the network send succeeds,
+// so being offline never costs you the reward. Never returns once submitted.
+// the main features we want to know people are actually using (value -> label)
+const SURVEY_FEATURES = [
+  ['log', 'Logging food'],
+  ['steps', 'Walking / steps'],
+  ['pit', 'The Pit (fighting)'],
+  ['boneyard', 'The Boneyard (map)'],
+  ['pets', 'Pets & the Stable'],
+  ['kitchen', 'The Kitchen (cooking)'],
+  ['crew', 'The Crew (friends)'],
+  ['quests', 'Quests & the wheel'],
+];
+function openSurveySheet(source = 'auto') {
+  trackEvent('survey_open', { src: source });
+  const lizard = animatedPetHtml('CX', 132) || '';
+  const featChecks = SURVEY_FEATURES.map(([v, label]) =>
+    `<label class="survey-feat"><input type="checkbox" value="${v}"> ${label}</label>`).join('');
+  openSheet(`
+    <div class="survey" id="surveyForm">
+      <div class="survey-hero">
+        <div class="survey-liz">${lizard}</div>
+        <div class="survey-glow"></div>
+      </div>
+      <h2 class="survey-title">Claim the Day One Lizard</h2>
+      <p class="survey-sub">You showed up early, and that means a lot. Tell us what you think and this <b>exclusive amethyst lizard</b> is yours to keep. No one can hatch or buy it. It only goes to the players who were here at the start.</p>
+      <label class="survey-label" for="svName">Your name</label>
+      <input id="svName" class="survey-in" type="text" maxlength="60" autocomplete="name" placeholder="What should we call you?">
+      <label class="survey-label" for="svEmail">Email <span class="survey-opt">(optional)</span></label>
+      <input id="svEmail" class="survey-in" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com">
+      <label class="survey-check"><input id="svOptin" type="checkbox"> Email me the occasional Boneheadz update</label>
+      <label class="survey-label">Which parts are you actually using?</label>
+      <div class="survey-feats" id="svFeats">${featChecks}</div>
+      <label class="survey-label" for="svFeel">What do you think so far?</label>
+      <textarea id="svFeel" class="survey-in" rows="3" maxlength="500" placeholder="What's fun, what's confusing, what you'd change..."></textarea>
+      <label class="survey-label" for="svWant">The one thing that would make you play more?</label>
+      <textarea id="svWant" class="survey-in" rows="2" maxlength="280" placeholder="If we built one thing next, it should be..."></textarea>
+      <p class="survey-priv">Goes straight to the developers, never shared or shown to other players. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button class="btn ghost" id="svLater" style="flex:0 0 auto">Maybe later</button>
+        <button class="btn" id="svSend" style="flex:1">Claim my lizard 💜</button>
+      </div>
+      <p class="muted" id="svStatus" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+    </div>
+  `, { cls: 'sheet-survey', name: 'survey' });
+
+  $('#svLater')?.addEventListener('click', async () => {
+    trackEvent('survey_later', { src: source });
+    // snooze, don't kill: a "later" comes back in a few days (never after submit)
+    await kvSet('surveySnoozeAt', Date.now());
+    history.back();
+  });
+
+  $('#svSend')?.addEventListener('click', async () => {
+    const btn = $('#svSend'), st = $('#svStatus');
+    const name = ($('#svName')?.value || '').trim();
+    const email = ($('#svEmail')?.value || '').trim();
+    const optin = !!$('#svOptin')?.checked;
+    const feedback = ($('#svFeel')?.value || '').trim();
+    const mostWanted = ($('#svWant')?.value || '').trim();
+    const features = [...document.querySelectorAll('#svFeats input:checked')].map(c => c.value);
+    // light validation: we want SOMETHING useful, but never trap the player.
+    if (!name && !feedback && !mostWanted && !features.length) { if (st) st.textContent = 'Add your name, tick a feature, or leave a quick note, then the lizard is yours.'; return; }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (st) st.textContent = "That email doesn't look right. Fix it, or leave it blank."; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Claiming...'; }
+    // Grant LOCALLY first so the reward never depends on the network.
+    let granted = false;
+    try {
+      if (!(await kvGet('surveyDone', false))) { await grantPet('CX', 'survey'); granted = true; }
+      await kvSet('surveyDone', true);
+      await refreshShinyPets();
+    } catch { /* grant best-effort; gating below still marks done */ }
+    sendSurvey({ name, email, emailOptin: optin, feedback, mostWanted, features }); // fire-and-forget
+    trackEvent('survey_submit', { optin: optin ? 1 : 0, hasEmail: email ? 1 : 0, feats: features.length });
+    showDayOneReveal(granted);
+  });
+}
+
+// The celebratory reveal after a survey submit: swaps the form for a big animated
+// Day One Lizard and a thank-you. Replaces the sheet body in place.
+function showDayOneReveal(granted) {
+  const wrap = sheetStack[sheetStack.length - 1]?.wrap;
+  const form = wrap && $('#surveyForm', wrap);
+  if (!form) { toast(granted ? 'The Day One Lizard is yours! Find it in your Stable. 💜' : 'Thanks, every note gets read. 💜', 3600); history.back(); return; }
+  form.innerHTML = `
+    <div class="survey-hero big">
+      <div class="survey-liz">${animatedPetHtml('CX', 168) || ''}</div>
+      <div class="survey-glow on"></div>
+    </div>
+    <h2 class="survey-title">The Day One Lizard is yours! 💜</h2>
+    <p class="survey-sub">An exclusive amethyst companion, only for the players who were here at the start and helped shape the game. Find it in your <b>Stable</b> and equip it any time. Thank you: every word gets read.</p>
+    <div class="row" style="margin-top:6px"><button class="btn" id="svDone" style="flex:1">See it in my Stable</button></div>
+  `;
+  $('#svDone', wrap)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
+}
+
+// Boot trigger: invite engaged players to the survey once. Gated so it never nags
+// — not for brand-new players (needs a few DAYS of play to form an opinion), never
+// over onboarding / the splash / the daily wheel / any open sheet (retries next
+// boot), snoozes on "Maybe later", and NEVER returns once submitted. Skips
+// webdriver/demo.
+async function maybeShowSurvey() {
+  try {
+    if (navigator.webdriver || !S.settings) return;
+    if (await kvGet('surveyDone', false)) return;
+    // engagement gate: only after the app has been OPENED on 3 distinct days (so a
+    // player has actually lived with it for a few days, not 3 opens in one sitting).
+    let days = (await kvGet('surveyDays', [])) || [];
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, local-ish
+    if (!days.includes(today)) { days = [...days, today].slice(-14); await kvSet('surveyDays', days); }
+    if (days.length < 3) return;
+    // "Maybe later" snooze: wait ~4 days before asking again
+    const snooze = await kvGet('surveySnoozeAt', 0);
+    if (snooze && Date.now() - snooze < 4 * 86400e3) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      openSurveySheet('auto');
+    };
+    setTimeout(tick, 2600); // after What's New / wheel have had their chance
+  } catch { /* never block boot */ }
+}
+
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
 async function openWhatsNew() {
@@ -2824,6 +2958,7 @@ async function renderSettings(el) {
   const notifPlat = notifPlatform();
   const notifPerm = await notifPermissionState();
   const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const surveyDone = await kvGet('surveyDone', false);
   const notifRow = (key, label, sub) => `
     <div class="settings-row">
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
@@ -2942,6 +3077,7 @@ async function renderSettings(el) {
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
+    ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
   </div>
@@ -3081,6 +3217,7 @@ async function renderSettings(el) {
   // Force-fetch the latest build: drop the service worker + all caches, then
   $('#whatsNewBtn')?.addEventListener('click', openWhatsNew);
   $('#feedbackBtn')?.addEventListener('click', openFeedbackSheet);
+  $('#surveyBtn')?.addEventListener('click', () => openSurveySheet('settings'));
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched — it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', async () => {
@@ -5108,7 +5245,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v179'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v180'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
