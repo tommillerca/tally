@@ -66,6 +66,8 @@ export function questCtx(period, base) {
   const inP = r => set.has(r.date);
   const countType = t => base.allXp.filter(r => r.type === t && inP(r)).length;
   const steps = (base.healthRows || []).filter(inP).reduce((a, r) => a + (r.steps || 0), 0);
+  const active = (base.healthRows || []).filter(inP).reduce((a, r) => a + (r.activeKcal || 0), 0);
+  const workoutToday = (base.healthRows || []).some(r => r.date === base.date && (r.activeKcal || 0) >= 500);
   const logDays = new Set((base.allLog || []).filter(e => set.has(e.date)).map(e => e.date)).size;
   return {
     period,
@@ -79,6 +81,9 @@ export function questCtx(period, base) {
     targets: base.targets,
     // period-scoped aggregates
     steps,
+    active,
+    workoutToday,
+    workoutDays: base.allXp.filter(r => r.type === 'actcrate' && inP(r)).length, // ≥500 active-kcal days
     pitWins: countType('fight'),
     bossWins: countType('boss'),
     spawns: countType('spawn'),
@@ -132,6 +137,8 @@ export const DAILY_POOL = [
     progress: c => clamp(c.steps, 8000) },
   { id: 'q-steps11', name: 'Long haul', desc: 'Walk 11,000 steps', coins: 80, dust: 20, need: 'hk',
     progress: c => clamp(c.steps, 11000) },
+  { id: 'q-active', name: 'Break a sweat', desc: 'Burn 500 active calories (a workout or a ride)', coins: 70, need: 'hk',
+    progress: c => clamp(c.active, 500) },
   { id: 'q-friend', name: 'Bone brawl', desc: "Battle a friend's bonehead", coins: 75, need: 'social',
     progress: c => clamp(c.friendBattles, 1) },
 ];
@@ -141,6 +148,8 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.steps, 50000) },
   { id: 'w-pit', name: 'Pit regular', desc: 'Win 12 Pit fights this week', coins: 150, crate: 'golden', item: 'vigor',
     progress: c => clamp(c.pitWins, 12) },
+  { id: 'w-workouts', name: 'Training week', desc: 'Work out (500+ active kcal) on 4 days', coins: 160, crate: 'golden', item: 'vigor', need: 'hk',
+    progress: c => clamp(c.workoutDays, 4) },
   { id: 'w-protein', name: 'Protein week', desc: 'Hit your protein target on 5 days', coins: 150, crate: 'golden',
     progress: c => clamp(c.proteinDays, 5) },
   { id: 'w-boss', name: 'Boss hunter', desc: 'Beat 2 world bosses this week', coins: 180, crate: 'golden', dust: 60,

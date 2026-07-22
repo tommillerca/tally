@@ -4172,7 +4172,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     await onWeighIn(payload.date);
   }
   if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
-  const game = await onHealthSync(payload.date, { steps: payload.steps });
+  const game = await onHealthSync(payload.date, { steps: payload.steps, activeKcal: payload.activeKcal });
   await checkPetLevelUp();
   const bits = [];
   if (payload.steps != null) bits.push(`${payload.steps.toLocaleString()} steps`);
@@ -4181,7 +4181,8 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (celebrate) {
     confettiBurst(innerWidth / 2, 160, 14);
     popSound(S.sounds);
-    toast(`Health synced: ${bits.join(' · ')}${game.xp ? ` · +${game.xp} XP` : ''}`, 3200);
+    const extra = game.workout ? ' · 🏋️ Workout crate!' : '';
+    toast(`Health synced: ${bits.join(' · ')}${game.xp ? ` · +${game.xp} XP` : ''}${extra}`, 3400);
     if (game.newBadges.length) { queueCelebration({ newBadges: game.newBadges }); maybeCelebrate(); }
   }
   return bits;
@@ -5249,7 +5250,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v182'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v183'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

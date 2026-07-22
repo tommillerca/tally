@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 183, date: '2026-07-22', title: 'Your workouts count now', items: [
+    'Active calories pay off: a bike ride, a gym session, a run, anything your Apple Watch tracks as active energy now earns XP and coins, not just steps.',
+    'Break 500 active calories in a day and you\'ll bag a Workout Crate.',
+    'New goals to match: a daily "Break a sweat" and a weekly training streak.',
+  ] },
   { n: 180, date: '2026-07-22', title: 'A fresh look + the Day One Lizard', items: [
     'Fresh coat of paint: a darker, moodier backdrop with a hand-drawn, grainy finish, chunkier hand-inked panels, and sticker-style buttons, so the whole app feels more like Cam\'s artwork.',
     'A quick survey for early players has landed: tell us what you think and what would make you play more, and you\'ll keep the exclusive amethyst Day One Lizard, an animated pet no one can hatch or buy. It only goes to the players who were here at the start.',

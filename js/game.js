@@ -177,6 +177,7 @@ async function buildStats() {
     weighs: weights.length,
     streak: streakFrom([...streakDateSet(log, xp)], dateKey()),
     maxSteps: Math.max(0, ...health.map(h => h.steps || 0)),
+    maxActiveKcal: Math.max(0, ...health.map(h => h.activeKcal || 0)),
     cosmetics: inv.filter(r => r.kind === 'cos').length,
     spawns: xp.filter(r => r.type === 'spawn').length,
     roadStops: xp.filter(r => r.type === 'road').length,
@@ -295,9 +296,23 @@ export const STEP_OVER = [ // diminishing bonuses beyond the cap
   { at: 12500, coins: 12 }, { at: 15000, coins: 10 }, { at: 17500, coins: 8 }, { at: 20000, coins: 6 },
 ];
 
-export async function onHealthSync(date, { steps } = {}) {
+// ACTIVE ENERGY (Apple Watch / Health): active kcal is the universal "you moved"
+// signal — a bike ride, a gym session, a run all burn it, so rewarding it means
+// every workout counts, not just steps. Wellbeing-safe: rewards effort/movement,
+// never eating less. (Active energy also nudges the eating TARGET up elsewhere.)
+export const ACTIVE_MILESTONES = [
+  { at: 250, coins: 15 },  // an active day
+  { at: 500, coins: 25 },  // a genuine workout / ride happened today -> also a crate
+  { at: 750, coins: 35 },  // big training day (soft cap)
+];
+export const ACTIVE_WORKOUT_KCAL = 500; // "you worked out today" threshold -> daily crate
+export const ACTIVE_OVER = [ // diminishing beyond the cap
+  { at: 1000, coins: 10 }, { at: 1250, coins: 8 }, { at: 1500, coins: 6 },
+];
+
+export async function onHealthSync(date, { steps, activeKcal } = {}) {
   let gained = await award(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
-  let egg = false, coinsEarned = 0;
+  let egg = false, coinsEarned = 0, workout = false;
   if (steps != null) {
     for (const m of STEP_MILESTONES) {
       if (steps < m.at) break;
@@ -314,11 +329,29 @@ export async function onHealthSync(date, { steps } = {}) {
       const g = await award(`stepx-${date}-${o.at}`, 'stepx', 5, `Extra steps past the cap: ${o.at.toLocaleString()}`, date);
       if (g) { gained += g; coinsEarned += o.coins; }
     }
-    if (coinsEarned) await coinsAdd(coinsEarned);
   }
+  // Active energy: rewards every kind of workout (bike/run/gym/swim all burn it).
+  if (activeKcal != null) {
+    for (const m of ACTIVE_MILESTONES) {
+      if (activeKcal < m.at) break;
+      const g = await award(`actms-${date}-${m.at}`, 'actms', 15, `${m.at.toLocaleString()} active kcal`, date);
+      if (g) { gained += g; coinsEarned += m.coins; }
+    }
+    // a real workout's worth of burn -> a daily crate (once/day, idempotent)
+    if (activeKcal >= ACTIVE_WORKOUT_KCAL) {
+      const g = await award(`actcrate-${date}`, 'actcrate', 15, 'Workout of the day', date);
+      if (g) { gained += g; await grantCrate('daily', 'active-' + date); workout = true; }
+    }
+    for (const o of ACTIVE_OVER) {
+      if (activeKcal < o.at) break;
+      const g = await award(`actx-${date}-${o.at}`, 'actx', 5, `Extra burn past the cap: ${o.at.toLocaleString()} kcal`, date);
+      if (g) { gained += g; coinsEarned += o.coins; }
+    }
+  }
+  if (coinsEarned) await coinsAdd(coinsEarned);
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
-  return { xp: gained, newBadges, egg, coins: coinsEarned };
+  return { xp: gained, newBadges, egg, coins: coinsEarned, workout };
 }
 
 // At boot: settle yesterday (day-close bonus and any missed day checks).
