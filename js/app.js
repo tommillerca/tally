@@ -1669,7 +1669,7 @@ async function openScanner(getMeal) {
   scanner = createScanner(video, {
     onCode: code => { audioTick(); handleBarcode(code, getMeal); },
     onState: (st) => {
-      if (st === 'denied') status.innerHTML = 'Camera access denied.<br><span style="font-weight:500;font-size:12.5px">Allow camera for this site in iOS Settings, or type the barcode below.</span>';
+      if (st === 'denied') status.innerHTML = `Camera access denied.<br><span style="font-weight:500;font-size:12.5px">Allow camera for Boneheadz Gym in ${/android/i.test(navigator.userAgent || '') ? 'Settings → Apps → Boneheadz Gym → Permissions → Camera' : 'iOS Settings'}, or type the barcode below.</span>`;
       else if (st === 'error') status.textContent = 'Camera unavailable. Type the barcode below.';
       else if (st === 'stalled') status.textContent = 'Camera is not sending frames. Close and reopen the scanner.';
       else if (st === 'running') { status.textContent = ''; if (scanner.hasTorch()) $('#torchBtn', wrap).hidden = false; }
@@ -3191,6 +3191,10 @@ async function renderSettings(el) {
   $('#hkGuide')?.addEventListener('click', openHealthGuide);
   $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
+    // On the native shells the WebView can't save a blob download, so don't fake
+    // success — your progress is already safe via the auto cloud backup. The file
+    // export is a web-only convenience.
+    if (isNative()) { toast('Your progress is auto-saved to the cloud (end-to-end encrypted). A downloadable file export is available in the web version.', 4600); return; }
     const data = await exportAll();
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -4165,6 +4169,10 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   const row = { ...(existing || {}), date: payload.date };
   if (payload.steps != null) row.steps = payload.steps;
   if (payload.activeKcal != null) row.activeKcal = payload.activeKcal;
+  if (payload.exerciseMin != null) row.exerciseMin = payload.exerciseMin;
+  if (payload.cycleKm != null) row.cycleKm = payload.cycleKm;
+  if (payload.workouts != null) row.workouts = payload.workouts;
+  if (payload.wtypes) row.wtypes = payload.wtypes;
   await db.put('health', row);
   if (payload.steps != null) { await kvSet('hkLastSync', Date.now()); await kvSet('hkStaleNotified', false); }
   if (payload.weightKg != null) {
@@ -4172,17 +4180,23 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     await onWeighIn(payload.date);
   }
   if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
-  const game = await onHealthSync(payload.date, { steps: payload.steps, activeKcal: payload.activeKcal });
+  const game = await onHealthSync(payload.date, {
+    steps: payload.steps, activeKcal: payload.activeKcal,
+    exerciseMin: payload.exerciseMin, cycleKm: payload.cycleKm,
+    workouts: payload.workouts, wtypes: payload.wtypes,
+  });
   await checkPetLevelUp();
   const bits = [];
   if (payload.steps != null) bits.push(`${payload.steps.toLocaleString()} steps`);
   if (payload.activeKcal != null) bits.push(`${payload.activeKcal.toLocaleString()} active kcal`);
+  if (payload.workouts) bits.push(`${payload.workouts} workout${payload.workouts === 1 ? '' : 's'}`);
+  if (payload.cycleKm) bits.push(`${payload.cycleKm.toFixed(1)} km ride`);
   if (payload.weightKg != null) bits.push(`weight ${S.settings.units === 'kg' ? payload.weightKg.toFixed(1) + ' kg' : kgToLb(payload.weightKg).toFixed(1) + ' lb'}`);
   if (celebrate) {
     confettiBurst(innerWidth / 2, 160, 14);
     popSound(S.sounds);
-    const extra = game.workout ? ' · 🏋️ Workout crate!' : '';
-    toast(`Health synced: ${bits.join(' · ')}${game.xp ? ` · +${game.xp} XP` : ''}${extra}`, 3400);
+    const extras = [game.workout ? '🏋️ Workout crate!' : '', ...(game.themed || [])].filter(Boolean);
+    toast(`Health synced: ${bits.join(' · ')}${game.xp ? ` · +${game.xp} XP` : ''}${extras.length ? ' · ' + extras.join(' · ') : ''}`, 3600);
     if (game.newBadges.length) { queueCelebration({ newBadges: game.newBadges }); maybeCelebrate(); }
   }
   return bits;
@@ -4605,8 +4619,12 @@ async function openMap() {
       ]);
     } catch (err) {
       const geoErr = err && typeof err.code === 'number';
+      const isAndroid = /android/i.test(navigator.userAgent || '');
+      const locDenied = isAndroid
+        ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
+        : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
       body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
-        ? 'Location permission denied. Allow location for this app in iOS Settings, then try again.'
+        ? locDenied
         : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
         : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
       $('#mapRetry', body)?.addEventListener('click', startMap);
@@ -5250,7 +5268,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v183'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v184'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

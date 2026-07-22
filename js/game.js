@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { consumeFreeze, grantCrate, grantConsumable, coinsAdd } from './loot.js';
+import { consumeFreeze, grantCrate, grantConsumable, coinsAdd, boneDustAdd } from './loot.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days protected by a Streak Freeze marker.
@@ -310,9 +310,43 @@ export const ACTIVE_OVER = [ // diminishing beyond the cap
   { at: 1000, coins: 10 }, { at: 1250, coins: 8 }, { at: 1500, coins: 6 },
 ];
 
-export async function onHealthSync(date, { steps, activeKcal } = {}) {
+// ---- WORKOUTS (HealthKit / Health Connect granularity) ----
+// Beyond steps + calories: reward completed workout sessions, exercise minutes,
+// and cycling distance, and theme the reward to the KIND of activity. Wellbeing-
+// safe (rewards doing the activity, never eating less).
+export const WORKOUT_COINS = 25;          // per completed workout
+export const WORKOUT_CAP = 3;             // rewarded workouts/day (anti-farm)
+export const EXERCISE_RING_MIN = 30;      // Apple's daily Exercise ring
+export const CYCLE_KM_STEP = 5;           // reward every 5 km ridden
+export const CYCLE_KM_CAP = 40;           // stop paying past 40 km/day
+// Raw HealthKit / Health Connect activity types -> our three "disciplines".
+export const WORKOUT_DISCIPLINE = {
+  // cardio -> Vigor (energy)
+  running: 'cardio', walking: 'cardio', cycling: 'cardio', biking: 'cardio', hiking: 'cardio',
+  swimming: 'cardio', rowing: 'cardio', elliptical: 'cardio', stairclimbing: 'cardio',
+  hiit: 'cardio', dance: 'cardio', jumprope: 'cardio', kickboxing: 'cardio',
+  // strength -> Battle Charm (hit harder)
+  strength: 'strength', functionalstrength: 'strength', traditionalstrength: 'strength',
+  core: 'strength', crosstraining: 'strength', crossfit: 'strength', weightlifting: 'strength',
+  // flexibility / mind -> Bone Dust (restorative crafting mat)
+  yoga: 'flex', pilates: 'flex', flexibility: 'flex', mindandbody: 'flex', barre: 'flex',
+  cooldown: 'flex', stretching: 'flex',
+};
+// discipline -> the themed reward it grants (once per discipline per day)
+export const DISCIPLINE_REWARD = {
+  cardio:   { consumable: 'vigor', label: 'Vigor Draught' },
+  strength: { consumable: 'xp2',   label: 'Battle Charm' },
+  flex:     { dust: 20,            label: 'Bone Dust' },
+};
+export function disciplineOf(type) {
+  const k = String(type || '').toLowerCase().replace(/[^a-z]/g, '');
+  return WORKOUT_DISCIPLINE[k] || 'cardio'; // unknown activity still counts as cardio effort
+}
+
+export async function onHealthSync(date, { steps, activeKcal, exerciseMin, cycleKm, workouts, wtypes } = {}) {
   let gained = await award(`hk-${date}`, 'hk', 10, 'Apple Health sync', date);
   let egg = false, coinsEarned = 0, workout = false;
+  const themed = []; // themed consumables granted this sync (for the toast)
   if (steps != null) {
     for (const m of STEP_MILESTONES) {
       if (steps < m.at) break;
@@ -348,10 +382,42 @@ export async function onHealthSync(date, { steps, activeKcal } = {}) {
       if (g) { gained += g; coinsEarned += o.coins; }
     }
   }
+  // Completed workout SESSIONS (capped/day so it can't be farmed).
+  if (workouts != null && workouts > 0) {
+    for (let i = 1; i <= Math.min(workouts, WORKOUT_CAP); i++) {
+      const g = await award(`wk-${date}-${i}`, 'wk', 15, `Workout ${i}`, date);
+      if (g) { gained += g; coinsEarned += WORKOUT_COINS; workout = true; }
+    }
+  }
+  // Apple Exercise ring.
+  if (exerciseMin != null && exerciseMin >= EXERCISE_RING_MIN) {
+    const g = await award(`exring-${date}`, 'exring', 20, `${EXERCISE_RING_MIN} exercise minutes`, date);
+    if (g) { gained += g; coinsEarned += 20; }
+  }
+  // Cycling distance (every CYCLE_KM_STEP km up to the cap).
+  if (cycleKm != null && cycleKm > 0) {
+    for (let km = CYCLE_KM_STEP; km <= CYCLE_KM_CAP; km += CYCLE_KM_STEP) {
+      if (cycleKm < km) break;
+      const g = await award(`cyc-${date}-${km}`, 'cyc', 8, `${km} km ridden`, date);
+      if (g) { gained += g; coinsEarned += 10; }
+    }
+  }
+  // Type-themed reward: one per DISCIPLINE done today (cardio->Vigor,
+  // strength->Battle Charm, flex->Bone Dust). Idempotent per date+discipline.
+  if (wtypes && wtypes.length) {
+    for (const disc of new Set(wtypes.map(disciplineOf))) {
+      const g = await award(`wtype-${date}-${disc}`, 'wtype', 10, `${disc} session`, date);
+      if (!g) continue;
+      gained += g;
+      const r = DISCIPLINE_REWARD[disc];
+      if (r?.consumable) { await grantConsumable(r.consumable, `workout-${disc}-${date}`); themed.push(r.label); }
+      else if (r?.dust) { await boneDustAdd(r.dust); themed.push(r.label); }
+    }
+  }
   if (coinsEarned) await coinsAdd(coinsEarned);
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
-  return { xp: gained, newBadges, egg, coins: coinsEarned, workout };
+  return { xp: gained, newBadges, egg, coins: coinsEarned, workout, themed };
 }
 
 // At boot: settle yesterday (day-close bonus and any missed day checks).
@@ -461,10 +527,13 @@ export async function xpForDate(date) {
 export function parseHkPayload(input) {
   const t = String(input || '').trim();
   if (!t) return null;
-  if (!(/tally-hk/i.test(t) || /(^|[?&# ])(steps|active|weightlb|weightkg)=/i.test(t))) return null;
+  if (!(/tally-hk/i.test(t) || /(^|[?&# ])(steps|active|weightlb|weightkg|exmin|cyclekm|workouts)=/i.test(t))) return null;
 
   const params = {};
   for (const m of t.matchAll(/([a-z]+)\s*=\s*([0-9.,-]+)/gi)) params[m[1].toLowerCase()] = m[2];
+  // wtypes is a comma list of activity slugs (letters), not numeric
+  const wtMatch = t.match(/wtypes\s*=\s*([a-z,]+)/i);
+  const wtypes = wtMatch ? wtMatch[1].toLowerCase().split(',').map(s => s.trim()).filter(Boolean) : null;
 
   const num = v => {
     if (v == null) return null;
@@ -485,6 +554,11 @@ export function parseHkPayload(input) {
   if (weightKg == null && wlb != null) weightKg = wlb * 0.45359237;
   if (weightKg != null && (weightKg < 25 || weightKg > 350)) weightKg = null;
 
-  if (steps == null && active == null && weightKg == null) return null;
-  return { date, steps, activeKcal: active, weightKg };
+  const exerciseMin = num(params.exmin) != null ? Math.round(num(params.exmin)) : null;
+  const cycleKm = num(params.cyclekm);
+  const workouts = num(params.workouts) != null ? Math.round(num(params.workouts)) : null;
+
+  if (steps == null && active == null && weightKg == null &&
+      exerciseMin == null && cycleKm == null && workouts == null && !wtypes) return null;
+  return { date, steps, activeKcal: active, weightKg, exerciseMin, cycleKm, workouts, wtypes };
 }
