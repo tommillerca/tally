@@ -63,6 +63,15 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Camera: the barcode scanner opens a live WebView camera stream (getUserMedia).
+         Same as location above, Capacitor's BridgeWebChromeClient grants the WebView camera
+         prompt only if declared here; without it getUserMedia is silently denied. (The
+         nutrition-label scan uses the OS camera-capture intent and needs no permission.)
+         Not required, so camera-less devices can still install. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!-- Health Connect: read-only steps, active calories, weight (mirrors iOS HealthKit reads) -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
