@@ -101,6 +101,7 @@ const PET_CROP = {
   C3: { x0: 0.547, y0: 0.617, x1: 0.891, y1: 0.875 },
   C4: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 },
   C5: { x0: 0.542, y0: 0.644, x1: 0.836, y1: 0.873 },
+  CX: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 }, // Day One Lizard = C4 recolored at the same bbox
 };
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
@@ -5248,7 +5249,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v181'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v182'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
