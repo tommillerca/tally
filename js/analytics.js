@@ -100,6 +100,31 @@ export async function sendReport(kind, data = {}) {
   } catch { return { ok: false, reason: 'error' }; }
 }
 
+// One-time in-app survey lead (name/email/feedback/most-wanted + update opt-in).
+// Email is contact info (declared in the store data-safety forms). Same private
+// dev channel as reports; best-effort. The reward grant is handled locally by the
+// caller regardless of whether this POST succeeds.
+export async function sendSurvey(data = {}) {
+  if (BOT) return { ok: false, reason: 'bot' };
+  try {
+    const base = await apiBase();
+    if (!base) return { ok: false, reason: 'offline' };
+    const me = await socialMe().catch(() => null);
+    const body = {
+      device: await deviceId(), appV,
+      player: me ? (me.id || me.handle || null) : null,
+      label: me ? (me.name || me.handle || null) : null,
+      name: data.name ? String(data.name).slice(0, 60) : null,
+      email: data.email ? String(data.email).slice(0, 120) : null,
+      emailOptin: !!data.emailOptin,
+      feedback: data.feedback ? String(data.feedback).slice(0, 500) : null,
+      mostWanted: data.mostWanted ? String(data.mostWanted).slice(0, 280) : null,
+    };
+    const r = await fetch(base + '/survey', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { ok: !!(r && r.ok) };
+  } catch { return { ok: false, reason: 'error' }; }
+}
+
 export async function initAnalytics(version) {
   if (BOT) return; // automated/verification browsers never count as testers
   appV = version || '';

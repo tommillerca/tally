@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 180, date: '2026-07-21', title: 'The Founder\'s Lizard', items: [
+    'A founding-player survey has landed: tell me what you think and what would make you play more, and you\'ll keep the exclusive amethyst Founder\'s Lizard, an animated pet no one can hatch, buy, or breed into existence.',
+    'Find it any time under Settings, and once you\'ve claimed it, the lizard lives in your Stable to equip whenever you like.',
+  ] },
   { n: 164, date: '2026-07-20', title: 'Tell us what you think', items: [
     'New Send feedback button in Settings. Got a thought on the game, something confusing, an idea? It goes straight to the developer.',
   ] },

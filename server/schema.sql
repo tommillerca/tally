@@ -112,3 +112,23 @@ CREATE TABLE IF NOT EXISTS reports (
   ts INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reports_ts ON reports (ts);
+
+-- Survey leads: the one-time in-app survey (name/email/feedback/most-wanted +
+-- an explicit opt-in to product-update emails). Email is contact info, so this
+-- MUST be declared in the App Store / Play data-safety forms before shipping.
+-- Private dev channel; surfaced only in the admin dashboard.
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device TEXT NOT NULL,      -- anonymous random device id
+  player TEXT,               -- social pubkey/id, if the player went online
+  label TEXT,                -- Crew name, if known
+  name TEXT,                 -- what they typed (capped)
+  email TEXT,                -- contact email (capped)
+  email_optin INTEGER DEFAULT 0, -- 1 = opted in to update emails
+  feedback TEXT,             -- free text (capped 500)
+  most_wanted TEXT,          -- "one thing that would make you play more" (capped 280)
+  app_v TEXT,
+  geo TEXT,                  -- coarse edge geo string (city, region, country)
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_leads_ts ON leads (ts);
