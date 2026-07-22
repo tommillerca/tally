@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 185, date: '2026-07-22', title: 'Workouts, by type', items: [
+    'Now the KIND of workout matters: each session your watch logs (bike, run, strength, yoga, and more) drops a themed reward, cardio hands you a Vigor Draught, strength a Battle Charm, flexibility some Bone Dust.',
+    'Completed workouts and exercise minutes earn XP and coins on top of your steps and calories.',
+    'Update to the latest build to sync workouts (iPhone workout sync lands in the next TestFlight update).',
+  ] },
   { n: 183, date: '2026-07-22', title: 'Your workouts count now', items: [
     'Active calories pay off: a bike ride, a gym session, a run, anything your Apple Watch tracks as active energy now earns XP and coins, not just steps.',
     'Break 500 active calories in a day and you\'ll bag a Workout Crate.',

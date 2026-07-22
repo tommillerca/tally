@@ -25,6 +25,25 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
     private var stepsType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .stepCount)! }
     private var energyType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)! }
     private var massType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .bodyMass)! }
+    private var exTimeType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)! }
+
+    // HKWorkoutActivityType -> slug matching js/game.js WORKOUT_DISCIPLINE.
+    private func workoutSlug(_ t: HKWorkoutActivityType) -> String {
+        switch t {
+        case .cycling: return "biking"
+        case .running: return "running"
+        case .walking: return "walking"
+        case .hiking: return "hiking"
+        case .swimming: return "swimming"
+        case .rowing: return "rowing"
+        case .elliptical: return "elliptical"
+        case .highIntensityIntervalTraining: return "hiit"
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining: return "strength"
+        case .yoga: return "yoga"
+        case .pilates: return "pilates"
+        default: return "other"
+        }
+    }
 
     @objc func isAvailable(_ call: CAPPluginCall) {
         call.resolve([
@@ -38,7 +57,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["granted": false, "reason": "unavailable"])
             return
         }
-        let read: Set<HKObjectType> = [stepsType, energyType, massType]
+        let read: Set<HKObjectType> = [stepsType, energyType, massType, exTimeType, HKObjectType.workoutType()]
         #if DEBUG
         let write: Set<HKSampleType> = [stepsType, energyType]
         #else
@@ -86,6 +105,24 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             group.leave()
         })
 
+        // Workouts today: count, distinct type slugs, and Apple exercise minutes.
+        var workouts = 0
+        var wtypes: [String] = []
+        var exMin: Double = 0
+        group.enter()
+        store.execute(HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let ws = (samples as? [HKWorkout]) ?? []
+            workouts = ws.count
+            var seen = Set<String>()
+            for w in ws { let s = self.workoutSlug(w.workoutActivityType); if seen.insert(s).inserted { wtypes.append(s) } }
+            group.leave()
+        })
+        group.enter()
+        store.execute(HKStatisticsQuery(quantityType: exTimeType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, stats, _ in
+            exMin = stats?.sumQuantity()?.doubleValue(for: .minute()) ?? 0
+            group.leave()
+        })
+
         group.notify(queue: .main) {
             let fmt = DateFormatter()
             fmt.dateFormat = "yyyy-MM-dd"
@@ -94,6 +131,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 "date": fmt.string(from: Date()),
                 "steps": Int(steps.rounded()),
                 "activeKcal": Int(active.rounded()),
+                "workouts": workouts,
+                "exerciseMin": Int(exMin.rounded()),
+                "wtypes": wtypes,
             ]
             if let w = weightKg { out["weightKg"] = w }
             call.resolve(out)

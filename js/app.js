@@ -1058,6 +1058,10 @@ function healthCardHtml(hk, isToday) {
             : `<span style="color:var(--text-3);font-weight:500">· within your activity baseline</span>`;
           return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
         })() : ''}
+        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">🏋️</span><div style="font-size:13.5px;font-weight:600">${[
+          hk.workouts ? `${hk.workouts} workout${hk.workouts === 1 ? '' : 's'}` : '',
+          hk.exerciseMin ? `${hk.exerciseMin} min` : '',
+        ].filter(Boolean).join(' · ')}${hk.wtypes && hk.wtypes.length ? ` <span style="color:var(--text-3);font-weight:500">${hk.wtypes.slice(0, 3).join(', ')}</span>` : ''}</div></div>` : ''}
       </div>` :
       '<p class="note">No sync yet today. Run your "Sync Boneheadz" shortcut, then tap Sync.</p>'}
   </div>`;
@@ -4454,7 +4458,11 @@ async function nativeSyncNow({ silent = false } = {}) {
     const r = await nativeQueryToday();
     if (!r || (r.steps == null && r.activeKcal == null)) return false;
     lastNativeSync = Date.now();
-    const payload = { date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null };
+    const payload = {
+      date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
+      exerciseMin: r.exerciseMin ?? null, cycleKm: r.cycleKm ?? null,
+      workouts: r.workouts ?? null, wtypes: Array.isArray(r.wtypes) ? r.wtypes : null,
+    };
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
       S.settings.hkConnected = true; S.settings.hkNative = true;
@@ -5268,7 +5276,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v184'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v185'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

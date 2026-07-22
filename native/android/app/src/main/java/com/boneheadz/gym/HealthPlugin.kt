@@ -6,8 +6,11 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
+import com.getcapacitor.JSArray
+import java.time.Duration
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -41,8 +44,30 @@ class HealthPlugin : Plugin() {
     private val readPerms = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(WeightRecord::class)
+        HealthPermission.getReadPermission(WeightRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     )
+
+    // Health Connect exerciseType Int -> a slug matching js/game.js WORKOUT_DISCIPLINE.
+    private fun exerciseSlug(type: Int): String = when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> "biking"
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> "running"
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "hiking"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING,
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> "rowing"
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "elliptical"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "hiit"
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "strength"
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "yoga"
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "pilates"
+        else -> "other"
+    }
 
     private fun sdkAvailable(): Boolean =
         HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
@@ -122,6 +147,22 @@ class HealthPlugin : Plugin() {
                     )
                 ).records
                 if (weights.isNotEmpty()) res.put("weightKg", weights[0].weight.inKilograms)
+
+                // Workouts today: count, distinct type slugs, total minutes.
+                val sessions = hc.readRecords(
+                    ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = range)
+                ).records
+                res.put("workouts", sessions.size)
+                var exMin = 0L
+                val types = LinkedHashSet<String>()
+                for (s in sessions) {
+                    exMin += Duration.between(s.startTime, s.endTime).toMinutes()
+                    types.add(exerciseSlug(s.exerciseType))
+                }
+                res.put("exerciseMin", exMin.toInt())
+                val arr = JSArray()
+                for (t in types) arr.put(t)
+                res.put("wtypes", arr)
             } catch (e: Exception) {
                 res.put("steps", 0); res.put("activeKcal", 0); res.put("error", e.message ?: "read-failed")
             }
