@@ -57,6 +57,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Location: the WebView's HTML5 navigator.geolocation (map hunt / spawns). Capacitor's
+         BridgeWebChromeClient requests these at runtime and grants the WebView geolocation
+         prompt, but only if they are declared here; without them the request is silently denied. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Health Connect: read-only steps, active calories, weight (mirrors iOS HealthKit reads) -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
