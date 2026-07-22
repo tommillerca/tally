@@ -206,7 +206,7 @@ export async function hatchEgg(invId) {
   if (!ready) return { ready: false };
   await db.del('inv', row.id);
   const owned = await ownedCosmeticIds();
-  const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive); // exclusive pets (Founder's Lizard) never hatch
+  const pets = BH_ITEMS.filter(i => i.slot === 'C');
   const fresh = pets.filter(i => !owned.has(i.id));
   const isShiny = rng() < SHINY_CHANCE;
   const isDupe = !fresh.length;

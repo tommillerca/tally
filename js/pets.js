@@ -35,7 +35,6 @@ export const PET_ASSIGN = {
   C3: 'hound',    // Corner-store Pet
   C4: 'hound',    // Basic Pet
   C5: 'warden',   // Tidy Pet
-  CX: 'hound',    // Founder's Lizard (exclusive survey reward) — an amethyst C4
 };
 export function familyOf(petId) { return PET_FAMILIES[PET_ASSIGN[petId] || 'hound']; }
 
@@ -114,10 +113,6 @@ export const PET_STATS = {
   C5: { rarity: 'uncommon',  mult: 1.09, tilt: { marrow: 1.15, power: 0.92 } },            // Tidy warden (dog): sturdy guardian
   C1: { rarity: 'epic',      mult: 1.27, tilt: { reflex: 1.12, wind: 1.06, power: 0.96 } }, // Cosmic imp (cloud): evasive utility
   C2: { rarity: 'legendary', mult: 1.36, tilt: { marrow: 1.08, reflex: 1.02 } },           // Eternal warden (duck): best all-round
-  // Founder's Lizard: an amethyst C4 for survey backers. Legendary glow, but its
-  // aggressive glass-cannon line sits at epic power (1.27) so its total stays under
-  // C2's audited 1.36 top-end — a desirable thank-you, not a balance-breaker.
-  CX: { rarity: 'legendary', mult: 1.27, tilt: { power: 1.12, marrow: 0.88, reflex: 1.05 } }, // Founder hound (lizard): elite glass cannon
 };
 // Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
 // flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.
@@ -185,7 +180,6 @@ export const PET_SIGNATURE = {
   C3: { id: 'sig-c3', name: 'Chum Slick', desc: 'Every bite floods the enemy to max poison, ticking 40% harder.' },
   C4: { id: 'sig-c4', name: 'Apex Ambush', desc: 'Bites always crit and strike 50% harder.' },
   C5: { id: 'sig-c5', name: 'Loyal Bulwark', desc: 'Shields are massive (+90%), refill your stamina and cleanse you.' },
-  CX: { id: 'sig-cx', name: "Founder's Fury", desc: 'Bites always crit and strike 50% harder.' },
 };
 export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
 
@@ -262,9 +256,9 @@ export function petAbilityEffect(pet, self, foe) {
     const bites = (has('h-frenzy') && foe.hp <= foe.d.maxHp * 0.25) ? 2 : 1;
     let stacks = (has('h-rabid') ? 2 : 1) + (has('h-plague') ? 1 : 0);
     let per = Math.round((1 + lvl * 0.35) * (has('h-venom') ? 1.5 : 1) * (has('h-rupture') ? 1.5 : 1));
-    // C4 Apex Ambush / CX Founder's Fury: guaranteed crit + harder bites. C3 Chum Slick: max poison, harder ticks.
-    const critAlways = sig('C4') || sig('CX');
-    if (sig('C4') || sig('CX')) base = Math.round(base * 1.5);
+    // C4 Apex Ambush: guaranteed crit + harder bites. C3 Chum Slick: max poison, harder ticks.
+    const critAlways = sig('C4');
+    if (sig('C4')) base = Math.round(base * 1.5);
     if (sig('C3')) { stacks = 3; per = Math.round(per * 1.4); }
     return {
       kind: 'pethit', bites, damage: base, crit: has('h-maul'), critAlways,

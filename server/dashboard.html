@@ -103,14 +103,6 @@
           const meta = [esc(who), r.geo ? esc(r.geo) : '', new Date(r.ts).toLocaleString()].filter(Boolean).join(' · ');
           return `<div class="rpt">${tag}${r.target ? `<b>${esc(r.target)}</b> ` : ''}<span class="rnote">${esc(r.note) || '<i>(no note)</i>'}</span><div class="rmeta">${meta}${coords ? ' · ' + coords : ''}</div></div>`;
         }).join('') : '<p class="note">No reports yet. Testers can press and hold the map to nominate a den or flag an unreachable spot.</p>'}
-        <h2>Survey leads 💜</h2>${(s.leads || []).length ? s.leads.map(l => {
-          const who = l.name || l.label || 'anon';
-          const mail = l.email ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>${l.optin ? ' <span class="rtag den">opted in</span>' : ''}` : '<i>(no email)</i>';
-          const meta = [esc(l.label || ''), l.geo ? esc(l.geo) : '', new Date(l.ts).toLocaleString()].filter(Boolean).join(' · ');
-          const want = l.mostWanted ? `<div class="rnote"><b>Wants:</b> ${esc(l.mostWanted)}</div>` : '';
-          const fb = l.feedback ? `<div class="rnote">${esc(l.feedback)}</div>` : '';
-          return `<div class="rpt"><span class="rtag fb">lead</span><b>${esc(who)}</b> · ${mail}${fb}${want}<div class="rmeta">${meta}</div></div>`;
-        }).join('') : '<p class="note">No survey responses yet.</p>'}
         <p class="note">Names shown for testers who went online (Crew); location is coarse (country/city from IP, no GPS). Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }

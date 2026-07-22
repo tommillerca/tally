@@ -1651,13 +1651,6 @@ export const BH_ITEMS = [
   "name": "Tidy Pet #5"
  },
  {
-  "id": "CX",
-  "slot": "C",
-  "rarity": "legendary",
-  "name": "Founder's Lizard",
-  "exclusive": true
- },
- {
   "id": "YD1",
   "slot": "YD",
   "file": "assets/brand/tombstone.png",

@@ -33,21 +33,17 @@ function cloud(px) {
   </div>`;
 }
 
-// `skin` picks the layer folder: 'lizard' (base C4 orange) or 'lizard-amethyst'
-// (the exclusive Founder's Lizard, CX). Only base + lid are recolored; the shared
-// tongue/mouthline/drool/fly layers ride the original folder either way.
-function lizard(px, skin = 'lizard') {
+function lizard(px) {
   const s = px / LIZ_W;
-  const body = `${A}/${skin}`;
   return `<div class="petanim" style="width:${px}px;height:${(px * LIZ_H / LIZ_W).toFixed(1)}px">
     <div class="pa-stage pa-lizard" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <div class="pa-creature">
-          <img class="pa-base" src="${body}/base.png" alt="">
+          <img class="pa-base" src="${A}/lizard/base.png" alt="">
           <div class="pa-tongueclip"><img class="pa-tongue" src="${A}/lizard/tongue.png" alt=""></div>
           <img class="pa-mouthline" src="${A}/lizard/mouthline.png" alt="">
           <img class="pa-drool" src="${A}/lizard/drool.png" alt="">
-          <img class="pa-lid" src="${body}/lid.png" alt="">
+          <img class="pa-lid" src="${A}/lizard/lid.png" alt="">
         </div>
         <img class="pa-fly" src="${A}/lizard/fly.png" alt="">
       </div>
@@ -60,8 +56,7 @@ function lizard(px, skin = 'lizard') {
 export function animatedPetHtml(petId, px) {
   if (petId === 'C1') return cloud(px);
   if (petId === 'C4') return lizard(px);
-  if (petId === 'CX') return lizard(px, 'lizard-amethyst'); // Founder's Lizard (survey reward)
   return null;
 }
 
-export const ANIMATED_PETS = new Set(['C1', 'C4', 'CX']);
+export const ANIMATED_PETS = new Set(['C1', 'C4']);
