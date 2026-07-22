@@ -120,7 +120,7 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
 // S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
 function petSpriteHtml(petId, px, ground = false) {
-  // CX (Founder's Lizard) has no shiny static variant — its amethyst art IS the
+  // CX (Founder's Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   if (petId !== 'CX' && S.shinyPets.has(petId)) {
     return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
@@ -2785,7 +2785,7 @@ function openFeedbackSheet() {
 
 // One-time founding-player survey. Prize-led: fill it out (name, email, what you
 // think, the one thing that would make you play more) and you keep the exclusive
-// amethyst Founder's Lizard — a pet nobody can hatch or buy. Email is optional
+// amethyst Founder's Lizard: a pet nobody can hatch or buy. Email is optional
 // contact info with an explicit opt-in (declared in the store data-safety forms);
 // the pet is granted LOCALLY on submit whether or not the network send succeeds,
 // so being offline never costs you the reward. Never returns once submitted.
@@ -2799,7 +2799,7 @@ function openSurveySheet(source = 'auto') {
         <div class="survey-glow"></div>
       </div>
       <h2 class="survey-title">Claim the Founder's Lizard</h2>
-      <p class="survey-sub">You're one of the first to play. Tell me what you think and this <b>exclusive amethyst lizard</b> is yours to keep. No one can hatch, buy, or breed it into existence — it only comes from here.</p>
+      <p class="survey-sub">You're one of the first to play. Tell me what you think and this <b>exclusive amethyst lizard</b> is yours to keep. No one can hatch, buy, or breed it into existence. It only comes from here.</p>
       <label class="survey-label" for="svName">Your name</label>
       <input id="svName" class="survey-in" type="text" maxlength="60" autocomplete="name" placeholder="What should I call you?">
       <label class="survey-label" for="svEmail">Email <span class="survey-opt">(optional)</span></label>
@@ -2833,7 +2833,7 @@ function openSurveySheet(source = 'auto') {
     const feedback = ($('#svFeel')?.value || '').trim();
     const mostWanted = ($('#svWant')?.value || '').trim();
     // light validation: we want SOMETHING useful, but never trap the player.
-    if (!name && !feedback && !mostWanted) { if (st) st.textContent = 'Add your name or a quick note first — then the lizard is yours.'; return; }
+    if (!name && !feedback && !mostWanted) { if (st) st.textContent = 'Add your name or a quick note first, then the lizard is yours.'; return; }
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (st) st.textContent = "That email doesn't look right. Fix it, or leave it blank."; return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Claiming...'; }
     // Grant LOCALLY first so the reward never depends on the network.
@@ -2854,14 +2854,14 @@ function openSurveySheet(source = 'auto') {
 function showFounderReveal(granted) {
   const wrap = sheetStack[sheetStack.length - 1]?.wrap;
   const form = wrap && $('#surveyForm', wrap);
-  if (!form) { toast(granted ? 'The Founder’s Lizard is yours! Find it in your Stable. 💜' : 'Thanks — every note gets read. 💜', 3600); history.back(); return; }
+  if (!form) { toast(granted ? 'The Founder’s Lizard is yours! Find it in your Stable. 💜' : 'Thanks, every note gets read. 💜', 3600); history.back(); return; }
   form.innerHTML = `
     <div class="survey-hero big">
       <div class="survey-liz">${animatedPetHtml('CX', 168) || ''}</div>
       <div class="survey-glow on"></div>
     </div>
     <h2 class="survey-title">The Founder's Lizard is yours! 💜</h2>
-    <p class="survey-sub">An exclusive amethyst companion, only for the players who helped shape the game. Find it in your <b>Stable</b> and equip it any time. Thank you — every word gets read.</p>
+    <p class="survey-sub">An exclusive amethyst companion, only for the players who helped shape the game. Find it in your <b>Stable</b> and equip it any time. Thank you: every word gets read.</p>
     <div class="row" style="margin-top:6px"><button class="btn" id="svDone" style="flex:1">See it in my Stable</button></div>
   `;
   $('#svDone', wrap)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
