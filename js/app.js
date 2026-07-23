@@ -166,6 +166,7 @@ ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0
 ICONS.water = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2s6.2 6.6 6.2 10.8A6.2 6.2 0 0 1 5.8 14C5.8 9.8 12 3.2 12 3.2z" fill="#7cc4ff" stroke="#173a52" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.4 13.6a2.6 2.6 0 0 0 2.6 2.6" fill="none" stroke="#e8f5ff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 ICONS.bed = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#f2e9d7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3H9v3" fill="rgba(242,233,215,0.12)"/><path d="M5.5 11V9.4a1.6 1.6 0 0 1 1.6-1.6" /></svg>`;
 ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z" fill="#b6a8e8" stroke="#2a2340" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16.5" cy="7.5" r="0.9" fill="#f0ecff"/></svg>`;
+ICONS.trend = (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15l4.6-4.6 3 3L20 6.5"/><path d="M14.5 6.5H20v5.5"/></svg>`;
 
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
@@ -702,7 +703,7 @@ async function renderToday(el) {
     ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
 
     <div class="hero-top">
-      <button class="streak-chip ${streak >= 3 ? 'hot' : ''}" id="streakChip"><span class="flame">${bhIcon('flame', 15)}</span> <b>${streak}</b></button>
+      <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
       <div class="hero-top-right">
         <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
         <button class="bh-coin" id="dustBtn" title="Bone Dust"><span class="dust-ico">◆</span> <b>${dustBal.toLocaleString()}</b></button>
@@ -5596,7 +5597,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v193'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v194'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

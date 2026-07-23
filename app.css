@@ -2702,3 +2702,8 @@ body::before {
 .trend-insight b { color: var(--text-1, #f2e9d7); }
 .trend-insight.ti-good { background: var(--accent-soft); border-color: rgba(165, 232, 71, 0.32); }
 .trend-insight.ti-warn { background: rgba(255, 201, 97, 0.11); border-color: rgba(var(--gold-rgb), 0.36); }
+
+/* Home top-left "Trends" entry (repurposed streak chip → clear graph affordance, v194) */
+.streak-chip.trend-chip { color: var(--accent); border-color: rgba(165, 232, 71, 0.5); }
+.streak-chip.trend-chip b { color: var(--accent); font-weight: 750; letter-spacing: 0.02em; }
+.streak-chip.trend-chip .tico { display: inline-flex; align-items: center; }
