@@ -47,6 +47,20 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // Most recent sample value for a quantity type within the last `days` days.
+    // Used for sparse metrics (resting HR, HRV) that aren't written every day.
+    private func latestQuantity(_ type: HKQuantityType, unit: HKUnit, days: Int, _ done: @escaping (Double) -> Void) {
+        let end = Date()
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: end) ?? end
+        let pred = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let q = HKSampleQuery(sampleType: type, predicate: pred, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+            let v = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit) ?? 0
+            done(v)
+        }
+        store.execute(q)
+    }
+
     @objc func isAvailable(_ call: CAPPluginCall) {
         call.resolve([
             "available": HKHealthStore.isHealthDataAvailable(),
@@ -136,20 +150,17 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             group.leave()
         })
 
-        // Heart & recovery: today's resting HR (bpm) + HRV (SDNN, ms), averaged.
+        // Heart & recovery: resting HR (bpm) + HRV (SDNN, ms). These are written
+        // sparsely by the watch (resting HR ~once/day and often not until later;
+        // HRV only during sleep/Breathe), so a "today only" query almost always
+        // comes back empty. Take the most RECENT reading within the last 10 days.
         var restingHr: Double = 0
         var hrv: Double = 0
         let bpm = HKUnit.count().unitDivided(by: .minute())
         group.enter()
-        store.execute(HKStatisticsQuery(quantityType: restingHrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, _ in
-            restingHr = stats?.averageQuantity()?.doubleValue(for: bpm) ?? 0
-            group.leave()
-        })
+        latestQuantity(restingHrType, unit: bpm, days: 10) { v in restingHr = v; group.leave() }
         group.enter()
-        store.execute(HKStatisticsQuery(quantityType: hrvType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, _ in
-            hrv = stats?.averageQuantity()?.doubleValue(for: .secondUnit(with: .milli)) ?? 0
-            group.leave()
-        })
+        latestQuantity(hrvType, unit: .secondUnit(with: .milli), days: 10) { v in hrv = v; group.leave() }
 
         group.notify(queue: .main) {
             let fmt = DateFormatter()

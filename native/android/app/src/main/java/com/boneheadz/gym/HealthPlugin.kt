@@ -191,11 +191,14 @@ class HealthPlugin : Plugin() {
                 for (t in types) arr.put(t)
                 res.put("wtypes", arr)
 
-                // Heart & recovery: latest resting HR (bpm) + HRV (RMSSD, ms) today.
-                val rhr = hc.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, range)).records
-                if (rhr.isNotEmpty()) res.put("restingHr", rhr.last().beatsPerMinute.toInt())
-                val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, range)).records
-                if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.last().heartRateVariabilityMillis).toInt())
+                // Heart & recovery: resting HR (bpm) + HRV (RMSSD, ms). These are
+                // written sparsely (not every day), so a "today only" range usually
+                // finds nothing. Look back 10 days and take the most recent reading.
+                val recent = TimeRangeFilter.between(now.minus(Duration.ofDays(10)), now)
+                val rhr = hc.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, recent)).records
+                if (rhr.isNotEmpty()) res.put("restingHr", rhr.maxByOrNull { it.time }!!.beatsPerMinute.toInt())
+                val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, recent)).records
+                if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.maxByOrNull { it.time }!!.heartRateVariabilityMillis).toInt())
             } catch (e: Exception) {
                 res.put("steps", 0); res.put("activeKcal", 0); res.put("error", e.message ?: "read-failed")
             }
