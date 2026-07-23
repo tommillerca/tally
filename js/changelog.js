@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 192, date: '2026-07-23', title: 'Activity & recovery trends', items: [
+    'Your Progress screen now has an Activity & recovery section for anyone with a watch: a gentle recovery read from your resting heart rate, plus cards for resting HR, HRV, active energy and move minutes.',
+    'Tap any card, or the History link on Steps and Weight, to drill in the way Apple Health does: Day, Week, Month and Year, with your average, range, best day and a plain-language read on where the trend is heading.',
+    'A "Your activities" breakdown shows your real workout mix from the last 8 weeks, and new activity types appear on their own.',
+    'Don\'t track any of this? Nothing changes, the section simply stays hidden.',
+  ] },
   { n: 188, date: '2026-07-23', title: 'Tidier home, Boneyard in the nav', items: [
     'The home screen is simpler: four clear buttons (Character, Stable, Kitchen, The Pit). Wardrobe and your Backpack now live together under Character.',
     'The Boneyard moved down to the bottom bar, so the map is always one tap away. The Shop lives in your Backpack now.',

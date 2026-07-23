@@ -2034,7 +2034,13 @@ async function renderTrends(el) {
     const dk = addDays(dateKey(), -i);
     const tot = dayTotals(byDate[dk] || []);
     const h = hByDate[dk] || {};
-    days.push({ date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0, steps: h.steps || 0, sleepHours: h.sleepHours ?? null });
+    days.push({
+      date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0,
+      steps: h.steps || 0, sleepHours: h.sleepHours ?? null,
+      activeKcal: h.activeKcal ?? null, exerciseMin: h.exerciseMin ?? null,
+      workouts: h.workouts || 0, wtypes: Array.isArray(h.wtypes) ? h.wtypes : [],
+      restingHr: h.restingHr ?? null, hrv: h.hrv ?? null,
+    });
   }
   const days14 = days.slice(-14), days7 = days.slice(-7);
 
@@ -2073,6 +2079,8 @@ async function renderTrends(el) {
     </div>
   </div>
 
+  ${activityRecoveryHtml(days)}
+
   <div class="card">
     <div class="card-title">CONSISTENCY · LAST 8 WEEKS</div>
     ${heatmapHtml(days)}
@@ -2080,7 +2088,7 @@ async function renderTrends(el) {
   </div>
 
   <div class="card">
-    <div class="card-title">ACTIVITY · LAST 14 DAYS</div>
+    <div class="card-title">ACTIVITY · LAST 14 DAYS${stepsWk ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
     <div class="big-stat"><span class="v">${stepsWk ? Math.round(days14.reduce((a, d) => a + d.steps, 0) / 14).toLocaleString() : '·'}</span><span class="d">avg steps / day</span></div>
     <div class="chart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}</div>
     <p class="note" style="margin-top:8px">${stepsWk ? `Line = ${(STEP_REF / 1000)}k steps. Walking is what levels your bonehead and hatches eggs.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
@@ -2094,7 +2102,7 @@ async function renderTrends(el) {
   </div>
 
   <div class="card">
-    <div class="card-title">WEIGHT ${weights.length ? `<span class="note">${weights.length} entries</span>` : ''}</div>
+    <div class="card-title">WEIGHT ${weights.length ? `<span class="note">${weights.length} entries</span><button class="link" data-metric="weight">History ›</button>` : ''}</div>
     ${latest ? `
       <div class="big-stat">
         <span class="v">${toUnit(latest.trend).toFixed(1)} ${unit}</span>
@@ -2123,6 +2131,7 @@ async function renderTrends(el) {
 
   $('#logWeight').addEventListener('click', openWeightSheet);
   $('#openProg').addEventListener('click', openProgressSheet);
+  el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
   bindBadgeTaps(el);
 }
 
@@ -2205,6 +2214,233 @@ function proteinChart(days, target) {
   }).join('');
   const ty = H - 16 - (target / max) * (H - 30);
   return `<svg viewBox="0 0 ${W} ${H}">${bars}<line x1="${P}" x2="${W - P}" y1="${ty.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="var(--line-strong)" stroke-width="1.5" stroke-dasharray="5 5"/></svg>`;
+}
+
+/* ================= activity & recovery trends (v192) =================
+   Heart + activity modules for the Progress screen, plus Apple-Health-style
+   drill-in detail views (Day / Week / Month / Year). Everything reads the daily
+   `health` rows ingestHealth() already stores (restingHr / hrv / activeKcal /
+   exerciseMin / workouts / wtypes), so anyone without a watch just sees nothing
+   extra here (the blocks self-hide when there is no data). */
+
+const WORKOUT_LABEL = {
+  running: 'Running', walking: 'Walking', biking: 'Cycling', cycling: 'Cycling',
+  hiking: 'Hiking', swimming: 'Swimming', rowing: 'Rowing', elliptical: 'Elliptical',
+  hiit: 'HIIT', strength: 'Strength', yoga: 'Yoga', pilates: 'Pilates', other: 'Other',
+};
+
+// Metric registry shared by the Progress modules and the drill-in sheet.
+// goodLow: true = lower is better (resting HR), false = higher is better,
+// null = neither (weight — we show the trend, no "best day").
+const TREND_METRICS = {
+  restingHr:   { label: 'Resting heart rate', short: 'Resting HR',    unit: 'bpm',   color: 'var(--fat)',     pick: h => h.restingHr,   goodLow: true },
+  hrv:         { label: 'Heart rate variability', short: 'HRV',       unit: 'ms',    color: 'var(--protein)', pick: h => h.hrv,         goodLow: false },
+  activeKcal:  { label: 'Active energy',      short: 'Active energy',  unit: 'kcal',  color: 'var(--carbs)',   pick: h => h.activeKcal,  goodLow: false },
+  exerciseMin: { label: 'Move minutes',       short: 'Move minutes',   unit: 'min',   color: 'var(--gold)',    pick: h => h.exerciseMin, goodLow: false },
+  steps:       { label: 'Steps',              short: 'Steps',          unit: 'steps', color: 'var(--accent)',  pick: h => h.steps,       goodLow: false },
+  weight:      { label: 'Weight',             short: 'Weight',         unit: '',      color: 'var(--protein)', pick: null,               goodLow: null },
+};
+
+// date -> value map for a metric. Weight comes from the weights store; the rest
+// from health rows. Zero/absent readings are treated as "no data" (gaps).
+function metricValueByDate(metricKey, health, weights) {
+  const m = {};
+  if (metricKey === 'weight') { for (const w of (weights || [])) if (w.kg) m[w.date] = w.kg; }
+  else { const M = TREND_METRICS[metricKey]; for (const h of health) { const v = M.pick(h); if (v != null && v > 0) m[h.date] = v; } }
+  return m;
+}
+
+// Series of {label,date,value|null} for a range. We only capture one aggregate
+// reading per day, so Week/Month are daily bars, Year is 12 monthly averages,
+// and Day shows the last 14 days as recent context (no intraday feed to plot).
+function metricSeries(metricKey, rangeKey, health, weights) {
+  const byDate = metricValueByDate(metricKey, health, weights);
+  const today = dateKey();
+  const points = [];
+  if (rangeKey === 'year') {
+    const buckets = {};
+    for (const dk in byDate) { const mk = dk.slice(0, 7); (buckets[mk] = buckets[mk] || []).push(byDate[dk]); }
+    const d = new Date(today + 'T12:00');
+    for (let i = 11; i >= 0; i--) {
+      const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const mk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+      const arr = buckets[mk] || [];
+      const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], value: avg });
+    }
+  } else {
+    const n = rangeKey === 'week' ? 7 : rangeKey === 'day' ? 14 : 30;
+    for (let i = n - 1; i >= 0; i--) {
+      const dk = addDays(today, -i);
+      points.push({ label: 'SMTWTFS'[new Date(dk + 'T12:00').getDay()], date: dk, value: byDate[dk] ?? null });
+    }
+  }
+  return points;
+}
+
+// format a metric value (unit handled by caller where needed)
+function metricNum(metricKey, v) {
+  if (v == null) return '·';
+  if (metricKey === 'weight') return (S.settings.units === 'kg' ? v : kgToLb(v)).toFixed(1);
+  if (metricKey === 'steps' || metricKey === 'activeKcal') return Math.round(v).toLocaleString();
+  return String(Math.round(v));
+}
+function metricUnit(metricKey) {
+  if (metricKey === 'weight') return S.settings.units === 'kg' ? 'kg' : 'lb';
+  return TREND_METRICS[metricKey].unit;
+}
+
+// tiny bar sparkline for the summary cards (nulls = gaps)
+function metricSpark(vals, color) {
+  const W = 120, H = 26, nn = vals.filter(v => v != null && v > 0);
+  if (!nn.length) return '';
+  const mx = Math.max(...nn), mn = Math.min(...nn), span = (mx - mn) || 1, n = vals.length, bw = W / n;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none">${vals.map((v, i) => {
+    if (v == null || v <= 0) return '';
+    const h = 4 + ((v - mn) / span) * (H - 4);
+    return `<rect x="${(i * bw).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw - 1.5).toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${color}" opacity="0.5"/>`;
+  }).join('')}</svg>`;
+}
+
+// full drill-in chart: bars, a dashed average baseline, best day highlighted green
+function metricDetailChart(points, metricKey) {
+  const metric = TREND_METRICS[metricKey];
+  const vals = points.map(p => p.value).filter(v => v != null);
+  if (!vals.length) return '<p class="note" style="text-align:center;padding:26px 0">No readings in this window yet.</p>';
+  const maxV = Math.max(...vals), minV = Math.min(...vals);
+  const base = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const lo = Math.min(minV, base) * 0.94, hi = Math.max(maxV, base) * 1.06, span = (hi - lo) || 1;
+  const W = 360, H = 150, P = 8, gap = 3, n = points.length, bw = (W - 2 * P - gap * (n - 1)) / n;
+  const y = v => P + (1 - (v - lo) / span) * (H - 2 * P - 16);
+  let best = -1;
+  if (metric.goodLow != null) points.forEach((p, i) => { if (p.value == null) return; if (best < 0 || (metric.goodLow ? p.value < points[best].value : p.value > points[best].value)) best = i; });
+  const bars = points.map((p, i) => {
+    if (p.value == null) return '';
+    const x = P + i * (bw + gap), yy = y(p.value), h = (H - 16 - P) - yy;
+    const isBest = i === best;
+    return `<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5, h).toFixed(1)}" rx="1.5" fill="${isBest ? 'var(--accent)' : metric.color}" opacity="${isBest ? 1 : 0.55}"/>`;
+  }).join('');
+  const by = y(base);
+  const bl = `<line x1="${P}" y1="${by.toFixed(1)}" x2="${W - P}" y2="${by.toFixed(1)}" stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/><text x="${W - P}" y="${(by - 3).toFixed(1)}" fill="var(--text-3)" font-size="9" text-anchor="end">avg ${metricNum(metricKey, base)}</text>`;
+  const leftLbl = { day: '2 wks ago', week: '7 days ago', month: '30 days ago', year: '12 mo ago' };
+  const axis = `<text x="${P}" y="${H - 2}" fill="var(--text-3)" font-size="9">${leftLbl[points.length === 12 ? 'year' : (n === 7 ? 'week' : n === 14 ? 'day' : 'month')] || ''}</text><text x="${W - P}" y="${H - 2}" fill="var(--text-3)" font-size="9" text-anchor="end">now</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${bl}${bars}${axis}</svg>`;
+}
+
+// a plain-language insight comparing the first vs second half of the window
+function metricInsight(metricKey, points) {
+  const metric = TREND_METRICS[metricKey];
+  const half = Math.floor(points.length / 2);
+  const avg = arr => { const v = arr.map(p => p.value).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const a = avg(points.slice(0, half)), b = avg(points.slice(half));
+  if (a == null || b == null || a === 0) return '';
+  const pct = (b - a) / a * 100;
+  if (Math.abs(pct) < 3) return `Holding steady across this window.`;
+  const p = Math.abs(pct).toFixed(0), up = pct > 0;
+  const good = metric.goodLow == null ? null : (metric.goodLow ? !up : up);
+  const line = {
+    restingHr: up ? `Up about <b>${p}%</b>. A rising resting heart rate can mean fatigue, stress or a hard training block, worth an easier day.` : `Down about <b>${p}%</b>. A falling resting heart rate usually means your fitness is improving, nice work.`,
+    hrv: up ? `Up about <b>${p}%</b>. Higher HRV generally points to good recovery.` : `Down about <b>${p}%</b>. Lower HRV can follow poor sleep or heavy load, ease in if it keeps dropping.`,
+    activeKcal: `${up ? 'Up' : 'Down'} about <b>${p}%</b> in active energy${up ? ', you are moving more.' : ' vs earlier in the window.'}`,
+    exerciseMin: `${up ? 'Up' : 'Down'} about <b>${p}%</b> in move minutes${up ? '. Momentum.' : ' vs earlier in the window.'}`,
+    steps: `${up ? 'Up' : 'Down'} about <b>${p}%</b> in daily steps${up ? '. Keep it rolling.' : ' vs earlier in the window.'}`,
+    weight: `Trend is ${up ? 'up' : 'down'} about <b>${p}%</b> across this window.`,
+  }[metricKey] || '';
+  return line ? `<div class="trend-insight ${good === true ? 'ti-good' : good === false ? 'ti-warn' : ''}">${line}</div>` : '';
+}
+
+// Apple-Health-style drill-in: header + Day/Week/Month/Year + chart + stats + insight.
+async function openMetricDetail(metricKey) {
+  const metric = TREND_METRICS[metricKey];
+  if (!metric) return;
+  const health = await db.all('health');
+  const weights = metricKey === 'weight' ? await db.all('weights') : [];
+
+  const byDate = metricValueByDate(metricKey, health, weights);
+  const dates = Object.keys(byDate).sort();
+  const latest = dates.length ? byDate[dates[dates.length - 1]] : null;
+  const recent = dates.slice(-28).map(d => byDate[d]);
+  const base = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
+  const delta = (latest != null && base != null) ? latest - base : null;
+  let deltaHtml = '';
+  if (delta != null && Math.abs(delta) >= (metricKey === 'weight' ? 0.2 : 1)) {
+    const down = delta < 0;
+    const good = metric.goodLow == null ? null : (metric.goodLow ? down : !down);
+    deltaHtml = `<span class="now-d ${good === false ? 'bad' : ''}">${down ? '▼' : '▲'}${metricNum(metricKey, Math.abs(delta))} vs baseline</span>`;
+  }
+
+  const bodyHtml = (rangeKey) => {
+    const pts = metricSeries(metricKey, rangeKey, health, weights);
+    const vals = pts.map(p => p.value).filter(v => v != null);
+    if (!vals.length) return `<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length, mn = Math.min(...vals), mx = Math.max(...vals);
+    const u = metricUnit(metricKey);
+    const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
+    let stats;
+    if (metric.goodLow == null) { // weight: Average / Range / Latest
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}–${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, vals[vals.length - 1])}<small> ${u}</small>`);
+    } else {
+      const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}–${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
+    }
+    return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}</div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
+  };
+
+  const range0 = 'month';
+  const tabs = ['day', 'week', 'month', 'year'].map(r => `<button class="rtab ${r === range0 ? 'on' : ''}" data-r="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+  const html = `
+    <button class="sheet-close" style="position:absolute;top:12px;right:14px">Close</button>
+    <h2 style="margin:2px 0 2px;font-size:19px">${metric.label}</h2>
+    <div class="trend-now"><span class="n">${latest != null ? metricNum(metricKey, latest) : '·'}</span><span class="u">${metricUnit(metricKey)}</span>${deltaHtml}</div>
+    <div class="rtabs">${tabs}</div>
+    <div class="trend-body">${bodyHtml(range0)}</div>
+    <p class="note" style="margin:14px 2px 2px">Day, Week, Month and Year switch the window, like Apple Health. Baseline dashes = your recent average${metric.goodLow != null ? '; the green bar is your best day' : ''}.</p>`;
+  const wrap = openSheet(html, { cls: 'sheet-trend', name: 'trend_' + metricKey });
+  $$('.rtab', wrap).forEach(b => b.addEventListener('click', () => {
+    $$('.rtab', wrap).forEach(x => x.classList.toggle('on', x === b));
+    $('.trend-body', wrap).innerHTML = bodyHtml(b.dataset.r);
+  }));
+}
+
+// The Progress-screen "Activity & recovery" block. Returns '' when there is no
+// watch data, so non-fitness users never see an empty or nagging section.
+function activityRecoveryHtml(days) {
+  const has = k => days.some(d => d[k] != null && d[k] > 0);
+  const hasHeart = has('restingHr') || has('hrv');
+  const hasActive = has('activeKcal') || has('exerciseMin') || days.some(d => d.workouts > 0);
+  if (!hasHeart && !hasActive) return '';
+
+  let cue = '';
+  if (has('restingHr')) {
+    const rhrs = days.map(d => d.restingHr).filter(v => v != null);
+    const baseline = rhrs.reduce((a, b) => a + b, 0) / rhrs.length;
+    const latest = [...days].reverse().find(d => d.restingHr != null).restingHr;
+    const delta = latest - baseline;
+    let cls = 'rc-steady', title = 'Steady', sub = `Resting HR ${Math.round(latest)}, right around your ${Math.round(baseline)} baseline.`;
+    if (delta <= -1) { cls = 'rc-good'; title = 'Well recovered'; sub = `Resting HR ${Math.round(latest)}, ${Math.round(Math.abs(delta))} below your ${Math.round(baseline)} baseline. Good day to push.`; }
+    else if (delta >= 3) { cls = 'rc-easy'; title = 'Ease in today'; sub = `Resting HR ${Math.round(latest)}, ${Math.round(delta)} above your ${Math.round(baseline)} baseline. Your body may still be recovering.`; }
+    cue = `<div class="recovery-cue ${cls}"><span class="rc-dot"></span><div class="rc-txt"><b>${title}</b><span>${sub}</span></div></div>`;
+  }
+
+  const cardKeys = ['restingHr', 'hrv', 'activeKcal', 'exerciseMin'].filter(k => has(k));
+  const card = (mk) => {
+    const M = TREND_METRICS[mk];
+    const latestD = [...days].reverse().find(d => M.pick(d) != null && M.pick(d) > 0);
+    const val = latestD ? M.pick(latestD) : null;
+    return `<button class="trend-card" data-metric="${mk}"><div class="tc-top"><span class="tc-lab">${M.short}</span><span class="tc-chev">›</span></div><div class="tc-val">${metricNum(mk, val)}<small>${M.unit}</small></div><div class="tc-spark">${metricSpark(days.slice(-14).map(d => M.pick(d)), M.color)}</div></button>`;
+  };
+  const cards = cardKeys.length ? `<div class="trend-cards">${cardKeys.map(card).join('')}</div>` : '';
+
+  let mix = '';
+  const counts = {};
+  for (const d of days) for (const t of (d.wtypes || [])) counts[t] = (counts[t] || 0) + 1;
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (rows.length) {
+    const max = rows[0][1];
+    mix = `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
+  }
+
+  return `<div class="card trend-hero"><div class="card-title">ACTIVITY &amp; RECOVERY</div>${cue}${cards}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
 }
 
 function openWeightSheet() {
@@ -5354,7 +5590,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v191'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v192'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
