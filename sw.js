@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v196';
+const VERSION = 'tally-v197';
 const PRECACHE = [
   './',
   './index.html',
@@ -92,24 +92,31 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // API calls go to network
 
-  if (e.request.mode === 'navigate') {
+  const p = url.pathname;
+  const isVendor = p.includes('/vendor/');
+  // App shell = the HTML + our own JS/CSS/JSON. Served NETWORK-FIRST so a new
+  // deploy is picked up the moment the device is online, and so a stale/poisoned
+  // cache entry can never get stuck being served forever. Cache is the offline
+  // fallback only. Heavy, rarely-changing binaries (fonts, images, vendor libs)
+  // stay cache-first for speed + offline.
+  const isShell = !isVendor && (e.request.mode === 'navigate' || /\.(?:js|mjs|css|json)$/.test(p));
+
+  if (isShell) {
     e.respondWith(
-      caches.match('./index.html').then(hit => hit || fetch(e.request))
+      fetch(e.request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+        return res;
+      }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
     );
     return;
   }
 
+  // static assets: cache-first
   e.respondWith(
-    caches.match(e.request).then(hit => {
-      if (hit) return hit;
-      return fetch(e.request).then(res => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(VERSION).then(c => c.put(e.request, copy));
-        }
-        return res;
-      });
-    })
+    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+      return res;
+    }))
   );
 });
 
