@@ -454,7 +454,10 @@ async function backupNudge() {
 }
 
 function bindTabs() {
-  $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => { location.hash = '#/' + b.dataset.tab; }));
+  $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.tab === 'boneyard') { openMap(); return; } // Boneyard opens the map sheet, not a route
+    location.hash = '#/' + b.dataset.tab;
+  }));
   $('#fab').addEventListener('click', () => {
     if (currentTab() !== 'today') location.hash = '#/today';
     const now = new Date();
@@ -718,12 +721,10 @@ async function renderToday(el) {
     </div>
   </div>
 
-  <div class="hero-actions six">
-    <button class="hero-act" id="huntBtn">${ICONS.mapmark(23)}<span>Boneyard</span></button>
-    <button class="hero-act${wardAttn ? ' attn' : ''}" id="wardBtn">${ICONS.bone(23)}<span>Wardrobe${wardAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+  <div class="hero-actions four">
+    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(23)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
     <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
     <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act" id="crateActBtn">${crateIcon('golden', 23)}<span>Backpack${crates.length ? ` (${crates.length})` : ''}</span></button>
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(23)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
@@ -822,16 +823,14 @@ async function renderToday(el) {
   measureBubbleSide($('#bhStage'), eq).then(side => {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
   });
-  $('#wardBtn')?.addEventListener('click', () => openCharacter('wardrobe'));
+  $('#charBtn')?.addEventListener('click', () => openCharacter('wardrobe')); // Character hub: Wardrobe + Backpack + Build + Progress
   $('#stableBtn')?.addEventListener('click', openStable);
-  $('#crateActBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#huntBtn')?.addEventListener('click', openMap);
   $('#unlockNudge')?.addEventListener('click', () => {
     const a = $('#unlockNudge')?.dataset.ulaction;
     if (a === 'wardrobe') openCharacter('wardrobe');
@@ -867,7 +866,7 @@ async function renderToday(el) {
     navigator.geolocation.getCurrentPosition = ok => setTimeout(() => ok(fake), 60);
     navigator.geolocation.watchPosition = ok => { setTimeout(() => ok(fake), 400); return 1; };
     navigator.geolocation.clearWatch = () => {};
-    setTimeout(() => { $('#huntBtn')?.click(); setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
+    setTimeout(() => { openMap(); setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
   }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
@@ -5337,7 +5336,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v187'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v188'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
