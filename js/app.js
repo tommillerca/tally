@@ -4197,6 +4197,11 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (payload.steps != null) row.steps = payload.steps;
   if (payload.activeKcal != null) row.activeKcal = payload.activeKcal;
   if (payload.exerciseMin != null) row.exerciseMin = payload.exerciseMin;
+  if (payload.workouts != null) row.workouts = payload.workouts;
+  if (Array.isArray(payload.wtypes)) row.wtypes = payload.wtypes;
+  if (payload.restingHr != null) row.restingHr = payload.restingHr;
+  if (payload.hrv != null) row.hrv = payload.hrv;
+  if (payload.exerciseMin != null) row.exerciseMin = payload.exerciseMin;
   if (payload.cycleKm != null) row.cycleKm = payload.cycleKm;
   if (payload.workouts != null) row.workouts = payload.workouts;
   if (payload.wtypes) row.wtypes = payload.wtypes;
@@ -4485,6 +4490,7 @@ async function nativeSyncNow({ silent = false } = {}) {
       date: r.date, steps: r.steps ?? null, activeKcal: r.activeKcal ?? null, weightKg: r.weightKg ?? null,
       exerciseMin: r.exerciseMin ?? null, cycleKm: r.cycleKm ?? null,
       workouts: r.workouts ?? null, wtypes: Array.isArray(r.wtypes) ? r.wtypes : null,
+      restingHr: r.restingHr ?? null, hrv: r.hrv ?? null,
     };
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
@@ -4501,8 +4507,8 @@ async function nativeAutoSync() {
   // already-connected users were never prompted for them. Re-request auth once —
   // iOS/Health Connect only surface a sheet for the NOT-yet-granted scopes (no-op
   // if all are already set). Gated by hkScopesV so it fires exactly once.
-  if ((await kvGet('hkScopesV', 1)) < 2) {
-    await kvSet('hkScopesV', 2);
+  if ((await kvGet('hkScopesV', 1)) < 3) {
+    await kvSet('hkScopesV', 3);
     try { await nativeRequestAuth(); } catch { /* best-effort; Reconnect in Settings is the fallback */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
@@ -5348,7 +5354,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v190'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v191'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

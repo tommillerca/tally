@@ -26,6 +26,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
     private var energyType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)! }
     private var massType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .bodyMass)! }
     private var exTimeType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)! }
+    private var restingHrType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .restingHeartRate)! }
+    private var hrvType: HKQuantityType { HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)! }
 
     // HKWorkoutActivityType -> slug matching js/game.js WORKOUT_DISCIPLINE.
     private func workoutSlug(_ t: HKWorkoutActivityType) -> String {
@@ -57,7 +59,18 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["granted": false, "reason": "unavailable"])
             return
         }
-        let read: Set<HKObjectType> = [stepsType, energyType, massType, exTimeType, HKObjectType.workoutType()]
+        // Full superset requested ONCE so future features never need a new prompt.
+        // compactMap drops any identifier unavailable on the running iOS version.
+        let qids: [HKQuantityTypeIdentifier] = [
+            .stepCount, .activeEnergyBurned, .appleExerciseTime, .appleStandTime,
+            .distanceWalkingRunning, .distanceCycling, .distanceSwimming, .flightsClimbed,
+            .heartRate, .restingHeartRate, .heartRateVariabilitySDNN, .walkingHeartRateAverage, .vo2Max,
+            .respiratoryRate, .oxygenSaturation,
+            .bodyMass, .height, .bodyFatPercentage, .leanBodyMass,
+        ]
+        var read: Set<HKObjectType> = Set(qids.compactMap { HKObjectType.quantityType(forIdentifier: $0) })
+        read.insert(HKObjectType.workoutType())
+        if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { read.insert(sleep) }
         #if DEBUG
         let write: Set<HKSampleType> = [stepsType, energyType]
         #else
@@ -123,6 +136,21 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             group.leave()
         })
 
+        // Heart & recovery: today's resting HR (bpm) + HRV (SDNN, ms), averaged.
+        var restingHr: Double = 0
+        var hrv: Double = 0
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        group.enter()
+        store.execute(HKStatisticsQuery(quantityType: restingHrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, _ in
+            restingHr = stats?.averageQuantity()?.doubleValue(for: bpm) ?? 0
+            group.leave()
+        })
+        group.enter()
+        store.execute(HKStatisticsQuery(quantityType: hrvType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, stats, _ in
+            hrv = stats?.averageQuantity()?.doubleValue(for: .secondUnit(with: .milli)) ?? 0
+            group.leave()
+        })
+
         group.notify(queue: .main) {
             let fmt = DateFormatter()
             fmt.dateFormat = "yyyy-MM-dd"
@@ -135,6 +163,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 "exerciseMin": Int(exMin.rounded()),
                 "wtypes": wtypes,
             ]
+            if restingHr > 0 { out["restingHr"] = Int(restingHr.rounded()) }
+            if hrv > 0 { out["hrv"] = Int(hrv.rounded()) }
             if let w = weightKg { out["weightKg"] = w }
             call.resolve(out)
         }

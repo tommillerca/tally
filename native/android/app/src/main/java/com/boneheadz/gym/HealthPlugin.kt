@@ -6,9 +6,22 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
+import androidx.health.connect.client.records.RespiratoryRateRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.HeightRecord
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.LeanBodyMassRecord
+import androidx.health.connect.client.records.SleepSessionRecord
 import com.getcapacitor.JSArray
 import java.time.Duration
 import androidx.health.connect.client.request.AggregateRequest
@@ -41,11 +54,25 @@ class HealthPlugin : Plugin() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val permContract = PermissionController.createRequestPermissionResultContract()
 
+    // Full superset requested ONCE so future features never need a new grant sheet.
     private val readPerms = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+        HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
+        HealthPermission.getReadPermission(Vo2MaxRecord::class),
+        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
+        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
         HealthPermission.getReadPermission(WeightRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        HealthPermission.getReadPermission(HeightRecord::class),
+        HealthPermission.getReadPermission(BodyFatRecord::class),
+        HealthPermission.getReadPermission(LeanBodyMassRecord::class),
+        HealthPermission.getReadPermission(SleepSessionRecord::class)
     )
 
     // Health Connect exerciseType Int -> a slug matching js/game.js WORKOUT_DISCIPLINE.
@@ -163,6 +190,12 @@ class HealthPlugin : Plugin() {
                 val arr = JSArray()
                 for (t in types) arr.put(t)
                 res.put("wtypes", arr)
+
+                // Heart & recovery: latest resting HR (bpm) + HRV (RMSSD, ms) today.
+                val rhr = hc.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, range)).records
+                if (rhr.isNotEmpty()) res.put("restingHr", rhr.last().beatsPerMinute.toInt())
+                val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, range)).records
+                if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.last().heartRateVariabilityMillis).toInt())
             } catch (e: Exception) {
                 res.put("steps", 0); res.put("activeKcal", 0); res.put("error", e.message ?: "read-failed")
             }
