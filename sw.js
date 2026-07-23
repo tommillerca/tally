@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v197';
+const VERSION = 'tally-v198';
 const PRECACHE = [
   './',
   './index.html',
@@ -102,8 +102,10 @@ self.addEventListener('fetch', e => {
   const isShell = !isVendor && (e.request.mode === 'navigate' || /\.(?:js|mjs|css|json)$/.test(p));
 
   if (isShell) {
+    // no-cache: force revalidation against the server (bypass the browser HTTP
+    // cache) so a stale HTTP-cached copy can't keep the app pinned to old code.
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
         return res;
       }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
