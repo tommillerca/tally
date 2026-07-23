@@ -4497,6 +4497,14 @@ async function nativeSyncNow({ silent = false } = {}) {
 
 async function nativeAutoSync() {
   if (!isNative() || !S.settings?.hkNative) return;
+  // One-time: workout + exercise-minute read scopes were added after launch, so
+  // already-connected users were never prompted for them. Re-request auth once —
+  // iOS/Health Connect only surface a sheet for the NOT-yet-granted scopes (no-op
+  // if all are already set). Gated by hkScopesV so it fires exactly once.
+  if ((await kvGet('hkScopesV', 1)) < 2) {
+    await kvSet('hkScopesV', 2);
+    try { await nativeRequestAuth(); } catch { /* best-effort; Reconnect in Settings is the fallback */ }
+  }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
   const ok = await nativeSyncNow({ silent: true });
   if (ok && currentTab() === 'today') refresh();
@@ -5340,7 +5348,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v189'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v190'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
