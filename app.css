@@ -904,6 +904,16 @@ body::before {
 .unlock-nudge .ul-chev { color: var(--muted); font-size: 20px; font-weight: 700; flex: 0 0 auto; }
 .unlock-nudge:active { background: var(--surface-2); }
 /* v148 What's New (changelog) sheet */
+.wn-update-note {
+  display: flex; flex-direction: column; gap: 5px; margin: 0 0 16px;
+  padding: 13px 15px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(185,108,240,0.16), rgba(185,108,240,0.08));
+  border: 2px solid rgba(185,108,240,0.55);
+  box-shadow: 0 3px 0 rgba(122,63,176,0.4);
+}
+.wn-update-note b:first-child { font-size: 15px; color: #d7a6ff; }
+.wn-update-note span { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.wn-update-note b { color: var(--text); }
 .wn-entry { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .wn-entry:last-child { border-bottom: 0; }
 .wn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }

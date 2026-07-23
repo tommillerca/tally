@@ -317,7 +317,7 @@ async function boot() {
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
   onAppResume(() => { nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
-  initAnalytics(APP_SOCIAL_V); // anonymous first-party usage analytics (queues until backend configured)
+  initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
 
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -2952,6 +2952,10 @@ async function openWhatsNew() {
     <div class="sheet-head"><h2>What's New</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
+      ${isNative() ? `<div class="wn-update-note">
+        <b>📲 Update the app to get everything</b>
+        <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
+      </div>` : ''}
       ${cards}
     </div>`, { cls: 'full' });
   await kvSet('changelogSeen', changelogLatest());
@@ -5336,7 +5340,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v188'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v189'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
