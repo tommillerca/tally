@@ -2064,6 +2064,7 @@ async function renderTrends(el) {
   const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
 
   el.innerHTML = `
+  <div id="updBanner"></div>
   <h1 class="page-h1">Progress<span class="sub">Your level, streak, badges and data</span></h1>
 
   <div class="card recap-card">
@@ -2135,6 +2136,7 @@ async function renderTrends(el) {
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
   $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
   $('#trendSync', el)?.addEventListener('click', async () => { await nativeSyncNow({ silent: false }); refresh(); });
+  checkForUpdate(el);
   bindBadgeTaps(el);
 }
 
@@ -2462,6 +2464,44 @@ function activityRecoveryHtml(days) {
 
   const heroTitle = hasHeart ? 'ACTIVITY &amp; RECOVERY' : 'ACTIVITY';
   return `<div class="card trend-hero"><div class="card-title">${heroTitle}</div>${cue}${cards}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
+}
+
+// Hard refresh: drop the service worker + all caches and reload, so a stale
+// client actually pulls the newest build. Shared by Settings and the Trends banner.
+async function hardRefresh() {
+  toast('Getting the latest build...', 2200);
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch { /* best effort */ }
+  setTimeout(() => location.reload(true), 500);
+}
+
+// Ask the network (not the SW cache) what the latest shipped build is, and show a
+// "Get latest" banner at the top of Progress when this client is behind. It hides
+// itself the moment the running build matches, so it only nags when truly stale.
+async function checkForUpdate(el) {
+  try {
+    const res = await fetch('sw.js?cb=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/tally-v(\d+)/);
+    if (!m) return;
+    const latest = +m[1];
+    const running = parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) || 0;
+    if (latest <= running) return; // up to date -> no banner
+    const b = $('#updBanner', el);
+    if (!b) return;
+    b.innerHTML = `<button class="upd-banner" id="updBannerBtn">
+      <span class="ub-txt"><b>Update available</b><span>New features are ready. You're on ${esc(APP_BUILD)}; v${latest} is live.</span></span>
+      <span class="ub-cta">Get latest</span></button>`;
+    $('#updBannerBtn', el)?.addEventListener('click', hardRefresh);
+  } catch { /* offline / blocked: just skip the banner */ }
 }
 
 function openWeightSheet() {
@@ -3512,20 +3552,7 @@ async function renderSettings(el) {
   $('#surveyBtn')?.addEventListener('click', () => openSurveySheet('settings'));
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched — it lives in IndexedDB).
-  $('#updateBtn')?.addEventListener('click', async () => {
-    toast('Getting the latest build...', 2200);
-    try {
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(r => r.unregister()));
-      }
-      if (window.caches) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
-      }
-    } catch { /* best effort */ }
-    setTimeout(() => location.reload(true), 500);
-  });
+  $('#updateBtn')?.addEventListener('click', hardRefresh);
 }
 
 /* ================= profile / onboarding ================= */
@@ -5611,7 +5638,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v195'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v196'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

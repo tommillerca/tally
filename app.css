@@ -2707,3 +2707,14 @@ body::before {
 .streak-chip.trend-chip { color: var(--accent); border-color: rgba(165, 232, 71, 0.5); }
 .streak-chip.trend-chip b { color: var(--accent); font-weight: 750; letter-spacing: 0.02em; }
 .streak-chip.trend-chip .tico { display: inline-flex; align-items: center; }
+
+/* Trends update banner (v196): self-hides when the running build is current */
+.upd-banner { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px;
+  text-align: left; background: linear-gradient(180deg, rgba(255,201,97,.17), rgba(255,201,97,.06));
+  border: 1.5px solid rgba(var(--gold-rgb), .5); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px; }
+.upd-banner .ub-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.upd-banner .ub-txt b { font-size: 14.5px; color: var(--text); }
+.upd-banner .ub-txt span { font-size: 12px; color: var(--text-3); }
+.upd-banner .ub-cta { flex: none; background: var(--gold); color: #2a1c05; font-weight: 750; font-size: 13px;
+  padding: 8px 14px; border-radius: 10px; }
+.upd-banner:active { filter: brightness(.95); }
