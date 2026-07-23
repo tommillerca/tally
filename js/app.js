@@ -2408,7 +2408,8 @@ function activityRecoveryHtml(days) {
   const has = k => days.some(d => d[k] != null && d[k] > 0);
   const hasHeart = has('restingHr') || has('hrv');
   const hasActive = has('activeKcal') || has('exerciseMin') || days.some(d => d.workouts > 0);
-  if (!hasHeart && !hasActive) return '';
+  const hasSteps = has('steps');
+  if (!hasHeart && !hasActive && !hasSteps) return '';
 
   let cue = '';
   if (has('restingHr')) {
@@ -2422,7 +2423,11 @@ function activityRecoveryHtml(days) {
     cue = `<div class="recovery-cue ${cls}"><span class="rc-dot"></span><div class="rc-txt"><b>${title}</b><span>${sub}</span></div></div>`;
   }
 
-  const cardKeys = ['restingHr', 'hrv', 'activeKcal', 'exerciseMin'].filter(k => has(k));
+  // Heart + active-energy cards when a watch feeds them. If all we have is steps
+  // (phone-only, or a watch that hasn't synced the richer fields yet), fall back
+  // to a Steps card so the section is still visible and useful.
+  let cardKeys = ['restingHr', 'hrv', 'activeKcal', 'exerciseMin'].filter(k => has(k));
+  if (!cardKeys.length && hasSteps) cardKeys = ['steps'];
   const card = (mk) => {
     const M = TREND_METRICS[mk];
     const latestD = [...days].reverse().find(d => M.pick(d) != null && M.pick(d) > 0);
@@ -2440,7 +2445,8 @@ function activityRecoveryHtml(days) {
     mix = `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
   }
 
-  return `<div class="card trend-hero"><div class="card-title">ACTIVITY &amp; RECOVERY</div>${cue}${cards}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
+  const heroTitle = hasHeart ? 'ACTIVITY &amp; RECOVERY' : 'ACTIVITY';
+  return `<div class="card trend-hero"><div class="card-title">${heroTitle}</div>${cue}${cards}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
 }
 
 function openWeightSheet() {
@@ -5590,7 +5596,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v192'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v193'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
