@@ -2133,6 +2133,8 @@ async function renderTrends(el) {
   $('#logWeight').addEventListener('click', openWeightSheet);
   $('#openProg').addEventListener('click', openProgressSheet);
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
+  $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
+  $('#trendSync', el)?.addEventListener('click', async () => { await nativeSyncNow({ silent: false }); refresh(); });
   bindBadgeTaps(el);
 }
 
@@ -2410,7 +2412,19 @@ function activityRecoveryHtml(days) {
   const hasHeart = has('restingHr') || has('hrv');
   const hasActive = has('activeKcal') || has('exerciseMin') || days.some(d => d.workouts > 0);
   const hasSteps = has('steps');
-  if (!hasHeart && !hasActive && !hasSteps) return '';
+  if (!hasHeart && !hasActive && !hasSteps) {
+    // NEVER vanish. With no synced data, show a visible connect/sync state so the
+    // section is discoverable for everyone and gives a path to fix a dead sync.
+    const connected = !!S.settings.hkConnected;
+    const line = connected
+      ? 'No activity synced in the last little while. Tap Sync now, or take a walk and reopen the app, and your steps, workouts and heart data land here with full history.'
+      : 'Connect Apple Health and your steps, workouts, active energy and heart data show up here, with day / week / month / year history.';
+    const btn = connected
+      ? (isNative() ? '<button class="btn small" id="trendSync">Sync now</button>' : '')
+      : '<button class="btn small" id="trendConnect">Connect Apple Health</button>';
+    return `<div class="card trend-hero"><div class="card-title">ACTIVITY &amp; RECOVERY</div>
+      <p class="note" style="margin:2px 0 13px;line-height:1.55">${line}</p>${btn}</div>`;
+  }
 
   let cue = '';
   if (has('restingHr')) {
@@ -5597,7 +5611,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v194'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v195'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
