@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 187, date: '2026-07-22', title: 'Tap a marker to inspect it', items: [
+    'Tap any pin on the Boneyard, a cache, crate, mini-boss or den, and a little tooltip tells you what it is, what it drops, and how far away it is.',
+    'The map key button is now brighter and easier to spot.',
+  ] },
   { n: 186, date: '2026-07-22', title: 'A Boneyard map key', items: [
     'Tap the ? on the map for a key that explains every marker: bone caches, coin piles, crates, mystery eggs, mini-bosses, and all the den types (landmark, the daily roaming dens, and the rare hidden ones).',
     'The key uses the exact same art the map draws, so there\'s no guessing what a pin is anymore.',

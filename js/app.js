@@ -189,11 +189,11 @@ function mapLegendHtml() {
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
     [spawn('crate'), 'Buried crate', 'A common crate of loot'],
-    [spawn('rare', ' rare'), 'Mystery egg', 'Rare — walk to hatch a pet'],
+    [spawn('rare', ' rare'), 'Mystery egg', 'Rare: walk to hatch a pet'],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
-    [den(), 'Boss den', 'A landmark boss — rare gear'],
+    [den(), 'Boss den', 'A landmark boss: rare gear'],
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
-    [den(' secret'), 'Secret den', 'A hidden boss — only where one is buried'],
+    [den(' secret'), 'Secret den', 'A hidden boss, only where one is buried'],
   ];
   return `<div class="leg-h">MAP KEY</div>${rows.map(([m, n, d]) =>
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
@@ -4818,6 +4818,40 @@ async function openMap() {
       lpClear();
     }));
 
+    // ---- tap a marker: quick inspect tooltip (name · what it drops · distance).
+    // Short tap = inspect; the 750ms hold above still opens the report sheet.
+    const poiTip = document.createElement('div');
+    poiTip.className = 'map-poi-tip'; poiTip.hidden = true;
+    $('#mapStage', body).appendChild(poiTip);
+    const hidePoiTip = () => { poiTip.hidden = true; };
+    function markerInfo(el) {
+      for (const r of denMarkers.values()) if (r.el === el) { const d = r.den; return { name: d.name || 'Boss den', reward: d.roaming ? 'A daily boss: rare gear and coins' : 'A boss fight: rare gear and coins', distM: d.dist }; }
+      for (const r of miniMarkers.values()) if (r.el === el) { const m = r.mini; return { name: m.name || 'Mini-boss', reward: 'A quick fight for coins + XP', distM: m.dist }; }
+      for (const r of spawnMarkers.values()) if (r.el === el) {
+        const s = r.spawn, def = SPAWN_TYPES[s.type] || {};
+        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
+        return { name: def.label || 'Cache', reward: rw, distM: s.dist };
+      }
+      return null;
+    }
+    function showPoiTip(el) {
+      const info = markerInfo(el); if (!info) return;
+      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${fmtDist(info.distM)} away · walk to reach it</span>` : ''}`;
+      poiTip.hidden = false;
+      const stage = $('#mapStage', body).getBoundingClientRect(), m = el.getBoundingClientRect();
+      const tw = poiTip.offsetWidth, th = poiTip.offsetHeight;
+      let left = Math.max(8, Math.min(stage.width - tw - 8, (m.left - stage.left) + m.width / 2 - tw / 2));
+      let top = (m.top - stage.top) - th - 10;
+      if (top < 8) top = (m.bottom - stage.top) + 10;
+      poiTip.style.left = left + 'px'; poiTip.style.top = top + 'px';
+    }
+    mapEl.addEventListener('click', ev => {
+      if (reportOpen) return;
+      const el = ev.target && ev.target.closest && ev.target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
+      if (el) { showPoiTip(el); ev.stopPropagation(); } else hidePoiTip();
+    });
+    map.on('movestart', hidePoiTip);
+
     function openReportSheet(kind, ctx) {
       const isDen = kind === 'den-nominate';
       const coords = (Number.isFinite(ctx.lat) && Number.isFinite(ctx.lng)) ? `${ctx.lat.toFixed(5)}, ${ctx.lng.toFixed(5)}` : null;
@@ -5303,7 +5337,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v186'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v187'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

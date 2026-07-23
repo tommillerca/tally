@@ -161,3 +161,122 @@ pet takes a player-controlled turn via petActionsFor/applyPetAction.)*
   touch/wheel. Lesson: verify the RUNNING build via the Settings badge first.
 - Melt bench verified end-to-end (+dust). Watchdog verified: banner + one-shot
   notification + clears on next good sync. TP verified retroactive (+1/25k steps).
+
+## 📝 July 22 idea batch (Tom, logged 2026-07-22 — needs prioritization, none started unless noted)
+
+1. **Gear-reveal "cursed fortune teller" wheel.** A carnival/slot spin where potential gear
+   flashes by before it lands on your piece — lean into the addictive near-miss feel. Builds on
+   the existing daily wheel (`js/wheel.js`, Tomb-gate chat's) + boss-loot reveal; this is a
+   dedicated GEAR spin with a teasing pre-roll. Design: keep it earned (crate/dust cost), not a
+   money sink; date/seed-deterministic like the daily wheel so no reroll-by-reload.
+2. **Navi-style guide sprite.** A little ghost/lantern companion that proactively advises
+   "what next? where to spend coins?" Character-fies the existing home nudge system
+   (`computeHomeUnlocks` in app.js). Needs: a sprite (Cam art), a rules engine for suggestions,
+   a non-nagging cadence.
+3. **Holistic "I had a burrito bowl" meal builder.** For meals you can't look up exactly: guide
+   the user through likely components (Uber-Eats-order style) → ballpark macros. New food-entry
+   flow; pairs with #4. Bigger feature (component DB + estimation UX).
+4. **Branded fast-food data.** Tim Hortons, McDonald's, Chipotle, etc. menu items. Extends the
+   current search (OFF + USDA in `js/sources.js`); OFF has some branded items but a curated
+   chain set would be better. Data-sourcing task.
+5. **Simplify home-screen icons / combine actions.** The Boneyard/Build/Stable/Kitchen/Backpack/
+   Pit action tiles — combine sensibly, reduce clutter. Home IA pass (renderToday in app.js).
+6. **Rearrange bottom nav to most-used.** e.g. Boneyard in the tab bar instead of Shop.
+   Bottom-nav IA (`bindTabs`/tab bar in index.html + app.js). Pairs with #5.
+7. **Granular workout data (Apple Watch — workouts, bike rides).** ✅ SHIPPED v183–v185 + Android
+   vc4: active energy + completed workouts + exercise minutes + type-themed rewards. iOS workout
+   reads ready (Swift), ship on next TestFlight build. Cycling-distance per-km bonus = fast-follow.
+8. **Boneyard legend + tap-for-tooltip.** A legend of what the collectibles are, and/or a
+   WoW-style tooltip when you tap a map thing explaining what it is. Map legibility/onboarding
+   (`js/map.js`/`js/poi.js` + a legend UI). Cheap, high clarity win.
+9. **Personalized quest chains for your own tasks** (take vitamins, take out trash…). The design
+   problem Tom flagged: how to allow custom tasks WITHOUT "I made a task just to farm the reward"
+   cheating. Options to explore: self-set tasks pay only tiny/symbolic rewards (streak/cosmetic,
+   not coins/loot), or cap custom-task rewards/day, or make them honor-system with no material
+   payout (just satisfaction + a habit streak). Must stay inside the wellbeing guardrail. Design
+   task before build.
+
+## 🏋️ Fitness-tracking expansion (planned 2026-07-22, awaiting Tom's approval to build)
+
+### Context (how health data works TODAY)
+- No native HealthKit plugin. An Apple **Shortcut** ("Sync Boneheadz") reads Health and
+  hands the app a payload string: `tally-hk d=YYYY-MM-DD steps=N active=N weightlb=N`
+  (parsed in `js/game.js` parseHkPayload ~L426). Android = Health Connect, same idea.
+- `onHealthSync(date,{steps})` rewards STEPS ONLY (step milestones + big-day egg + past-cap
+  XP, idempotent ledger keys `stepms-/egg-/stepx-<date>`). **`active` kcal is parsed but
+  dropped** — not rewarded. Wellbeing guardrail: only ever reward movement, never eating less.
+
+### A. Apple Watch → reward workouts / bike / active energy (LOW-RISK, no native build)
+Everything an Apple Watch records (workouts, active energy, exercise minutes, cycling
+distance) is ALREADY in Apple Health. The whole feature = read more fields in the Shortcut
++ reward them. Steps:
+1. **Extend the Shortcut** to also append: `active=` (already sent), `exmin=` (exercise
+   minutes), `cyclekm=` (cycling distance), `workouts=` (count/min of completed workouts).
+   Provide Tom an updated shortcut recipe; Health Connect mirror for Android.
+2. **parseHkPayload**: parse the new fields (additive, back-compatible).
+3. **onHealthSync**: reward them, wellbeing-safe + idempotent per date:
+   - Active energy: XP/Vigor per N kcal, daily cap + diminishing past cap (mirrors steps).
+     Covers ALL cardio (bike/run/gym/swim burn active kcal) — the universal "you moved".
+   - Exercise minutes: milestone at Apple's 30-min ring + bonus crate roll.
+   - Completed workout: a real reward (coins + Vigor + crate roll); first-workout-of-day
+     bonus. This is the marquee new hook — a bike ride or gym session = a meaningful reward.
+   - Cycling km: per-km reward so bike rides (few "steps") finally count.
+4. **Quests**: new weekly/monthly ("do 3 workouts", "burn 2000 active kcal", "ride 20 km").
+5. **UI**: a "Today's activity" surface (steps + active kcal + exercise min + workouts) with
+   reward toasts; Apple-Watch-ring energy.
+- Integrity: rewards keyed to Health TOTALS via idempotent ledger keys, not user input; caps.
+- Effort: MODERATE, contained to game.js + a quests + a UI card + the Shortcut recipe. No
+  native rebuild (Shortcut mechanism already live).
+- ✅ SHIPPED v183 (active-energy milestones + Workout Crate + daily/weekly quests, web-only).
+
+### A2. GRANULAR HealthKit / Health Connect metrics (approved in principle 2026-07-22, NATIVE build)
+Tom: step count + calorie burn isn't enough; need per-activity granularity. This is the native
+follow-up. Extend the existing pipeline (no new architecture):
+- **Metrics to add** (both platforms):
+  - Workout SESSIONS: type + duration + energy. iOS `HKWorkout`/`HKWorkoutActivityType`
+    (cycling/running/walking/swim/strength/HIIT/yoga…); Android `ExerciseSessionRecord` +
+    `exerciseType`. Needs adding workout read perms (Info.plist strings already exist; Android
+    manifest needs the Health Connect exercise/distance permission entries).
+  - Exercise minutes: iOS `appleExerciseTime`; Android sum of session durations.
+  - Cycling distance: iOS `distanceCycling`; Android `DistanceRecord` / per-session distance.
+- **Flow**: `HealthPlugin.swift` + `HealthPlugin.kt` `queryToday()` return new fields
+  (`exerciseMin`, `cycleKm`, `workouts:[{type,min,kcal}]`); `nativeSyncNow` (app.js ~4443)
+  adds them to the payload; shortcut recipe + `parseHkPayload` gain `exmin=/cyclekm=/workouts=`
+  so shortcut users benefit; `ingestHealth` stores; `onHealthSync` rewards; quests + a workout
+  UI surface consume them.
+- **Reward design (DECISION PENDING)**: per-workout event reward (≥10 min → coins+XP+crate,
+  first-of-day bonus, type shown), per-km cycling, exercise-minute ring bonus, weekly
+  "cross-trainer" variety bonus, type-specific quests (ride 20km / 3 strength / 60 min cardio).
+  Optional phase-2 RPG flavor: workout type → themed loot/buff.
+- **SHIP REALITY**: web reward/quest/UI ships live as usual, but the native metric-reading needs
+  an **iOS + Android rebuild + re-upload to BOTH TestFlight and Play** (new build numbers,
+  review). ⚠️ Coordinate with Tomb-gate chat: they just touched `AndroidManifest.xml` +
+  `build.gradle` (GPS fix, versionCode 2) — adding Health Connect exercise/distance perms edits
+  the manifest again; base on their vc2, note in handoff before editing native/android.
+
+### B. Fitbit steps (friend's request)
+The app is source-agnostic — it rewards whatever steps land in Apple Health / Health Connect.
+So the task is getting Fitbit data INTO that store:
+- **Android**: Fitbit app now supports **Health Connect** — she enables Fitbit → Health
+  Connect (steps), Tally reads it. Zero app work.
+- **iOS**: Fitbit does NOT write to Apple Health. Options:
+  a. **Bridge app** (Health Sync / Sync Solver / myFitnessSync, ~$5): Fitbit → Apple Health,
+     Tally reads via the Shortcut. Easiest, no app change. (Recommended short-term.)
+  b. **Fitbit Web API** first-class integration: OAuth + a Worker endpoint pulling daily
+     steps from Fitbit's cloud. Real project (Fitbit dev app, OAuth, token storage). Only
+     worth it if many users have Fitbits.
+  c. Manual entry fallback.
+- Recommendation: short-term = tell her to bridge (iOS) / enable Health Connect (Android),
+  no build. Long-term = Fitbit Web API only if Fitbit demand is broad.
+
+## ✅ Pre-public-launch checklist (parked 2026-07-22, do BEFORE production/App Store review)
+- **Declare email in the store data-safety forms.** v180 shipped the Day One survey,
+  which collects an optional email LIVE (reaches TestFlight/Play via the web bundle).
+  Play Data safety + App Store privacy must add "Email address (contact info)" before
+  going to production/public review. privacy.html already covers it. Not blocking for
+  internal/friends testing; Tom deferred 2026-07-22.
+- **Move the app off `tommillerca.github.io` to a custom domain.** The native apps load
+  the web app live from that URL, so iOS permission prompts + the privacy-policy URL show
+  the GitHub handle (reads as Tom's name). Fix = custom domain (e.g. boneheadz.app):
+  CNAME in repo + DNS + switch capacitor.config server.url + privacy/listing URLs, then
+  one native rebuild + re-upload. Tom deferred 2026-07-22 ("leave it for now").
