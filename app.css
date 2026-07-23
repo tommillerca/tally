@@ -2718,3 +2718,11 @@ body::before {
 .upd-banner .ub-cta { flex: none; background: var(--gold); color: #2a1c05; font-weight: 750; font-size: 13px;
   padding: 8px 14px; border-radius: 10px; }
 .upd-banner:active { filter: brightness(.95); }
+
+/* Trends "turn on heart tracking" CTA (v199) */
+.heart-cta { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 13px;
+  border-radius: var(--radius-sm); background: rgba(255,157,199,.10); border: 1px solid rgba(255,157,199,.34); }
+.heart-cta .hc-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.heart-cta .hc-txt b { font-size: 14px; color: var(--text); }
+.heart-cta .hc-txt span { font-size: 12px; color: var(--text-3); line-height: 1.45; }
+.heart-cta .btn { flex: none; }

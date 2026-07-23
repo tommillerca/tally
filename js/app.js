@@ -2136,6 +2136,7 @@ async function renderTrends(el) {
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
   $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
   $('#trendSync', el)?.addEventListener('click', async () => { await nativeSyncNow({ silent: false }); refresh(); });
+  $('#trendHeartAuth', el)?.addEventListener('click', async () => { try { await nativeRequestAuth(); } catch { /* noop */ } await nativeSyncNow({ silent: false }); refresh(); });
   checkForUpdate(el);
   bindBadgeTaps(el);
 }
@@ -2463,7 +2464,12 @@ function activityRecoveryHtml(days) {
   }
 
   const heroTitle = hasHeart ? 'ACTIVITY &amp; RECOVERY' : 'ACTIVITY';
-  return `<div class="card trend-hero"><div class="card-title">${heroTitle}</div>${cue}${cards}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
+  // On native, if we have activity but no heart data yet, give an on-screen way
+  // to grant Heart Rate / HRV (the app also auto-asks on open until it works).
+  const heartPrompt = (isNative() && !hasHeart)
+    ? `<div class="heart-cta"><div class="hc-txt"><b>Add heart &amp; recovery</b><span>Allow Heart Rate &amp; HRV to see resting heart rate, HRV and a daily recovery read here.</span></div><button class="btn small" id="trendHeartAuth">Turn on</button></div>`
+    : '';
+  return `<div class="card trend-hero"><div class="card-title">${heroTitle}</div>${cue}${cards}${heartPrompt}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
 }
 
 // Hard refresh: drop the service worker + all caches and reload, so a stale
@@ -4485,6 +4491,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (Array.isArray(payload.wtypes)) row.wtypes = payload.wtypes;
   if (payload.restingHr != null) row.restingHr = payload.restingHr;
   if (payload.hrv != null) row.hrv = payload.hrv;
+  if (payload.restingHr != null || payload.hrv != null) await kvSet('hkHeartOk', true); // stop re-prompting once heart data flows
   if (payload.exerciseMin != null) row.exerciseMin = payload.exerciseMin;
   if (payload.cycleKm != null) row.cycleKm = payload.cycleKm;
   if (payload.workouts != null) row.workouts = payload.workouts;
@@ -4787,13 +4794,13 @@ async function nativeSyncNow({ silent = false } = {}) {
 
 async function nativeAutoSync() {
   if (!isNative() || !S.settings?.hkNative) return;
-  // One-time: workout + exercise-minute read scopes were added after launch, so
-  // already-connected users were never prompted for them. Re-request auth once —
-  // iOS/Health Connect only surface a sheet for the NOT-yet-granted scopes (no-op
-  // if all are already set). Gated by hkScopesV so it fires exactly once.
-  if ((await kvGet('hkScopesV', 1)) < 3) {
-    await kvSet('hkScopesV', 3);
-    try { await nativeRequestAuth(); } catch { /* best-effort; Reconnect in Settings is the fallback */ }
+  // Heart scopes (resting HR / HRV) and any later-added scopes need granting.
+  // iOS / Health Connect only surface the permission sheet for scopes that are
+  // NOT yet decided, and silently no-op once they are. So: re-request the full
+  // set on open until we've actually read heart data (hkHeartOk). This pops the
+  // "Allow" sheet exactly once for anyone missing it, with no repeat nag after.
+  if (!(await kvGet('hkHeartOk', false))) {
+    try { await nativeRequestAuth(); } catch { /* best-effort */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
   const ok = await nativeSyncNow({ silent: true });
@@ -5638,7 +5645,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v198'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v199'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
