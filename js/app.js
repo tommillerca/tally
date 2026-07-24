@@ -2072,11 +2072,22 @@ async function renderTrends(el) {
   const loggedDays7 = days7.filter(d => d.logged).length;
   const kcalLogged14 = days14.filter(d => d.logged);
 
+  // Step averages EXCLUDE today (in-progress: no fair way to have a full day's
+  // steps yet, so it must not drag the average down). Count only days with steps.
+  const doneDays = days.slice(0, -1);
+  const stepAvg = arr => { const v = arr.filter(d => d.steps > 0); return v.length ? Math.round(v.reduce((a, d) => a + d.steps, 0) / v.length) : 0; };
+  const stepsToday = days[days.length - 1].steps;
+  const stepAvg7 = stepAvg(doneDays.slice(-7));
+  const stepAvg30 = stepAvg(doneDays.slice(-30));
+  const stepsHasData = days.some(d => d.steps > 0);
+
   const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
 
   el.innerHTML = `
   <div id="updBanner"></div>
   <h1 class="page-h1">Progress<span class="sub">Your level, streak, badges and data</span></h1>
+
+  ${activityRecoveryHtml(days)}
 
   <div class="card recap-card">
     <div class="card-title">THIS WEEK</div>
@@ -2092,8 +2103,6 @@ async function renderTrends(el) {
     </div>
   </div>
 
-  ${activityRecoveryHtml(days)}
-
   <div class="card">
     <div class="card-title">CONSISTENCY · LAST 8 WEEKS</div>
     ${heatmapHtml(days)}
@@ -2101,10 +2110,14 @@ async function renderTrends(el) {
   </div>
 
   <div class="card">
-    <div class="card-title">ACTIVITY · LAST 14 DAYS${stepsWk ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
-    <div class="big-stat"><span class="v">${stepsWk ? Math.round(days14.reduce((a, d) => a + d.steps, 0) / 14).toLocaleString() : '·'}</span><span class="d">avg steps / day</span></div>
+    <div class="card-title">STEPS${stepsHasData ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
+    <div class="trend-stats" style="margin:2px 0 12px">
+      <div class="st"><div class="l">Today</div><div class="v">${stepsToday.toLocaleString()}</div></div>
+      <div class="st"><div class="l">7-day avg</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">30-day avg</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
+    </div>
     <div class="chart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}</div>
-    <p class="note" style="margin-top:8px">${stepsWk ? `Line = ${(STEP_REF / 1000)}k steps. Walking is what levels your bonehead and hatches eggs.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
+    <p class="note" style="margin-top:8px">${stepsHasData ? `Line = ${(STEP_REF / 1000)}k steps. Averages skip today (still counting). Tap History for week / month / year.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
   </div>
 
   <div class="card">
@@ -2378,7 +2391,10 @@ async function openMetricDetail(metricKey) {
   const latest = dates.length ? byDate[dates[dates.length - 1]] : null;
   const recent = dates.slice(-28).map(d => byDate[d]);
   const base = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null;
-  const delta = (latest != null && base != null) ? latest - base : null;
+  // cumulative-per-day metrics build up over the day, so today is always partial:
+  // never compare today's running total to a baseline (it reads falsely low early).
+  const cumulative = ['steps', 'activeKcal', 'exerciseMin'].includes(metricKey);
+  const delta = (!cumulative && latest != null && base != null) ? latest - base : null;
   let deltaHtml = '';
   if (delta != null && Math.abs(delta) >= (metricKey === 'weight' ? 0.2 : 1)) {
     const down = delta < 0;
@@ -2390,7 +2406,12 @@ async function openMetricDetail(metricKey) {
     const pts = metricSeries(metricKey, rangeKey, health, weights);
     const vals = pts.map(p => p.value).filter(v => v != null);
     if (!vals.length) return `<div class="trend-panel"><p class="note" style="text-align:center;padding:22px 0">No readings in this window yet. They will appear here as your watch syncs.</p></div>`;
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length, mn = Math.min(...vals), mx = Math.max(...vals);
+    // stats exclude the in-progress current day for cumulative metrics (steps etc.)
+    // so a partial today never drags the average/lowest down; the chart still shows it.
+    const statPts = (cumulative && rangeKey !== 'year' && pts.length > 1) ? pts.slice(0, -1) : pts;
+    const svals = statPts.map(p => p.value).filter(v => v != null);
+    const useVals = svals.length ? svals : vals;
+    const avg = useVals.reduce((a, b) => a + b, 0) / useVals.length, mn = Math.min(...useVals), mx = Math.max(...useVals);
     const u = metricUnit(metricKey);
     const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
     let stats;
@@ -2406,12 +2427,14 @@ async function openMetricDetail(metricKey) {
   const range0 = 'month';
   const tabs = ['day', 'week', 'month', 'year'].map(r => `<button class="rtab ${r === range0 ? 'on' : ''}" data-r="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
   const html = `
-    <button class="sheet-close" style="position:absolute;top:12px;right:14px">Close</button>
-    <h2 style="margin:2px 0 2px;font-size:19px">${metric.label}</h2>
-    <div class="trend-now"><span class="n">${latest != null ? metricNum(metricKey, latest) : '·'}</span><span class="u">${metricUnit(metricKey)}</span>${deltaHtml}</div>
-    <div class="rtabs">${tabs}</div>
-    <div class="trend-body">${bodyHtml(range0)}</div>
-    <p class="note" style="margin:14px 2px 2px">Day, Week, Month and Year switch the window, like Apple Health. Baseline dashes = your recent average${metric.goodLow != null ? '; the green bar is your best day' : ''}.</p>`;
+    <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
+    <div class="trend-scroll">
+      <h2 style="margin:2px 40px 2px 0;font-size:19px">${metric.label}</h2>
+      <div class="trend-now"><span class="n">${latest != null ? metricNum(metricKey, latest) : '·'}</span><span class="u">${metricUnit(metricKey)}</span>${deltaHtml}</div>
+      <div class="rtabs">${tabs}</div>
+      <div class="trend-body">${bodyHtml(range0)}</div>
+      <p class="note" style="margin:14px 2px 2px">Day, Week, Month and Year switch the window, like Apple Health. Baseline dashes = your recent average${metric.goodLow != null ? '; the green bar is your best day' : ''}.</p>
+    </div>`;
   const wrap = openSheet(html, { cls: 'sheet-trend', name: 'trend_' + metricKey });
   $$('.rtab', wrap).forEach(b => b.addEventListener('click', () => {
     $$('.rtab', wrap).forEach(x => x.classList.toggle('on', x === b));
@@ -2421,6 +2444,63 @@ async function openMetricDetail(metricKey) {
 
 // The Progress-screen "Activity & recovery" block. Returns '' when there is no
 // watch data, so non-fitness users never see an empty or nagging section.
+// Daily readiness: blend resting HR + HRV + sleep vs their baselines into a 0-100
+// score. Returns null if there's no heart data to read.
+function readinessScore(days) {
+  const col = k => days.map(d => d[k]).filter(v => v != null && v > 0);
+  const rhrs = col('restingHr'), hrvs = col('hrv'), sleeps = col('sleepHours');
+  if (!rhrs.length && !hrvs.length) return null;
+  const last = a => a.length ? a[a.length - 1] : null;
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  let score = 72;
+  const rhrL = last(rhrs), rhrB = mean(rhrs);
+  if (rhrL != null) score += Math.max(-16, Math.min(14, (rhrB - rhrL) * 2.5)); // lower resting HR = better
+  const hrvL = last(hrvs), hrvB = mean(hrvs);
+  if (hrvL != null) score += Math.max(-15, Math.min(15, (hrvL - hrvB) * 0.6));   // higher HRV = better
+  const slL = last(sleeps);
+  if (slL != null) score += Math.max(-14, Math.min(12, (slL - 7) * 6));           // ~7h+ = better
+  return { score: Math.round(Math.max(5, Math.min(99, score))), rhrL, rhrB, hrvL, hrvB, slL };
+}
+
+function readinessHtml(r) {
+  const s = r.score;
+  const band = s >= 80 ? { lab: 'PRIMED TO TRAIN', sub: 'Recovered and rested. Good day to push in the Pit or a long walk.', col: '#a5e847' }
+    : s >= 62 ? { lab: 'READY', sub: 'In good shape. Train as normal today.', col: '#a5e847' }
+    : s >= 45 ? { lab: 'STEADY', sub: 'A middling read. Warm up and see how you feel.', col: '#5fe6d0' }
+    : { lab: 'EASE IN', sub: 'Still recovering. Keep it lighter today.', col: '#ffc961' };
+  const cx = 135, cy = 135, R = 104, start = 135, sweep = 270, N = 44;
+  let ticks = '';
+  for (let i = 0; i <= N; i++) { const a = (start + sweep * i / N) * Math.PI / 180, r1 = (i % 5 === 0) ? R + 12 : R + 8, r2 = R + 15; ticks += `<line x1="${(cx + Math.cos(a) * r1).toFixed(1)}" y1="${(cy + Math.sin(a) * r1).toFixed(1)}" x2="${(cx + Math.cos(a) * r2).toFixed(1)}" y2="${(cy + Math.sin(a) * r2).toFixed(1)}"/>`; }
+  const capA = (start + sweep * s / 100) * Math.PI / 180;
+  const capX = (cx + Math.cos(capA) * R).toFixed(1), capY = (cy + Math.sin(capA) * R).toFixed(1);
+  const arrow = (v, goodLow) => v == null ? '' : (goodLow ? (v < 0 ? `<i class="up">▼${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">▲${Math.round(v)}</i>` : '') : (v > 0 ? `<i class="up">▲${Math.round(v)}</i>` : v < 0 ? `<i class="warn">▼${Math.abs(Math.round(v))}</i>` : ''));
+  const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span>${tr}</button>`;
+  const tiles = [
+    r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
+    r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
+    r.slL != null ? tile('', 'Sleep', `${Math.floor(r.slL)}h${String(Math.round((r.slL % 1) * 60)).padStart(2, '0')}`, '', '') : tile('', 'Sleep', '—', '', ''),
+  ].filter(Boolean).join('');
+  return `<div class="card rd-card">
+    <div class="rd-eyebrow">DAILY READINESS</div>
+    <div class="rd-gauge-wrap">
+      <svg class="rd-gauge" viewBox="0 0 270 270" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="rdg" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#5fe6d0"/><stop offset="55%" stop-color="${band.col}"/><stop offset="100%" stop-color="#d6ff6b"/></linearGradient>
+          <filter id="rdglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <g stroke="var(--text-2)" stroke-opacity="0.16" stroke-width="2">${ticks}</g>
+        <path d="M 56.5 203.5 A 104 104 0 1 1 213.5 203.5" fill="none" stroke="#1e2230" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 56.5 203.5 A 104 104 0 1 1 213.5 203.5" fill="none" stroke="url(#rdg)" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="${s} 100" filter="url(#rdglow)"/>
+        <circle r="7" cx="${capX}" cy="${capY}" fill="#d6ff6b" filter="url(#rdglow)"/>
+      </svg>
+      <div class="rd-center"><span class="rd-score">${s}</span><span class="rd-of">/ 100</span></div>
+    </div>
+    <div class="rd-status" style="color:${band.col}">${band.lab}</div>
+    <p class="rd-sub">${band.sub}</p>
+    <div class="rd-tiles">${tiles}</div>
+  </div>`;
+}
+
 function activityRecoveryHtml(days) {
   const has = k => days.some(d => d[k] != null && d[k] > 0);
   const hasHeart = has('restingHr') || has('hrv');
@@ -2440,47 +2520,25 @@ function activityRecoveryHtml(days) {
       <p class="note" style="margin:2px 0 13px;line-height:1.55">${line}</p>${btn}</div>`;
   }
 
-  let cue = '';
-  if (has('restingHr')) {
-    const rhrs = days.map(d => d.restingHr).filter(v => v != null);
-    const baseline = rhrs.reduce((a, b) => a + b, 0) / rhrs.length;
-    const latest = [...days].reverse().find(d => d.restingHr != null).restingHr;
-    const delta = latest - baseline;
-    let cls = 'rc-steady', title = 'Steady', sub = `Resting HR ${Math.round(latest)}, right around your ${Math.round(baseline)} baseline.`;
-    if (delta <= -1) { cls = 'rc-good'; title = 'Well recovered'; sub = `Resting HR ${Math.round(latest)}, ${Math.round(Math.abs(delta))} below your ${Math.round(baseline)} baseline. Good day to push.`; }
-    else if (delta >= 3) { cls = 'rc-easy'; title = 'Ease in today'; sub = `Resting HR ${Math.round(latest)}, ${Math.round(delta)} above your ${Math.round(baseline)} baseline. Your body may still be recovering.`; }
-    cue = `<div class="recovery-cue ${cls}"><span class="rc-dot"></span><div class="rc-txt"><b>${title}</b><span>${sub}</span></div></div>`;
-  }
-
-  // Heart + active-energy cards when a watch feeds them. If all we have is steps
-  // (phone-only, or a watch that hasn't synced the richer fields yet), fall back
-  // to a Steps card so the section is still visible and useful.
-  let cardKeys = ['restingHr', 'hrv', 'activeKcal', 'exerciseMin'].filter(k => has(k));
-  if (!cardKeys.length && hasSteps) cardKeys = ['steps'];
-  const card = (mk) => {
-    const M = TREND_METRICS[mk];
-    const latestD = [...days].reverse().find(d => M.pick(d) != null && M.pick(d) > 0);
-    const val = latestD ? M.pick(latestD) : null;
-    return `<button class="trend-card" data-metric="${mk}"><div class="tc-top"><span class="tc-lab">${M.short}</span><span class="tc-chev">›</span></div><div class="tc-val">${metricNum(mk, val)}<small>${M.unit}</small></div><div class="tc-spark">${metricSpark(days.slice(-14).map(d => M.pick(d)), M.color)}</div></button>`;
-  };
-  const cards = cardKeys.length ? `<div class="trend-cards">${cardKeys.map(card).join('')}</div>` : '';
-
-  let mix = '';
-  const counts = {};
-  for (const d of days) for (const t of (d.wtypes || [])) counts[t] = (counts[t] || 0) + 1;
-  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  if (rows.length) {
+  // Your real workout mix (weekly, not daily tiles) — kept as its own card.
+  const mix = (() => {
+    const counts = {};
+    for (const d of days) for (const t of (d.wtypes || [])) counts[t] = (counts[t] || 0) + 1;
+    const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (!rows.length) return '';
     const max = rows[0][1];
-    mix = `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
-  }
+    return `<div class="card"><div class="card-title">YOUR ACTIVITIES · LAST 8 WEEKS</div>${rows.map(([t, c]) => `<div class="mix-row"><span class="mix-lab">${WORKOUT_LABEL[t] || t}</span><div class="mix-bar"><i style="width:${Math.round(c / max * 100)}%"></i></div><span class="mix-n">${c}</span></div>`).join('')}<p class="note" style="margin-top:9px">Your real workout mix, straight from your watch. New activities show up here on their own.</p></div>`;
+  })();
 
-  const heroTitle = hasHeart ? 'ACTIVITY &amp; RECOVERY' : 'ACTIVITY';
-  // On native, if we have activity but no heart data yet, give an on-screen way
-  // to grant Heart Rate / HRV (the app also auto-asks on open until it works).
-  const heartPrompt = (isNative() && !hasHeart)
-    ? `<div class="heart-cta"><div class="hc-txt"><b>Add heart &amp; recovery</b><span>Allow Heart Rate &amp; HRV to see resting heart rate, HRV and a daily recovery read here.</span></div><button class="btn small" id="trendHeartAuth">Turn on</button></div>`
+  // With heart data, lead with the futuristic readiness dashboard.
+  const r = readinessScore(days);
+  if (r) return readinessHtml(r) + mix;
+
+  // Activity but no heart data yet: a light card + an on-screen way to turn heart on.
+  const heartPrompt = isNative()
+    ? `<div class="heart-cta"><div class="hc-txt"><b>Add heart &amp; recovery</b><span>Allow Heart Rate &amp; HRV to unlock your daily readiness score here.</span></div><button class="btn small" id="trendHeartAuth">Turn on</button></div>`
     : '';
-  return `<div class="card trend-hero"><div class="card-title">${heroTitle}</div>${cue}${cards}${heartPrompt}<p class="note" style="margin-top:${cards ? '10' : '2'}px">Tap any card for day, week, month and year history.</p></div>${mix}`;
+  return `<div class="card trend-hero"><div class="card-title">ACTIVITY</div>${heartPrompt}<p class="note" style="margin-top:${heartPrompt ? '12' : '2'}px">Your steps and workouts are tracked below. Connect a watch (Heart Rate + HRV) to unlock a daily readiness score up here.</p></div>${mix}`;
 }
 
 // Hard refresh: drop the service worker + all caches and reload, so a stale
@@ -5672,7 +5730,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v211'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v212'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6985,12 +7043,17 @@ async function seedDemo() {
   await kvSet('settings', settings);
   const demoSteps = [8421, 11250, 6480, 9902, 7300, 12010, 5400, 9100, 10250, 6800, 8800, 11500, 7000, 9600];
   const demoSleep = [7, 8, 6.5, 7.5, 6, 8, 5.5, 7, 8, 6.5, 7, 9, 6, 7.5];
+  const demoRhr = [49, 48, 52, 50, 54, 47, 55, 51, 48, 53, 50, 46, 54, 50];
+  const demoHrv = [66, 71, 58, 64, 54, 74, 51, 62, 70, 57, 63, 78, 55, 65];
   for (let i = 0; i < demoSteps.length; i++) {
     await db.put('health', {
       date: addDays(dateKey(), -i),
       steps: demoSteps[i],
       activeKcal: Math.round(demoSteps[i] * 0.06),
+      exerciseMin: Math.round(demoSteps[i] / 900),
       sleepHours: demoSleep[i],
+      restingHr: demoRhr[i],
+      hrv: demoHrv[i],
     });
   }
   await kvSet('coins', 340);
