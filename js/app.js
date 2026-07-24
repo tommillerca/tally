@@ -2124,12 +2124,6 @@ async function renderTrends(el) {
   </div>
 
   <div class="card">
-    <div class="card-title">CONSISTENCY · LAST 8 WEEKS</div>
-    ${heatmapHtml(days)}
-    <p class="note" style="margin-top:9px">Each square is a day. Brighter = you logged food and moved. Streaks build themselves.</p>
-  </div>
-
-  <div class="card">
     <div class="card-title">STEPS${stepsHasData ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
     <div class="trend-stats" style="margin:2px 0 12px">
       <div class="st"><div class="l">Today</div><div class="v">${stepsToday.toLocaleString()}</div></div>
@@ -2184,23 +2178,6 @@ async function renderTrends(el) {
   $('#trendHeartAuth', el)?.addEventListener('click', async () => { try { await nativeRequestAuth(); } catch { /* noop */ } await nativeSyncNow({ silent: false }); refresh(); });
   checkForUpdate(el);
   bindBadgeTaps(el);
-}
-
-// GitHub-style consistency grid: 8 week-columns x 7 day-rows, brighter with more
-// engagement (logged food + steps). Positive-only: an empty day is never "bad".
-function heatmapHtml(days) {
-  const intensity = d => (d.logged ? 1 : 0) + (d.steps >= 3000 ? 1 : 0) + (d.steps >= 8000 ? 1 : 0);
-  const cols = [];
-  for (let w = 0; w < 8; w++) {
-    const cells = days.slice(w * 7, w * 7 + 7).map(d => {
-      const lv = intensity(d);
-      const title = `${d.date}: ${d.logged ? Math.round(d.kcal) + ' kcal' : 'no log'}${d.steps ? ' · ' + d.steps.toLocaleString() + ' steps' : ''}`;
-      return `<span class="hm-cell hm-${lv}" title="${title}"></span>`;
-    }).join('');
-    cols.push(`<div class="hm-col">${cells}</div>`);
-  }
-  return `<div class="heatmap">${cols.join('')}</div>
-    <div class="hm-legend"><span class="note">less</span><span class="hm-cell hm-0"></span><span class="hm-cell hm-1"></span><span class="hm-cell hm-2"></span><span class="hm-cell hm-3"></span><span class="note">more</span></div>`;
 }
 
 // Generic bar chart. pick(d) -> value|null; opts: target line, color, fmt, band [lo,hi].
@@ -3420,6 +3397,7 @@ async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
+      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(TestFlight / Play Store)' : ''} to work on your phone</div>` : ''}
       <ul class="wn-list">${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
     </div>`).join('');
   openSheet(`
@@ -5844,7 +5822,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v213'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v214'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6257,12 +6235,33 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }));
   }
 
-  // Tap a status chip to read what it does (delegated; survives updateBars rebuilds)
+  // Tap a status chip -> an anchored tooltip (like the Boneyard marker tip),
+  // not a fleeting toast. Delegated so it survives updateBars rebuilds.
+  const fchipTip = document.createElement('div');
+  fchipTip.className = 'fchip-tip'; fchipTip.hidden = true;
+  body.appendChild(fchipTip);
+  const hideChipTip = () => { fchipTip.hidden = true; };
+  function showChipTip(b) {
+    const det = b.dataset.det || '';
+    const ci = det.indexOf(':');
+    const name = ci > 0 ? det.slice(0, ci) : det;
+    const detail = ci > 0 ? det.slice(ci + 1).trim() : '';
+    fchipTip.innerHTML = `<b>${esc(name)}</b>${detail ? `<span>${esc(detail)}</span>` : ''}`;
+    fchipTip.hidden = false;
+    const tw = fchipTip.offsetWidth, th = fchipTip.offsetHeight, m = b.getBoundingClientRect();
+    let left = Math.max(8, Math.min(window.innerWidth - tw - 8, m.left + m.width / 2 - tw / 2));
+    let top = m.top - th - 9;
+    if (top < 8) top = m.bottom + 9;
+    fchipTip.style.left = left + 'px'; fchipTip.style.top = top + 'px';
+  }
   [el('youState'), el('foeState')].forEach(sp => sp && sp.addEventListener('click', (e) => {
     const b = e.target.closest('.fchip'); if (!b) return;
     e.stopPropagation();
-    toast(b.dataset.det, 3400);
+    if (!fchipTip.hidden && fchipTip.dataset.for === b.dataset.det) { hideChipTip(); return; } // tap again to close
+    fchipTip.dataset.for = b.dataset.det;
+    showChipTip(b);
   }));
+  body.addEventListener('click', (e) => { if (!e.target.closest('.fchip') && !e.target.closest('.fchip-tip')) hideChipTip(); });
 
   function positionFighters() {
     el('youG').style.left = '12%';

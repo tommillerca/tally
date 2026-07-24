@@ -3,7 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 213, date: '2026-07-24', title: 'Your sleep, read automatically', items: [
+  { n: 214, date: '2026-07-24', title: 'Readiness polish + tap a debuff to read it', items: [
+    'Tightened the daily readiness dial: no more dead gap between the ring and the status.',
+    'In a fight, tap any status icon (yours or the enemy\'s) for a quick tooltip on exactly what it does, like the Boneyard map.',
+    'Dropped the consistency grid from Progress, it wasn\'t pulling its weight.',
+  ] },
+  { n: 213, date: '2026-07-24', title: 'Your sleep, read automatically', needsBuild: true, items: [
     'Your watch\'s sleep now logs itself, no more tapping in hours. It shows up on Today and feeds your daily readiness.',
     'New sleep score (0 to 100): tap it on the Progress tab for last night\'s deep / REM / core / awake breakdown.',
     'No watch? The manual hours picker is still there whenever you want it.',
