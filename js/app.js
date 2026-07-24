@@ -4200,8 +4200,20 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const res = await disenchantGear(btn.dataset.meltbench);
       if (!res.ok) { toast('Could not melt that piece.'); return; }
       popSound(S.sounds);
-      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2800);
-      renderCharacter(wrap, 'crates');
+      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2200);
+      // melt in place (no full re-render) so the list doesn't jump to the top —
+      // you can melt a whole stack of spare gear in one pass.
+      btn.closest('.crate-row')?.remove();
+      const fold = content.querySelector('.melt-fold');
+      const left = $$('[data-meltbench]', content);
+      if (fold && !left.length) { fold.remove(); }
+      else if (fold) {
+        const total = left.reduce((a, b) => a + (parseInt((b.textContent.match(/\d+/) || [0])[0], 10) || 0), 0);
+        const sum = fold.querySelector('summary');
+        if (sum) sum.innerHTML = `Melt gear · ${left.length} spare piece${left.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${total.toLocaleString()}`;
+      }
+      const nd = await boneDust();
+      content.querySelectorAll('.wallet-line b').forEach(b => { if (/◆/.test(b.textContent)) b.innerHTML = `<span class="dust-ico">◆</span> ${nd.toLocaleString()}`; });
     }));
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -4664,6 +4676,7 @@ async function openStable() {
         const isEq = x.iid === eqIid;
         const inSel = sel.includes(x.iid);
         const isOpen = x.iid === openIid;
+        const dustVal = petDustValue(it) + (x.shiny ? 15 : 0) + (x.lineage || 0) * 8;
         return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
           <div class="stable-portrait">${petPortraitHtml(sp, 60, x.shiny)}</div>
           <div class="stable-info">
@@ -4672,7 +4685,7 @@ async function openStable() {
             <div class="stable-acts">
               ${isEq ? '<span class="stable-active-lbl">Leveling this one</span>' : `<button class="btn tiny" data-eq="${x.iid}">Equip</button>`}
               <button class="btn tiny ${inSel ? 'on' : 'ghost'}" data-breedsel="${x.iid}">${inSel ? 'Breeding ✓' : 'Breed'}</button>
-              <button class="btn tiny danger" data-destroy="${x.iid}">Destroy</button>
+              <button class="btn tiny danger" data-destroy="${x.iid}" data-dust="${dustVal}">Destroy · <span class="dust-ico">◆</span>${dustVal}</button>
             </div>
           </div>
         </div>${isOpen ? petTalentTree(x, lvl, openPicks) : ''}`;
@@ -4718,11 +4731,12 @@ async function openStable() {
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
+      const dustVal = btn.dataset.dust || '?';
       if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1'; const t = btn.textContent;
-        btn.textContent = isShiny ? 'Destroy SHINY?' : 'Confirm?';
-        if (isShiny) toast('⚠️ That\'s a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent. Tap again to confirm.', 4200);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, isShiny ? 4200 : 2600);
+        btn.dataset.armed = '1'; const t = btn.innerHTML;
+        btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">◆</span>${dustVal}?` : `Melt for <span class="dust-ico">◆</span>${dustVal}?`;
+        if (isShiny) toast(`⚠️ That's a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent and only gives ◆${dustVal} Bone Dust. Tap again to confirm.`, 4600);
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
         return;
       }
       const res = await salvageInstance(btn.dataset.destroy);
@@ -5664,7 +5678,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v208'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v209'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

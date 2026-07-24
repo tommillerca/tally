@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 209, date: '2026-07-23', title: 'Melt a stack + see your salvage', items: [
+    'Melting gear no longer jumps you back to the top, melt as many spare pieces as you like in one go.',
+    'Destroying a pet now shows how much Bone Dust you\'ll get before you confirm.',
+  ] },
   { n: 208, date: '2026-07-23', title: 'Cleaner combat status icons', items: [
     'The status effects on each fighter are now tidy little icons on their own line (no more cluttered text crowding the names). Tap any icon to read what it does.',
   ] },
