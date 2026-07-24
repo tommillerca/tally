@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 217, date: '2026-07-24', title: 'The Glutton is on the map', items: [
+    'He\'s a real world boss now: find his marker out on the Boneyard map and fight him there. No more instant-fight button on Today.',
+    'Today has a small collapsible banner above Quests instead, just pointing you toward him.',
+  ] },
   { n: 216, date: '2026-07-24', title: 'The Glutton: real art in the fight', items: [
     'The Glutton now fights as himself: his own art in the arena (not a reskinned skeleton), sized up as a real boss with proper room around him.',
     'The reveal card and lore sheet now use the actual approved look and the real hero art.',

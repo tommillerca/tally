@@ -414,3 +414,18 @@ export function secretsNear(lat, lng) {
   out.sort((a, b) => a.dist - b.dist);
   return out;
 }
+
+// The Glutton: a single world-boss "world event", not part of the weekly den
+// rotation (kept fully separate so it never perturbs existing dens' seeded
+// identity). Placed at a fixed bearing/distance from wherever the player is
+// when the map loads — always nearby, always reachable, recomputed fresh each
+// time (no persisted position; a one-time encounter doesn't need one).
+export const GLUTTON_RADIUS_M = 60;
+export function gluttonSpot(lat, lng) {
+  const bearing = 42, distM = 230;
+  const rad = bearing * Math.PI / 180;
+  const dLat = (distM * Math.cos(rad)) / 111320;
+  const dLng = (distM * Math.sin(rad)) / (111320 * Math.cos(lat * Math.PI / 180));
+  const glat = lat + dLat, glng = lng + dLng;
+  return { lat: glat, lng: glng, dist: distanceM(lat, lng, glat, glng) };
+}

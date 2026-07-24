@@ -2916,3 +2916,25 @@ body::before {
 #foeStage.glutton-foe { width: 176px; height: 134px; align-self: end; }
 .fighterG.foe-side.glutton-boss { width: 176px; }
 .glutton-plate { object-position: center bottom; }
+
+/* Glutton teaser banner on Today (v217): collapsible, native <details>, no
+   fight button — just wayfinding to the real map encounter. */
+.glutton-banner { background: linear-gradient(160deg, rgba(159, 176, 78, .14), rgba(22, 20, 32, .9) 55%), var(--surface); border: 1px solid rgba(159, 176, 78, .28); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+.glutton-banner > summary { list-style: none; display: flex; align-items: center; gap: 11px; padding: 11px 13px; cursor: pointer; }
+.glutton-banner > summary::-webkit-details-marker { display: none; }
+.gbn-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #0d0f08; border: 1px solid rgba(159, 176, 78, .35); overflow: hidden; position: relative; }
+.gbn-ico .glutton-hero { position: absolute; width: 150%; left: 50%; top: 58%; transform: translate(-50%, -50%); margin: 0; }
+.gbn-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gbn-txt i { font-style: normal; font-size: 9.5px; letter-spacing: .2em; color: var(--glutton-sick); text-transform: uppercase; font-weight: 800; }
+.gbn-txt b { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: .02em; color: var(--glutton-bone); }
+.gbn-chev { color: var(--text-3); transition: transform .2s; }
+.glutton-banner[open] .gbn-chev { transform: rotate(90deg); }
+.gbn-body { padding: 2px 14px 15px; }
+
+/* The Glutton's map marker (v217): real art + a pulsing sickly blight halo,
+   matching the approved den-marker language but for a one-of-a-kind boss. */
+.map-glutton-mark { position: relative; width: 54px; height: 54px; }
+.map-glutton-mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,.6)); z-index: 2; }
+.glutton-blight-halo { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, rgba(159,176,78,.35), transparent); animation: gluttonHaloPulse 2.6s ease-in-out infinite; z-index: 1; }
+@keyframes gluttonHaloPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: .6; } 50% { transform: translate(-50%, -50%) scale(1.25); opacity: .95; } }
+.map-glutton-mark.inrange img { filter: drop-shadow(0 0 10px rgba(165,232,71,.8)); }

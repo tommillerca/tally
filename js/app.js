@@ -31,7 +31,7 @@ import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.j
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -764,6 +764,8 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
+  ${isToday && !allXp.some(r => r.key === GLUTTON_KEY) ? gluttonBannerHtml() : ''}
+
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest ? ICONS.quest(18) : '📜'}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
@@ -816,7 +818,6 @@ async function renderToday(el) {
 
   ${isToday ? wellnessCardHtml(wellness) : ''}
   ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs) : ''}
-  ${isToday ? gluttonCardHtml(allXp.some(r => r.key === GLUTTON_KEY)) : ''}
   ${healthCardHtml(hk, isToday)}
 
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
@@ -864,7 +865,7 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#gluttonCta')?.addEventListener('click', openGluttonSheet);
+  $('#gluttonToMap')?.addEventListener('click', openMap);
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -1192,13 +1193,21 @@ function gluttonLoreHtml() {
     <div class="glutton-quote">&ldquo;Plan for what is difficult while it is easy,<br>do what is great while it is small.&rdquo;<br><b>- Sun Tzu&hellip; probably</b></div>
   </div>`;
 }
-function gluttonCardHtml(beaten) {
-  return `<div class="card glutton-card">
-    <div class="glutton-tag">something is eating the boneyard</div>
-    <h2 class="glutton-h1"><span class="sm">BEWARE THE</span><span class="big">GLUTTON</span></h2>
-    ${gluttonHeroHtml()}
-    <button class="glutton-cta" id="gluttonCta" ${beaten ? 'disabled' : ''}>${beaten ? 'CLEANSED' : 'FACE THE GLUTTON'}</button>
-  </div>`;
+// A collapsible teaser banner on Today (above Quests), not a fight entry point:
+// he's a world boss now, only fightable by finding his marker on the live map.
+function gluttonBannerHtml() {
+  return `<details class="glutton-banner">
+    <summary>
+      <span class="gbn-ico">${gluttonHeroHtml()}</span>
+      <span class="gbn-txt"><i>New on the map</i><b>The Glutton is loose</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      ${gluttonLoreHtml()}
+      <p class="glutton-mech">It <b>blights</b> the ground it eats. He's a world boss: walk out, find him, and fight him there. There's no button that teleports you to him.</p>
+      <button class="btn ghost" id="gluttonToMap" style="width:100%">Open the Boneyard</button>
+    </div>
+  </details>`;
 }
 
 async function openGluttonSheet() {
@@ -5209,6 +5218,7 @@ async function openMap() {
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
         <button class="btn map-den" id="mapSecret" hidden></button>
         <button class="btn map-mini" id="mapMini" hidden>Fight</button>
+        <button class="btn map-den" id="mapGlutton" hidden>Face The Glutton</button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
 
@@ -5255,6 +5265,7 @@ async function openMap() {
       if (typeof refreshSpawns === 'function') refreshSpawns();
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
+      if (typeof refreshGlutton === 'function') refreshGlutton();
     };
     map.on('moveend', rerunPlacement);
     map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
@@ -5285,6 +5296,8 @@ async function openMap() {
     const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
     const whisperedSecrets = new Set(); // one cryptic cue per spot per map session
     let claimedSecret = new Set(xpRows0.filter(r => r.type === 'secret').map(r => r.key));
+    const gluttonBeaten = xpRows0.some(r => r.key === GLUTTON_KEY);
+    let gluttonRec = null; // single marker, not a Map (one-of-a-kind world boss)
     let lastNearest = null;
 
     // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
@@ -5504,6 +5517,29 @@ async function openMap() {
       }
     }
 
+    // The Glutton: a single world-boss marker, real art + a pulsing blight
+    // halo. Skips entirely once beaten (one-time encounter).
+    const glutSnap = new Map();
+    function refreshGlutton() {
+      if (gluttonBeaten) { const gb = $('#mapGlutton', body); if (gb) gb.hidden = true; return; }
+      const spot = gluttonSpot(lat, lng);
+      const placed = placeWalkable({ lat: spot.lat, lng: spot.lng }, glutSnap, 'glutton');
+      if (placed === null) return; // unreachable this camera view; try again next placement pass
+      const glat = placed.lat, glng = placed.lng;
+      const dist = distanceM(lat, lng, glat, glng);
+      if (!gluttonRec) {
+        const el = document.createElement('div');
+        el.className = 'map-glutton-mark';
+        el.innerHTML = `<div class="glutton-blight-halo"></div><img src="assets/bh/glutton/idle.png" alt="The Glutton">`;
+        gluttonRec = { marker: domMarker(maplibregl, map, { lat: glat, lng: glng, el, anchor: 'center' }), el };
+      } else {
+        gluttonRec.marker.setLngLat([glng, glat]);
+      }
+      gluttonRec.el.classList.toggle('inrange', dist <= GLUTTON_RADIUS_M);
+      const gb = $('#mapGlutton', body);
+      if (gb) gb.hidden = dist > GLUTTON_RADIUS_M;
+    }
+
     // Easter-egg secret dens: whisper within earshot, materialize on approach.
     // No marker, readout or button exists beyond SECRET_REVEAL_M — the whole
     // point is that these spread by rumor, not by map-reading.
@@ -5552,6 +5588,7 @@ async function openMap() {
       refreshDens();
       refreshMinis();
       refreshSecrets();
+      refreshGlutton();
     }
 
     const raresCued = new Set(); // rares we've already announced this session
@@ -5665,6 +5702,11 @@ async function openMap() {
       const mini = rec.mini;
       const fighter = await buildFighter();
       openFight(wrap, fighter, { mode: 'mini', name: mini.name, mult: mini.mult, aiLevel: mini.aiLevel, talents: [], venue: 'The Boneyard', mini, date });
+    });
+
+    $('#mapGlutton', body).addEventListener('click', () => {
+      if (gluttonBeaten || !gluttonRec || !gluttonRec.el.classList.contains('inrange')) return;
+      openGluttonSheet();
     });
 
     $('#mapCollect', body).addEventListener('click', async () => {
@@ -5873,7 +5915,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v216'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v217'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
