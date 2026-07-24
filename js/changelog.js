@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 206, date: '2026-07-23', title: 'See what your debuffs are doing', items: [
+    'Each fighter\'s active status effects now show as chips on their plate (burn, bleed, poison, blind, weaken, sunder, guard and more) with turns or stacks left, so you can tell at a glance whether it\'s worth re-applying.',
+    'Tap any status chip to read exactly what it does.',
+  ] },
   { n: 205, date: '2026-07-23', title: 'Heckle jeers in the enemy\'s face', items: [
     'The Heckle skulls now flank the rattled enemy\'s head, one jeering over each shoulder, instead of floating across the whole screen. Cleaner art, too.',
   ] },

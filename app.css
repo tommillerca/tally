@@ -2762,3 +2762,21 @@ body::before {
 .shop-back { background: var(--surface-2); border: 1px solid var(--line); color: var(--text-1, #f2e9d7);
   font-weight: 700; font-size: 14px; padding: 8px 15px 8px 12px; border-radius: 11px; }
 .shop-back:active { background: var(--surface-3); }
+
+/* Combat status chips (v206): per-status, always on the plate, tappable for detail */
+.fstate { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; vertical-align: middle; }
+.fstate[hidden] { display: none; }
+.hud-side.foe .fstate { justify-content: flex-end; }
+.fchip { font-size: 10px; font-weight: 750; line-height: 1; padding: 3px 5px; border-radius: 6px;
+  background: var(--surface-3); color: var(--text-2); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; gap: 3px; letter-spacing: .01em; }
+.fchip i { font-style: normal; opacity: .68; font-size: 9px; }
+.fchip:active { filter: brightness(1.25); }
+.fchip.s-burn { color: #ffb454; border-color: rgba(255,180,84,.5); }
+.fchip.s-bleed, .fchip.s-rage { color: #ff6d5e; border-color: rgba(255,109,94,.5); }
+.fchip.s-poison { color: #a5e847; border-color: rgba(165,232,71,.45); }
+.fchip.s-blind { color: #b9ac97; border-color: rgba(185,172,151,.5); }
+.fchip.s-weaken, .fchip.s-sunder { color: #c9a0ff; border-color: rgba(201,160,255,.5); }
+.fchip.s-mark { color: #ff9dc7; border-color: rgba(255,157,199,.5); }
+.fchip.s-ward { color: #7cc4ff; border-color: rgba(124,196,255,.5); }
+.fchip.s-summon { color: #b9ac97; border-color: rgba(185,172,151,.4); }

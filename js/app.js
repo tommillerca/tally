@@ -5659,7 +5659,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v205'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v206'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5915,6 +5915,29 @@ const PIT_VENUES = {
   4: 'The Sunken Colosseum', 5: 'The Old Crypt Arena', champ: 'The Marrow Throne',
 };
 
+// Active statuses on a fighter, as tappable chips: {k, lab, turns, det}. Powers
+// the always-on debuff chips on the plates so you can see what's already applied
+// (and how long) before re-blinding/re-burning.
+function fighterStatuses(f) {
+  const tn = x => (x && typeof x.turns === 'number' && x.turns > 0) ? x.turns : null;
+  const s = [];
+  if (f.burn) s.push({ k: 'burn', lab: 'Burn', turns: tn(f.burn), det: `Burning: ~${f.burn.per || 5} fire damage per turn${tn(f.burn) ? `, ${tn(f.burn)} turn${tn(f.burn) === 1 ? '' : 's'} left` : ''}. Re-applying refreshes the timer.` });
+  if (f.bleed) s.push({ k: 'bleed', lab: `Bleed ×${f.bleed.stacks}`, turns: tn(f.bleed), det: `Bleeding, ${f.bleed.stacks} stack${f.bleed.stacks === 1 ? '' : 's'}: loses HP each turn${tn(f.bleed) ? `, ${tn(f.bleed)}t left` : ''}. Re-applying adds a stack (max 3) and more damage.` });
+  if (f.poison) s.push({ k: 'poison', lab: `Poison ×${f.poison.stacks}`, turns: tn(f.poison), det: `Poisoned, ${f.poison.stacks} stack${f.poison.stacks === 1 ? '' : 's'}: ~${(f.poison.per || 0) * f.poison.stacks} damage/turn${tn(f.poison) ? `, ${tn(f.poison)}t left` : ''}.` });
+  if (f.blind) s.push({ k: 'blind', lab: 'Blind', turns: tn(f.blind), det: `Blinded: about ${Math.round((f.blind.pct || 0) * 100)}% higher chance to miss${tn(f.blind) ? `, ${tn(f.blind)}t left` : ''}. No point re-applying until it fades.` });
+  if (f.weaken) s.push({ k: 'weaken', lab: 'Weaken', turns: tn(f.weaken), det: `Weakened: deals ${Math.round((f.weaken.pct || 0) * 100)}% less damage${tn(f.weaken) ? `, ${tn(f.weaken)}t left` : ''}.` });
+  if (f.sunder) s.push({ k: 'sunder', lab: 'Sunder', turns: tn(f.sunder), det: `Sundered: takes +15% damage${tn(f.sunder) ? `, ${tn(f.sunder)}t left` : ''}.` });
+  if (f.marked) s.push({ k: 'mark', lab: 'Marked', turns: tn(f.marked), det: `Marked for death: takes extra finisher damage${tn(f.marked) ? `, ${tn(f.marked)}t left` : ''}.` });
+  if (f.stagger) s.push({ k: 'stagger', lab: 'Stagger', turns: tn(f.stagger), det: `Staggered and off balance: the next hit lands harder.` });
+  if (f.rage) s.push({ k: 'rage', lab: 'Rage', turns: tn(f.rage), det: `Raging: deals more damage but bleeds itself each turn.` });
+  if (f.ward > 0) s.push({ k: 'ward', lab: `Guard ${f.ward}`, turns: null, det: `Bone Guard: absorbs the next ${f.ward} damage before HP is touched.` });
+  if (f.minion) s.push({ k: 'summon', lab: 'Minion', turns: null, det: `A bone minion is fighting alongside them.` });
+  if (f.totem) s.push({ k: 'summon', lab: 'Totem', turns: null, det: `A spirit totem zaps each turn.` });
+  if (f.flock > 0) s.push({ k: 'summon', lab: `Flock ${f.flock}`, turns: null, det: `${f.flock} crows pecking each turn.` });
+  if (f.toxicity > 0) s.push({ k: 'poison', lab: `Toxic ${f.toxicity}`, turns: null, det: `Toxicity ${f.toxicity}: alchemist buildup, bigger payoff when it pops.` });
+  return s;
+}
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -6046,6 +6069,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }));
   }
 
+  // Tap a status chip to read what it does (delegated; survives updateBars rebuilds)
+  [el('youState'), el('foeState')].forEach(sp => sp && sp.addEventListener('click', (e) => {
+    const b = e.target.closest('.fchip'); if (!b) return;
+    e.stopPropagation();
+    toast(b.dataset.det, 3400);
+  }));
+
   function positionFighters() {
     el('youG').style.left = '12%';
     el('foeG').style.right = '12%';
@@ -6080,27 +6110,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     el('foeHype').style.width = foe.hype + '%';
     for (const [f, id] of [[player, 'youState'], [foe, 'foeState']]) {
       const chip = el(id);
-      const bits = [];
-      if (f.stagger) bits.push('STAGGERED');
-      if (f.bleed) bits.push(`BLEED x${f.bleed.stacks}`);
-      if (f.burn) bits.push('BURNING');
-      if (f.poison) bits.push(`POISON x${f.poison.stacks}`);
-      if (f.blind) bits.push('BLINDED');
-      if (f.marked) bits.push('MARKED');
-      if (f.ward > 0) bits.push(`GUARD ${f.ward}`);
-      if (f.sunder) bits.push('SUNDERED');
-      if (f.weaken) bits.push('WEAKENED');
-      if (f.rage) bits.push('RAGING');
-      if (f.minion) bits.push('MINION');
-      if (f.totem) bits.push('TOTEM');
-      if (f.toxicity > 0) bits.push(`TOXIC ${f.toxicity}`);
-      if (f.flock > 0) bits.push(`FLOCK ${f.flock}`);
-      if (bits.length) {
+      const list = fighterStatuses(f);
+      if (list.length) {
         chip.hidden = false;
-        chip.textContent = bits.join(' · ');
-        chip.classList.toggle('stag', !!f.stagger || !!f.sunder);
-        chip.classList.toggle('raging', !!f.rage);
-      } else chip.hidden = true;
+        chip.innerHTML = list.map(s => `<button type="button" class="fchip s-${s.k}" data-det="${esc(s.det)}">${esc(s.lab)}${s.turns ? `<i>${s.turns}t</i>` : ''}</button>`).join('');
+      } else { chip.hidden = true; chip.innerHTML = ''; }
     }
     // persistent class-identity auras on the fighter stages
     const youStg = el('youStage'), foeStg = el('foeStage');
