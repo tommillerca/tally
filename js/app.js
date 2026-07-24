@@ -4090,6 +4090,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
+      <button class="btn" id="bpToShop" style="width:100%;margin:2px 0 14px">Shop · spend coins &amp; Bone Dust</button>
       ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
       ${pendingLoot.map((p, i) => `
         <div class="loot-pending" data-lootkey="${esc(p.key)}">
@@ -4140,14 +4141,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
           .sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
         if (!rows.length) return '';
-        return `<div class="sect-h" style="margin-top:12px">Melt gear</div>` + rows.map(g => {
+        const totalDust = rows.reduce((a, g) => a + gearDustValue(g), 0);
+        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>` + rows.map(g => {
           const worn = gearLoNow[g.slot] === g.id;
           return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
             <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn</b>' : ''}</small></div>
             <button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button></div>`;
-        }).join('');
-      })()}
-      <button class="btn ghost small" id="bpToShop" style="margin-top:14px">Spend coins &amp; Bone Dust in the Shop</button>`;
+        }).join('') + `</details>`;
+      })()}`;
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
         toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);
@@ -5645,7 +5646,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v202'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v203'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

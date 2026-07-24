@@ -2746,3 +2746,13 @@ body::before {
 .heckfx .hbone { left: 60.7%; top: 34%; width: 24.6%; height: 31.1%; animation: heckbob 1.9s ease-in-out infinite; animation-delay: -.95s; }
 @keyframes heckbob { 0%, 100% { transform: translateY(-6px); } 50% { transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .heckfx .hsk { animation: none; } }
+
+/* Backpack: collapsed Melt-gear fold (v203) so the Shop isn't buried below it */
+.melt-fold > summary { list-style: none; cursor: pointer; font-size: 13px; font-weight: 650; color: var(--text-2);
+  letter-spacing: 0.02em; padding: 9px 12px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 12px; display: flex; align-items: center; gap: 6px; }
+.melt-fold > summary::-webkit-details-marker { display: none; }
+.melt-fold > summary::after { content: '▾'; margin-left: auto; color: var(--text-3); transition: transform .18s; }
+.melt-fold[open] > summary::after { transform: rotate(180deg); }
+.melt-fold > summary:active { background: var(--surface-3); }
+.melt-fold[open] > summary { margin-bottom: 6px; }
