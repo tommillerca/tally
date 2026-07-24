@@ -2756,3 +2756,9 @@ body::before {
 .melt-fold[open] > summary::after { transform: rotate(180deg); }
 .melt-fold > summary:active { background: var(--surface-3); }
 .melt-fold[open] > summary { margin-bottom: 6px; }
+
+/* Shop back button (v204): a clear exit from the routed Shop screen */
+.shop-head { display: flex; margin: 2px 0 6px; }
+.shop-back { background: var(--surface-2); border: 1px solid var(--line); color: var(--text-1, #f2e9d7);
+  font-weight: 700; font-size: 14px; padding: 8px 15px 8px 12px; border-radius: 11px; }
+.shop-back:active { background: var(--surface-3); }

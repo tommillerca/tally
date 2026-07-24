@@ -511,6 +511,17 @@ function refresh() {
   addEventListener('wheel', stop, { once: true, passive: true });
 }
 
+// Background/unprompted refresh (auto health-sync, crew deliveries on resume):
+// only re-render when the player is already near the top. If they've scrolled
+// down to read, we skip the visual refresh (data is already saved; it shows on
+// the next navigation) rather than yank them back to the top. iOS momentum made
+// the scroll-restore unreliable, so the safest fix is to not refresh at all here.
+function bgRefresh() {
+  const sc = $('#screen');
+  const atTop = (scrollY || 0) < 48 && ((sc && sc.scrollTop) || 0) < 48;
+  if (atTop) refresh();
+}
+
 /* ================= shared ui ================= */
 
 let toastTimer = 0;
@@ -1938,6 +1949,7 @@ async function renderShop(el) {
     }).join('')}`;
 
   el.innerHTML = `
+  <div class="shop-head"><button class="shop-back" id="shopBack" aria-label="Back">‹ Back</button></div>
   <h1 class="page-h1">Shop<span class="sub">Weapons, crates and Bone Dust</span></h1>
 
   <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
@@ -2007,6 +2019,7 @@ async function renderShop(el) {
   }));
   $('#shopForage', el)?.addEventListener('click', openKitchen);
   $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
+  $('#shopBack', el)?.addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/today'; });
 }
 
 /* ================= trends ================= */
@@ -4805,7 +4818,7 @@ async function nativeAutoSync() {
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
   const ok = await nativeSyncNow({ silent: true });
-  if (ok && currentTab() === 'today') refresh();
+  if (ok && currentTab() === 'today') bgRefresh();
 }
 
 async function connectNativeHealth() {
@@ -5646,7 +5659,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v203'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v204'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -5679,10 +5692,10 @@ function presentGrantDelivery(r) {
     setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
   });
   if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
-  if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); refresh(); return; }
-  if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); refresh(); return; }
-  if (cheers.length) { refresh(); return; } // cheers already toasted, nothing else to reveal
-  toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); refresh();
+  if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
+  if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
+  if (cheers.length) { bgRefresh(); return; } // cheers already toasted, nothing else to reveal
+  toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); bgRefresh();
 }
 
 // Push a local notification when a friend sends a gift or cheer. Gated on the
