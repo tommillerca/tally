@@ -5645,7 +5645,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v200'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v201'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6130,6 +6130,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const schoolOf = ev => ev.school || (ACTIONS[ev.move] && ACTIONS[ev.move].school) || 'phys';
 
   // choreograph one engine event
+  // Counterstep jab: Cam's 3 fist frames revealed as a stacked anime flurry
+  // (1-2-3, light->dark), aimed at the victim (mirrored when the victim is you).
+  function jabFlurry(vic) {
+    const arena = el('arena'); if (!arena) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'jabfx' + (vic === 'p' ? ' mir' : '');
+    wrap.innerHTML = "<img src='assets/bh/fx/jab/jab1.png' alt=''><img src='assets/bh/fx/jab/jab2.png' alt=''><img src='assets/bh/fx/jab/jab3.png' alt=''>";
+    arena.appendChild(wrap);
+    const L = [...wrap.querySelectorAll('img')];
+    const pop = e => { e.style.opacity = '1'; e.style.animation = 'none'; void e.offsetWidth; e.style.animation = 'jabpop .16s ease-out'; };
+    const s = fast ? 0.25 : 1;
+    pop(L[0]);
+    setTimeout(() => pop(L[1]), 80 * s);
+    setTimeout(() => pop(L[2]), 160 * s);
+    setTimeout(() => { wrap.style.transition = 'opacity .16s'; wrap.style.opacity = '0'; }, 520 * s);
+    setTimeout(() => wrap.remove(), 780 * s);
+  }
+
   function playFx(ev) {
     // multi-body staging: an enemy going after your pet lands on the pet plate;
     // you going after the add lands on the add plate; the add attacks from its plate
@@ -6267,8 +6285,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (ev.t === 'counter') {
       const vs = ev.who === 'p' ? 'f' : 'p';
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), ev.who === 'p' ? 'lunge-r' : 'lunge-l', fxMs);
-      floatNode(`-${ev.damage}`, vs, 'dmg');
+      jabFlurry(vs); // Counterstep's counter-jab: Cam's 3-fist anime flurry, aimed at the victim
       floatNode('COUNTER!', vs, 'stamp hot');
+      const s = fast ? 0.25 : 1;
+      setTimeout(() => { floatNode(`-${ev.damage}`, vs, 'dmg'); hitSound(S.sounds, 'tick'); }, 170 * s);
     } else if (ev.t === 'heal' || ev.t === 'secondwind') {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);

@@ -2726,3 +2726,15 @@ body::before {
 .heart-cta .hc-txt b { font-size: 14px; color: var(--text); }
 .heart-cta .hc-txt span { font-size: 12px; color: var(--text-3); line-height: 1.45; }
 .heart-cta .btn { flex: none; }
+
+/* Counterstep jab flurry FX (v199): Cam's 3 fists stacked as an anime 1-2-3 */
+.jabfx { position: absolute; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
+.jabfx img { position: absolute; top: 50%; left: 50%; width: 82%; height: 82%; object-fit: contain; opacity: 0;
+  transform: translate(-50%, -50%); filter: drop-shadow(0 2px 7px rgba(0,0,0,.55)); }
+.jabfx.mir { transform: scaleX(-1); }
+@keyframes jabpop {
+  0% { transform: translate(-50%, -50%) scale(1.22); }
+  60% { transform: translate(-50%, -50%) scale(.97); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .jabfx img { animation-duration: .01s !important; } }
