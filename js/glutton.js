@@ -13,15 +13,29 @@ const PHASES = [
   { cls: 'p-middle', hold: 2600 },
 ];
 
-export function gluttonStageHtml() {
-  return `<div class="glutton-stage">
-    <img class="glutton-plate p-idle on" src="assets/bh/glutton/idle.png" alt="The Glutton">
-    <img class="glutton-plate p-tongue" src="assets/bh/glutton/tongue.png" alt="">
-    <img class="glutton-plate p-middle" src="assets/bh/glutton/middle.png" alt="">
+// The static reveal hero: the tongue-out portrait, the approved poster/hero
+// frame. Used for the announcement card + sheet (a still creature, per the
+// locked design), NOT the combat stage (which gets the idle/attack loop below).
+export function gluttonHeroHtml() {
+  return `<div class="glutton-hero">
+    <div class="gh-glow"></div>
+    <img class="gh-img" src="assets/bh/glutton/tongue.png" alt="The Glutton">
     <span class="glutton-bub gb0"><img src="assets/bh/glutton/bub0.png" alt=""></span>
     <span class="glutton-bub gb1"><img src="assets/bh/glutton/bub1.png" alt=""></span>
     <span class="glutton-bub gb2"><img src="assets/bh/glutton/bub2.png" alt=""></span>
-    <span class="glutton-bub gb3"><img src="assets/bh/glutton/bub3.png" alt=""></span>
+  </div>`;
+}
+
+// Combat stage: the same idle/tongue/middle plates, but pre-cropped tight to
+// the actual creature (the source canvases are ~35% empty transparent sky, so
+// scaling the whole 448-square as the "boss is bigger" fix wasted most of the
+// size increase on blank space and made it read as floating). No bubbles here
+// — this is the fast-paced arena, not the hero portrait.
+export function gluttonStageHtml() {
+  return `<div class="glutton-stage">
+    <img class="glutton-plate p-idle on" src="assets/bh/glutton/combat/idle.png" alt="The Glutton">
+    <img class="glutton-plate p-tongue" src="assets/bh/glutton/combat/tongue.png" alt="">
+    <img class="glutton-plate p-middle" src="assets/bh/glutton/combat/middle.png" alt="">
   </div>`;
 }
 

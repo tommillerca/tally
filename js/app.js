@@ -27,7 +27,7 @@ import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
-import { gluttonStageHtml, startGluttonLoop } from './glutton.js';
+import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
@@ -1180,29 +1180,40 @@ function sleepRowHtml(w) {
 // still ROADMAP items). Reachable from a card on Today; the win is idempotent
 // via the same award() ledger every other one-time encounter uses.
 const GLUTTON_KEY = 'glutton-cleanse';
+// The exact lore lockup + copy Tom already approved (scratchpad/glutton.src.html,
+// direction locked). Reused verbatim for both the compact card and the full
+// sheet reveal — do not paraphrase this, it's Brock's, use it as written.
+function gluttonLoreHtml() {
+  return `<div class="glutton-lore">
+    <p class="lead">With a comparable appetite to a chocolate lab and the expansion rate of spray foam insulation, the Glutton is no mere dungeon monster.</p>
+    <p>It seeks out and devours every goodie and gold piece its blobby body can slime up to, leaving a dead <span class="accent">blight</span> where nothing will spawn until it is dealt with.</p>
+    <p>Muster your might and face this abomination. You may become its next snack. You may make off with its entire jellified hoard.</p>
+    <p class="sign">Best of luck, my bony buddy.</p>
+    <div class="glutton-quote">&ldquo;Plan for what is difficult while it is easy,<br>do what is great while it is small.&rdquo;<br><b>- Sun Tzu&hellip; probably</b></div>
+  </div>`;
+}
 function gluttonCardHtml(beaten) {
   return `<div class="card glutton-card">
-    <div class="card-title">THE GLUTTON</div>
-    ${gluttonStageHtml()}
-    <p class="gc-lede">${beaten
-      ? 'You cleansed its hoard. <b>The Glutton</b> has been dealt with... for now.'
-      : 'A bloated horror is feasting on the Boneyard\'s trash heaps. <b>Face The Glutton</b> and take back its hoard.'}</p>
-    <button class="btn" id="gluttonCta">${beaten ? 'Beaten' : 'Fight The Glutton'}</button>
+    <div class="glutton-tag">something is eating the boneyard</div>
+    <h2 class="glutton-h1"><span class="sm">BEWARE THE</span><span class="big">GLUTTON</span></h2>
+    ${gluttonHeroHtml()}
+    <button class="glutton-cta" id="gluttonCta" ${beaten ? 'disabled' : ''}>${beaten ? 'CLEANSED' : 'FACE THE GLUTTON'}</button>
   </div>`;
 }
 
 async function openGluttonSheet() {
   const allXp = await db.all('xp');
   const beaten = allXp.some(r => r.key === GLUTTON_KEY);
-  let stopAnim = () => {};
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Glutton</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body">
-      ${gluttonStageHtml()}
-      <p class="note" style="margin:12px 2px">Beware the Glutton. With a comparable appetite to a chocolate lab and the expansion rate of spray foam insulation, the Glutton is no mere dungeon monster. It seeks out and devours every goodie and gold piece its blobby body can slime up to. Face this abomination and you may become its next snack, or make off with its entire jellified hoard. Best of luck, my bony buddy.</p>
-      ${beaten ? '<p class="note" style="margin:2px">Already cleansed. Come back if it ever stirs again.</p>' : '<button class="btn" id="gluttonFight" style="width:100%">Fight The Glutton</button>'}
-    </div>`, { cls: '', onClose: () => stopAnim() });
-  stopAnim = startGluttonLoop($('.glutton-stage', wrap));
+    <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Done</button>
+    <div class="sheet-body glutton-card" style="border:none;background:none;padding-top:8px">
+      <div class="glutton-tag">something is eating the boneyard</div>
+      <h2 class="glutton-h1"><span class="sm">BEWARE THE</span><span class="big">GLUTTON</span></h2>
+      ${gluttonHeroHtml()}
+      ${gluttonLoreHtml()}
+      <p class="glutton-mech">It <b>blights</b> the ground it eats. Hunt it down and win to <b>cleanse the land</b> and claim its hoard.</p>
+      ${beaten ? '<p class="glutton-beaten">Already cleansed. Come back if it ever stirs again.</p>' : '<button class="glutton-cta" id="gluttonFight">FACE THE GLUTTON</button>'}
+    </div>`, { cls: '', name: 'The Glutton' });
   $('#gluttonFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
     openFight(wrap, fighter, {
@@ -5862,7 +5873,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v215'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v216'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6211,9 +6222,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
-    { cls: 'full', onClose: () => { if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.'); } });
+    { cls: 'full', onClose: () => { stopGluttonFoeAnim(); if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.'); } });
 
   const body = $('#fightBody', wrap);
+  let stopGluttonFoeAnim = () => {};
   body.innerHTML = `
     <div class="arena" id="arena">
       <div class="pit-crowd"></div>
@@ -6241,8 +6253,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
           ${add ? `<div class="hud-pet" id="hudAdd"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div></div>` : ''}
         </div>
       </div>
-      <div class="fighterG foe-side" id="foeG" data-target="f">
-        <div class="bh-stage fstage" id="foeStage"><div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+      <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
           <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
@@ -6259,6 +6271,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
     </div>
     <div class="fight-meta"><span class="range-pill" id="rangePill"></span><span class="fight-log" id="flog">Round one. Your turn.</span></div>
     <div class="fight-actions" id="factions"></div>`;
+
+  if (foeCfg.mode === 'glutton') stopGluttonFoeAnim = startGluttonLoop($('.glutton-stage', body));
 
   const el = id => $('#' + id, body);
 
@@ -6304,8 +6318,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
   body.addEventListener('click', (e) => { if (!e.target.closest('.fchip') && !e.target.closest('.fchip-tip')) hideChipTip(); });
 
   function positionFighters() {
-    el('youG').style.left = '12%';
-    el('foeG').style.right = '12%';
+    // the Glutton's stage is much wider than a normal fighter, so give both
+    // sides more room to keep a real gap instead of crowding the middle.
+    const big = foeCfg.mode === 'glutton';
+    el('youG').style.left = big ? '0%' : '12%';
+    el('foeG').style.right = big ? '0%' : '12%';
     el('rangePill').textContent = `Turn ${fight.turn}`;
   }
 

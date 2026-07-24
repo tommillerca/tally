@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 216, date: '2026-07-24', title: 'The Glutton: real art in the fight', items: [
+    'The Glutton now fights as himself: his own art in the arena (not a reskinned skeleton), sized up as a real boss with proper room around him.',
+    'The reveal card and lore sheet now use the actual approved look and the real hero art.',
+  ] },
   { n: 215, date: '2026-07-24', title: 'The Glutton has arrived', items: [
     'A new one-time world boss: The Glutton, a bloated horror squatting on a mountain of stolen loot. Find its card on Today and fight it for a big reward.',
     'This is the first pass on its art and animation, simple for now, with more to come.',
