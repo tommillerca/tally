@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 208, date: '2026-07-23', title: 'Cleaner combat status icons', items: [
+    'The status effects on each fighter are now tidy little icons on their own line (no more cluttered text crowding the names). Tap any icon to read what it does.',
+  ] },
   { n: 207, date: '2026-07-23', title: 'Pet talents inline + custom serving sizes', items: [
     'In the Stable, tap any pet to expand its talent tree right below it, no more scrolling to the bottom to find them.',
     'When adding food, tap the servings number to type any amount (like 1.33), on top of the +/- quarter steps.',
