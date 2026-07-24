@@ -1981,12 +1981,6 @@ async function renderShop(el) {
         <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
     </div>
     <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
-  </div>
-
-  <div class="card shop-vault">
-    <div class="card-title">THE BONE VAULT</div>
-    <p class="note" style="margin:0 2px 2px">Coming soon: support Boneheadz with premium bone bundles. Everything here today is earned by playing, and always will be. No pay-to-win.</p>
-    <div class="vault-soon">Locked · in the works</div>
   </div>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
@@ -5678,7 +5672,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v209'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v210'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
