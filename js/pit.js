@@ -829,7 +829,7 @@ export function applyAction(fight, actionId) {
       events.push({ t: 'status', who: fight.active, kind: 'guard', shield });
       if (me.talents.has('heckle')) {
         if (!them.weaken || them.weaken.pct < 0.25) them.weaken = { pct: 0.25, turns: 3 };
-        events.push({ t: 'status', who: defWho, kind: 'weaken' });
+        events.push({ t: 'status', who: defWho, kind: 'weaken', heckle: true });
       }
       break;
     }

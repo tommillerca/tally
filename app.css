@@ -2738,3 +2738,11 @@ body::before {
   100% { transform: translate(-50%, -50%) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .jabfx img { animation-duration: .01s !important; } }
+
+/* Heckle taunt FX (v202): two skulls jeer, floating in alternate rhythm */
+.heckfx { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 300px; max-width: 84%; height: 100%; pointer-events: none; z-index: 41; }
+.heckfx .hsk { position: absolute; background-size: contain; background-repeat: no-repeat; background-position: center; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
+.heckfx .hdark { left: 14.7%; top: 34%; width: 24.5%; height: 31%; animation: heckbob 1.9s ease-in-out infinite; }
+.heckfx .hbone { left: 60.7%; top: 34%; width: 24.6%; height: 31.1%; animation: heckbob 1.9s ease-in-out infinite; animation-delay: -.95s; }
+@keyframes heckbob { 0%, 100% { transform: translateY(-6px); } 50% { transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .heckfx .hsk { animation: none; } }

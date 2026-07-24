@@ -5645,7 +5645,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v201'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v202'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6148,6 +6148,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
     setTimeout(() => wrap.remove(), 780 * s);
   }
 
+  // Heckle rattle: Cam's two skulls jeer over the arena, each floating in an
+  // alternate rhythm while they yap (frame swap), then fade. Two split sprites.
+  function heckleTaunt() {
+    const arena = el('arena'); if (!arena) return;
+    const st = document.createElement('div'); st.className = 'heckfx';
+    st.innerHTML = "<div class='hsk hdark'></div><div class='hsk hbone'></div>";
+    arena.appendChild(st);
+    const d = st.querySelector('.hdark'), b = st.querySelector('.hbone');
+    const D = ['assets/bh/fx/heckle/dark1.png', 'assets/bh/fx/heckle/dark2.png'];
+    const B = ['assets/bh/fx/heckle/bone1.png', 'assets/bh/fx/heckle/bone2.png'];
+    let i = 0; const set = () => { d.style.backgroundImage = `url(${D[i]})`; b.style.backgroundImage = `url(${B[i]})`; };
+    set();
+    const iv = setInterval(() => { i ^= 1; set(); }, fast ? 120 : 300);
+    const life = fast ? 260 : 1350;
+    setTimeout(() => { st.style.transition = 'opacity .18s'; st.style.opacity = '0'; }, life);
+    setTimeout(() => { clearInterval(iv); st.remove(); }, life + 240);
+  }
+
   function playFx(ev) {
     // multi-body staging: an enemy going after your pet lands on the pet plate;
     // you going after the add lands on the add plate; the add attacks from its plate
@@ -6293,6 +6311,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
+      if (ev.kind === 'weaken' && ev.heckle) heckleTaunt(); // Heckle rattle: two skulls jeer
       const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rage: 'RAGE!' }[ev.kind] || '';
       floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'rage' ? 'stamp rage' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
       if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);

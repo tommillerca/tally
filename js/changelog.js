@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 202, date: '2026-07-23', title: 'Heckle rattles with a jeer', items: [
+    'The Heckle talent now plays an animation when your Bone Guard rattles the enemy: two skulls bob and jeer with green shout-bursts (Cam\'s art) as the foe is weakened.',
+  ] },
   { n: 201, date: '2026-07-23', title: 'Counterstep hits back with a flurry', items: [
     'The Counterstep talent now lands with a proper animation: a rapid three-fist jab flurry (Cam\'s art) that stacks in and connects when you snap back after an enemy whiffs.',
   ] },
