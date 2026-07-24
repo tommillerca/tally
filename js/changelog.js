@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 215, date: '2026-07-24', title: 'The Glutton has arrived', items: [
+    'A new one-time world boss: The Glutton, a bloated horror squatting on a mountain of stolen loot. Find its card on Today and fight it for a big reward.',
+    'This is the first pass on its art and animation, simple for now, with more to come.',
+  ] },
   { n: 214, date: '2026-07-24', title: 'Readiness polish + tap a debuff to read it', items: [
     'Tightened the daily readiness dial: no more dead gap between the ring and the status.',
     'In a fight, tap any status icon (yours or the enemy\'s) for a quick tooltip on exactly what it does, like the Boneyard map.',

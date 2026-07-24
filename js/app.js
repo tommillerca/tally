@@ -27,6 +27,7 @@ import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
+import { gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
@@ -815,6 +816,7 @@ async function renderToday(el) {
 
   ${isToday ? wellnessCardHtml(wellness) : ''}
   ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs) : ''}
+  ${isToday ? gluttonCardHtml(allXp.some(r => r.key === GLUTTON_KEY)) : ''}
   ${healthCardHtml(hk, isToday)}
 
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
@@ -862,6 +864,7 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
+  $('#gluttonCta')?.addEventListener('click', openGluttonSheet);
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -1170,6 +1173,43 @@ function sleepRowHtml(w) {
       </div>
       ${logged ? '<span class="well-check">✓</span>' : ''}
     </div>`;
+}
+
+// The Glutton (v215): a one-time world-boss spectacle. Lightweight interim
+// version — no map marker, no blight/spawn-suppression mechanic yet (those are
+// still ROADMAP items). Reachable from a card on Today; the win is idempotent
+// via the same award() ledger every other one-time encounter uses.
+const GLUTTON_KEY = 'glutton-cleanse';
+function gluttonCardHtml(beaten) {
+  return `<div class="card glutton-card">
+    <div class="card-title">THE GLUTTON</div>
+    ${gluttonStageHtml()}
+    <p class="gc-lede">${beaten
+      ? 'You cleansed its hoard. <b>The Glutton</b> has been dealt with... for now.'
+      : 'A bloated horror is feasting on the Boneyard\'s trash heaps. <b>Face The Glutton</b> and take back its hoard.'}</p>
+    <button class="btn" id="gluttonCta">${beaten ? 'Beaten' : 'Fight The Glutton'}</button>
+  </div>`;
+}
+
+async function openGluttonSheet() {
+  const allXp = await db.all('xp');
+  const beaten = allXp.some(r => r.key === GLUTTON_KEY);
+  let stopAnim = () => {};
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Glutton</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      ${gluttonStageHtml()}
+      <p class="note" style="margin:12px 2px">Beware the Glutton. With a comparable appetite to a chocolate lab and the expansion rate of spray foam insulation, the Glutton is no mere dungeon monster. It seeks out and devours every goodie and gold piece its blobby body can slime up to. Face this abomination and you may become its next snack, or make off with its entire jellified hoard. Best of luck, my bony buddy.</p>
+      ${beaten ? '<p class="note" style="margin:2px">Already cleansed. Come back if it ever stirs again.</p>' : '<button class="btn" id="gluttonFight" style="width:100%">Fight The Glutton</button>'}
+    </div>`, { cls: '', onClose: () => stopAnim() });
+  stopAnim = startGluttonLoop($('.glutton-stage', wrap));
+  $('#gluttonFight', wrap)?.addEventListener('click', async () => {
+    const fighter = await buildFighter();
+    openFight(wrap, fighter, {
+      mode: 'glutton', name: 'The Glutton', mult: 1.3, aiLevel: 3,
+      talents: ['heavyhands', 'marrowlust', 'bonebreaker'], venue: 'The Blighted Yard',
+    });
+  });
 }
 
 function kitchenCardHtml(cook, ingCount, buffs) {
@@ -5822,7 +5862,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v214'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v215'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6167,7 +6207,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret';
+  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret' || foeCfg.mode === 'glutton';
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
@@ -6878,6 +6918,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
           extraCards.push(crateCard('golden'));
         } else coins = 25; // rematch: pocket change, no re-farm
       }
+      else if (foeCfg.mode === 'glutton') {
+        // one-time world-boss spectacle, same idempotent shape as a secret boss.
+        const g = await award(GLUTTON_KEY, 'glutton', 150, 'Cleansed the Glutton');
+        trackEvent('glutton_win', { first: !!g });
+        if (g) {
+          xp += g; coins = 400;
+          await grantCrate('golden', GLUTTON_KEY);
+          extraCards.push(crateCard('golden'));
+        } else coins = 25; // rematch: pocket change, no re-farm
+      }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {
           const g = await award(`pitrung-${foeCfg.rung}`, 'pitrung', foeCfg.xp, `Ladder: beat ${foeCfg.name}`);
@@ -6952,7 +7002,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             <button class="btn loot-keep" disabled>Tap a piece to choose</button>
           </div>` : ''}
           <div style="height:12px"></div>
-          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
+          <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : foeCfg.mode === 'glutton' ? 'Done' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);
       const overEl = $('.fight-over', body);
       if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
