@@ -5073,7 +5073,7 @@ async function openMap() {
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
     const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
-    let claimedBoss = new Set(xpRows0.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
+    let claimedBoss = new Set(xpRows0.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
     const spawnSnap = new Map();    // id -> {lat,lng} | null(suppressed), placed onto walkable ground
@@ -5250,11 +5250,11 @@ async function openMap() {
           rec.marker.setLngLat([d.lng, d.lat]); // reposition if the snap resolved after first render
         }
         rec.den = d;
-        rec.el.classList.toggle('claimed', claimedBoss.has(denKey(week, d)));
-        rec.el.classList.toggle('inrange', d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
+        rec.el.classList.toggle('claimed', claimedBoss.has(denKey(date, d)));
+        rec.el.classList.toggle('inrange', d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(date, d)));
         rec.el.classList.toggle('big', d.tier >= 4);
       }
-      const openDen = shown.find(d => d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(week, d)));
+      const openDen = shown.find(d => d.dist <= DEN_RADIUS_M && !claimedBoss.has(denKey(date, d)));
       const db2 = $('#mapDen', body);
       if (db2) {
         db2.hidden = !openDen;
@@ -5344,7 +5344,7 @@ async function openMap() {
 
     async function refreshWorld() {
       const rows = await db.all('xp');
-      claimedBoss = new Set(rows.filter(r => r.type === 'boss' || r.type === 'roamboss').map(r => r.key));
+      claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       claimedSecret = new Set(rows.filter(r => r.type === 'secret').map(r => r.key));
       refreshSpawns();
@@ -5672,7 +5672,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v210'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v211'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6673,12 +6673,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
       else if (foeCfg.mode === 'boss') {
-        const r = await claimDenWin(foeCfg.den, foeCfg.week);
+        const r = await claimDenWin(foeCfg.den);
         if (r) {
           xp += r.xp || 0;
           coins = r.coins || 0;
           if (r.crate) extraCards.push(crateCard(r.crate));
-          if (r.gearChoices) bossLoot = { key: denKey(foeCfg.week, foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
+          if (r.gearChoices) bossLoot = { key: denKey(dateKey(), foeCfg.den), den: foeCfg.den.name, choices: r.gearChoices };
           // landmark world bosses are the other source of the RARE cooking
           // ingredient; roaming dens don't drop it (they stay a lighter reward).
           if (!foeCfg.den.roaming) {

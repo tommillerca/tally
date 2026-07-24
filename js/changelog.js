@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 211, date: '2026-07-24', title: 'Fight boss dens daily', items: [
+    'Landmark boss dens now refresh every day, walk out and fight them daily if you want, instead of once a week.',
+    'To keep it fair, top-tier gear from dens is now rarer (a great drop stays a lucky event), and daily re-clears don\'t fast-forward the endless Pit, only beating a new den does.',
+  ] },
   { n: 209, date: '2026-07-23', title: 'Melt a stack + see your salvage', items: [
     'Melting gear no longer jumps you back to the top, melt as many spare pieces as you like in one go.',
     'Destroying a pet now shows how much Bone Dust you\'ll get before you confirm.',

@@ -165,7 +165,16 @@ export function denKey(week, den) { return den.roaming ? `roamboss-${den.day}-${
 // How many world-boss dens you have ever beaten (drives the endless-Pit gate).
 export async function denWinsCount() {
   const xp = await db.all('xp');
-  return xp.filter(r => r.type === 'boss').length;
+  // DISTINCT dens ever beaten (drives the endless-Pit gate + difficulty ramp).
+  // Daily re-clears log as 'bossday' and are NOT counted, so grinding a den daily
+  // never inflates progression. New clears mark 'bossfirst-<denId>'; legacy weekly
+  // 'boss' rows are deduped by their key so veterans keep roughly their old count.
+  const ids = new Set();
+  for (const r of xp) {
+    if (r.type === 'bossfirst') ids.add(r.key.slice('bossfirst-'.length));
+    else if (r.type === 'boss') ids.add(r.key);
+  }
+  return ids.size;
 }
 
 // v123: world bosses RAMP with your progression so they never go stale. The base
@@ -212,8 +221,11 @@ export function denRewardLabel(r) {
 // over-geared from nonstop drops. (Gear rarities are uncommon/rare/legendary.)
 const RARITY_TIERS = ['uncommon', 'rare', 'legendary'];
 // weights per den tier 0..6 → [uncommon, rare, legendary]
+// v211: dens are now farmable DAILY, so top-end gear is deliberately rarer —
+// legendary chances roughly halved so an awesome piece stays a lucky event, not
+// a daily payout. (weights per den tier 0..6 → [uncommon, rare, legendary])
 const RARITY_WEIGHTS = [
-  [90, 10, 0], [80, 20, 0], [60, 38, 2], [45, 50, 5], [30, 60, 10], [18, 62, 20], [8, 62, 30],
+  [92, 8, 0], [85, 15, 0], [68, 31, 1], [56, 42, 2], [45, 51, 4], [32, 60, 8], [22, 64, 14],
 ];
 function rollRarityIdx(rng, tier) {
   const w = RARITY_WEIGHTS[Math.min(tier, RARITY_WEIGHTS.length - 1)];
@@ -248,28 +260,33 @@ export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = nu
   return second ? [first, second] : null;
 }
 
-// Called after a boss-den victory. Idempotent per den per week.
-export async function claimDenWin(den, week = isoWeekKey()) {
+// Called after a boss-den victory. Landmark dens are claimable ONCE PER DAY
+// (day-keyed) so you can walk out and fight them daily; roaming dens likewise.
+// Daily wins log as a NON-gating type ('bossday' / 'roamboss') so grinding them
+// never fast-forwards the endless-Pit gate — only the FIRST-ever clear of each
+// den identity advances the gate (a permanent 'boss' marker, counted once).
+export async function claimDenWin(den, day = dateKey()) {
   const r = den.reward;
-  // roaming dens (daily) log as 'roamboss' so they don't inflate the landmark
-  // boss count that gates the endless Pit; the day-based key caps them to once/day.
-  const type = den.roaming ? 'roamboss' : 'boss';
-  const xp = await award(denKey(week, den), type, r.xp || 50, `${den.roaming ? 'Roaming boss' : 'Boss den'}: ${den.name}`);
-  if (xp === 0) return null;
-  // coins are added by the caller (settle) so the Battle Charm + food coin boost
-  // apply uniformly; adding them here too was a double-pay bug.
-  if (r.crate) await grantCrate(r.crate, den.roaming ? 'roam-boss' : 'boss-den');
-  // roaming dens keep it light: crate/coins/xp only, no gear-choice drop.
-  if (den.roaming) return { xp, ...r, gearChoices: null };
-  // every boss drops two pieces: the player keeps ONE (chooser persists in kv
-  // until picked, so closing the victory screen never eats the loot)
+  if (den.roaming) {
+    const xp = await award(denKey(day, den), 'roamboss', r.xp || 50, `Roaming boss: ${den.name}`);
+    if (xp === 0) return null;
+    if (r.crate) await grantCrate(r.crate, 'roam-boss');
+    return { xp, ...r, gearChoices: null };
+  }
+  // landmark: once per day for loot/coins/xp, logged non-gating
+  const xp = await award(denKey(day, den), 'bossday', r.xp || 50, `Boss den: ${den.name}`);
+  if (xp === 0) return null; // already cleared today
+  // gate marker: advances the endless Pit exactly once per den ever beaten
+  await award(`bossfirst-${den.id}`, 'bossfirst', 0, `First clear: ${den.name}`);
+  if (r.crate) await grantCrate(r.crate, 'boss-den');
+  // every boss drops two pieces: keep ONE (chooser persists in kv until picked)
   const owned = await ownedGearIds();
   const lvl = levelFor(await totalXp()).level;
-  const choices = rollDenLoot(den, week, owned, lvl + 3, await dominantArch());
+  const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch());
   if (choices) {
     const pending = (await kvGet('denloot', [])) || [];
-    if (!pending.some(p => p.key === denKey(week, den))) {
-      pending.push({ key: denKey(week, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() });
+    if (!pending.some(p => p.key === denKey(day, den))) {
+      pending.push({ key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() });
       await kvSet('denloot', pending.slice(-6));
     }
   } else {
