@@ -8,8 +8,8 @@ echo "=== build-www + cap sync ==="
 ./build-www.sh
 npx cap sync ios
 cd ios/App
-echo "=== bump build 7 -> 8 ==="
-sed -i '' 's/CURRENT_PROJECT_VERSION = 9;/CURRENT_PROJECT_VERSION = 9;/g' App.xcodeproj/project.pbxproj
+echo "=== bump build 10 -> 11 ==="
+sed -i '' 's/CURRENT_PROJECT_VERSION = 10;/CURRENT_PROJECT_VERSION = 11;/g' App.xcodeproj/project.pbxproj
 rm -rf build/App.xcarchive build/export
 echo "=== archive ==="
 xcodebuild -project App.xcodeproj -scheme App -configuration Release \
@@ -24,4 +24,4 @@ xcodebuild -exportArchive -archivePath build/App.xcarchive -exportPath build/exp
 echo "=== upload to TestFlight ==="
 xcrun altool --upload-app -f build/export/*.ipa -t ios \
   --apiKey $KEY --apiIssuer $ISS
-echo "=== IOS BUILD 8 DONE ==="
+echo "=== IOS BUILD 11 DONE ==="
