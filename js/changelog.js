@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 207, date: '2026-07-23', title: 'Pet talents inline + custom serving sizes', items: [
+    'In the Stable, tap any pet to expand its talent tree right below it, no more scrolling to the bottom to find them.',
+    'When adding food, tap the servings number to type any amount (like 1.33), on top of the +/- quarter steps.',
+  ] },
   { n: 206, date: '2026-07-23', title: 'See what your debuffs are doing', items: [
     'Each fighter\'s active status effects now show as chips on their plate (burn, bleed, poison, blind, weaken, sunder, guard and more) with turns or stacks left, so you can tell at a glance whether it\'s worth re-applying.',
     'Tap any status chip to read exactly what it does.',

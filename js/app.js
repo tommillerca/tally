@@ -1510,13 +1510,17 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       qtyArea.innerHTML = `
         <div class="stepper">
           <button data-d="-0.25">-</button>
-          <div class="val" id="qtyVal">${fmtQty(sel.qty)}</div>
+          <input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings">
           <button data-d="0.25">+</button>
         </div>
-        <div class="note" style="text-align:center;margin-top:8px">servings</div>`;
+        <div class="note" style="text-align:center;margin-top:8px">servings · tap the number to type any amount (e.g. 1.33)</div>`;
+      const qin = $('#qtyIn', wrap);
+      qin.addEventListener('input', e => { sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
+      qin.addEventListener('focus', () => qin.select());
+      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
       $$('.stepper button', qtyArea).forEach(b => b.addEventListener('click', () => {
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
-        $('#qtyVal', wrap).textContent = fmtQty(sel.qty);
+        qin.value = fmtQty(sel.qty);
         preview();
       }));
     }
@@ -4605,6 +4609,7 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 async function openStable() {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
+  let openIid = null; // which pet's talent tree is expanded inline (default: active pet)
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
@@ -4613,6 +4618,31 @@ async function openStable() {
     if (!body) return;
     const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
+    // expanded talent tree: default to the active pet so it's visible right away
+    if (openIid == null || !insts.some(x => x.iid === openIid)) openIid = eqIid;
+    const openInst = insts.find(x => x.iid === openIid) || null;
+    const openPicks = openInst ? await petPicks(openInst.sp) : [];
+    // inline talent tree for one pet, rendered directly under its card
+    const petTalentTree = (inst, lvl, picks) => {
+      const fam = familyOf(inst.sp);
+      const isEq = inst.iid === eqIid;
+      const nextRow = PET_TREES[fam.key].find(row => lvl < row.tier);
+      const nextHint = nextRow
+        ? `<p class="tree-next">★ Next talent at <b>Lv ${nextRow.tier}</b>${isEq ? ', keep walking this pet' : ', equip this pet to keep leveling it'} (top tier is Lv 10).</p>`
+        : `<p class="tree-next">Every talent unlocked, this pet is fully trained.</p>`;
+      let html = `<div class="pet-tree-inline"><p class="tree-head">${esc((BH_BY_ID[inst.sp] || {}).name || '')} talents${isEq ? ' · ACTIVE' : ''}</p>${nextHint}
+        <div class="pet-tree">${PET_TREES[fam.key].map(row => `
+          <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
+            <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
+            <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-sp="${inst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
+          </div>`).join('')}</div>`;
+      const sigObj = petSignature(inst.sp);
+      if (sigObj) {
+        const sigOn = lvl >= PET_MAX_LEVEL;
+        html += `<div class="pet-sig ${sigOn ? 'on' : 'locked'}"><div class="pet-sig-h">${sparkIco(12)} Species Signature${sigOn ? '' : ` · Lv ${PET_MAX_LEVEL}`}</div><b>${esc(sigObj.name)}</b><small>${esc(sigObj.desc)}</small><span class="pet-sig-tag">${sigOn ? 'ACTIVE' : `unlocks at Lv ${PET_MAX_LEVEL}`}</span></div>`;
+      }
+      return html + `</div>`;
+    };
     const bySp = {};
     for (const x of insts) (bySp[x.sp] = bySp[x.sp] || []).push(x);
     const order = Object.keys(bySp).sort((p, q) => RAR_ORDER.indexOf((BH_BY_ID[q] || {}).rarity) - RAR_ORDER.indexOf((BH_BY_ID[p] || {}).rarity));
@@ -4633,10 +4663,11 @@ async function openStable() {
         const bs = petBattleStats(sp, lvl, x.shiny, x.lineage || 0);
         const isEq = x.iid === eqIid;
         const inSel = sel.includes(x.iid);
-        return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}">
+        const isOpen = x.iid === openIid;
+        return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
           <div class="stable-portrait">${petPortraitHtml(sp, 60, x.shiny)}</div>
           <div class="stable-info">
-            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">★${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}</b>
+            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">★${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}<span class="stable-chev">${isOpen ? '▴ talents' : '▾ talents'}</span></b>
             <small>${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
             <div class="stable-acts">
               ${isEq ? '<span class="stable-active-lbl">Leveling this one</span>' : `<button class="btn tiny" data-eq="${x.iid}">Equip</button>`}
@@ -4644,42 +4675,11 @@ async function openStable() {
               <button class="btn tiny danger" data-destroy="${x.iid}">Destroy</button>
             </div>
           </div>
-        </div>`;
+        </div>${isOpen ? petTalentTree(x, lvl, openPicks) : ''}`;
       }).join('');
       return `<div class="sect-h">${esc(it.name || sp)} <span class="rar-lbl r-${it.rarity || 'common'}">${(RARITIES[it.rarity] || {}).label || ''}</span> · ${bySp[sp].length}</div>${cards}`;
     }).join('');
 
-    // active pet's talent tree
-    const eqInst = insts.find(x => x.iid === eqIid);
-    let treeHtml = '';
-    if (eqInst) {
-      const fam = familyOf(eqInst.sp);
-      const lvl = petLevel(bank[eqIid] || 0);
-      const picks = await petPicks(eqInst.sp);
-      // spell out the road ahead so nobody misses that the tree runs to Lv 10
-      const nextRow = PET_TREES[fam.key].find(row => lvl < row.tier);
-      const toNextTier = nextRow ? petStepsToNext(bank[eqIid] || 0) : 0; // steps to the very next level; UI nudge
-      const nextHint = nextRow
-        ? `<p class="tree-next">★ Next talent unlocks at <b>Lv ${nextRow.tier}</b> — keep walking this pet (top tier is Lv 10).</p>`
-        : `<p class="tree-next">Every talent unlocked — this pet is fully trained.</p>`;
-      treeHtml = `<div class="sect-h" style="margin-top:14px">Active pet talents · ${esc((BH_BY_ID[eqInst.sp] || {}).name || '')}</div>
-        ${nextHint}
-        <div class="pet-tree">${PET_TREES[fam.key].map(row => `
-          <div class="pet-tier ${lvl >= row.tier ? '' : 'locked'}">
-            <span class="pet-tier-lbl">Lv ${row.tier}${lvl < row.tier ? ' · locked' : ''}</span>
-            <div class="pet-opts">${row.opts.map(o => `<button class="pet-opt ${picks.includes(o.id) ? 'on' : ''}" data-petpick2="${o.id}" data-sp="${eqInst.sp}" data-tier="${row.tier}" data-lvl="${lvl}" ${lvl < row.tier ? 'disabled' : ''}><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></button>`).join('')}</div>
-          </div>`).join('')}</div>`;
-      // species signature capstone — unique to THIS pet, auto-lit at max level
-      const sigObj = petSignature(eqInst.sp);
-      if (sigObj) {
-        const sigOn = lvl >= PET_MAX_LEVEL;
-        treeHtml += `<div class="pet-sig ${sigOn ? 'on' : 'locked'}">
-          <div class="pet-sig-h">${sparkIco(12)} Species Signature${sigOn ? '' : ` · Lv ${PET_MAX_LEVEL}`}</div>
-          <b>${esc(sigObj.name)}</b><small>${esc(sigObj.desc)}</small>
-          <span class="pet-sig-tag">${sigOn ? 'ACTIVE' : `unlocks when this pet hits Lv ${PET_MAX_LEVEL}`}</span>
-        </div>`;
-      }
-    }
 
     const spChips = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
       .map(x => `<button class="chip ${offSp === x.sp ? 'on' : ''}" data-offsp="${x.sp}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}</button>`).join('') : '';
@@ -4695,9 +4695,14 @@ async function openStable() {
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed</button>
         </div>`
       : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. Flag two with <b>Breed</b> to fuse them into a stronger one, or <b>Destroy</b> a spare for Bone Dust.</p>`}
-      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
-      ${treeHtml}`;
+      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}`;
 
+    $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return; // don't hijack Equip/Breed/Destroy
+      const iid = card.dataset.petsel;
+      openIid = (openIid === iid) ? null : iid;
+      render();
+    }));
     $$('[data-eq]', body).forEach(btn => btn.addEventListener('click', async () => {
       await setEquippedPet(btn.dataset.eq);
       popSound(S.sounds); pushProfileSoon();
@@ -5659,7 +5664,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v206'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v207'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -2780,3 +2780,11 @@ body::before {
 .fchip.s-mark { color: #ff9dc7; border-color: rgba(255,157,199,.5); }
 .fchip.s-ward { color: #7cc4ff; border-color: rgba(124,196,255,.5); }
 .fchip.s-summon { color: #b9ac97; border-color: rgba(185,172,151,.4); }
+
+/* Stable: per-pet inline talent tree (v207) — tap a pet to expand its talents */
+.stable-card { cursor: pointer; }
+.stable-card .stable-chev { font-size: 10px; font-weight: 700; color: var(--accent); margin-left: 8px; letter-spacing: .02em; white-space: nowrap; }
+.stable-card.talk-open { border-color: rgba(165,232,71,.4); }
+.pet-tree-inline { margin: 0 0 14px; padding: 10px 12px 12px; background: var(--surface-2); border: 1px solid var(--line);
+  border-top: none; border-radius: 0 0 14px 14px; }
+.pet-tree-inline .tree-head { font-size: 12px; font-weight: 750; color: var(--text-2); letter-spacing: .03em; margin: 0 0 6px; text-transform: uppercase; }
