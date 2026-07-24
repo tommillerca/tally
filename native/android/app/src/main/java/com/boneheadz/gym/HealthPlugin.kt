@@ -96,6 +96,23 @@ class HealthPlugin : Plugin() {
         else -> "other"
     }
 
+    // Merge overlapping/touching intervals, return total seconds. Sleep stages
+    // from multiple sources can overlap, so union (not sum) is the true time.
+    private fun unionSeconds(intervals: List<Pair<Instant, Instant>>): Long {
+        if (intervals.isEmpty()) return 0
+        val sorted = intervals.sortedBy { it.first }
+        var total = 0L
+        var curS = sorted[0].first
+        var curE = sorted[0].second
+        for (i in 1 until sorted.size) {
+            val (s, e) = sorted[i]
+            if (s > curE) { total += Duration.between(curS, curE).seconds; curS = s; curE = e }
+            else if (e > curE) { curE = e }
+        }
+        total += Duration.between(curS, curE).seconds
+        return total
+    }
+
     private fun sdkAvailable(): Boolean =
         HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
 
@@ -199,6 +216,46 @@ class HealthPlugin : Plugin() {
                 if (rhr.isNotEmpty()) res.put("restingHr", rhr.maxByOrNull { it.time }!!.beatsPerMinute.toInt())
                 val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, recent)).records
                 if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.maxByOrNull { it.time }!!.heartRateVariabilityMillis).toInt())
+
+                // Last night's sleep (auto, with stages). Look back 18h and union
+                // the stage intervals across all sessions in that window.
+                val sleepWindow = TimeRangeFilter.between(now.minus(Duration.ofHours(18)), now)
+                val sleeps = hc.readRecords(ReadRecordsRequest(SleepSessionRecord::class, sleepWindow)).records
+                if (sleeps.isNotEmpty()) {
+                    val core = ArrayList<Pair<Instant, Instant>>()
+                    val deep = ArrayList<Pair<Instant, Instant>>()
+                    val rem = ArrayList<Pair<Instant, Instant>>()
+                    val unspecified = ArrayList<Pair<Instant, Instant>>()
+                    val awake = ArrayList<Pair<Instant, Instant>>()
+                    for (s in sleeps) {
+                        if (s.stages.isEmpty()) {
+                            unspecified.add(Pair(s.startTime, s.endTime))
+                        } else for (st in s.stages) {
+                            val iv = Pair(st.startTime, st.endTime)
+                            when (st.stage) {
+                                SleepSessionRecord.STAGE_TYPE_DEEP -> deep.add(iv)
+                                SleepSessionRecord.STAGE_TYPE_REM -> rem.add(iv)
+                                SleepSessionRecord.STAGE_TYPE_LIGHT -> core.add(iv)
+                                SleepSessionRecord.STAGE_TYPE_SLEEPING -> unspecified.add(iv)
+                                SleepSessionRecord.STAGE_TYPE_AWAKE,
+                                SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> awake.add(iv)
+                                else -> {} // UNKNOWN / OUT_OF_BED ignored
+                            }
+                        }
+                    }
+                    val coreS = unionSeconds(core); val deepS = unionSeconds(deep); val remS = unionSeconds(rem)
+                    val staged = coreS + deepS + remS
+                    val asleep = if (staged > 0) staged else unionSeconds(unspecified)
+                    if (asleep >= 30 * 60) {
+                        val mins = { s: Long -> Math.round(s / 60.0).toInt() }
+                        res.put("sleepMin", mins(asleep))
+                        res.put("sleepDeepMin", mins(deepS))
+                        res.put("sleepRemMin", mins(remS))
+                        res.put("sleepCoreMin", mins(coreS))
+                        res.put("sleepAwakeMin", mins(unionSeconds(awake)))
+                        res.put("sleepStaged", if (staged > 0) 1 else 0)
+                    }
+                }
             } catch (e: Exception) {
                 res.put("steps", 0); res.put("activeKcal", 0); res.put("error", e.message ?: "read-failed")
             }

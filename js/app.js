@@ -654,6 +654,16 @@ async function renderToday(el) {
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false) };
   const healthRows = await db.all('health');
+  // Surface an auto watch sleep read in the wellness card when the player hasn't
+  // hand-logged tonight (so it reads "from your watch" instead of asking).
+  if (wellness && wellness.sleepHours == null) {
+    const hToday = healthRows.find(h => h.date === S.date);
+    if (hToday && hToday.sleepMin > 0) {
+      wellness.sleepHours = Math.round(hToday.sleepMin / 6) / 10;
+      wellness.sleepAuto = true;
+      wellness.sleepScore = sleepScore(hToday);
+    }
+  }
   const qbase = {
     date: S.date, entries, allXp, allLog, healthRows, targets: S.settings.targets,
     priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
@@ -1141,15 +1151,22 @@ function wellnessCardHtml(w) {
 // the night; the chosen hours highlights. Wellbeing: never scolds a short night.
 function sleepRowHtml(w) {
   const logged = w.sleepHours != null;
+  const auto = !!w.sleepAuto;
+  const hm = h => `${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, '0')}m`;
   const chips = [5, 6, 7, 8, 9].map(h =>
     `<button class="hchip ${w.sleepHours === h ? 'on' : ''}" data-sleep="${h}">${h === 9 ? '9+' : h}h</button>`).join('');
+  // Auto (from the watch): show the hours + score, no manual chips to tap. Manual
+  // fallback (no watch data): the hour chips.
+  const line = auto
+    ? `${hm(w.sleepHours)} from your watch${w.sleepScore != null ? ` · sleep score ${w.sleepScore}` : ''}. Rest is training too.`
+    : logged ? `${w.sleepHours} h logged. Rest is training too.` : 'How many hours did you get?';
   return `
     <div class="well-row ${logged ? 'done' : ''}">
       <span class="well-ico">${ICONS.moon(22)}</span>
       <div class="well-body">
         <b>Sleep</b>
-        <small>${logged ? `${w.sleepHours} h logged. Rest is training too.` : 'How many hours did you get?'}</small>
-        <div class="sleep-picks">${chips}</div>
+        <small>${line}</small>
+        ${auto ? '' : `<div class="sleep-picks">${chips}</div>`}
       </div>
       ${logged ? '<span class="well-check">✓</span>' : ''}
     </div>`;
@@ -2049,6 +2066,9 @@ async function renderTrends(el) {
     days.push({
       date: dk, kcal: tot.kcal, p: tot.p, logged: tot.kcal > 0,
       steps: h.steps || 0, sleepHours: h.sleepHours ?? null,
+      sleepMin: h.sleepMin ?? null, sleepDeepMin: h.sleepDeepMin ?? null,
+      sleepRemMin: h.sleepRemMin ?? null, sleepCoreMin: h.sleepCoreMin ?? null,
+      sleepAwakeMin: h.sleepAwakeMin ?? null, sleepStaged: !!h.sleepStaged, sleepAuto: !!h.sleepAuto,
       activeKcal: h.activeKcal ?? null, exerciseMin: h.exerciseMin ?? null,
       workouts: h.workouts || 0, wtypes: Array.isArray(h.wtypes) ? h.wtypes : [],
       restingHr: h.restingHr ?? null, hrv: h.hrv ?? null,
@@ -2158,6 +2178,7 @@ async function renderTrends(el) {
   $('#logWeight').addEventListener('click', openWeightSheet);
   $('#openProg').addEventListener('click', openProgressSheet);
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
+  el.querySelectorAll('[data-sleepdetail]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openSleepDetail(); }));
   $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
   $('#trendSync', el)?.addEventListener('click', async () => { await nativeSyncNow({ silent: false }); refresh(); });
   $('#trendHeartAuth', el)?.addEventListener('click', async () => { try { await nativeRequestAuth(); } catch { /* noop */ } await nativeSyncNow({ silent: false }); refresh(); });
@@ -2444,6 +2465,28 @@ async function openMetricDetail(metricKey) {
 
 // The Progress-screen "Activity & recovery" block. Returns '' when there is no
 // watch data, so non-fitness users never see an empty or nagging section.
+// Sleep score (0-100), OUR read, computed from the stage minutes the watch
+// records. Apple exposes no numeric sleep score through HealthKit (only the
+// stages + durations), so we derive one: mostly duration (ideal 7-9h), plus
+// deep %, REM % and efficiency when the watch logged stages. A manual "hours
+// slept" entry has no stages, so it scores on duration alone. Returns null if
+// there's no usable sleep on record.
+function sleepScore(r) {
+  const asleep = r && r.sleepMin;
+  if (asleep == null || asleep < 30) return null;
+  const durFrac = asleep >= 420 && asleep <= 540 ? 1
+    : asleep < 420 ? Math.max(0, (asleep - 180) / 240)
+      : Math.max(0.8, 1 - (asleep - 540) / 600); // long lie-ins get a mild trim
+  if (r.sleepStaged && r.sleepDeepMin != null) {
+    const deepS = Math.max(0, Math.min(1, ((r.sleepDeepMin || 0) / asleep) / 0.16));
+    const remS = Math.max(0, Math.min(1, ((r.sleepRemMin || 0) / asleep) / 0.22));
+    const eff = asleep / (asleep + (r.sleepAwakeMin || 0));
+    const effS = Math.max(0, Math.min(1, (eff - 0.75) / 0.20));
+    return Math.round(100 * (0.55 * durFrac + 0.18 * deepS + 0.17 * remS + 0.10 * effS));
+  }
+  return Math.round(Math.max(40, Math.min(95, durFrac * 95)));
+}
+
 // Daily readiness: blend resting HR + HRV + sleep vs their baselines into a 0-100
 // score. Returns null if there's no heart data to read.
 function readinessScore(days) {
@@ -2457,9 +2500,22 @@ function readinessScore(days) {
   if (rhrL != null) score += Math.max(-16, Math.min(14, (rhrB - rhrL) * 2.5)); // lower resting HR = better
   const hrvL = last(hrvs), hrvB = mean(hrvs);
   if (hrvL != null) score += Math.max(-15, Math.min(15, (hrvL - hrvB) * 0.6));   // higher HRV = better
-  const slL = last(sleeps);
-  if (slL != null) score += Math.max(-14, Math.min(12, (slL - 7) * 6));           // ~7h+ = better
-  return { score: Math.round(Math.max(5, Math.min(99, score))), rhrL, rhrB, hrvL, hrvB, slL };
+  // Sleep: prefer the richer sleep score (stages) when we have it; fall back to
+  // raw hours otherwise. `sl` is the most recent day carrying any sleep data.
+  const slDays = days.filter(d => (d.sleepMin != null && d.sleepMin > 0) || (d.sleepHours != null && d.sleepHours > 0));
+  const sl = slDays.length ? slDays[slDays.length - 1] : null;
+  const slScore = sl ? sleepScore(sl) : null;
+  const slHours = sl ? (sl.sleepMin != null ? sl.sleepMin / 60 : sl.sleepHours) : last(sleeps);
+  if (slScore != null) score += Math.max(-15, Math.min(13, (slScore - 65) * 0.4));
+  else if (slHours != null) score += Math.max(-14, Math.min(12, (slHours - 7) * 6));
+  return {
+    score: Math.round(Math.max(5, Math.min(99, score))),
+    rhrL, rhrB, hrvL, hrvB,
+    slL: slHours, slScore, slStaged: sl ? !!sl.sleepStaged : false,
+    slDeep: sl ? sl.sleepDeepMin : null, slRem: sl ? sl.sleepRemMin : null,
+    slCore: sl ? sl.sleepCoreMin : null, slAwake: sl ? sl.sleepAwakeMin : null,
+    slAuto: sl ? !!sl.sleepAuto : false,
+  };
 }
 
 function readinessHtml(r) {
@@ -2475,10 +2531,17 @@ function readinessHtml(r) {
   const capX = (cx + Math.cos(capA) * R).toFixed(1), capY = (cy + Math.sin(capA) * R).toFixed(1);
   const arrow = (v, goodLow) => v == null ? '' : (goodLow ? (v < 0 ? `<i class="up">▼${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">▲${Math.round(v)}</i>` : '') : (v > 0 ? `<i class="up">▲${Math.round(v)}</i>` : v < 0 ? `<i class="warn">▼${Math.abs(Math.round(v))}</i>` : ''));
   const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span>${tr}</button>`;
+  const hm = h => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+  // Sleep tile: when the watch gave us a score, that's the headline (Tom wanted
+  // the sleep score shown) with hours beneath, and it's tappable for the stage
+  // breakdown. A manual hours-only entry just shows the hours.
+  const sleepTile = r.slScore != null
+    ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span>${r.slL != null ? `<i>${hm(r.slL)}</i>` : ''}</button>`
+    : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">${r.slL != null ? hm(r.slL) : '&mdash;'}</span></button>`;
   const tiles = [
     r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
     r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
-    r.slL != null ? tile('', 'Sleep', `${Math.floor(r.slL)}h${String(Math.round((r.slL % 1) * 60)).padStart(2, '0')}`, '', '') : tile('', 'Sleep', '—', '', ''),
+    sleepTile,
   ].filter(Boolean).join('');
   return `<div class="card rd-card">
     <div class="rd-eyebrow">DAILY READINESS</div>
@@ -2499,6 +2562,45 @@ function readinessHtml(r) {
     <p class="rd-sub">${band.sub}</p>
     <div class="rd-tiles">${tiles}</div>
   </div>`;
+}
+
+// Last night's sleep, broken into stages, as a bottom sheet. Opened from the
+// readiness Sleep tile. Honest about what it is: the score is our own read of
+// the watch's stage data (Apple gives no sleep-score API), and manual entries
+// have hours but no stages.
+async function openSleepDetail() {
+  const health = await db.all('health');
+  const withSleep = health.filter(h => h.sleepMin != null && h.sleepMin > 0).sort((a, b) => a.date.localeCompare(b.date));
+  const r = withSleep.length ? withSleep[withSleep.length - 1] : null;
+  if (!r) { toast('No sleep recorded yet.', 2200); return; }
+  const sc = sleepScore(r);
+  const hm = m => `${Math.floor(m / 60)}h ${String(Math.round(m % 60)).padStart(2, '0')}m`;
+  const asleep = r.sleepMin;
+  const stages = [
+    { k: 'Deep', m: r.sleepDeepMin || 0, col: '#7b6cff' },
+    { k: 'REM', m: r.sleepRemMin || 0, col: '#5fe6d0' },
+    { k: 'Core', m: r.sleepCoreMin || 0, col: '#7cc4ff' },
+    { k: 'Awake', m: r.sleepAwakeMin || 0, col: 'var(--gold)' },
+  ];
+  const tot = stages.reduce((a, s) => a + s.m, 0) || asleep;
+  const staged = r.sleepStaged && (r.sleepDeepMin != null || r.sleepRemMin != null);
+  const bar = staged
+    ? `<div class="sleep-bar">${stages.filter(s => s.m > 0).map(s => `<i style="flex:${s.m};background:${s.col}"></i>`).join('')}</div>
+       <div class="sleep-legend">${stages.filter(s => s.m > 0).map(s => `<div class="sl-row"><span class="sl-dot" style="background:${s.col}"></span><span class="sl-k">${s.k}</span><span class="sl-m">${hm(s.m)}</span><span class="sl-p">${Math.round(s.m / tot * 100)}%</span></div>`).join('')}</div>`
+    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages last night.' : 'This night was logged by hand.'}</p>`;
+  const bandCol = sc >= 80 ? 'var(--accent)' : sc >= 60 ? '#5fe6d0' : 'var(--gold)';
+  const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
+  const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
+    <div class="trend-scroll">
+      <h2 style="margin:2px 40px 6px 0;font-size:19px">Sleep</h2>
+      <div class="sleep-top">
+        <div class="sleep-score" style="color:${bandCol}">${sc}<small>/100</small></div>
+        <div class="sleep-meta"><b>${hm(asleep)} asleep</b><span>${when}${r.sleepAuto ? ' · auto from your watch' : ''}</span></div>
+      </div>
+      ${bar}
+      <p class="note" style="margin:14px 2px 2px">Your sleep score is Boneheadz's own read of ${staged ? 'how long and how well you slept (duration, deep, REM and how settled the night was)' : 'how long you slept'}. It feeds your daily readiness up top. Apple doesn't hand apps a sleep number, so this is our take on the same data your watch records.</p>
+    </div>`;
+  openSheet(html, { cls: 'sheet-trend' });
 }
 
 function activityRecoveryHtml(days) {
@@ -4574,6 +4676,18 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (payload.restingHr != null) row.restingHr = payload.restingHr;
   if (payload.hrv != null) row.hrv = payload.hrv;
   if (payload.restingHr != null || payload.hrv != null) await kvSet('hkHeartOk', true); // stop re-prompting once heart data flows
+  // Auto sleep read (last night). Skip if the player hand-logged sleep for this
+  // date (sleepManual) so a manual override sticks for the day.
+  if (payload.sleepMin != null && payload.sleepMin > 0 && !row.sleepManual) {
+    row.sleepMin = payload.sleepMin;
+    row.sleepDeepMin = payload.sleepDeepMin ?? null;
+    row.sleepRemMin = payload.sleepRemMin ?? null;
+    row.sleepCoreMin = payload.sleepCoreMin ?? null;
+    row.sleepAwakeMin = payload.sleepAwakeMin ?? null;
+    row.sleepStaged = !!payload.sleepStaged;
+    row.sleepHours = Math.round(payload.sleepMin / 6) / 10; // 0.1h precision, keeps the sleep chart fed
+    row.sleepAuto = true;
+  }
   if (payload.exerciseMin != null) row.exerciseMin = payload.exerciseMin;
   if (payload.cycleKm != null) row.cycleKm = payload.cycleKm;
   if (payload.workouts != null) row.workouts = payload.workouts;
@@ -5730,7 +5844,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v212'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v213'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7046,12 +7160,19 @@ async function seedDemo() {
   const demoRhr = [49, 48, 52, 50, 54, 47, 55, 51, 48, 53, 50, 46, 54, 50];
   const demoHrv = [66, 71, 58, 64, 54, 74, 51, 62, 70, 57, 63, 78, 55, 65];
   for (let i = 0; i < demoSteps.length; i++) {
+    const sleepMin = Math.round(demoSleep[i] * 60);
+    const deepMin = Math.round(sleepMin * 0.20);
+    const remMin = Math.round(sleepMin * 0.22);
+    const awakeMin = Math.round(sleepMin * 0.05);
     await db.put('health', {
       date: addDays(dateKey(), -i),
       steps: demoSteps[i],
       activeKcal: Math.round(demoSteps[i] * 0.06),
       exerciseMin: Math.round(demoSteps[i] / 900),
       sleepHours: demoSleep[i],
+      sleepMin, sleepDeepMin: deepMin, sleepRemMin: remMin,
+      sleepCoreMin: sleepMin - deepMin - remMin, sleepAwakeMin: awakeMin,
+      sleepStaged: true, sleepAuto: true,
       restingHr: demoRhr[i],
       hrv: demoHrv[i],
     });

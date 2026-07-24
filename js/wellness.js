@@ -43,7 +43,12 @@ export async function markSleep(hours, date = dateKey()) {
   const w = await getWellness(date); const first = w.sleepHours == null;
   w.sleepHours = hours; w.sleep = true; await save(w);
   const h = (await db.get('health', date)) || { date };
-  h.sleepHours = hours; await db.put('health', h);
+  // Manual entry: hours only, no stages. Flag it so the auto watch-read won't
+  // overwrite a night the player deliberately logged by hand.
+  h.sleepHours = hours; h.sleepMin = Math.round(hours * 60);
+  h.sleepManual = true; h.sleepAuto = false; h.sleepStaged = false;
+  h.sleepDeepMin = null; h.sleepRemMin = null; h.sleepCoreMin = null; h.sleepAwakeMin = null;
+  await db.put('health', h);
   let xp = 0;
   if (first) xp = await award(`sleep-${date}`, 'wellness', 10, `Slept ${hours}h`, date);
   return { w, xp, hours, first };

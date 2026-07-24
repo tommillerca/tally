@@ -47,6 +47,68 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    private var sleepType: HKCategoryType { HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)! }
+
+    // Merge overlapping/touching [start,end] intervals and return total seconds.
+    // Sleep can be written by several sources (watch + phone + third-party), so
+    // raw duration-summing double-counts; a union of the intervals is the true time.
+    private func unionSeconds(_ intervals: [(Date, Date)]) -> Double {
+        guard !intervals.isEmpty else { return 0 }
+        let sorted = intervals.sorted { $0.0 < $1.0 }
+        var total: Double = 0
+        var curS = sorted[0].0, curE = sorted[0].1
+        for (s, e) in sorted.dropFirst() {
+            if s > curE { total += curE.timeIntervalSince(curS); curS = s; curE = e }
+            else if e > curE { curE = e }
+        }
+        total += curE.timeIntervalSince(curS)
+        return total
+    }
+
+    // Last night's sleep, as stage minutes. Returns nil if nothing was recorded.
+    // We look back 18h (covers a morning/afternoon check-in) and union the
+    // "asleep" samples per stage. Stage identifiers (asleepCore/Deep/REM) are
+    // iOS 16+, so we branch on rawValue to stay correct on older systems where
+    // only inBed(0)/asleep(1)/awake(2) exist.
+    private func latestSleep(_ done: @escaping ([String: Int]?) -> Void) {
+        let end = Date()
+        let start = end.addingTimeInterval(-18 * 3600)
+        let pred = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        let q = HKSampleQuery(sampleType: sleepType, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            let cats = (samples as? [HKCategorySample]) ?? []
+            guard !cats.isEmpty else { done(nil); return }
+            var core: [(Date, Date)] = [], deep: [(Date, Date)] = [], rem: [(Date, Date)] = []
+            var unspecified: [(Date, Date)] = [], awake: [(Date, Date)] = []
+            for c in cats {
+                let iv = (c.startDate, c.endDate)
+                switch c.value {
+                case 3: core.append(iv)       // asleepCore
+                case 4: deep.append(iv)       // asleepDeep
+                case 5: rem.append(iv)        // asleepREM
+                case 1: unspecified.append(iv) // asleep / asleepUnspecified
+                case 2: awake.append(iv)      // awake
+                default: break                // 0 = inBed (ignored; not "asleep")
+                }
+            }
+            let coreS = self.unionSeconds(core), deepS = self.unionSeconds(deep), remS = self.unionSeconds(rem)
+            let staged = coreS + deepS + remS
+            // Prefer staged data; fall back to unspecified "asleep" when the source
+            // didn't record stages (older watches / third-party trackers).
+            let asleep = staged > 0 ? staged : self.unionSeconds(unspecified)
+            guard asleep >= 30 * 60 else { done(nil); return } // ignore stray < 30 min blips
+            let m = { (s: Double) in Int((s / 60).rounded()) }
+            done([
+                "sleepMin": m(asleep),
+                "sleepDeepMin": m(deepS),
+                "sleepRemMin": m(remS),
+                "sleepCoreMin": m(coreS),
+                "sleepAwakeMin": m(self.unionSeconds(awake)),
+                "sleepStaged": staged > 0 ? 1 : 0,
+            ])
+        }
+        store.execute(q)
+    }
+
     // Most recent sample value for a quantity type within the last `days` days.
     // Used for sparse metrics (resting HR, HRV) that aren't written every day.
     private func latestQuantity(_ type: HKQuantityType, unit: HKUnit, days: Int, _ done: @escaping (Double) -> Void) {
@@ -162,6 +224,11 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         group.enter()
         latestQuantity(hrvType, unit: .secondUnit(with: .milli), days: 10) { v in hrv = v; group.leave() }
 
+        // Last night's sleep, auto-read from the watch (stages when available).
+        var sleep: [String: Int]? = nil
+        group.enter()
+        latestSleep { s in sleep = s; group.leave() }
+
         group.notify(queue: .main) {
             let fmt = DateFormatter()
             fmt.dateFormat = "yyyy-MM-dd"
@@ -176,6 +243,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             ]
             if restingHr > 0 { out["restingHr"] = Int(restingHr.rounded()) }
             if hrv > 0 { out["hrv"] = Int(hrv.rounded()) }
+            if let s = sleep { for (k, v) in s { out[k] = v } }
             if let w = weightKg { out["weightKg"] = w }
             call.resolve(out)
         }
