@@ -2739,12 +2739,12 @@ body::before {
 }
 @media (prefers-reduced-motion: reduce) { .jabfx img { animation-duration: .01s !important; } }
 
-/* Heckle taunt FX (v202): two skulls jeer, floating in alternate rhythm */
-.heckfx { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 300px; max-width: 84%; height: 100%; pointer-events: none; z-index: 41; }
-.heckfx .hsk { position: absolute; background-size: contain; background-repeat: no-repeat; background-position: center; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
-.heckfx .hdark { left: 14.7%; top: 34%; width: 24.5%; height: 31%; animation: heckbob 1.9s ease-in-out infinite; }
-.heckfx .hbone { left: 60.7%; top: 34%; width: 24.6%; height: 31.1%; animation: heckbob 1.9s ease-in-out infinite; animation-delay: -.95s; }
-@keyframes heckbob { 0%, 100% { transform: translateY(-6px); } 50% { transform: translateY(6px); } }
+/* Heckle taunt FX (v205): two skulls jeer over the rattled fighter's shoulders,
+   floating in alternate rhythm. Skull position/size are set inline by heckleTaunt. */
+.heckfx { position: absolute; inset: 0; pointer-events: none; z-index: 41; }
+.heckfx .hsk { position: absolute; background-size: contain; background-repeat: no-repeat; background-position: center; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); animation: heckbob 1.6s ease-in-out infinite; }
+.heckfx .hbone { animation-delay: -.8s; }
+@keyframes heckbob { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .heckfx .hsk { animation: none; } }
 
 /* Backpack: collapsed Melt-gear fold (v203) so the Shop isn't buried below it */

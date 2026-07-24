@@ -5659,7 +5659,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v204'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v205'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6162,22 +6162,31 @@ async function openFight(pitWrap, fighter, foeCfg) {
     setTimeout(() => wrap.remove(), 780 * s);
   }
 
-  // Heckle rattle: Cam's two skulls jeer over the arena, each floating in an
-  // alternate rhythm while they yap (frame swap), then fade. Two split sprites.
-  function heckleTaunt() {
+  // Heckle rattle: Cam's two skulls jeer AT THE RATTLED FIGHTER, one over each
+  // shoulder of their head, yapping in alternation (frame swap) then fading.
+  function heckleTaunt(vic) {
     const arena = el('arena'); if (!arena) return;
+    const stage = el(vic === 'p' ? 'youStage' : 'foeStage') || el('foeStage'); if (!stage) return;
+    const ar = arena.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    if (!sr.width) return;
+    const cx = (sr.left - ar.left) + sr.width / 2;
+    const headY = (sr.top - ar.top) + sr.height * 0.12;   // near the top of the fighter (head)
+    const sz = Math.round(Math.max(42, sr.width * 0.52));
     const st = document.createElement('div'); st.className = 'heckfx';
     st.innerHTML = "<div class='hsk hdark'></div><div class='hsk hbone'></div>";
     arena.appendChild(st);
     const d = st.querySelector('.hdark'), b = st.querySelector('.hbone');
+    const place = (elm, centerX) => { elm.style.width = elm.style.height = sz + 'px'; elm.style.left = Math.round(centerX - sz / 2) + 'px'; elm.style.top = Math.round(headY - sz / 2) + 'px'; };
+    place(d, cx - sr.width * 0.46);   // left shoulder
+    place(b, cx + sr.width * 0.46);   // right shoulder
     const D = ['assets/bh/fx/heckle/dark1.png', 'assets/bh/fx/heckle/dark2.png'];
     const B = ['assets/bh/fx/heckle/bone1.png', 'assets/bh/fx/heckle/bone2.png'];
     let i = 0; const set = () => { d.style.backgroundImage = `url(${D[i]})`; b.style.backgroundImage = `url(${B[i]})`; };
     set();
-    const iv = setInterval(() => { i ^= 1; set(); }, fast ? 120 : 300);
-    const life = fast ? 260 : 1350;
-    setTimeout(() => { st.style.transition = 'opacity .18s'; st.style.opacity = '0'; }, life);
-    setTimeout(() => { clearInterval(iv); st.remove(); }, life + 240);
+    const iv = setInterval(() => { i ^= 1; set(); }, fast ? 130 : 320);
+    const life = fast ? 280 : 1500;
+    setTimeout(() => { st.style.transition = 'opacity .2s'; st.style.opacity = '0'; }, life);
+    setTimeout(() => { clearInterval(iv); st.remove(); }, life + 260);
   }
 
   function playFx(ev) {
@@ -6325,7 +6334,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       floatNode(`+${ev.amount || ev.heal}`, ev.who, 'dmg heal');
       pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'mendfx', fxMs + 250);
     } else if (ev.t === 'status') {
-      if (ev.kind === 'weaken' && ev.heckle) heckleTaunt(); // Heckle rattle: two skulls jeer
+      if (ev.kind === 'weaken' && ev.heckle) heckleTaunt(ev.who); // Heckle rattle: two skulls jeer at the victim
       const label = { sunder: 'SUNDERED', bleed: 'BLEEDING', hex: 'HEXED', weaken: 'WEAKENED', chill: 'CHILLED', burn: 'BURNING', ward: 'WARDED', blind: 'BLINDED', guard: 'GUARD UP', rage: 'RAGE!' }[ev.kind] || '';
       floatNode(label, ev.who, ev.kind === 'burn' ? 'stamp fire' : ev.kind === 'rage' ? 'stamp rage' : (ev.kind === 'ward' || ev.kind === 'guard') ? 'stamp holy' : ev.kind === 'guard' ? 'stamp cool' : 'stamp hex');
       if (ev.kind === 'hex' || ev.kind === 'weaken' || ev.kind === 'chill' || ev.kind === 'blind') pulse(ev.who === 'p' ? el('youStage') : el('foeStage'), 'hexfx', fxMs + 250);

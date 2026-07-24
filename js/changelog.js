@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 205, date: '2026-07-23', title: 'Heckle jeers in the enemy\'s face', items: [
+    'The Heckle skulls now flank the rattled enemy\'s head, one jeering over each shoulder, instead of floating across the whole screen. Cleaner art, too.',
+  ] },
   { n: 204, date: '2026-07-23', title: 'Scroll fix + a way out of the Shop', items: [
     'Fixed the screen jumping back to the top on its own: background health syncs no longer re-render and yank you up while you\'re scrolled down reading.',
     'The Shop now has a Back button, no more getting stuck in there.',
