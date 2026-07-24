@@ -9,6 +9,33 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🫠 The Glutton — first big feature highlight — 2026-07-23 — 🎨 FEATURE (art-blocked)
+
+A map-wide world event. The Glutton (a slime/blob abomination, Brock's lore) **feasts on part of the Boneyard, creating a blight** that suppresses all spawns in its area until a player hunts it down and beats it. Intended as our **first "big feature" launch** with a proper announcement popup. **Launch gated on Cam's real art** — everything below is designed + mocked on placeholder art, ready to build once art lands.
+
+**Mocks (placeholder art, approved direction):**
+- Announcement popup → artifact `437a041e-f0c5-4f84-b0c4-cbd84471038b` (source `scratchpad/glutton.src.html`). Direction locked after v2 rework: **near-monochrome + one muted sickly-green accent**, spooky not poppy, title in bone-white **Bangers** (colour was reading junior), lore panel, single outlined CTA. Restraint-first per taste contract.
+- Blight-on-map → artifact `f8c7dbda-9ba7-4f1d-96a4-f9dd7e2553f1` (source `scratchpad/blightmap.src.html`). Locked visual behaviour:
+  - **Dead zone**: inside the rot the map darkens + desaturates, mottled/uneven (SVG fractal-noise + speckle, no repeating tile), streets tinted sickly green, no new spawns.
+  - **Feathered creeping edge**: organic slime border (turbulence-displaced + blurred, never a clean circle), oozing tendrils; grows outward the longer it's ignored.
+  - **Fill drifts like fog in a light wind** (two noise layers, 17s/23s loops + 26s turbulence churn; edge stays anchored). Verified drifting via 2-frame diff.
+  - **Glutton at the heart**: pulsing sickly den marker, tap in to fight.
+  - **Cleanse on defeat**: colour floods back, spawns return, its hoard spills across the freed ground.
+
+**Lore (Brock, use verbatim in the announcement):**
+> Beware the Glutton. With a comparable appetite to a chocolate lab and the expansion rate of spray foam insulation, the Glutton is no mere dungeon monster. It seeks out and devours every goodie and gold piece its blobby body can slime up to. Face this abomination and you may become its next snack, or make off with its entire jellified hoard. Best of luck, my bony buddy.
+> "Plan for what is difficult while it is easy, do what is great while it is small." - Sun Tzu... probably
+
+**Open gameplay DECISIONs (need Tom's call before build):**
+1. **Spawn + growth cadence** — timer/level-triggered? Slow menace (grows over hours, ignorable a while) vs urgent (grows fast, forces action)?
+2. **Can it block core play?** — allowed to creep over a den / the Pit entrance and lock it until cleared (more threatening), or open-ground only (never blocks)?
+3. **One at a time, or multiple** blights concurrently?
+4. **Reward** — generic big coin+crate burst, or a signature **Glutton-only cosmetic/pet**?
+
+**Build notes (when unblocked):** announcement popup reuses the What's-New sheet pattern, one-time gated. Blight = a GeoJSON region + map style overlay in `js/map.js`/`poi.js`; the Glutton is a special den (`poi.js`) with its own fight mode + cleanse-on-win → restore spawns + hoard payout. Additive state only (new ledger keys).
+
+---
+
 ## 🥁 Easter-egg bosses — 2026-07-21 — ✅ Tum Tum Wabaloo SHIPPED v178
 
 Tom's ask: hidden bosses friends can FIND. Chosen mechanic: secret map dens (hybrid of Tom's "hidden map spot, scattered because Brock's in Ontario").
