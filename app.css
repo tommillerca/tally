@@ -2952,7 +2952,11 @@ body::before {
 
 /* Glutton banner expanded body: real hero art + map visual (v-glutton fix) */
 .gbn-hero { width: 66%; max-width: 220px; margin: 4px auto 6px; }
-.gbn-hero .glutton-hero { position: static; width: 100%; margin: 0; }
+/* MUST stay positioned (relative) + clip: the hero's glow/bubbles are absolutely
+   positioned with %-based insets. If this is `static`, they resolve against a
+   far-up ancestor and the green radial glow balloons across the whole screen,
+   landing on the macro/wellness cards (Android bug report, v218). */
+.gbn-hero .glutton-hero { position: relative; width: 100%; margin: 0; overflow: hidden; }
 .gbn-maplabel { font-size: 10px; letter-spacing: .16em; color: var(--text-3); text-transform: uppercase; font-weight: 800; margin: 8px 0 6px; }
 .gbn-map { border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); margin-bottom: 10px; }
 .gbn-map svg { display: block; width: 100%; height: auto; }
