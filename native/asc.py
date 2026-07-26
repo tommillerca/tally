@@ -7,8 +7,24 @@ invisible in TestFlight, which is exactly how build 11 (the first with the sleep
 plugin) sat unused for three days while the phone kept showing build 10.
 
 Usage:
+  ./asc.py next                    # the next safe build number, derived from ASC
   ./asc.py list                    # every build + which groups can see it
   ./asc.py distribute <version>    # wait for processing, add to the internal group
+  ./asc.py check                   # assert the invariants; non-zero exit if broken
+
+Two failures this file exists to make impossible:
+
+  1. Build 11 uploaded fine and was never added to a group, so it was invisible
+     in TestFlight for three days while the phone showed build 10. The upload
+     succeeding was mistaken for the build being available.
+  2. The build number came from a hardcoded `sed 10 -> 11` in build-ios.sh, so a
+     second run would have silently produced a duplicate.
+
+So: `next` derives the number from App Store Connect rather than the local
+project (the local file can lag behind what is already uploaded), and `check`
+asserts the outcome that actually matters, which is that a tester can install
+the thing. Both are wired into build-ios.sh, and check exits non-zero so a
+broken release cannot report success.
 """
 import json
 import os
@@ -104,11 +120,90 @@ def cmd_distribute(version, timeout=1800):
     print('External testers still need a separate beta-review submission.')
 
 
+def cmd_next():
+    """Next build number, from App Store Connect rather than the local project.
+
+    The local pbxproj can lag behind what is already uploaded (a failed run, a
+    build made on another machine), and Apple rejects a duplicate build number
+    only after a full archive + upload. Asking ASC makes a collision impossible.
+    """
+    nums = [int(b['attributes']['version']) for b in builds(50)['data']
+            if str(b['attributes'].get('version', '')).isdigit()]
+    print(max(nums) + 1 if nums else 1)
+
+
+def cmd_check():
+    """Assert what actually matters: a tester can install the newest build.
+
+    Exits non-zero on any broken invariant, so build-ios.sh cannot report success
+    over a release nobody can see. This is the check that would have caught
+    build 11 sitting in no group.
+    """
+    problems, notes = [], []
+    d = builds(20)
+    rows = [b for b in d['data'] if not b['attributes'].get('expired')]
+    if not rows:
+        raise SystemExit('CHECK FAILED: no live builds at all')
+
+    group_names = {g['id']: g['attributes']['name'] for g in call(f'/apps/{APP_ID}/betaGroups')['data']}
+    seen_by = {}
+    for gid, name in group_names.items():
+        for b in call(f'/betaGroups/{gid}/builds?limit=50')['data']:
+            seen_by.setdefault(b['id'], []).append(name)
+
+    newest = rows[0]
+    v = newest['attributes']['version']
+    if newest['attributes'].get('processingState') != 'VALID':
+        notes.append(f'build {v} is still {newest["attributes"].get("processingState")}')
+    if not seen_by.get(newest['id']):
+        problems.append(f'build {v} is the newest live build and is in NO group: invisible in TestFlight')
+
+    # any other processed build stranded with no group is a silent shipping failure
+    for b in rows[1:]:
+        if b['attributes'].get('processingState') == 'VALID' and not seen_by.get(b['id']):
+            notes.append(f'build {b["attributes"]["version"]} is processed but in no group')
+
+    # A build in a group is still invisible to anyone who never accepted the
+    # invite. This is not a footnote: it is the difference between "shipped" and
+    # "Tom cannot install it", which is exactly what happened with build 12.
+    # Every member of the INTERNAL group is a developer on this app, so any of
+    # them stuck on INVITED is a real failure, not a note.
+    internal_ok = False
+    for gid, name in group_names.items():
+        testers = call(f'/betaGroups/{gid}/betaTesters?limit=50')['data']
+        states = [t['attributes'].get('state') for t in testers]
+        is_internal = gid == INTERNAL_GROUP
+        if testers and not any(s in ('INSTALLED', 'ACCEPTED') for s in states):
+            problems.append(f'group "{name}" has {len(testers)} tester(s) but none accepted: {states}')
+        for t in testers:
+            if t['attributes'].get('state') == 'INVITED':
+                who = t['attributes'].get('email')
+                msg = f'{who} is still INVITED in "{name}" and cannot install anything'
+                (problems if is_internal else notes).append(msg)
+        if is_internal and any(s in ('INSTALLED', 'ACCEPTED') for s in states):
+            internal_ok = True
+    if not internal_ok:
+        problems.append('nobody in the internal group can install: the build is effectively unshipped')
+
+    for n in notes:
+        print('  note: ' + n)
+    if problems:
+        for p in problems:
+            print('  PROBLEM: ' + p)
+        raise SystemExit('CHECK FAILED')
+    print(f'check passed: build {v} is live and visible to {", ".join(seen_by[newest["id"]])}')
+
+
 if __name__ == '__main__':
-    if len(sys.argv) < 2 or sys.argv[1] not in ('list', 'distribute'):
+    cmds = ('list', 'distribute', 'next', 'check')
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         raise SystemExit(__doc__)
     if sys.argv[1] == 'list':
         cmd_list()
+    elif sys.argv[1] == 'next':
+        cmd_next()
+    elif sys.argv[1] == 'check':
+        cmd_check()
     else:
         if len(sys.argv) < 3:
             raise SystemExit('usage: asc.py distribute <version>')
