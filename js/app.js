@@ -764,7 +764,7 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
-  ${isToday && !allXp.some(r => r.key === GLUTTON_KEY) ? gluttonBannerHtml() : ''}
+  ${isToday ? gluttonBannerHtml() : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -1203,11 +1203,41 @@ function gluttonBannerHtml() {
       <span class="gbn-chev">›</span>
     </summary>
     <div class="gbn-body">
+      <div class="gbn-hero">${gluttonHeroHtml()}</div>
       ${gluttonLoreHtml()}
+      <div class="gbn-maplabel">How the blight reads on the map</div>
+      ${gluttonBlightMapHtml()}
       <p class="glutton-mech">It <b>blights</b> the ground it eats. He's a world boss: walk out, find him, and fight him there. There's no button that teleports you to him.</p>
       <button class="btn ghost" id="gluttonToMap" style="width:100%">Open the Boneyard</button>
     </div>
   </details>`;
+}
+
+// A stylized "map screenshot" for the banner: the approved feathered-fog blight
+// with the REAL Glutton art at its heart + a couple of Boneyard markers, so the
+// banner shows what the player will see, not just describe it. Asset paths (not
+// base64) so it stays in sync with the shipped art.
+function gluttonBlightMapHtml() {
+  return `<div class="gbn-map"><svg viewBox="0 0 350 150" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="gbnGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#9fb04e" stop-opacity="0.24"/><stop offset="100%" stop-color="#9fb04e" stop-opacity="0"/></radialGradient>
+      <radialGradient id="gbnCore" cx="45%" cy="45%" r="62%"><stop offset="0%" stop-color="#070a04" stop-opacity="0.9"/><stop offset="55%" stop-color="#111806" stop-opacity="0.5"/><stop offset="100%" stop-color="#111806" stop-opacity="0"/></radialGradient>
+      <filter id="gbnOoze" x="-40%" y="-40%" width="180%" height="180%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="26" xChannelSelector="R" yChannelSelector="G" result="d"/><feGaussianBlur in="d" stdDeviation="4"/></filter>
+      <filter id="gbnMottle" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.04 0.05" numOctaves="4" seed="6" result="t"/><feColorMatrix in="t" type="matrix" values="0 0 0 0 0.22  0 0 0 0 0.27  0 0 0 0 0.09  0 0 0 1.6 -0.55"/></filter>
+      <mask id="gbnMask"><g filter="url(#gbnOoze)" fill="#fff"><ellipse cx="232" cy="92" rx="88" ry="60"/><ellipse cx="176" cy="80" rx="38" ry="28"/><ellipse cx="286" cy="104" rx="40" ry="30"/><ellipse cx="258" cy="54" rx="30" ry="22"/></g></mask>
+    </defs>
+    <rect width="350" height="150" fill="#0d0c13"/>
+    <g stroke="#EAE3D2" stroke-opacity="0.09" stroke-width="4" stroke-linecap="round"><line x1="-10" y1="44" x2="360" y2="44"/><line x1="-10" y1="104" x2="360" y2="104"/><line x1="70" y1="-10" x2="70" y2="160"/><line x1="160" y1="-10" x2="160" y2="160"/></g>
+    <g transform="translate(40,52)"><path d="M0-11c6 0 11 5 11 11 0 8-11 18-11 18S-11 8-11 0c0-6 5-11 11-11z" fill="#e06a86" stroke="#12140a" stroke-width="2.5"/></g>
+    <circle cx="112" cy="34" r="7" fill="#c9a24a" stroke="#12140a" stroke-width="2.5"/>
+    <ellipse cx="232" cy="94" rx="110" ry="80" fill="url(#gbnGlow)"/>
+    <g mask="url(#gbnMask)">
+      <rect x="120" y="10" width="230" height="140" fill="#0a0d07" opacity="0.6"/>
+      <rect x="120" y="10" width="230" height="140" fill="url(#gbnCore)"/>
+      <rect x="120" y="10" width="230" height="140" filter="url(#gbnMottle)" opacity="0.85"/>
+    </g>
+    <image href="assets/bh/glutton/idle.png" x="196" y="52" width="74" height="74" preserveAspectRatio="xMidYMid meet"/>
+  </svg></div>`;
 }
 
 async function openGluttonSheet() {
@@ -5296,9 +5326,15 @@ async function openMap() {
     const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
     const whisperedSecrets = new Set(); // one cryptic cue per spot per map session
     let claimedSecret = new Set(xpRows0.filter(r => r.type === 'secret').map(r => r.key));
-    const gluttonBeaten = xpRows0.some(r => r.key === GLUTTON_KEY);
+    let gluttonBeaten = xpRows0.some(r => r.key === GLUTTON_KEY);
+    const GLUTTON_BLIGHT_M = 140; // dead-ground radius: no spawns inside until he's beaten
     let gluttonRec = null; // single marker, not a Map (one-of-a-kind world boss)
     let lastNearest = null;
+    // Anti-cheat: block looting/fighting above a driving speed. GPS speed (m/s)
+    // when the device reports it, else derived from raw position deltas. ~8 m/s
+    // = ~29 km/h: comfortably above running/cycling, clearly a vehicle.
+    const MAX_LOOT_SPEED = 8;
+    let youSpeed = 0, lastFix = null;
 
     // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
     // it snaps to a walkable feature (road / path / park) within ~80m; otherwise
@@ -5521,7 +5557,11 @@ async function openMap() {
     // halo. Skips entirely once beaten (one-time encounter).
     const glutSnap = new Map();
     function refreshGlutton() {
-      if (gluttonBeaten) { const gb = $('#mapGlutton', body); if (gb) gb.hidden = true; return; }
+      if (gluttonBeaten) {
+        if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; } // he's gone
+        const gb = $('#mapGlutton', body); if (gb) gb.hidden = true;
+        return;
+      }
       const spot = gluttonSpot(lat, lng);
       const placed = placeWalkable({ lat: spot.lat, lng: spot.lng }, glutSnap, 'glutton');
       if (placed === null) return; // unreachable this camera view; try again next placement pass
@@ -5534,6 +5574,18 @@ async function openMap() {
         gluttonRec = { marker: domMarker(maplibregl, map, { lat: glat, lng: glng, el, anchor: 'center' }), el };
       } else {
         gluttonRec.marker.setLngLat([glng, glat]);
+      }
+      // Size the blight fog to the REAL suppression radius so the dead ground you
+      // see matches where loot actually stops spawning. Convert metres -> px at
+      // the current zoom via map.project (falls back to a fixed size pre-load).
+      const halo = gluttonRec.el.querySelector('.glutton-blight-halo');
+      if (halo && map.loaded()) {
+        try {
+          const a = map.project([glng, glat]);
+          const b = map.project([glng, glat + GLUTTON_BLIGHT_M / 111320]);
+          const px = Math.max(120, Math.hypot(b.x - a.x, b.y - a.y) * 2);
+          halo.style.width = px + 'px'; halo.style.height = px + 'px';
+        } catch { /* projection not ready */ }
       }
       gluttonRec.el.classList.toggle('inrange', dist <= GLUTTON_RADIUS_M);
       const gb = $('#mapGlutton', body);
@@ -5620,6 +5672,16 @@ async function openMap() {
         }
         live.sort((a, b) => a.dist - b.dist);
       }
+      // THE BLIGHT: while the Glutton lives, nothing spawns in the dead ground
+      // around him. Suppress any spawn within the blight radius of his spot
+      // (deterministic from the player position, so no ordering dependency on
+      // refreshGlutton). Beating him flips gluttonBeaten -> spawns return.
+      if (!gluttonBeaten) {
+        const bl = gluttonSpot(lat, lng);
+        for (let i = live.length - 1; i >= 0; i--) {
+          if (distanceM(live[i].lat, live[i].lng, bl.lat, bl.lng) <= GLUTTON_BLIGHT_M) live.splice(i, 1);
+        }
+      }
       // Rare cue: the ONLY interruption. Fires once per rare when it surfaces nearby.
       for (const s of live) {
         if (s.type === 'rare' && s.dist <= RARE_CUE_M && !raresCued.has(s.id)) {
@@ -5656,20 +5718,28 @@ async function openMap() {
         else if (d >= 2) trend = ' · getting farther';
       }
       if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
+      const tooFast = youSpeed > MAX_LOOT_SPEED;
       const ro = $('#mapReadout', body);
-      if (ro) ro.innerHTML = nearest
-        ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
-        : 'Cleared nearby. Keep walking, spawns keep surfacing across the map.';
+      if (ro) ro.innerHTML = tooFast
+        ? '<b style="color:var(--gold)">Too fast to loot.</b> Slow down to a walk to collect.'
+        : nearest
+          ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
+          : 'Cleared nearby. Keep walking, spawns keep surfacing across the map.';
       const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
       if (btn) {
         btn.hidden = !inRange;
-        if (inRange) btn.textContent = `Collect ${SPAWN_TYPES[nearest.type].label}`;
+        if (inRange) { btn.textContent = tooFast ? 'Slow down to loot' : `Collect ${SPAWN_TYPES[nearest.type].label}`; btn.disabled = tooFast; }
         btn.dataset.spawnId = inRange ? nearest.id : '';
       }
     }
 
+    // Anti-cheat gate shared by every map interaction: no looting/fighting from
+    // a moving vehicle. Returns true (and nags) when you're going too fast.
+    const tooFastToAct = () => { if (youSpeed > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
+
     $('#mapDen', body).addEventListener('click', async () => {
+      if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
       if (!rec || rec.den.dist > DEN_RADIUS_M) return;
@@ -5685,6 +5755,7 @@ async function openMap() {
     });
 
     $('#mapSecret', body).addEventListener('click', async () => {
+      if (tooFastToAct()) return;
       const key = $('#mapSecret', body).dataset.secretKey;
       const s = secretsNear(lat, lng).find(x => x.key === key);
       if (!s || s.dist > SECRET_RADIUS_M) return;
@@ -5696,6 +5767,7 @@ async function openMap() {
     });
 
     $('#mapMini', body).addEventListener('click', async () => {
+      if (tooFastToAct()) return;
       const id = $('#mapMini', body).dataset.miniId;
       const rec = miniMarkers.get(id);
       if (!rec || rec.mini.dist > MINI_RADIUS_M || claimedMini.has(miniKey(date, rec.mini))) return;
@@ -5705,11 +5777,13 @@ async function openMap() {
     });
 
     $('#mapGlutton', body).addEventListener('click', () => {
+      if (tooFastToAct()) return;
       if (gluttonBeaten || !gluttonRec || !gluttonRec.el.classList.contains('inrange')) return;
       openGluttonSheet();
     });
 
     $('#mapCollect', body).addEventListener('click', async () => {
+      if (tooFastToAct()) return;
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
       if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
@@ -5752,12 +5826,34 @@ async function openMap() {
     const prevCleanupWT = cleanupExtras;
     cleanupExtras = () => { prevCleanupWT(); clearInterval(worldTimer); clearInterval(denAwaken); };
 
+    // When the Glutton is beaten (fired from the fight settle), he leaves the
+    // map at once: marker gone, button hidden, and the blight lifts so loot
+    // spawns come back. Cleaned up when the map sheet closes.
+    const onGluttonBeaten = () => {
+      gluttonBeaten = true;
+      if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; }
+      const gb = $('#mapGlutton', body); if (gb) gb.hidden = true;
+      refreshSpawns();
+      toast('The blight lifts. The Boneyard breathes again.', 3600);
+    };
+    addEventListener('bh-glutton-beaten', onGluttonBeaten);
+    const prevCleanupGB = cleanupExtras;
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); };
+
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
       const now = Date.now();
       if (now - lastTick < 1200) return;
+      const dt = lastTick ? (now - lastTick) / 1000 : 0;
       lastTick = now;
       if (!body.isConnected) { cleanup(); return; }
+      // travel speed for the anti-cheat gate: prefer the device's own GPS speed,
+      // fall back to raw position delta / dt, then smooth it.
+      const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      let sp = (pos.coords.speed != null && pos.coords.speed >= 0) ? pos.coords.speed
+        : (lastFix && dt > 0 ? distanceM(lastFix.lat, lastFix.lng, raw.lat, raw.lng) / dt : 0);
+      lastFix = raw;
+      youSpeed += (sp - youSpeed) * 0.5;
       // smooth the jitter: exponential moving average, fresh fixes weighted 40%
       if (!ema) ema = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       else { ema.lat += (pos.coords.latitude - ema.lat) * 0.4; ema.lng += (pos.coords.longitude - ema.lng) * 0.4; }
@@ -5915,7 +6011,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v217'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v218'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6985,6 +7081,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           xp += g; coins = 400;
           await grantCrate('golden', GLUTTON_KEY);
           extraCards.push(crateCard('golden'));
+          dispatchEvent(new CustomEvent('bh-glutton-beaten')); // he leaves the map + blight lifts
         } else coins = 25; // rematch: pocket change, no re-farm
       }
       else if (foeCfg.mode === 'rung') {
@@ -7071,7 +7168,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
           const fd = $('#fightDone', body); if (fd) fd.textContent = 'Back to the map';
         });
       }
-      $('#fightDone', body).addEventListener('click', () => { history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate(); });
+      $('#fightDone', body).addEventListener('click', () => {
+        // Glutton win: pop BOTH the fight sheet AND the (now stale) glutton
+        // sheet so you land back on the map with him gone, never on a re-fight
+        // prompt. A loss just backs out one level so you can try again.
+        if (foeCfg.mode === 'glutton' && won) { history.go(-2); maybeCelebrate(); return; }
+        history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
+      });
     }, fast ? 80 : 750);
   }
 

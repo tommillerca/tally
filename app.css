@@ -2933,8 +2933,26 @@ body::before {
 
 /* The Glutton's map marker (v217): real art + a pulsing sickly blight halo,
    matching the approved den-marker language but for a one-of-a-kind boss. */
-.map-glutton-mark { position: relative; width: 54px; height: 54px; }
-.map-glutton-mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,.6)); z-index: 2; }
-.glutton-blight-halo { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, rgba(159,176,78,.35), transparent); animation: gluttonHaloPulse 2.6s ease-in-out infinite; z-index: 1; }
-@keyframes gluttonHaloPulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: .6; } 50% { transform: translate(-50%, -50%) scale(1.25); opacity: .95; } }
-.map-glutton-mark.inrange img { filter: drop-shadow(0 0 10px rgba(165,232,71,.8)); }
+/* Bigger, more formidable boss token than a den/spawn pin. */
+.map-glutton-mark { position: relative; width: 92px; height: 92px; }
+.map-glutton-mark img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 5px 8px rgba(0,0,0,.7)); z-index: 2; animation: gluttonMarkWob 4.4s ease-in-out infinite; transform-origin: 50% 92%; }
+@keyframes gluttonMarkWob { 0%, 100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-2px) scale(1.02,.98); } }
+/* The BLIGHT: a feathered fractal-fog patch (matches the approved mock), sized
+   in px by JS to cover the real ~140m suppression radius so the strangled loot
+   reads visually. Static noise (no per-frame turbulence = no flicker), just a
+   slow opacity breathe. */
+.glutton-blight-halo {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 220px; height: 220px; z-index: 1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cdefs%3E%3CradialGradient id='m' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23fff' stop-opacity='1'/%3E%3Cstop offset='52%25' stop-color='%23fff' stop-opacity='.8'/%3E%3Cstop offset='100%25' stop-color='%23fff' stop-opacity='0'/%3E%3C/radialGradient%3E%3Cmask id='fade'%3E%3Crect width='220' height='220' fill='url(%23m)'/%3E%3C/mask%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05' numOctaves='3' seed='7' result='t'/%3E%3CfeColorMatrix in='t' type='matrix' values='0 0 0 0 0.34 0 0 0 0 0.42 0 0 0 0 0.14 0 0 0 1.1 -0.3'/%3E%3C/filter%3E%3C/defs%3E%3Cg mask='url(%23fade)'%3E%3Crect width='220' height='220' fill='%230a0d07'/%3E%3Crect width='220' height='220' filter='url(%23f)'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 100% 100%; animation: gluttonHaloPulse 4s ease-in-out infinite;
+}
+@keyframes gluttonHaloPulse { 0%, 100% { opacity: .82; } 50% { opacity: 1; } }
+.map-glutton-mark.inrange img { filter: drop-shadow(0 0 12px rgba(165,232,71,.85)) drop-shadow(0 5px 8px rgba(0,0,0,.7)); }
+
+/* Glutton banner expanded body: real hero art + map visual (v-glutton fix) */
+.gbn-hero { width: 66%; max-width: 220px; margin: 4px auto 6px; }
+.gbn-hero .glutton-hero { position: static; width: 100%; margin: 0; }
+.gbn-maplabel { font-size: 10px; letter-spacing: .16em; color: var(--text-3); text-transform: uppercase; font-weight: 800; margin: 8px 0 6px; }
+.gbn-map { border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); margin-bottom: 10px; }
+.gbn-map svg { display: block; width: 100%; height: auto; }
