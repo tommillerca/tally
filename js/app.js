@@ -5020,6 +5020,10 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   // date (sleepManual) so a manual override sticks for the day.
   // Sleep actually read: stop re-requesting the scope (see HK_SCOPES_V).
   if (payload.sleepMin != null && payload.sleepMin > 0) await kvSet('hkScopesV', HK_SCOPES_V);
+  // Keep the plugin's own account of the sleep read, so a failure is inspectable
+  // in Settings instead of being invisible. Includes the case where it found
+  // nothing, which is the case that took three rounds to pin down.
+  if (payload.sleepDiag) await kvSet('hkSleepDiag', { ...payload.sleepDiag, at: Date.now(), manual: !!row.sleepManual });
   if (payload.sleepMin != null && payload.sleepMin > 0 && !row.sleepManual) {
     row.sleepMin = payload.sleepMin;
     row.sleepDeepMin = payload.sleepDeepMin ?? null;
@@ -5398,15 +5402,44 @@ async function syncFromClipboard() {
 
 const HK_TEMPLATE = 'tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]';
 
-function openHealthGuide() {
+async function openHealthGuide() {
   if (isNative()) {
+    // Sleep read diagnostics. HealthKit gives no API to check READ permission, so
+    // when a sleep read comes back empty the only way to tell "denied" from "no
+    // samples" from "all inBed" from "under the 30-min floor" is to report what
+    // the query actually saw. Written by ingestHealth on every sync.
+    const dg = await kvGet('hkSleepDiag', null);
+    const diagHtml = dg ? `
+      <div class="sect-h" style="margin-top:18px">Sleep read · last sync</div>
+      <div class="hk-diag">
+        <div><span>Window searched</span><b>${esc(dg.window || '?')}</b></div>
+        <div><span>Samples found</span><b>${dg.samples ?? '?'}</b></div>
+        <div><span>Counted as asleep</span><b>${dg.rawAsleepMin ?? 0} min</b></div>
+        <div><span>Of that, staged</span><b>${dg.stagedMin ?? 0} min</b></div>
+        <div><span>In bed but not asleep</span><b>${dg.inBedMin ?? 0} min</b></div>
+        ${dg.manual ? '<div><span>Today</span><b>hand-logged, auto read skipped</b></div>' : ''}
+        ${dg.err ? `<div><span>Error</span><b>${esc(dg.err)}</b></div>` : ''}
+      </div>
+      <p class="note" style="margin-top:8px">${
+        dg.samples === 0 ? 'No sleep samples came back at all. Either Sleep is not shared with Boneheadz (iOS Settings > Health > Data Access) or there is nothing recorded for that window.'
+        : (dg.rawAsleepMin || 0) === 0 && (dg.inBedMin || 0) > 0 ? 'Your sleep is recorded as "in bed" only, with no asleep stages. Boneheadz currently ignores in-bed time, which is why nothing shows. Tell Tom and this becomes a one-line fix.'
+        : (dg.rawAsleepMin || 0) > 0 && (dg.rawAsleepMin || 0) < 30 ? 'Under the 30-minute minimum, so it was discarded as a stray reading.'
+        : 'Sleep read fine on the last sync.'}</p>` : '';
     const wrap = openSheet(`
       <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
       <div class="sheet-body">
         <p class="note" style="margin-bottom:14px">One tap. iOS will ask permission to share your steps, active energy, and weight. After that, Boneheadz syncs automatically every time you open it: no shortcuts, no clipboard.</p>
         <button class="btn" id="nativeConnect">Connect Apple Health</button>
+        <button class="btn ghost small" id="hkTestSleep" style="margin-top:10px">Test sleep read</button>
+        ${diagHtml}
       </div>`);
     $('#nativeConnect', wrap).addEventListener('click', connectNativeHealth);
+    $('#hkTestSleep', wrap).addEventListener('click', async () => {
+      toast('Reading sleep from Health...', 1600);
+      await nativeSyncNow({ silent: true });
+      closeAllSheetsViaHistory();
+      openHealthGuide();
+    });
     return;
   }
   const wrap = openSheet(`
@@ -6318,7 +6351,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v226'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v227'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

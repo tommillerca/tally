@@ -79,16 +79,32 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
     // starting to fold in tonight's nap. Before 6pm we look back to 6pm yesterday;
     // after 6pm we keep the same anchor, so the number does not change under you
     // as the evening wears on.
-    private func latestSleep(_ done: @escaping ([String: Int]?) -> Void) {
+    // Always reports WHAT IT SAW, even when it decides there is no usable sleep.
+    // Three rounds of "sleep is not pulling" were undiagnosable because a failed
+    // read returned nil and stored nothing, so "denied", "no samples", "all inBed"
+    // and "under the floor" were indistinguishable from the outside.
+    private func latestSleep(_ done: @escaping ([String: Int]?, [String: Any]) -> Void) {
         let cal = Calendar.current
         let now = Date()
         let noonToday = cal.date(bySettingHour: 12, minute: 0, second: 0, of: now)!
         let start = cal.date(byAdding: .hour, value: -18, to: noonToday)!  // 6pm yesterday
         let end = min(now, noonToday)                                     // noon today at the latest
         let pred = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
-        let q = HKSampleQuery(sampleType: sleepType, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+        let wf = DateFormatter(); wf.dateFormat = "MMM d HH:mm"
+        var diag: [String: Any] = [
+            "window": "\(wf.string(from: start)) to \(wf.string(from: end))",
+            "samples": 0, "inBedMin": 0, "rawAsleepMin": 0, "stagedMin": 0, "err": "",
+        ]
+        let q = HKSampleQuery(sampleType: sleepType, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, err in
+            if let e = err { diag["err"] = e.localizedDescription }
             let cats = (samples as? [HKCategorySample]) ?? []
-            guard !cats.isEmpty else { done(nil); return }
+            diag["samples"] = cats.count
+            // value 0 = inBed. Reported separately so "the watch only wrote inBed"
+            // is visible instead of looking like "no sleep at all".
+            diag["inBedMin"] = Int((self.unionSeconds(cats.filter { $0.value == 0 }
+                .map { (max($0.startDate, start), min($0.endDate, end)) }
+                .filter { $0.1 > $0.0 }) / 60).rounded())
+            guard !cats.isEmpty else { done(nil, diag); return }
             var core: [(Date, Date)] = [], deep: [(Date, Date)] = [], rem: [(Date, Date)] = []
             var unspecified: [(Date, Date)] = [], awake: [(Date, Date)] = []
             for c in cats {
@@ -112,7 +128,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             // Prefer staged data; fall back to unspecified "asleep" when the source
             // didn't record stages (older watches / third-party trackers).
             let asleep = staged > 0 ? staged : self.unionSeconds(unspecified)
-            guard asleep >= 30 * 60 else { done(nil); return } // ignore stray < 30 min blips
+            diag["stagedMin"] = Int((staged / 60).rounded())
+            diag["rawAsleepMin"] = Int((asleep / 60).rounded())
+            guard asleep >= 30 * 60 else { done(nil, diag); return } // ignore stray < 30 min blips
             let m = { (s: Double) in Int((s / 60).rounded()) }
             done([
                 "sleepMin": m(asleep),
@@ -121,7 +139,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 "sleepCoreMin": m(coreS),
                 "sleepAwakeMin": m(self.unionSeconds(awake)),
                 "sleepStaged": staged > 0 ? 1 : 0,
-            ])
+            ], diag)
         }
         store.execute(q)
     }
@@ -244,7 +262,8 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         // Last night's sleep, auto-read from the watch (stages when available).
         var sleep: [String: Int]? = nil
         group.enter()
-        latestSleep { s in sleep = s; group.leave() }
+        var sleepDiag: [String: Any] = [:]
+        latestSleep { s, d in sleep = s; sleepDiag = d; group.leave() }
 
         group.notify(queue: .main) {
             let fmt = DateFormatter()
@@ -261,6 +280,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             if restingHr > 0 { out["restingHr"] = Int(restingHr.rounded()) }
             if hrv > 0 { out["hrv"] = Int(hrv.rounded()) }
             if let s = sleep { for (k, v) in s { out[k] = v } }
+            out["sleepDiag"] = sleepDiag
             if let w = weightKg { out["weightKg"] = w }
             call.resolve(out)
         }
