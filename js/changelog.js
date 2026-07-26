@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 224, date: '2026-07-27', title: 'A new day actually starts a new day', needsBuild: true, items: [
+    'The app now notices when the date changes while it is sitting in your pocket. Open it the next morning and you get a fresh day properly: new quests, your streak checked, yesterday closed out and its crate handed over, and a new spin on the wheel.',
+    'Sleep from your watch reads correctly again. It now asks for permission to read your sleep, which it should have done when auto-sleep launched, so check for the Health prompt on your next open.',
+    'Sleep is also measured over the whole night now instead of a rolling window, so checking the app in the evening no longer under-counts, or misses, the night before.',
+  ] },
   { n: 223, date: '2026-07-26', title: 'Saved fits and the Looks collection', items: [
     'Save up to six fits and put a whole outfit back on in one tap, at the top of the Wardrobe. Long-press a fit to rename or bin it.',
     'New Looks page under the Character tabs, tracking every piece in the game. Yours show their art; the rest stay blank until you find them, so an unlock is still a surprise. The counts tell you what is out there, never what it looks like.',

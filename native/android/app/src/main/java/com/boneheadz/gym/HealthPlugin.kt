@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /**
  * Boneheadz Gym native Health Connect bridge (Android side of the iOS HealthKit
@@ -217,9 +218,18 @@ class HealthPlugin : Plugin() {
                 val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, recent)).records
                 if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.maxByOrNull { it.time }!!.heartRateVariabilityMillis).toInt())
 
-                // Last night's sleep (auto, with stages). Look back 18h and union
-                // the stage intervals across all sessions in that window.
-                val sleepWindow = TimeRangeFilter.between(now.minus(Duration.ofHours(18)), now)
+                // Last night's sleep (auto, with stages), anchored to THE NIGHT rather
+                // than rolled back from "now". A rolling 18h window broke evening
+                // check-ins: sleep is stored as many short stage records, so opening
+                // the app at 9pm put the window start at 3am and every stage that
+                // ended earlier was never returned, under-counting the night (and
+                // returning nothing at all once the remainder fell under 30 min).
+                // 6pm yesterday through noon today, capped at now.
+                val zone = ZoneId.systemDefault()
+                val noonToday = ZonedDateTime.now(zone).withHour(12).withMinute(0).withSecond(0).withNano(0)
+                val nightStart = noonToday.minusHours(18).toInstant()   // 6pm yesterday
+                val nightEnd = minOf(now, noonToday.toInstant())        // noon today at the latest
+                val sleepWindow = TimeRangeFilter.between(nightStart, nightEnd)
                 val sleeps = hc.readRecords(ReadRecordsRequest(SleepSessionRecord::class, sleepWindow)).records
                 if (sleeps.isNotEmpty()) {
                     val core = ArrayList<Pair<Instant, Instant>>()
@@ -227,11 +237,19 @@ class HealthPlugin : Plugin() {
                     val rem = ArrayList<Pair<Instant, Instant>>()
                     val unspecified = ArrayList<Pair<Instant, Instant>>()
                     val awake = ArrayList<Pair<Instant, Instant>>()
+                    // clip to the night: Health Connect returns any record OVERLAPPING
+                    // the window, so an unclipped one straddling 6pm would donate its
+                    // whole duration to last night's total
+                    fun clip(a: Instant, b: Instant): Pair<Instant, Instant>? {
+                        val s2 = if (a.isAfter(nightStart)) a else nightStart
+                        val e2 = if (b.isBefore(nightEnd)) b else nightEnd
+                        return if (e2.isAfter(s2)) Pair(s2, e2) else null
+                    }
                     for (s in sleeps) {
                         if (s.stages.isEmpty()) {
-                            unspecified.add(Pair(s.startTime, s.endTime))
+                            clip(s.startTime, s.endTime)?.let { unspecified.add(it) }
                         } else for (st in s.stages) {
-                            val iv = Pair(st.startTime, st.endTime)
+                            val iv = clip(st.startTime, st.endTime) ?: continue
                             when (st.stage) {
                                 SleepSessionRecord.STAGE_TYPE_DEEP -> deep.add(iv)
                                 SleepSessionRecord.STAGE_TYPE_REM -> rem.add(iv)

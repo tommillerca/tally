@@ -66,13 +66,25 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // Last night's sleep, as stage minutes. Returns nil if nothing was recorded.
-    // We look back 18h (covers a morning/afternoon check-in) and union the
-    // "asleep" samples per stage. Stage identifiers (asleepCore/Deep/REM) are
-    // iOS 16+, so we branch on rawValue to stay correct on older systems where
-    // only inBed(0)/asleep(1)/awake(2) exist.
+    //
+    // The window is anchored to LAST NIGHT, not rolled back from "now". It used to
+    // be `now - 18h ... now`, which broke any evening check-in: the watch records
+    // sleep as many short per-stage samples, so opening the app at 9pm put the
+    // window start at 3am and every stage segment that ended before 3am simply was
+    // not returned. Sleep came back under-counted, and late enough at night the
+    // remainder fell under the 30-minute floor and the whole read returned nil.
+    //
+    // Instead: 6pm the previous evening through to now, capped at noon today so a
+    // late-evening check-in still describes the night just gone rather than
+    // starting to fold in tonight's nap. Before 6pm we look back to 6pm yesterday;
+    // after 6pm we keep the same anchor, so the number does not change under you
+    // as the evening wears on.
     private func latestSleep(_ done: @escaping ([String: Int]?) -> Void) {
-        let end = Date()
-        let start = end.addingTimeInterval(-18 * 3600)
+        let cal = Calendar.current
+        let now = Date()
+        let noonToday = cal.date(bySettingHour: 12, minute: 0, second: 0, of: now)!
+        let start = cal.date(byAdding: .hour, value: -18, to: noonToday)!  // 6pm yesterday
+        let end = min(now, noonToday)                                     // noon today at the latest
         let pred = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let q = HKSampleQuery(sampleType: sleepType, predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
             let cats = (samples as? [HKCategorySample]) ?? []
@@ -80,7 +92,12 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             var core: [(Date, Date)] = [], deep: [(Date, Date)] = [], rem: [(Date, Date)] = []
             var unspecified: [(Date, Date)] = [], awake: [(Date, Date)] = []
             for c in cats {
-                let iv = (c.startDate, c.endDate)
+                // clip to the night: HealthKit returns any sample that OVERLAPS the
+                // window, so an unclipped one straddling 6pm would donate its whole
+                // duration to last night's total
+                let s = max(c.startDate, start), e = min(c.endDate, end)
+                guard e > s else { continue }
+                let iv = (s, e)
                 switch c.value {
                 case 3: core.append(iv)       // asleepCore
                 case 4: deep.append(iv)       // asleepDeep

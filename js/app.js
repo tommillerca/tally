@@ -319,7 +319,8 @@ async function boot() {
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
-  onAppResume(() => { nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
+  onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
+  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
 
@@ -335,6 +336,41 @@ async function boot() {
   maybeRequestNotifPermission();
   maybeShowSurvey();
   setTimeout(checkFriendRequests, 3000);
+}
+
+/* DAY ROLLOVER (v224).
+   The native shell is a long-lived WebView: iOS suspends and resumes it rather
+   than relaunching, so boot() can go days without running. Everything
+   day-shaped used to roll over ONLY in boot() — S.date, the streak freeze,
+   yesterday's close-out crate, the daily wheel, quests, Pit energy. So the
+   second morning you opened the app it was still on yesterday's date, and
+   because renders compare S.date against a live dateKey() (`isToday`), the app
+   treated your own Today screen as a PAST day and suppressed the wellness card.
+   Now the day is re-checked on every resume, and once a minute so an app left
+   open across midnight rolls over on its own. */
+let _dayAnchor = dateKey();
+let _rolling = false;
+async function rollDayIfNeeded() {
+  if (_rolling || !S.settings) return false;
+  const today = dateKey();
+  if (today === _dayAnchor) return false;
+  _rolling = true;
+  try {
+    // If you had deliberately paged back to an earlier day, stay there: only
+    // follow the clock forward when you were actually sitting on "today".
+    const wasOnToday = S.date === _dayAnchor;
+    _dayAnchor = today;
+    if (wasOnToday) S.date = today;
+    const frozen = await checkStreakFreeze();
+    const closed = await awardDayCloseIfDue(S.settings.targets);
+    if (wasOnToday) route(); // a new day starts at the top, like a fresh open
+    if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 600);
+    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 1400);
+    else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
+    maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+    refreshNotifSchedules();
+    return true;
+  } finally { _rolling = false; }
 }
 
 // R2 (v151): the first time the app opens after an update, pop the What's New
@@ -4968,7 +5004,9 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (Array.isArray(payload.wtypes)) row.wtypes = payload.wtypes;
   if (payload.restingHr != null) row.restingHr = payload.restingHr;
   if (payload.hrv != null) row.hrv = payload.hrv;
-  if (payload.restingHr != null || payload.hrv != null) await kvSet('hkHeartOk', true); // stop re-prompting once heart data flows
+  // (hkHeartOk retired in v224: a single boolean could not tell which scopes were
+  // granted, so it blocked the sheet for every scope added after heart. See
+  // HK_SCOPES_V.)
   // Auto sleep read (last night). Skip if the player hand-logged sleep for this
   // date (sleepManual) so a manual override sticks for the day.
   if (payload.sleepMin != null && payload.sleepMin > 0 && !row.sleepManual) {
@@ -5284,15 +5322,30 @@ async function nativeSyncNow({ silent = false } = {}) {
   } catch { return false; }
 }
 
+// Bump whenever the native HealthKit / Health Connect read set gains a type, so
+// the permission sheet is presented once more for the new scope. 1 = the original
+// set, 2 = + sleep stages (v213, never actually requested until v224).
+const HK_SCOPES_V = 2;
+
 async function nativeAutoSync() {
   if (!isNative() || !S.settings?.hkNative) return;
-  // Heart scopes (resting HR / HRV) and any later-added scopes need granting.
   // iOS / Health Connect only surface the permission sheet for scopes that are
-  // NOT yet decided, and silently no-op once they are. So: re-request the full
-  // set on open until we've actually read heart data (hkHeartOk). This pops the
-  // "Allow" sheet exactly once for anyone missing it, with no repeat nag after.
-  if (!(await kvGet('hkHeartOk', false))) {
-    try { await nativeRequestAuth(); } catch { /* best-effort */ }
+  // NOT yet decided, and silently no-op once they are, so we have to ask again
+  // whenever the read set grows.
+  //
+  // This used to gate on a single `hkHeartOk` boolean, set as soon as heart data
+  // flowed. That worked for heart and then actively BROKE every scope added
+  // afterwards: sleep landed in v213, but by then hkHeartOk was true, so we
+  // never asked again, so iOS never showed the sleep sheet, so sleep read empty
+  // forever. The flag that fixed one scope silently blocked the next.
+  //
+  // Now it is versioned: bump HK_SCOPES_V whenever the native read set changes
+  // and everyone gets asked exactly once more, no repeat nag after that.
+  if ((await kvGet('hkScopesV', 0)) < HK_SCOPES_V) {
+    try {
+      await nativeRequestAuth();
+      await kvSet('hkScopesV', HK_SCOPES_V);
+    } catch { /* best-effort: leave the version behind so we retry next open */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
   const ok = await nativeSyncNow({ silent: true });
@@ -5305,6 +5358,7 @@ async function connectNativeHealth() {
   if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
   await kvSet('settings', S.settings);
+  await kvSet('hkScopesV', HK_SCOPES_V); // asked for the current set just now
   await nativeSyncNow({ silent: false });
   toast('Apple Health connected. Boneheadz now syncs automatically.', 3400);
   closeAllSheetsViaHistory();
@@ -6249,7 +6303,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v223'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v224'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
