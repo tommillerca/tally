@@ -814,9 +814,18 @@ export async function transmogMap() { return (await kvGet('transmog', {})) || {}
    wearing, so anyone who paid under v221 keeps what they bought. */
 const paidKey = (slot, artId) => `${slot}:${artId}`;
 export async function paidLooks() {
-  const set = new Set((await kvGet('paidlooks', [])) || []);
-  const tm = await transmogMap();
-  for (const [slot, artId] of Object.entries(tm)) set.add(paidKey(slot, artId));
+  const stored = (await kvGet('paidlooks', [])) || [];
+  const set = new Set(stored);
+  // Grandfather anything worn under v221, when nothing recorded the purchase.
+  // This WRITES on read, deliberately: seeding from the live transmog map alone
+  // is not durable, because clearing the slot would erase the only evidence and
+  // charge the player a second time for a look they already bought.
+  const add = [];
+  for (const [slot, artId] of Object.entries(await transmogMap())) {
+    const k = paidKey(slot, artId);
+    if (artId !== TRANSMOG_HIDE && !set.has(k)) { set.add(k); add.push(k); }
+  }
+  if (add.length) await kvSet('paidlooks', [...stored, ...add]);
   return set;
 }
 async function markPaid(slot, artId) {
@@ -841,7 +850,10 @@ export async function applyTransmog(slot, artId) {
     if (!(await collectedLooks()).has(artId)) return { ok: false, reason: 'not-collected' };
   }
   const tm = await transmogMap();
-  if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
+  if (tm[slot] === artId) {
+    if (artId !== TRANSMOG_HIDE) await markPaid(slot, artId); // banked, not just worn
+    return { ok: true, cost: 0, already: true };
+  }
   const cost = await transmogPrice(slot, artId);
   if (cost > 0) {
     const bal = await boneDust();

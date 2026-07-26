@@ -3,7 +3,7 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 222, date: '2026-07-26', title: 'Saved fits and the Looks collection', items: [
+  { n: 223, date: '2026-07-26', title: 'Saved fits and the Looks collection', items: [
     'Save up to six fits and put a whole outfit back on in one tap, at the top of the Wardrobe. Long-press a fit to rename or bin it.',
     'New Looks page under the Character tabs, tracking every piece in the game. Yours show their art; the rest stay blank until you find them, so an unlock is still a surprise. The counts tell you what is out there, never what it looks like.',
     'Tap anything in your collection to see it and wear it straight away.',

@@ -625,6 +625,19 @@ test('transmog: looks are priced off rarity, reverting and hiding are free', () 
   assert.ok(transmogCost(BH_ITEMS.find(i => i.rarity === 'legendary').id) < DUST_VALUE.gear.legendary,
     'melting a legendary funds wearing its look');
 });
+test('transmog: the paid-once credit must be persisted, not derived', () => {
+  // Regression. paidLooks() used to seed purely from the live transmog map, so a
+  // v221 player who cleared the slot lost the evidence and paid twice for a look
+  // they already owned. The seed must be written back to kv.
+  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const fn = src.match(/export async function paidLooks\(\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(fn, 'paidLooks present');
+  assert.ok(/kvSet\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
+  // and re-confirming a look you are already wearing must bank it too
+  const ap = src.match(/export async function applyTransmog[\s\S]*?\n\}/);
+  assert.ok(/already: true/.test(ap[0]) && /markPaid[\s\S]*?already: true/.test(ap[0]),
+    'the already-worn early return banks the look before returning');
+});
 test('collection: every locked piece must be indistinguishable', () => {
   // The Looks browser renders locked pieces from a single constant string with no
   // item data bound in, so a future edit that starts interpolating art, name or
