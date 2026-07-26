@@ -9,6 +9,34 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 👗 Transmog — wear the stats, keep the look — 2026-07-26 — ✅ BUILT v221 (awaiting Tom's push approval)
+
+Pay to move a gear piece's **look** onto whatever cosmetic you actually want, keeping its stats. Modelled on WoW's transmogrification.
+
+**Investigation finding: the game currently punishes taste.** Look and stats are welded together in two places.
+- `equipGear` (js/loot.js:799) writes **both** `gearloadout[slot]` and `equipped[slot] = g.artId`. Wearing the stats forces you to wear the art.
+- `equip` (js/loot.js:788) does the reverse: *"choosing a plain look drops the statted piece from that slot."* Pick the hat you like, lose the +6 POW.
+- An unused `keepGear` flag already exists on `equip()`. It is the seed of this feature.
+- Melting gear for dust currently destroys the look **permanently**. An appearance collection makes melting pure upside and unclogs the dust economy.
+
+**What we take from WoW:** (1) you collect *appearances*, not items, and the unlock is permanent even after you destroy the item; (2) slot-for-slot, and only what you could actually equip; (3) a modest currency fee per piece, deliberately cheap; (4) fully reversible, stats never change; (5) **hide slot** (helm/cloak) is the most-loved single part; (6) ensembles = saved outfits.
+
+**Decisions locked with Tom (2026-07-26):**
+- **Cost: Bone Dust, scaled by the look's rarity.** Legendary 60 · rare 25 · uncommon 12 · common 6. Reverting to your true look is free. Chosen over coins because coins already sink into the Bone Merchant's thousand-coin weapons, while dust pools up (only sinks are eggs 60 / crates 40).
+- **UI home: inline in the wardrobe.** A "Change look" button on the existing gear inspect panel opens the appearance grid for that slot. No new art, no new screen. Promote to a proper Bone Tailor screen later if the Appearances browser gets built.
+
+**Design:**
+- **Collection**: append-only kv `looks`, written on every gear/cosmetic grant. On read, union with everything currently owned so existing players are grandfathered on first load. No migration, nobody loses anything. (Additive-DB rule.)
+- **Applied state**: kv `transmog: { [slot]: artId }`, `'__hide'` to hide a slot.
+- **One choke point**: `equipped()` resolves transmog by default, `{ raw: true }` returns the truth for the wardrobe. That single change carries the mogged look into the Pit, home hero, map marker, level-up card and friends' Crew tab, because they all already call `equipped()`.
+- **Rules**: same slot only, collected looks only. No level gate (looks are cosmetic). Legendary look on uncommon stats is allowed, same as WoW.
+- **Melt copy**: "The look is yours forever. Melting only takes the stats."
+- **Balance surface: zero.** Stats are untouched by definition.
+
+**Deferred to a second release:** saved outfits/ensembles; a full Appearances browser with locked silhouettes (strong retention hook, art already exists); transmog for pets and backgrounds.
+
+---
+
 ## 🫠 The Glutton — first big feature highlight — 2026-07-23 — 🎨 FEATURE (art-blocked)
 
 A map-wide world event. The Glutton (a slime/blob abomination, Brock's lore) **feasts on part of the Boneyard, creating a blight** that suppresses all spawns in its area until a player hunts it down and beats it. Intended as our **first "big feature" launch** with a proper announcement popup. **Launch gated on Cam's real art** — everything below is designed + mocked on placeholder art, ready to build once art lands.

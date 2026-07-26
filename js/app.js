@@ -15,6 +15,7 @@ import {
   WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
   shinyPetIds,
+  transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
@@ -4189,9 +4190,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, fighter, slimedSet] = await Promise.all([ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds()]);
+    const [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal] = await Promise.all([
+      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(),
+    ]);
+    // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
+    // you actually appear as once transmog resolves, so the doll and the stage
+    // agree with the rest of the app.
+    const look = await equipped();
     const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
+    const mogOf = code => (gearLo[code] ? tm[code] : null); // only reads while gear is worn
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
     const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
@@ -4201,10 +4209,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const meta = BH_SLOTS.find(x => x.code === code);
       const isGearSlot = GEAR_SLOTS.includes(code);
       const g = isGearSlot ? GEAR_BY_ID[gearLo[code]] : null;
-      const art = eq[code] && BH_BY_ID[eq[code]] ? BH_BY_ID[eq[code]] : null;
+      // show the LOOK (so the doll matches the avatar beside it); the stat line
+      // below still reports the real gear, and a badge marks a disguised slot.
+      const art = look[code] && BH_BY_ID[look[code]] ? BH_BY_ID[look[code]] : null;
+      const mog = mogOf(code);
       const label = isGearSlot ? GEAR_SLOT_LABELS[code] : meta.label;
-      return `<button class="pd-slot ${slot === code ? 'sel' : ''} ${g ? 'gear-on r-' + g.rarity : ''}" data-pd="${code}" title="${esc(label)}">
-        ${art ? `<img src="${bhAsset(art)}" alt="" loading="lazy">` : '<span class="pd-empty">+</span>'}
+      return `<button class="pd-slot ${slot === code ? 'sel' : ''} ${g ? 'gear-on r-' + g.rarity : ''}" data-pd="${code}" title="${esc(label)}${mog ? ' (look changed)' : ''}">
+        ${art ? `<img src="${bhAsset(art)}" alt="" loading="lazy">` : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? '🚫' : '+'}</span>`}
+        ${mog ? '<span class="pd-mog" title="Look changed">✨</span>' : ''}
         <span class="pd-tag">${esc(label)}</span>
         ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>` : ''}
       </button>`;
@@ -4216,12 +4228,24 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const gb = fighter.gearBonus[m.key] || 0;
       return `<span class="pd-stat"><small>${m.label}</small><b>${fighter.stats[m.key]}</b>${gb ? `<i>+${gb}</i>` : ''}</span>`;
     };
+    // Trying a look is FREE and shows on the doll immediately; only the Apply
+    // button in the bar below spends dust. Nobody pays for a tap.
+    const wornGear = gearLo[slot] ? GEAR_BY_ID[gearLo[slot]] : null;
+    const stageEq = (() => {
+      const p = S.lookPreview;
+      if (p == null || !wornGear) return look;
+      const e = { ...look };
+      if (p === TRANSMOG_HIDE) delete e[slot];
+      else if (p === '') e[slot] = wornGear.artId;
+      else if (BH_BY_ID[p]) e[slot] = p;
+      return e;
+    })();
 
     content.innerHTML = `
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
-          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(eq, { noYard: true, skip: ['C'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(stageEq, { noYard: true, skip: ['C'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
         </div>
         <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
@@ -4269,12 +4293,63 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>
         </div>`;
       })()}
-      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder.</p>' : ''}
+      ${(() => {
+        // TRANSMOG. Only offered where a look is actually forced on you, i.e. a
+        // statted piece is worn. Equip a plain cosmetic and the look you picked
+        // is the look you get, so there is nothing to disguise.
+        if (!GEAR_SLOTS.includes(slot) || !wornGear) return '';
+        const cur = tm[slot] ?? '';                        // '' = the gear's own look
+        const sel = S.lookPreview == null ? cur : S.lookPreview;
+        const arts = BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== wornGear.artId);
+        const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
+        const ownArt = BH_BY_ID[wornGear.artId];
+        const nameOf = v => v === '' ? `${wornGear.name}, its own look` : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
+        const cost = transmogCost(sel === '' ? null : sel);
+        const afford = dustBal >= cost;
+        const changed = sel !== cur;
+        return `
+        <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
+        <div class="ward-grid look-grid">
+          ${cell('', `<img src="${bhAsset(ownArt)}" alt="" loading="lazy"><span class="look-tag">Its own look</span>`, 'Wear the gear as it is')}
+          ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
+          ${arts.map(i => cell(i.id, `<img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy"><span class="look-cost">${transmogCost(i.id)}</span>`, i.name)).join('')}
+        </div>
+        <div class="look-bar${changed ? ' armed' : ''}">
+          <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
+          ${changed
+            ? (afford
+                ? `<button class="btn" data-look-apply="${esc(sel)}">${cost ? `Wear it · ${cost} dust` : 'Wear it · free'}</button>`
+                : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
+            : ''}
+        </div>
+        <p class="note" style="text-align:center;margin-top:8px">Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b>◆ ${dustBal}</b>.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
+      })()}
+      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
-    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
+    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
+      S.lookPreview = null;
       popSound(S.sounds); pushProfileSoon();
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+    // Tap a look to try it on: free, instant, no commitment. Dust is only spent
+    // by the Apply button in the bar.
+    $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
+      S.lookPreview = cell.dataset.look;
+      popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+    $$('[data-look-apply]', content).forEach(btn => btn.addEventListener('click', async () => {
+      const val = btn.dataset.lookApply;
+      const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
+      if (!res.ok) {
+        toast(res.reason === 'dust' ? `Need ${res.need} dust, you have ${res.have}.` : 'Could not change that look.', 2600);
+        return;
+      }
+      S.lookPreview = null;
+      levelSound(S.sounds); pushProfileSoon();
+      toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
@@ -4285,6 +4360,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (S.wardrobePreview === g.id && gearLo[slot] !== g.id) {
         if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
         await equipGear(slot, g.id);
+        S.lookPreview = null;
         popSound(S.sounds); pushProfileSoon();
         renderCharacter(wrap, 'wardrobe', { instant: true });
         return;
@@ -4298,6 +4374,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
       if (!g || wLevel < g.minLevel) return;
       await equipGear(slot, g.id);
+      S.lookPreview = null;
       levelSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
@@ -4306,9 +4383,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Tap again to melt'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = `Melt · +${gearDustValue(GEAR_BY_ID[btn.dataset.meltGear])} dust`; } }, 2600); return; }
       const res = await disenchantGear(btn.dataset.meltGear);
       if (!res.ok) { toast('Could not melt that piece.'); return; }
-      S.wardrobePreview = null;
+      S.wardrobePreview = null; S.lookPreview = null;
       popSound(S.sounds);
-      toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2800);
+      toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
@@ -6033,7 +6110,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v220'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v221'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

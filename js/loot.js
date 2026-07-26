@@ -74,6 +74,7 @@ export async function grantCosmetic(itemId, source) {
   if (owned.has(itemId)) return null;
   const row = { id: newId(), kind: 'cos', itemId, source, ts: Date.now() };
   await db.put('inv', row);
+  await collectLook(itemId);
   return row;
 }
 
@@ -90,6 +91,7 @@ export async function grantGear(gearId, source, opts = {}) {
   // `slimed`: the rare green-glowing Glutton variant. Purely cosmetic + a brag,
   // stored on the inv row so the wardrobe can mark the piece forever.
   await db.put('inv', { id: newId(), kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) });
+  await collectLook(g.artId);
   return g;
 }
 
@@ -150,7 +152,7 @@ export async function salvagePet(petId) {
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
     if (row) await db.del('inv', row.id);
-    const eq = await equipped();
+    const eq = await equipped({ raw: true });
     if (eq.C === petId) await equip('C', null);
     const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
   }
@@ -331,7 +333,7 @@ export async function breedPets(iidA, iidB, offspringSp) {
       const inv = await db.all('inv');
       const row = inv.find(r => r.kind === 'cos' && r.itemId === sp);
       if (row) await db.del('inv', row.id);
-      const eqp = await equipped();
+      const eqp = await equipped({ raw: true });
       if (eqp.C === sp && off.sp !== sp) await equip('C', off.sp);
       const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[sp]; await kvSet('pets', petsRec);
     }
@@ -513,7 +515,7 @@ export async function equippedPetIid() {
   const insts = await petInstances();
   if (iid && insts.some(x => x.iid === iid)) return iid;
   // migrate / repair: fall back to the old paper-doll species, else the best pet owned
-  const oldSp = (await equipped()).C;
+  const oldSp = (await equipped({ raw: true })).C;
   const target = (oldSp && bestInstance(insts, oldSp)) || bestInstance(insts, insts[0] && insts[0].sp) || insts[0] || null;
   iid = target ? target.iid : null;
   await kvSet('petEquipped', iid);
@@ -763,16 +765,104 @@ export async function buyWeapon(weaponId) {
   return { ok: true, weaponId, cost: coinCost, dust: dustCost };
 }
 
-/* ---------- equipped ---------- */
-export async function equipped() {
+/* ---------- Transmog (v221): wear the stats, keep the look ----------
+   Statted gear used to force its own art on you: equipGear writes the look too,
+   and picking a plain cosmetic dropped the stats. So liking a piece cost you
+   power. Transmog splits the two: your gear keeps its stats, the slot shows a
+   look you have collected.
+
+   Three rules keep this honest and surprise-free:
+   1. COLLECTION IS FOREVER. Seeing a piece once unlocks its look permanently,
+      even after you melt it. `looks` is append-only and read unions it with what
+      you currently own, so pre-v221 saves are grandfathered on first read with
+      no migration and nobody can lose a look they already had.
+   2. THE OVERRIDE ONLY APPLIES OVER GEAR. If you deliberately equip a plain
+      cosmetic in a slot, the look you picked is the look you get. No hidden
+      override fighting your choice.
+   3. IT IS PER SLOT, NOT PER ITEM. WoW makes you re-apply on every upgrade;
+      here your look sticks as the gear underneath it changes. */
+export const TRANSMOG_HIDE = '__hide';
+// Priced off the LOOK's rarity, in Bone Dust (melting a piece is how you fund
+// wearing it). Reverting to the gear's own look, and hiding a slot, are free.
+const TRANSMOG_COST = { common: 6, uncommon: 12, rare: 25, epic: 60, legendary: 60 };
+export function transmogCost(artId) {
+  if (!artId || artId === TRANSMOG_HIDE) return 0;
+  const art = BH_BY_ID[artId];
+  return art ? (TRANSMOG_COST[art.rarity] ?? 12) : 0;
+}
+
+export async function collectedLooks() {
+  const out = new Set((await kvGet('looks', [])) || []);
+  for (const id of await ownedCosmeticIds()) out.add(id);
+  for (const gid of await ownedGearIds()) { const g = GEAR_BY_ID[gid]; if (g) out.add(g.artId); }
+  return out;
+}
+export async function collectLook(artId) {
+  if (!artId) return;
+  const stored = (await kvGet('looks', [])) || [];
+  if (stored.includes(artId)) return;
+  stored.push(artId);
+  await kvSet('looks', stored);
+}
+
+export async function transmogMap() { return (await kvGet('transmog', {})) || {}; }
+
+export async function applyTransmog(slot, artId) {
+  if (!GEAR_SLOTS.includes(slot)) return { ok: false, reason: 'slot' };
+  if (artId == null || artId === '') return clearTransmog(slot);
+  if (artId !== TRANSMOG_HIDE) {
+    const art = BH_BY_ID[artId];
+    if (!art || art.slot !== slot) return { ok: false, reason: 'slot' };
+    if (!(await collectedLooks()).has(artId)) return { ok: false, reason: 'not-collected' };
+  }
+  const tm = await transmogMap();
+  if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
+  const cost = transmogCost(artId);
+  if (cost > 0) {
+    const bal = await boneDust();
+    if (bal < cost) return { ok: false, reason: 'dust', need: cost, have: bal };
+    await boneDustAdd(-cost);
+  }
+  tm[slot] = artId;
+  await kvSet('transmog', tm);
+  return { ok: true, cost };
+}
+
+export async function clearTransmog(slot) {
+  const tm = await transmogMap();
+  if (!(slot in tm)) return { ok: true, cost: 0 };
+  delete tm[slot];
+  await kvSet('transmog', tm);
+  return { ok: true, cost: 0 };
+}
+
+/* ---------- equipped ----------
+   Returns the LOOK by default: every render path (home hero, Pit, map marker,
+   splash, level-up card, friends' Crew card) already funnels through here, so
+   resolving transmog once means they all show it with no extra plumbing.
+   `{ raw: true }` returns the true equipment. Anything that WRITES equipment
+   back, or reasons about what you actually own, must use raw or it would bake
+   a transmog into the real save. */
+export async function equipped({ raw = false } = {}) {
   const base = {};
   for (const s of BH_SLOTS) if (s.default) base[s.code] = s.default;
   const saved = await kvGet('equipped', {});
-  return { ...base, ...saved };
+  const eq = { ...base, ...saved };
+  if (raw) return eq;
+  const tm = (await kvGet('transmog', {})) || {};
+  const slots = Object.keys(tm);
+  if (!slots.length) return eq;
+  const lo = await gearLoadout();
+  for (const slot of slots) {
+    if (!lo[slot]) continue;                       // rule 2: only overrides gear
+    if (tm[slot] === TRANSMOG_HIDE) delete eq[slot];
+    else if (BH_BY_ID[tm[slot]]) eq[slot] = tm[slot];
+  }
+  return eq;
 }
 
 export async function equip(slot, itemId, { keepGear = false } = {}) {
-  const eq = await equipped();
+  const eq = await equipped({ raw: true });
   if (itemId == null) {
     const def = BH_SLOTS.find(s => s.code === slot)?.default || null;
     if (def) eq[slot] = def; else delete eq[slot];
@@ -807,7 +897,7 @@ export async function equipGear(slot, gearId) {
   if (levelFor(await totalXp()).level < g.minLevel) throw new Error('level ' + g.minLevel + ' required');
   lo[slot] = gearId;
   await kvSet('gearloadout', lo);
-  const eq = await equipped();
+  const eq = await equipped({ raw: true });
   eq[slot] = g.artId;
   await kvSet('equipped', eq);
   return lo;

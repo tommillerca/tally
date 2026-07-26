@@ -22,7 +22,7 @@ import {
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
-  removeInstance, breedOffspring, breedCost } from '../js/loot.js';
+  removeInstance, breedOffspring, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { existsSync } from 'node:fs';
 
@@ -609,6 +609,21 @@ test('gear: slot impact weights budgets (chest > socks)', () => {
   }
   const legChest = gear.GEAR_ITEMS.find(g => g.slot === 'T' && g.rarity === 'legendary');
   assert.equal(Object.values(legChest.stats).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.legendary, 'full-weight slot spends the whole budget');
+});
+test('transmog: looks are priced off rarity, reverting and hiding are free', () => {
+  assert.equal(transmogCost(null), 0, 'back to the gear\'s own look is free');
+  assert.equal(transmogCost(TRANSMOG_HIDE), 0, 'hiding a slot is free');
+  assert.equal(transmogCost('nope-not-an-item'), 0, 'unknown art never charges');
+  const seen = {};
+  for (const i of BH_ITEMS) if (!seen[i.rarity]) seen[i.rarity] = transmogCost(i.id);
+  assert.equal(seen.common, 6);
+  assert.equal(seen.uncommon, 12);
+  assert.equal(seen.rare, 25);
+  assert.equal(seen.legendary, 60);
+  // a look must never cost more than melting the piece that carries it pays out,
+  // for every tier where melting is the realistic way to fund it
+  assert.ok(transmogCost(BH_ITEMS.find(i => i.rarity === 'legendary').id) < DUST_VALUE.gear.legendary,
+    'melting a legendary funds wearing its look');
 });
 test('gear: armor stays normalized as slots are added', () => {
   // Gear STATS self-balance (foes scale off your stats) but gear ARMOR does not:
