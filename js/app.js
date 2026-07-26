@@ -3564,6 +3564,7 @@ async function renderSettings(el) {
   const p = S.settings.profile;
   const units = S.settings.units;
   const lastExport = await kvGet('lastExportAt', 0);
+  const sleepDiag = await kvGet('hkSleepDiag', null);   // written by ingestHealth on every sync
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   // native shell build (TestFlight/APK build number) — the WEB build updates by
   // itself, so without this there's no way to tell which SHELL a device runs
@@ -3691,7 +3692,10 @@ async function renderSettings(el) {
       <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected · syncs automatically every time you open' : 'Connect once, then it syncs automatically'}</span></div>
       <button class="btn small ${S.settings.hkConnected ? 'ghost' : ''}" id="hkGuide">${S.settings.hkConnected ? 'Reconnect' : 'Connect'}</button>
     </div>
-    ${S.settings.hkConnected ? '<button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync now</button>' : ''}` : `
+    ${S.settings.hkConnected ? '<button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync now</button>' : ''}
+    ${S.settings.hkConnected ? `
+    <div class="sect-h" style="margin-top:16px">Sleep read</div>
+    <div id="hkSleepDiagBox">${sleepDiagHtml(sleepDiag)}</div>` : ''}` : `
     <div class="settings-row">
       <div class="lab"><b>Steps, active energy, weight</b><span>${S.settings.hkConnected ? 'Connected via your Sync Boneheadz shortcut' : 'Bridge from your Apple Watch via a one-time Shortcut'}</span></div>
       <button class="btn small ghost" id="hkGuide">${S.settings.hkConnected ? 'Guide' : 'Connect'}</button>
@@ -5400,46 +5404,47 @@ async function syncFromClipboard() {
   }
 }
 
+// Sleep read diagnostics, rendered inline in Settings under APPLE HEALTH.
+// HealthKit exposes no way to check READ permission, so when a sleep read comes
+// back empty the ONLY way to tell "not shared" from "no samples" from "all inBed"
+// from "under the 30-min floor" is to report what the query actually saw. This
+// lived behind the "Reconnect" button in v227, which nobody would ever tap to
+// look at sleep, so it may as well not have existed.
+function sleepDiagHtml(dg) {
+  if (!dg) {
+    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs a TestFlight update.</p>`;
+  }
+  const asleep = dg.rawAsleepMin || 0, inBed = dg.inBedMin || 0, n = dg.samples ?? 0;
+  const verdict =
+    dg.err ? `Health returned an error: ${esc(dg.err)}`
+    : dg.manual ? 'You hand-logged sleep for today, so the automatic read is deliberately skipped to keep your entry.'
+    : n === 0 ? 'No sleep samples came back at all for that window. Either Sleep is not shared with Boneheadz (iOS Settings > Health > Data Access & Devices > Boneheadz Gym) or nothing is recorded in it.'
+    : asleep === 0 && inBed > 0 ? 'Your sleep is recorded as time IN BED with no asleep stages. Boneheadz currently throws in-bed time away, which is exactly why nothing shows. This is a bug on our side, not your watch.'
+    : asleep === 0 ? 'Samples came back but none of them were asleep, in-bed, or staged time.'
+    : asleep < 30 ? 'Under the 30-minute minimum, so it was discarded as a stray reading.'
+    : 'Sleep read correctly on the last sync.';
+  return `
+    <div class="hk-diag">
+      <div><span>Window searched</span><b>${esc(dg.window || '?')}</b></div>
+      <div><span>Samples found</span><b>${n}</b></div>
+      <div><span>Counted as asleep</span><b>${asleep} min</b></div>
+      <div><span>Of that, staged</span><b>${dg.stagedMin || 0} min</b></div>
+      <div><span>In bed, not asleep</span><b>${inBed} min</b></div>
+    </div>
+    <p class="note" style="margin-top:8px">${verdict}</p>`;
+}
+
 const HK_TEMPLATE = 'tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]';
 
 async function openHealthGuide() {
   if (isNative()) {
-    // Sleep read diagnostics. HealthKit gives no API to check READ permission, so
-    // when a sleep read comes back empty the only way to tell "denied" from "no
-    // samples" from "all inBed" from "under the 30-min floor" is to report what
-    // the query actually saw. Written by ingestHealth on every sync.
-    const dg = await kvGet('hkSleepDiag', null);
-    const diagHtml = dg ? `
-      <div class="sect-h" style="margin-top:18px">Sleep read · last sync</div>
-      <div class="hk-diag">
-        <div><span>Window searched</span><b>${esc(dg.window || '?')}</b></div>
-        <div><span>Samples found</span><b>${dg.samples ?? '?'}</b></div>
-        <div><span>Counted as asleep</span><b>${dg.rawAsleepMin ?? 0} min</b></div>
-        <div><span>Of that, staged</span><b>${dg.stagedMin ?? 0} min</b></div>
-        <div><span>In bed but not asleep</span><b>${dg.inBedMin ?? 0} min</b></div>
-        ${dg.manual ? '<div><span>Today</span><b>hand-logged, auto read skipped</b></div>' : ''}
-        ${dg.err ? `<div><span>Error</span><b>${esc(dg.err)}</b></div>` : ''}
-      </div>
-      <p class="note" style="margin-top:8px">${
-        dg.samples === 0 ? 'No sleep samples came back at all. Either Sleep is not shared with Boneheadz (iOS Settings > Health > Data Access) or there is nothing recorded for that window.'
-        : (dg.rawAsleepMin || 0) === 0 && (dg.inBedMin || 0) > 0 ? 'Your sleep is recorded as "in bed" only, with no asleep stages. Boneheadz currently ignores in-bed time, which is why nothing shows. Tell Tom and this becomes a one-line fix.'
-        : (dg.rawAsleepMin || 0) > 0 && (dg.rawAsleepMin || 0) < 30 ? 'Under the 30-minute minimum, so it was discarded as a stray reading.'
-        : 'Sleep read fine on the last sync.'}</p>` : '';
     const wrap = openSheet(`
       <div class="sheet-head"><h2>Connect Apple Health</h2><button class="sheet-close">Done</button></div>
       <div class="sheet-body">
         <p class="note" style="margin-bottom:14px">One tap. iOS will ask permission to share your steps, active energy, and weight. After that, Boneheadz syncs automatically every time you open it: no shortcuts, no clipboard.</p>
         <button class="btn" id="nativeConnect">Connect Apple Health</button>
-        <button class="btn ghost small" id="hkTestSleep" style="margin-top:10px">Test sleep read</button>
-        ${diagHtml}
       </div>`);
     $('#nativeConnect', wrap).addEventListener('click', connectNativeHealth);
-    $('#hkTestSleep', wrap).addEventListener('click', async () => {
-      toast('Reading sleep from Health...', 1600);
-      await nativeSyncNow({ silent: true });
-      closeAllSheetsViaHistory();
-      openHealthGuide();
-    });
     return;
   }
   const wrap = openSheet(`
@@ -6351,7 +6356,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v227'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v228'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
