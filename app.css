@@ -2960,3 +2960,15 @@ body::before {
 .gbn-maplabel { font-size: 10px; letter-spacing: .16em; color: var(--text-3); text-transform: uppercase; font-weight: 800; margin: 8px 0 6px; }
 .gbn-map { border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); margin-bottom: 10px; }
 .gbn-map svg { display: block; width: 100%; height: auto; }
+
+/* SLIMED gear: the rare green-glowing variant only the Glutton drops. Sits on
+   top of the normal rarity styling so you can still read the piece's tier. */
+.ward-cell.slimed { border-color: rgba(159, 176, 78, .95); box-shadow: 0 0 14px rgba(120, 200, 60, .5), inset 0 0 12px rgba(120, 200, 60, .18); }
+.ward-cell.slimed img { filter: drop-shadow(0 0 7px rgba(150, 230, 80, .85)); }
+.ward-cell.slimed::before {
+  content: 'SLIMED'; position: absolute; top: 3px; left: 3px; z-index: 3;
+  font-size: 7.5px; font-weight: 900; letter-spacing: .06em; line-height: 1;
+  padding: 2px 3px; border-radius: 4px; color: #16210b; background: #9fb04e;
+}
+.slime-ico { position: relative; display: inline-block; }
+.slime-ico.slimed { filter: drop-shadow(0 0 10px rgba(150, 230, 80, .9)); }

@@ -421,11 +421,55 @@ export function secretsNear(lat, lng) {
 // when the map loads — always nearby, always reachable, recomputed fresh each
 // time (no persisted position; a one-time encounter doesn't need one).
 export const GLUTTON_RADIUS_M = 60;
-export function gluttonSpot(lat, lng) {
-  const bearing = 42, distM = 230;
-  const rad = bearing * Math.PI / 180;
-  const dLat = (distM * Math.cos(rad)) / 111320;
-  const dLng = (distM * Math.sin(rad)) / (111320 * Math.cos(lat * Math.PI / 180));
-  const glat = lat + dLat, glng = lng + dLng;
+// The dead-ground radius. Spawns sit on a ~550 m grid at 2 per cell, so 400 m
+// (~50 ha) strangles roughly 3 loot spawns: a swath you can actually feel. The
+// old 140 m ate ~0.4 spawns, i.e. usually nothing at all.
+export const GLUTTON_BLIGHT_M = 400;
+// TWICE DAILY: [startHour, endHour) local, morning + evening so either routine
+// can catch him. Between windows he is simply not on the map. Retune freely.
+export const GLUTTON_WINDOWS = [[8, 12], [17, 21]];
+
+// Which appearance (if any) is open right now.
+export function gluttonWindow(now = new Date()) {
+  const h = now.getHours() + now.getMinutes() / 60;
+  for (let i = 0; i < GLUTTON_WINDOWS.length; i++) {
+    const [a, b] = GLUTTON_WINDOWS[i];
+    if (h >= a && h < b) return { active: true, slot: i, endHour: b };
+  }
+  const next = GLUTTON_WINDOWS.find(([a]) => h < a);
+  return { active: false, slot: -1, nextHour: next ? next[0] : GLUTTON_WINDOWS[0][0], tomorrow: !next };
+}
+// One clear per appearance: repeatable across windows, never farmable inside one.
+export function gluttonKey(day, slot) { return `glutton-${day}-${slot}`; }
+
+// Where he squats for THIS appearance. Anchored to the centre of your den-cell
+// (seeded by day + slot + cell), NOT to your live position — he is a place you
+// walk to, not a boss that follows you around the map.
+export function gluttonSpot(lat, lng, day = dateKey(), slot = 0) {
+  const { cx, cy } = denCellOf(lat, lng);
+  const rng = mulberry32(hashStr(`glutton:${day}:${slot}:${cx}:${cy}`));
+  const glat = (cx + (rng() - 0.5) * 0.86) * DEN_CELL_DEG;
+  const glng = (cy + (rng() - 0.5) * 0.86) * DEN_CELL_DEG;
   return { lat: glat, lng: glng, dist: distanceM(lat, lng, glat, glng) };
+}
+
+// Beat him: pays once per appearance and drops a gear piece, which has a chance
+// to come out SLIMED — a rare green-glowing variant, flagged on the inv row.
+export const GLUTTON_SLIME_CHANCE = 0.25;
+export async function claimGluttonWin(day = dateKey(), slot = 0) {
+  const xp = await award(gluttonKey(day, slot), 'glutton', 70, 'Cleansed the Glutton');
+  if (xp === 0) return null;                       // already cleared this window
+  await coinsAdd(140);
+  const owned = await ownedGearIds();
+  const lvl = levelFor(await totalXp()).level;
+  const rng = mulberry32(hashStr(`glutgear:${day}:${slot}`));
+  const pick = pickDenGear(rng, rollRarityIdx(rng, 4), { exclude: new Set(), maxLevel: lvl + 3, ownedSet: owned });
+  let gear = null;
+  if (pick) {
+    const slimed = rng() < GLUTTON_SLIME_CHANCE;
+    const got = await grantGear(pick.id, 'glutton', { slimed });
+    if (got) gear = { id: pick.id, name: pick.name, rarity: pick.rarity, slimed };
+  }
+  if (!gear) await boneDustAdd(40);                // already own it all: consolation
+  return { xp, coins: 140, gear };
 }

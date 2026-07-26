@@ -494,13 +494,8 @@ test('boneheadz: full slots have a legendary to chase, defaults exist', () => {
     if (s.default) assert.ok(BH_BY_ID[s.default], s.default);
   }
 });
-test('boneheadz: yard specials exist with real art files', () => {
-  const yd = BH_ITEMS.filter(i => i.slot === 'YD');
-  assert.equal(yd.length, 2);
-  for (const i of yd) {
-    assert.ok(i.file, i.id);
-    assert.ok(existsSync(join(here, '..', bhAsset(i))), i.file);
-  }
+test('boneheadz: yard decor is retired (no YD slot)', () => {
+  assert.equal(BH_ITEMS.filter(i => i.slot === 'YD').length, 0, 'yard slot scrapped in v220');
 });
 
 // ---- boss dens (the bone road, reimagined) ----
@@ -591,7 +586,11 @@ test('level rewards scale with level', () => {
 const gear = await import('../js/gear.js');
 test('gear: catalog covers all wearable slots in 4 tiers', () => {
   assert.ok(gear.GEAR_ITEMS.length > 100, String(gear.GEAR_ITEMS.length));
-  assert.equal(gear.GEAR_SLOTS.length, 6, 'stats only on weapon/off-hand/chest/kicks/undies/socks');
+  assert.equal(gear.GEAR_SLOTS.length, 8, 'stats on weapon/off-hand/chest/pants/kicks/hat/undies/socks');
+  for (const s of ['P', 'H']) {
+    assert.ok(gear.GEAR_SLOTS.includes(s), 'statted slot ' + s);
+    assert.ok(gear.GEAR_ITEMS.some(g => g.slot === s), 'catalog has ' + s + ' rolls');
+  }
   const tiers = new Set(gear.GEAR_ITEMS.map(g => g.rarity));
   assert.deepEqual([...tiers].sort(), ['legendary', 'rare', 'uncommon'], 'statted tiers only; common = plain armor');
   for (const g of gear.GEAR_ITEMS) {
@@ -610,6 +609,20 @@ test('gear: slot impact weights budgets (chest > socks)', () => {
   }
   const legChest = gear.GEAR_ITEMS.find(g => g.slot === 'T' && g.rarity === 'legendary');
   assert.equal(Object.values(legChest.stats).reduce((a, b) => a + b, 0), gear.GEAR_BUDGET.legendary, 'full-weight slot spends the whole budget');
+});
+test('gear: armor stays normalized as slots are added', () => {
+  // Gear STATS self-balance (foes scale off your stats) but gear ARMOR does not:
+  // it is a player-only damage cut. Adding statted slots must not quietly raise the
+  // tankiness ceiling, so ARMOR_NORM rescales points against the pre-v220 baseline.
+  const best = {};
+  for (const s of gear.GEAR_SLOTS) {
+    const g = gear.GEAR_ITEMS.find(x => x.slot === s && x.rarity === 'legendary');
+    if (g) best[s] = g.id;
+  }
+  const owned = new Set(Object.values(best));
+  const a = gear.gearArmor(best, owned, 99);
+  const full = a.armor + a.spellArmor;
+  assert.ok(full >= 80 && full <= 90, `full legendary armor ${full} inside the 80-90 band`);
 });
 test('gear: same art two variants, distinct archetypes, tier bump', () => {
   const byArt = {};

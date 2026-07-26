@@ -11,14 +11,17 @@ import { TALENT_TREES } from './pit.js';
 // rolls more stat points than socks. Scene slots (Background, Yard) and Pets
 // stay pure cosmetics. FOUR gear tiers: common is plain armor (no stats);
 // uncommon/rare/legendary add stats, and the top tiers can carry a talent.
-// Only these slots carry stats (Tom's call): weapon, off-hand, chest, kicks,
-// undies, socks. Everything else (hats, skulls, eyes, pets, scenes) is pure look.
-export const GEAR_SLOTS = ['IR', 'IL', 'T', 'FW', 'U', 'S'];
+// Slots that carry stats: weapon, off-hand, chest, pants, kicks, head, undies,
+// socks. Everything else (skulls, eyes, grillz, pets, scenes) is pure look.
+// Head + pants joined in v220. To add another statted slot later, just list it
+// here and give it a SLOT_WEIGHT — generation, stats, armor, talents, sets and
+// the wardrobe all read off these two tables.
+export const GEAR_SLOTS = ['IR', 'IL', 'T', 'P', 'FW', 'H', 'U', 'S'];
 export const GEAR_SLOT_LABELS = {
-  IR: 'Weapon', IL: 'Off-hand', T: 'Chest', FW: 'Kicks', U: 'Undies', S: 'Socks',
+  IR: 'Weapon', IL: 'Off-hand', T: 'Chest', P: 'Pants', FW: 'Kicks', H: 'Hat', U: 'Undies', S: 'Socks',
 };
-// impact weights: main gear > kicks > underthings
-export const SLOT_WEIGHT = { T: 1.0, IR: 1.0, IL: 0.7, FW: 0.6, U: 0.35, S: 0.3 };
+// impact weights: main gear > pants/kicks/head > underthings
+export const SLOT_WEIGHT = { T: 1.0, IR: 1.0, IL: 0.7, P: 0.6, FW: 0.6, H: 0.55, U: 0.35, S: 0.3 };
 
 // Archetypes mirror the talent trees, so gear pushes the build you spec.
 export const GEAR_ARCHETYPES = {
@@ -162,12 +165,23 @@ export function setBonusLabel(arch, tier) {
 // you against spells, so your gear choice answers "what am I about to face".
 const ARMOR_PTS = { common: 4, uncommon: 8, rare: 14, legendary: 22 };
 const SPELL_ARCH = new Set(['gravecaller', 'gravewarden', 'boneshaman']); // casters -> spell armor
+// KEEPING THE FIGHT BALANCED AS SLOTS GROW. Gear STATS are self-correcting:
+// they fold into fighter.stats and every Pit/den foe is scaled off those, so
+// both sides inflate together. Gear ARMOR is not — it is player-only and cuts
+// incoming damage outright, so each new statted slot would quietly make you
+// tankier and flatten the difficulty curve we already tuned. So we hold the
+// TOTAL armor budget fixed at the original 6-slot baseline and divide it across
+// however many slots exist: a full set is worth the same as before, head/pants
+// just change how it's distributed. Add slots freely; this stays honest.
+const ARMOR_BASELINE_WEIGHT = 3.95;   // T1 + IR1 + IL.7 + FW.6 + U.35 + S.3
+const TOTAL_SLOT_WEIGHT = GEAR_SLOTS.reduce((a, s) => a + (SLOT_WEIGHT[s] || 0.5), 0);
+const ARMOR_NORM = ARMOR_BASELINE_WEIGHT / TOTAL_SLOT_WEIGHT;
 export function gearArmor(loadout = {}, ownedGearIds = new Set(), level = 1) {
   let armor = 0, spellArmor = 0;
   for (const slot of GEAR_SLOTS) {
     const g = GEAR_BY_ID[loadout[slot]];
     if (!g || g.slot !== slot || !ownedGearIds.has(g.id) || level < g.minLevel) continue;
-    const pts = Math.round((ARMOR_PTS[g.rarity] || 0) * (SLOT_WEIGHT[slot] || 0.5));
+    const pts = Math.round((ARMOR_PTS[g.rarity] || 0) * (SLOT_WEIGHT[slot] || 0.5) * ARMOR_NORM);
     if (SPELL_ARCH.has(g.arch)) spellArmor += pts; else armor += pts;
   }
   return { armor, spellArmor };

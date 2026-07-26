@@ -82,13 +82,21 @@ export async function ownedGearIds() {
   return new Set(inv.filter(r => r.kind === 'gear').map(r => r.gearId));
 }
 
-export async function grantGear(gearId, source) {
+export async function grantGear(gearId, source, opts = {}) {
   const g = GEAR_BY_ID[gearId];
   if (!g) throw new Error('unknown gear');
   const owned = await ownedGearIds();
   if (owned.has(gearId)) return null;
-  await db.put('inv', { id: newId(), kind: 'gear', gearId, source, ts: Date.now() });
+  // `slimed`: the rare green-glowing Glutton variant. Purely cosmetic + a brag,
+  // stored on the inv row so the wardrobe can mark the piece forever.
+  await db.put('inv', { id: newId(), kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) });
   return g;
+}
+
+// Gear ids the player owns a SLIMED copy of (Glutton drops).
+export async function slimedGearIds() {
+  const inv = await db.all('inv');
+  return new Set(inv.filter(r => r.kind === 'gear' && r.slimed).map(r => r.gearId));
 }
 
 /* ---------- Bone Dust: the salvage economy (v73) ----------

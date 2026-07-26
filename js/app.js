@@ -13,7 +13,7 @@ import {
   migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
-  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust,
+  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
   shinyPetIds,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
@@ -31,7 +31,7 @@ import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.j
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M } from './poi.js';
+import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -722,7 +722,6 @@ async function renderToday(el) {
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
     ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, 98)}</div>` : ''}
-    ${eq.YD && BH_BY_ID[eq.YD] ? `<img class="hero-yard" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : ''}
 
     <div class="hero-top">
       <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
@@ -1061,9 +1060,10 @@ function speechLine({ entries, tot, targets, crates, streak, isToday }) {
   ]);
 }
 
+// NOTE: the `noYard` option some callers still pass is a legacy no-op — the
+// yard-decor slot was retired, so there is no anchored decor layer any more.
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
-  skip.add('YD'); // yard decor is anchored, never a full-frame layer
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
   const layers = slots.map(s => {
     if (skip.has(s.code)) return '';
@@ -1075,9 +1075,7 @@ function avatarLayersHtml(eq, opts = {}) {
       ? ` class="wpn-glow r-${item.rarity}"` : '';
     return `<img${glow} src="${bhAsset(item)}" alt="" loading="lazy" decoding="async">`;
   }).join('');
-  const yd = !opts.noYard && eq.YD && BH_BY_ID[eq.YD]
-    ? `<img class="yard-decor" src="${bhAsset(BH_BY_ID[eq.YD])}" alt="">` : '';
-  return `<div class="bh-anim">${layers}</div>${yd}`;
+  return `<div class="bh-anim">${layers}</div>`;
 }
 
 function healthCardHtml(hk, isToday) {
@@ -1180,7 +1178,14 @@ function sleepRowHtml(w) {
 // version — no map marker, no blight/spawn-suppression mechanic yet (those are
 // still ROADMAP items). Reachable from a card on Today; the win is idempotent
 // via the same award() ledger every other one-time encounter uses.
-const GLUTTON_KEY = 'glutton-cleanse';
+// He surfaces twice a day. Tell the player which it is, in plain language.
+const hr12 = h => `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`;
+function gluttonWhenHtml() {
+  const w = gluttonWindow();
+  return w.active
+    ? `<b style="color:var(--glutton-sick)">He's out on the map right now</b>, until ${hr12(w.endHour)}.`
+    : `He feeds twice a day. Next sighting <b>${hr12(w.nextHour)}${w.tomorrow ? ' tomorrow' : ''}</b>.`;
+}
 // The exact lore lockup + copy Tom already approved (scratchpad/glutton.src.html,
 // direction locked). Reused verbatim for both the compact card and the full
 // sheet reveal — do not paraphrase this, it's Brock's, use it as written.
@@ -1207,7 +1212,7 @@ function gluttonBannerHtml() {
       ${gluttonLoreHtml()}
       <div class="gbn-maplabel">How the blight reads on the map</div>
       ${gluttonBlightMapHtml()}
-      <p class="glutton-mech">It <b>blights</b> the ground it eats. He's a world boss: walk out, find him, and fight him there. There's no button that teleports you to him.</p>
+      <p class="glutton-mech">${gluttonWhenHtml()} He <b>blights</b> the ground he squats on, so nothing spawns near him. Walk out, find him, and fight him there: no button teleports you to him.</p>
       <button class="btn ghost" id="gluttonToMap" style="width:100%">Open the Boneyard</button>
     </div>
   </details>`;
@@ -1242,7 +1247,9 @@ function gluttonBlightMapHtml() {
 
 async function openGluttonSheet() {
   const allXp = await db.all('xp');
-  const beaten = allXp.some(r => r.key === GLUTTON_KEY);
+  const w = gluttonWindow();
+  // "beaten" is per APPEARANCE now, not forever: he's back next window.
+  const beaten = w.active && allXp.some(r => r.key === gluttonKey(dateKey(), w.slot));
   const wrap = openSheet(`
     <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Done</button>
     <div class="sheet-body glutton-card" style="border:none;background:none;padding-top:8px">
@@ -1251,7 +1258,9 @@ async function openGluttonSheet() {
       ${gluttonHeroHtml()}
       ${gluttonLoreHtml()}
       <p class="glutton-mech">It <b>blights</b> the ground it eats. Hunt it down and win to <b>cleanse the land</b> and claim its hoard.</p>
-      ${beaten ? '<p class="glutton-beaten">Already cleansed. Come back if it ever stirs again.</p>' : '<button class="glutton-cta" id="gluttonFight">FACE THE GLUTTON</button>'}
+      ${beaten
+        ? '<p class="glutton-beaten">Cleansed for now. He crawls back out at his next feeding.</p>'
+        : '<button class="glutton-cta" id="gluttonFight">FACE THE GLUTTON</button>'}
     </div>`, { cls: '', name: 'The Glutton' });
   $('#gluttonFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
@@ -4180,7 +4189,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, fighter] = await Promise.all([ownedGearIds(), gearLoadout(), buildFighter()]);
+    const [gOwnedSet, gearLo, fighter, slimedSet] = await Promise.all([ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds()]);
     const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
@@ -4202,7 +4211,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     };
     const LEFT = ['H', 'E', 'M', 'T', 'P'];
     const RIGHT = ['IR', 'IL', 'G', 'U', 'S'];
-    const BOTTOM = ['SK', 'B', 'FW', 'BG', 'YD']; // pets moved out of the paper-doll into the Stable
+    const BOTTOM = ['SK', 'B', 'FW', 'BG']; // pets in the Stable; yard decor retired
     const statChip = m => {
       const gb = fighter.gearBonus[m.key] || 0;
       return `<span class="pd-stat"><small>${m.label}</small><b>${fighter.stats[m.key]}</b>${gb ? `<i>+${gb}</i>` : ''}</span>`;
@@ -4229,7 +4238,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
-          <button class="ward-cell gear r-${g.rarity} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}">
+          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
             <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
@@ -5326,9 +5335,12 @@ async function openMap() {
     const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
     const whisperedSecrets = new Set(); // one cryptic cue per spot per map session
     let claimedSecret = new Set(xpRows0.filter(r => r.type === 'secret').map(r => r.key));
-    let gluttonBeaten = xpRows0.some(r => r.key === GLUTTON_KEY);
-    const GLUTTON_BLIGHT_M = 140; // dead-ground radius: no spawns inside until he's beaten
+    // Twice-daily world event: cleared windows are remembered per appearance,
+    // so he comes back tomorrow morning but can't be farmed inside one window.
+    const gluttonCleared = new Set(xpRows0.filter(r => r.type === 'glutton').map(r => r.key));
+    const gluttonLive = () => { const w = gluttonWindow(); return (w.active && !gluttonCleared.has(gluttonKey(date, w.slot))) ? w : null; };
     let gluttonRec = null; // single marker, not a Map (one-of-a-kind world boss)
+    let gluttonPos = null; // where he ACTUALLY ended up, so the blight matches the marker
     let lastNearest = null;
     // Anti-cheat: block looting/fighting above a driving speed. GPS speed (m/s)
     // when the device reports it, else derived from raw position deltas. ~8 m/s
@@ -5557,15 +5569,23 @@ async function openMap() {
     // halo. Skips entirely once beaten (one-time encounter).
     const glutSnap = new Map();
     function refreshGlutton() {
-      if (gluttonBeaten) {
-        if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; } // he's gone
+      const w = gluttonLive();
+      if (!w) {                                    // between windows, or already cleared
+        if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; }
+        gluttonPos = null;
         const gb = $('#mapGlutton', body); if (gb) gb.hidden = true;
         return;
       }
-      const spot = gluttonSpot(lat, lng);
-      const placed = placeWalkable({ lat: spot.lat, lng: spot.lng }, glutSnap, 'glutton');
-      if (placed === null) return; // unreachable this camera view; try again next placement pass
+      const c = gluttonSpot(lat, lng, date, w.slot);
+      let placed = placeWalkable({ lat: c.lat, lng: c.lng }, glutSnap, 'glutton' + w.slot);
+      // ALWAYS place him, even unsnapped. placeWalkable returns null while
+      // `map.loaded()` is false, and on a live map that streams tiles it is
+      // false almost always — gating on it made the world boss permanently
+      // invisible. Spawns already behave this way (raw coords until the snap
+      // resolves); the marker just refines its spot on a later pass.
+      if (!placed) placed = { lat: c.lat, lng: c.lng };
       const glat = placed.lat, glng = placed.lng;
+      gluttonPos = { lat: glat, lng: glng };
       const dist = distanceM(lat, lng, glat, glng);
       if (!gluttonRec) {
         const el = document.createElement('div');
@@ -5676,10 +5696,11 @@ async function openMap() {
       // around him. Suppress any spawn within the blight radius of his spot
       // (deterministic from the player position, so no ordering dependency on
       // refreshGlutton). Beating him flips gluttonBeaten -> spawns return.
-      if (!gluttonBeaten) {
-        const bl = gluttonSpot(lat, lng);
+      // Only while he's actually out: centre on where he PLACED so the dead
+      // zone lines up with the fog you can see.
+      if (gluttonPos) {
         for (let i = live.length - 1; i >= 0; i--) {
-          if (distanceM(live[i].lat, live[i].lng, bl.lat, bl.lng) <= GLUTTON_BLIGHT_M) live.splice(i, 1);
+          if (distanceM(live[i].lat, live[i].lng, gluttonPos.lat, gluttonPos.lng) <= GLUTTON_BLIGHT_M) live.splice(i, 1);
         }
       }
       // Rare cue: the ONLY interruption. Fires once per rare when it surfaces nearby.
@@ -5829,11 +5850,12 @@ async function openMap() {
     // When the Glutton is beaten (fired from the fight settle), he leaves the
     // map at once: marker gone, button hidden, and the blight lifts so loot
     // spawns come back. Cleaned up when the map sheet closes.
-    const onGluttonBeaten = () => {
-      gluttonBeaten = true;
+    const onGluttonBeaten = e => {
+      if (e?.detail?.key) gluttonCleared.add(e.detail.key);
       if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; }
+      gluttonPos = null;
       const gb = $('#mapGlutton', body); if (gb) gb.hidden = true;
-      refreshSpawns();
+      refreshSpawns();                             // blight lifts: loot returns
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
@@ -6011,7 +6033,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v219'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v220'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7075,14 +7097,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
       }
       else if (foeCfg.mode === 'glutton') {
         // one-time world-boss spectacle, same idempotent shape as a secret boss.
-        const g = await award(GLUTTON_KEY, 'glutton', 150, 'Cleansed the Glutton');
-        trackEvent('glutton_win', { first: !!g });
-        if (g) {
-          xp += g; coins = 400;
-          await grantCrate('golden', GLUTTON_KEY);
-          extraCards.push(crateCard('golden'));
-          dispatchEvent(new CustomEvent('bh-glutton-beaten')); // he leaves the map + blight lifts
-        } else coins = 25; // rematch: pocket change, no re-farm
+        // Twice-daily event: pays once per appearance, so the reward is sized
+        // like a den clear (not the old one-off jackpot) to keep the economy sane.
+        const w = gluttonWindow();
+        const slot = w.active ? w.slot : 0;
+        const r = await claimGluttonWin(dateKey(), slot);
+        trackEvent('glutton_win', { first: !!r, slimed: !!r?.gear?.slimed });
+        if (r) {
+          xp += r.xp; coins = r.coins;
+          if (r.gear) extraCards.push({
+            iconHtml: `<span class="slime-ico${r.gear.slimed ? ' slimed' : ''}">${bhIcon('tombstone', 96)}</span>`,
+            name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
+            stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
+          });
+          dispatchEvent(new CustomEvent('bh-glutton-beaten', { detail: { key: gluttonKey(dateKey(), slot) } }));
+        } else coins = 25; // already cleared this window: pocket change, no re-farm
       }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {
@@ -7391,9 +7420,7 @@ async function seedDemo() {
   await kvSet('coins', 340);
   const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR1', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
   for (const id of demoCos) await db.put('inv', { id: 'demo-' + id, kind: 'cos', itemId: id, source: 'demo', ts: Date.now() });
-  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1', YD: 'YD1' });
-  await db.put('inv', { id: 'demo-YD1', kind: 'cos', itemId: 'YD1', source: 'demo', ts: Date.now() });
-  await db.put('inv', { id: 'demo-YD2', kind: 'cos', itemId: 'YD2', source: 'demo', ts: Date.now() });
+  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
   await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
   await db.put('inv', { id: 'demo-freeze', kind: 'freeze', source: 'welcome', ts: Date.now() });

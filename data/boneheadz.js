@@ -90,12 +90,6 @@ export const BH_SLOTS = [
   "label": "Pet",
   "z": 5,
   "default": null
- },
- {
-  "code": "YD",
-  "label": "Yard",
-  "z": 150,
-  "default": null
  }
 ];
 
@@ -1656,20 +1650,6 @@ export const BH_ITEMS = [
   "rarity": "legendary",
   "name": "Day One Lizard",
   "exclusive": true
- },
- {
-  "id": "YD1",
-  "slot": "YD",
-  "file": "assets/brand/tombstone.png",
-  "name": "Haunted Tombstone",
-  "rarity": "uncommon"
- },
- {
-  "id": "YD2",
-  "slot": "YD",
-  "file": "assets/brand/tomb.png",
-  "name": "Tomb Gate",
-  "rarity": "epic"
  }
 ];
 
