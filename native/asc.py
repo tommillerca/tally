@@ -81,8 +81,14 @@ def cmd_distribute(version, timeout=1800):
     deadline = time.time() + timeout
     while True:
         b = find(version)
+        # A build takes a minute or two to even appear after altool reports success,
+        # so waiting for it to show up is part of the job, not an error.
         if not b:
-            raise SystemExit(f'build {version} is not on App Store Connect yet')
+            if time.time() > deadline:
+                raise SystemExit(f'build {version} never appeared on App Store Connect')
+            print(f'  build {version} has not appeared yet, waiting...', flush=True)
+            time.sleep(30)
+            continue
         state = b['attributes'].get('processingState')
         if state == 'VALID':
             break
