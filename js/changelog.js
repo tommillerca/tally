@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 229, date: '2026-07-27', title: 'Sleep from your watch actually lands now', items: [
+    'Last night\'s sleep reads from Apple Health and shows on Today and in your daily readiness, with the deep / REM / core breakdown when your watch recorded stages.',
+    'Tap the Sleep tile on Progress for the full stage breakdown of the night.',
+  ] },
   { n: 228, date: '2026-07-27', title: 'See exactly why sleep is not reading', needsBuild: true, items: [
     'Settings > Apple Health now shows a Sleep read panel right under Sync now: the window it searched, how many samples came back, how much counted as asleep, and how much was in-bed-but-not-asleep.',
     'It also says in plain language what each result means, so a sleep read that comes back empty is something you can see rather than guess at. Tap Sync now to refresh it.',

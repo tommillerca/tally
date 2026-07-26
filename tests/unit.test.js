@@ -625,6 +625,31 @@ test('transmog: looks are priced off rarity, reverting and hiding are free', () 
   assert.ok(transmogCost(BH_ITEMS.find(i => i.rarity === 'legendary').id) < DUST_VALUE.gear.legendary,
     'melting a legendary funds wearing its look');
 });
+test('health: nativeSyncNow must forward every field the plugin returns', () => {
+  // The bug this exists to prevent: HealthPlugin returned sleepMin and friends
+  // from v213 onward, but nativeSyncNow builds an explicit allow-list payload and
+  // nobody added them, so every sleep field was silently dropped in the glue
+  // between the plugin and ingestHealth. Sleep could never work, and no amount of
+  // fixing permissions or the query window would have helped.
+  const swift = readFileSync(join(here, '..', 'native', 'ios', 'App', 'App', 'HealthPlugin.swift'), 'utf8');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+
+  const emitted = new Set([...swift.matchAll(/out\["([a-zA-Z]+)"\]/g)].map(m => m[1]));
+  // the sleep dictionary is spread into `out`, so its keys are emitted too
+  const sleepDict = swift.match(/done\(\[([\s\S]*?)\], diag\)/);
+  assert.ok(sleepDict, 'sleep result dictionary still present in the plugin');
+  for (const m of sleepDict[1].matchAll(/"([a-zA-Z]+)":/g)) emitted.add(m[1]);
+
+  const fn = app.match(/async function nativeSyncNow[\s\S]*?\n\}/);
+  assert.ok(fn, 'nativeSyncNow present');
+  const payload = fn[0].match(/const payload = \{([\s\S]*?)\n    \};/);
+  assert.ok(payload, 'nativeSyncNow still builds an explicit payload');
+  const forwarded = new Set([...payload[1].matchAll(/([a-zA-Z]+):/g)].map(m => m[1]));
+
+  const dropped = [...emitted].filter(k => !forwarded.has(k));
+  assert.deepEqual(dropped, [],
+    `nativeSyncNow drops plugin fields before ingestHealth ever sees them: ${dropped.join(', ')}`);
+});
 test('transmog: the paid-once credit must be persisted, not derived', () => {
   // Regression. paidLooks() used to seed purely from the live transmog map, so a
   // v221 player who cleared the slot lost the evidence and paid twice for a look

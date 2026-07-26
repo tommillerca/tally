@@ -5331,6 +5331,15 @@ async function nativeSyncNow({ silent = false } = {}) {
       exerciseMin: r.exerciseMin ?? null, cycleKm: r.cycleKm ?? null,
       workouts: r.workouts ?? null, wtypes: Array.isArray(r.wtypes) ? r.wtypes : null,
       restingHr: r.restingHr ?? null, hrv: r.hrv ?? null,
+      // Sleep. THIS is why sleep never worked: the plugin has returned these since
+      // v213, but this payload is an explicit allow-list and nobody added them, so
+      // every sleep field was dropped here before ingestHealth could see it. The
+      // permission, the query window and the native read were all fine; the glue
+      // in the middle silently discarded the result.
+      sleepMin: r.sleepMin ?? null, sleepDeepMin: r.sleepDeepMin ?? null,
+      sleepRemMin: r.sleepRemMin ?? null, sleepCoreMin: r.sleepCoreMin ?? null,
+      sleepAwakeMin: r.sleepAwakeMin ?? null, sleepStaged: r.sleepStaged ?? null,
+      sleepDiag: r.sleepDiag ?? null,
     };
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
@@ -6356,7 +6365,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v228'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v229'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
