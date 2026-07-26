@@ -625,6 +625,19 @@ test('transmog: looks are priced off rarity, reverting and hiding are free', () 
   assert.ok(transmogCost(BH_ITEMS.find(i => i.rarity === 'legendary').id) < DUST_VALUE.gear.legendary,
     'melting a legendary funds wearing its look');
 });
+test('collection: every locked piece must be indistinguishable', () => {
+  // The Looks browser renders locked pieces from a single constant string with no
+  // item data bound in, so a future edit that starts interpolating art, name or
+  // rarity into a locked tile fails here rather than quietly spoiling unlocks.
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/missing\.map\((.*?)\)\.join\(''\)/s);
+  assert.ok(m, 'locked-tile renderer still present');
+  const body = m[1];
+  assert.ok(/^\(\)\s*=>/.test(body.trim()), 'locked tile takes no item argument');
+  for (const leak of ['bhAsset', 'i.name', 'i.rarity', 'i.id', '<img']) {
+    assert.ok(!body.includes(leak), `locked tile must not reference ${leak}`);
+  }
+});
 test('gear: armor stays normalized as slots are added', () => {
   // Gear STATS self-balance (foes scale off your stats) but gear ARMOR does not:
   // it is a player-only damage cut. Adding statted slots must not quietly raise the

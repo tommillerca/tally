@@ -15,7 +15,8 @@ import {
   WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
   shinyPetIds,
-  transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE,
+  transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
+  fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
@@ -4150,6 +4151,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
   const takenTal = await kvGet('talents', []);
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
+  const looksAll = BH_ITEMS.filter(i => !i.default);
+  const looksHave = await collectedLooks();
+  const looksN = looksAll.filter(i => looksHave.has(i.id)).length;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -4182,17 +4186,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
     </div>
+    <button class="looks-card ${tab === 'looks' ? 'on' : ''}" data-tab="looks">
+      <span class="lc-top"><b>Looks</b><span>${looksN} / ${looksAll.length} collected</span></span>
+      <span class="lc-bar"><i style="width:${((looksN / looksAll.length) * 100).toFixed(1)}%"></i></span>
+    </button>
     <div id="chContent"></div>`;
 
-  $$('#chTabs .chip', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  $$('#chTabs .chip, .looks-card', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal] = await Promise.all([
-      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(),
+    const [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
+      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
+    const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -4240,8 +4249,34 @@ async function renderCharacter(wrap, tab, opts = {}) {
       else if (BH_BY_ID[p]) e[slot] = p;
       return e;
     })();
+    // Prices are paid-aware: a look you have already bought for this slot reads
+    // free forever, which is what lets fits swap without a tax.
+    const slotArts = wornGear
+      ? BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== wornGear.artId) : [];
+    const lookPriceMap = {};
+    for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
+
+    // SAVED FITS: a look you can put back on in one tap. Stats never move.
+    const fitRail = `
+      <div class="fit-rail">
+        ${fitList.map((f, i) => {
+          // No art thumbnail: the source PNGs are full-body canvases with a lot of
+          // transparent padding, so at chip size they render as an empty square.
+          // A rarity pip off the fit's headline piece reads at any size.
+          const art = fitThumbArt(f);
+          const price = fitPrices[i];
+          return `<button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}">
+            <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
+            ${esc(f.name)}${price ? `<i class="fc-cost">${price} ◆</i>` : ''}
+            ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">✕</i>' : ''}
+          </button>`;
+        }).join('')}
+        ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+      </div>
+      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
 
     content.innerHTML = `
+      ${fitRail}
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
@@ -4300,11 +4335,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
         if (!GEAR_SLOTS.includes(slot) || !wornGear) return '';
         const cur = tm[slot] ?? '';                        // '' = the gear's own look
         const sel = S.lookPreview == null ? cur : S.lookPreview;
-        const arts = BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== wornGear.artId);
+        const arts = slotArts;
         const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
         const ownArt = BH_BY_ID[wornGear.artId];
         const nameOf = v => v === '' ? `${wornGear.name}, its own look` : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
-        const cost = transmogCost(sel === '' ? null : sel);
+        const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
         const afford = dustBal >= cost;
         const changed = sel !== cur;
         return `
@@ -4312,7 +4347,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="ward-grid look-grid">
           ${cell('', `<img src="${bhAsset(ownArt)}" alt="" loading="lazy"><span class="look-tag">Its own look</span>`, 'Wear the gear as it is')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy"><span class="look-cost">${transmogCost(i.id)}</span>`, i.name)).join('')}
+          ${arts.map(i => cell(i.id, `<img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -4326,6 +4361,52 @@ async function renderCharacter(wrap, tab, opts = {}) {
       })()}
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
+    // --- saved fits: tap to wear, long-press for rename / bin ---
+    $$('[data-fit]', content).forEach(chip => {
+      let held = false, t = null;
+      const arm = () => { held = false; t = setTimeout(() => { held = true; S.fitEdit = S.fitEdit === chip.dataset.fit ? null : chip.dataset.fit; popSound(S.sounds); renderCharacter(wrap, 'wardrobe', { instant: true }); }, 520); };
+      const disarm = () => { if (t) clearTimeout(t); t = null; };
+      chip.addEventListener('pointerdown', arm);
+      chip.addEventListener('pointerup', disarm);
+      chip.addEventListener('pointerleave', disarm);
+      chip.addEventListener('pointercancel', disarm);
+      chip.addEventListener('click', async e => {
+        if (held) { held = false; return; }
+        if (e.target.closest('[data-fit-del]')) return;      // the ✕ has its own handler
+        if (S.fitEdit === chip.dataset.fit) {                 // in edit mode a tap renames
+          const cur = (await fits()).find(f => f.id === chip.dataset.fit);
+          const name = prompt('Name this fit', cur ? cur.name : '');
+          if (name != null) await renameFit(chip.dataset.fit, name.trim() || (cur && cur.name));
+          S.fitEdit = null;
+          renderCharacter(wrap, 'wardrobe', { instant: true });
+          return;
+        }
+        const res = await applyFit(chip.dataset.fit);
+        if (!res.ok) {
+          toast(res.reason === 'dust' ? `That fit needs ${res.need} dust, you have ${res.have}.` : 'Could not wear that fit.', 2800);
+          return;
+        }
+        S.lookPreview = null;
+        levelSound(S.sounds); pushProfileSoon();
+        toast(res.cost ? `${res.name} on. −${res.cost} dust.` : `${res.name} on.`, 2000);
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+      });
+    });
+    $$('[data-fit-del]', content).forEach(x => x.addEventListener('click', async e => {
+      e.stopPropagation();
+      await deleteFit(x.dataset.fitDel);
+      S.fitEdit = null; popSound(S.sounds);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    }));
+    $('[data-fit-save]', content)?.addEventListener('click', async () => {
+      const name = prompt('Name this fit', `Fit ${fitList.length + 1}`);
+      if (name == null) return;
+      const res = await captureFit(name.trim());
+      if (!res.ok) { toast(res.reason === 'full' ? `You can keep ${res.max} fits. Bin one first.` : 'Could not save that fit.', 2800); return; }
+      levelSound(S.sounds);
+      toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
+    });
     $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
@@ -4403,6 +4484,64 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (fighter.petMeta && fighter.petMeta.id === petId) fighter.petMeta.picks = next;
     }));
   }
+  if (tab === 'looks') {
+    // THE COLLECTION. Locked pieces are deliberately identical: no art, no
+    // outline, no rarity, no name. The unlock stays a surprise, and the only
+    // information you get is the per-slot tally, which spoils nothing.
+    const worn = await equipped();
+    const wornSet = new Set(Object.values(worn));
+    const RAR_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+    const sections = BH_SLOTS.map(s => {
+      const all = looksAll.filter(i => i.slot === s.code);
+      if (!all.length) return '';
+      const have = all.filter(i => looksHave.has(i.id));
+      const missing = all.filter(i => !looksHave.has(i.id));
+      const label = GEAR_SLOTS.includes(s.code) ? GEAR_SLOT_LABELS[s.code] : s.label;
+      // tease WHAT is still out there by tier, never WHICH piece it is
+      const byRar = {};
+      for (const m of missing) byRar[m.rarity] = (byRar[m.rarity] || 0) + 1;
+      const tease = RAR_ORDER.filter(r => byRar[r] && (r === 'legendary' || r === 'epic'))
+        .map(r => `${byRar[r]} ${r}`).join(', ');
+      const sorted = [...have].sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
+      return `
+        <div class="col-head"><span>${esc(label)}</span><em>${have.length} of ${all.length}${tease ? ` · ${esc(tease)} out there` : ''}</em></div>
+        <div class="col-grid">
+          ${sorted.map(i => `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy"></button>`).join('')}
+          ${missing.map(() => '<button class="col-cell locked" data-look-locked="1" title="Not collected yet"><span class="lock-q">?</span></button>').join('')}
+        </div>
+        ${(() => {
+          const it = S.lookInspect && have.find(x => x.id === S.lookInspect);
+          if (!it) return '';
+          const rar = RARITIES[it.rarity] || RARITIES.common;
+          const gearSlot = GEAR_SLOTS.includes(it.slot);
+          return `<div class="col-inspect r-${it.rarity}">
+            <img src="${bhAsset(it)}" alt="">
+            <div class="ci-body">
+              <b>${esc(it.name)}</b>
+              <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${esc(label)}</span>
+            </div>
+            ${gearSlot ? `<button class="btn small" data-wear-look="${it.id}">Wear this look</button>` : '<span class="ci-note">Equip it in the Wardrobe</span>'}
+          </div>`;
+        })()}`;
+    }).join('');
+    content.innerHTML = `
+      <p class="note" style="text-align:center;margin-top:4px">Every piece you have ever owned is here for good, even the ones you melted. Locked pieces stay hidden until you find them.</p>
+      ${sections}`;
+    $$('[data-look-info]', content).forEach(c => c.addEventListener('click', () => {
+      S.lookInspect = S.lookInspect === c.dataset.lookInfo ? null : c.dataset.lookInfo;
+      popSound(S.sounds);
+      renderCharacter(wrap, 'looks', { instant: true });
+    }));
+    $$('[data-look-locked]', content).forEach(c => c.addEventListener('click', () =>
+      toast('Still out there. Crates, boss dens and the Glutton all drop new looks.', 2600)));
+    $$('[data-wear-look]', content).forEach(b => b.addEventListener('click', () => {
+      const it = BH_BY_ID[b.dataset.wearLook];
+      S.wardrobeSlot = it.slot; S.lookPreview = it.id; S.lookInspect = null;
+      renderCharacter(wrap, 'wardrobe');
+      requestAnimationFrame(() => $('.look-bar')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    }));
+  }
+
   if (tab === 'talents') {
     content.innerHTML = '<div id="talBody" style="margin-top:6px"></div>';
     await renderTalents(content);
@@ -6110,7 +6249,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v221'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v222'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

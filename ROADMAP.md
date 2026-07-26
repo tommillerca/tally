@@ -9,7 +9,31 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 👗 Transmog — wear the stats, keep the look — 2026-07-26 — ✅ BUILT v221 (awaiting Tom's push approval)
+## 🧥 Saved fits + the Looks collection — 2026-07-26 — ✅ SHIPPED v222
+
+The two halves of WoW's system that v221 deliberately left out. Mock served its purpose and was removed; the real thing is in the app.
+
+**Catalogue:** 257 collectible pieces across 15 slots. Hat 21, Skull 31, Body 31, Background 22, Left hand 20, Kicks 19, Top 19, Right hand 17, Grillz 15, Pants 13, Eyes 13, Socks 12, Mouth 11, Undies 7, Pet 6. Every slot has exactly 1 legendary except Left hand (2) and Pet (2).
+
+### A. Saved fits
+- kv `outfits: [{id, name, look:{slot: artId|'__hide'}, ts}]`, cap 6.
+- Saves the **look only, never stats**. You re-gear constantly for stats; the look should survive that.
+- Applying: gear slots set transmog, non-gear slots equip the cosmetic. A gear slot with nothing equipped keeps its transmog dormant (v221 rule 2) and it wakes when you gear up.
+- **Re-wearing is free.** New `paidLooks` set of `slot:artId`; `applyTransmog` charges only the first time you wear a given look in a given slot. Makes fit-swapping free by construction, and fixes the v221 trap where flip-flopping between two looks charged you every single time. An outfit containing one unpaid look charges only that one, and the button says the amount.
+- UI: horizontally scrolling chip rail at the top of the Wardrobe. Tap to wear, long-press to rename/delete, "+ Save this fit" captures the current look. **No art thumbnail**: the source PNGs are full-body canvases with heavy transparent padding, so at 26px they rendered as empty squares. Replaced with a rarity pip off the fit's headline piece, which reads at any size.
+
+### B. The Looks collection
+- Entry: a **full-width 5th card** under the four tab cards, showing "34 / 257 collected" and a progress bar. Full width because a 2x2 grid has no natural 5th cell, and it gives the collection a real front door.
+- Inside: one section per slot, header reads `HAT · 6 of 21 · 1 legendary still out there`.
+- Collected tile: real art, rarity border, tick if currently worn. Tap for name + rarity + "Wear this look", which deep-links to that Wardrobe slot (functional, not just a trophy case).
+- **Locked tile: identical for every piece.** No art, no outline, no rarity, no name, just a `?`. Tom's call: the unlock stays a surprise. Tap gives a spoiler-free nudge ("Still out there. Crates, dens and the Glutton all drop new looks.").
+- The per-slot counts are the hook and they spoil nothing: you learn a legendary hat exists, not what it looks like. Recommendation is to keep rarity OUT of locked tiles and only in the header tally.
+
+**Risk:** low, all additive kv. The one behaviour change is `paidLooks` making repeat transmogs free, which shrinks the dust sink to "first time per look per slot". Across 257 looks that is still a deep sink.
+
+---
+
+## 👗 Transmog — wear the stats, keep the look — 2026-07-26 — ✅ SHIPPED v221
 
 Pay to move a gear piece's **look** onto whatever cosmetic you actually want, keeping its stats. Modelled on WoW's transmogrification.
 

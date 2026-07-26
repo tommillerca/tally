@@ -807,6 +807,31 @@ export async function collectLook(artId) {
 
 export async function transmogMap() { return (await kvGet('transmog', {})) || {}; }
 
+/* You pay for a (slot, look) pair ONCE. After that, wearing it again in that
+   slot is free forever. That is what makes saved fits swappable without a tax,
+   and it retires the v221 trap where flip-flopping between two looks charged
+   you every single time. Read seeds itself from whatever you are currently
+   wearing, so anyone who paid under v221 keeps what they bought. */
+const paidKey = (slot, artId) => `${slot}:${artId}`;
+export async function paidLooks() {
+  const set = new Set((await kvGet('paidlooks', [])) || []);
+  const tm = await transmogMap();
+  for (const [slot, artId] of Object.entries(tm)) set.add(paidKey(slot, artId));
+  return set;
+}
+async function markPaid(slot, artId) {
+  const list = (await kvGet('paidlooks', [])) || [];
+  const k = paidKey(slot, artId);
+  if (!list.includes(k)) { list.push(k); await kvSet('paidlooks', list); }
+}
+// What this slot change would cost right now (0 if free or already bought).
+export async function transmogPrice(slot, artId) {
+  if (!artId || artId === TRANSMOG_HIDE) return 0;
+  const tm = await transmogMap();
+  if (tm[slot] === artId) return 0;
+  return (await paidLooks()).has(paidKey(slot, artId)) ? 0 : transmogCost(artId);
+}
+
 export async function applyTransmog(slot, artId) {
   if (!GEAR_SLOTS.includes(slot)) return { ok: false, reason: 'slot' };
   if (artId == null || artId === '') return clearTransmog(slot);
@@ -817,12 +842,13 @@ export async function applyTransmog(slot, artId) {
   }
   const tm = await transmogMap();
   if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
-  const cost = transmogCost(artId);
+  const cost = await transmogPrice(slot, artId);
   if (cost > 0) {
     const bal = await boneDust();
     if (bal < cost) return { ok: false, reason: 'dust', need: cost, have: bal };
     await boneDustAdd(-cost);
   }
+  if (artId !== TRANSMOG_HIDE) await markPaid(slot, artId);
   tm[slot] = artId;
   await kvSet('transmog', tm);
   return { ok: true, cost };
@@ -834,6 +860,90 @@ export async function clearTransmog(slot) {
   delete tm[slot];
   await kvSet('transmog', tm);
   return { ok: true, cost: 0 };
+}
+
+/* ---------- Saved fits (v222) ----------
+   A fit is a LOOK, never stats: you re-gear constantly chasing numbers and your
+   outfit should survive that. Two halves, because they mean different things:
+   `tm` is the transmog overrides (a gear slot missing from tm means "show
+   whatever the gear itself looks like", which is not the same as pinning that
+   art), and `cos` is the plain cosmetics on non-gear slots. Pets are excluded:
+   the Stable owns that slot now. */
+export const MAX_FITS = 6;
+export const FIT_COSMETIC_SLOTS = BH_SLOTS
+  .map(s => s.code)
+  .filter(c => !GEAR_SLOTS.includes(c) && c !== 'C');
+
+export async function fits() { return (await kvGet('outfits', [])) || []; }
+
+export async function captureFit(name) {
+  const list = await fits();
+  if (list.length >= MAX_FITS) return { ok: false, reason: 'full', max: MAX_FITS };
+  const tm = { ...(await transmogMap()) };
+  const eq = await equipped({ raw: true });
+  const cos = {};
+  for (const s of FIT_COSMETIC_SLOTS) if (eq[s]) cos[s] = eq[s];
+  const fit = { id: newId(), name: (name || `Fit ${list.length + 1}`).slice(0, 18), tm, cos, ts: Date.now() };
+  await kvSet('outfits', [...list, fit]);
+  return { ok: true, fit };
+}
+
+// Total dust to wear this fit right now: only the looks you have never bought.
+export async function fitPrice(fit) {
+  if (!fit) return 0;
+  let sum = 0;
+  for (const [slot, artId] of Object.entries(fit.tm || {})) sum += await transmogPrice(slot, artId);
+  return sum;
+}
+
+export async function applyFit(id) {
+  const fit = (await fits()).find(f => f.id === id);
+  if (!fit) return { ok: false, reason: 'missing' };
+  const cost = await fitPrice(fit);
+  const bal = await boneDust();
+  if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
+  // gear slots: the fit's tm replaces the whole map, so a slot the fit does not
+  // mention goes back to its gear's own look rather than keeping a stale override
+  for (const slot of GEAR_SLOTS) {
+    const want = (fit.tm || {})[slot];
+    if (want == null) await clearTransmog(slot);
+    else await applyTransmog(slot, want);
+  }
+  // cosmetics: skip anything no longer owned rather than throwing
+  const owned = await ownedCosmeticIds();
+  for (const [slot, itemId] of Object.entries(fit.cos || {})) {
+    if (owned.has(itemId)) await equip(slot, itemId, { keepGear: true });
+  }
+  return { ok: true, cost, name: fit.name };
+}
+
+export async function renameFit(id, name) {
+  const list = await fits();
+  const f = list.find(x => x.id === id);
+  if (!f) return { ok: false };
+  f.name = (name || f.name).slice(0, 18);
+  await kvSet('outfits', list);
+  return { ok: true };
+}
+
+export async function deleteFit(id) {
+  await kvSet('outfits', (await fits()).filter(f => f.id !== id));
+  return { ok: true };
+}
+
+// The piece that best identifies a fit at chip size: whatever it deliberately
+// changed, most-visible slot first.
+export function fitThumbArt(fit) {
+  if (!fit) return null;
+  for (const s of ['H', 'SK', 'T', 'IR', 'M', 'E', 'G', 'IL', 'P', 'FW', 'B']) {
+    const v = (fit.tm || {})[s];
+    if (v && v !== TRANSMOG_HIDE && BH_BY_ID[v]) return BH_BY_ID[v];
+  }
+  for (const s of ['SK', 'B', 'BG']) {
+    const v = (fit.cos || {})[s];
+    if (v && BH_BY_ID[v]) return BH_BY_ID[v];
+  }
+  return null;
 }
 
 /* ---------- equipped ----------

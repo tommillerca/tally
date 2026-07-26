@@ -3005,5 +3005,82 @@ body::before {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .7)); pointer-events: none;
 }
 
+/* SAVED FITS (v222): a look you can put back on in one tap, at the top of the
+   Wardrobe. Scrolls sideways so six of them never crowd the paper doll. */
+.fit-rail { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; }
+.fit-rail::-webkit-scrollbar { display: none; }
+.fit-chip {
+  position: relative; flex: none; display: flex; align-items: center; gap: 7px;
+  padding: 8px 12px; border-radius: 12px;
+  background: var(--surface-2); border: 1.5px solid var(--line);
+  font-size: 12.5px; font-weight: 700; color: var(--text-2); white-space: nowrap;
+}
+.fit-chip.editing { border-color: var(--danger, #ff6b6b); }
+.fit-chip .fc-pip { width: 9px; height: 9px; border-radius: 99px; flex: none; background: #9fac9f; }
+.fit-chip .fc-pip.r-uncommon { background: #4ade80; }
+.fit-chip .fc-pip.r-rare { background: #6fd0ff; }
+.fit-chip .fc-pip.r-epic { background: #c084fc; }
+.fit-chip .fc-pip.r-legendary { background: #ffc961; }
+.fit-chip .fc-cost { font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--accent); margin-left: 2px; }
+.fit-chip .fc-x {
+  font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; margin-left: 2px;
+  border-radius: 6px; background: var(--danger, #ff6b6b); color: #1b0d0d; font-size: 11px; font-weight: 900;
+}
+.fit-chip.add { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+.fit-note { text-align: center; margin: 2px 0 10px; }
+
+/* THE COLLECTION (v222): entry card sits under the four tab cards, full width
+   because a 2x2 grid has no natural fifth cell. */
+.looks-card {
+  display: block; width: 100%; text-align: left; margin-top: 10px; padding: 12px 14px;
+  border-radius: 15px; background: var(--surface); border: 1.5px solid var(--line-strong);
+}
+.looks-card.on { border-color: var(--accent); box-shadow: 0 0 12px rgba(255, 201, 97, .16); }
+.looks-card .lc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.looks-card .lc-top b { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; }
+.looks-card .lc-top span { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.looks-card .lc-bar { display: block; height: 6px; border-radius: 99px; background: var(--surface-2); margin-top: 9px; overflow: hidden; }
+.looks-card .lc-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+
+.col-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin: 16px 0 7px; font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+}
+.col-head em {
+  font-style: normal; color: var(--text-3); font-weight: 700; letter-spacing: 0;
+  text-transform: none; font-size: 11.5px; text-align: right;
+}
+.col-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.col-cell {
+  position: relative; aspect-ratio: 1; border-radius: 11px; overflow: hidden; padding: 0;
+  background: var(--surface-2); border: 2px solid var(--line);
+}
+.col-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.col-cell.r-common { border-color: rgba(159, 172, 159, .4); }
+.col-cell.r-uncommon { border-color: rgba(74, 222, 128, .55); }
+.col-cell.r-rare { border-color: rgba(111, 208, 255, .6); }
+.col-cell.r-epic { border-color: rgba(192, 132, 252, .65); box-shadow: 0 0 9px rgba(192, 132, 252, .2); }
+.col-cell.r-legendary { border-color: rgba(255, 201, 97, .8); box-shadow: 0 0 10px rgba(255, 201, 97, .22); }
+.col-cell.selected { outline: 2px solid var(--protein); outline-offset: 1px; }
+/* LOCKED: identical for every piece. No art, no silhouette of the real shape,
+   no rarity, no name — finding it should still be a surprise. */
+.col-cell.locked { border-color: var(--line); background: var(--surface); display: grid; place-items: center; }
+.col-cell.locked .lock-q { font-size: 26px; font-weight: 900; color: var(--text-3); opacity: .3; line-height: 1; }
+.col-cell.worn::after {
+  content: "✓"; position: absolute; top: 3px; right: 3px; width: 17px; height: 17px;
+  background: var(--accent); color: var(--accent-ink); border-radius: 6px;
+  display: grid; place-items: center; font-size: 10px; font-weight: 900;
+}
+.col-inspect {
+  display: flex; align-items: center; gap: 11px; margin-top: 9px; padding: 9px 11px;
+  border-radius: 12px; background: var(--surface-2); border: 1.5px solid var(--line);
+}
+.col-inspect.r-epic { border-color: rgba(192, 132, 252, .5); }
+.col-inspect.r-legendary { border-color: rgba(255, 201, 97, .6); }
+.col-inspect img { width: 42px; height: 42px; object-fit: contain; flex: none; }
+.col-inspect .ci-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.col-inspect .ci-body b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-inspect .ci-note { font-size: 11.5px; color: var(--text-3); flex: none; }
+
 .slime-ico { position: relative; display: inline-block; }
 .slime-ico.slimed { filter: drop-shadow(0 0 10px rgba(150, 230, 80, .9)); }
