@@ -354,10 +354,14 @@ svg { display: block; }
 .toast {
   position: fixed; bottom: calc(var(--sab) + 96px); left: 50%; transform: translateX(-50%);
   background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--text);
-  font-size: 14px; font-weight: 600; padding: 11px 18px; border-radius: 999px;
+  font-size: 15px; font-weight: 600; padding: 11px 18px; border-radius: 22px;
   z-index: 80; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   animation: toastin 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  max-width: 86%; text-align: center;
+  /* `width: max-content` so the pill uses the room it is allowed instead of
+     shrink-wrapping: a fixed element with auto width was sizing to ~50% of the
+     screen, so a one-line message wrapped to four lines inside a pill shaped for
+     one. Radius drops from 999px so the two-line case still looks deliberate. */
+  width: max-content; max-width: 86%; text-align: center;
 }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
@@ -2029,7 +2033,10 @@ body::before {
 .map-readout {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--sab, 0px) + 66px); z-index: 5;
-  max-width: 86%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* was nowrap + ellipsis, which cut "Slow down to a walk to coll..." and threw
+     away the half of the sentence that says what to do. Wrap instead, and set
+     width: max-content or it shrink-wraps to ~50% like the toast did. */
+  width: max-content; max-width: 86%; text-wrap: balance;
   font-size: 13.5px; color: var(--text-2);
   background: rgba(13, 12, 18, 0.82); border: 1px solid var(--line-strong);
   padding: 7px 14px; border-radius: 999px;
@@ -2430,7 +2437,35 @@ body::before {
 .fight-act.petmove { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 /* tap-to-target: pointer + a focus ring on the current target */
 .foe-side[data-target], .pet-fighter.add[data-target] { cursor: pointer; }
-.fighterG.foe-side.targeted > .fstage, .pet-fighter.add.targeted > .fstage { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 14px; }
+/* TARGET RETICLE. Marks which enemy your attacks land on, so it only appears
+   while there are genuinely two live enemies to choose between (see updateBars).
+   Corner brackets in the hostile colour rather than a full box in --accent: a
+   hard green outline around the whole stage read as a UI selection artifact, and
+   green is the colour the app uses for the PLAYER's own actions. */
+.fighterG.foe-side.targeted > .fstage::after, .pet-fighter.add.targeted > .fstage::after {
+  content: ''; position: absolute; inset: -5px; pointer-events: none; z-index: 3;
+  --tc: var(--danger); --tl: 15px; --tw: 2px;
+  background:
+    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--tl) var(--tw) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 0 0 / var(--tw) var(--tl) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--tl) var(--tw) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 100% 0 / var(--tw) var(--tl) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--tl) var(--tw) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 0 100% / var(--tw) var(--tl) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--tl) var(--tw) no-repeat,
+    linear-gradient(var(--tc), var(--tc)) 100% 100% / var(--tw) var(--tl) no-repeat;
+}
+/* "NAME TARGETED" above the bracketed enemy, so it is never ambiguous which of
+   the two you are hitting. data-tgt is set on the wrapper in updateBars. */
+.fighterG.foe-side.targeted::before, .pet-fighter.add.targeted::before {
+  content: attr(data-tgt) " TARGETED";
+  /* -19px, not -13px: at -13px the label's descender band overlapped the top
+     bracket arm by a measured 2px and the bracket cut through the text. */
+  position: absolute; left: 50%; transform: translateX(-50%); top: -19px;
+  font-size: 8.5px; font-weight: 900; letter-spacing: 0.08em; white-space: nowrap;
+  color: var(--danger); z-index: 4; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
 @media (prefers-reduced-motion: reduce) { .fstage.petpounce { animation: none; } }
 
 /* ===== Animated pets (C1 cloud, C4 lizard) — see js/petanim.js ===== */

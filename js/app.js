@@ -6303,7 +6303,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v224'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v225'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6775,8 +6775,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (fight.pTarget === 'fa' && add.hp <= 0) fight.pTarget = 'f';
       else if (fight.pTarget === 'f' && foe.hp <= 0 && add.hp > 0) fight.pTarget = 'fa';
       const eff = (add.hp > 0 && fight.pTarget === 'fa') ? 'fa' : 'f';
-      el('foeG')?.classList.toggle('targeted', eff === 'f');
-      el('addG')?.classList.toggle('targeted', eff === 'fa');
+      // Only cue a target while there are actually two live enemies: once one is
+      // down there is nothing to choose, so the reticle is pure noise.
+      const choice = add.hp > 0 && foe.hp > 0;
+      const fg = el('foeG');
+      if (fg) { fg.dataset.tgt = String(foe.name || '').toUpperCase(); fg.classList.toggle('targeted', choice && eff === 'f'); }
+      if (ag) { ag.dataset.tgt = String(add.name || '').toUpperCase(); ag.classList.toggle('targeted', choice && eff === 'fa'); }
     }
     el('youWind').style.width = (player.wind / player.d.maxWind * 100) + '%';
     el('foeWind').style.width = (foe.wind / foe.d.maxWind * 100) + '%';

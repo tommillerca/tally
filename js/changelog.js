@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 225, date: '2026-07-27', title: 'Clearer targets, clearer warnings', items: [
+    'When you face two enemies at once, the one you are about to hit is now marked with red corner brackets and its name, so there is no guessing which one your swing lands on. In a straight one-on-one there is nothing to choose, so the arena stays clean.',
+    'The "too fast to loot" warning is readable now: it no longer gets cut off mid-sentence on the map, and the pop-up uses the full width instead of squeezing into a tiny block.',
+  ] },
   { n: 224, date: '2026-07-27', title: 'A new day actually starts a new day', needsBuild: true, items: [
     'The app now notices when the date changes while it is sitting in your pocket. Open it the next morning and you get a fresh day properly: new quests, your streak checked, yesterday closed out and its crate handed over, and a new spin on the wheel.',
     'Sleep from your watch reads correctly again. It now asks for permission to read your sleep, which it should have done when auto-sleep launched, so check for the Health prompt on your next open.',
