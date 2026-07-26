@@ -2625,7 +2625,11 @@ function readinessScore(days) {
   return {
     score: Math.round(Math.max(5, Math.min(99, score))),
     rhrL, rhrB, hrvL, hrvB,
-    slL: slHours, slScore, slStaged: sl ? !!sl.sleepStaged : false,
+    // slDate: WHICH night slL/slScore actually came from. `sl` is the most recent
+    // day in the window that has any sleep, which is not necessarily last night,
+    // and the tile used to render it undated. So a stale entry looked exactly
+    // like a fresh watch read, which hid a broken auto-read for days.
+    slL: slHours, slScore, slDate: sl ? sl.date : null, slStaged: sl ? !!sl.sleepStaged : false,
     slDeep: sl ? sl.sleepDeepMin : null, slRem: sl ? sl.sleepRemMin : null,
     slCore: sl ? sl.sleepCoreMin : null, slAwake: sl ? sl.sleepAwakeMin : null,
     slAuto: sl ? !!sl.sleepAuto : false,
@@ -2649,9 +2653,14 @@ function readinessHtml(r) {
   // Sleep tile: when the watch gave us a score, that's the headline (Tom wanted
   // the sleep score shown) with hours beneath, and it's tappable for the stage
   // breakdown. A manual hours-only entry just shows the hours.
-  const sleepTile = r.slScore != null
+  // A score means "last night". If the newest sleep on record is from an earlier
+  // night, say which night instead of passing it off as last night's.
+  const slStale = !!(r.slDate && r.slDate !== dateKey());
+  const sleepTile = (r.slScore != null && !slStale)
     ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep score</span><span class="rv">${r.slScore}</span>${r.slL != null ? `<i>${hm(r.slL)}</i>` : ''}</button>`
-    : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">${r.slL != null ? hm(r.slL) : '&mdash;'}</span></button>`;
+    : r.slL != null
+      ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep${slStale ? ` · ${r.slDate.slice(5)}` : ''}</span><span class="rv">${hm(r.slL)}</span>${slStale ? '<i class="warn">not last night</i>' : ''}</button>`
+      : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">&mdash;</span></button>`;
   const tiles = [
     r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
     r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
@@ -5009,6 +5018,8 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   // HK_SCOPES_V.)
   // Auto sleep read (last night). Skip if the player hand-logged sleep for this
   // date (sleepManual) so a manual override sticks for the day.
+  // Sleep actually read: stop re-requesting the scope (see HK_SCOPES_V).
+  if (payload.sleepMin != null && payload.sleepMin > 0) await kvSet('hkScopesV', HK_SCOPES_V);
   if (payload.sleepMin != null && payload.sleepMin > 0 && !row.sleepManual) {
     row.sleepMin = payload.sleepMin;
     row.sleepDeepMin = payload.sleepDeepMin ?? null;
@@ -5341,11 +5352,14 @@ async function nativeAutoSync() {
   //
   // Now it is versioned: bump HK_SCOPES_V whenever the native read set changes
   // and everyone gets asked exactly once more, no repeat nag after that.
+  // NB: the version is advanced in ingestHealth, when sleep data actually ARRIVES,
+  // not here. v224 set it right after the request resolved, which repeated the
+  // hkHeartOk mistake in a new form: iOS resolves requestAuthorization even when
+  // you deny, and no-ops for types already decided, so one silent non-grant burned
+  // the flag forever. Asking again is invisible when the type is already decided,
+  // so retrying until data flows costs nothing.
   if ((await kvGet('hkScopesV', 0)) < HK_SCOPES_V) {
-    try {
-      await nativeRequestAuth();
-      await kvSet('hkScopesV', HK_SCOPES_V);
-    } catch { /* best-effort: leave the version behind so we retry next open */ }
+    try { await nativeRequestAuth(); } catch { /* best-effort */ }
   }
   if (Date.now() - lastNativeSync < 10 * 60e3) return; // at most every 10 min
   const ok = await nativeSyncNow({ silent: true });
@@ -5358,7 +5372,8 @@ async function connectNativeHealth() {
   if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
   await kvSet('settings', S.settings);
-  await kvSet('hkScopesV', HK_SCOPES_V); // asked for the current set just now
+  // (deliberately NOT advancing hkScopesV here: asking is not evidence of a grant.
+  // ingestHealth advances it once sleep data actually arrives.)
   await nativeSyncNow({ silent: false });
   toast('Apple Health connected. Boneheadz now syncs automatically.', 3400);
   closeAllSheetsViaHistory();
@@ -6303,7 +6318,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v225'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v226'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 226, date: '2026-07-27', title: 'Your sleep tile tells the truth', items: [
+    'The Sleep tile on Progress now says which night it is showing. If last night has not come in from your watch yet, it says so instead of quietly showing you an older night as though it were last night.',
+    'A sleep score only appears for last night, since that is the only night a score means anything about how you feel today.',
+    'Behind the scenes, the app now keeps asking Apple Health for permission to read your sleep until it actually gets some, rather than assuming one ask was enough.',
+  ] },
   { n: 225, date: '2026-07-27', title: 'Clearer targets, clearer warnings', items: [
     'When you face two enemies at once, the one you are about to hit is now marked with red corner brackets and its name, so there is no guessing which one your swing lands on. In a straight one-on-one there is nothing to choose, so the arena stays clean.',
     'The "too fast to loot" warning is readable now: it no longer gets cut off mid-sentence on the map, and the pop-up uses the full width instead of squeezing into a tiny block.',
