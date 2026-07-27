@@ -3040,6 +3040,25 @@ body::before {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .7)); pointer-events: none;
 }
 
+/* Optional hero image on a What's New entry (v230). Used once, for the account
+   that was lost to the missing recovery system. It stays in the list forever;
+   later releases simply stack above it. */
+.wn-hero {
+  position: relative; margin: 2px 0 12px; border-radius: 16px; overflow: hidden;
+  background: radial-gradient(120% 100% at 50% 0%, #2a1d22 0%, #16131a 60%, #100e14 100%);
+  border: 1.5px solid rgba(255, 109, 94, .35);
+  display: grid; place-items: center; padding: 14px 10px 10px;
+}
+.wn-hero img { width: 62%; max-width: 210px; height: auto; display: block; filter: drop-shadow(0 10px 26px rgba(0, 0, 0, .65)); }
+.wn-hero .rip {
+  position: absolute; top: 10px; left: 12px; font-size: 10px; font-weight: 900;
+  letter-spacing: .14em; color: #ff6d5e; text-transform: uppercase; line-height: 1;
+}
+.wn-hero .meta { margin-top: 10px; text-align: center; display: grid; gap: 3px; }
+.wn-hero .m-name { font-size: 17.5px; font-weight: 900; letter-spacing: .04em; line-height: 1; color: var(--text-1, #efe9f5); }
+.wn-hero .m-rank { font-size: 13px; font-weight: 800; color: #ffc961; letter-spacing: .02em; }
+.wn-hero .m-tally { font-size: 10px; font-weight: 700; color: var(--text-3); letter-spacing: .06em; }
+
 /* SAVED FITS (v222): a look you can put back on in one tap, at the top of the
    Wardrobe. Scrolls sideways so six of them never crowd the paper doll. */
 .fit-rail { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; }

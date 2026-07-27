@@ -72,7 +72,11 @@ function mirrorIdentity(id) {
 
 async function ensureIdentity() {
   let id = await kvGet('identity', null);
-  if (id && id.privJwk && id.pubJwk) { mirrorIdentity(id); return id; }
+  // Deliberately does NOT mirror on every read. It used to, and that is how a
+  // freshly minted identity overwrote a good keychain entry seconds after a
+  // reinstall, destroying the only key that could decrypt an existing backup.
+  // The keychain is written exactly where a NEW key is created, or on restore.
+  if (id && id.privJwk && id.pubJwk) return id;
   // Fresh or wiped install: recover the identity from the OS keychain BEFORE
   // minting a new one, so we come back as the same account (and can decrypt the
   // cloud backup) instead of starting over empty.
@@ -337,6 +341,96 @@ export async function pullGrants() {
 // established devices already have the flag and skip the pull. importAll is
 // additive, so even a redundant restore only merges identical rows.
 // Returns { restored, counts? } so the caller can toast + refresh.
+/* ---------------- account recovery ----------------
+   The backup above is encrypted with a key that lives in the device keychain.
+   Delete the app and that key can go with it, and the backup is undecryptable
+   forever. That is not theoretical: it destroyed a real level 27 account on
+   2026-07-27. A recovery phrase wraps the identity bundle so the account can be
+   rebuilt on ANY device. The phrase never leaves the phone; the server stores
+   only ciphertext plus the KDF salt.
+
+   Tom chose a USER-PICKED phrase over a generated code ("people will forget to
+   save the ones you auto generate"). That is weaker, so it is defended with a
+   length floor, a common-password blocklist, and a deliberately expensive KDF. */
+export const RECOVERY_ITERS = 600000;
+export const RECOVERY_MIN_LEN = 8;
+// the phrases people actually reach for first; refusing them costs nothing
+const WEAK_PHRASES = new Set(['password', 'password1', '12345678', '123456789', 'qwertyui', 'qwerty123',
+  'iloveyou', 'letmein1', 'boneheadz', 'boneheads', 'football', 'baseball', 'sunshine', 'princess',
+  'trustno1', 'starwars', 'whatever', 'superman', 'passw0rd', 'abc12345', 'welcome1']);
+
+export function phraseProblem(phrase) {
+  const p = String(phrase || '').trim();
+  if (p.length < RECOVERY_MIN_LEN) return `Use at least ${RECOVERY_MIN_LEN} characters.`;
+  if (WEAK_PHRASES.has(p.toLowerCase().replace(/\s+/g, ''))) return 'That one is too easy to guess. Pick something personal.';
+  if (/^(.)\1+$/.test(p)) return 'Pick something less repetitive.';
+  return null;
+}
+
+const enc = new TextEncoder();
+
+async function phraseKey(phrase, salt, iters) {
+  const base = await crypto.subtle.importKey('raw', enc.encode(String(phrase).trim()), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+// Wrap the identity bundle under the phrase and store the ciphertext server-side.
+export async function setRecoveryPhrase(phrase) {
+  const bad = phraseProblem(phrase);
+  if (bad) return { ok: false, reason: bad };
+  if (!(await apiBase())) return { ok: false, reason: 'Not online yet.' };
+  const id = await ensureIdentity();
+  await backupKey();                             // make sure aesJwk exists before wrapping
+  const full = await kvGet('identity', null);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await phraseKey(phrase, salt, RECOVERY_ITERS);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(full)));
+  const wrapped = u8ToB64(new Uint8Array([...iv, ...new Uint8Array(ct)]));
+  const r = await signedFetch('PUT', '/recovery', { wrapped, salt: u8ToB64(salt), iters: RECOVERY_ITERS });
+  if (!r || !r.ok) return { ok: false, reason: 'Could not reach the server. Try again.' };
+  await kvSet('recoverySetAt', Date.now());
+  return { ok: true, friendCode: (await kvGet('social', {}))?.friendCode || null };
+}
+
+export async function hasRecoveryPhrase() { return !!(await kvGet('recoverySetAt', 0)); }
+
+// Rebuild the account on a fresh device: fetch the wrapped bundle by friend code,
+// unwrap with the phrase, install the identity, then the normal backup pull works.
+export async function restoreWithPhrase(friendCode, phrase) {
+  const code = String(friendCode || '').toUpperCase().trim();
+  if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return { ok: false, reason: 'That friend code does not look right.' };
+  const base = await apiBase();
+  if (!base) return { ok: false, reason: 'No connection.' };
+  let meta;
+  try {
+    const res = await fetch(`${base}/recovery/${encodeURIComponent(code)}`);
+    if (res.status === 429) return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };
+    if (!res.ok) return { ok: false, reason: 'No recovery phrase is set for that code.' };
+    meta = await res.json();
+  } catch { return { ok: false, reason: 'Could not reach the server.' }; }
+  let bundle;
+  try {
+    const raw = b64ToU8(meta.wrapped);
+    const key = await phraseKey(phrase, b64ToU8(meta.salt), Number(meta.iters) || RECOVERY_ITERS);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12));
+    bundle = JSON.parse(new TextDecoder().decode(pt));
+  } catch { return { ok: false, reason: 'Wrong phrase for that account.' }; }
+  if (!bundle || !bundle.privJwk || !bundle.pubJwk) return { ok: false, reason: 'That recovery data is damaged.' };
+  await kvSet('identity', bundle);
+  mirrorIdentity(bundle);
+  await kvSet('social', null);                   // re-register under the restored key
+  await kvSet('bootRestored', false);            // let the backup pull run again
+  const on = await goOnline();
+  if (!on.ok) return { ok: false, reason: 'Restored the key but could not go online.' };
+  const pulled = await pullBackup();
+  await kvSet('bootRestored', true);
+  await kvSet('recoverySetAt', Date.now());
+  return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts };
+}
+
 export async function bootSync() {
   try {
     if (await kvGet('cloudOff', false)) return { restored: false, reason: 'opted-out' };

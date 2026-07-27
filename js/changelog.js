@@ -3,27 +3,25 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 229, date: '2026-07-27', title: 'Sleep from your watch actually lands now', items: [
-    'Last night\'s sleep reads from Apple Health and shows on Today and in your daily readiness, with the deep / REM / core breakdown when your watch recorded stages.',
-    'Tap the Sleep tile on Progress for the full stage breakdown of the night.',
+  { n: 230, date: '2026-07-27', title: '\u{1F480} Claude destroyed my account \u{1F480}',
+    hero: { img: 'assets/bh/memorial/wretched-goblin.png', alt: 'Wretched Goblin, level 27',
+            tag: 'In memoriam', name: 'WRETCHED GOBLIN', rank: 'LV 27 \u00b7 Bone Grandmaster', tally: '14 BADGES \u00b7 47 GEAR' },
+    items: [
+    'Tom deleted the app to troubleshoot a bug. His level 27 Bonehead did not come back. The cloud backup was there the whole time, but the key that unlocks it lived only on that phone, and it went with the app. \u{1F480}',
+    'The good news: this will not happen to you. Boneheadz now has a recovery code. You pick a phrase you will actually remember, and it can restore your account onto any phone, even if you delete the app, lose the device or get a new one.',
+    'You will be asked to set one the next time you open the app. It takes about ten seconds. Until you do, the app will keep asking, because the alternative is what happened above.',
+    'Tom is starting over from scratch as Chiseled Goblin. Find him on the leaderboard and add him, and say hello when you see him crawling around the Boneyard at level 1. \u{1F480}',
   ] },
-  { n: 228, date: '2026-07-27', title: 'See exactly why sleep is not reading', needsBuild: true, items: [
-    'Settings > Apple Health now shows a Sleep read panel right under Sync now: the window it searched, how many samples came back, how much counted as asleep, and how much was in-bed-but-not-asleep.',
-    'It also says in plain language what each result means, so a sleep read that comes back empty is something you can see rather than guess at. Tap Sync now to refresh it.',
-  ] },
-  { n: 226, date: '2026-07-27', title: 'Your sleep tile tells the truth', items: [
-    'The Sleep tile on Progress now says which night it is showing. If last night has not come in from your watch yet, it says so instead of quietly showing you an older night as though it were last night.',
-    'A sleep score only appears for last night, since that is the only night a score means anything about how you feel today.',
-    'Behind the scenes, the app now keeps asking Apple Health for permission to read your sleep until it actually gets some, rather than assuming one ask was enough.',
+  { n: 229, date: '2026-07-27', title: 'Sleep from your watch, done properly', needsBuild: true, items: [
+    'Last night\'s sleep reads itself from Apple Health and lands on Today and in your daily readiness, with the deep / REM / core breakdown when your watch tracked stages.',
+    'Tap the Sleep tile on Progress for the whole night. It always names the night it is showing, so a night that has not come in yet reads as missing instead of quietly showing you an older one.',
   ] },
   { n: 225, date: '2026-07-27', title: 'Clearer targets, clearer warnings', items: [
     'When you face two enemies at once, the one you are about to hit is now marked with red corner brackets and its name, so there is no guessing which one your swing lands on. In a straight one-on-one there is nothing to choose, so the arena stays clean.',
     'The "too fast to loot" warning is readable now: it no longer gets cut off mid-sentence on the map, and the pop-up uses the full width instead of squeezing into a tiny block.',
   ] },
-  { n: 224, date: '2026-07-27', title: 'A new day actually starts a new day', needsBuild: true, items: [
+  { n: 224, date: '2026-07-27', title: 'A new day actually starts a new day', items: [
     'The app now notices when the date changes while it is sitting in your pocket. Open it the next morning and you get a fresh day properly: new quests, your streak checked, yesterday closed out and its crate handed over, and a new spin on the wheel.',
-    'Sleep from your watch reads correctly again. It now asks for permission to read your sleep, which it should have done when auto-sleep launched, so check for the Health prompt on your next open.',
-    'Sleep is also measured over the whole night now instead of a rolling window, so checking the app in the evening no longer under-counts, or misses, the night before.',
   ] },
   { n: 223, date: '2026-07-26', title: 'Saved fits and the Looks collection', items: [
     'Save up to six fits and put a whole outfit back on in one tap, at the top of the Wardrobe. Long-press a fit to rename or bin it.',

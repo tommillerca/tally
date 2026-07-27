@@ -133,3 +133,15 @@ CREATE TABLE IF NOT EXISTS leads (
   ts INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_leads_ts ON leads (ts);
+
+-- v230 account recovery: a user-chosen phrase wraps the identity bundle
+-- (signing key + backup AES key) client-side. The server stores ONLY the
+-- ciphertext and the KDF salt, so it still cannot read a save. This is what
+-- makes an account survive losing the device that holds the keychain.
+CREATE TABLE IF NOT EXISTS recovery (
+  player_id TEXT PRIMARY KEY,
+  wrapped TEXT NOT NULL,       -- base64(iv || AES-GCM(identity bundle))
+  salt TEXT NOT NULL,          -- base64 PBKDF2 salt
+  iters INTEGER NOT NULL,      -- PBKDF2 iterations, recorded so it can be raised later
+  updated_at INTEGER NOT NULL
+);

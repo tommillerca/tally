@@ -332,6 +332,7 @@ async function boot() {
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
   maybeShowWhatsNew();
+  maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
   maybeShowSurvey();
@@ -2156,11 +2157,24 @@ async function renderShop(el) {
     toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
     rerender();
   }));
-  el.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', async () => {
-    const r = await buyShopItem(b.dataset.buy);
-    if (!r.ok) { toast('Not enough coins yet'); return; }
-    popSound(S.sounds); toast('Purchased'); rerender();
-  }));
+  el.querySelectorAll('[data-buy]').forEach((b => {
+      let t = null;
+      const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
+      b.addEventListener('click', async () => {
+        if (b.dataset.armed !== '1') {
+          b.dataset.label = b.dataset.label || b.textContent;
+          b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
+          clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
+          return;
+        }
+        clearTimeout(t); reset();
+        const r = await buyShopItem(b.dataset.buy);
+        if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+        popSound(S.sounds);
+        toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+        rerender();
+      });
+    }));
   el.querySelectorAll('[data-dustbuy]').forEach(btn => btn.addEventListener('click', async () => {
     btn.disabled = true;
     const res = await buyWithDust(btn.dataset.dustbuy);
@@ -3544,6 +3558,15 @@ async function openWhatsNew() {
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
       ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(TestFlight / Play Store)' : ''} to work on your phone</div>` : ''}
+      ${c.hero ? `<div class="wn-hero">
+        ${c.hero.tag ? `<span class="rip">${esc(c.hero.tag)}</span>` : ''}
+        <img src="${esc(c.hero.img)}" alt="${esc(c.hero.alt || '')}">
+        ${c.hero.name ? `<div class="meta">
+          <span class="m-name">${esc(c.hero.name)}</span>
+          ${c.hero.rank ? `<span class="m-rank">${esc(c.hero.rank)}</span>` : ''}
+          ${c.hero.tally ? `<span class="m-tally">${esc(c.hero.tally)}</span>` : ''}
+        </div>` : ''}
+      </div>` : ''}
       <ul class="wn-list">${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
     </div>`).join('');
   openSheet(`
@@ -3565,6 +3588,7 @@ async function renderSettings(el) {
   const units = S.settings.units;
   const lastExport = await kvGet('lastExportAt', 0);
   const sleepDiag = await kvGet('hkSleepDiag', null);   // written by ingestHealth on every sync
+  const recoverySet = await social.hasRecoveryPhrase();
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   // native shell build (TestFlight/APK build number) — the WEB build updates by
   // itself, so without this there's no way to tell which SHELL a device runs
@@ -3619,7 +3643,12 @@ async function renderSettings(el) {
     <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). Reinstall the app or get a new phone and your progress comes back on its own. Share your friend code so friends can add you.</p>`
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
-    <button class="btn" id="goOnlineBtn">Go Online</button>`}
+    <button class="btn" id="goOnlineBtn">Go Online</button>
+    <button class="btn small ghost" id="restoreAcctBtn" style="margin-top:8px">I already have an account</button>`}
+    ${me ? `<div class="settings-row" style="margin-top:10px">
+      <div class="lab"><b>Recovery code</b><span>${recoverySet ? 'Set. Your Bonehead can be restored on any phone.' : 'NOT SET. Delete the app and this account is gone for good.'}</span></div>
+      <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
+    </div>` : ''}
   </div>` : ''}
 
   ${notifPlat !== 'none' ? `
@@ -3728,6 +3757,8 @@ async function renderSettings(el) {
     await kvSet('settings', S.settings);
     toast('Targets saved');
   });
+  $('#recoveryBtn', el)?.addEventListener('click', () => openRecoverySheet());
+  $('#restoreAcctBtn', el)?.addEventListener('click', () => openRestoreSheet());
   $('#goOnlineBtn', el)?.addEventListener('click', async () => {
     const btn = $('#goOnlineBtn', el);
     btn.disabled = true; btn.textContent = 'Connecting...';
@@ -4721,12 +4752,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
     $('#bpToShop', content)?.addEventListener('click', () => { history.back(); setTimeout(() => { location.hash = '#/shop'; }, 260); });
-    $$('[data-buy]', content).forEach(b => b.addEventListener('click', async () => {
-      const r = await buyShopItem(b.dataset.buy);
-      if (!r.ok) { toast('Not enough coins yet'); return; }
-      popSound(S.sounds);
-      toast('Purchased');
-      renderCharacter(wrap, 'crates');
+    $$('[data-buy]', content).forEach((b => {
+      let t = null;
+      const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
+      b.addEventListener('click', async () => {
+        if (b.dataset.armed !== '1') {
+          b.dataset.label = b.dataset.label || b.textContent;
+          b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
+          clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
+          return;
+        }
+        clearTimeout(t); reset();
+        const r = await buyShopItem(b.dataset.buy);
+        if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+        popSound(S.sounds);
+        toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+        renderCharacter(wrap, 'crates');
+      });
     }));
   }
 
@@ -5443,6 +5485,87 @@ function sleepDiagHtml(dg) {
     <p class="note" style="margin-top:8px">${verdict}</p>`;
 }
 
+/* ---------------- account recovery ----------------
+   Exists because a real level 27 account was lost on 2026-07-27: the cloud
+   backup survived but the key lived only in the device keychain, and deleting
+   the app took it. A phrase the player chooses can rebuild the account on any
+   device. The phrase never leaves the phone. */
+async function openRecoverySheet({ firstRun = false } = {}) {
+  const me = await social.socialMe();
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Recovery code</h2><button class="sheet-close">${firstRun ? 'Later' : 'Done'}</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:2px 2px 14px">Pick a phrase you will actually remember. It is the only thing that can bring your Bonehead back if you lose this phone or delete the app. We never see it, so we can never reset it for you.</p>
+      <label class="rc-lab">Your phrase</label>
+      <input class="rc-in" id="rcPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="something only you would pick">
+      <label class="rc-lab" style="margin-top:10px">Type it again</label>
+      <input class="rc-in" id="rcPhrase2" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <p class="rc-err" id="rcErr" hidden></p>
+      <button class="btn" id="rcSave" style="margin-top:14px">Save my recovery code</button>
+      ${me ? `<p class="note" style="margin-top:12px">Write these two down together:<br><b>Friend code ${esc(me.friendCode)}</b> and your phrase. You need both to restore.</p>` : ''}
+    </div>`, { cls: '', name: 'Recovery code' });
+  const err = m => { const e = $('#rcErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rcSave', wrap).addEventListener('click', async () => {
+    const a = $('#rcPhrase', wrap).value, b = $('#rcPhrase2', wrap).value;
+    if (a !== b) return err('Those two do not match.');
+    const bad = social.phraseProblem(a);
+    if (bad) return err(bad);
+    const btn = $('#rcSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
+    const r = await social.setRecoveryPhrase(a);
+    btn.disabled = false; btn.textContent = 'Save my recovery code';
+    if (!r.ok) return err(r.reason || 'Could not save that.');
+    levelSound(S.sounds);
+    closeAllSheetsViaHistory();
+    toast('Recovery code saved. Your Bonehead can come back from anywhere now.', 4200);
+  });
+}
+
+async function openRestoreSheet() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Restore an account</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:2px 2px 14px">Enter the friend code and the recovery phrase from your old device. This replaces whatever is on this phone now.</p>
+      <label class="rc-lab">Friend code</label>
+      <input class="rc-in" id="rsCode" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="BONE-XXXX-XXXX">
+      <label class="rc-lab" style="margin-top:10px">Recovery phrase</label>
+      <input class="rc-in" id="rsPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <p class="rc-err" id="rsErr" hidden></p>
+      <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
+    </div>`, { cls: '', name: 'Restore' });
+  const err = m => { const e = $('#rsErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rsGo', wrap).addEventListener('click', async () => {
+    const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
+    const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
+    btn.disabled = false; btn.textContent = 'Restore my Bonehead';
+    if (!r.ok) return err(r.reason || 'Could not restore.');
+    S.settings = await kvGet('settings', S.settings);
+    levelSound(S.sounds);
+    closeAllSheetsViaHistory();
+    toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
+    route();
+  });
+}
+
+// Nag until a phrase exists. Tom: "make sure that people that skip the recovery
+// phrase popup see it each time they open until they pick one, for their own
+// good." So this is NOT once-per-session: every open, until it is set.
+async function maybePromptRecovery(tries = 0) {
+  try {
+    if (navigator.webdriver || !S.settings) return;
+    if (!(await social.isOnline())) return;          // nothing to protect yet
+    if (await social.hasRecoveryPhrase()) return;
+    // Never stack over another sheet, but do NOT give up: What's New pops on the
+    // very release that introduces recovery, and simply bailing here would swallow
+    // the prompt on the one open where it matters most. Wait for the stack to
+    // clear instead, for up to a minute.
+    if (document.querySelector('#sheets .sheet')) {
+      if (tries < 30) setTimeout(() => maybePromptRecovery(tries + 1), 2000);
+      return;
+    }
+    openRecoverySheet({ firstRun: true });
+  } catch { /* never block boot */ }
+}
+
 const HK_TEMPLATE = 'tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]';
 
 async function openHealthGuide() {
@@ -6131,7 +6254,10 @@ async function openMap() {
 
     $('#mapGlutton', body).addEventListener('click', () => {
       if (tooFastToAct()) return;
-      if (gluttonBeaten || !gluttonRec || !gluttonRec.el.classList.contains('inrange')) return;
+      // `gluttonBeaten` never existed: this threw ReferenceError on EVERY tap, so
+      // Face The Glutton has never once opened. Beaten/out-of-window is already
+      // handled by refreshGlutton, which nulls gluttonRec and hides this button.
+      if (!gluttonRec || !gluttonRec.el.classList.contains('inrange')) return;
       openGluttonSheet();
     });
 
@@ -6365,7 +6491,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v229'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v230'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

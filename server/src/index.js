@@ -147,6 +147,68 @@ export default {
         return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at });
       }
 
+      /* ---------------- account recovery ----------------
+         Why this exists: the backup above is encrypted with a key that lived
+         ONLY in the device keychain. Delete the app and that key is gone, and
+         the backup becomes undecryptable forever. That destroyed a real level 27
+         account. A recovery phrase wraps the identity bundle client-side so the
+         account can be rebuilt on any device. The server still only ever holds
+         ciphertext plus a KDF salt: it cannot read a save, and it cannot help an
+         attacker without also cracking the phrase. */
+
+      // Signed: store (or replace) the wrapped identity bundle.
+      if (path === '/recovery' && request.method === 'PUT') {
+        const bodyText = await request.text();
+        if (bodyText.length > 64 * 1024) return json({ error: 'too large' }, 413);
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const body = JSON.parse(bodyText || '{}');
+        if (typeof body.wrapped !== 'string' || !body.wrapped) return json({ error: 'missing wrapped' }, 400);
+        if (typeof body.salt !== 'string' || !body.salt) return json({ error: 'missing salt' }, 400);
+        const iters = Number(body.iters) || 0;
+        if (iters < 100000) return json({ error: 'weak kdf' }, 400);
+        const now = Date.now();
+        await env.DB.prepare('INSERT INTO recovery (player_id, wrapped, salt, iters, updated_at) VALUES (?,?,?,?,?) ' +
+          'ON CONFLICT(player_id) DO UPDATE SET wrapped=excluded.wrapped, salt=excluded.salt, iters=excluded.iters, updated_at=excluded.updated_at')
+          .bind(auth.playerId, body.wrapped, body.salt, iters, now).run();
+        return json({ ok: true, updatedAt: now });
+      }
+
+      // Signed: has this account got a recovery phrase yet? (drives the nag)
+      if (path === '/recovery' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const row = await env.DB.prepare('SELECT updated_at FROM recovery WHERE player_id = ?').bind(auth.playerId).first();
+        return json({ set: !!row, updatedAt: row ? row.updated_at : null });
+      }
+
+      // UNSIGNED by necessity: a device restoring an account has no key yet, so
+      // it cannot sign. Looked up by friend code, which is semi-public, so this
+      // hands out ciphertext to anyone who knows a code. That is acceptable only
+      // because the phrase is never sent and the wrap is PBKDF2-hardened, but it
+      // does mean an offline attack is possible, so it is rate limited per IP.
+      if (path.startsWith('/recovery/') && request.method === 'GET') {
+        const code = decodeURIComponent(path.slice('/recovery/'.length)).toUpperCase().trim();
+        if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return json({ error: 'bad code' }, 400);
+        // hash the IP: the events table holds anonymous ids by design, and a raw
+        // IP log would be a privacy regression for an app that never uploads location
+        const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
+        const ipHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',
+          new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+        const now = Date.now();
+        const hits = Number((await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = 'rl_recovery' AND ts > ?")
+          .bind(ipHash, now - 600000).first())?.n || 0);
+        if (hits >= 10) return json({ error: 'too many attempts, try again later' }, 429);
+        await env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
+          .bind(ipHash, 'rl_recovery', '{}', '', new Date(now).toISOString().slice(0, 10), now).run().catch(() => {});
+        const p = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
+        if (!p) return json({ error: 'no account' }, 404);
+        const row = await env.DB.prepare('SELECT wrapped, salt, iters FROM recovery WHERE player_id = ?').bind(p.id).first();
+        if (!row) return json({ error: 'no recovery set' }, 404);
+        return json({ wrapped: row.wrapped, salt: row.salt, iters: row.iters });
+      }
+
       // Signed: pull server-issued ledger events (idempotent on the client by key).
       if (path === '/grants' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');

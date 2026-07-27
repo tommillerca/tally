@@ -713,12 +713,17 @@ export async function buyShopItem(shopId) {
   const s = SHOP.find(x => x.id === shopId);
   if (!s) throw new Error('unknown item');
   const c = await coins();
-  if (c < s.cost) return { ok: false, reason: 'coins' };
+  if (c < s.cost) return { ok: false, reason: 'coins', need: s.cost, have: c };
   await coinsAdd(-s.cost);
   if (shopId === 'crate-daily') await grantCrate('daily', 'shop');
   else if (shopId === 'crate-golden') await grantCrate('golden', 'shop');
   else await grantConsumable(shopId, 'shop');
-  return { ok: true };
+  // Report WHAT was bought, what it cost, the new balance and how many you now
+  // hold. The old bare {ok:true} left the UI with nothing to say beyond
+  // "Purchased", which reads as a no-op when you tap twice, so people kept
+  // tapping and drained their coins without ever seeing a purchase land.
+  const owned = shopId.startsWith('crate-') ? (await unopenedCrates()).length : await consumableCount(shopId);
+  return { ok: true, label: s.label, cost: s.cost, coins: await coins(), owned };
 }
 
 /* ---------- weapons (bought with coins, one-each) ---------- */

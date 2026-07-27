@@ -9,6 +9,40 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🔑 Account recovery (ironclad) — 2026-07-27 — 🚨 CRITICAL, planned, awaiting Tom's approval
+
+**Why this is P0.** Tom deleted the app to troubleshoot a bug. His level 27 account (Wretched Goblin, 14 badges, 47 gear) is unrecoverable: the cloud backup blob is intact on the server (129,444 bytes, saved locally to `~/Documents/boneheadz-recovery/`) but the AES key lived only in the iOS keychain, and it went with the app. `BhVault.swift` and the memory note both asserted keychain items survive app deletion. **They did not.** Second data loss of the same class (see [[lessons_native_install_wipes_container]]).
+
+**Blast radius today: 8 encrypted backups on the server**, incl. a 164KB level 27 (Cam). Every one is one app-deletion away from the same loss, while Settings promises "end-to-end encrypted, only your phone can read it".
+
+### Layer 1 — recovery phrase (web + Worker, reaches everyone immediately)
+- **User-CHOSEN phrase** (Tom's call, overriding auto-generated: "people will forget to save the ones you auto generate").
+- Set: `KEK = PBKDF2-SHA256(phrase, salt=random16, 600k iters)` → AES-GCM wrap the identity bundle (privJwk + aesJwk) → `POST /recovery` with `{wrapped, salt}`. Server stores ciphertext only, never sees the phrase or the keys, so it stays E2E.
+- Restore: fresh device → "I already have an account" → enter **friend code + phrase** → `GET /recovery/:friendCode` returns `{wrapped, salt}` → derive → unwrap → identity restored → existing `pullBackup()` decrypts the save. No change to how saves are encrypted, so **all 8 existing accounts are covered the moment they set a phrase**.
+- Schema: additive `recovery_blob`, `recovery_salt`, `recovery_set_at` on `players`.
+- **Tradeoffs to state plainly, not bury:** a user-chosen phrase is weaker than a generated key. Mitigate with a minimum length, a common-password blocklist, PBKDF2 600k, and per-account salt. Lookup by friend code means anyone holding a friend code could fetch the ciphertext and attempt an offline attack, so the endpoint needs hard rate limiting. Threat model is a fitness game, and the alternative is losing accounts permanently, so this is the right trade.
+
+### Layer 2 — iCloud Keychain sync (native, build 14, background priority)
+- `kSecAttrSynchronizable = true` in `BhVault`. The key then rides iCloud Keychain, survives app deletion and moves to a new phone with no user action. **This alone would have saved Tom's account.**
+- Migration gotcha: a synchronizable query does NOT match existing non-synchronizable items. Must read the old item, write a synchronizable copy, and keep both.
+
+### Layer 3 — stop the foot-guns (web)
+- **ONE art piece, not two** (Tom, 2026-07-27). The memorial card IS the What's New entry: it lives in the changelog list, later releases stack above it, and it stays viewable forever. No separate one-time full-screen warning carrying the same art.
+- Boot prompt when online with no recovery phrase set: **plain and functional**, a short "set your recovery code" form. No hero art, no memorial framing, that story is told once in What's New. Recurring, dismissible per session, silent once set.
+- Settings shows a warning state until a phrase exists; the backup card stops claiming safety it cannot deliver.
+- Remove the unconditional `mirrorIdentity(id)` on every `ensureIdentity()` read. It is what overwrote Tom's keychain slot seconds after the fresh install minted a new identity, destroying any chance the old key had survived.
+- Nag when the last local export goes stale.
+
+### Patch note (Tom's copy, approved art)
+`💀 Claude destroyed my account 💀` with a hero render of Wretched Goblin's real loadout, recovered from the **unencrypted** `players.profile` snapshot (the Crew-tab copy) before anything is deleted. Art committed at `assets/bh/memorial/wretched-goblin.png` (663x840, transparent). Needs a new optional `hero` field on changelog entries. Copy: this happened, it will not happen to you, set a recovery code, Tom restarts from scratch as Wretched Goblin.
+
+### Sequence
+1. Layer 1 + Layer 3 + patch note (web + Worker) → verify → **ask Tom before pushing**.
+2. Delete the dead Wretched Goblin player + backup rows only after Tom confirms (local copy retained regardless).
+3. Layer 2 in build 14.
+
+---
+
 ## 🧥 Saved fits + the Looks collection — 2026-07-26 — ✅ SHIPPED v222
 
 The two halves of WoW's system that v221 deliberately left out. Mock served its purpose and was removed; the real thing is in the app.
