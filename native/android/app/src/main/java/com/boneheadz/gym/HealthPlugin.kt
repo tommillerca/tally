@@ -225,7 +225,6 @@ class HealthPlugin : Plugin() {
                 // ended earlier was never returned, under-counting the night (and
                 // returning nothing at all once the remainder fell under 30 min).
                 // 6pm yesterday through noon today, capped at now.
-                val zone = ZoneId.systemDefault()
                 val noonToday = ZonedDateTime.now(zone).withHour(12).withMinute(0).withSecond(0).withNano(0)
                 val nightStart = noonToday.minusHours(18).toInstant()   // 6pm yesterday
                 val nightEnd = minOf(now, noonToday.toInstant())        // noon today at the latest
@@ -264,6 +263,19 @@ class HealthPlugin : Plugin() {
                     val coreS = unionSeconds(core); val deepS = unionSeconds(deep); val remS = unionSeconds(rem)
                     val staged = coreS + deepS + remS
                     val asleep = if (staged > 0) staged else unionSeconds(unspecified)
+                    // Report WHAT the query saw, even when it finds nothing usable, so a
+                    // failed sleep read is inspectable in Settings instead of invisible.
+                    // Same keys as the iOS sleepDiag so one renderer serves both;
+                    // inBedMin is the nearest Health Connect equivalent (awake +
+                    // awake-in-bed stages) of iOS's HKCategoryValueSleepAnalysis.inBed.
+                    val diag = JSObject()
+                    diag.put("window", nightStart.toString().substring(0, 16) + " to " + nightEnd.toString().substring(0, 16))
+                    diag.put("samples", sleeps.size)
+                    diag.put("inBedMin", Math.round(unionSeconds(awake) / 60.0).toInt())
+                    diag.put("stagedMin", Math.round(staged / 60.0).toInt())
+                    diag.put("rawAsleepMin", Math.round(asleep / 60.0).toInt())
+                    diag.put("err", "")
+                    res.put("sleepDiag", diag)
                     if (asleep >= 30 * 60) {
                         val mins = { s: Long -> Math.round(s / 60.0).toInt() }
                         res.put("sleepMin", mins(asleep))
