@@ -138,10 +138,27 @@ CREATE INDEX IF NOT EXISTS idx_leads_ts ON leads (ts);
 -- (signing key + backup AES key) client-side. The server stores ONLY the
 -- ciphertext and the KDF salt, so it still cannot read a save. This is what
 -- makes an account survive losing the device that holds the keychain.
+-- recovery_id (v231): a memorable handle to restore BY. Restoring used to need
+-- the friend code, which nobody has after wiping the phone that displayed it, so
+-- the phrase alone was useless. Nullable, so every pre-v231 row keeps working via
+-- friend code. SQLite allows many NULLs under a UNIQUE index, which is what makes
+-- that possible.
+-- This file stays re-runnable, so the column lives in the CREATE. An ALREADY
+-- EXISTING database needs the one-off migration instead (see migrations below).
 CREATE TABLE IF NOT EXISTS recovery (
   player_id TEXT PRIMARY KEY,
   wrapped TEXT NOT NULL,       -- base64(iv || AES-GCM(identity bundle))
   salt TEXT NOT NULL,          -- base64 PBKDF2 salt
   iters INTEGER NOT NULL,      -- PBKDF2 iterations, recorded so it can be raised later
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  recovery_id TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id);
+
+-- ---------------------------------------------------------------------------
+-- MIGRATIONS for databases created before the column above existed. Run once,
+-- by hand; re-running errors with "duplicate column name", which is harmless.
+--   npx wrangler d1 execute bonez --remote --command \
+--     "ALTER TABLE recovery ADD COLUMN recovery_id TEXT"
+--   npx wrangler d1 execute bonez --remote --command \
+--     "CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id)"

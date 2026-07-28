@@ -3589,6 +3589,8 @@ async function renderSettings(el) {
   const lastExport = await kvGet('lastExportAt', 0);
   const sleepDiag = await kvGet('hkSleepDiag', null);   // written by ingestHealth on every sync
   const recoverySet = await social.hasRecoveryPhrase();
+  const vault = await social.vaultStatus();             // null on the web: no vault to describe
+  const myRid = await social.myRecoveryId();
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
   // native shell build (TestFlight/APK build number) — the WEB build updates by
   // itself, so without this there's no way to tell which SHELL a device runs
@@ -3646,9 +3648,10 @@ async function renderSettings(el) {
     <button class="btn" id="goOnlineBtn">Go Online</button>
     <button class="btn small ghost" id="restoreAcctBtn" style="margin-top:8px">I already have an account</button>`}
     ${me ? `<div class="settings-row" style="margin-top:10px">
-      <div class="lab"><b>Recovery code</b><span>${recoverySet ? 'Set. Your Bonehead can be restored on any phone.' : 'NOT SET. Delete the app and this account is gone for good.'}</span></div>
+      <div class="lab"><b>Recovery code</b><span>${recoverySet ? (myRid ? `Set. Restore anywhere with <b>${esc(myRid)}</b> and your phrase.` : 'Set. Add a recovery ID so you do not need your friend code to restore.') : 'NOT SET. Delete the app and this account is gone for good.'}</span></div>
       <button class="btn small ${recoverySet ? 'ghost' : ''}" id="recoveryBtn">${recoverySet ? 'Change' : 'Set it'}</button>
     </div>` : ''}
+    ${vaultRowHtml(vault)}
   </div>` : ''}
 
   ${notifPlat !== 'none' ? `
@@ -3759,6 +3762,16 @@ async function renderSettings(el) {
   });
   $('#recoveryBtn', el)?.addEventListener('click', () => openRecoverySheet());
   $('#restoreAcctBtn', el)?.addEventListener('click', () => openRestoreSheet());
+  $('#vaultAdoptBtn', el)?.addEventListener('click', async () => {
+    const other = await social.vaultOtherIdentity();
+    if (!other) { toast('That other Bonehead is no longer on this phone.'); refresh(); return; }
+    if (!confirm('Switch to the other Bonehead saved on this phone? What is on this phone now will be replaced by that account’s save.')) return;
+    const r = await social.adoptIdentity(other);
+    if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
+    S.settings = await kvGet('settings', S.settings);
+    toast(r.restored ? 'Switched. Welcome back.' : 'Switched, but there was no save to pull.', 4200);
+    route();
+  });
   $('#goOnlineBtn', el)?.addEventListener('click', async () => {
     const btn = $('#goOnlineBtn', el);
     btn.disabled = true; btn.textContent = 'Connecting...';
@@ -3879,6 +3892,7 @@ async function renderSettings(el) {
   $('#eraseBtn').addEventListener('click', async () => {
     if (!confirm('Erase ALL Boneheadz Gym data on this device? This cannot be undone.')) return;
     if (!confirm('Last check: your log, foods, and weights will be gone.')) return;
+    await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
     for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
     location.reload();
   });
@@ -5461,6 +5475,38 @@ async function syncFromClipboard() {
 // from "under the 30-min floor" is to report what the query actually saw. This
 // lived behind the "Reconnect" button in v227, which nobody would ever tap to
 // look at sleep, so it may as well not have existed.
+/* The one place the app states what the DEVICE vault can actually do, measured
+   rather than assumed. The old copy promised "reinstall and your progress comes
+   back on its own", which on Android is only true when Google Backup is on. A
+   promise we cannot keep is worse than no promise: that is how an account gets
+   lost by someone who thought they were covered. */
+function vaultRowHtml(v) {
+  if (!v) return '';                                   // web: no vault, claim nothing
+  // Native reasons arrive unpunctuated, and they are followed by another sentence.
+  const why = s => esc(String(s).replace(/\s*[.!?]?$/, '.'));
+  let cls = 'ok', body;
+  if (v.conflict) {
+    cls = 'warn';
+    body = `<b>Another Bonehead is saved on this phone</b><span>We kept it instead of overwriting it. You can switch to it, which replaces what is on this phone now.</span>`;
+    return `<div class="settings-row vault-row ${cls}" style="margin-top:10px">
+      <div class="lab">${body}</div>
+      <button class="btn small" id="vaultAdoptBtn">Switch to it</button>
+    </div>`;
+  }
+  if (v.available === false || v.unreadable || v.readError) {
+    cls = 'warn';
+    body = `<b>This phone's secure store is unavailable</b><span>${why(v.reason || v.readError || 'It could not be read')} Your recovery code is what will bring your Bonehead back.</span>`;
+  } else if (!v.hasIdentity) {
+    body = `<b>Not saved on this phone yet</b><span>It saves itself the first time your account is created or restored.</span>`;
+  } else if (v.e2e === false) {
+    cls = 'warn';
+    body = `<b>Saved on this phone only</b><span>${why(v.reason || 'No screen lock is set')} Set a screen lock and this can also travel to a new phone.</span>`;
+  } else {
+    body = `<b>Saved on this phone</b><span>Delete and reinstall and your Bonehead comes back on its own. This is a convenience, not a guarantee: your recovery code is the thing that always works.</span>`;
+  }
+  return `<div class="settings-row vault-row ${cls}" style="margin-top:10px"><div class="lab">${body}</div></div>`;
+}
+
 function sleepDiagHtml(dg) {
   if (!dg) {
     return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs a TestFlight update.</p>`;
@@ -5491,32 +5537,65 @@ function sleepDiagHtml(dg) {
    the app took it. A phrase the player chooses can rebuild the account on any
    device. The phrase never leaves the phone. */
 async function openRecoverySheet({ firstRun = false } = {}) {
-  const me = await social.socialMe();
+  const existingId = await social.myRecoveryId();
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Recovery code</h2><button class="sheet-close">${firstRun ? 'Later' : 'Done'}</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:2px 2px 14px">Pick a phrase you will actually remember. It is the only thing that can bring your Bonehead back if you lose this phone or delete the app. We never see it, so we can never reset it for you.</p>
-      <label class="rc-lab">Your phrase</label>
-      <input class="rc-in" id="rcPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="something only you would pick">
-      <label class="rc-lab" style="margin-top:10px">Type it again</label>
-      <input class="rc-in" id="rcPhrase2" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <p class="note" style="margin:2px 2px 14px">Two things you pick and remember. Together they bring your Bonehead back on any phone, even if this one is lost or wiped. We never see your phrase, so we can never reset it for you.</p>
+      <div class="field">
+        <label>Recovery ID <span class="rc-hint">the name you look yourself up by</span></label>
+        <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. tom-bones" value="${esc(existingId || '')}">
+        <p class="rc-note" id="rcIdState"></p>
+      </div>
+      <div class="field">
+        <label>Your phrase <span class="rc-hint">the secret</span></label>
+        <input id="rcPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="two words you will not forget">
+      </div>
+      <div class="field">
+        <label>Type it again</label>
+        <input id="rcPhrase2" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
       <p class="rc-err" id="rcErr" hidden></p>
       <button class="btn" id="rcSave" style="margin-top:14px">Save my recovery code</button>
-      ${me ? `<p class="note" style="margin-top:12px">Write these two down together:<br><b>Friend code ${esc(me.friendCode)}</b> and your phrase. You need both to restore.</p>` : ''}
+      <p class="note" style="margin-top:12px">Anyone can guess a recovery ID, so the phrase is what actually protects you. That is why it needs to be a bit longer than a password you would rush.</p>
     </div>`, { cls: '', name: 'Recovery code' });
   const err = m => { const e = $('#rcErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  const state = (m, cls = '') => { const e = $('#rcIdState', wrap); e.textContent = m; e.className = 'rc-note ' + cls; };
+
+  // Live availability, so nobody types a phrase twice only to be told the name is gone.
+  let idTimer = null;
+  $('#rcId', wrap).addEventListener('input', () => {
+    clearTimeout(idTimer);
+    const v = $('#rcId', wrap).value.toLowerCase().trim();
+    if (!v) return state('');
+    const bad = social.recoveryIdProblem(v);
+    if (bad) return state(bad, 'bad');
+    if (v === existingId) return state('This is your current ID.', 'good');
+    state('Checking...');
+    idTimer = setTimeout(async () => {
+      const r = await social.recoveryIdAvailable(v);
+      if (!r.ok) return state(r.reason || 'Could not check that right now.');
+      state(r.available ? `"${v}" is free.` : `"${v}" is taken.`, r.available ? 'good' : 'bad');
+    }, 450);
+  });
+
   $('#rcSave', wrap).addEventListener('click', async () => {
+    const id = $('#rcId', wrap).value.toLowerCase().trim();
     const a = $('#rcPhrase', wrap).value, b = $('#rcPhrase2', wrap).value;
+    if (!id) return err('Pick a recovery ID. It is how you find your account again.');
+    const badId = social.recoveryIdProblem(id);
+    if (badId) return err(badId);
     if (a !== b) return err('Those two do not match.');
     const bad = social.phraseProblem(a);
     if (bad) return err(bad);
     const btn = $('#rcSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
-    const r = await social.setRecoveryPhrase(a);
+    const r = await social.setRecoveryPhrase(a, id);
     btn.disabled = false; btn.textContent = 'Save my recovery code';
     if (!r.ok) return err(r.reason || 'Could not save that.');
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
-    toast('Recovery code saved. Your Bonehead can come back from anywhere now.', 4200);
+    toast(`Saved. Restore anywhere with "${r.recoveryId}" and your phrase.`, 4600);
+    refresh();
   });
 }
 
@@ -5524,11 +5603,15 @@ async function openRestoreSheet() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Restore an account</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:2px 2px 14px">Enter the friend code and the recovery phrase from your old device. This replaces whatever is on this phone now.</p>
-      <label class="rc-lab">Friend code</label>
-      <input class="rc-in" id="rsCode" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="BONE-XXXX-XXXX">
-      <label class="rc-lab" style="margin-top:10px">Recovery phrase</label>
-      <input class="rc-in" id="rsPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <p class="note" style="margin:2px 2px 14px">Enter the recovery ID and phrase you picked on your old device. This replaces whatever is on this phone now.</p>
+      <div class="field">
+        <label>Recovery ID <span class="rc-hint">or an old BONE- friend code</span></label>
+        <input id="rsCode" type="text" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="tom-bones">
+      </div>
+      <div class="field">
+        <label>Recovery phrase</label>
+        <input id="rsPhrase" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
       <p class="rc-err" id="rsErr" hidden></p>
       <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
     </div>`, { cls: '', name: 'Restore' });
@@ -5552,7 +5635,10 @@ async function openRestoreSheet() {
 async function maybePromptRecovery(tries = 0) {
   try {
     if (navigator.webdriver || !S.settings) return;
-    if (!(await social.isOnline())) return;          // nothing to protect yet
+    // Offline players used to be skipped here. They are the MOST exposed group,
+    // with no cloud backup at all, so they get the prompt too: setRecoveryPhrase
+    // now takes them online as part of saving it.
+    if (!(await social.apiBase())) return;           // no server configured at all
     if (await social.hasRecoveryPhrase()) return;
     // Never stack over another sheet, but do NOT give up: What's New pops on the
     // very release that introduces recovery, and simply bailing here would swallow
@@ -6491,7 +6577,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v230'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v231'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

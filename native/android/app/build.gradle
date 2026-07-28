@@ -58,6 +58,10 @@ dependencies {
     implementation project(':capacitor-android')
     // Health Connect (native steps/calories on Android, mirrors iOS HealthKit)
     implementation "androidx.health.connect:connect-client:1.1.0"
+    // Block Store: the identity vault that survives an uninstall (BhVault.kt).
+    // Android's nearest analogue to the iOS keychain. Not Firebase, so no
+    // google-services.json is needed.
+    implementation "com.google.android.gms:play-services-auth-blockstore:16.4.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

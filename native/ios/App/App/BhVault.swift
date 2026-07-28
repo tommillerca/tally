@@ -20,6 +20,7 @@ public class BhVault: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "set", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "get", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
     ]
 
     private let service = "com.boneheadz.gym.vault"
@@ -65,10 +66,29 @@ public class BhVault: CAPPlugin, CAPBridgedPlugin {
         var out: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         if status == errSecSuccess, let data = out as? Data, let s = String(data: data, encoding: .utf8) {
-            call.resolve(["value": s])
+            call.resolve(["value": s, "error": NSNull()])
+        } else if status == errSecItemNotFound {
+            // Genuinely nothing stored. Only this case may be read as "new device".
+            call.resolve(["value": NSNull(), "error": NSNull()])
         } else {
-            call.resolve(["value": NSNull()])
+            // Locked keychain, entitlement problem, anything else: we DO NOT KNOW.
+            // Reporting that as empty is how the caller mints a fresh identity and
+            // then overwrites a perfectly good key with it.
+            call.resolve(["value": NSNull(), "error": "keychain read failed: \(status)"])
         }
+    }
+
+    /// What is actually true on this phone, so Settings can state it rather than
+    /// assume it. Mirrors the Android status(); the keychain has no cloud-encryption
+    /// toggle to report, so e2e is always true here (iCloud Keychain is encrypted).
+    @objc func status(_ call: CAPPluginCall) {
+        var q = baseQuery("identity")
+        q[kSecReturnData as String] = false
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        let st = SecItemCopyMatching(q as CFDictionary, nil)
+        var out: [String: Any] = ["available": true, "e2e": true, "hasIdentity": st == errSecSuccess]
+        if st != errSecSuccess && st != errSecItemNotFound { out["readError"] = "keychain status \(st)" }
+        call.resolve(out)
     }
 
     @objc func remove(_ call: CAPPluginCall) {

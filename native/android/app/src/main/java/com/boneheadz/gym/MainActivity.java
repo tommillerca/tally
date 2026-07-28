@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(HealthPlugin.class); // native Health Connect bridge (steps/calories)
+        registerPlugin(BhVault.class);      // Block Store identity vault (survives reinstall)
         super.onCreate(savedInstanceState);
     }
 }

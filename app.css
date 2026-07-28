@@ -3137,6 +3137,20 @@ body::before {
 .col-inspect .ci-note { font-size: 11.5px; color: var(--text-3); flex: none; }
 
 /* Sleep read diagnostics (v227): plain rows, meant to be screenshotted and sent. */
+/* Recovery sheet. The inputs reuse .field/.input; only these three are new.
+   (rc-lab / rc-in from v230 never had styles at all, so those inputs rendered
+   with the browser default chrome. They now use .field instead.) */
+.rc-hint { font-weight: 400; color: var(--text-3); }
+.rc-note { font-size: 12.5px; color: var(--text-3); margin: 2px 0 0; min-height: 16px; }
+.rc-note.good { color: var(--accent, #b9ef4a); }
+.rc-note.bad, .rc-err { color: var(--danger); }
+.rc-err { font-size: 13px; margin: 4px 0 0; }
+
+/* Device-vault state in Settings. Warn state is a left rule, not a red banner:
+   it is an honest limitation, not an emergency. */
+.vault-row.warn .lab b { color: var(--danger); }
+.vault-row.warn { border-left: 2px solid var(--danger); padding-left: 9px; }
+
 .hk-diag { display: grid; gap: 1px; border-radius: 11px; overflow: hidden; background: var(--line); }
 .hk-diag > div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 11px; background: var(--surface-2); font-size: 12.5px; }
 .hk-diag > div span { color: var(--text-3); }

@@ -52,6 +52,34 @@ function rollFreeGift() {
   return { crate: 'egg' };
 }
 
+/* ---------------- recovery lookups ----------------
+   A recovery id is a handle the player CHOOSES, so unlike a friend code it is
+   guessable. Every unsigned recovery endpoint therefore shares one limiter, so
+   adding a route can never accidentally ship an unthrottled way to harvest
+   ciphertext. Keep this in step with RECOVERY_ID_RE in js/social.js. */
+const RECOVERY_ID_RE = /^[a-z0-9._-]{4,32}$/;
+
+/** Returns a 429 Response when the caller is over budget, else null.
+ *  `bucket` matters: handing out CIPHERTEXT has to be tight, but an availability
+ *  check only reveals whether a name is taken. They shared one counter at first,
+ *  which meant a player trying four candidate IDs in the setup sheet spent half
+ *  the budget that their actual restore needs. Separate buckets, separate costs. */
+async function rateLimitRecovery(request, env, limit = 10, windowMs = 600000, bucket = 'rl_recovery') {
+  // hash the IP: the events table holds anonymous ids by design, and a raw IP
+  // log would be a privacy regression for an app that never uploads location
+  const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
+  const ipHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+  const now = Date.now();
+  const hits = Number((await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ? AND ts > ?')
+    .bind(ipHash, bucket, now - windowMs).first())?.n || 0);
+  if (hits >= limit) return json({ error: 'too many attempts, try again later' }, 429);
+  await env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
+    .bind(ipHash, bucket, '{}', '', new Date(now).toISOString().slice(0, 10), now).run().catch(() => {});
+  return null;
+}
+
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
@@ -167,11 +195,58 @@ export default {
         if (typeof body.salt !== 'string' || !body.salt) return json({ error: 'missing salt' }, 400);
         const iters = Number(body.iters) || 0;
         if (iters < 100000) return json({ error: 'weak kdf' }, 400);
+        let rid = null;
+        if (body.recoveryId != null && body.recoveryId !== '') {
+          rid = String(body.recoveryId).toLowerCase().trim();
+          if (!RECOVERY_ID_RE.test(rid)) return json({ error: 'bad recovery id' }, 400);
+          const taken = await env.DB.prepare(
+            'SELECT player_id FROM recovery WHERE recovery_id = ? AND player_id != ?')
+            .bind(rid, auth.playerId).first();
+          if (taken) return json({ error: 'that recovery id is taken' }, 409);
+        }
         const now = Date.now();
-        await env.DB.prepare('INSERT INTO recovery (player_id, wrapped, salt, iters, updated_at) VALUES (?,?,?,?,?) ' +
-          'ON CONFLICT(player_id) DO UPDATE SET wrapped=excluded.wrapped, salt=excluded.salt, iters=excluded.iters, updated_at=excluded.updated_at')
-          .bind(auth.playerId, body.wrapped, body.salt, iters, now).run();
-        return json({ ok: true, updatedAt: now });
+        try {
+          await env.DB.prepare(
+            'INSERT INTO recovery (player_id, wrapped, salt, iters, updated_at, recovery_id) VALUES (?,?,?,?,?,?) ' +
+            'ON CONFLICT(player_id) DO UPDATE SET wrapped=excluded.wrapped, salt=excluded.salt, ' +
+            'iters=excluded.iters, updated_at=excluded.updated_at, ' +
+            // keep the existing id when this call does not carry one
+            'recovery_id=COALESCE(excluded.recovery_id, recovery.recovery_id)')
+            .bind(auth.playerId, body.wrapped, body.salt, iters, now, rid).run();
+        } catch (e) {
+          // the unique index is the real guard; the SELECT above only races
+          if (/UNIQUE|constraint/i.test(String(e))) return json({ error: 'that recovery id is taken' }, 409);
+          throw e;
+        }
+        return json({ ok: true, updatedAt: now, recoveryId: rid });
+      }
+
+      // Is this recovery id free? Rate limited like the lookups, since it is an
+      // unauthenticated probe of which handles exist.
+      if (path.startsWith('/recovery/available/') && request.method === 'GET') {
+        const rid = decodeURIComponent(path.slice('/recovery/available/'.length)).toLowerCase().trim();
+        if (!RECOVERY_ID_RE.test(rid)) return json({ error: 'bad recovery id' }, 400);
+        // Its own generous bucket: the setup sheet checks as you type, and this
+        // must never eat the budget a real restore depends on.
+        const limited = await rateLimitRecovery(request, env, 60, 600000, 'rl_ridcheck');
+        if (limited) return limited;
+        const row = await env.DB.prepare('SELECT 1 AS x FROM recovery WHERE recovery_id = ?').bind(rid).first();
+        return json({ available: !row });
+      }
+
+      // UNSIGNED, same bargain as the friend-code lookup below: hands out
+      // ciphertext to whoever knows the handle. A recovery id is CHOSEN, so it is
+      // more guessable than a random friend code, which is exactly why the client
+      // requires a longer phrase and a heavier KDF before it will attach one.
+      if (path.startsWith('/recovery/id/') && request.method === 'GET') {
+        const rid = decodeURIComponent(path.slice('/recovery/id/'.length)).toLowerCase().trim();
+        if (!RECOVERY_ID_RE.test(rid)) return json({ error: 'bad recovery id' }, 400);
+        const limited = await rateLimitRecovery(request, env);
+        if (limited) return limited;
+        const row = await env.DB.prepare(
+          'SELECT wrapped, salt, iters FROM recovery WHERE recovery_id = ?').bind(rid).first();
+        if (!row) return json({ error: 'no account' }, 404);
+        return json({ wrapped: row.wrapped, salt: row.salt, iters: row.iters });
       }
 
       // Signed: has this account got a recovery phrase yet? (drives the nag)
@@ -190,18 +265,8 @@ export default {
       if (path.startsWith('/recovery/') && request.method === 'GET') {
         const code = decodeURIComponent(path.slice('/recovery/'.length)).toUpperCase().trim();
         if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return json({ error: 'bad code' }, 400);
-        // hash the IP: the events table holds anonymous ids by design, and a raw
-        // IP log would be a privacy regression for an app that never uploads location
-        const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
-        const ipHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',
-          new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
-        const now = Date.now();
-        const hits = Number((await env.DB.prepare(
-          "SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = 'rl_recovery' AND ts > ?")
-          .bind(ipHash, now - 600000).first())?.n || 0);
-        if (hits >= 10) return json({ error: 'too many attempts, try again later' }, 429);
-        await env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
-          .bind(ipHash, 'rl_recovery', '{}', '', new Date(now).toISOString().slice(0, 10), now).run().catch(() => {});
+        const limited = await rateLimitRecovery(request, env);
+        if (limited) return limited;
         const p = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
         if (!p) return json({ error: 'no account' }, 404);
         const row = await env.DB.prepare('SELECT wrapped, salt, iters FROM recovery WHERE player_id = ?').bind(p.id).first();

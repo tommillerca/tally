@@ -56,18 +56,70 @@ function vaultPlugin() {
   try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BhVault) || null; }
   catch { return null; }
 }
+// Returns { ok, id }. `ok:false` means the vault could not be READ, which is a
+// completely different thing from "the vault is empty" and the two must never be
+// collapsed: an empty vault means mint a new identity, and doing that after a
+// failed read is precisely how a live account gets replaced by a fresh one.
+// Verified on Android 2026-07-28: the boot sequence really is get -> empty ->
+// mint -> set, so a lying "empty" destroys the key on the very next line.
 async function readKeychainIdentity() {
   const v = vaultPlugin();
-  if (!v || !v.get) return null;
+  if (!v || !v.get) return { ok: true, id: null };      // browsers: no vault, not an error
   try {
     const r = await v.get({ key: 'identity' });
-    return r && r.value ? JSON.parse(r.value) : null;
-  } catch { return null; }
+    if (r && r.error) return { ok: false, id: null };
+    return { ok: true, id: r && r.value ? JSON.parse(r.value) : null };
+  } catch { return { ok: false, id: null }; }
 }
-function mirrorIdentity(id) {
+
+// Compare-and-set. Refuses to overwrite a DIFFERENT account's key, and refuses to
+// write at all when the current contents are unknown. Adding aesJwk to the same
+// bundle is fine (same privJwk.d); genuinely swapping accounts needs force, which
+// only restoreWithPhrase passes.
+async function mirrorIdentity(id, { force = false } = {}) {
   const v = vaultPlugin();
-  if (!v || !v.set) return;
-  try { v.set({ key: 'identity', value: JSON.stringify(id) }); } catch { /* best effort */ }
+  if (!v || !v.set || !id?.privJwk?.d) return;
+  try {
+    if (!force) {
+      const cur = await readKeychainIdentity();
+      if (!cur.ok) return;                                // unknown contents: never blind-write
+      if (cur.id?.privJwk?.d && cur.id.privJwk.d !== id.privJwk.d) {
+        // Another account is in the vault. That is a recoverable account we would
+        // otherwise erase, so leave it alone and record it for the UI to offer.
+        await kvSet('vaultConflict', { at: Date.now() });
+        return;
+      }
+    }
+    await v.set({ key: 'identity', value: JSON.stringify(id) });
+  } catch { /* best effort */ }
+}
+
+// Erasing this device has to clear the vault too. Without this, "Erase ALL data"
+// wipes IndexedDB, the next boot reads the vault, and the account the player just
+// deleted walks straight back in.
+// What the device vault ACTUALLY holds and can do, for the Settings row. Null on
+// the web, where there is no vault and there is nothing honest to claim.
+export async function vaultStatus() {
+  const v = vaultPlugin();
+  if (!v) return null;
+  let s = {};
+  try { if (v.status) s = (await v.status()) || {}; } catch { /* report what we can */ }
+  return { ...s, conflict: await kvGet('vaultConflict', null), unreadable: await kvGet('vaultUnreadable', 0) };
+}
+
+// The other account this phone's vault is holding, if mirrorIdentity refused to
+// overwrite one. Returns null when there is no conflict.
+export async function vaultOtherIdentity() {
+  if (!(await kvGet('vaultConflict', null))) return null;
+  const cur = await readKeychainIdentity();
+  if (!cur.ok || !cur.id?.privJwk?.d) return null;
+  const mine = await kvGet('identity', null);
+  return cur.id.privJwk.d === mine?.privJwk?.d ? null : cur.id;
+}
+
+export async function forgetIdentity() {
+  const v = vaultPlugin();
+  try { if (v && v.remove) await v.remove({ key: 'identity' }); } catch { /* best effort */ }
 }
 
 async function ensureIdentity() {
@@ -80,8 +132,15 @@ async function ensureIdentity() {
   // Fresh or wiped install: recover the identity from the OS keychain BEFORE
   // minting a new one, so we come back as the same account (and can decrypt the
   // cloud backup) instead of starting over empty.
-  const kc = await readKeychainIdentity();
-  if (kc && kc.privJwk && kc.pubJwk) { await kvSet('identity', kc); return kc; }
+  let kc = await readKeychainIdentity();
+  // A failed read is not an empty vault. Retry before concluding this is a new
+  // player, because the alternative is silently abandoning a real account.
+  for (let i = 0; !kc.ok && i < 3; i++) {
+    await new Promise(r => setTimeout(r, 400 * (i + 1)));
+    kc = await readKeychainIdentity();
+  }
+  if (kc.id && kc.id.privJwk && kc.id.pubJwk) { await kvSet('identity', kc.id); return kc.id; }
+  if (!kc.ok) await kvSet('vaultUnreadable', Date.now());  // surfaced in Settings; do NOT mirror below
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   id = {
     privJwk: await crypto.subtle.exportKey('jwk', kp.privateKey),
@@ -89,7 +148,7 @@ async function ensureIdentity() {
     createdAt: Date.now(),
   };
   await kvSet('identity', id);
-  mirrorIdentity(id);
+  await mirrorIdentity(id);   // no-ops if the vault is unreadable or holds someone else
   return id;
 }
 
@@ -107,7 +166,7 @@ async function backupKey() {
     const k = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     id.aesJwk = await crypto.subtle.exportKey('jwk', k);
     await kvSet('identity', id);
-    mirrorIdentity(id); // push updated bundle to native keychain (no-op in browsers)
+    await mirrorIdentity(id); // same key plus aesJwk, so compare-and-set allows it
   }
   return crypto.subtle.importKey('jwk', id.aesJwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
@@ -352,19 +411,52 @@ export async function pullGrants() {
    Tom chose a USER-PICKED phrase over a generated code ("people will forget to
    save the ones you auto generate"). That is weaker, so it is defended with a
    length floor, a common-password blocklist, and a deliberately expensive KDF. */
-export const RECOVERY_ITERS = 600000;
-export const RECOVERY_MIN_LEN = 8;
+// v231 raised both of these. A recovery id is CHOSEN, so unlike a random friend
+// code it is guessable, which means anyone can pull down your wrapped bundle and
+// attack it offline at their leisure. The phrase now has to carry the weight the
+// friend code used to: longer, more than one word, and a KDF that costs about a
+// second per guess instead of half of one.
+export const RECOVERY_ITERS = 1000000;
+export const RECOVERY_MIN_LEN = 12;
+export const RECOVERY_ID_RE = /^[a-z0-9._-]{4,32}$/;   // keep in step with the Worker
 // the phrases people actually reach for first; refusing them costs nothing
 const WEAK_PHRASES = new Set(['password', 'password1', '12345678', '123456789', 'qwertyui', 'qwerty123',
   'iloveyou', 'letmein1', 'boneheadz', 'boneheads', 'football', 'baseball', 'sunshine', 'princess',
-  'trustno1', 'starwars', 'whatever', 'superman', 'passw0rd', 'abc12345', 'welcome1']);
+  'trustno1', 'starwars', 'whatever', 'superman', 'passw0rd', 'abc12345', 'welcome1',
+  'password123', 'qwerty123456', 'iloveyou123', 'letmein12345', 'boneheadzgym']);
 
 export function phraseProblem(phrase) {
   const p = String(phrase || '').trim();
   if (p.length < RECOVERY_MIN_LEN) return `Use at least ${RECOVERY_MIN_LEN} characters.`;
   if (WEAK_PHRASES.has(p.toLowerCase().replace(/\s+/g, ''))) return 'That one is too easy to guess. Pick something personal.';
   if (/^(.)\1+$/.test(p)) return 'Pick something less repetitive.';
+  // Two words beats one long word by a mile, and it is a rule people can act on.
+  // ponytail: a space-or-digit check, not a dictionary. Ship a wordlist only if
+  // real phrases turn out to be single common words despite this.
+  if (!/[\s\d]/.test(p)) return 'Use more than one word, or add a number. Two words you will remember beats one long one.';
   return null;
+}
+
+// A recovery id is public-ish, like a friend code. It is a lookup handle, not a
+// secret; the phrase is the secret.
+export function recoveryIdProblem(id) {
+  const s = String(id || '').toLowerCase().trim();
+  if (s.length < 4) return 'Use at least 4 characters.';
+  if (s.length > 32) return 'Keep it under 32 characters.';
+  if (!RECOVERY_ID_RE.test(s)) return 'Letters, numbers, dots, dashes and underscores only.';
+  return null;
+}
+
+export async function recoveryIdAvailable(id) {
+  const s = String(id || '').toLowerCase().trim();
+  const base = await apiBase();
+  if (!base || recoveryIdProblem(s)) return { ok: false };
+  try {
+    const r = await fetch(`${base}/recovery/available/${encodeURIComponent(s)}`);
+    if (r.status === 429) return { ok: false, reason: 'Too many checks. Wait a minute.' };
+    if (!r.ok) return { ok: false };
+    return { ok: true, available: !!(await r.json()).available };
+  } catch { return { ok: false }; }
 }
 
 const enc = new TextEncoder();
@@ -377,11 +469,24 @@ async function phraseKey(phrase, salt, iters) {
 }
 
 // Wrap the identity bundle under the phrase and store the ciphertext server-side.
-export async function setRecoveryPhrase(phrase) {
+// recoveryId is the memorable handle the player restores BY. Optional only so an
+// existing account can re-wrap without renaming itself.
+export async function setRecoveryPhrase(phrase, recoveryId = null) {
   const bad = phraseProblem(phrase);
   if (bad) return { ok: false, reason: bad };
+  const rid = recoveryId == null ? null : String(recoveryId).toLowerCase().trim();
+  if (rid) {
+    const badId = recoveryIdProblem(rid);
+    if (badId) return { ok: false, reason: badId, field: 'id' };
+  }
   if (!(await apiBase())) return { ok: false, reason: 'Not online yet.' };
-  const id = await ensureIdentity();
+  // Offline players are the MOST exposed (no cloud backup at all), so getting
+  // them online is part of saving a phrase rather than a reason to refuse.
+  if (!(await kvGet('social', null))) {
+    const on = await goOnline();
+    if (!on.ok) return { ok: false, reason: 'Could not get online to save it. Check your connection.' };
+  }
+  await ensureIdentity();
   await backupKey();                             // make sure aesJwk exists before wrapping
   const full = await kvGet('identity', null);
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -389,26 +494,42 @@ export async function setRecoveryPhrase(phrase) {
   const key = await phraseKey(phrase, salt, RECOVERY_ITERS);
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(full)));
   const wrapped = u8ToB64(new Uint8Array([...iv, ...new Uint8Array(ct)]));
-  const r = await signedFetch('PUT', '/recovery', { wrapped, salt: u8ToB64(salt), iters: RECOVERY_ITERS });
+  let r;
+  try {
+    r = await signedFetch('PUT', '/recovery', { wrapped, salt: u8ToB64(salt), iters: RECOVERY_ITERS, recoveryId: rid });
+  } catch { return { ok: false, reason: 'Could not reach the server. Try again.' }; }
+  // signedFetch hands back the raw Response, so a taken id arrives as 409, not a throw
+  if (r && r.status === 409) return { ok: false, reason: 'That recovery ID is taken. Pick another.', field: 'id' };
   if (!r || !r.ok) return { ok: false, reason: 'Could not reach the server. Try again.' };
   await kvSet('recoverySetAt', Date.now());
-  return { ok: true, friendCode: (await kvGet('social', {}))?.friendCode || null };
+  if (rid) await kvSet('recoveryId', rid);
+  return { ok: true, recoveryId: rid || (await kvGet('recoveryId', null)), friendCode: (await kvGet('social', {}))?.friendCode || null };
 }
+
+export async function myRecoveryId() { return kvGet('recoveryId', null); }
 
 export async function hasRecoveryPhrase() { return !!(await kvGet('recoverySetAt', 0)); }
 
 // Rebuild the account on a fresh device: fetch the wrapped bundle by friend code,
 // unwrap with the phrase, install the identity, then the normal backup pull works.
-export async function restoreWithPhrase(friendCode, phrase) {
-  const code = String(friendCode || '').toUpperCase().trim();
-  if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return { ok: false, reason: 'That friend code does not look right.' };
+// handle is EITHER a recovery id (what everyone gets from v231 on) or a
+// BONE-XXXX-XXXX friend code (what people who wrote theirs down already have).
+export async function restoreWithPhrase(handle, phrase) {
+  const input = String(handle || '').trim();
+  const isCode = /^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(input.toUpperCase());
+  if (!isCode && recoveryIdProblem(input)) {
+    return { ok: false, reason: 'That does not look like a recovery ID or a friend code.' };
+  }
+  const url = isCode
+    ? `/recovery/${encodeURIComponent(input.toUpperCase())}`
+    : `/recovery/id/${encodeURIComponent(input.toLowerCase())}`;
   const base = await apiBase();
   if (!base) return { ok: false, reason: 'No connection.' };
   let meta;
   try {
-    const res = await fetch(`${base}/recovery/${encodeURIComponent(code)}`);
+    const res = await fetch(base + url);
     if (res.status === 429) return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };
-    if (!res.ok) return { ok: false, reason: 'No recovery phrase is set for that code.' };
+    if (!res.ok) return { ok: false, reason: `No account found for that ${isCode ? 'friend code' : 'recovery ID'}.` };
     meta = await res.json();
   } catch { return { ok: false, reason: 'Could not reach the server.' }; }
   let bundle;
@@ -419,10 +540,20 @@ export async function restoreWithPhrase(friendCode, phrase) {
     bundle = JSON.parse(new TextDecoder().decode(pt));
   } catch { return { ok: false, reason: 'Wrong phrase for that account.' }; }
   if (!bundle || !bundle.privJwk || !bundle.pubJwk) return { ok: false, reason: 'That recovery data is damaged.' };
+  if (!isCode) await kvSet('recoveryId', input.toLowerCase());   // so Settings can show it again
+  return adoptIdentity(bundle);
+}
+
+// Become this identity and pull its save. Shared by phrase restore and by
+// adopting the bundle the vault is already holding (vaultConflict), which needs
+// no phrase because the key itself is right there.
+export async function adoptIdentity(bundle) {
+  if (!bundle || !bundle.privJwk || !bundle.pubJwk) return { ok: false, reason: 'That recovery data is damaged.' };
   await kvSet('identity', bundle);
-  mirrorIdentity(bundle);
+  await mirrorIdentity(bundle, { force: true });   // deliberate account swap
   await kvSet('social', null);                   // re-register under the restored key
   await kvSet('bootRestored', false);            // let the backup pull run again
+  await kvSet('vaultConflict', null);
   const on = await goOnline();
   if (!on.ok) return { ok: false, reason: 'Restored the key but could not go online.' };
   const pulled = await pullBackup();

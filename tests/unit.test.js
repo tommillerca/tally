@@ -24,6 +24,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustVa
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedOffspring, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
 import { existsSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -973,6 +974,36 @@ test('kitchen: transmute consumes commons greedily from the most-abundant (v144)
   assert.equal(inv.ectoplasm, 2, 'rare ingredient untouched');
   // short of 6: takes what it can (caller gates on canAfford so this is defensive)
   assert.equal(transmuteConsume({ marrow: 2 }, 6).taken, 2);
+});
+
+/* ---- v231 account recovery: the rules that decide whether a lost account can
+   come back. A regression here is not a cosmetic bug, it is a wiped save. ---- */
+
+test('recovery: phrase bar is high enough to survive a guessable recovery ID', () => {
+  assert.equal(RECOVERY_MIN_LEN, 12, 'raised from 8 when recovery IDs made lookup guessable');
+  assert.equal(RECOVERY_ITERS, 1000000, 'KDF cost raised to match');
+  assert.ok(phraseProblem('short'), 'too short is rejected');
+  assert.ok(phraseProblem('elevenchars'), '11 chars is still short');
+  assert.ok(phraseProblem('password123'), 'blocklisted phrase rejected even at length');
+  assert.ok(phraseProblem('aaaaaaaaaaaaaa'), 'single repeated character rejected');
+  assert.ok(phraseProblem('correcthorsebattery'), 'one long word is nudged toward two');
+  assert.equal(phraseProblem('correct horse battery'), null, 'multi-word passes');
+  assert.equal(phraseProblem('bonehunter77'), null, 'a digit counts as variety too');
+});
+
+test('recovery: IDs accept what people type and reject what breaks the URL', () => {
+  assert.equal(recoveryIdProblem('tom-bones'), null);
+  assert.equal(recoveryIdProblem('TOM.Bones_1'), null, 'case folded before checking');
+  assert.ok(recoveryIdProblem('ab'), 'too short');
+  assert.ok(recoveryIdProblem('x'.repeat(33)), 'too long');
+  assert.ok(recoveryIdProblem('tom bones'), 'no spaces');
+  assert.ok(recoveryIdProblem('tom/bones'), 'no slashes, it is a path segment');
+  assert.ok(recoveryIdProblem(''), 'empty is not a valid id');
+  // the client regex has to agree with the Worker's or lookups 400 in the wild
+  const worker = readFileSync(join(here, '..', 'server', 'src', 'index.js'), 'utf8');
+  const m = worker.match(/RECOVERY_ID_RE\s*=\s*(\/[^\n;]+\/)/);
+  assert.ok(m, 'Worker declares RECOVERY_ID_RE');
+  assert.equal(m[1], String(RECOVERY_ID_RE), 'client and Worker recovery-id rules must match exactly');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
