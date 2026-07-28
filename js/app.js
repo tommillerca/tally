@@ -2167,12 +2167,6 @@ async function renderShop(el) {
   <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
 
   <div class="card">
-    <div class="card-title">THE BONE MERCHANT · <span style="color:var(--accent)">${ARCH_META[recArch].label} suits you</span></div>
-    <p class="note" style="margin:0 2px 12px">Weapons multiply your effort; they never replace it. Melt spare gear at the Salvage Bench for the Bone Dust the top-tier pieces need.</p>
-    ${merchantHtml}
-  </div>
-
-  <div class="card">
     <div class="card-title">COIN SHOP</div>
     <div class="grid2">
       ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
@@ -2189,7 +2183,13 @@ async function renderShop(el) {
         <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
     </div>
     <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
-  </div>`;
+  </div>
+
+  <details class="card shop-fold">
+    <summary class="card-title">THE BONE MERCHANT · <span style="color:var(--accent)">${ARCH_META[recArch].label} suits you</span></summary>
+    <p class="note" style="margin:10px 2px 12px">Weapons multiply your effort; they never replace it. Melt spare gear at the Salvage Bench for the Bone Dust the top-tier pieces need.</p>
+    ${merchantHtml}
+  </details>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
@@ -4718,7 +4718,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
-      <button class="btn" id="bpToShop" style="width:100%;margin:2px 0 14px">Shop · spend coins &amp; Bone Dust</button>
       ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
       ${pendingLoot.map((p, i) => `
         <div class="loot-pending" data-lootkey="${esc(p.key)}">
@@ -4835,7 +4834,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     }));
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
-    $('#bpToShop', content)?.addEventListener('click', () => renderCharacter(wrap, 'shop'));
     $$('[data-buy]', content).forEach((b => {
       let t = null;
       const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
@@ -5024,13 +5022,22 @@ function packCardHtml(c, { selectable = false } = {}) {
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
 }
-function hydratePackArt(scope) { $$('.pc-canvas[data-art]', scope).forEach(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'))); }
+function hydratePackArt(scope) {
+  return Promise.all($$('.pc-canvas[data-art]', scope)
+    .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'))));
+}
 
 // Pokemon-pack-crack reveal: cards you flip through one at a time, big centered
 // art, rarity foil (holo for rare+), name + stats. Tap or swipe to advance; the
 // last card dismisses. cards: [{imgSrc?|iconHtml?, name, rarity, kind, stats}].
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
+  // Warm every card's art up front so flicking through a multi-card pack never
+  // waits: by the time you tap to advance, the next one is already decoded.
+  for (const c of cards) {
+    const src = c.imgSrc || c.art;
+    if (src) { const im = new Image(); im.src = src; }
+  }
   return new Promise(resolve => {
     const wrap = openSheet(`
       <div class="pack-reveal" id="packReveal">
@@ -5053,11 +5060,17 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         (tier >= 3 ? '<div class="pack-flash"></div>' : '') +
         `<div class="pack-tilt${reduced ? '' : ' swaying'}">${packCardHtml(c)}</div>`;
       const tilt = $('.pack-tilt', stage), card = $('.pack-card', stage), glare = $('.pc-glare', stage);
-      hydratePackArt(stage);
-      requestAnimationFrame(() => card.classList.add('in'));
-      if (tier >= 4) { confettiRain(95); levelSound(S.sounds); }              // legendary
-      else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); }
-      else sparkleSound(S.sounds);
+      // Art first, THEN the entrance. The card used to fly in with an empty art
+      // panel and fill itself a moment later, which robbed the payoff. Capped so
+      // a slow asset delays the reveal rather than blocking it forever.
+      card.classList.add('art-wait');
+      Promise.race([hydratePackArt(stage), new Promise(r => setTimeout(r, 700))]).then(() => {
+        card.classList.remove('art-wait');
+        requestAnimationFrame(() => card.classList.add('in'));
+        if (tier >= 4) { confettiRain(95); levelSound(S.sounds); }            // legendary
+        else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); }
+        else sparkleSound(S.sounds);
+      });
 
       let sx = 0, dx = 0, pid = null;
       const settle = () => { tilt.style.transform = ''; if (!reduced) tilt.classList.add('swaying'); if (glare) glare.style.opacity = 0; };
@@ -6682,7 +6695,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v236'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v237'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

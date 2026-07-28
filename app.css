@@ -844,7 +844,9 @@ body::before {
   position: absolute; top: 10px; left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: space-between; align-items: flex-start;
 }
-.hero-top-right { display: flex; gap: 7px; }
+/* Leave a lane for the floating Settings gear, which sits over this corner on
+   Today. Without it the gear covered the coin and crate chips. */
+.hero-top-right { display: flex; gap: 7px; padding-right: 42px; }
 .hero-top .streak-chip, .hero-top .bh-coin, .hero-top .bh-crates {
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
@@ -2816,6 +2818,18 @@ body::before {
 .melt-fold[open] > summary::after { transform: rotate(180deg); }
 .melt-fold > summary:active { background: var(--surface-3); }
 .melt-fold[open] > summary { margin-bottom: 6px; }
+
+/* Collapsible shop section. The weapon list is long, and most trips to the Shop
+   are for crates, so the merchant folds away under the two crate shops. */
+.shop-fold > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+.shop-fold > summary::-webkit-details-marker { display: none; }
+.shop-fold > summary::after {
+  content: ''; margin-left: auto; width: 8px; height: 8px;
+  border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3);
+  transform: rotate(45deg); transition: transform .18s ease;
+}
+.shop-fold[open] > summary::after { transform: rotate(-135deg); }
+.shop-fold > summary:active { opacity: 0.7; }
 
 /* Combat status chips (v208): compact ICON pills on their own line, tap for detail */
 .fstate { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }

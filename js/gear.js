@@ -38,6 +38,16 @@ const ARCH_KEYS = Object.keys(GEAR_ARCHETYPES);
 export const GEAR_TIERS = ['common', 'uncommon', 'rare', 'legendary'];
 export const GEAR_BUDGET = { uncommon: 6, rare: 11, legendary: 18 };  // x slot weight
 export const GEAR_MIN_LEVEL = { common: 1, uncommon: 3, rare: 8, legendary: 14 };
+// Every rare in the game unlocked at exactly 8 and every legendary at 14, so a
+// player crossing those levels could suddenly equip a backlog across all eight
+// slots at once: a power cliff, not a curve. These per-slot offsets turn each
+// cliff into a ramp spread over three levels. Offsets are <= 0 on purpose, so a
+// gate can only ever come EARLIER than before: nobody is retroactively locked
+// out of gear they are already wearing. Heaviest slots unlock last, so the big
+// stat jumps stay at the top of the ramp.
+export const SLOT_LEVEL_OFFSET = { T: 0, IR: 0, IL: -1, P: -1, FW: -2, H: -2, U: -2, S: -2 };
+export const gearMinLevel = (tier, slot) =>
+  Math.max(1, GEAR_MIN_LEVEL[tier] + (tier === 'common' ? 0 : (SLOT_LEVEL_OFFSET[slot] || 0)));
 
 function hashStr(s) {
   let h = 2166136261;
@@ -73,7 +83,7 @@ function variant(art, arch, tier) {
     slot: art.slot,
     arch,
     rarity: tier,
-    minLevel: GEAR_MIN_LEVEL[tier],
+    minLevel: gearMinLevel(tier, art.slot),
     stats: statSplit(arch, tier, art.slot),
     name: `${GEAR_ARCHETYPES[arch].epithet} ${art.name}`,
   };

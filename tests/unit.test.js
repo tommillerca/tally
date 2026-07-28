@@ -711,6 +711,18 @@ test('gear: affixes: legendary always, rare sometimes, capstones never', () => {
 });
 test('gear: level gates ascend and gearStats validates', () => {
   assert.ok(gear.GEAR_MIN_LEVEL.uncommon < gear.GEAR_MIN_LEVEL.rare && gear.GEAR_MIN_LEVEL.rare < gear.GEAR_MIN_LEVEL.legendary);
+  // v237: every rare unlocked at exactly 8 and every legendary at 14, so crossing
+  // those levels handed a player a whole wardrobe at once. Gates now ramp per slot.
+  const rareGates = gear.GEAR_SLOTS.map(s => gear.gearMinLevel('rare', s));
+  assert.ok(new Set(rareGates).size >= 3, 'rare unlocks must spread across levels, not land on one');
+  assert.equal(Math.max(...rareGates), gear.GEAR_MIN_LEVEL.rare, 'the ramp tops out at the old gate');
+  // offsets must never push a gate LATER, or players lose gear they already wear
+  for (const s of gear.GEAR_SLOTS) {
+    for (const tier of ['uncommon', 'rare', 'legendary']) {
+      assert.ok(gear.gearMinLevel(tier, s) <= gear.GEAR_MIN_LEVEL[tier],
+        `${tier}/${s} gate moved later, which would unequip live gear`);
+    }
+  }
   const g = gear.GEAR_ITEMS.find(x => x.rarity === 'legendary' && x.slot === 'T');
   const lo = { [g.slot]: g.id };
   const zero = { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 };
