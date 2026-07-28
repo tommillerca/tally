@@ -1018,5 +1018,44 @@ test('recovery: IDs accept what people type and reject what breaks the URL', () 
   assert.equal(m[1], String(RECOVERY_ID_RE), 'client and Worker recovery-id rules must match exactly');
 });
 
+/* ---- v240 safe-area guard ------------------------------------------------
+   The hero cancelled the screen's safe-area padding with a negative top margin.
+   That was fine while a day header sat above it, and became a bug the moment the
+   hero was first: it slid under the notch / Dynamic Island, clipping the
+   character and putting the currency chips behind the clock and battery. A
+   desktop browser reports no safe area, so this is invisible there. The pattern
+   is what is dangerous, so the pattern is what gets asserted. ---- */
+
+test('css: nothing cancels the safe-area inset with a negative top margin', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  // paren-aware: split a shorthand on TOP-LEVEL spaces only, so calc(...) with
+  // nested brackets stays in one piece. A naive regex silently matched nothing.
+  const topValue = (v) => {
+    let depth = 0, out = '';
+    for (const ch of v.trim()) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (/\s/.test(ch) && depth === 0) break;
+      out += ch;
+    }
+    return out;
+  };
+  const offenders = [];
+  for (const line of css.split('\n')) {
+    const m = line.match(/margin(-top)?\s*:\s*([^;]+);/);
+    if (!m) continue;
+    const top = m[1] ? m[2].trim() : topValue(m[2]);
+    if (/--sat/.test(top) && /-\s*1\s*\*|^-/.test(top)) offenders.push(line.trim());
+  }
+  assert.deepEqual(offenders, [],
+    'a negative top margin containing var(--sat) pulls content under the notch');
+});
+
+test('css: the scroll container still reserves the safe area', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.match(css, /\.screen\s*\{[^}]*padding:\s*calc\(var\(--sat\)/,
+    '.screen must pad the safe area, or every screen starts under the notch');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

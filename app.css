@@ -831,7 +831,7 @@ body::before {
 /* ---------- pogo-style hero scene ---------- */
 .hero-scene {
   position: relative; overflow: hidden; cursor: pointer;
-  margin: calc(-1 * (var(--sat) + 14px)) calc(-1 * var(--pad)) 14px;
+  margin: -14px calc(-1 * var(--pad)) 14px;
   height: min(54vh, 440px);
   background: var(--surface-2);
   border-bottom: 1px solid var(--line-strong);
@@ -858,7 +858,7 @@ body::before {
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .hero-bubble {
-  position: absolute; left: 10px; top: calc(var(--sat) + 58px); z-index: 3;
+  position: absolute; left: 10px; top: 58px; z-index: 3;
   --sway: rotate(-2deg);
   transform: var(--sway);
   max-width: 42%; width: max-content; text-align: left;
