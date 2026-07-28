@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 235, date: '2026-07-28', title: 'Everything where you would look for it', items: [
+    'New <b>Bonehead</b> tab at the bottom: your Wardrobe, Backpack, Shop, Build and Level, all in one place. Settings moved to the gear in the top corner, because you open it about once a month and it was taking a quarter of the bar.',
+    'The <b>Shop</b> finally has a home. It was a real screen you could only reach from two buttons buried inside other pop-ups, and once you were there nothing pointed the way out. It is a tab now.',
+    'The <b>Boneyard</b> is a proper screen instead of a pop-up, so the back gesture behaves the way it does everywhere else and there is no Done button to hunt for.',
+    'Your Bonehead and the loot on the map now appear as finished art instead of assembling themselves piece by piece while you watch.',
+    'Settings is sorted: your account and your data sit together at the top, and everything about the app itself is grouped below.',
+    'Your saved foods moved out of Settings and into the <b>+</b> button, next to the rest of the food logging.',
+  ] },
   { n: 231, date: '2026-07-28', title: 'Recovery, finished properly', needsBuild: true, items: [
     'Your recovery code now has two halves: a Recovery ID you pick (a name, like a username) and your phrase. Type both on any phone and your Bonehead comes back. Before this you also needed your friend code, which nobody has after wiping the phone that was showing it.',
     'The ID is checked as you type, so you know straight away whether the name you want is free.',

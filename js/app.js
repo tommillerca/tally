@@ -496,9 +496,9 @@ async function backupNudge() {
 
 function bindTabs() {
   $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => {
-    if (b.dataset.tab === 'boneyard') { openMap(); return; } // Boneyard opens the map sheet, not a route
     location.hash = '#/' + b.dataset.tab;
   }));
+  $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#fab').addEventListener('click', () => {
     if (currentTab() !== 'today') location.hash = '#/today';
     const now = new Date();
@@ -514,19 +514,40 @@ function currentTab() {
 // keepScroll: an in-place re-render must NOT reset the scroll, because undoing a
 // reset after the fact means fighting the user for it. Returns the render promise
 // so a caller can wait for real content instead of guessing when it lands.
+// A screen that owns a live resource (the Boneyard's MapLibre instance, its GPS
+// watch) registers a teardown here. Leaving the screen must release it, or the
+// map keeps running and draining battery behind whatever you opened next.
+let screenCleanup = null;
+
 function route({ keepScroll = false } = {}) {
   closeAllSheets();
+  try { screenCleanup?.(); } catch { /* never block navigation on teardown */ }
+  screenCleanup = null;
   const tab = currentTab();
   trackScreen(tab); // screen-dwell heatmap: time spent per bottom-nav screen
-  $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  // #/shop is a deep link into the hub, so it must light the Bonehead tab rather
+  // than leaving the bar with nothing selected.
+  const navTab = tab === 'shop' ? 'bonehead' : tab;
+  $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
+  // Redundant on Settings itself, and the Boneyard is full-bleed map.
+  const gear = $('#gearBtn');
+  if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard';
   const el = $('#screen');
   let done;
-  if (tab === 'shop') done = renderShop(el);
-  else if (tab === 'progress' || tab === 'trends') done = renderTrends(el); // Trends merged into Progress (v150)
+  // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
+  if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
+  else if (tab === 'bonehead') done = renderBonehead(el);
+  // #/progress is the HEALTH data screen (steps, sleep, weight, intake). The hub's
+  // "Level" tab is character progression. Similar names, different features: do
+  // not fold one into the other.
+  else if (tab === 'progress' || tab === 'trends') done = renderTrends(el);
   else if (tab === 'foods') done = renderFoods(el);
   else if (tab === 'friends') done = renderFriends(el);
   else if (tab === 'settings') done = renderSettings(el);
+  else if (tab === 'boneyard') done = renderBoneyard(el);
   else done = renderToday(el);
+  // the map fills the screen, so this route drops the usual padding and scroll
+  el.classList.toggle('screen--map', tab === 'boneyard');
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => composeAvatars(el));
@@ -909,7 +930,7 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#gluttonToMap')?.addEventListener('click', openMap);
+  $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -936,7 +957,7 @@ async function renderToday(el) {
     navigator.geolocation.getCurrentPosition = ok => setTimeout(() => ok(fake), 60);
     navigator.geolocation.watchPosition = ok => { setTimeout(() => ok(fake), 400); return 1; };
     navigator.geolocation.clearWatch = () => {};
-    setTimeout(() => { openMap(); setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
+    setTimeout(() => { location.hash = '#/boneyard'; setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
   }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
@@ -1498,10 +1519,13 @@ function openAdd(meal = 0) {
         <button class="action-tile" id="actScan">${ICONS.barcode}Scan barcode</button>
         <button class="action-tile" id="actLabel">${ICONS.label}Scan label</button>
         <button class="action-tile" id="actQuick">${ICONS.bolt}Quick add</button>
+        <button class="action-tile" id="actMyFoods">${ICONS.bone(20)}My foods</button>
       </div>
       <div class="search-wrap">${ICONS.search}<input id="q" class="input" type="search" placeholder="Search foods" autocomplete="off" enterkeyhint="search"></div>
       <div id="results"></div>
     </div>`, { cls: 'full' });
+
+  $('#actMyFoods', wrap)?.addEventListener('click', () => { closeAllSheetsViaHistory(); setTimeout(() => { location.hash = '#/foods'; }, 200); });
 
   let curMeal = meal;
   $$('#mealChips .chip', wrap).forEach(c => c.addEventListener('click', () => {
@@ -2122,9 +2146,9 @@ async function renderShop(el) {
       </div>`;
     }).join('')}`;
 
+  // No page heading or back button: the Shop is a tab inside Your Bonehead now,
+  // so the hub supplies both and a second title would just repeat itself.
   el.innerHTML = `
-  <div class="shop-head"><button class="shop-back" id="shopBack" aria-label="Back">‹ Back</button></div>
-  <h1 class="page-h1">Shop<span class="sub">Weapons, crates and Bone Dust</span></h1>
 
   <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
 
@@ -2200,7 +2224,6 @@ async function renderShop(el) {
   }));
   $('#shopForage', el)?.addEventListener('click', openKitchen);
   $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
-  $('#shopBack', el)?.addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/today'; });
 }
 
 /* ================= trends ================= */
@@ -3669,6 +3692,14 @@ async function renderSettings(el) {
     ${vaultRowHtml(vault)}
   </div>` : ''}
 
+  <div class="card">
+    <div class="card-title">YOUR DATA</div>
+    <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
+    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+  </div>
+
   ${notifPlat !== 'none' ? `
   <div class="card">
     <div class="card-title">NOTIFICATIONS</div>
@@ -3721,10 +3752,6 @@ async function renderSettings(el) {
       <div class="lab"><b>Sounds</b><span>Little pops and level-up chimes</span></div>
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
-    <button class="crew-friends" id="myFoodsRow" style="margin-top:12px">
-      <span>My foods</span>
-      <span class="crew-friends-r"><span style="color:var(--text-3);font-size:12.5px">Custom · favorites · scans</span><span class="crew-chev">›</span></span>
-    </button>
     <div class="settings-row">
       <div class="lab"><b>USDA API key</b><span>Optional: raises online search limit to 1,000/hr. <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></span></div>
     </div>
@@ -3750,12 +3777,9 @@ async function renderSettings(el) {
     <button class="btn small ghost" id="hkSyncNow" style="margin-top:8px">Sync from clipboard now</button>`}
   </div>
 
+
   <div class="card">
-    <div class="card-title">DATA</div>
-    <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
-    <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
-    <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="card-title">ABOUT</div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
@@ -3820,7 +3844,6 @@ async function renderSettings(el) {
   });
   $('#editName', el)?.addEventListener('click', () => openNameBuilder(() => renderSettings(el)));
   $('#friendsBtn', el)?.addEventListener('click', () => { location.hash = '#/friends'; });
-  $('#myFoodsRow', el)?.addEventListener('click', () => { location.hash = '#/foods'; });
   // ---- notifications ----
   const applyNotifs = async (prefs, note) => {
     await setNotifPrefs(prefs);
@@ -4174,11 +4197,23 @@ function bindBadgeTaps(wrap) {
   }));
 }
 
-async function openCharacter(tab = 'wardrobe') {
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>Your Bonehead</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="chBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
-  await renderCharacter(wrap, tab);
+// Your Bonehead is a real screen with a tab, not a modal. It is the game hub
+// (Wardrobe, Backpack, Shop, Build, Progress), and it used to be reachable only
+// by tapping small chips on Today. openCharacter(tab) is kept as the one way in
+// so every old caller lands in the right place.
+function openCharacter(tab = 'wardrobe') {
+  pendingHubTab = tab;
+  if (currentTab() === 'bonehead') return route();   // already here: just switch tabs
+  location.hash = '#/bonehead';
+}
+
+let pendingHubTab = null;
+
+async function renderBonehead(el) {
+  const tab = pendingHubTab || 'wardrobe';
+  pendingHubTab = null;
+  el.innerHTML = `<h1 class="page-h1">Your Bonehead</h1><div id="chBody"></div>`;
+  await renderCharacter(el, tab);
 }
 
 // Egg hatch: a bone egg wobbles, cracks spread, it bursts into shards and the
@@ -4292,8 +4327,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
       <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(21)}<span>Shop</span></button>
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Progress</span></button>
+      <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Level</span></button>
     </div>
     <button class="looks-card ${tab === 'looks' ? 'on' : ''}" data-tab="looks">
       <span class="lc-top"><b>Looks</b><span>${looksN} / ${looksAll.length} collected</span></span>
@@ -4656,6 +4692,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
     await renderTalents(content);
   }
 
+  // The Shop lives here rather than on its own tabless route, which was only
+  // reachable from two buttons buried inside other sheets. renderShop owns its
+  // own re-render, so it just needs a container.
+  if (tab === 'shop') await renderShop(content);
+
   if (tab === 'crates') {
     await migrateLegacyEggs();
     const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout()]);
@@ -4749,7 +4790,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit fights ready.`, 3000); }
       renderCharacter(wrap, 'crates');
     });
-    $('#openStableFromBp', content)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
+    $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
     $$('[data-meltbench]', content).forEach(btn => btn.addEventListener('click', async () => {
       // arm-then-confirm, same contract as the Wardrobe melt
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
@@ -4779,8 +4820,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
       toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it above.' : 'Added to your consumables.', 2800);
       renderCharacter(wrap, 'crates');
     }));
-    $('#bpKitchen', content)?.addEventListener('click', () => { history.back(); setTimeout(openKitchen, 250); });
-    $('#bpToShop', content)?.addEventListener('click', () => { history.back(); setTimeout(() => { location.hash = '#/shop'; }, 260); });
+    $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
+    $('#bpToShop', content)?.addEventListener('click', () => renderCharacter(wrap, 'shop'));
     $$('[data-buy]', content).forEach((b => {
       let t = null;
       const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
@@ -5753,7 +5794,10 @@ function warmMapArt() {
   return _mapArtWarm;
 }
 
-async function openMap() {
+// The Boneyard is a screen, not a modal. It used to be a "full" sheet opened by
+// a special case in the tab handler, which is why it had a Done button and its
+// own back semantics while every other tab was a route.
+async function renderBoneyard(el) {
   warmMapArt();                       // starts now, resolves long before a marker needs it
   const eq = await equipped();
   let map = null, maplibregl = null;
@@ -5765,8 +5809,9 @@ async function openMap() {
     try { map?.remove(); } catch { /* already gone */ }
     map = null;
   };
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Boneyard</h2><button class="sheet-close">Done</button></div>
+  const wrap = el;
+  screenCleanup = cleanup;            // route() tears the map down when you leave
+  el.innerHTML = `
     <div class="sheet-body map-sheet">
       <div id="mapBody">
         <div id="mapIntro" style="padding:16px 16px 0">
@@ -5782,7 +5827,7 @@ async function openMap() {
           </div>
         </div>
       </div>
-    </div>`, { cls: 'full', onClose: cleanup });
+    </div>`;
 
   const body = $('#mapBody', wrap);
   let heading = null, headingSeen = false;
@@ -6623,7 +6668,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v234'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v235'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6838,7 +6883,7 @@ async function renderPit(wrap) {
     <p class="note" style="margin:6px 2px 8px">Sparring is always free. Ladder, Champion and Gauntlet fights cost one charge: ${FREE_FIGHTS} free a day, then Vigor you earn by logging food and getting your steps.</p>
     ${pitSections}`;
 
-  $('#buildBtn', body)?.addEventListener('click', () => { history.back(); setTimeout(() => openCharacter('talents'), 250); });
+  $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {
@@ -6856,7 +6901,7 @@ async function renderPit(wrap) {
     startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
     startPit({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet' }));
-  $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); history.back(); setTimeout(openMap, 250); });
+  $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); location.hash = '#/boneyard'; });
 }
 
 function foeOutfitFor(name) {
@@ -7967,7 +8012,7 @@ async function renderTalents(wrap) {
   $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
   $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderTalents(wrap); });
   // weapons now live in the Shop tab (v150); Build just links there
-  $('#toShopMerchant', body)?.addEventListener('click', () => { history.back(); setTimeout(() => { location.hash = '#/shop'; }, 260); });
+  $('#toShopMerchant', body)?.addEventListener('click', () => openCharacter('shop'));
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
     if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;

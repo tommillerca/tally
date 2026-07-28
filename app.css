@@ -83,7 +83,20 @@ svg { display: block; }
 .icon-btn:active { background: var(--surface-2); }
 .icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
-.page-h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 6px 2px 16px; }
+/* Settings gear, pinned to the top corner so Settings does not need a quarter of
+   the bottom bar. Sits on the page-h1 line; h1s are left-aligned so it never
+   collides. Below #sheets, so a modal always covers it. */
+.gear-btn {
+  position: absolute; top: calc(var(--sat) + 16px); right: var(--pad); z-index: 20;
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--text-3);
+}
+.gear-btn svg { width: 20px; height: 20px; stroke: currentColor; }
+.gear-btn:active { background: var(--surface-3); color: var(--text); }
+.gear-btn[hidden] { display: none; }
+/* Give headings room so a long title never runs under the gear. */
+.page-h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 6px 2px 16px; padding-right: 46px; }
 .page-h1 .sub { display: block; font-size: 13px; color: var(--text-3); font-weight: 500; margin-top: 3px; letter-spacing: 0; }
 
 /* ---------- cards ---------- */
@@ -1301,12 +1314,14 @@ body::before {
 @keyframes rarePulse { 50% { box-shadow: 0 0 18px var(--accent); } }
 
 /* ===== character sheet: game tabs + stat pills ===== */
-.ch-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 14px 0 10px; }
+/* Five tabs in a 2-column grid meant three rows and ~430px of chrome before any
+   content. One compact row instead, so the Wardrobe doll is visible on arrival. */
+.ch-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 14px 0 10px; }
 .chip.ch-tab {
-  position: relative; display: grid; justify-items: center; gap: 4px;
-  padding: 11px 4px 8px; border-radius: 15px;
+  position: relative; display: grid; justify-items: center; gap: 3px;
+  padding: 9px 2px 7px; border-radius: 14px;
   background: var(--surface); border: 1px solid var(--line);
-  font-family: var(--display); font-size: 15px; letter-spacing: 0.03em;
+  font-family: var(--display); font-size: 11px; letter-spacing: 0.01em; line-height: 1.1;
   color: var(--text-2);
 }
 .chip.ch-tab svg, .chip.ch-tab img { opacity: 0.75; }
@@ -2015,6 +2030,9 @@ body::before {
 .tp-count { color: var(--accent); font-weight: 700; white-space: nowrap; }
 
 /* ===== the boneyard: real-world map ===== */
+/* The Boneyard is a route now, so #screen has to behave like the sheet the map
+   used to live in: a flex column with no padding of its own. */
+.screen.screen--map { display: flex; flex-direction: column; padding: var(--sat) 0 0; overflow: hidden; }
 .sheet-body.map-sheet { flex: 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 #mapBody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .map-stage { position: relative; flex: 1; min-height: 0; border-radius: 16px 16px 0 0; overflow: hidden; }
@@ -2798,12 +2816,6 @@ body::before {
 .melt-fold[open] > summary::after { transform: rotate(180deg); }
 .melt-fold > summary:active { background: var(--surface-3); }
 .melt-fold[open] > summary { margin-bottom: 6px; }
-
-/* Shop back button (v204): a clear exit from the routed Shop screen */
-.shop-head { display: flex; margin: 2px 0 6px; }
-.shop-back { background: var(--surface-2); border: 1px solid var(--line); color: var(--text-1, #f2e9d7);
-  font-weight: 700; font-size: 14px; padding: 8px 15px 8px 12px; border-radius: 11px; }
-.shop-back:active { background: var(--surface-3); }
 
 /* Combat status chips (v208): compact ICON pills on their own line, tap for detail */
 .fstate { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
