@@ -163,6 +163,27 @@ def cmd_check():
         if b['attributes'].get('processingState') == 'VALID' and not seen_by.get(b['id']):
             notes.append(f'build {b["attributes"]["version"]} is processed but in no group')
 
+    # THE PUBLIC LINK IS THE REAL INSTALL PATH. Tom's own device enrolled through
+    # it after his Inner Circle tester record was revoked, so "visible to Inner
+    # Circle" can pass while he cannot install a thing. Build 16 hit exactly that:
+    # in the internal group, absent from the public-link group, check green.
+    # An EXTERNAL group also gates downloads on beta review, so being listed in
+    # the group is not enough on its own.
+    for g in call(f'/apps/{APP_ID}/betaGroups')['data']:
+        a = g['attributes']
+        if not a.get('publicLinkEnabled'):
+            continue
+        name = a['name']
+        if name not in seen_by.get(newest['id'], []):
+            problems.append(f'build {v} is NOT in "{name}", the group the public link '
+                            f'({a.get("publicLink")}) serves: nobody using that link can install it')
+            continue
+        sub = call(f"/builds/{newest['id']}/betaAppReviewSubmission").get('data')
+        state = (sub or {}).get('attributes', {}).get('betaReviewState')
+        if state != 'APPROVED':
+            notes.append(f'build {v} is in "{name}" but beta review is '
+                         f'{state or "not submitted"}, so external testers stay on the last approved build')
+
     # A build in a group is still invisible to anyone who never accepted the
     # invite. This is not a footnote: it is the difference between "shipped" and
     # "Tom cannot install it", which is exactly what happened with build 12.
