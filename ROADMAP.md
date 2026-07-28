@@ -9,9 +9,20 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 🔑 Account recovery (ironclad) — 2026-07-27 — 🚨 CRITICAL, planned, awaiting Tom's approval
+## 🔑 Account recovery (ironclad) — ✅ SHIPPED v230 + v231 (2026-07-28)
 
-**Why this is P0.** Tom deleted the app to troubleshoot a bug. His level 27 account (Wretched Goblin, 14 badges, 47 gear) is unrecoverable: the cloud backup blob is intact on the server (129,444 bytes, saved locally to `~/Documents/boneheadz-recovery/`) but the AES key lived only in the iOS keychain, and it went with the app. `BhVault.swift` and the memory note both asserted keychain items survive app deletion. **They did not.** Second data loss of the same class (see [[lessons_native_install_wipes_container]]).
+**Status.** Layer 1 shipped in v230. **v231 finished it** and the measured facts below correct several assumptions in the original plan:
+
+- **Restore no longer needs the friend code.** A user-chosen **Recovery ID** (`^[a-z0-9._-]{4,32}$`, unique index on `recovery.recovery_id`) is the lookup handle; friend-code restore still works for anyone who wrote theirs down. Nobody has their friend code after wiping the phone that displayed it, which made the v230 phrase useless on its own.
+- **Phrase bar raised because the ID is guessable**: `RECOVERY_MIN_LEN` 8 → **12**, must contain a space or digit, `RECOVERY_ITERS` 600k → **1M**. Existing phrases are grandfathered (`iters` is stored per row).
+- **`/recovery/available/:id` has its OWN rate-limit bucket** (`rl_ridcheck`, 60/10min) separate from the ciphertext lookups (`rl_recovery`, 10/10min). They shared one at first, so typing a few candidate IDs during setup could lock a player out of their own restore.
+- **Android vault shipped**: `native/android/.../BhVault.kt` on Play Services Block Store, same JS surface as the iOS keychain plugin.
+- **Measured on an emulator, not assumed**: Block Store is **deleted on uninstall** unless Google Backup is on (`Blockstore: Removed Blockstore data for com.boneheadz.gym upon uninstallation`). Separately, `android:allowBackup="true"` DOES restore the entire WebView IndexedDB on reinstall, which is more than the iOS keychain does. Settings now reports which of these is actually true per phone instead of promising a reinstall will work.
+- **The bug that actually caused the loss**: both vaults reported a failed READ as "empty", and the boot path is `get → empty → mint → overwrite`. One transient read error minted a new account and destroyed the good key on the next line. Fixed on both platforms: empty and unreadable are now distinct, `ensureIdentity` retries before concluding "new player", and `mirrorIdentity` is compare-and-set that refuses to overwrite a different account (offering it to the player instead).
+- **Erase ALL data** now clears the vault; it did not, so the next boot restored the account you had just deleted.
+- Tests: `node tests/unit.test.js` (89, incl. a guard that the client and Worker recovery-ID regexes match), `node server/recovery.test.mjs` (13, against `wrangler dev`), plus a destructive rehearsal run against **production**: register → back up → wipe → restore with ID + phrase alone → coins and save marker returned.
+
+**Why this was P0.** Tom deleted the app to troubleshoot a bug. His level 27 account (Wretched Goblin, 14 badges, 47 gear) is unrecoverable: the cloud backup blob is intact on the server (129,444 bytes, saved locally to `~/Documents/boneheadz-recovery/`) but the AES key lived only in the iOS keychain, and it went with the app. `BhVault.swift` and the memory note both asserted keychain items survive app deletion. **They did not.** Second data loss of the same class (see [[lessons_native_install_wipes_container]]).
 
 **Blast radius today: 8 encrypted backups on the server**, incl. a 164KB level 27 (Cam). Every one is one app-deletion away from the same loss, while Settings promises "end-to-end encrypted, only your phone can read it".
 
