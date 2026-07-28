@@ -247,9 +247,23 @@ async function showSplash(userEq) {
   const finish = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => el.remove(), 380); };
   el.addEventListener('click', finish);
   const beat = ms => new Promise(r => setTimeout(r, ms));
-  for (const word of ['EAT.', 'LOG.', 'EVOLVE.']) {
+  // Pick the outfits and warm everything BEFORE the sequence starts. Each word
+  // only holds for 430ms, so a stack that begins loading when it appears is still
+  // assembling when it is replaced, which read as the previews glitching.
+  const outfits = ['EAT.', 'LOG.', 'EVOLVE.'].map(() => randomOutfit());
+  const warm = Promise.all(outfits.flatMap(eq => BH_SLOTS
+    .map(s => (eq[s.code] && BH_BY_ID[eq[s.code]]) ? bhAsset(BH_BY_ID[eq[s.code]]) : null)
+    .filter(Boolean)
+    .map(src => new Promise(res => { const i = new Image(); i.onload = i.onerror = res; i.src = src; }))));
+  // Bangers is font-display:swap and the splash is the first paint, so without
+  // this "EAT." renders in the fallback face and swaps a beat later.
+  const font = document.fonts ? document.fonts.load('60px Bangers').catch(() => {}) : Promise.resolve();
+  // Bounded: a slow network must never hold the app on a blank splash.
+  await Promise.race([Promise.all([warm, font]), beat(900)]);
+
+  for (const [i, word] of ['EAT.', 'LOG.', 'EVOLVE.'].entries()) {
     if (done) return;
-    el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(randomOutfit())}</div><div class="splash-word">${word}</div></div>`;
+    el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(outfits[i])}</div><div class="splash-word">${word}</div></div>`;
     await beat(430);
   }
   if (done) return;
@@ -6668,7 +6682,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v235'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v236'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

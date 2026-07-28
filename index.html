@@ -13,6 +13,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- The splash is the first paint, so Bangers must already be in flight before
+     the stylesheet asks for it, or "EAT." renders in the fallback face and swaps
+     a beat later. -->
+<link rel="preload" href="assets/fonts/bangers.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
