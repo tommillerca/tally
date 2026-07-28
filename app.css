@@ -724,6 +724,13 @@ body::before {
 
 /* idle shuffle: the whole layer stack sways gently */
 .bh-anim { position: absolute; inset: 0; animation: bh-idle 3.4s ease-in-out infinite; transform-origin: 50% 94%; }
+/* Hold the stack back until every layer has decoded, then fade the finished
+   character in. Without this you watch the gear land on the skeleton one piece
+   at a time on every render. JS clears .bh-composing (with a 1.5s safety net, so
+   a missing asset can never leave a character invisible). */
+.bh-anim.bh-composing { opacity: 0; }
+.bh-anim { transition: opacity .18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .bh-anim { transition: none; } }
 @keyframes bh-idle {
   0%, 100% { transform: translateY(0) rotate(-0.9deg); }
   22% { transform: translateY(-3px) rotate(0.4deg); }

@@ -511,44 +511,49 @@ function currentTab() {
   return m ? m[1] : 'today';
 }
 
-let _holdIv = null; // active scroll-hold from an in-place refresh(), if any
-function route() {
-  if (_holdIv) { clearInterval(_holdIv); _holdIv = null; } // navigation cancels any pending in-place scroll hold
+// keepScroll: an in-place re-render must NOT reset the scroll, because undoing a
+// reset after the fact means fighting the user for it. Returns the render promise
+// so a caller can wait for real content instead of guessing when it lands.
+function route({ keepScroll = false } = {}) {
   closeAllSheets();
   const tab = currentTab();
   trackScreen(tab); // screen-dwell heatmap: time spent per bottom-nav screen
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const el = $('#screen');
-  if (tab === 'shop') renderShop(el);
-  else if (tab === 'progress' || tab === 'trends') renderTrends(el); // Trends merged into Progress (v150)
-  else if (tab === 'foods') renderFoods(el);
-  else if (tab === 'friends') renderFriends(el);
-  else if (tab === 'settings') renderSettings(el);
-  else renderToday(el);
-  el.scrollTop = 0;
+  let done;
+  if (tab === 'shop') done = renderShop(el);
+  else if (tab === 'progress' || tab === 'trends') done = renderTrends(el); // Trends merged into Progress (v150)
+  else if (tab === 'foods') done = renderFoods(el);
+  else if (tab === 'friends') done = renderFriends(el);
+  else if (tab === 'settings') done = renderSettings(el);
+  else done = renderToday(el);
+  if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
+  return Promise.resolve(done).catch(() => {}).then(() => composeAvatars(el));
 }
 
 // In-place re-render of the current tab. Unlike navigation (hashchange -> route(),
 // which intentionally lands at the top), an in-place refresh should keep the
 // player where they were: logging water/sleep, changing the day, closing a sheet.
-// Capture the scroll position and reassert it for ~1.2s across the async
-// re-render (rAF is throttled on some WebViews). A real scroll (touch/wheel) or a
-// navigation (route() clears _holdIv) releases the hold immediately.
+// This used to reset the scroll (inside route) and then spend 1.2 seconds
+// writing scrollTop back every 50ms to undo it. On a touch screen that loop
+// fights the player: momentum keeps moving after the finger lifts, so the
+// release fired early and the loop dragged them back, which is the "shop keeps
+// jumping to the top" testers reported. Nothing resets the scroll now, so
+// nothing has to fight to restore it.
 function refresh() {
-  const y = { win: scrollY, el: $('#screen')?.scrollTop || 0 };
-  route();
-  const put = () => {
-    const sc = $('#screen');
-    if (sc && Math.abs(sc.scrollTop - y.el) > 1) sc.scrollTop = y.el;
-    if (y.win > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
-  };
-  put();
-  _holdIv = setInterval(put, 50);
-  const stop = () => { if (_holdIv) { clearInterval(_holdIv); _holdIv = null; } };
-  setTimeout(stop, 1200);
-  addEventListener('touchstart', stop, { once: true, passive: true });
-  addEventListener('wheel', stop, { once: true, passive: true });
+  const sc = $('#screen');
+  const before = sc ? sc.scrollTop : 0;
+  const p = route({ keepScroll: true });
+  // The render is async: content can be shorter for a frame, which clamps
+  // scrollTop. Reassert ONCE when it resolves, and only if the player has not
+  // scrolled away themselves in the meantime.
+  p.then(() => {
+    const el = $('#screen');
+    if (!el || before <= 0) return;
+    if (Math.abs(el.scrollTop - before) > 1 && el.scrollTop < 2) el.scrollTop = before;
+  });
+  return p;
 }
 
 // Background/unprompted refresh (auto health-sync, crew deliveries on resume):
@@ -588,6 +593,7 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   history.pushState({ sheet: sheetStack.length }, '');
   $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
+  composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
   return wrap;
 }
 function closeTopSheet() {
@@ -947,25 +953,6 @@ async function renderToday(el) {
     // claiming re-renders home; hold the reading position from THIS closure and
     // reassert it for ~1s so the re-render (and any late layout) can't yank the
     // player back to the top while they work down the quest list
-    const y = { win: scrollY, el: $('#screen')?.scrollTop || 0 };
-    const holdScroll = () => {
-      // timer-based on purpose: rAF is throttled on some WebViews, so a
-      // rAF-driven restore can silently never run. Write immediately (route's
-      // reset already happened synchronously inside refresh()), then keep
-      // reasserting for 1.2s while the async re-render lands. A real touch
-      // hands control back to the player instantly.
-      const put = () => {
-        const sc = $('#screen');
-        if (sc && Math.abs(sc.scrollTop - y.el) > 1) sc.scrollTop = y.el;
-        if (y.win > 0 && Math.abs(scrollY - y.win) > 1) scrollTo(0, y.win);
-      };
-      put();
-      const iv = setInterval(put, 50);
-      const stop = () => clearInterval(iv);
-      setTimeout(stop, 1200);
-      addEventListener('touchstart', stop, { once: true, passive: true });
-      addEventListener('wheel', stop, { once: true, passive: true });
-    };
     const period = b.dataset.period || 'day';
     const tier = questTiers.find(t => t.period === period);
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
@@ -986,11 +973,10 @@ async function renderToday(el) {
     }
     if (crates2.length) {
       // item rewards pop as pack cards; coins/XP ride the footer
-      openPackReveal(crates2.map(k => ({ iconHtml: crateIcon(k, 120), name: CRATES[k].label, rarity: k === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: k === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' })), { coins: res.coins, footerNote: `+${res.xp + bonusXp} XP` }).then(() => { refresh(); holdScroll(); });
+      openPackReveal(crates2.map(k => ({ iconHtml: crateIcon(k, 120), name: CRATES[k].label, rarity: k === 'daily' ? 'uncommon' : 'rare', kind: 'CRATE', stats: k === 'egg' ? 'Incubates · walk to hatch it' : 'Open it in your Backpack' })), { coins: res.coins, footerNote: `+${res.xp + bonusXp} XP` }).then(() => { refresh(); });
     } else {
       toast(`Quest done · +${res.xp} XP · +${res.coins} coins`, 2800);
       refresh();
-      holdScroll();
     }
   }));
   $$('[data-addmeal]').forEach(b => b.addEventListener('click', () => openAdd(Number(b.dataset.addmeal))));
@@ -1112,9 +1098,27 @@ function avatarLayersHtml(eq, opts = {}) {
     // weapon / off-hand glow by rarity (epic/legendary)
     const glow = (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary')
       ? ` class="wpn-glow r-${item.rarity}"` : '';
-    return `<img${glow} src="${bhAsset(item)}" alt="" loading="lazy" decoding="async">`;
+    // NOT lazy, NOT async-decoded: these layers only mean anything stacked
+    // together. Loading them independently is what made the character visibly
+    // assemble itself, piece by piece, every single render.
+    return `<img${glow} src="${bhAsset(item)}" alt="">`;
   }).join('');
-  return `<div class="bh-anim">${layers}</div>`;
+  return `<div class="bh-anim bh-composing">${layers}</div>`;
+}
+
+/* Reveal a layered Bonehead only once every layer has decoded, so it appears as
+   one finished character instead of assembling on screen. Cheap after the first
+   paint: decoded images come straight from cache, so this is a no-op on
+   re-renders. Called after any render that can contain a .bh-anim stack. */
+function composeAvatars(root = document) {
+  for (const stack of root.querySelectorAll('.bh-anim.bh-composing')) {
+    const imgs = [...stack.querySelectorAll('img')];
+    if (!imgs.length) { stack.classList.remove('bh-composing'); continue; }
+    const ready = imgs.map(i => (i.decode ? i.decode() : Promise.resolve()).catch(() => {}));
+    // Never leave a character invisible because one asset 404s or hangs.
+    Promise.race([Promise.all(ready), new Promise(r => setTimeout(r, 1500))])
+      .then(() => stack.classList.remove('bh-composing'));
+  }
 }
 
 function healthCardHtml(hk, isToday) {
@@ -5719,7 +5723,27 @@ function stopHuntWatch() {
 
 const APPROACH_LOCK_M = 400; // within this, a spawn is "yours": it won't move/despawn until collected
 
+// The Boneyard draws the same handful of PNGs across every marker, so without
+// this each den and the Glutton decode separately and the map fills in piecemeal.
+// Decoding them once up front means every marker paints on its first frame,
+// including the ones that appear later as you walk. Spawn pips are inline SVG and
+// need nothing. Failures are ignored: this is a warm-up, never a gate.
+const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png'];
+let _mapArtWarm = null;
+function warmMapArt() {
+  if (!_mapArtWarm) {
+    _mapArtWarm = Promise.all(MAP_ART.map(src => new Promise(res => {
+      const i = new Image();
+      i.onload = () => (i.decode ? i.decode().catch(() => {}) : Promise.resolve()).then(res);
+      i.onerror = res;
+      i.src = src;
+    })));
+  }
+  return _mapArtWarm;
+}
+
 async function openMap() {
+  warmMapArt();                       // starts now, resolves long before a marker needs it
   const eq = await equipped();
   let map = null, maplibregl = null;
   let cleanupExtras = () => {};
@@ -6587,7 +6611,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v232'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v233'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
