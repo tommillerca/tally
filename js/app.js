@@ -1103,7 +1103,12 @@ function avatarLayersHtml(eq, opts = {}) {
     // assemble itself, piece by piece, every single render.
     return `<img${glow} src="${bhAsset(item)}" alt="">`;
   }).join('');
-  return `<div class="bh-anim bh-composing">${layers}</div>`;
+  // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
+  // markup, which meant any stack injected somewhere composeAvatars() never
+  // reached (the map "you" marker, the fight arena) stayed at opacity 0 and the
+  // character was simply invisible. Hiding is now owned by the same code that
+  // un-hides it, so a missed call costs a little pop-in, never the whole avatar.
+  return `<div class="bh-anim">${layers}</div>`;
 }
 
 /* Reveal a layered Bonehead only once every layer has decoded, so it appears as
@@ -1111,9 +1116,15 @@ function avatarLayersHtml(eq, opts = {}) {
    paint: decoded images come straight from cache, so this is a no-op on
    re-renders. Called after any render that can contain a .bh-anim stack. */
 function composeAvatars(root = document) {
-  for (const stack of root.querySelectorAll('.bh-anim.bh-composing')) {
+  const scope = root && root.querySelectorAll ? root : document;
+  for (const stack of scope.querySelectorAll('.bh-anim:not([data-composed])')) {
+    stack.dataset.composed = '1';
     const imgs = [...stack.querySelectorAll('img')];
-    if (!imgs.length) { stack.classList.remove('bh-composing'); continue; }
+    if (!imgs.length) continue;
+    // Already decoded (cache hit) means there is nothing to hide: skip straight
+    // through rather than blink the character out and back in.
+    if (imgs.every(i => i.complete && i.naturalWidth > 0)) continue;
+    stack.classList.add('bh-composing');
     const ready = imgs.map(i => (i.decode ? i.decode() : Promise.resolve()).catch(() => {}));
     // Never leave a character invisible because one asset 404s or hangs.
     Promise.race([Promise.all(ready), new Promise(r => setTimeout(r, 1500))])
@@ -5892,6 +5903,7 @@ async function openMap() {
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
     youEl.innerHTML = `<div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+    composeAvatars(youEl);   // marker is built outside route(), so it needs its own call
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
     const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
 
@@ -6611,7 +6623,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v233'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v234'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7011,6 +7023,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     <div class="fight-actions" id="factions"></div>`;
 
   if (foeCfg.mode === 'glutton') stopGluttonFoeAnim = startGluttonLoop($('.glutton-stage', body));
+  composeAvatars(body);   // arena is built outside route(); without this the fighters never reveal
 
   const el = id => $('#' + id, body);
 
