@@ -5538,10 +5538,17 @@ function sleepDiagHtml(dg) {
    device. The phrase never leaves the phone. */
 async function openRecoverySheet({ firstRun = false } = {}) {
   const existingId = await social.myRecoveryId();
+  // Someone who set a phrase before v231 has no ID, so restoring still demands
+  // their friend code. Say why they are being asked again rather than repeating
+  // the new-player pitch at them.
+  const upgrading = !existingId && await social.hasRecoveryPhrase();
+  const intro = upgrading
+    ? 'You already have a recovery phrase, but restoring with it still needs your friend code, and that is on the phone you would have lost. Pick a Recovery ID and re-enter a phrase, and the ID is all you need from now on.'
+    : 'Two things you pick and remember. Together they bring your Bonehead back on any phone, even if this one is lost or wiped. We never see your phrase, so we can never reset it for you.';
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>Recovery code</h2><button class="sheet-close">${firstRun ? 'Later' : 'Done'}</button></div>
+    <div class="sheet-head"><h2>${upgrading ? 'Finish your recovery code' : 'Recovery code'}</h2><button class="sheet-close">${firstRun ? 'Later' : 'Done'}</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:2px 2px 14px">Two things you pick and remember. Together they bring your Bonehead back on any phone, even if this one is lost or wiped. We never see your phrase, so we can never reset it for you.</p>
+      <p class="note" style="margin:2px 2px 14px">${intro}</p>
       <div class="field">
         <label>Recovery ID <span class="rc-hint">the name you look yourself up by</span></label>
         <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. tom-bones" value="${esc(existingId || '')}">
@@ -5639,7 +5646,10 @@ async function maybePromptRecovery(tries = 0) {
     // with no cloud backup at all, so they get the prompt too: setRecoveryPhrase
     // now takes them online as part of saving it.
     if (!(await social.apiBase())) return;           // no server configured at all
-    if (await social.hasRecoveryPhrase()) return;
+    // A v230 phrase with no recovery ID still needs the friend code to restore,
+    // which is the gap v231 exists to close. Checking only for a phrase left every
+    // early player silently uninvited to the fix, so both count as "not covered".
+    if (await social.hasRecoveryPhrase() && await social.myRecoveryId()) return;
     // Never stack over another sheet, but do NOT give up: What's New pops on the
     // very release that introduces recovery, and simply bailing here would swallow
     // the prompt on the one open where it matters most. Wait for the stack to
@@ -6577,7 +6587,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v231'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v232'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
