@@ -545,7 +545,9 @@ function route({ keepScroll = false } = {}) {
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
   // Redundant on Settings itself, and the Boneyard is full-bleed map.
   const gear = $('#gearBtn');
-  if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard';
+  // Today carries its own gear in the day strip, so the floating one stays out
+  // of the way and nothing sits above the Bonehead.
+  if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
   const el = $('#screen');
   let done;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
@@ -789,15 +791,6 @@ async function renderToday(el) {
   const protHit = t.p && tot.p >= t.p;
 
   el.innerHTML = `
-  <div class="day-head">
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
-    <div class="day-title">
-      <h1>${title}</h1><div class="sub">${sub}</div>
-      <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
-    </div>
-    <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
-  </div>
-
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
@@ -873,6 +866,16 @@ async function renderToday(el) {
     </div>
   </details>` : ''}
 
+  <div class="day-strip">
+    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+    <div class="day-title">
+      <h1>${title}</h1><div class="sub">${sub}</div>
+      <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
+    </div>
+    <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
+    <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+  </div>
+
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
@@ -918,6 +921,7 @@ async function renderToday(el) {
   tweenNumber($('#ringBig', el), prev.remainShown ?? remaining, Math.abs(remaining), 650, v => Math.round(Math.abs(v)).toLocaleString());
   S.ui = { ringPct: pct, remainShown: Math.abs(remaining), macroPcts };
 
+  $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
@@ -6703,7 +6707,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v238'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v239'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
