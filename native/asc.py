@@ -116,8 +116,35 @@ def cmd_distribute(version, timeout=1800):
         time.sleep(30)
     call(f'/betaGroups/{INTERNAL_GROUP}/relationships/builds', 'POST',
          {'data': [{'type': 'builds', 'id': b['id']}]})
-    print(f'build {version} added to the internal group. It appears in TestFlight within a few minutes.')
-    print('External testers still need a separate beta-review submission.')
+    print(f'build {version} added to the internal group.')
+
+    # ALSO distribute to every public-link group and submit for beta review.
+    # This was a manual step for builds 16, 17 and 18: each time the postflight
+    # correctly failed, and each time it was fixed by hand instead of here. The
+    # public link is Tom's actual install path, so "internal only" means he
+    # cannot install the build he just waited for.
+    for g in call(f'/apps/{APP_ID}/betaGroups')['data']:
+        a = g['attributes']
+        if not a.get('publicLinkEnabled') or g['id'] == INTERNAL_GROUP:
+            continue
+        try:
+            call(f"/betaGroups/{g['id']}/relationships/builds", 'POST',
+                 {'data': [{'type': 'builds', 'id': b['id']}]})
+            print(f"build {version} added to \"{a['name']}\" (the public-link group).")
+        except SystemExit as e:
+            print(f"  could not add to \"{a['name']}\": {e}")
+        # An external group also gates downloads on review, so being in the group
+        # is not enough on its own.
+        sub = call(f"/builds/{b['id']}/betaAppReviewSubmission").get('data')
+        state = (sub or {}).get('attributes', {}).get('betaReviewState')
+        if state:
+            print(f'  beta review already {state}')
+        else:
+            r = call('/betaAppReviewSubmissions', 'POST', {'data': {
+                'type': 'betaAppReviewSubmissions',
+                'relationships': {'build': {'data': {'type': 'builds', 'id': b['id']}}}}})
+            print(f"  submitted for beta review: {r['data']['attributes'].get('betaReviewState')}")
+    print('It appears in TestFlight within a few minutes.')
 
 
 def cmd_next():
