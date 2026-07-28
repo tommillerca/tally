@@ -923,7 +923,15 @@ async function renderToday(el) {
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
-  $('#bhStage').addEventListener('click', () => openCharacter('wardrobe'));
+  // Tapping the scene opens the Wardrobe, but the Trends chip and the
+  // coin/dust/vigor/crate chips live INSIDE it, so their clicks bubbled here and
+  // this handler ran too. It always did; it used to be masked because
+  // openCharacter opened a sheet on top, and once it navigated by hash instead it
+  // started overwriting the chip's own destination. Buttons handle themselves.
+  $('#bhStage').addEventListener('click', e => {
+    if (e.target.closest('button')) return;
+    openCharacter('wardrobe');
+  });
   measureBubbleSide($('#bhStage'), eq).then(side => {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
   });
@@ -6695,7 +6703,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v237'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v238'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
