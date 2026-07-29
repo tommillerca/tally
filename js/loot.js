@@ -441,6 +441,14 @@ export async function grantPet(petId, source = 'code') {
     if (!pick || pick.slot !== 'C') return null;   // owning it already is fine now (dupes stack)
   }
   await addPetInstance(pick.id, {});
+  // Put it on the player's shoulder if that slot is empty. Granting a pet used to
+  // only file it in the Stable, so claiming the Day One Lizard showed a big
+  // celebration and then nothing on the home screen. Never overrides a companion
+  // the player already chose.
+  try {
+    const eq = await equipped({ raw: true });
+    if (!eq.C) await equip('C', pick.id);
+  } catch { /* the pet is granted either way; equipping is a courtesy */ }
   return pick;
 }
 

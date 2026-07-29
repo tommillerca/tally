@@ -280,6 +280,18 @@ async function boot() {
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   S.userFoods = await db.all('foods');
 
+  // One-off: players who claimed the Day One Lizard before v241 got it filed in
+  // the Stable and never put on their shoulder, so the celebration was followed by
+  // an unchanged home screen. Only fires when the companion slot is empty, so it
+  // can never displace a pet someone picked.
+  try {
+    if (!(await kvGet('dayOneEquipFix', false))) {
+      await kvSet('dayOneEquipFix', true);
+      const eqNow = await equipped({ raw: true });
+      if (!eqNow.C && (await ownedCosmeticIds()).has('CX')) await equip('C', 'CX');
+    }
+  } catch { /* cosmetic backfill; never block boot */ }
+
   if ('serviceWorker' in navigator && !S.demo && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').then(reg => {
       // resumed PWAs never re-navigate, so check for updates whenever we come back
@@ -6707,7 +6719,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v240'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v241'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
