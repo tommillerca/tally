@@ -65,3 +65,24 @@ export function animatedPetHtml(petId, px) {
 }
 
 export const ANIMATED_PETS = new Set(['C1', 'C4', 'CX']);
+
+/* Pets are sized by WIDTH, which quietly shrinks the flat ones. In a 98px slot the
+   cloud's art measures 82x81 while a lizard measures 81x61: a third less creature
+   for the same box, so a lizard reads as small beside the cloud even though its art
+   is fine. This scales each species so their art lands at a similar HEIGHT, which
+   is what the eye compares.
+
+   Art height per unit of requested width = (stage height / stage width) *
+   (art height / stage height). Both terms matter: the first is why the lizard
+   loses out (273x218 stage vs the cloud's near-square 222x219), and leaving it out
+   gives 1.07 instead of the measured 1.32. */
+const ART_H_PER_WIDTH = {
+  C1: (CLOUD_H / CLOUD_W) * (183 / CLOUD_H),
+  C4: (LIZ_H / LIZ_W) * (170 / LIZ_H),
+  CX: (LIZ_H / LIZ_W) * (170 / LIZ_H),
+};
+export function petMassScale(petId) {
+  const tallest = Math.max(...Object.values(ART_H_PER_WIDTH));
+  const mine = ART_H_PER_WIDTH[petId];
+  return mine ? tallest / mine : 1;   // 1.0 for the cloud, ~1.32 for a lizard
+}

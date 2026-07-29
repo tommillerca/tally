@@ -54,7 +54,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
-import { animatedPetHtml } from './petanim.js';
+import { animatedPetHtml, petMassScale } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
@@ -806,7 +806,7 @@ async function renderToday(el) {
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, 98)}</div>` : ''}
+    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, Math.round(98 * petMassScale(eq.C)))}</div>` : ''}
 
     <div class="hero-top">
       <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
@@ -6719,7 +6719,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v241'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v242'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
