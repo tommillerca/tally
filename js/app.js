@@ -54,7 +54,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
 import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
-import { animatedPetHtml, petMassScale } from './petanim.js';
+import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
@@ -106,6 +106,26 @@ const PET_CROP = {
   C5: { x0: 0.542, y0: 0.644, x1: 0.836, y1: 0.873 },
   CX: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 }, // Day One Lizard = C4 recolored at the same bbox
 };
+// Height-per-unit-width for a STATIC cropped pet, matching croppedPetImg's maths
+// (FILL 0.82 against the longest content edge). Pairs with petMassScale() for the
+// animated stack so a pet is the same visual size whichever path draws it.
+function staticMassScale(petId) {
+  const c = PET_CROP[petId];
+  if (!c) return 1;
+  const h = id => {
+    const k = PET_CROP[id]; if (!k) return null;
+    const cw = k.x1 - k.x0, ch = k.y1 - k.y0;
+    return ch / Math.max(cw, ch);
+  };
+  const mine = h(petId);
+  const tallest = Math.max(...Object.keys(PET_CROP).map(h).filter(Boolean));
+  return mine ? tallest / mine : 1;
+}
+// A pet's display scale, whichever way it is drawn. Flat species (lizards) would
+// otherwise render a third shorter than round ones (the cloud) in the same box.
+function petScale(petId) {
+  return ANIMATED_PETS.has(petId) ? petMassScale(petId) : staticMassScale(petId);
+}
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
 function croppedPetImg(petId, px, ground = false, srcOverride = null) {
@@ -123,13 +143,22 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
 // S.shinyPets (refreshed at boot + after hatch) so render stays synchronous.
-function petSpriteHtml(petId, px, ground = false) {
+// mass:true normalises flat species up so they read the same size as round ones.
+// Opt-in, because the fight arena's 76px stage is tuned against the fighter sprite
+// and scaling the pet there re-creates the combat overlap fixed back in v49.
+function petSpriteHtml(petId, px, ground = false, { mass = false } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
+  // Every path scales by the species' visual mass, so a colourway is never a
+  // different size from its base pet.
+  const S2 = mass ? Math.round(px * petScale(petId)) : px;
   if (petId !== 'CX' && S.shinyPets.has(petId)) {
-    return `<div class="pet-shiny-wrap"><img class="pet-shiny" style="width:${px}px;height:${px}px" src="assets/bh/C/shiny/${petId}.png" alt=""><span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    // Cropped like every other pet. This used to be a raw <img> at px, which drew
+    // the creature tiny inside its box because the source art sits small in a 640²
+    // canvas: a shiny lizard came out a fraction of the normal one.
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, px) || croppedPetImg(petId, px, ground);
+  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
@@ -806,7 +835,7 @@ async function renderToday(el) {
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, Math.round(98 * petMassScale(eq.C)))}</div>` : ''}
+    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, 98, false, { mass: true })}</div>` : ''}
 
     <div class="hero-top">
       <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
@@ -3320,7 +3349,7 @@ function openFriendProfile(f, onChange) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70)}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
@@ -6719,7 +6748,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v242'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v243'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
