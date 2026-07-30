@@ -99,12 +99,12 @@ const S = {
 // (fractions of the square) so we can crop each pet to its art and scale it to
 // fill the slot — matching the tightly-framed animated pets (cloud/lizard).
 const PET_CROP = {
-  C1: { x0: 0.564, y0: 0.609, x1: 0.845, y1: 0.887 },
-  C2: { x0: 0.550, y0: 0.597, x1: 0.912, y1: 0.844 },
-  C3: { x0: 0.547, y0: 0.617, x1: 0.891, y1: 0.875 },
-  C4: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 },
-  C5: { x0: 0.542, y0: 0.644, x1: 0.836, y1: 0.873 },
-  CX: { x0: 0.539, y0: 0.630, x1: 0.883, y1: 0.887 }, // Day One Lizard = C4 recolored at the same bbox
+  C1: { x0: 0.5594, y0: 0.6047, x1: 0.8531, y1: 0.8938 },
+  C2: { x0: 0.5453, y0: 0.5922, x1: 0.9187, y1: 0.8500 },
+  C3: { x0: 0.5422, y0: 0.6125, x1: 0.8969, y1: 0.8812 },
+  C4: { x0: 0.5344, y0: 0.6250, x1: 0.8891, y1: 0.8938 },
+  C5: { x0: 0.5375, y0: 0.6391, x1: 0.8422, y1: 0.8797 },
+  CX: { x0: 0.5375, y0: 0.6281, x1: 0.8859, y1: 0.8906 },   // Day One Lizard = C4 recolored at the same bbox
 };
 // Height-per-unit-width for a STATIC cropped pet, matching croppedPetImg's maths
 // (FILL 0.82 against the longest content edge). Pairs with petMassScale() for the
@@ -163,10 +163,10 @@ function petSpriteHtml(petId, px, ground = false, { mass = false } = {}) {
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
-  const inner = croppedPetImg(petId, px, false, src);
+  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
@@ -3104,7 +3104,7 @@ function friendRowAvatar(f) {
 function friendCardHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petPortraitHtml(p.pet.id, 40)}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petPortraitHtml(p.pet.id, 40, false, { mass: true })}</div>` : '';
   const chips = [];
   if (p.level) chips.push(`<span class="fc-chip lvl">Lv ${p.level}</span>`);
   if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
@@ -6748,7 +6748,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v243'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v244'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
