@@ -6902,7 +6902,7 @@ async function renderPit(wrap) {
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="crate-row">
         <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
-        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · first win: ${r.coins} coins + ${r.xp} XP</small></div>
+        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · +${r.repeatCoins} coins` : `first win: ${r.coins} coins + ${r.xp} XP`}</small></div>
         ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'Rematch' : 'Fight'}</button>`}
       </div>`;
     }).join('')}
@@ -6911,7 +6911,7 @@ async function renderPit(wrap) {
     <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion${champBeaten ? ' ✓' : ''}</summary>
     <div class="crate-row">
       <span class="crate-ico">${crateIcon('golden', 24)}</span>
-      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? '✓' : ''}</b><small>Wields the Bonecrusher · first win drops it + a Golden Crate</small></div>
+      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? '✓' : ''}</b><small>${champBeaten ? `rematch · +${CHAMPION.repeatCoins} coins` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
       ${champOpen ? `<button class="btn small ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'Rematch' : 'Fight'}</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>
     </details>`;
