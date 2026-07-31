@@ -6748,7 +6748,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v245'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v246'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7310,6 +7310,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
     jab:   { dir: 'assets/bh/fx/jab/basic',   step: 60, hold: 150, cls: 'sfx-jab' },
     swing: { dir: 'assets/bh/fx/swing/swing', step: 75, hold: 190, cls: 'sfx-swing' },
   };
+  // Cam's frames are 110KB to 136KB each and the whole animation lives about
+  // 350ms. On a cold cache that means the element is created, played and removed
+  // before one pixel decodes, so the punch is simply invisible: exactly what Tom
+  // saw on the first fight after updating to v245. Warm them when the fight
+  // opens, long before anyone can tap JAB, and hold the references so they are
+  // not collected. Cheap: six images, once per fight, straight from cache after.
+  const strikeFxWarm = [];
+  function warmStrikeFx() {
+    if (strikeFxWarm.length) return;
+    for (const cfg of Object.values(STRIKE_FX)) {
+      for (let i = 1; i <= 3; i++) { const im = new Image(); im.src = `${cfg.dir}${i}.png`; strikeFxWarm.push(im); }
+    }
+  }
   function strikeFx(vic, move) {
     const cfg = STRIKE_FX[move];
     const arena = el('arena');
@@ -7339,13 +7352,26 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }
     const s = fast ? 0.25 : 1;
     const show = i => L.forEach((im, k) => { im.style.opacity = k === i ? '1' : '0'; });
-    show(0);
-    setTimeout(() => show(1), cfg.step * s);
-    setTimeout(() => show(2), cfg.step * 2 * s);
-    // hold the impact frame, then fade the whole thing out
-    setTimeout(() => { wrap.style.transition = `opacity ${140 * s}ms`; wrap.style.opacity = '0'; },
-      (cfg.step * 2 + cfg.hold) * s);
-    setTimeout(() => wrap.remove(), (cfg.step * 2 + cfg.hold + 200) * s);
+    const run = () => {
+      show(0);
+      setTimeout(() => show(1), cfg.step * s);
+      setTimeout(() => show(2), cfg.step * 2 * s);
+      // hold the impact frame, then fade the whole thing out
+      setTimeout(() => { wrap.style.transition = `opacity ${140 * s}ms`; wrap.style.opacity = '0'; },
+        (cfg.step * 2 + cfg.hold) * s);
+      setTimeout(() => wrap.remove(), (cfg.step * 2 + cfg.hold + 200) * s);
+    };
+    // Never play over undecoded images. warmStrikeFx() means this is normally
+    // already true; the wait is the safety net for a first fight on a slow
+    // connection, and it degrades to a slightly late punch rather than no punch.
+    if (L[0].complete && L[0].naturalWidth) run();
+    else {
+      let started = false;
+      const go = () => { if (!started) { started = true; run(); } };
+      L[0].addEventListener('load', go, { once: true });
+      L[0].addEventListener('error', go, { once: true });
+      setTimeout(go, 400);
+    }
   }
   // The mirrored branch (a foe striking YOU) is otherwise unreachable in a test:
   // rung 1 dies before it gets a turn. Same webdriver-only hook the map uses.
@@ -7981,6 +8007,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }, fast ? 80 : 750);
   }
 
+  warmStrikeFx();   // fetch Cam's jab/swing frames now, not on the first punch
   refreshAll('Round one. Your turn.');
 }
 
