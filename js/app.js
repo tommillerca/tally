@@ -6748,7 +6748,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v244'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v245'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7300,6 +7300,57 @@ async function openFight(pitWrap, fighter, foeCfg) {
     setTimeout(() => wrap.remove(), 780 * s);
   }
 
+  // Basic-move FX (v245): Cam's jab and swing frames. Unlike the Counterstep
+  // flurry above, these three frames are CUMULATIVE snapshots of one motion (frame
+  // 2 contains frame 1, frame 3 contains frame 2 plus the impact burst), measured
+  // at 100% pixel containment. So they play as a REPLACE, one visible at a time.
+  // Stacking them the way jabFlurry stacks its separate pieces would draw six
+  // fists at once.
+  const STRIKE_FX = {
+    jab:   { dir: 'assets/bh/fx/jab/basic',   step: 60, hold: 150, cls: 'sfx-jab' },
+    swing: { dir: 'assets/bh/fx/swing/swing', step: 75, hold: 190, cls: 'sfx-swing' },
+  };
+  function strikeFx(vic, move) {
+    const cfg = STRIKE_FX[move];
+    const arena = el('arena');
+    if (!cfg || !arena) return;
+    const wrap = document.createElement('div');
+    wrap.className = `strikefx ${cfg.cls}`;
+    wrap.innerHTML = [1, 2, 3].map(i => `<img src="${cfg.dir}${i}.png" alt="">`).join('');
+    arena.appendChild(wrap);
+    const L = [...wrap.querySelectorAll('img')];
+
+    // Anchor to the VICTIM, not the arena. Measured off Cam's comps: the FX's
+    // vertical centre sits 35% down the victim's body and its leading edge lands
+    // 75% into them, which is what makes the punch connect with the skull instead
+    // of sailing over it. Percentages of the arena cannot express that: the arena
+    // is much wider and taller than a fighter, so the same numbers drift.
+    const vicStage = vic === 'p' ? el('youStage') : (vic === 'fa' && el('addStage')) || el('foeStage');
+    const ar = arena.getBoundingClientRect();
+    const vr = (vicStage || arena).getBoundingClientRect();
+    const toRight = vic !== 'p';                       // a foe victim is struck left-to-right
+    const cy = (vr.top - ar.top) + vr.height * 0.35;
+    const lead = (vr.left - ar.left) + vr.width * (toRight ? 0.75 : 0.25);
+    for (const im of L) {
+      const w = im.offsetWidth || parseFloat(getComputedStyle(im).width) || 0;
+      im.style.left = `${Math.round(toRight ? lead - w / 2 : lead + w / 2)}px`;
+      im.style.top = `${Math.round(cy)}px`;
+      im.style.transform = `translate(-50%, -50%)${toRight ? '' : ' scaleX(-1)'}`;
+    }
+    const s = fast ? 0.25 : 1;
+    const show = i => L.forEach((im, k) => { im.style.opacity = k === i ? '1' : '0'; });
+    show(0);
+    setTimeout(() => show(1), cfg.step * s);
+    setTimeout(() => show(2), cfg.step * 2 * s);
+    // hold the impact frame, then fade the whole thing out
+    setTimeout(() => { wrap.style.transition = `opacity ${140 * s}ms`; wrap.style.opacity = '0'; },
+      (cfg.step * 2 + cfg.hold) * s);
+    setTimeout(() => wrap.remove(), (cfg.step * 2 + cfg.hold + 200) * s);
+  }
+  // The mirrored branch (a foe striking YOU) is otherwise unreachable in a test:
+  // rung 1 dies before it gets a turn. Same webdriver-only hook the map uses.
+  if (navigator.webdriver) window.__strikeFx = strikeFx;
+
   // Heckle rattle: Cam's two skulls jeer AT THE RATTLED FIGHTER, one over each
   // shoulder of their head, yapping in alternation (frame swap) then fading.
   function heckleTaunt(vic) {
@@ -7357,6 +7408,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const heavy = ev.move === 'haymaker' || ev.move === 'titan' || ev.signature;
       const strike = () => {
         pulse(atkStage, heavy ? lungeCls + ' big' : lungeCls, fxMs + 120);
+        // Cam's frames travel toward the victim as the lunge starts, so the burst
+        // frame lands with the hurt pulse rather than trailing after it.
+        strikeFx(vicSide, ev.move);
         setTimeout(() => {
           pulse(vicStage, 'hurt', fxMs + 150);
           impactBurst(vicSide, 'phys', heavy);

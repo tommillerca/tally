@@ -2820,6 +2820,40 @@ body::before {
 }
 @media (prefers-reduced-motion: reduce) { .jabfx img { animation-duration: .01s !important; } }
 
+/* Basic-move strike FX (v245): Cam's jab + swing frames. The three frames per move
+   are CUMULATIVE and share one cropped canvas, so they are stacked in the same spot
+   and revealed one at a time (JS toggles opacity); aspect-ratio comes from the
+   asset crop so the art is never squashed:
+     jab   928x357  (2.599)  a flat horizontal punch
+     swing 985x581  (1.695)  an upward arc
+   Sizes are % of the arena so this scales with the stage on any phone. */
+.strikefx { position: absolute; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
+.strikefx img {
+  position: absolute; opacity: 0;      /* left/top/transform set by strikeFx() */
+  transition: opacity .05s linear;
+  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, .55));
+}
+/* Size is measured against a FIGHTER, not the arena, because that is the only
+   scale-invariant anchor: in Cam's comps each fighter is 583px and the jab FX is
+   928px, i.e. 1.59x a fighter (swing 1.69x). .fstage is a fixed 112px, so:
+     jab   1.59 x 112 = 178px wide
+     swing 1.69 x 112 = 189px wide, which lands 112px tall, exactly one fighter high
+   Anchoring to the arena instead was the mistake: Cam draws his fighters at 35% of
+   the comp where the app draws them at 20% of the arena, so "56% of the scene"
+   rendered the jab at 2.84x a fighter, nearly double Cam's intent. The max-widths
+   only matter on a very narrow arena. */
+/* Position is set inline by strikeFx() from the VICTIM's box (centre 35% down them,
+   leading edge 75% into them, both measured off Cam's comps). Only the SIZE lives
+   here, as a multiple of the fixed 112px fighter: jab 1.59x = 178px, swing 1.69x =
+   189px, which lands exactly one fighter tall. Arena-relative percentages were the
+   bug twice over: too big horizontally, and floating above the head vertically. */
+.strikefx.sfx-jab img { width: 178px; max-width: 62%; aspect-ratio: 928 / 357; height: auto; }
+.strikefx.sfx-swing img { width: 189px; max-width: 66%; aspect-ratio: 985 / 581; height: auto; }
+@media (prefers-reduced-motion: reduce) {
+  /* no crossfade, just land the impact frame */
+  .strikefx img { transition: none; }
+}
+
 /* Heckle taunt FX (v205): two skulls jeer over the rattled fighter's shoulders,
    floating in alternate rhythm. Skull position/size are set inline by heckleTaunt. */
 .heckfx { position: absolute; inset: 0; pointer-events: none; z-index: 41; }
