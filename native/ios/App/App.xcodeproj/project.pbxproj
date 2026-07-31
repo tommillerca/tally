@@ -15,13 +15,41 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		9464532CA915111A1D1EE2B2 /* BoneheadzWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 59C4FEB86C6290D85E63335A /* BoneheadzWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B0NEHEAD00000000000001AB /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000001AA /* HealthPlugin.swift */; };
 		B0NEHEAD00000000000002AB /* BoneheadzViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */; };
 		B0NEHEAD00000000000004AB /* BhVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0NEHEAD00000000000004AA /* BhVault.swift */; };
+		B89B10AC2A2C7D37C865BDEC /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 84D13B13E0A61588BCD76EFF /* Foundation.framework */; };
+		C28AE4CC86B99F6F7F7C8F66 /* BoneheadzWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 586B8FC3BB7ED052D7B79425 /* BoneheadzWidget.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3B713E395A62B6E15221E5D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7B76498DE79EB9BB4CC70F01;
+			remoteInfo = BoneheadzWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9B14768C12C50740125CCF1D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9464532CA915111A1D1EE2B2 /* BoneheadzWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		46801FFFEE30A9DB5D3D2FE2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -30,11 +58,15 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		586B8FC3BB7ED052D7B79425 /* BoneheadzWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BoneheadzWidget.swift; sourceTree = "<group>"; };
+		59C4FEB86C6290D85E63335A /* BoneheadzWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BoneheadzWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		84D13B13E0A61588BCD76EFF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		B0NEHEAD00000000000001AA /* HealthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthPlugin.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000002AA /* BoneheadzViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoneheadzViewController.swift; sourceTree = "<group>"; };
-		B0NEHEAD00000000000004AA /* BhVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BhVault.swift; sourceTree = "<group>"; };
 		B0NEHEAD00000000000003AA /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		B0NEHEAD00000000000004AA /* BhVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BhVault.swift; sourceTree = "<group>"; };
+		F97433936478D4E7A65A39E0 /* BoneheadzWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = BoneheadzWidget.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,15 +78,41 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D52AA2B97EBDCFAF727A4E44 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B89B10AC2A2C7D37C865BDEC /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0EE1C66312D0AB4A4B6A98AD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1455B3465633BCEBAA9DD08B /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		1455B3465633BCEBAA9DD08B /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				84D13B13E0A61588BCD76EFF /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				0EE1C66312D0AB4A4B6A98AD /* Frameworks */,
+				7EB10E746E17D2912A5F0A1B /* BoneheadzWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -62,6 +120,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				59C4FEB86C6290D85E63335A /* BoneheadzWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,6 +144,17 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		7EB10E746E17D2912A5F0A1B /* BoneheadzWidget */ = {
+			isa = PBXGroup;
+			children = (
+				586B8FC3BB7ED052D7B79425 /* BoneheadzWidget.swift */,
+				46801FFFEE30A9DB5D3D2FE2 /* Info.plist */,
+				F97433936478D4E7A65A39E0 /* BoneheadzWidget.entitlements */,
+			);
+			name = BoneheadzWidget;
+			path = BoneheadzWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -95,10 +165,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				9B14768C12C50740125CCF1D /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0ABAB4984AD7A02FC380827F /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -107,6 +179,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7B76498DE79EB9BB4CC70F01 /* BoneheadzWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 13E8FBE75DF55F267517D92D /* Build configuration list for PBXNativeTarget "BoneheadzWidget" */;
+			buildPhases = (
+				833A0F3F533A40B4C8A5EEC6 /* Sources */,
+				D52AA2B97EBDCFAF727A4E44 /* Frameworks */,
+				1613981643EF878C7367288B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BoneheadzWidget;
+			productName = BoneheadzWidget;
+			productReference = 59C4FEB86C6290D85E63335A /* BoneheadzWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -141,11 +230,19 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				7B76498DE79EB9BB4CC70F01 /* BoneheadzWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1613981643EF878C7367288B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3021FED79650016851F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -173,7 +270,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		833A0F3F533A40B4C8A5EEC6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C28AE4CC86B99F6F7F7C8F66 /* BoneheadzWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0ABAB4984AD7A02FC380827F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = BoneheadzWidget;
+			target = 7B76498DE79EB9BB4CC70F01 /* BoneheadzWidget */;
+			targetProxy = 3B713E395A62B6E15221E5D4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -352,9 +466,71 @@
 			};
 			name = Release;
 		};
+		9A9013C0906AAFB911143914 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BoneheadzWidget/BoneheadzWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 18;
+				DEVELOPMENT_TEAM = H8TRZ23C77;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BoneheadzWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.boneheadz.gym.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A8DBD09F6EA280A3E845E116 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BoneheadzWidget/BoneheadzWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 18;
+				DEVELOPMENT_TEAM = H8TRZ23C77;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BoneheadzWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.boneheadz.gym.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		13E8FBE75DF55F267517D92D /* Build configuration list for PBXNativeTarget "BoneheadzWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A8DBD09F6EA280A3E845E116 /* Release */,
+				9A9013C0906AAFB911143914 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

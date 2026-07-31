@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 0 stub face. Phase 2 replaces the text with a single ImageView holding
+     the bitmap the web app renders, since RemoteViews cannot draw the calorie
+     ring or use Bangers. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="bottom|start"
+    android:padding="16dp"
+    android:background="@drawable/bh_widget_bg">
+
+    <TextView
+        android:id="@+id/bh_level"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:textColor="#B8ED4D"
+        android:text="LV 28" />
+
+    <TextView
+        android:id="@+id/bh_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#D9FFFFFF"
+        android:text="BONE GRANDMASTER" />
+
+    <TextView
+        android:id="@+id/bh_note"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="10sp"
+        android:textColor="#59FFFFFF"
+        android:text="phase 0 stub" />
+
+</LinearLayout>

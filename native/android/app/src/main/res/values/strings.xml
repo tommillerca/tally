@@ -4,4 +4,6 @@
     <string name="title_activity_main">Boneheadz Gym</string>
     <string name="package_name">com.boneheadz.gym</string>
     <string name="custom_url_scheme">com.boneheadz.gym</string>
+    <string name="bh_widget_label">Your Bonehead</string>
+    <string name="bh_widget_description">Your fighter, your level, and what you have left to eat today.</string>
 </resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Large, to match the iOS systemLarge decision: 4x4 is the TARGET cell size.
+     minWidth/minHeight are the honest floor the layout still reads at, not the
+     target, and resize is allowed. That distinction is load-bearing: with
+     minHeight 250dp and resizeMode="none" the launcher refused every drop with
+     LAUNCHER_ITEM_DROP_FAILED_INSUFFICIENT_SPACE. On a 411x914dp Pixel a 4-row
+     widget wants ~560dp and only ~560dp remains once At a Glance holds row 1, so
+     a rigid 4x4 is unplaceable on a stock home screen, not just a full one.
+
+     updatePeriodMillis is 0 on purpose. The widget shows the numbers as of the
+     last app open, so there is nothing for a timer to discover; the app pushes an
+     update when it has something new. A periodic timer here would burn battery
+     redrawing identical content, and Android would cap it at 30 minutes anyway. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="4"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/bh_widget"
+    android:previewLayout="@layout/bh_widget"
+    android:description="@string/bh_widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

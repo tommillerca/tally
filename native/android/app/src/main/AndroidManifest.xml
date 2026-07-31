@@ -42,6 +42,21 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Home screen widget. exported=true and the APPWIDGET_UPDATE filter are
+             both required: without them the widget never appears in the picker,
+             which looks identical to the widget not existing. -->
+        <receiver
+            android:name=".BhWidgetProvider"
+            android:label="@string/bh_widget_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/bh_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
