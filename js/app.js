@@ -8008,6 +8008,43 @@ async function openFight(pitWrap, fighter, foeCfg) {
   }
 
   warmStrikeFx();   // fetch Cam's jab/swing frames now, not on the first punch
+
+  /* Test-only fight control (webdriver, so never a real player or a ?demo
+     screen-share). Playing a fight out by script is slow and can simply fail to
+     end: a ladder check once ran 140 turns without finishing because the pet kept
+     healing while the foe kept guarding. Everything behind a win (reward cards,
+     KO choreography, level-up, the ladder marking a rung beaten) was effectively
+     unverifiable, so it went unverified.
+     This does NOT fake the result. It puts a body one hit from death and then
+     takes a REAL action, so the engine's own damage, checkOver and settle() run.
+     What the test sees is what a player sees. */
+  if (navigator.webdriver) {
+    window.__bhFight = {
+      state: () => ({
+        turn: fight.turn, active: fight.active, over: fight.over,
+        you: fight.p.hp, pet: fight.pAux ? fight.pAux.hp : null,
+        foe: fight.f.hp, add: fight.fAux ? fight.fAux.hp : null,
+      }),
+      // finish('p') wins, finish('f') loses. Resolves through the real path or
+      // reports false; it never claims an outcome it did not reach.
+      finish: async (winner = 'p') => {
+        for (let i = 0; i < 12 && !fight.over; i++) {
+          if (winner === 'p') {
+            fight.f.hp = 1; fight.f.ward = 0;
+            if (fight.fAux) { fight.fAux.hp = 1; fight.fAux.ward = 0; }
+            if (fight.active === 'p' && !petPhase) playerAct('jab');   // a real swing, so it can still whiff
+            else doEndTurn();
+          } else {
+            fight.p.hp = 1; fight.p.ward = 0;
+            if (fight.pAux) { fight.pAux.hp = 0; }
+            doEndTurn();                                               // let the foe land the real killing blow
+          }
+          await new Promise(r => setTimeout(r, 260));
+        }
+        return fight.over || false;
+      },
+    };
+  }
   refreshAll('Round one. Your turn.');
 }
 
