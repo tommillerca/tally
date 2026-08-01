@@ -6181,6 +6181,15 @@ async function renderBoneyard(el) {
     // so he comes back tomorrow morning but can't be farmed inside one window.
     const gluttonCleared = new Set(xpRows0.filter(r => r.type === 'glutton').map(r => r.key));
     const gluttonLive = () => { const w = gluttonWindow(); return (w.active && !gluttonCleared.has(gluttonKey(date, w.slot))) ? w : null; };
+    // gluttonCleared starts as a SNAPSHOT taken when this screen opened, so any
+    // clear that happens elsewhere (or a slot/date the event payload got wrong)
+    // would leave a dead boss standing. Re-read the ledger and let the next
+    // refreshGlutton() take him off the map.
+    const syncGluttonCleared = async () => {
+      try {
+        for (const r of await db.all('xp')) if (r.type === 'glutton') gluttonCleared.add(r.key);
+      } catch { /* keep the snapshot we have */ }
+    };
     let gluttonRec = null; // single marker, not a Map (one-of-a-kind world boss)
     let gluttonPos = null; // where he ACTUALLY ended up, so the blight matches the marker
     let lastNearest = null;
@@ -6677,7 +6686,11 @@ async function renderBoneyard(el) {
 
     refreshWorld();
     // claims and day rollovers must surface even when standing still
-    const worldTimer = setInterval(() => { if (body.isConnected) refreshWorld(); else clearInterval(worldTimer); }, 5000);
+    const worldTimer = setInterval(async () => {
+      if (!body.isConnected) { clearInterval(worldTimer); return; }
+      await syncGluttonCleared();   // self-heal: a boss cleared anywhere leaves the map here
+      refreshWorld();
+    }, 5000);
     // occasionally a den STIRS (boss eyes glow + a shake) to give the map life —
     // not a loop, just a random flicker; the full gate cinematic plays on entry.
     const denAwaken = setInterval(() => {
@@ -6695,8 +6708,9 @@ async function renderBoneyard(el) {
     // When the Glutton is beaten (fired from the fight settle), he leaves the
     // map at once: marker gone, button hidden, and the blight lifts so loot
     // spawns come back. Cleaned up when the map sheet closes.
-    const onGluttonBeaten = e => {
+    const onGluttonBeaten = async e => {
       if (e?.detail?.key) gluttonCleared.add(e.detail.key);
+      await syncGluttonCleared();   // never trust the payload alone: read the ledger
       if (gluttonRec) { gluttonRec.marker.remove(); gluttonRec = null; }
       gluttonPos = null;
       const gb = $('#mapGlutton', body); if (gb) gb.hidden = true;
@@ -6878,7 +6892,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v248'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v249'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8040,8 +8054,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
             name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
             stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
           });
-          dispatchEvent(new CustomEvent('bh-glutton-beaten', { detail: { key: gluttonKey(dateKey(), slot) } }));
         } else coins = 25; // already cleared this window: pocket change, no re-farm
+        // Tell the map he is DOWN on every win, not just the first claim. Firing
+        // only inside `if (r)` meant a repeat win left the marker and the Face
+        // The Glutton button on screen, so he read as farmable: and he was, since
+        // a glutton fight costs no Pit energy while every win still mints a
+        // uniquely-keyed `fight` row (+10 XP and quest credit).
+        dispatchEvent(new CustomEvent('bh-glutton-beaten', { detail: { key: gluttonKey(dateKey(), slot) } }));
       }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {
