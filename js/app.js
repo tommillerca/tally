@@ -513,7 +513,7 @@ function openDropPopup() {
 function dropBannerHtml() {
   return `<details class="glutton-banner drop-banner">
     <summary>
-      <span class="gbn-ico drop-ico">${dropFitHtml('T9-5', 'H13-2')}</span>
+      <span class="gbn-ico drop-ico"><img src="assets/bh/H/H13-2.png" alt=""></span>
       <span class="gbn-txt"><i>Fresh drop</i><b>${esc(DROP.title)} is live</b></span>
       <span class="gbn-chev">›</span>
     </summary>
@@ -6878,7 +6878,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v247'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v248'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

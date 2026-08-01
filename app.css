@@ -3284,8 +3284,15 @@ body::before {
 
 /* pinned Today banner (glutton-banner skeleton, drop skin) */
 .drop-banner summary .gbn-txt i { color: var(--accent); }
-.drop-ico { overflow: visible; }
-.drop-ico .drop-fit { width: 44px; height: 44px; filter: none; }
+.drop-ico { border-color: rgba(255, 201, 97, .4); background: #14100a; }
+/* one zoomed piece, the glutton-hero pattern. The first version put a layered
+   .drop-fit <span> here; outside a flex container a span stays inline, so its
+   width/height were ignored and the icon collapsed to an empty box. That reached
+   Tom's phone because the check read the banner's TEXT and never its pixels. */
+.drop-ico img { position: absolute; width: 242%; left: 50%; top: 50%; transform: translate(-40.7%, -23.4%); }
+/* 242% / -40.7% / -23.4% are MEASURED from H13-2.png's alpha bbox (art spans 38%
+   of the canvas, centred at 40.7%,23.4%), so the fish fills the box instead of
+   hiding in the corner of a mostly-empty layer canvas. */
 
 /* shop section */
 .drop-sect { border: 1px solid rgba(255, 201, 97, 0.35); border-radius: 18px; padding: 14px;
