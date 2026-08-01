@@ -840,6 +840,36 @@ export const BH_ITEMS = [
   "name": "Deluxe Top #19"
  },
  {
+  "id": "T9-5",
+  "slot": "T",
+  "rarity": "legendary",
+  "name": "Bloodrush Puffer"
+ },
+ {
+  "id": "T9-6",
+  "slot": "T",
+  "rarity": "legendary",
+  "name": "Slime Puffer"
+ },
+ {
+  "id": "T9-7",
+  "slot": "T",
+  "rarity": "legendary",
+  "name": "Gravemint Puffer"
+ },
+ {
+  "id": "T9-8",
+  "slot": "T",
+  "rarity": "legendary",
+  "name": "Grape Puffer"
+ },
+ {
+  "id": "T9-9",
+  "slot": "T",
+  "rarity": "legendary",
+  "name": "Bubblegum Puffer"
+ },
+ {
   "id": "SK0-1",
   "slot": "SK",
   "rarity": "common",
@@ -1307,6 +1337,36 @@ export const BH_ITEMS = [
   "slot": "H",
   "rarity": "epic",
   "name": "Storm-forged Hat #7"
+ },
+ {
+  "id": "H13-2",
+  "slot": "H",
+  "rarity": "legendary",
+  "name": "Bloodrush Blowfish"
+ },
+ {
+  "id": "H13-3",
+  "slot": "H",
+  "rarity": "legendary",
+  "name": "Slime Blowfish"
+ },
+ {
+  "id": "H13-4",
+  "slot": "H",
+  "rarity": "legendary",
+  "name": "Gravemint Blowfish"
+ },
+ {
+  "id": "H13-5",
+  "slot": "H",
+  "rarity": "legendary",
+  "name": "Grape Blowfish"
+ },
+ {
+  "id": "H13-6",
+  "slot": "H",
+  "rarity": "legendary",
+  "name": "Bubblegum Blowfish"
  },
  {
   "id": "H13",

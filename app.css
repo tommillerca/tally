@@ -3244,3 +3244,70 @@ body::before {
 
 .slime-ico { position: relative; display: inline-block; }
 .slime-ico.slimed { filter: drop-shadow(0 0 10px rgba(150, 230, 80, .9)); }
+
+/* ================= the drop (Puffer Pack release) ================= */
+/* announcement veil, shown on the first 5 launches while the drop is live */
+.drop-veil { position: fixed; inset: 0; z-index: 300; background: rgba(6, 5, 9, 0.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+  padding-top: max(18px, var(--sat)); }
+.drop-card { position: relative; width: 100%; max-width: 380px;
+  background: radial-gradient(120% 90% at 50% 0%, #1c2413 0%, var(--surface) 55%);
+  border: 1px solid var(--line-strong); border-radius: 24px; padding: 26px 20px 20px;
+  text-align: center; overflow: hidden; }
+.drop-card::after { content: ''; position: absolute; inset: 0; background: var(--grain);
+  opacity: 0.05; pointer-events: none; }
+.drop-count { position: absolute; top: 14px; right: 14px; background: var(--surface-3);
+  border: 1px solid var(--line-strong); color: var(--gold); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; border-radius: 99px; padding: 6px 10px; }
+.drop-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent); margin: 0 0 8px; }
+.drop-title { font-family: var(--display); font-size: 44px; line-height: 0.95; color: var(--text);
+  margin: 0; text-transform: uppercase; font-weight: 400; }
+.drop-title em { font-style: normal; color: var(--accent); }
+.drop-sub { color: var(--text-2); font-size: 14.5px; margin: 10px auto 2px; max-width: 26em; }
+.drop-how { color: var(--text-3); font-size: 12.5px; margin: 8px auto 14px; max-width: 28em; }
+.drop-row { display: flex; justify-content: center; align-items: flex-end; margin: 14px 0 0; height: 168px; }
+/* one layered outfit: slot imgs stacked exactly like a .bh-anim avatar */
+.drop-fit { position: relative; width: 150px; height: 150px; flex: 0 0 auto;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5)); }
+.drop-fit img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.drop-row .drop-fit:nth-child(1) { transform: rotate(-8deg) translate(26px, -4px) scale(0.85); }
+.drop-row .drop-fit:nth-child(2) { transform: rotate(6deg) translate(-2px, 2px) scale(1.05); z-index: 2; }
+.drop-row .drop-fit:nth-child(3) { transform: rotate(10deg) translate(-30px, -8px) scale(0.82); }
+.drop-row.sm { height: 118px; margin: 6px 0 10px; }
+.drop-row.sm .drop-fit { width: 106px; height: 106px; }
+.drop-cta { display: block; width: 100%; border: 0; border-radius: 16px; padding: 15px;
+  font-family: var(--display); font-size: 20px; letter-spacing: 0.05em;
+  background: var(--accent); color: var(--accent-ink); }
+.drop-later { display: block; width: 100%; background: none; border: 0; color: var(--text-3);
+  font-size: 14px; padding: 12px 0 2px; }
+
+/* pinned Today banner (glutton-banner skeleton, drop skin) */
+.drop-banner summary .gbn-txt i { color: var(--accent); }
+.drop-ico { overflow: visible; }
+.drop-ico .drop-fit { width: 44px; height: 44px; filter: none; }
+
+/* shop section */
+.drop-sect { border: 1px solid rgba(255, 201, 97, 0.35); border-radius: 18px; padding: 14px;
+  margin: 0 0 16px;
+  background: radial-gradient(130% 100% at 50% 0%, rgba(165, 232, 71, 0.07) 0%, var(--surface) 60%); }
+.drop-sect-head { display: flex; align-items: baseline; gap: 8px; margin: 2px 2px 4px; }
+.drop-sect-head b { font-family: var(--display); font-size: 22px; letter-spacing: 0.03em;
+  color: var(--text); font-weight: 400; }
+.drop-sect-head .new { background: var(--accent); color: var(--accent-ink); font-size: 10px;
+  font-weight: 800; letter-spacing: 0.1em; padding: 4px 8px; border-radius: 99px; }
+.drop-sect-head small { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.drop-sub2 { color: var(--text-2); font-size: 13px; margin: 0 2px 12px; }
+.drop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.drop-item { background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 14px;
+  padding: 10px; text-align: center; position: relative; }
+.drop-item::before { content: 'LEGENDARY'; position: absolute; top: 8px; left: 8px;
+  font-size: 8.5px; font-weight: 800; letter-spacing: 0.12em; color: var(--gold); }
+.drop-item img { width: 88px; height: 88px; object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.25)); }
+.drop-item b { display: block; font-size: 13.5px; color: var(--text); margin: 4px 0 8px; }
+.drop-buy { width: 100%; border: 0; border-radius: 10px; padding: 9px; font-weight: 800;
+  font-size: 13px; background: var(--accent); color: var(--accent-ink); }
+.drop-buy:disabled { opacity: 0.9; }
+.drop-item.owned .drop-buy, .drop-buy[disabled]:not([data-buydrop]) { background: var(--surface-3); color: var(--text-2); }
+.drop-buy[data-buydrop]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }

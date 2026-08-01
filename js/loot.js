@@ -45,6 +45,35 @@ export const SHOP = [
 // Coin bonus a Battle Charm charge adds to a Pit win.
 export const BATTLE_CHARM_BONUS = 0.25;
 
+/* ---------- the drop: limited cosmetic sets sold like a release ---------- */
+// One active drop at a time. Items are ordinary BH_ITEMS entries (legendary, in
+// the crate pool like every legendary), PLUS direct-buy here, so the two
+// acquisition paths in the copy below stay true: crack crates or pay full price.
+export const DROP = {
+  id: 'puffer-pack',
+  title: 'The Puffer Pack',
+  blurb: 'Legendary colourways. Puffer on puffer.',
+  acquire: 'Every piece drops from crates like any legendary, or buy it outright below. Jackets 3,000 · fish 1,500.',
+  items: [
+    { id: 'T9-5', cost: 3000 }, { id: 'T9-6', cost: 3000 }, { id: 'T9-7', cost: 3000 },
+    { id: 'T9-8', cost: 3000 }, { id: 'T9-9', cost: 3000 },
+    { id: 'H13-2', cost: 1500 }, { id: 'H13-3', cost: 1500 }, { id: 'H13-4', cost: 1500 },
+    { id: 'H13-5', cost: 1500 }, { id: 'H13-6', cost: 1500 },
+  ],
+};
+
+export async function buyDropItem(itemId) {
+  const d = DROP.items.find(x => x.id === itemId);
+  if (!d) throw new Error('not a drop item');
+  const item = BH_BY_ID[itemId];
+  if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
+  const c = await coins();
+  if (c < d.cost) return { ok: false, reason: 'coins', need: d.cost, have: c };
+  await coinsAdd(-d.cost);
+  await grantCosmetic(itemId, 'drop');
+  return { ok: true, label: item.name, cost: d.cost, coins: await coins() };
+}
+
 function rng() {
   const a = new Uint32Array(1);
   crypto.getRandomValues(a);

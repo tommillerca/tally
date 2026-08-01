@@ -36,14 +36,37 @@ SLOTS = {
     'IL': ('Left hand', 120, None),
     'IR': ('Right hand', 130, None),
     'C':  ('Pet', 5, None),  # companion sits BEHIND the character (just above BG)
-    'YD': ('Yard', 150, None),  # anchored decor, not a full-frame layer
+    # YD ('Yard') was retired: app.js treats noYard as a legacy no-op and the shipped
+    # manifest carries no YD slot. Rebuilding with it resurrected a Yard tab and put
+    # two unusable decor items into the crate pool, caught only by the additive diff.
 }
 
-# Hand-curated items whose art lives outside the layer library.
+# Hand-curated items that exist in the SHIPPED manifest but not in the layer
+# library scan. CX (the Founder's Lizard, granted by CX survey reward) was added
+# to the manifest by hand after a build, so a naive rebuild silently DELETED a
+# species players own. Anything hand-added to data/boneheadz.js must be mirrored
+# here or the next rebuild eats it.
 SPECIALS = [
-    {'id': 'YD1', 'slot': 'YD', 'file': 'assets/brand/tombstone.png', 'name': 'Haunted Tombstone', 'rarity': 'uncommon'},
-    {'id': 'YD2', 'slot': 'YD', 'file': 'assets/brand/tomb.png', 'name': 'Tomb Gate', 'rarity': 'epic'},
+    {'id': 'CX', 'slot': 'C', 'rarity': 'legendary', 'name': 'Day One Lizard', 'exclusive': True},
 ]
+
+# Drop items: explicit name + rarity, and EXCLUDED from the running-number naming
+# below. Both matter. The hash would assign these near-random rarities, and the
+# per-slot counter would renumber every hat sorted after H13 ("Street Hat #9"
+# would silently become #14 in players' wardrobes) the moment H13-2..6 joined the
+# sort order. Ids here must exist in the library; the build fails loudly if not.
+OVERRIDES = {
+    'T9-5':  ('Bloodrush Puffer', 'legendary'),
+    'T9-6':  ('Slime Puffer', 'legendary'),
+    'T9-7':  ('Gravemint Puffer', 'legendary'),
+    'T9-8':  ('Grape Puffer', 'legendary'),
+    'T9-9':  ('Bubblegum Puffer', 'legendary'),
+    'H13-2': ('Bloodrush Blowfish', 'legendary'),
+    'H13-3': ('Slime Blowfish', 'legendary'),
+    'H13-4': ('Gravemint Blowfish', 'legendary'),
+    'H13-5': ('Grape Blowfish', 'legendary'),
+    'H13-6': ('Bubblegum Blowfish', 'legendary'),
+}
 
 RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary']
 # deterministic weights (must sum to 100)
@@ -94,21 +117,34 @@ def main():
             im.save(os.path.join(OUT_ASSETS, code, f), optimize=True)
             rarity = pick_rarity(item_id)
             slot_items.append({'id': item_id, 'slot': code, 'rarity': rarity})
-        # guarantee the top of every slot has something to chase
-        if slot_items:
-            if not any(i['rarity'] == 'legendary' for i in slot_items):
-                slot_items[h32('leg:' + code) % len(slot_items)]['rarity'] = 'legendary'
-            if not any(i['rarity'] == 'epic' for i in slot_items):
-                slot_items[h32('epic:' + code) % len(slot_items)]['rarity'] = 'epic'
+        # guarantee the top of every slot has something to chase.
+        # Computed over the PRE-DROP list only: the modulo index depends on the
+        # list length, so counting override items shifted which item got promoted
+        # (T slot: the legendary guarantee moved from T9-1 to T3, i.e. a rebuild
+        # would have quietly demoted a legendary players already own).
+        base_items = [i for i in slot_items if i['id'] not in OVERRIDES]
+        if base_items:
+            if not any(i['rarity'] == 'legendary' for i in base_items):
+                base_items[h32('leg:' + code) % len(base_items)]['rarity'] = 'legendary'
+            if not any(i['rarity'] == 'epic' for i in base_items):
+                base_items[h32('epic:' + code) % len(base_items)]['rarity'] = 'epic'
         items.extend(slot_items)
 
-    # names: deterministic adjective + slot noun + running number within slot
+    # names: deterministic adjective + slot noun + running number within slot.
+    # Overridden (drop) items take their explicit name and do NOT consume a
+    # number, so every pre-existing item keeps its exact name.
     counter = {}
     for it in items:
+        if it['id'] in OVERRIDES:
+            it['name'], it['rarity'] = OVERRIDES[it['id']]
+            continue
         n = counter.get(it['slot'], 0) + 1
         counter[it['slot']] = n
         adj = ADJ[it['rarity']][h32('adj:' + it['id']) % len(ADJ[it['rarity']])]
         it['name'] = f"{adj} {NOUN[it['slot']]} #{n}"
+    missing = [k for k in OVERRIDES if k not in {i['id'] for i in items}]
+    if missing:
+        raise SystemExit(f'OVERRIDES name ids with no library art: {missing}')
 
     # defaults are always owned and never drop from crates
     defaults = [d for (_, _, d) in SLOTS.values() if d]

@@ -31,6 +31,8 @@ const CONTROL_EXPECTATIONS = [
   { id: 'vigorBtn', on: 'today', expect: { sheet: 'The Pit' } },
   { id: 'charBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'wardrobe' } },
   { id: 'todaySettings', on: 'today', expect: { hash: '#/settings' } },
+  // the Puffer Pack drop: the pinned banner's CTA must land on the hub's Shop tab
+  { id: 'dropToShop', on: 'today', expect: { hash: '#/bonehead', hubTab: 'shop' }, open: 'details.drop-banner' },
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -57,6 +59,9 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
   // 1. Every control goes where it claims. Rendering proves nothing.
   for (const c of CONTROL_EXPECTATIONS) {
     await goto(c.on);
+    // controls that live inside a collapsed <details> (the pinned banners): expand
+    // it first, the way a user would, so the click starts from a visible control
+    if (c.open) { q(c.open)?.setAttribute('open', ''); await sleep(250); }
     const el = q('#' + c.id);
     if (!el) { problems.push(`control #${c.id} is MISSING on ${c.on}`); continue; }
     el.click();
@@ -78,7 +83,12 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
   // 2. Nothing floating may swallow a button underneath it.
   for (const route of routes) {
     await goto(route);
-    for (const btn of [...document.querySelectorAll('button')].filter(b => b.offsetParent && !b.hidden)) {
+    // offsetParent no longer proves visibility: Chrome hides closed-<details>
+    // content via content-visibility, which KEEPS layout geometry, so a button in
+    // a collapsed banner reports a full-size rect (behind the tab bar) while being
+    // invisible and untappable. Filter those out or every pinned banner CTA reads
+    // as a phantom overlay bug.
+    for (const btn of [...document.querySelectorAll('button')].filter(b => b.offsetParent && !b.hidden && !b.closest('details:not([open])'))) {
       if (!btn.id) continue;
       checked.overlays++;
       const top = topmostAt(btn);

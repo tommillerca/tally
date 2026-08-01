@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 247, date: '2026-08-02', title: 'The Puffer Pack has dropped', items: [
+    'Ten <b>legendary</b> pieces just hit: five new colourways of the puffer jacket, each with a matching <b>blowfish hat</b>. Bloodrush, Slime, Gravemint, Grape and Bubblegum. Puffer on puffer.',
+    'Every colour is pulled from Cam\'s original art, nothing invented. Wear the fish or fear the fish.',
+    'Get them from any crate (legendary odds, same as ever) or buy them outright in the <b>Shop</b>: jackets 3,000 coins, fish 1,500.',
+    'The drop card on Today has the whole set, and stays pinned there so you can find your way back to it.',
+  ] },
   { n: 246, date: '2026-08-01', title: 'Jab and swing have fists now', items: [
     'Your <b>jab</b> and <b>swing</b> are drawn animations instead of a flash of light, and they land on the fighter you are hitting rather than somewhere near them.',
     'They also actually show up. The frames were arriving a fraction of a second after the punch had already finished, so the first fight after an update looked exactly like nothing had changed.',

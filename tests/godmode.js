@@ -60,6 +60,10 @@ export async function click(page, re) {
     const b = [...document.querySelectorAll('button')]
       .find(x => rx.test((x.textContent || '').trim()) && !x.disabled && x.getBoundingClientRect().width);
     if (!b) return null;
+    // A button below the fold measures fine but a mouse click at its coordinates
+    // lands in dead space; a whole verification run once read as 7 failures
+    // because of exactly this. Scroll first, like a thumb would.
+    b.scrollIntoView({ block: 'center' });
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, re.source);

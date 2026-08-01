@@ -17,6 +17,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
+  DROP, buyDropItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
@@ -387,6 +388,7 @@ async function boot() {
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
   maybeShowWhatsNew();
+  maybeShowDropPopup();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -443,6 +445,84 @@ async function maybeShowWhatsNew() {
     if ($('#sheets')?.children.length) return;   // something already open — try again next launch
     openWhatsNew();
   } catch { /* never block boot */ }
+}
+
+/* ---------- the drop announcement ---------- */
+// A streetwear-style release card for DROP. Shows on the first 5 launches after
+// the drop lands (kv counter, bumped once per boot), then retires; the pinned
+// banner on Today (dropBannerHtml) carries it from there, glutton-style. Skips
+// webdriver unless forced so audits stay quiet, and follows the house popup
+// etiquette: never over the splash, the wheel, or an open sheet.
+const DROP_SEEN_KEY = `dropSeen.${DROP.id}`;
+
+// One outfit, layered exactly like avatarLayersHtml stacks slots (z order:
+// body < pants < top < skull < hat), on the default body so the popup shows the
+// GEAR, not anyone's loadout.
+function dropFitHtml(topId, hatId) {
+  const layers = ['assets/bh/B/B0-1.png', 'assets/bh/P/P2.png',
+    bhAsset(BH_BY_ID[topId]), 'assets/bh/SK/SK0-1.png', bhAsset(BH_BY_ID[hatId])];
+  return `<span class="drop-fit">${layers.map(s => `<img src="${s}" alt="">`).join('')}</span>`;
+}
+
+async function maybeShowDropPopup() {
+  try {
+    if ((navigator.webdriver && !window.__dropForce) || !S.settings) return;
+    const seen = await kvGet(DROP_SEEN_KEY, 0);
+    if (seen >= 5) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;      // busy boot: does NOT consume one of the 5 showings
+      }
+      await kvSet(DROP_SEEN_KEY, seen + 1);
+      openDropPopup();
+    };
+    setTimeout(tick, 2200);
+  } catch { /* never block boot */ }
+}
+
+function openDropPopup() {
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">10 NEW FITS</span>
+      <p class="drop-eyebrow">FRESH DROP</p>
+      <h1 class="drop-title">The <em>Puffer</em> Pack</h1>
+      <p class="drop-sub">${DROP.blurb} Wear the fish or fear the fish.</p>
+      <div class="drop-row">${dropFitHtml('T9-6', 'H13-3')}${dropFitHtml('T9-5', 'H13-2')}${dropFitHtml('T9-8', 'H13-5')}</div>
+      <p class="drop-how">${DROP.acquire}</p>
+      <button class="drop-cta" id="dropSeeBtn">SEE THE DROP</button>
+      <button class="drop-later" id="dropLaterBtn">Maybe later</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#dropLaterBtn', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#dropSeeBtn', veil).addEventListener('click', async () => {
+    await kvSet(DROP_SEEN_KEY, 99);   // they took the tour: the popup's job is done
+    close();
+    openCharacter('shop');
+  });
+  composeAvatars(veil);
+}
+
+// The pinned Today dropdown, same pattern as the Glutton banner: collapsed one-
+// liner, expands to the pitch + how-to-get-it + a straight line to the Shop.
+function dropBannerHtml() {
+  return `<details class="glutton-banner drop-banner">
+    <summary>
+      <span class="gbn-ico drop-ico">${dropFitHtml('T9-5', 'H13-2')}</span>
+      <span class="gbn-txt"><i>Fresh drop</i><b>${esc(DROP.title)} is live</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      <div class="drop-row sm">${dropFitHtml('T9-6', 'H13-3')}${dropFitHtml('T9-5', 'H13-2')}${dropFitHtml('T9-8', 'H13-5')}</div>
+      <p class="glutton-mech"><b>${esc(DROP.blurb)}</b> ${esc(DROP.acquire)}</p>
+      <button class="btn ghost" id="dropToShop" style="width:100%">Open the Shop</button>
+    </div>
+  </details>`;
 }
 
 // First run online: actively invite the player to pick their own Crew name
@@ -878,6 +958,7 @@ async function renderToday(el) {
   </button>` : ''}
 
   ${isToday ? gluttonBannerHtml() : ''}
+  ${isToday ? dropBannerHtml() : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -998,6 +1079,14 @@ async function renderToday(el) {
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#dropToShop')?.addEventListener('click', () => openCharacter('shop'));
+  // Expanding the banner leaves its CTA exactly under the fixed bottom nav, so
+  // taps fall through to the nav (ui-audit hit-test caught this pre-ship; it is
+  // the same failure shape as the Settings-gear/next-day collision). Scroll the
+  // CTA clear the moment the banner opens.
+  $('details.drop-banner')?.addEventListener('toggle', e => {
+    if (e.target.open) $('#dropToShop')?.scrollIntoView({ block: 'center' });
+  });
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -2176,7 +2265,7 @@ function scalePer100(per100, grams) {
 // route to Forage, and a placeholder for future real-money packs. Renders into
 // #screen like the other main tabs; re-renders itself after each purchase.
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal] = await Promise.all([buildFighter(), coins(), boneDust()]);
+  const [fighter, coinBal, dustBal, ownedCos] = await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds()]);
   const recArch = recommendArch(fighter);
   const rerender = () => renderShop(el);
 
@@ -2218,6 +2307,24 @@ async function renderShop(el) {
   el.innerHTML = `
 
   <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
+
+  <div class="drop-sect">
+    <div class="drop-sect-head"><b>${esc(DROP.title).toUpperCase()}</b><span class="new">NEW</span><small>${DROP.items.length} pieces</small></div>
+    <p class="drop-sub2">${esc(DROP.blurb)} Match the set or mix it filthy. ${esc(DROP.acquire)}</p>
+    <div class="drop-grid">
+      ${DROP.items.map(d => {
+        const it = BH_BY_ID[d.id];
+        const owned = ownedCos.has(d.id);
+        return `<div class="drop-item ${owned ? 'owned' : ''}">
+          <img src="${bhAsset(it)}" alt="" loading="lazy">
+          <b>${esc(it.name)}</b>
+          ${owned
+            ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+            : `<button class="drop-buy" data-buydrop="${d.id}" ${coinBal < d.cost ? 'disabled' : ''}>${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>`}
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-title">COIN SHOP</div>
@@ -2281,6 +2388,29 @@ async function renderShop(el) {
         rerender();
       });
     }));
+  // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
+  // are the most expensive single taps in the game.
+  el.querySelectorAll('[data-buydrop]').forEach((b => {
+    let t = null;
+    const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
+    b.addEventListener('click', async () => {
+      if (b.dataset.armed !== '1') {
+        b.dataset.label = b.dataset.label || b.innerHTML;
+        b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
+        clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
+        return;
+      }
+      clearTimeout(t); reset();
+      const r = await buyDropItem(b.dataset.buydrop);
+      if (!r.ok) {
+        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        return;
+      }
+      levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Equip it in your Wardrobe.`, 3200);
+      rerender();
+    });
+  }));
   el.querySelectorAll('[data-dustbuy]').forEach(btn => btn.addEventListener('click', async () => {
     btn.disabled = true;
     const res = await buyWithDust(btn.dataset.dustbuy);
@@ -6748,7 +6878,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v246'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v247'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

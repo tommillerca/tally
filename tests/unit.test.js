@@ -1057,5 +1057,33 @@ test('css: the scroll container still reserves the safe area', () => {
     '.screen must pad the safe area, or every screen starts under the notch');
 });
 
+// ---- the Puffer Pack drop: manifest and shop must agree ----
+test('drop items exist in the manifest, legendary, with drop names', () => {
+  const data = readFileSync(join(here, '..', 'data', 'boneheadz.js'), 'utf8');
+  const items = JSON.parse(data.match(/BH_ITEMS = (\[[\s\S]*?\]);/)[1]);
+  const byId = Object.fromEntries(items.map(i => [i.id, i]));
+  const jackets = ['T9-5', 'T9-6', 'T9-7', 'T9-8', 'T9-9'];
+  const hats = ['H13-2', 'H13-3', 'H13-4', 'H13-5', 'H13-6'];
+  for (const id of [...jackets, ...hats]) {
+    assert.ok(byId[id], `${id} missing from the manifest`);
+    assert.equal(byId[id].rarity, 'legendary', `${id} must be legendary, is ${byId[id]?.rarity}`);
+    assert.match(byId[id].name, /Puffer|Blowfish/, `${id} kept a generated name: ${byId[id]?.name}`);
+  }
+  // the drop definition sells exactly these ids at the agreed prices
+  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const dropSrc = loot.match(/export const DROP = \{[\s\S]*?\n\};/)[0];
+  for (const id of jackets) assert.ok(dropSrc.includes(`{ id: '${id}', cost: 3000 }`), `${id} must sell for 3000`);
+  for (const id of hats) assert.ok(dropSrc.includes(`{ id: '${id}', cost: 1500 }`), `${id} must sell for 1500`);
+});
+
+test('rebuilding cosmetics cannot eat hand-added manifest entries again', () => {
+  // CX vanished from a rebuild once (survey reward, hand-added). The build script
+  // must carry every hand-added id in SPECIALS.
+  const script = readFileSync(join(here, '..', 'scripts', 'build-cosmetics.py'), 'utf8');
+  assert.ok(/'id': 'CX'/.test(script), 'CX missing from build-cosmetics SPECIALS: the next rebuild deletes the Day One Lizard');
+  const data = readFileSync(join(here, '..', 'data', 'boneheadz.js'), 'utf8');
+  assert.ok(data.includes('"Day One Lizard"'), 'CX missing from the shipped manifest');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
