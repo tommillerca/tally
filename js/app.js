@@ -3788,6 +3788,16 @@ async function maybeShowSurvey() {
 
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
+// Changelog copy is written with a little emphasis markup. esc() was escaping it,
+// so players read a literal "<b>" in their patch notes. Escape EVERYTHING first,
+// then re-open only <b>/<i>/<br>: the copy lives in-repo, but an allowlist means
+// a stray angle bracket can never become markup.
+function richLine(str) {
+  return esc(String(str))
+    .replace(/&lt;(\/?)(b|i)&gt;/g, '<$1$2>')
+    .replace(/&lt;br\s*\/?&gt;/g, '<br>');
+}
+
 async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
@@ -3802,7 +3812,7 @@ async function openWhatsNew() {
           ${c.hero.tally ? `<span class="m-tally">${esc(c.hero.tally)}</span>` : ''}
         </div>` : ''}
       </div>` : ''}
-      <ul class="wn-list">${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+      <ul class="wn-list">${c.items.map(i => `<li>${richLine(i)}</li>`).join('')}</ul>
     </div>`).join('');
   openSheet(`
     <div class="sheet-head"><h2>What's New</h2><button class="sheet-close">Done</button></div>
@@ -6892,7 +6902,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v249'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v250'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -1085,5 +1085,16 @@ test('rebuilding cosmetics cannot eat hand-added manifest entries again', () => 
   assert.ok(data.includes('"Day One Lizard"'), 'CX missing from the shipped manifest');
 });
 
+// ---- patch notes render emphasis, not literal tags ----
+test('changelog items are rendered with richLine, not esc', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/wn-list[\s\S]{0,80}richLine\(i\)/.test(app),
+    'What\'s New must render items through richLine; esc() prints a literal <b> in players\' patch notes');
+  // and richLine must still neuter anything that is not simple emphasis
+  const body = app.match(/function richLine\(str\) \{([\s\S]*?)\n\}/)[1];
+  assert.ok(body.includes('esc('), 'richLine must escape first');
+  assert.ok(!/script|img|a\|/.test(body), 'richLine allowlist must stay b/i/br only');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
