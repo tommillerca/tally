@@ -105,6 +105,19 @@ routes; rewards ride the existing grants system. Fights resolve client-side like
 2. **Rivals** — player guardians, takeovers, notifications, revenge, shield, cap.
 3. **Legend** — sieges, spire levels, Warden cosmetics, leaderboard column.
 
+**Art: DECIDED 2026-08-02. Spires use `assets/brand/tomb.png`** (Tom's call). It is the bat-gargoyle
+gate that was the retired Yard slot's "Tomb Gate" and is otherwise **unused**, so a Spire costs zero
+new art and cannot be confused with a den (dens use `tombstone.png`, a different silhouette). Proven
+on the real Boneyard map with the real marker plumbing: three states read clearly at map scale and
+against the Glutton blight.
+- **Unclaimed** `grayscale(.85) brightness(.62)` — cold, dead, obviously free to take.
+- **Yours** `hue-rotate(62deg) saturate(1.5)` + accent glow + a `YOURS` pennant + tribute counter.
+- **Rival's** `hue-rotate(-38deg) saturate(1.7)` + coral glow + their name on the pennant.
+- Marker root carries position ONLY; every filter/animation sits on an inner `.spire-fx`, or
+  MapLibre's positioning transform gets clobbered (the lesson already written into `.map-den-mark`).
+- Bigger than a den on purpose (58x74 vs 46x52) so a Spire reads as a landmark, not another pickup.
+- Later polish, not needed to ship: the owner's Bonehead head on the gate, and a lit doorway.
+
 **Decisions for Tom:** name stays "Dark Spire"? · Keeper's Boon perk (+10% quest coins vs +1 Vigor
 cap vs a daily dust trickle)? · cap at 3? · siege cadence (weekly max feels right)? · Phase 1 go?
 
