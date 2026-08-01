@@ -9,6 +9,107 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🧢 Drop calendar: 10 featured pieces after the Puffer Pack — DECISION (planned 2026-08-02)
+
+**Tom's ask.** Plan 10 key pieces for featured drops or weekly sale items, coolest weapons
+included, no filler slots (socks/undies out). Picked by surveying every IL/IR/FW/SK/H asset
+(88 props/kicks/skulls + 21 hats + 19 tops), not from the manifest names.
+
+**Two mechanics, both already built.** The Puffer Pack shipped the whole pipeline (recolor
+playbook, manifest OVERRIDES, drop section, popup, pinned banner). A **featured drop** = new
+legendary colourways of a hero piece, popup + banner, every 4-6 weeks. A **weekly sale** = an
+EXISTING catalog piece made direct-buy for 7 days, picked deterministically by ISO week from a
+curated list (the den-refresh pattern; zero server work). Sales give the shop a weekly heartbeat
+between drops.
+
+**The 10, in the order I'd run them:**
+| # | piece | mechanic | concept |
+|---|---|---|---|
+| 1 | Katana (IL7, 3 finishes exist) | featured drop | "Boneyard Steel": new blade colourways; the coolest weapon in the library |
+| 2 | Kitsune mask (H11, 3 exist) | featured drop | "Kitsune Night": gold/jade masks; Tom literally wears one already |
+| 3 | Chunky kicks (FW7, 6 exist) | weekly sale + 2 new | "Grail Kicks": rotate the 6, drop a triple-black and an all-bone legendary |
+| 4 | Magma skull (SK10) | featured drop | "Cold Flame": blue/green fire recolors; skull = face = maximum flex |
+| 5 | Storm skull (SK13) | featured drop | red/acid lightning variants; pairs with 4 as "Elements" season |
+| 6 | Chrome skull (SK7/8) | weekly sale | "Chrome Death" spotlight; maybe one gold "Midas" variant later |
+| 7 | Ball & chain (IR1) | featured drop | "The Wrecking Crew": gold/slime/rose flails, angry ball stays angry |
+| 8 | Foam finger (IL4, 3 exist) | weekly sale | cheap fun tier; keeps sales from feeling like a money grab |
+| 9 | Fishing rod (IR4) | weekly sale bundle | "Gone Fishin'": rod + a Blowfish hat cross-sell; extends the Puffer joke |
+| 10 | Pocket pet (IR2, tamagotchi) | weekly sale | retro bait; pairs with the pet system thematically |
+
+**Pricing bands (per Puffer Pack precedent):** hero-slot legendary colourways (skulls, katana)
+3,000 · secondary slots (masks, flails, kicks) 1,500-2,000 · fun tier (foam finger, balloons)
+600-900. Weekly sale = the piece's band, no fake discounts.
+
+**Rules that carry over:** all colourways palette-anchored to Cam's library with provenance
+receipts; masters into the library as new files only; manifest rebuilt through OVERRIDES with the
+additive diff proven clean; popup budget stays one active drop at a time.
+
+**Waiting on Tom:** approve/edit the 10 · which one is drop #2 (katana is my pick) · whether
+weekly sales start now or after drop #2.
+
+---
+
+## 🗼 Dark Spires — territory you claim and tend — DECISION (designed 2026-08-02, awaiting Tom's call)
+
+**Tom's ask.** A Pokemon-Go-gym-like system: claim a tower ("dark spire") in your town as your
+Bonehead, protect it, and have a reason to walk to it.
+
+**The honest constraint the whole design bends around: player density.** Pokemon Go gyms work
+because millions of players contest them. This game has ~92 accounts, few sharing a neighborhood.
+A system whose fun DEPENDS on rivals showing up reads as dead content for almost everyone. So the
+design must be fully alive for one player alone in their town, and get better with rivals rather
+than requiring them.
+
+**The shape.**
+- Spires are **permanent named landmarks**, sparser than dens (~1 per 2.2 km cell vs dens' 1.1 km)
+  so each feels like a monument. Position + name seeded by cell, same `mulberry32(hashStr(...))`
+  machinery as dens: The Crooked Fang, Marrowspike Rise, The Widow's Belfry.
+- Walk within 60 m to challenge. An unclaimed spire is held by an NPC **Wraith Warden** scaled to
+  your level. Win and your Bonehead becomes the guardian: your real build, gear, talents and pet,
+  frozen as a snapshot, VISIBLY standing on the map with your name. (The v136 friend-battle
+  faithful-AI-clone builder is exactly this; the profile snapshot is already on the server.)
+
+**The solo loop — what makes a player walk there with zero rivals:**
+1. **Tribute.** A held spire accrues coins + Bone Dust daily, capped at ~3 days, collectible only
+   in person. Uncollected tribute is the standing reason to walk.
+2. **Tending.** Guardian resolve decays over ~7 days; any visit restores it. Lapse and the spire
+   goes **dormant** (neutral NPC retakes it). Nothing is destroyed, per the shame-free rule: decay
+   pauses income, it never punishes. A weekly walking circuit emerges on its own.
+3. **Keeper's Boon.** Holding ≥1 spire grants a small always-on perk (proposal: +10% quest coins).
+   Gentle loss aversion: the buff is why losing a spire stings even solo.
+4. **Sieges (rare).** At most one push/week: a named NPC (graverise flavor) besieges one of your
+   spires; 48 h to walk there and break it or it goes dormant. Defense becomes a story with no
+   humans nearby. This is the ONLY new notification type, respecting the reduced-frequency rule.
+5. **Warden prestige.** Days-held streak, spire level (grows per tend/defense), and a Warden
+   cosmetic line that can ONLY be earned by holding spires.
+
+**The rivalry layer — lights up with even ONE other player in town (Brock, Cam):**
+- Take a rival's spire by beating their AI clone **in person**; your snapshot replaces theirs.
+- The fallen owner gets the notification and the **revenge walk**, the strongest motivator here.
+- Absent defense pays: your guardian repels an attacker → you receive a grant (+coins).
+- Cap of **3 held spires** (forces geographic choice, leaves towers for others); **1 h shield**
+  after a takeover so two friends at one corner can't ping-pong farm it.
+
+**Economy fit.** Attacking costs a fight charge (Pit energy), consistent with every other fight;
+tending and collecting are free. Walks already pay steps → Vigor; spires add *direction*, not grind.
+
+**Tech reality (why this is cheaper than it sounds).** Placement/naming = den cell-seeding verbatim.
+Defenders = existing profile snapshots + v136 clone builder. State = one new D1 `spires` table
+(id, owner, defender snapshot, claimed_at, resolve_until, tribute_from, level, siege) + 3-4 signed
+routes; rewards ride the existing grants system. Fights resolve client-side like every other award
+(friends-scale trust, stated plainly). Offline players see spires shrouded; claiming needs online.
+
+**Phases.**
+1. **The Lone Warden** — spires on the Boneyard map, NPC guardian, claim, tribute, tend, boon.
+   Fully fun at n=1. Server: table + routes.
+2. **Rivals** — player guardians, takeovers, notifications, revenge, shield, cap.
+3. **Legend** — sieges, spire levels, Warden cosmetics, leaderboard column.
+
+**Decisions for Tom:** name stays "Dark Spire"? · Keeper's Boon perk (+10% quest coins vs +1 Vigor
+cap vs a daily dust trickle)? · cap at 3? · siege cadence (weekly max feels right)? · Phase 1 go?
+
+---
+
 ## 🔑 Account recovery (ironclad) — ✅ SHIPPED v230 + v231 (2026-07-28)
 
 **Status.** Layer 1 shipped in v230. **v231 finished it** and the measured facts below correct several assumptions in the original plan:
