@@ -6635,13 +6635,25 @@ async function renderBoneyard(el) {
     let spireState_ = {};
     let spireInRange = null;
     let spireRemote = new Map();   // id -> server record (who really holds it)
-    async function refreshSpires() {
+    let spireFetchedAt = 0, spireFetchKey = '', spireFetching = false;
+    const SPIRE_POLL_MS = 60000;
+    async function refreshSpires({ force = false } = {}) {
       spireState_ = await spireState();
       const near = spiresNear(lat, lng).slice(0, 4);
-      // Ownership is shared, so ask the server who holds these. Fails soft: with
-      // no network the local model still drives everything.
-      const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
-      if (rows) spireRemote = new Map(rows.map(r => [r.id, r]));
+      // Ownership is shared, so ask the server who holds these. THROTTLED: this
+      // runs on the 5s world tick, and polling ownership twelve times a minute
+      // would burn battery and data to learn nothing. Refresh at most once a
+      // minute, immediately when the set of nearby spires changes, and always
+      // right after a claim. Fails soft: no network means the local model drives.
+      const key = near.map(s => s.id).join(',');
+      const stale = force || key !== spireFetchKey || Date.now() - spireFetchedAt > SPIRE_POLL_MS;
+      if (stale && !spireFetching) {
+        spireFetching = true;
+        try {
+          const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
+          if (rows) { spireRemote = new Map(rows.map(r => [r.id, r])); spireFetchedAt = Date.now(); spireFetchKey = key; }
+        } finally { spireFetching = false; }
+      }
       const live = new Set(near.map(s => s.id));
       for (const [id, rec] of spireMarkers) { if (!live.has(id)) { rec.marker.remove(); spireMarkers.delete(id); } }
       spireInRange = null;
@@ -6964,7 +6976,7 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
-    const onSpireClaimed = () => { refreshSpires(); };
+    const onSpireClaimed = () => { refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
     const prevCleanupGB = cleanupExtras;
     cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); };

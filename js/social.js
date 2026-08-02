@@ -317,6 +317,9 @@ export async function newFriendRequests() {
 
 export async function fetchSpires(ids) {
   if (!ids.length) return null;
+  // Most players are offline-only until they join the Crew. Ask first rather than
+  // throwing and catching a request that was never going to be made.
+  if (!(await isOnline())) return null;
   try {
     const r = await signedFetch('GET', `/spires?ids=${encodeURIComponent(ids.join(','))}`);
     if (!r.ok) return null;
