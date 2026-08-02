@@ -2651,14 +2651,16 @@ async function renderTrends(el) {
       <div class="st"><div class="l">7-day avg</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
       <div class="st"><div class="l">30-day avg</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
     </div>
-    <div class="chart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}</div>
+    <div class="chart" id="stepsChart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}
+      <p class="bc-readout note">${stepsHasData ? 'Tap any bar for that day\'s exact steps.' : ''}</p></div>
     <p class="note" style="margin-top:8px">${stepsHasData ? `Line = ${(STEP_REF / 1000)}k steps. Averages skip today (still counting). Tap History for week / month / year.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
   </div>
 
   <div class="card">
     <div class="card-title">SLEEP · LAST 14 DAYS</div>
     <div class="big-stat"><span class="v">${avgSleep != null ? avgSleep.toFixed(1) : '·'}<span class="d" style="margin-left:4px">h avg (7d)</span></span></div>
-    <div class="chart">${barChart(days14, d => d.sleepHours, { target: 8, color: 'var(--protein)', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}</div>
+    <div class="chart" id="sleepChart">${barChart(days14, d => d.sleepHours, { target: 8, color: 'var(--protein)', fmt: v => v.toFixed(0) + 'h', band: [7, 9] })}
+      <p class="bc-readout note">${sleepWk.length ? 'Tap any bar for that night.' : ''}</p></div>
     <p class="note" style="margin-top:8px">${sleepWk.length ? 'Shaded band = 7 to 9 hours. Log your hours each morning on the home screen.' : 'Log hours slept on the home screen (Daily wellness) to start your sleep trend.'}</p>
   </div>
 
@@ -2693,6 +2695,8 @@ async function renderTrends(el) {
   $('#logWeight').addEventListener('click', openWeightSheet);
   $('#openProg').addEventListener('click', openProgressSheet);
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
+  wireBarChart($('#stepsChart', el), v => `${v.toLocaleString()} steps`);
+  wireBarChart($('#sleepChart', el), v => `${v.toFixed(1)} hours`);
   el.querySelectorAll('[data-sleepdetail]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openSleepDetail(); }));
   $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
   $('#trendSync', el)?.addEventListener('click', async () => { await nativeSyncNow({ silent: false }); refresh(); });
@@ -2702,6 +2706,10 @@ async function renderTrends(el) {
 }
 
 // Generic bar chart. pick(d) -> value|null; opts: target line, color, fmt, band [lo,hi].
+/* Tappable bars. Each bar carries its date and exact value, and a FULL-HEIGHT
+   transparent hit target sits over it: a 300-step day is a 2px sliver, and asking
+   someone to hit that with a thumb is the same as not being tappable at all.
+   readBarChart() below wires the readout. */
 function barChart(days, pick, opts = {}) {
   const W = 560, H = 150, P = 8, gap = 5;
   const vals = days.map(pick);
@@ -2714,10 +2722,44 @@ function barChart(days, pick, opts = {}) {
   const bars = days.map((d, i) => {
     const v = pick(d); if (!v) return '';
     const x = P + i * (bw + gap), h = H - P - y(v);
-    return `<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${opts.color}" opacity="0.9"/>`;
+    return `<rect class="bc-bar" data-i="${i}" x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${opts.color}" opacity="0.9"/>`;
+  }).join('');
+  const hits = days.map((d, i) => {
+    const v = pick(d);
+    const x = P + i * (bw + gap);
+    return `<rect class="bc-hit" data-i="${i}" data-date="${esc(d.date || '')}" data-val="${v == null ? '' : v}"
+      x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" fill="transparent"/>`;
   }).join('');
   const tl = opts.target ? `<line x1="0" y1="${y(opts.target).toFixed(1)}" x2="${W}" y2="${y(opts.target).toFixed(1)}" stroke="var(--text-3)" stroke-width="1.5" stroke-dasharray="5 5"/>` : '';
-  return `<svg viewBox="0 0 ${W} ${H}">${bandRect}${bars}${tl}</svg>`;
+  return `<svg class="bc" viewBox="0 0 ${W} ${H}">${bandRect}${bars}${tl}${hits}</svg>`;
+}
+
+/* Tap a bar, read the exact number for that day. Delegated, so it survives the
+   in-place re-renders this screen does. `fmt` turns a raw value into the label. */
+function wireBarChart(wrap, fmt) {
+  const svg = $('.bc', wrap); if (!svg) return;
+  const out = $('.bc-readout', wrap); if (!out) return;
+  const idle = out.textContent;
+  svg.addEventListener('click', e => {
+    const hit = e.target.closest('.bc-hit'); if (!hit) return;
+    const i = hit.dataset.i;
+    svg.querySelectorAll('.bc-bar').forEach(b => b.classList.toggle('on', b.dataset.i === i));
+    const raw = hit.dataset.val;
+    if (raw === '') { out.textContent = `${prettyDay(hit.dataset.date)} · nothing recorded`; return; }
+    out.textContent = `${prettyDay(hit.dataset.date)} · ${fmt(Number(raw))}`;
+  });
+  svg.addEventListener('pointerleave', () => {
+    svg.querySelectorAll('.bc-bar.on').forEach(b => b.classList.remove('on'));
+    out.textContent = idle;
+  });
+}
+
+// "Tue 29 Jul" from a YYYY-MM-DD key, parsed as LOCAL time. new Date('2026-07-29')
+// is parsed as UTC and renders as the 28th for anyone west of Greenwich.
+function prettyDay(key) {
+  if (!key) return '';
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function weightChart(points, toUnit) {

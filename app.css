@@ -3396,3 +3396,10 @@ body::before {
 .spire-row small { display: block; color: var(--text-3); font-size: 12px; margin-top: 5px; }
 .spire-bar { height: 5px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
 .spire-bar i { display: block; height: 100%; background: var(--accent); }
+
+/* tappable bar charts: tap a bar, read that day's exact number */
+.bc { touch-action: manipulation; }
+.bc .bc-hit { cursor: pointer; }
+.bc .bc-bar { transition: opacity .12s; }
+.bc .bc-bar.on { opacity: 1; stroke: var(--text); stroke-width: 2; paint-order: stroke; }
+.bc-readout { margin: 6px 2px 0; min-height: 1.2em; font-variant-numeric: tabular-nums; }

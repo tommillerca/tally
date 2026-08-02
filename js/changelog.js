@@ -7,6 +7,7 @@ export const CHANGES = [
     'Nobody used them, and an item that quietly forgives a missed day muddied what a streak even means. They are gone from the shop, the dust shop, crates, the daily wheel and the welcome kit.',
     'If you were holding any, they have been <b>cashed out at 100 coins each</b>, added the next time you open the app.',
     'Days a Freeze already protected still count toward your streak. Retiring an item should not rewrite a streak you actually kept.',
+    'Also: <b>tap any bar</b> on your steps or sleep chart to see that exact day\'s number.',
   ] },
   { n: 252, date: '2026-08-02', title: 'Dark Spires: take the town', items: [
     'Towers have risen across your town. Walk to one, beat the warden holding it, and the <b>spire flies your name</b>.',
