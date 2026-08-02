@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>walk cycle demo</title>
+<link rel="stylesheet" href="../app.css">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; }
+  .wd { display: grid; justify-items: center; gap: 10px; }
+  .wd-card {
+    position: relative; width: 340px; height: 400px; border-radius: 24px;
+    background: radial-gradient(ellipse at 50% 115%, #1d1a14 0%, #14120e 45%, #0e0d12 100%);
+    border: 1px solid var(--line-strong); overflow: hidden;
+  }
+  .wd-floor { position: absolute; left: -8%; right: -8%; bottom: 52px; height: 3px;
+    background: rgba(242,233,215,.12); border-radius: 50%; box-shadow: 0 10px 30px 14px rgba(0,0,0,.5); }
+  .wd-av { position: absolute; left: 50%; bottom: 46px; width: 260px; height: 300px; margin-left: -130px; }
+  .wd-av .bh-anim img { object-fit: contain; }
+  .wd-caption { font-family: var(--display); font-size: 26px; letter-spacing: .04em; color: var(--bone, #f2e9d7); }
+  .wd-sub { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
+  /* map-marker size preview, bottom-right of card */
+  .wd-mini { position: absolute; right: 14px; bottom: 14px; display: grid; justify-items: center; gap: 5px; }
+  .wd-mini .map-you { width: 46px; height: 46px; }
+  .wd-mini span { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="wd">
+  <div class="wd-sub">Avatar walk cycle · the real walk.js</div>
+  <div class="wd-card">
+    <div class="wd-floor"></div>
+    <div class="wd-av" id="big"><div class="bh-anim">
+      <img src="../assets/bh/B/B0-1.png" alt=""><img src="../assets/bh/SK/SK0-1.png" alt="">
+    </div></div>
+    <div class="wd-mini"><div class="map-you"><div class="map-you-av" id="mini">
+      <div class="bh-anim"><img src="../assets/bh/B/B0-1.png" alt=""><img src="../assets/bh/SK/SK0-1.png" alt=""></div>
+    </div></div><span>map size</span></div>
+  </div>
+  <div class="wd-caption" id="cap">standing · idle</div>
+</div>
+<script type="module">
+const { attachWalk } = await import('../js/walk.js?ts=' + Date.now());
+const big = document.getElementById('big');
+const mini = document.getElementById('mini');
+const cap = document.getElementById('cap');
+// real module attached (proves the API); the seek below drives its classes
+const walkBig = attachWalk(big);
+const walkMini = attachWalk(mini);
+window.__walk = { walkBig, walkMini };
+
+// deterministic storyboard for frame capture:
+// 0-1.2 idle · 1.2-3.4 walk east · 3.4-5.4 walk west (flip) · 5.4-7 settle idle
+const PHASES = [
+  { t0: 0.0, t1: 1.2, walk: false, west: false, cap: 'standing · idle' },
+  { t0: 1.2, t1: 3.4, walk: true,  west: false, cap: 'walking east →' },
+  { t0: 3.4, t1: 5.4, walk: true,  west: true,  cap: '← walking west · auto-flip' },
+  { t0: 5.4, t1: 7.0, walk: false, west: true,  cap: 'stopped · settles to idle' },
+];
+window.__seek = (t) => {
+  const p = PHASES.find(p => t >= p.t0 && t < p.t1) || PHASES[PHASES.length - 1];
+  for (const el of [big, mini]) {
+    el.classList.toggle('bh-walking', p.walk);
+    el.classList.toggle('bh-face-w', p.west);
+  }
+  cap.textContent = p.cap;
+  const local = p.walk ? (t - p.t0) : t;
+  for (const a of document.getAnimations()) {
+    a.pause();
+    try { a.currentTime = local * 1000; } catch { /* unseekable */ }
+  }
+  return true;
+};
+window.__ready = true;
+
+// live mode: loop the storyboard in real time (capture calls __seek and stops this)
+let live = true;
+window.__stopLive = () => { live = false; };
+const t0 = performance.now();
+(function loop() {
+  if (!live) return;
+  const t = ((performance.now() - t0) / 1000) % 7;
+  const p = PHASES.find(p => t >= p.t0 && t < p.t1) || PHASES[0];
+  for (const el of [big, mini]) {
+    el.classList.toggle('bh-walking', p.walk);
+    el.classList.toggle('bh-face-w', p.west);
+  }
+  cap.textContent = p.cap;
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

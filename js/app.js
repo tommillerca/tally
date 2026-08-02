@@ -3,7 +3,7 @@ import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersis
 import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, initLootIfNeeded, checkStreakFreeze, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, initLootIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
 } from './game.js';
 import {
@@ -17,7 +17,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
-  DROP, buyDropItem,
+  DROP, buyDropItem, refundStreakFreezes,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
@@ -189,7 +189,6 @@ const ICONS = {
   star: (on) => `<svg viewBox="0 0 24 24" style="width:21px;height:21px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`,
   coin: (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
   flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
-  freeze: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4.5" fill="#bfe7ff" opacity="0.92" stroke="#173a52" stroke-width="1.6"/><path d="M12 7v10M8.5 9l7 6M15.5 9l-7 6" stroke="#5fa8d8" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
   paw: (s = 23) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
@@ -236,7 +235,7 @@ function mapLegendHtml() {
 }
 function consumableIcon(type, s = 20) {
   if (type === 'vigor') return `<span style="font-size:${Math.round(s * 0.92)}px;line-height:1">⚡</span>`;
-  return `<span class="bhi-wrap">${bhIcon(type === 'freeze' ? 'freeze' : 'charm', s)}</span>`;
+  return `<span class="bhi-wrap">${bhIcon('charm', s)}</span>`;
 }
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
 function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
@@ -363,10 +362,8 @@ async function boot() {
   const init = await initGameIfNeeded(S.settings.targets);
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
   await refreshShinyPets();
-  const frozen = await checkStreakFreeze();
-  if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 1600);
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
@@ -389,6 +386,9 @@ async function boot() {
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+  refundStreakFreezes().then(r => {
+    if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
+  }).catch(() => {});
   maybeShowWhatsNew();
   maybeShowDropPopup();
   maybeShowSpireIntro();
@@ -402,7 +402,7 @@ async function boot() {
 /* DAY ROLLOVER (v224).
    The native shell is a long-lived WebView: iOS suspends and resumes it rather
    than relaunching, so boot() can go days without running. Everything
-   day-shaped used to roll over ONLY in boot() — S.date, the streak freeze,
+   day-shaped used to roll over ONLY in boot() — S.date, the day close-out,
    yesterday's close-out crate, the daily wheel, quests, Pit energy. So the
    second morning you opened the app it was still on yesterday's date, and
    because renders compare S.date against a live dateKey() (`isToday`), the app
@@ -422,10 +422,8 @@ async function rollDayIfNeeded() {
     const wasOnToday = S.date === _dayAnchor;
     _dayAnchor = today;
     if (wasOnToday) S.date = today;
-    const frozen = await checkStreakFreeze();
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
-    if (frozen) setTimeout(() => toast(`Streak Freeze used: yesterday is covered, your ${frozen.saved + 1}-day streak lives`, 3800), 600);
     if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
     maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
@@ -4434,7 +4432,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates + a Streak Freeze are waiting on your Bonehead', 3600), 1200);
+  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), 1200);
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -4639,7 +4637,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges()]);
   const lvl = levelFor(xp);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
-  const freezes = inv.filter(r => r.kind === 'freeze').length;
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
@@ -5085,7 +5082,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>`;
       }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
       <div class="sect-h">Consumables</div>
-      <div class="crate-row"><span class="crate-ico">${ICONS.freeze(24)}</span><div style="flex:1"><b>Streak Freeze</b><small>${CONSUMABLES.freeze.desc}</small></div><span class="q-frac">x${freezes}</span></div>
       <div class="crate-row"><span class="crate-ico">${consumableIcon('xp2', 24)}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
       <div class="crate-row"><span class="crate-ico">${consumableIcon('vigor', 24)}</span><div style="flex:1"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
@@ -7152,7 +7148,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v252'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v253'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8692,7 +8688,6 @@ async function seedDemo() {
   await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
   await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
-  await db.put('inv', { id: 'demo-freeze', kind: 'freeze', source: 'welcome', ts: Date.now() });
   await db.put('inv', { id: 'demo-xp2', kind: 'xp2', source: 'crate', ts: Date.now() });
   await kvSet('loot-init', true);
   const g = id => GENERIC_FOODS.find(f => f.id === id);

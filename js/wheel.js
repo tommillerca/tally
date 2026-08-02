@@ -43,12 +43,13 @@ const PRIZES = [
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
   { key: 'golden', iconId: 'crate-golden',   tag: 'GOLD',   name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
-  { key: 'freeze', iconId: 'freeze',         tag: 'Freeze', name: 'a Streak Freeze',weight: 5,  gold: false, grant: () => grantConsumable('freeze', 'wheel') },
   { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
   { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
 ];
-const SEG = PRIZES.length;                 // 8
-const SEG_DEG = 360 / SEG;                  // 45
+// Derived, never hardcoded: the Streak Freeze prize was removed in v253 and the
+// wheel went from 8 segments to 7 without a single other change.
+const SEG = PRIZES.length;
+const SEG_DEG = 360 / SEG;
 
 const QUOTES = [
   'The bones remember who showed up.',

@@ -1,4 +1,4 @@
-// Loot: crates, cosmetics inventory, coins, consumables (streak freeze, XP boost).
+// Loot: crates, cosmetics inventory, coins, consumables (Battle Charm, Vigor Draught).
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
@@ -23,13 +23,12 @@ export const CRATES = {
 };
 
 export const CONSUMABLES = {
-  freeze: { label: 'Streak Freeze', icon: '🧊', desc: 'Auto-protects your streak the next day you forget to log' },
   // Battle Charm reuses the old 'xp2' storage key so any owned charges convert
   // 1:1 for free. It no longer touches logging; it pays out on Pit wins.
   xp2:    { label: 'Battle Charm',  icon: '🧿', desc: 'Your next 5 Pit wins pay +25% coins' },
-  // v153: a second "use it when you want it" item alongside the Charm, so drops
-  // aren't mostly Streak Freeze. Refills Pit energy so a good day of habits can
-  // fund a longer Pit run. Still never rewards eating less (it's a spent item).
+  // v153: a second "use it when you want it" item alongside the Charm. Refills
+  // Pit energy so a good day of habits can fund a longer Pit run. Still never
+  // rewards eating less (it's a spent item).
   vigor:  { label: 'Vigor Draught', icon: '⚡', desc: 'Drink to bank +3 Vigor (Pit energy) right now' },
 };
 export const VIGOR_DRAUGHT_AMOUNT = 3;
@@ -39,7 +38,6 @@ export const SHOP = [
   { id: 'crate-golden', label: 'Golden Crate', icon: '🧰', cost: 400 },
   { id: 'vigor', label: 'Vigor Draught', icon: '⚡', cost: 90 },
   { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
-  { id: 'freeze', label: 'Streak Freeze', icon: '🧊', cost: 120 },
 ];
 
 // Coin bonus a Battle Charm charge adds to a Pit win.
@@ -194,7 +192,6 @@ export async function salvagePet(petId) {
 export const DUST_SHOP = [
   { id: 'egg', label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' },
   { id: 'crate-daily', label: 'Common Crate', cost: 40, desc: 'A roll of loot' },
-  { id: 'freeze', label: 'Streak Freeze', cost: 25, desc: 'Protect a missed day' },
   { id: 'charm', label: 'Battle Charm', cost: 25, desc: 'Next Pit win pays more' },
 ];
 export async function buyWithDust(id) {
@@ -695,9 +692,9 @@ export async function openCrate(invId) {
     const floor = i === 0 ? def.floor : 0;
     if (rng() < def.consumableChance) {
       // v153: Streak Freeze was half of every consumable drop and nobody used them
-      // all. Weighted pool drops freeze to ~20%; Battle Charm + Vigor Draught (the
+      // all. Battle Charm + Vigor Draught (the
       // items people actually spend) fill the rest.
-      const pool = ['xp2', 'vigor', 'xp2', 'vigor', 'freeze'];
+      const pool = ['xp2', 'vigor'];
       const type = pool[Math.floor(rng() * pool.length)];
       await grantConsumable(type, 'crate');
       results.push({ type: 'consumable', consumable: type });
@@ -1095,11 +1092,22 @@ export async function consumeBattleCharmCharge() {
   return BATTLE_CHARM_BONUS;
 }
 
-/* ---------- streak freeze ---------- */
-export async function consumeFreeze() {
-  const inv = await inventory();
-  const row = inv.find(r => r.kind === 'freeze');
-  if (!row) return false;
-  await db.del('inv', row.id);
-  return true;
+/* Streak Freezes were retired in v253: nobody used them, and an item that
+   silently forgives a missed day muddied what a streak even means. Holders were
+   paid out at 100 coins each (see refundStreakFreezes). Deliberately not
+   replaced: do not re-add a "protect a day" consumable without a real reason. */
+
+/* One-time payout: 100 coins per Streak Freeze still in the backpack. Idempotent
+   via a kv flag AND by deleting the rows it pays for, so a double run cannot
+   double-pay. Coins are added BEFORE the rows are deleted: if the write dies
+   halfway, a player keeps an unusable item rather than losing coins they earned. */
+export async function refundStreakFreezes() {
+  if (await kvGet('freeze-refunded', false)) return null;
+  const rows = (await inventory()).filter(r => r.kind === 'freeze');
+  if (!rows.length) { await kvSet('freeze-refunded', true); return null; }
+  const coins = rows.length * 100;
+  await coinsAdd(coins);
+  for (const r of rows) await db.del('inv', r.id);
+  await kvSet('freeze-refunded', true);
+  return { count: rows.length, coins };
 }

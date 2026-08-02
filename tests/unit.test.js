@@ -1,5 +1,5 @@
 // Node unit tests: node tests/unit.test.js
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -1094,6 +1094,82 @@ test('changelog items are rendered with richLine, not esc', () => {
   const body = app.match(/function richLine\(str\) \{([\s\S]*?)\n\}/)[1];
   assert.ok(body.includes('esc('), 'richLine must escape first');
   assert.ok(!/script|img|a\|/.test(body), 'richLine allowlist must stay b/i/br only');
+});
+
+// ---- Streak Freezes are gone, everywhere ----
+test('no Streak Freeze remains in the shops, crates, wheel or welcome kit', () => {
+  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
+  const shop = loot.match(/export const SHOP = \[([\s\S]*?)\];/)[1];
+  const dust = loot.match(/export const DUST_SHOP = \[([\s\S]*?)\];/)[1];
+  const cons = loot.match(/export const CONSUMABLES = \{([\s\S]*?)\n\};/)[1];
+  assert.ok(!/freeze/i.test(shop), 'the coin shop still sells a freeze');
+  assert.ok(!/freeze/i.test(dust), 'the dust shop still sells a freeze');
+  assert.ok(!/freeze/i.test(cons), 'freeze is still a consumable');
+  const pool = loot.match(/const pool = \[([^\]]*)\]/)[1];
+  assert.ok(!/freeze/i.test(pool), 'crates can still drop a freeze');
+  const prizes = wheel.match(/const PRIZES = \[([\s\S]*?)\n\];/)[1];
+  assert.ok(!/freeze/i.test(prizes), 'the wheel can still land on a freeze');
+  assert.ok(!/grantConsumable\('freeze'/.test(game), 'the welcome kit still grants a freeze');
+  assert.ok(!/checkStreakFreeze/.test(game), 'the freeze-consuming boot check is still there');
+});
+
+test('the wheel derives its geometry, so removing a prize cannot skew it', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /const SEG = PRIZES\.length/);
+  assert.match(wheel, /const SEG_DEG = 360 \/ SEG/);
+});
+
+test('days a freeze already protected still count toward a streak', () => {
+  // Retiring an item must not retroactively break a streak someone really kept.
+  const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
+  const fn = game.match(/export function streakDateSet\([\s\S]*?\n\}/)[0];
+  assert.ok(/r\.type === 'freeze'/.test(fn), 'historic freeze markers must still be honoured');
+});
+
+test('the freeze payout is idempotent and pays before it deletes', () => {
+  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const fn = loot.match(/export async function refundStreakFreezes\([\s\S]*?\n\}/)[0];
+  assert.ok(/kvGet\('freeze-refunded'/.test(fn), 'must be guarded by a flag');
+  assert.ok(fn.indexOf('coinsAdd') < fn.indexOf('db.del'), 'coins must be credited BEFORE rows are deleted');
+  assert.ok(/\* 100/.test(fn), 'must pay 100 coins each');
+});
+
+test('every named import from a local module actually exists', () => {
+  // node --check parses a file but never resolves its imports, so deleting an
+  // export leaves `node --check` perfectly happy and the app dead on boot. That
+  // happened while retiring Streak Freezes (consumeFreeze / checkStreakFreeze).
+  const dir = join(here, '..', 'js');
+  const files = readdirSync(dir).filter(f => f.endsWith('.js'));
+  const exportsOf = new Map();
+  for (const f of files) {
+    const src = readFileSync(join(dir, f), 'utf8');
+    const names = new Set();
+    for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)/gm)) names.add(m[1]);
+    for (const m of src.matchAll(/^export\s+(?:const|let|class)\s+(\w+)/gm)) names.add(m[1]);
+    for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+      for (const part of m[1].split(',')) {
+        const n = part.trim().split(/\s+as\s+/).pop().trim();
+        if (n) names.add(n);
+      }
+    }
+    if (/^export\s+default/m.test(src)) names.add('default');
+    exportsOf.set(f, names);
+  }
+  const problems = [];
+  for (const f of files) {
+    const src = readFileSync(join(dir, f), 'utf8');
+    for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\/([\w.-]+\.js)'/g)) {
+      const target = m[2];
+      if (!exportsOf.has(target)) continue;      // ../data or vendor: out of scope
+      for (const part of m[1].split(',')) {
+        const name = part.trim().split(/\s+as\s+/)[0].trim();
+        if (name && !exportsOf.get(target).has(name)) problems.push(`${f} imports { ${name} } from ${target}, which does not export it`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n      '));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

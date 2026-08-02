@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 253, date: '2026-08-02', title: 'Streak Freezes are retired', items: [
+    'Nobody used them, and an item that quietly forgives a missed day muddied what a streak even means. They are gone from the shop, the dust shop, crates, the daily wheel and the welcome kit.',
+    'If you were holding any, they have been <b>cashed out at 100 coins each</b>, added the next time you open the app.',
+    'Days a Freeze already protected still count toward your streak. Retiring an item should not rewrite a streak you actually kept.',
+  ] },
   { n: 252, date: '2026-08-02', title: 'Dark Spires: take the town', items: [
     'Towers have risen across your town. Walk to one, beat the warden holding it, and the <b>spire flies your name</b>.',
     'A held spire pays <b>tribute</b> every day, up to three days\' worth, and you collect it in person. That is the whole idea: your walk now has a destination.',

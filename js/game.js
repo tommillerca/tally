@@ -4,10 +4,12 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { consumeFreeze, grantCrate, grantConsumable, coinsAdd, boneDustAdd } from './loot.js';
+import { grantCrate, grantConsumable, coinsAdd, boneDustAdd } from './loot.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
-// Streak counts logged days PLUS days protected by a Streak Freeze marker.
+// Streak counts logged days PLUS days a Streak Freeze protected back when the
+// item existed. Freezes were retired in v253, but these markers stay honoured:
+// removing an item must not retroactively break a streak someone really kept.
 export function streakDateSet(log, xpRows) {
   const set = new Set(log.map(e => e.date));
   for (const r of xpRows) if (r.type === 'freeze') set.add(r.date);
@@ -448,22 +450,6 @@ export async function awardDayCloseIfDue(targets) {
   return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
 }
 
-// At boot: if yesterday broke a streak and a Streak Freeze is in the inventory,
-// consume it and mark the day as protected.
-export async function checkStreakFreeze() {
-  const y = addDays(dateKey(), -1);
-  const [log, xpRows] = await Promise.all([db.all('log'), db.all('xp')]);
-  if (log.some(e => e.date === y)) return null;
-  if (xpRows.some(r => r.key === `freeze-${y}`)) return null;
-  const dates = streakDateSet(log, xpRows);
-  let d = addDays(y, -1), s = 0;
-  while (dates.has(d)) { s++; d = addDays(d, -1); }
-  if (s < 2) return null; // nothing meaningful to protect
-  if (!(await consumeFreeze())) return null;
-  await award(`freeze-${y}`, 'freeze', 0, 'Streak Freeze used', y);
-  return { date: y, saved: s };
-}
-
 // One-time retroactive backfill so existing users start with their history honored.
 export async function initGameIfNeeded(targets) {
   if (await kvGet('game-init')) return null;
@@ -509,9 +495,8 @@ export async function initLootIfNeeded() {
   if (await kvGet('loot-init')) return null;
   await grantCrate('golden', 'welcome');
   await grantCrate('daily', 'welcome');
-  await grantConsumable('freeze', 'welcome');
   await kvSet('loot-init', true);
-  return { crates: 2, freeze: 1 };
+  return { crates: 2 };
 }
 
 // XP rows for a given date (for the progress sheet).
