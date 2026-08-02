@@ -1172,5 +1172,20 @@ test('every named import from a local module actually exists', () => {
   assert.deepEqual(problems, [], problems.join('\n      '));
 });
 
+test('every <details> in a rendered template is closed with </details>', () => {
+  // A <details> closed with </div> does not error: the parser silently nests
+  // everything after it INSIDE the collapsed element. That shipped in v253 and
+  // swallowed the whole coin shop, so buying was dead while the buttons still
+  // looked present (closed-details children still report an offsetParent).
+  // Strip comments first: a line like "same <details> pattern as the talent
+  // trees" is prose, not markup, and counting it makes the guard cry wolf.
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const opens = (src.match(/<details[\s>]/g) || []).length;
+  const closes = (src.match(/<\/details>/g) || []).length;
+  assert.equal(opens, closes, `${opens} <details> opened but ${closes} closed in app.js`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

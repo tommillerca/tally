@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 254, date: '2026-08-02', title: 'The coin shop works again', items: [
+    'Buying crates, Vigor and Battle Charms was dead: the Puffer Pack card above it was left unclosed in the code, so the whole coin shop ended up trapped inside it. The buttons looked completely normal and did nothing. Sorry.',
+  ] },
   { n: 253, date: '2026-08-02', title: 'Streak Freezes are retired', items: [
     'Nobody used them, and an item that quietly forgives a missed day muddied what a streak even means. They are gone from the shop, the dust shop, crates, the daily wheel and the welcome kit.',
     'If you were holding any, they have been <b>cashed out at 100 coins each</b>, added the next time you open the app.',

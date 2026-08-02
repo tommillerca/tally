@@ -95,6 +95,13 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
     // a collapsed banner reports a full-size rect (behind the tab bar) while being
     // invisible and untappable. Filter those out or every pinned banner CTA reads
     // as a phantom overlay bug.
+    // BUT this filter is an EXCUSE, and it hid a real bug: in v253 a <details>
+    // closed with </div> swallowed the whole coin shop, and because those buttons
+    // were then inside a collapsed element this sweep skipped them and reported a
+    // clean pass while buying was dead. The reliable guard for that lives in
+    // tests/unit.test.js ("every <details> ... is closed with </details>"), which
+    // catches the cause instead of the symptom. Do not treat this sweep as
+    // covering anything inside a collapsed card.
     for (const btn of [...document.querySelectorAll('button')].filter(b => b.offsetParent && !b.hidden && !b.closest('details:not([open])'))) {
       if (!btn.id) continue;
       checked.overlays++;
