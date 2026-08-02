@@ -102,6 +102,9 @@ async function verifySigned(request, env, bodyText) {
 }
 
 /* ---------------- routes ---------------- */
+// A spire untended this long is dormant and stops counting against the cap.
+const SPIRE_DORMANT_MS = 7 * 86400000;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -372,6 +375,83 @@ export default {
           else incoming.push(other);
         }
         return json({ friends, incoming, outgoing });
+      }
+
+      /* ---------------- Dark Spires: shared territory ----------------
+         Ownership has to live here or a spire means something different on every
+         phone. Unclaimed spires have NO row, matching the client's local model,
+         so "nobody has taken it" needs no bookkeeping. The client still owns
+         placement and naming (both deterministic from the map cell), so the
+         server never invents a tower. */
+
+      // Who holds these spires? ids come from the client's local cell scan.
+      if (path === '/spires' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const ids = (url.searchParams.get('ids') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 24);
+        if (!ids.length) return json({ spires: [] });
+        const q = `SELECT id, name, owner, owner_name, defender, claimed_at, tended_at, level FROM spires WHERE id IN (${ids.map(() => '?').join(',')})`;
+        const rs = await env.DB.prepare(q).bind(...ids).all();
+        return json({
+          spires: (rs.results || []).map(r => ({
+            id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name,
+            mine: r.owner === auth.playerId,
+            defender: r.owner === auth.playerId ? null : JSON.parse(r.defender || 'null'),
+            claimedAt: r.claimed_at, tendedAt: r.tended_at, level: r.level,
+          })),
+        });
+      }
+
+      // Take one. The client has already won the fight locally (same trust model
+      // as every other award in this game, friends-scale, stated plainly).
+      if (path.startsWith('/spires/') && path.endsWith('/claim') && request.method === 'PUT') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const id = path.slice('/spires/'.length, -'/claim'.length);
+        if (!/^sp-[-0-9]+-[-0-9]+$/.test(id)) return json({ error: 'bad spire id' }, 400);
+        const b = JSON.parse(bodyText || '{}');
+        if (!b.name || typeof b.lat !== 'number' || typeof b.lng !== 'number') return json({ error: 'missing spire' }, 400);
+        const now = Date.now();
+        const me = await env.DB.prepare('SELECT id, name, handle, profile FROM players WHERE id = ?').bind(auth.playerId).first();
+        const prev = await env.DB.prepare('SELECT owner, owner_name, level FROM spires WHERE id = ?').bind(id).first();
+        if (prev && prev.owner === auth.playerId) {
+          await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ?')
+            .bind(now, now, me.profile || null, id).run();
+          return json({ ok: true, already: true });
+        }
+        // Cap: three live spires each, enforced HERE too. A client-only cap is a
+        // suggestion, and this is the rule that keeps towers available to others.
+        const held = await env.DB.prepare('SELECT COUNT(*) AS n FROM spires WHERE owner = ? AND tended_at > ?')
+          .bind(auth.playerId, now - SPIRE_DORMANT_MS).first();
+        if ((held?.n || 0) >= 3) return json({ error: 'cap', cap: 3 }, 409);
+        await env.DB.prepare(`INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
+               defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
+               level=spires.level+1, updated_at=excluded.updated_at`)
+          .bind(id, String(b.name).slice(0, 40), b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
+                me?.profile || null, now, now, 1, now).run();
+        // Tell the loser, through the grants channel the client already ingests.
+        if (prev && prev.owner !== auth.playerId) {
+          await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+            .bind(prev.owner, `spire-lost-${id}-${now}`, 'spire', JSON.stringify({
+              note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
+            }), now).run();
+        }
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null });
+      }
+
+      // A visit restores resolve. Owner only.
+      if (path.startsWith('/spires/') && path.endsWith('/tend') && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const id = path.slice('/spires/'.length, -'/tend'.length);
+        const now = Date.now();
+        const r = await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ? WHERE id = ? AND owner = ?')
+          .bind(now, now, id, auth.playerId).run();
+        return json({ ok: !!(r.meta?.changes) });
       }
 
       // Signed: the all-players leaderboard. Ranked by snapshot level. Includes

@@ -3342,6 +3342,10 @@ body::before {
 .map-spire.mine img { filter: hue-rotate(62deg) saturate(1.5) brightness(1.05); }
 .map-spire.mine .spire-fx { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(165, 232, 71, 0.55)); }
 .map-spire.dormant img { filter: grayscale(1) brightness(0.5); }
+/* a RIVAL's tower: coral, the danger colour used everywhere else in the game */
+.map-spire.rival img { filter: hue-rotate(-38deg) saturate(1.7) brightness(0.95); }
+.map-spire.rival .spire-fx { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(253, 104, 87, 0.5)); }
+.map-spire.rival .spire-flag { background: var(--danger); border-color: var(--danger); color: #fff; }
 .map-spire.inrange .spire-fx { animation: spirePulse 1s ease-in-out infinite; }
 @keyframes spirePulse {
   0%, 100% { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)); }

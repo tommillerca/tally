@@ -1591,12 +1591,15 @@ async function openGluttonSheet() {
 
 /* The spire pitch, shown when you stand at an unclaimed one. States what you get
    in plain terms, because a wall of territory rules is how a good idea dies. */
-function openSpireSheet(s, view) {
+function openSpireSheet(s, view, rival = null) {
+  const holder = rival ? (rival.ownerName || 'A rival') : s.warden;
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(s.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <div class="spire-hero"><img src="assets/brand/tomb.png" alt=""></div>
-      <p class="note" style="margin:10px 2px">${view.dormant
+      <p class="note" style="margin:10px 2px">${rival
+        ? `<b>${esc(holder)}</b> holds this tower. Beat their Bonehead and it is yours: they will hear about it.`
+        : view.dormant
         ? `You let this one go dormant. Beat <b>${esc(s.warden)}</b> again to take it back.`
         : `<b>${esc(s.warden)}</b> holds this tower. Beat it and the spire flies your name.`}</p>
       <ul class="spire-terms">
@@ -1605,10 +1608,24 @@ function openSpireSheet(s, view) {
         <li>Holding any spire earns the <b>Keeper's Boon</b>: +10% coins from quests.</li>
         <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
       </ul>
-      <button class="btn" id="spireFight" style="width:100%">Face ${esc(s.warden)}</button>
+      <button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>
     </div>`, { cls: '', name: 'Dark Spire' });
   $('#spireFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
+    if (rival) {
+      // A rival's tower is defended by a faithful clone of THEIR fighter, the
+      // same snapshot friend battles already use. No stats invented for them.
+      const d = rival.defender || {};
+      openFight(wrap, fighter, {
+        mode: 'spire', name: rival.ownerName || 'Rival Warden', mult: 1,
+        aiLevel: 3, venue: s.name, spire: s, rival: true,
+        // the exact fields the friend-battle clone builder already reads, so a
+        // rival's tower is defended by their real build, not an invented one
+        foeStats: d.stats || null, foeOutfit: d.outfit || null,
+        weaponId: d.weapon || d.loadout || 'starter', talents: d.talents || [],
+      });
+      return;
+    }
     const w = wardenFor(s, levelFor(await totalXp()).level);
     openFight(wrap, fighter, { mode: 'spire', name: w.name, mult: w.mult, aiLevel: w.aiLevel,
       venue: w.venue, spire: s });
@@ -6617,14 +6634,24 @@ async function renderBoneyard(el) {
     const spireMarkers = new Map();
     let spireState_ = {};
     let spireInRange = null;
+    let spireRemote = new Map();   // id -> server record (who really holds it)
     async function refreshSpires() {
       spireState_ = await spireState();
       const near = spiresNear(lat, lng).slice(0, 4);
+      // Ownership is shared, so ask the server who holds these. Fails soft: with
+      // no network the local model still drives everything.
+      const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
+      if (rows) spireRemote = new Map(rows.map(r => [r.id, r]));
       const live = new Set(near.map(s => s.id));
       for (const [id, rec] of spireMarkers) { if (!live.has(id)) { rec.marker.remove(); spireMarkers.delete(id); } }
       spireInRange = null;
       for (const s of near) {
         const view = readSpire(spireState_, s);
+        const remote = spireRemote.get(s.id);
+        // The server wins on ownership. Someone taking your tower while you were
+        // away must show up as THEIRS, not as yours-from-a-stale-local-record.
+        const rival = remote && !remote.mine ? remote : null;
+        const held = rival ? false : view.held;
         let rec = spireMarkers.get(s.id);
         if (!rec) {
           const el = document.createElement('div');
@@ -6633,22 +6660,25 @@ async function renderBoneyard(el) {
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el, anchor: 'bottom' }), el };
           spireMarkers.set(s.id, rec);
         }
-        const held = view.held, dormant = view.dormant;
+        const dormant = !rival && view.dormant;
         rec.el.classList.toggle('mine', held);
-        rec.el.classList.toggle('free', !held);
+        rec.el.classList.toggle('rival', !!rival);
+        rec.el.classList.toggle('free', !held && !rival);
         rec.el.classList.toggle('dormant', dormant);
         rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
-        $('.spire-flag', rec.el).textContent = held ? 'YOURS' : dormant ? 'DORMANT' : 'UNCLAIMED';
+        $('.spire-flag', rec.el).textContent = rival ? (rival.ownerName || 'RIVAL').toUpperCase()
+          : held ? 'YOURS' : dormant ? 'DORMANT' : 'UNCLAIMED';
         const trib = held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
-        if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view };
+        if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view: { ...view, held }, rival };
       }
       const sb = $('#mapSpire', body);
       if (sb) {
         sb.hidden = !spireInRange;
         if (spireInRange) {
-          const { s, view } = spireInRange;
-          sb.textContent = !view.held ? `Take ${s.name}`
+          const { s, view, rival } = spireInRange;
+          sb.textContent = rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
+            : !view.held ? `Take ${s.name}`
             : view.tribute.days ? `Collect ${view.tribute.coins} from ${s.name}`
             : `Tend ${s.name}`;
         }
@@ -6846,8 +6876,8 @@ async function renderBoneyard(el) {
     $('#mapSpire', body).addEventListener('click', async () => {
       if (tooFastToAct()) return;
       if (!spireInRange) return;
-      const { s, view } = spireInRange;
-      if (!view.held) return openSpireSheet(s, view);
+      const { s, view, rival } = spireInRange;
+      if (rival || !view.held) return openSpireSheet(s, view, rival);
       if (view.tribute.days) {
         const r = await collectTribute(s.id);
         if (!r.ok) { toast('Nothing to collect here yet.'); return; }
@@ -6857,6 +6887,7 @@ async function renderBoneyard(el) {
         toast(`${s.name} pays up: +${r.coins} coins, +${r.dust} Bone Dust.`, 3200);
       } else {
         await tendSpire(s.id);
+        social.tendSpireRemote(s.id).catch(() => {});
         toast(`${s.name} stands. Resolve restored.`, 2600);
       }
       await refreshSpires();
@@ -7109,7 +7140,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v251'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v252'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8284,11 +8315,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // and the tribute stream does the real earning. Re-taking a dormant spire
         // pays the same, because walking back out there deserves the same.
         const r = await claimSpire(foeCfg.spire);
-        if (r.ok) {
+        const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
+        if (remote && remote.ok === false && remote.reason === 'cap') {
+          coins = 40;
+          toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
+        } else if (r.ok) {
           coins = 80;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
             name: foeCfg.spire.name, rarity: 'epic', kind: 'DARK SPIRE',
-            stats: `It flies your name now. Come back to collect tribute and keep it standing.` });
+            stats: remote && remote.tookFrom
+              ? `Taken from ${remote.tookFrom}. It flies your name now: come back to collect tribute and keep it standing.`
+              : `It flies your name now. Come back to collect tribute and keep it standing.` });
           dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
         } else {
           coins = 40;

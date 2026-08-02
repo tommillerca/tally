@@ -309,6 +309,39 @@ export async function newFriendRequests() {
 // The all-players leaderboard (ranked by level, server-side). Each row carries
 // the player's friend code so the Crew tab can offer one-tap "add friend" —
 // deliberate while the community is small: everyone can find everyone.
+/* ---------------- Dark Spires: shared territory ----------------
+   The server is the authority on WHO holds a spire; the client still decides
+   where towers are and what they are called (both deterministic from the map
+   cell), so these calls only ever move ownership. Every one fails soft: offline
+   players keep playing against the local model rather than seeing an error. */
+
+export async function fetchSpires(ids) {
+  if (!ids.length) return null;
+  try {
+    const r = await signedFetch('GET', `/spires?ids=${encodeURIComponent(ids.join(','))}`);
+    if (!r.ok) return null;
+    return (await r.json()).spires || [];
+  } catch { return null; }
+}
+
+/** Take a spire. Returns {ok, tookFrom} or {ok:false, reason:'cap'|'offline'}. */
+export async function claimSpireRemote(spire) {
+  try {
+    const r = await signedFetch('PUT', `/spires/${encodeURIComponent(spire.id)}/claim`,
+      { name: spire.name, lat: spire.lat, lng: spire.lng });
+    if (r.status === 409) return { ok: false, reason: 'cap' };
+    if (!r.ok) return { ok: false, reason: 'server' };
+    return await r.json();
+  } catch { return { ok: false, reason: 'offline' }; }
+}
+
+export async function tendSpireRemote(id) {
+  try {
+    const r = await signedFetch('POST', `/spires/${encodeURIComponent(id)}/tend`, {});
+    return r.ok;
+  } catch { return false; }
+}
+
 export async function leaderboard() {
   try {
     const r = await signedFetch('GET', '/leaderboard', null);

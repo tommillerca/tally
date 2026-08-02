@@ -162,3 +162,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id);
 --     "ALTER TABLE recovery ADD COLUMN recovery_id TEXT"
 --   npx wrangler d1 execute bonez --remote --command \
 --     "CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id)"
+
+-- Dark Spires (v252): shared territory. One row per spire id that anyone has
+-- ever claimed; unclaimed spires simply have no row, exactly like the client's
+-- local model, so the two agree by construction.
+CREATE TABLE IF NOT EXISTS spires (
+  id TEXT PRIMARY KEY,               -- sp-<cx>-<cy>, deterministic from the cell
+  name TEXT NOT NULL,                -- seeded name, stored so a rival sees the same one
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  owner TEXT NOT NULL,               -- players.id
+  owner_name TEXT,                   -- denormalised for the map plate
+  defender TEXT,                     -- JSON snapshot of the owner's fighter
+  claimed_at INTEGER NOT NULL,
+  tended_at INTEGER NOT NULL,
+  level INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_spires_owner ON spires (owner);

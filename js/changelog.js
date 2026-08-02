@@ -3,12 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 251, date: '2026-08-02', title: 'Dark Spires: take the town', items: [
+  { n: 252, date: '2026-08-02', title: 'Dark Spires: take the town', items: [
     'Towers have risen across your town. Walk to one, beat the warden holding it, and the <b>spire flies your name</b>.',
     'A held spire pays <b>tribute</b> every day, up to three days\' worth, and you collect it in person. That is the whole idea: your walk now has a destination.',
     'Visit within <b>7 days</b> to keep it. Miss that and it goes dormant, never lost, and you can always take it back.',
     'Hold any spire and you earn the <b>Keeper\'s Boon</b>: +10% coins from every quest.',
     'You can hold <b>three</b> at once, so pick the towers you actually walk past.',
+    'Spires are <b>shared</b>. Your Crew sees who holds what, and a tower held by someone else is defended by their real Bonehead. Beat it and it changes hands, and they get told who took it.',
     'Also: equipping gear no longer throws you back to the top of the page, the <b>Puffer Pack</b> in the Shop is tucked into a collapsed card so it stays out of the way, and rare-spawn notifications are gone. They were scheduled from wherever you happened to be when you last opened the app, so by the time one arrived it was pointing at somewhere you had already left.',
   ] },
   { n: 250, date: '2026-08-02', title: 'Patch notes read like patch notes', items: [
