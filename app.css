@@ -3294,16 +3294,28 @@ body::before {
    of the canvas, centred at 40.7%,23.4%), so the fish fills the box instead of
    hiding in the corner of a mostly-empty layer canvas. */
 
-/* shop section */
-.drop-sect { border: 1px solid rgba(255, 201, 97, 0.35); border-radius: 18px; padding: 14px;
-  margin: 0 0 16px;
+/* shop section: a COLLAPSED disclosure. Featured stock should not shove the coin
+   shop down the page every time someone opens the tab, so it starts closed and
+   reads as one row until you want it. */
+.drop-sect { border: 1px solid rgba(255, 201, 97, 0.35); border-radius: 16px; margin: 0 0 16px;
+  overflow: hidden;
   background: radial-gradient(130% 100% at 50% 0%, rgba(165, 232, 71, 0.07) 0%, var(--surface) 60%); }
-.drop-sect-head { display: flex; align-items: baseline; gap: 8px; margin: 2px 2px 4px; }
-.drop-sect-head b { font-family: var(--display); font-size: 22px; letter-spacing: 0.03em;
-  color: var(--text); font-weight: 400; }
-.drop-sect-head .new { background: var(--accent); color: var(--accent-ink); font-size: 10px;
+.drop-sect > summary { list-style: none; display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px; cursor: pointer; }
+.drop-sect > summary::-webkit-details-marker { display: none; }
+.drop-sect[open] .gbn-chev { transform: rotate(90deg); }
+.drop-sect-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #14100a;
+  border: 1px solid rgba(255, 201, 97, 0.4); overflow: hidden; position: relative; }
+.drop-sect-ico img { position: absolute; width: 242%; left: 50%; top: 50%;
+  transform: translate(-40.7%, -23.4%); }
+.drop-sect-sum { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.drop-sect-sum i { font-style: normal; font-size: 9.5px; letter-spacing: 0.2em; color: var(--gold);
+  text-transform: uppercase; font-weight: 800; }
+.drop-sect-sum b { font-family: var(--display); font-weight: 400; font-size: 16px;
+  letter-spacing: 0.02em; color: var(--text); }
+.drop-sect .new { background: var(--accent); color: var(--accent-ink); font-size: 10px;
   font-weight: 800; letter-spacing: 0.1em; padding: 4px 8px; border-radius: 99px; }
-.drop-sect-head small { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.drop-sect-body { padding: 0 13px 13px; }
 .drop-sub2 { color: var(--text-2); font-size: 13px; margin: 0 2px 12px; }
 .drop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .drop-item { background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 14px;
@@ -3318,3 +3330,65 @@ body::before {
 .drop-buy:disabled { opacity: 0.9; }
 .drop-item.owned .drop-buy, .drop-buy[disabled]:not([data-buydrop]) { background: var(--surface-3); color: var(--text-2); }
 .drop-buy[data-buydrop]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+
+/* ================= Dark Spires (territory) ================= */
+/* Marker root carries position ONLY: MapLibre owns its transform, so every
+   filter/animation lives on .spire-fx. Same rule as .map-den-mark. */
+.map-spire { position: relative; width: 58px; height: 74px; margin-top: 24px; }
+.spire-fx { position: relative; width: 100%; height: 100%; display: block;
+  filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)); }
+.map-spire img { width: 100%; height: 100%; object-fit: contain; }
+.map-spire.free img { filter: grayscale(0.85) brightness(0.62); }
+.map-spire.mine img { filter: hue-rotate(62deg) saturate(1.5) brightness(1.05); }
+.map-spire.mine .spire-fx { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(165, 232, 71, 0.55)); }
+.map-spire.dormant img { filter: grayscale(1) brightness(0.5); }
+.map-spire.inrange .spire-fx { animation: spirePulse 1s ease-in-out infinite; }
+@keyframes spirePulse {
+  0%, 100% { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)); }
+  50% { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 12px var(--accent)); }
+}
+@media (prefers-reduced-motion: reduce) { .map-spire.inrange .spire-fx { animation: none; } }
+/* Owner plate: the point of a claimed spire, so it sits ABOVE the arch on its own
+   opaque ground rather than washing out against the gargoyle behind it. */
+.spire-flag {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px;
+  font-family: var(--display); font-weight: 400; font-size: 13px; letter-spacing: 0.03em;
+  line-height: 1; white-space: nowrap; padding: 4px 9px; border-radius: 7px;
+  border: 1.5px solid var(--surface); background: var(--surface); color: var(--text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+.spire-flag::after { content: ''; position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%); border: 4px solid transparent; border-top-color: inherit; }
+.map-spire.mine .spire-flag { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.map-spire.free .spire-flag, .map-spire.dormant .spire-flag { font-size: 11px; color: var(--text-2); }
+.spire-tribute { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 800; color: var(--gold); white-space: nowrap;
+  text-shadow: 0 1px 0 #17151d, 0 0 5px rgba(0, 0, 0, 0.9); }
+.map-spire.mine .spire-tribute::after { content: ' to collect'; font-weight: 600; color: var(--text-2); }
+/* the in-range action button, sitting above the other map CTAs */
+/* NOTE the distinct class: the marker is .map-spire and this is .map-spire-btn.
+   They collided at first, so the marker's 58x74 sizing was landing on the button
+   and querySelectorAll('.map-spire') counted the button as a tower. */
+.btn.map-spire-btn { position: absolute; left: 14px; right: 14px; bottom: 78px; z-index: 4; }
+/* claim sheet */
+.spire-hero { text-align: center; }
+.spire-hero img { width: 150px; height: 150px; object-fit: contain;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); }
+.spire-terms { margin: 6px 2px 16px; padding-left: 18px; }
+.spire-terms li { color: var(--text-2); font-size: 14px; margin-bottom: 7px; }
+.spire-terms b { color: var(--text); }
+/* spire intro + Today card */
+.spire-intro-art { text-align: center; margin: 6px 0 2px; }
+.spire-intro-art img { width: 132px; height: 132px; object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6)); }
+.spire-veil .spire-terms { text-align: left; margin: 4px 4px 14px; }
+.spire-banner summary .gbn-txt i { color: var(--accent); }
+.spire-ico { background: #0d0f08; }
+.spire-ico img { position: absolute; width: 118%; left: 50%; top: 52%; transform: translate(-50%, -50%); }
+.spire-list { display: grid; gap: 10px; margin: 4px 0 12px; }
+.spire-row { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.spire-row b { font-size: 14.5px; color: var(--text); }
+.spire-row-r { float: right; color: var(--gold); font-weight: 700; font-size: 13px; }
+.spire-row small { display: block; color: var(--text-3); font-size: 12px; margin-top: 5px; }
+.spire-bar { height: 5px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
+.spire-bar i { display: block; height: 100%; background: var(--accent); }

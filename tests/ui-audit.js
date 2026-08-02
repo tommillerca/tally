@@ -33,6 +33,7 @@ const CONTROL_EXPECTATIONS = [
   { id: 'todaySettings', on: 'today', expect: { hash: '#/settings' } },
   // the Puffer Pack drop: the pinned banner's CTA must land on the hub's Shop tab
   { id: 'dropToShop', on: 'today', expect: { hash: '#/bonehead', hubTab: 'shop' }, open: 'details.drop-banner' },
+  { id: 'spireToMap', on: 'today', expect: { hash: '#/boneyard' }, open: 'details.spire-banner' },
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -45,8 +46,14 @@ async function goto(route, wait = 1800) {
   while (q('#sheets > div')) { history.back(); await sleep(300); }
 }
 
-/** Which button actually receives a tap at an element's centre. */
+/** Which button actually receives a tap at an element's centre.
+ *  Scrolls it into view first, because that is what a user does: a control that
+ *  merely sits behind the fixed tab bar at rest is reachable, while one that is
+ *  still covered after scrolling to it is genuinely broken (the Settings gear over
+ *  the next-day arrow was the latter). Without this the check flags every button
+ *  that happens to sit low on a long page. */
 function topmostAt(el) {
+  el.scrollIntoView({ block: 'center' });
   const r = el.getBoundingClientRect();
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return hit?.closest('button')?.id || hit?.tagName || 'none';

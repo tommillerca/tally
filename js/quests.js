@@ -9,6 +9,7 @@
 // eating less. Longer periods pay bigger (coins + crates) for tougher targets.
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
+import { keepersBoon } from './spires.js';
 import { award } from './game.js';
 import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
 import { grantIngredient } from './cooking.js';
@@ -203,14 +204,19 @@ export function questState(q, ctx) {
 export async function claimQuest(periodKey, q, period = 'day') {
   const xp = await award(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`);
   if (!xp) return null;
-  await coinsAdd(q.coins);
+  // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
+  // This is the always-on perk that makes losing your last tower sting even when
+  // nobody else is competing for it.
+  const boon = await keepersBoon();
+  const coins = boon ? Math.round(q.coins * (1 + boon.questCoinBonus)) : q.coins;
+  await coinsAdd(coins);
   if (q.crate) await grantCrate(q.crate, 'quests');
   // v153: richer, more enticing rewards beyond coins — Bone Dust, ingredients,
   // and consumables so the reward table isn't all coins.
   if (q.dust) await boneDustAdd(q.dust);
   if (q.item) await grantConsumable(q.item, 'quests');            // e.g. 'vigor'
   if (q.ingredient) await grantIngredient(q.ingredient, q.ingredientN || 1);
-  return { xp, coins: q.coins, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
+  return { xp, coins, boon: boon ? Math.round(coins - q.coins) : 0, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
 }
 
 // Bonus daily crate when all three dailies are claimed.

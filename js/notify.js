@@ -1,3 +1,22 @@
+/* RETIRED (v251). Rare-spawn pushes were scheduled from `lastLoc` — wherever you
+ * happened to be when the app was last open — for spawn windows up to 8 ahead.
+ * By the time one fired you were usually somewhere else entirely, so it promised
+ * a rare "near you" that was near where you USED to be. Tom: "I feel like it
+ * doesn't actually correlate with something good nearby on the map".
+ *
+ * This now only CANCELS. That matters: players have rare pushes already queued on
+ * their phones, and simply deleting the scheduler would leave those firing for
+ * days. Kept under the old name so every existing call site keeps cancelling.
+ * The in-app cue when you are genuinely within RARE_CUE_M still fires, because
+ * that one is measured against where you are standing right now. */
+export async function scheduleRares() {
+  const L = ln(); if (!L) return;
+  try {
+    const pend = await L.getPending();
+    const mine = (pend.notifications || []).filter(n => n.id >= ID.rareLo && n.id <= ID.rareHi).map(n => ({ id: n.id }));
+    if (mine.length) await L.cancel({ notifications: mine });
+  } catch { /* ignore */ }
+}
 // Notifications. One preference model, two backends: Capacitor LocalNotifications
 // on the native app (real scheduled + background notifications) and the Web
 // Notifications API in a browser/PWA (immediate only; no background scheduling).
@@ -7,14 +26,13 @@
 
 import { kvGet, kvSet } from './db.js';
 import { isNative } from './native.js';
-import { raresNear, SPAWN_TTL_MIN } from './hunt.js';
 import { dateKey } from './nutrition.js';
 
 // New users have notifications ON by default (Tom's call). enabled=true only
 // takes effect once the OS grants permission (requested once at boot); until
 // then nothing fires. Existing users who deliberately turned it off saved
 // {enabled:false} and keep that.
-const DEFAULTS = { enabled: true, rares: true, reminder: true, streak: true, friends: true };
+const DEFAULTS = { enabled: true, reminder: true, streak: true, friends: true };
 export async function notifPrefs() { return { ...DEFAULTS, ...((await kvGet('notifPrefs', {})) || {}) }; }
 export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
 
@@ -83,36 +101,4 @@ export async function syncNotifications() {
   if (notis.length) { try { await L.schedule({ notifications: notis }); } catch { /* ignore */ } }
 }
 
-// Schedule "a rare is surfacing near you" pushes for the next few 45-min windows,
-// computed deterministically from a last-known location. Native only. No live
-// background GPS needed: rares are deterministic per (date, cell, window), so we
-// know exactly when/where one appears near where you last were.
-export async function scheduleRares(lat, lng) {
-  if (notifPlatform() !== 'native' || lat == null) return;
-  const p = await notifPrefs();
-  const L = ln(); if (!L) return;
-  try {
-    const pend = await L.getPending();
-    const mine = (pend.notifications || []).filter(n => n.id >= ID.rareLo && n.id <= ID.rareHi).map(n => ({ id: n.id }));
-    if (mine.length) await L.cancel({ notifications: mine });
-  } catch { /* ignore */ }
-  if (!p.enabled || !p.rares) return;
-  const date = dateKey();
-  const now = new Date();
-  const nowM = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  const curInst = Math.floor(nowM / SPAWN_TTL_MIN);
-  // Cap: at most 2 upcoming rare pushes so notifications stay a treat, not a
-  // stream (rares are common enough now that scheduling every window spams).
-  const MAX_RARE_PUSHES = 2;
-  const notis = [];
-  for (let i = curInst + 1; i <= curInst + 8 && i * SPAWN_TTL_MIN < 1440; i++) {
-    if (notis.length >= MAX_RARE_PUSHES) break;
-    const wm = i * SPAWN_TTL_MIN;
-    if (!raresNear(date, lat, lng, wm + 0.1).length) continue;
-    const at = new Date(now); at.setHours(Math.floor(wm / 60), Math.round(wm % 60), 0, 0);
-    if (at.getTime() > Date.now() + 30000) {
-      notis.push({ id: ID.rareLo + (i % 800), title: 'A rare stirs in the Boneyard', body: 'A rare spawn is surfacing near you. Head out and grab it.', schedule: { at, allowWhileIdle: true } });
-    }
-  }
-  if (notis.length) { try { await L.schedule({ notifications: notis }); } catch { /* ignore */ } }
-}
+

@@ -30,6 +30,8 @@ import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
+import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
+  SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS } from './spires.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
@@ -389,6 +391,7 @@ async function boot() {
   maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
   maybeShowWhatsNew();
   maybeShowDropPopup();
+  maybeShowSpireIntro();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -445,6 +448,88 @@ async function maybeShowWhatsNew() {
     if ($('#sheets')?.children.length) return;   // something already open — try again next launch
     openWhatsNew();
   } catch { /* never block boot */ }
+}
+
+/* ---------- Dark Spires: the announcement + the pinned explainer ---------- */
+// Shown once (kv flag), then the Today banner carries it, same etiquette as the
+// drop: never over the splash, the wheel, or an open sheet.
+const SPIRE_SEEN_KEY = 'spiresIntroSeen';
+
+async function maybeShowSpireIntro() {
+  try {
+    if ((navigator.webdriver && !window.__spireForce) || !S.settings) return;
+    if (await kvGet(SPIRE_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(SPIRE_SEEN_KEY, true);
+      openSpireIntro();
+    };
+    setTimeout(tick, 2600);
+  } catch { /* never block boot */ }
+}
+
+function openSpireIntro() {
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil spire-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">NEW</span>
+      <p class="drop-eyebrow">TAKE THE TOWN</p>
+      <h1 class="drop-title">Dark <em>Spires</em></h1>
+      <p class="drop-sub">Towers have risen across your town. Walk to one, beat what guards it, and it flies your name.</p>
+      <div class="spire-intro-art"><img src="assets/brand/tomb.png" alt=""></div>
+      <ul class="spire-terms">
+        <li>Held spires pay <b>tribute</b> daily. Collect it in person: that is the walk.</li>
+        <li>Visit within <b>${RESOLVE_DAYS} days</b> or it goes dormant. Never lost, just quiet.</li>
+        <li>Hold any spire for the <b>Keeper's Boon</b>: +10% coins from every quest.</li>
+      </ul>
+      <button class="drop-cta" id="spireIntroGo">FIND A SPIRE</button>
+      <button class="drop-later" id="spireIntroLater">Maybe later</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#spireIntroLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#spireIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+}
+
+// Pinned Today card: what you hold, what it owes you, and how close it is to
+// going quiet. Doubles as the explainer for anyone who dismissed the popup.
+function spireBannerHtml(held) {
+  const owed = held.reduce((n, s) => n + s.tribute.coins, 0);
+  const soon = held.filter(s => s.resolvePct < 0.3).length;
+  const line = !held.length ? 'Take one and it pays you to visit'
+    : owed ? `${owed} coins waiting to be collected`
+    : soon ? `${soon} need${soon === 1 ? 's' : ''} a visit soon`
+    : `${held.length} held · all standing`;
+  return `<details class="glutton-banner spire-banner">
+    <summary>
+      <span class="gbn-ico spire-ico"><img src="assets/brand/tomb.png" alt=""></span>
+      <span class="gbn-txt"><i>Dark Spires</i><b>${esc(line)}</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      ${held.length ? `<div class="spire-list">${held.map(s => `
+        <div class="spire-row">
+          <b>${esc(s.name || 'A spire')}</b>
+          <span class="spire-row-r">${s.tribute.coins ? `${ICONS.coin(12)} ${s.tribute.coins}` : '<span class="q-frac">nothing owed</span>'}</span>
+          <div class="spire-bar"><i style="width:${Math.round(s.resolvePct * 100)}%"></i></div>
+          <small>${s.heldDays} day${s.heldDays === 1 ? '' : 's'} held · resolve ${Math.round(s.resolvePct * 100)}%</small>
+        </div>`).join('')}</div>`
+        : '<p class="glutton-mech">You hold none yet. Spires sit on the Boneyard map as tall dark gates.</p>'}
+      <ul class="spire-terms">
+        <li>Beat the warden at a spire to claim it. You can hold <b>${SPIRE_CAP}</b>.</li>
+        <li><b>Tribute</b> builds up to ${TRIBUTE_CAP_DAYS} days' worth and is collected on site.</li>
+        <li>Any visit restores <b>resolve</b>. Untended for ${RESOLVE_DAYS} days it goes dormant, and you can always take it back.</li>
+        <li>Holding any spire grants the <b>Keeper's Boon</b>: +10% quest coins.</li>
+      </ul>
+      <button class="btn ghost" id="spireToMap" style="width:100%">Open the Boneyard</button>
+    </div>
+  </details>`;
 }
 
 /* ---------- the drop announcement ---------- */
@@ -608,7 +693,7 @@ async function maybeRequestNotifPermission() {
       if (ok) {
         await syncNotifications();
         const loc = await kvGet('lastLoc', null);
-        if (loc) await scheduleRares(loc.lat, loc.lng);
+        await scheduleRares();   // retired: clears any rare pushes still queued
       }
     };
     setTimeout(tick, 3500);
@@ -851,7 +936,7 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
-  const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
+  const [coinBal, dustBal, pitEnergy, heldSpiresNow] = await Promise.all([coins(), boneDust(), refreshPitEnergy(), heldSpires()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
@@ -958,6 +1043,7 @@ async function renderToday(el) {
   </button>` : ''}
 
   ${isToday ? gluttonBannerHtml() : ''}
+  ${isToday ? spireBannerHtml(heldSpiresNow) : ''}
   ${isToday ? dropBannerHtml() : ''}
 
   ${isToday ? `
@@ -1080,6 +1166,7 @@ async function renderToday(el) {
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#dropToShop')?.addEventListener('click', () => openCharacter('shop'));
+  $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   // Expanding the banner leaves its CTA exactly under the fixed bottom nav, so
   // taps fall through to the nav (ui-audit hit-test caught this pre-ship; it is
   // the same failure shape as the Settings-gear/next-day collision). Scroll the
@@ -1499,6 +1586,32 @@ async function openGluttonSheet() {
       mode: 'glutton', name: 'The Glutton', mult: 1.3, aiLevel: 3,
       talents: ['heavyhands', 'marrowlust', 'bonebreaker'], venue: 'The Blighted Yard',
     });
+  });
+}
+
+/* The spire pitch, shown when you stand at an unclaimed one. States what you get
+   in plain terms, because a wall of territory rules is how a good idea dies. */
+function openSpireSheet(s, view) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>${esc(s.name)}</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div class="spire-hero"><img src="assets/brand/tomb.png" alt=""></div>
+      <p class="note" style="margin:10px 2px">${view.dormant
+        ? `You let this one go dormant. Beat <b>${esc(s.warden)}</b> again to take it back.`
+        : `<b>${esc(s.warden)}</b> holds this tower. Beat it and the spire flies your name.`}</p>
+      <ul class="spire-terms">
+        <li>It pays <b>tribute</b> every day, up to ${TRIBUTE_CAP_DAYS} days' worth. Collect it here, in person.</li>
+        <li>Visit within <b>${RESOLVE_DAYS} days</b> to keep it. Miss that and it goes dormant, never lost.</li>
+        <li>Holding any spire earns the <b>Keeper's Boon</b>: +10% coins from quests.</li>
+        <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
+      </ul>
+      <button class="btn" id="spireFight" style="width:100%">Face ${esc(s.warden)}</button>
+    </div>`, { cls: '', name: 'Dark Spire' });
+  $('#spireFight', wrap)?.addEventListener('click', async () => {
+    const fighter = await buildFighter();
+    const w = wardenFor(s, levelFor(await totalXp()).level);
+    openFight(wrap, fighter, { mode: 'spire', name: w.name, mult: w.mult, aiLevel: w.aiLevel,
+      venue: w.venue, spire: s });
   });
 }
 
@@ -2308,21 +2421,28 @@ async function renderShop(el) {
 
   <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
 
-  <div class="drop-sect">
-    <div class="drop-sect-head"><b>${esc(DROP.title).toUpperCase()}</b><span class="new">NEW</span><small>${DROP.items.length} pieces</small></div>
-    <p class="drop-sub2">${esc(DROP.blurb)} Match the set or mix it filthy. ${esc(DROP.acquire)}</p>
-    <div class="drop-grid">
-      ${DROP.items.map(d => {
-        const it = BH_BY_ID[d.id];
-        const owned = ownedCos.has(d.id);
-        return `<div class="drop-item ${owned ? 'owned' : ''}">
-          <img src="${bhAsset(it)}" alt="" loading="lazy">
-          <b>${esc(it.name)}</b>
-          ${owned
-            ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
-            : `<button class="drop-buy" data-buydrop="${d.id}" ${coinBal < d.cost ? 'disabled' : ''}>${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>`}
-        </div>`;
-      }).join('')}
+  <details class="drop-sect" id="dropSect">
+    <summary>
+      <span class="drop-sect-ico"><img src="${bhAsset(BH_BY_ID[DROP.items[5].id])}" alt=""></span>
+      <span class="drop-sect-sum"><i>Fresh drop</i><b>${esc(DROP.title).toUpperCase()}</b></span>
+      <span class="new">NEW</span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="drop-sect-body">
+      <p class="drop-sub2">${esc(DROP.blurb)} Match the set or mix it filthy. ${esc(DROP.acquire)}</p>
+      <div class="drop-grid">
+        ${DROP.items.map(d => {
+          const it = BH_BY_ID[d.id];
+          const owned = ownedCos.has(d.id);
+          return `<div class="drop-item ${owned ? 'owned' : ''}">
+            <img src="${bhAsset(it)}" alt="" loading="lazy">
+            <b>${esc(it.name)}</b>
+            ${owned
+              ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+              : `<button class="drop-buy" data-buydrop="${d.id}" ${coinBal < d.cost ? 'disabled' : ''}>${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>`}
+          </div>`;
+        }).join('')}
+      </div>
     </div>
   </div>
 
@@ -3916,7 +4036,6 @@ async function renderSettings(el) {
     </div>
     ${np.enabled ? `
     ${notifRow('friends', 'Crew activity', 'Friend requests, gifts and cheers')}
-    ${notifRow('rares', 'Rare spawns', 'Get pinged when a rare surfaces near you')}
     ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
     ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
     <div class="notif-presets">
@@ -4056,7 +4175,7 @@ async function renderSettings(el) {
     await setNotifPrefs(prefs);
     await syncNotifications();
     const loc = await kvGet('lastLoc', null);
-    if (loc) await scheduleRares(loc.lat, loc.lng);
+    await scheduleRares();   // retired: clears any rare pushes still queued
     if (note) toast(note, 2600);
     renderSettings(el);
   };
@@ -4068,18 +4187,18 @@ async function renderSettings(el) {
       if (!ok) { toast('Notifications need permission. Allow them when prompted, or enable in system settings.', 3600); renderSettings(el); return; }
     }
     prefs[key] = on;
-    if (key === 'enabled' && on && !prefs.rares && !prefs.reminder && !prefs.streak && !prefs.friends) { prefs.rares = prefs.reminder = prefs.streak = prefs.friends = true; }
+    if (key === 'enabled' && on && !prefs.reminder && !prefs.streak && !prefs.friends) { prefs.reminder = prefs.streak = prefs.friends = true; }
     await applyNotifs(prefs);
   }));
   $('#notifAll', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, rares: true, reminder: true, streak: true, friends: true }, 'All notifications on. You will hear about every rare.');
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true }, 'All notifications on.');
   });
   $('#notifEss', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, rares: false, reminder: true, streak: true, friends: true }, 'Essentials only: reminders, streak saver + friend requests.');
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true }, 'Essentials only: reminders, streak saver + friend requests.');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
     const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
@@ -4492,7 +4611,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // instant re-renders come from an in-page action (equip, salvage, etc.): keep the
   // scroll position so equipping a piece doesn't bounce you back to the top. A tab
   // switch renders WITHOUT instant, so it still starts fresh at the top.
-  const keepScroll = opts.instant ? body.scrollTop : null;
+  //
+  // Read it off the SCROLLER, not #chBody. #chBody is a plain div inside .screen,
+  // which is the element with overflow-y, so its scrollTop is always 0: the
+  // previous version of this fix saved and restored zero and did nothing, which
+  // is why equipping still bounced to the top. Replacing the markup shortens the
+  // content and the browser clamps the real scroller's offset.
+  const scroller = body.closest('.screen') || body;
+  const keepScroll = opts.instant ? scroller.scrollTop : null;
   const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges()]);
   const lvl = levelFor(xp);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
@@ -5069,10 +5195,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div style="height:10px"></div>`;
     bindBadgeTaps(content);
   }
-  // restore scroll for in-page re-renders (equip/salvage) so the view doesn't jump
+  // restore scroll for in-page re-renders (equip/salvage) so the view doesn't jump.
+  // Twice: once now, once after layout, because images finishing decode can change
+  // the content height and re-clamp the offset.
   if (keepScroll != null) {
-    body.scrollTop = keepScroll;
-    requestAnimationFrame(() => { body.scrollTop = keepScroll; });
+    scroller.scrollTop = keepScroll;
+    requestAnimationFrame(() => { scroller.scrollTop = keepScroll; });
   }
 }
 
@@ -6095,8 +6223,9 @@ async function renderBoneyard(el) {
     }
 
     let lat = boot.coords.latitude, lng = boot.coords.longitude;
-    // remember where we are so notifications can predict rares near you later
-    kvSet('lastLoc', { lat, lng, at: Date.now() }).then(() => scheduleRares(lat, lng)).catch(() => {});
+    // remember where we are (used by the map, not by notifications any more);
+    // scheduleRares now only clears rare pushes already queued on the device.
+    kvSet('lastLoc', { lat, lng, at: Date.now() }).then(() => scheduleRares()).catch(() => {});
     body.innerHTML = `
       <div class="map-stage" id="mapStage">
         <div class="map-canvas" id="mapCanvas"></div>
@@ -6109,6 +6238,7 @@ async function renderBoneyard(el) {
         <button class="btn map-den" id="mapSecret" hidden></button>
         <button class="btn map-mini" id="mapMini" hidden>Fight</button>
         <button class="btn map-den" id="mapGlutton" hidden>Face The Glutton</button>
+        <button class="btn map-spire-btn" id="mapSpire" hidden></button>
         <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
       </div>`;
 
@@ -6147,11 +6277,18 @@ async function renderBoneyard(el) {
       }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
+    let worldReady = false;   // flipped once every marker layer's state exists
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
       // queryRenderedFeatures actually has the water/road features — the moment
       // to resolve which POIs snap to a path vs stay hidden (water/backyard).
+      // It can also fire BEFORE this setup finishes: the `typeof fn === 'function'`
+      // guards pass (declarations hoist) while the consts those functions close
+      // over are still in the temporal dead zone, so the first idle threw
+      // "Cannot access 'collected' before initialization" and placement silently
+      // did not run. Wait until the setup below has actually completed.
+      if (!worldReady) return;
       if (typeof refreshSpawns === 'function') refreshSpawns();
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
@@ -6473,6 +6610,51 @@ async function renderBoneyard(el) {
       if (gb) gb.hidden = dist > GLUTTON_RADIUS_M;
     }
 
+    // Dark Spires: permanent territory. Unclaimed ones are held by an NPC warden;
+    // yours light up, accrue tribute you must walk to, and fade to dormant if you
+    // stop visiting. Marker root carries position ONLY (MapLibre owns its
+    // transform) — every filter and animation lives on the inner .spire-fx.
+    const spireMarkers = new Map();
+    let spireState_ = {};
+    let spireInRange = null;
+    async function refreshSpires() {
+      spireState_ = await spireState();
+      const near = spiresNear(lat, lng).slice(0, 4);
+      const live = new Set(near.map(s => s.id));
+      for (const [id, rec] of spireMarkers) { if (!live.has(id)) { rec.marker.remove(); spireMarkers.delete(id); } }
+      spireInRange = null;
+      for (const s of near) {
+        const view = readSpire(spireState_, s);
+        let rec = spireMarkers.get(s.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-spire';
+          el.innerHTML = `<div class="spire-fx"><span class="spire-flag"></span><img src="assets/brand/tomb.png" alt=""><span class="spire-tribute"></span></div>`;
+          rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el, anchor: 'bottom' }), el };
+          spireMarkers.set(s.id, rec);
+        }
+        const held = view.held, dormant = view.dormant;
+        rec.el.classList.toggle('mine', held);
+        rec.el.classList.toggle('free', !held);
+        rec.el.classList.toggle('dormant', dormant);
+        rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
+        $('.spire-flag', rec.el).textContent = held ? 'YOURS' : dormant ? 'DORMANT' : 'UNCLAIMED';
+        const trib = held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
+        $('.spire-tribute', rec.el).innerHTML = trib;
+        if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view };
+      }
+      const sb = $('#mapSpire', body);
+      if (sb) {
+        sb.hidden = !spireInRange;
+        if (spireInRange) {
+          const { s, view } = spireInRange;
+          sb.textContent = !view.held ? `Take ${s.name}`
+            : view.tribute.days ? `Collect ${view.tribute.coins} from ${s.name}`
+            : `Tend ${s.name}`;
+        }
+      }
+    }
+
     // Easter-egg secret dens: whisper within earshot, materialize on approach.
     // No marker, readout or button exists beyond SECRET_REVEAL_M — the whole
     // point is that these spread by rumor, not by map-reading.
@@ -6522,6 +6704,7 @@ async function renderBoneyard(el) {
       refreshMinis();
       refreshSecrets();
       refreshGlutton();
+      await refreshSpires();
     }
 
     const raresCued = new Set(); // rares we've already announced this session
@@ -6658,6 +6841,27 @@ async function renderBoneyard(el) {
       openFight(wrap, fighter, { mode: 'mini', name: mini.name, mult: mini.mult, aiLevel: mini.aiLevel, talents: [], venue: 'The Boneyard', mini, date });
     });
 
+    // One button, three jobs, because a spire only ever wants one thing from you:
+    // take it, collect from it, or keep it alive.
+    $('#mapSpire', body).addEventListener('click', async () => {
+      if (tooFastToAct()) return;
+      if (!spireInRange) return;
+      const { s, view } = spireInRange;
+      if (!view.held) return openSpireSheet(s, view);
+      if (view.tribute.days) {
+        const r = await collectTribute(s.id);
+        if (!r.ok) { toast('Nothing to collect here yet.'); return; }
+        await coinsAdd(r.coins);
+        await boneDustAdd(r.dust);
+        popSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.4, 16);
+        toast(`${s.name} pays up: +${r.coins} coins, +${r.dust} Bone Dust.`, 3200);
+      } else {
+        await tendSpire(s.id);
+        toast(`${s.name} stands. Resolve restored.`, 2600);
+      }
+      await refreshSpires();
+    });
+
     $('#mapGlutton', body).addEventListener('click', () => {
       if (tooFastToAct()) return;
       // `gluttonBeaten` never existed: this threw ReferenceError on EVERY tap, so
@@ -6694,6 +6898,7 @@ async function renderBoneyard(el) {
       refreshWorld();
     });
 
+    worldReady = true;
     refreshWorld();
     // claims and day rollovers must surface even when standing still
     const worldTimer = setInterval(async () => {
@@ -6728,8 +6933,10 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
+    const onSpireClaimed = () => { refreshSpires(); };
+    addEventListener('bh-spire-claimed', onSpireClaimed);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -6902,7 +7109,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v250'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v251'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -6964,7 +7171,7 @@ async function refreshNotifSchedules() {
   try {
     await syncNotifications();
     const loc = await kvGet('lastLoc', null);
-    if (loc) await scheduleRares(loc.lat, loc.lng);
+    await scheduleRares();   // retired: clears any rare pushes still queued
   } catch { /* fails silent */ }
 }
 
@@ -8071,6 +8278,22 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // a glutton fight costs no Pit energy while every win still mints a
         // uniquely-keyed `fight` row (+10 XP and quest credit).
         dispatchEvent(new CustomEvent('bh-glutton-beaten', { detail: { key: gluttonKey(dateKey(), slot) } }));
+      }
+      else if (foeCfg.mode === 'spire') {
+        // Taking a tower: the claim itself is the prize, so the payout is modest
+        // and the tribute stream does the real earning. Re-taking a dormant spire
+        // pays the same, because walking back out there deserves the same.
+        const r = await claimSpire(foeCfg.spire);
+        if (r.ok) {
+          coins = 80;
+          extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
+            name: foeCfg.spire.name, rarity: 'epic', kind: 'DARK SPIRE',
+            stats: `It flies your name now. Come back to collect tribute and keep it standing.` });
+          dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
+        } else {
+          coins = 40;
+          toast(`You hold ${SPIRE_CAP} spires already. Let one go dormant to take another.`, 4000);
+        }
       }
       else if (foeCfg.mode === 'rung') {
         if (!foeCfg.done) {
