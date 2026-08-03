@@ -3365,10 +3365,10 @@ body::before {
   transform: translateX(-50%); border: 4px solid transparent; border-top-color: inherit; }
 .map-spire.mine .spire-flag { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .map-spire.free .spire-flag, .map-spire.dormant .spire-flag { font-size: 11px; color: var(--text-2); }
+.spire-tribute:empty { display: none; }
 .spire-tribute { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
   font-size: 11px; font-weight: 800; color: var(--gold); white-space: nowrap;
   text-shadow: 0 1px 0 #17151d, 0 0 5px rgba(0, 0, 0, 0.9); }
-.map-spire.mine .spire-tribute::after { content: ' to collect'; font-weight: 600; color: var(--text-2); }
 /* the in-range action button, sitting above the other map CTAs */
 /* NOTE the distinct class: the marker is .map-spire and this is .map-spire-btn.
    They collided at first, so the marker's 58x74 sizing was landing on the button
