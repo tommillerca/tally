@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 258, date: '2026-08-04', title: 'Your Bonehead has more to say', items: [
+    'He had nine things to say and picked one <b>per calendar day</b>, so he repeated himself all day long. Now every time you open the app he says something different, and there are roughly <b>90 lines</b> instead of thirty.',
+    'He also notices more: a big step day, a dish finishing in the pot, a Dark Spire flying your name, a full tank of Pit fights.',
+    'And a streak no longer gags him. Once you were three days in, the streak lines were <b>all</b> he was allowed to say.',
+  ] },
   { n: 257, date: '2026-08-04', title: 'Melt a pile at once', items: [
     'The Salvage Bench now has <b>tick boxes</b>. Select the spare pieces you want gone (or "select all unworn"), and melt the lot in one confirm instead of one popup per item. Gear you are wearing cannot be bulk-selected, so nothing you rely on goes in by accident.',
     'Slimed gear now <b>glows on your Bonehead</b>, not just in the equip box.',

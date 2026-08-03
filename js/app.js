@@ -1024,7 +1024,7 @@ async function renderToday(el) {
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
       </div>
     </div>
-    <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday }))}</div>
+    <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }))}</div>
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
         <span class="hero-lv">Lv ${lvl.level}</span>
@@ -1309,8 +1309,20 @@ async function measureBubbleSide(stage, eq) {
   } catch { return 'l'; }
 }
 
-function speechLine({ entries, tot, targets, crates, streak, isToday }) {
-  const pick = arr => arr[(new Date().getDate() + arr.length) % arr.length];
+/* What your Bonehead says on the home screen.
+ *
+ * The pools used to be indexed by the DAY OF THE MONTH, which meant he said one
+ * line all day no matter how many times you opened the app — nine lines read like
+ * one. The index is now a per-open salt, so every launch gets a fresh line and the
+ * bubble still holds still within a session instead of flickering on each render.
+ *
+ * House rules for anything added here: never comment on a number being too high,
+ * never imply eating less is the win, and keep him fond of the player. He is a
+ * skeleton who is delighted you showed up, not a coach. */
+function speechLine({ entries, tot, targets, crates, streak, isToday, steps = 0, dishReady = false, fightsReady = 0, spires = 0 }) {
+  if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
+  const pick = arr => arr[(S.speechSalt + arr.length) % arr.length];
+  const hour = new Date().getHours();
   if (S.pendingLevelLine) { const l = S.pendingLevelLine; S.pendingLevelLine = null; return l; }
   if (crates.length) return pick([
     'Crack that crate open already!',
@@ -1318,8 +1330,25 @@ function speechLine({ entries, tot, targets, crates, streak, isToday }) {
     'Crates do not open themselves, chief.',
     'I can hear something rattling in there. Relatable.',
     'Unopened crates keep me up at night. I do not sleep anyway.',
+    'That crate has been staring at me. Rude.',
+    'Could be a hat in there. Could be socks. Open it.',
+    'I shook it. Something moved. Your turn.',
+    'Loot goes stale, you know. It does not, but open it anyway.',
+    'A closed crate is just a rectangle. Fix that.',
   ]);
-  if (!isToday) return 'Time traveling, are we? Tap me to change my fit.';
+  if (!isToday) return pick([
+    'Time traveling, are we? Tap me to change my fit.',
+    'The past. Nice place. I was there.',
+    'Nothing to log back here, chief. Just vibes.',
+    'History cannot be re-cooked. It can be admired.',
+  ]);
+  if (dishReady) return pick([
+    'Something is done in the pot. I can smell it. Somehow.',
+    'The cauldron is finished and very smug about it.',
+    'Dinner is ready and I have no throat. Go on.',
+    'Kitchen is dinging. Kitchen never dings gently.',
+    'Serve that dish before it becomes a science project.',
+  ]);
   if (!entries.length) return pick([
     'Feed me a log, chief.',
     'Bones do not fuel themselves.',
@@ -1327,29 +1356,79 @@ function speechLine({ entries, tot, targets, crates, streak, isToday }) {
     'My stomach would growl if I had one.',
     'I have not eaten in years. You have no excuse.',
     'Breakfast: the most important meal I cannot have.',
+    'Blank slate. Put something delicious on it.',
+    'Whatever it is, it counts. Log it.',
+    'I live vicariously through your lunch.',
+    'Zero logs. Bold opening move.',
+    hour < 11 ? 'Morning. What are we eating? I mean you.' : 'Still nothing logged. I am extremely patient and mildly nosy.',
   ]);
   if (targets && targets.p && tot.p >= targets.p) return pick([
     'Protein secured. Bones swole.',
     'Full protein. Maximum calcium energy.',
     'Somewhere, a cow is proud of us.',
     'These femurs? Sponsored by protein.',
+    'Protein target: obliterated. Politely.',
+    'You could bench a tombstone right now.',
+    'Every gram went straight into the good bones.',
+    'That is the stuff. Structural integrity rising.',
   ]);
   if (targets && tot.kcal > targets.kcal) return pick([
     'Big day. We log it all anyway.',
     'Honest logs make strong bones.',
     'We feast like kings. Kings log too.',
+    'Logged it. That is the whole trick, chief.',
+    'A big day is still a tracked day. Nice work.',
+    'No notes. Just numbers. Onward.',
+    'The ledger does not judge. Neither do I.',
   ]);
   if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick([
     'Right in the zone. Finish strong.',
     'Stick the landing tonight.',
     'So close I can taste it. Figure of speech.',
+    'This is the good part of the day.',
+    'Dialled in. Do not let me distract you.',
+    'Textbook. Frame it.',
+    'You have got room for something good. Use it well.',
   ]);
-  if (streak >= 3) return pick([
-    `Day ${streak}. Keep the flame alive.`,
-    `${streak} days straight. Absolutely unkillable. Well. Again.`,
-    `Streak day ${streak}. The calcium is compounding.`,
-  ]);
+  // Everything from here down is chatter rather than a nudge, so the eligible
+  // pools are POOLED and picked across, not tried in order. As separate early
+  // returns, `streak >= 3` sat above the general pool and swallowed it whole: any
+  // player with a streak going only ever heard the streak lines, which is most of
+  // why a pile of lines read like a handful.
+  const chatter = [
+    ...(steps >= 12000 ? [
+      `${steps.toLocaleString()} steps. My ankles filed a complaint.`,
+      'You walked like the town owed you money.',
+      'Big legs day. Literally all I am.',
+      'That is a lot of ground. Any of it have loot on it?',
+      'Somewhere out there a spire heard you coming.',
+    ] : []),
+    ...(streak >= 3 ? [
+      `Day ${streak}. Keep the flame alive.`,
+      `${streak} days straight. Absolutely unkillable. Well. Again.`,
+      `Streak day ${streak}. The calcium is compounding.`,
+      `${streak} in a row. I am starting to expect this of you.`,
+      `Day ${streak} and the streak is load-bearing now.`,
+      `${streak} days. Consistency looks good on you. So does that hat.`,
+    ] : []),
+    ...(spires > 0 ? [
+      spires === 1 ? 'One tower flies our name. I check on it hourly.' : `${spires} spires under our name. Landlord energy.`,
+      'The tribute is not going to walk itself over here.',
+      'Someone will come for our tower eventually. Let them.',
+    ] : []),
+    ...(fightsReady >= 3 ? [
+      `${fightsReady} fights in the tank. The Pit is right there.`,
+      'I am full of vigor and bad decisions.',
+      'Something in the Pit needs hitting. I volunteer you.',
+    ] : []),
+    ...(hour >= 23 || hour < 5 ? [
+      'Late one. I do not sleep, but you should.',
+      'The witching hour. My hour, technically.',
+      'Logging at midnight is a lifestyle. Respect.',
+    ] : []),
+  ];
   return pick([
+    ...chatter,
     'The bones are our money!',
     'Solid pace today.',
     'What is next on the menu?',
@@ -1359,7 +1438,28 @@ function speechLine({ entries, tot, targets, crates, streak, isToday }) {
     'Every day is leg day when you are mostly legs.',
     'I do all my thinking with my skull.',
     'Hydrate. Marrow does not make itself.',
+    'I have no organs and yet somehow opinions.',
+    'Do these ribs make me look confident?',
+    'I would kill for a sandwich. I have killed for less.',
+    'Nothing hurts when you are all frame and no complaints.',
+    'Tap me. I got a new fit and nobody has noticed.',
+    'They said I would never amount to anything. I amounted to 206 things.',
+    'Skipped leg day once. Grew them back.',
+    'I am not lazy, I am structurally efficient.',
+    'Bone density: rising. Mood: also rising.',
+    'You keep showing up. I keep standing here. Great system.',
+    'One day I will get a nose. Today is not that day.',
+    'Bones out, standards high.',
+    'Nobody has ever won an arm wrestle against me twice.',
+    'I peaked in the Cretaceous and I am peaking again.',
+    'Been dead for years, never felt better.',
   ]);
+}
+// The pools are picked from a union, so sampling the real screen cannot prove a
+// given pool is reachable at all. This lets a test drive the salt and read back
+// every line a state can produce. Webdriver only, same as the other hooks.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__speech = (ctx, salt) => { S.speechSalt = salt; return speechLine(ctx); };
 }
 
 // NOTE: the `noYard` option some callers still pass is a legacy no-op — the
@@ -7290,7 +7390,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v257'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v258'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
