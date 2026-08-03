@@ -2523,10 +2523,16 @@ body::before {
    ARE 100% of their .pa-art box (correct); small sprites set their own px below. */
 .pa-stage img { position: absolute !important; inset: auto !important; object-fit: fill !important;
                 image-rendering: auto; filter: none !important; pointer-events: none; }
+/* Full-canvas layers fill .pa-art and sit at its origin. The left/top MUST be
+   !important: the `.pa-stage img { inset: auto !important }` rule above outranks
+   the plain `.pa-base { left: 0 }` declaration, which left these layers at an
+   arbitrary STATIC position. Scaled up, that pushed the art past .petanim's
+   overflow:hidden edge and sliced the creature down a straight vertical line,
+   which is the "pet cut off on the crew screen" Tom reported three times. */
 .pa-cloud .pa-body, .pa-cloud .pa-eyes, .pa-cloud .pa-closed,
 .pa-lizard .pa-base, .pa-lizard .pa-mouthline, .pa-lizard .pa-drool,
 .pa-lizard .pa-lid, .pa-lizard .pa-tongue, .pa-lizard .pa-fly {
-  width: 100% !important; height: 100% !important; }
+  width: 100% !important; height: 100% !important; left: 0 !important; top: 0 !important; }
 .pa-cloud { width: 222px; height: 219px; }
 .pa-lizard { width: 273px; height: 218px; }
 
@@ -3403,3 +3409,22 @@ body::before {
 .bc .bc-bar { transition: opacity .12s; }
 .bc .bc-bar.on { opacity: 1; stroke: var(--text); stroke-width: 2; paint-order: stroke; }
 .bc-readout { margin: 6px 2px 0; min-height: 1.2em; font-variant-numeric: tabular-nums; }
+
+/* SLIMED gear on the Bonehead itself. The wardrobe cell has glowed since the
+   Glutton shipped (.ward-cell.slimed) but the avatar layer never did, so a
+   slimed piece looked ordinary the moment you actually wore it. Same green as
+   the cell, tuned down: this sits over art, not over a dark tile. */
+.bh-anim img.bh-slimed, .bh-stage img.bh-slimed {
+  filter: drop-shadow(0 0 5px rgba(150, 230, 80, 0.95)) drop-shadow(0 0 12px rgba(120, 200, 60, 0.55));
+}
+
+/* Salvage Bench bulk melt */
+.melt-tools { display: flex; gap: 14px; padding: 4px 2px 8px; }
+.melt-tools .link { background: none; border: 0; color: var(--accent); font-size: 13px; font-weight: 700; padding: 0; }
+.melt-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.melt-row .melt-pick { width: 20px; height: 20px; flex: none; accent-color: var(--danger); }
+.melt-row.worn { opacity: 0.6; }
+.melt-val { color: var(--text-2); font-size: 13px; font-weight: 800; }
+/* the confirm bar sticks to the bottom of the fold so it is reachable with a
+   long list open, rather than making you scroll back to find it */
+.melt-go { position: sticky; bottom: 6px; width: 100%; margin-top: 10px; z-index: 2; }

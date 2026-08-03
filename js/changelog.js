@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 257, date: '2026-08-04', title: 'Melt a pile at once', items: [
+    'The Salvage Bench now has <b>tick boxes</b>. Select the spare pieces you want gone (or "select all unworn"), and melt the lot in one confirm instead of one popup per item. Gear you are wearing cannot be bulk-selected, so nothing you rely on goes in by accident.',
+    'Slimed gear now <b>glows on your Bonehead</b>, not just in the equip box.',
+    'Beating the Glutton shows the actual piece of gear you won. It was showing a generic tombstone icon.',
+    'Fixed a pet getting sliced in half when you open a Crew member\'s profile.',
+  ] },
   { n: 256, date: '2026-08-02', title: 'Your name on your towers', items: [
     'A Dark Spire you hold now flies <b>your Crew name</b> instead of the word "Yours". It is a territory marker: the whole point is reading your own Bonehead on it from across the map.',
     'A tower with nothing owed no longer reads "to collect" under it. The coin figure only appears when there is actually tribute waiting.',

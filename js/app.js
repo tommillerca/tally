@@ -95,6 +95,7 @@ const S = {
   celebration: null,
   sounds: true,
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
+  slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
 };
 
 // The pet art PNGs draw the creature small in the lower-right of a 640² canvas,
@@ -173,6 +174,19 @@ function petPortraitHtml(petId, px, shiny = false, { mass = false } = {}) {
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
+/* Which avatar slots are wearing SLIMED gear. Cached the same way shiny pets are,
+   because the glow has to appear on every avatar render and avatarLayersHtml has
+   14 call sites: threading a parameter through all of them is how one of them
+   ends up missed. The wardrobe cell glowed while the Bonehead itself did not,
+   which is exactly that mistake made once already. */
+async function refreshSlimedSlots() {
+  try {
+    const [ids, lo] = await Promise.all([slimedGearIds(), gearLoadout()]);
+    const set = new Set();
+    for (const [slot, gid] of Object.entries(lo || {})) if (gid && ids.has(gid)) set.add(slot);
+    S.slimeSlots = set;
+  } catch { S.slimeSlots = new Set(); }
+}
 
 // 4-point sparkle in the game's art style (flat gold fill, thick dark outline).
 // Replaces ✨/✦ emoji + text glyphs so decorations match Cam's illustrations.
@@ -364,6 +378,7 @@ async function boot() {
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
   await refreshShinyPets();
+  await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
@@ -1358,8 +1373,12 @@ function avatarLayersHtml(eq, opts = {}) {
     if (!itemId || !BH_BY_ID[itemId]) return '';
     const item = BH_BY_ID[itemId];
     // weapon / off-hand glow by rarity (epic/legendary)
-    const glow = (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary')
-      ? ` class="wpn-glow r-${item.rarity}"` : '';
+    const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
+    const cls = [
+      (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
+      slimed ? 'bh-slimed' : '',
+    ].filter(Boolean).join(' ');
+    const glow = cls ? ` class="${cls}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
@@ -3642,6 +3661,10 @@ async function renderFriends(el) {
   await paint();
 }
 
+// Test hook (webdriver only), same pattern as __strikeFx / __bhFight. A friend
+// profile needs a real friend on the server, so the pet-clipping bug in this
+// sheet was only ever reproducible by hand on Tom's phone. Now it is measurable.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = f => openFriendProfile(f, () => {});
 function openFriendProfile(f, onChange) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
@@ -4975,6 +4998,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (S.wardrobePreview === g.id && gearLo[slot] !== g.id) {
         if (wLevel < g.minLevel) { toast(`Locked: reach level ${g.minLevel} to wear ${g.name}.`, 2800); return; }
         await equipGear(slot, g.id);
+        await refreshSlimedSlots();   // keep the Bonehead's slime glow in step
         S.lookPreview = null;
         popSound(S.sounds); pushProfileSoon();
         renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -4989,6 +5013,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const g = GEAR_BY_ID[btn.dataset.equipgearCommit];
       if (!g || wLevel < g.minLevel) return;
       await equipGear(slot, g.id);
+      await refreshSlimedSlots();   // keep the Bonehead's slime glow in step
       S.lookPreview = null;
       levelSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -5143,12 +5168,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
           .sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
         if (!rows.length) return '';
         const totalDust = rows.reduce((a, g) => a + gearDustValue(g), 0);
-        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>` + rows.map(g => {
+        // Tick as many as you like, melt them in ONE confirm. Melting used to be
+        // two taps per piece, and the Wardrobe cannot melt cosmetic-only pieces at
+        // all because tapping one opens the equip sheet. Clearing a backlog of
+        // twenty spare drops was the worst chore in the game.
+        const spare = rows.filter(g => gearLoNow[g.slot] !== g.id);
+        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>
+          <div class="melt-tools">
+            <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
+            <button class="link" id="meltNone">Clear</button>
+          </div>` + rows.map(g => {
           const worn = gearLoNow[g.slot] === g.id;
-          return `<div class="crate-row"><span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
-            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn</b>' : ''}</small></div>
-            <button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button></div>`;
-        }).join('') + `</details>`;
+          // WORN gear is listed but never bulk-selectable: losing the piece you are
+          // wearing to a stray tap is not a mistake worth allowing.
+          return `<label class="crate-row melt-row${worn ? ' worn' : ''}">
+            <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}"${worn ? ' disabled' : ''}>
+            <span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small></div>
+            ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
+                   : `<span class="melt-val">+${gearDustValue(g)}</span>`}
+          </label>`;
+        }).join('') + `<button class="btn danger melt-go" id="meltGo" hidden></button></details>`;
       })()}`;
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
@@ -5178,6 +5218,54 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
+    // ---- bulk melt: tick pieces, one confirm ----
+    const meltPicks = () => $$('.melt-pick', content).filter(c => c.checked && !c.disabled);
+    const syncMeltBar = () => {
+      const go = $('#meltGo', content);
+      if (!go) return;
+      const picks = meltPicks();
+      const dust = picks.reduce((a, c) => a + (parseInt(c.dataset.dust, 10) || 0), 0);
+      go.hidden = !picks.length;
+      go.dataset.armed = '0';
+      go.innerHTML = `Melt ${picks.length} piece${picks.length === 1 ? '' : 's'} · <span class="dust-ico">◆</span> +${dust.toLocaleString()}`;
+    };
+    $$('.melt-pick', content).forEach(c => c.addEventListener('change', syncMeltBar));
+    $('#meltAll', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      $$('.melt-pick', content).forEach(c => { if (!c.disabled) c.checked = true; });
+      syncMeltBar();
+    });
+    $('#meltNone', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      $$('.melt-pick', content).forEach(c => { c.checked = false; });
+      syncMeltBar();
+    });
+    $('#meltGo', content)?.addEventListener('click', async () => {
+      const go = $('#meltGo', content);
+      const picks = meltPicks();
+      if (!picks.length) return;
+      // arm-then-confirm, because this destroys several pieces at once and there
+      // is no undo. The count is in the label both times so you can see the size
+      // of what you are about to do.
+      if (go.dataset.armed !== '1') {
+        go.dataset.armed = '1';
+        const label = go.innerHTML;
+        go.textContent = `Tap again to melt ${picks.length}`;
+        setTimeout(() => { if (go.isConnected && go.dataset.armed === '1') { go.dataset.armed = '0'; go.innerHTML = label; } }, 3000);
+        return;
+      }
+      go.disabled = true;
+      let dust = 0, n = 0;
+      for (const c of picks) {
+        const res = await disenchantGear(c.dataset.meltsel);
+        if (res.ok) { dust += res.dust; n++; c.closest('.melt-row')?.remove(); }
+      }
+      go.disabled = false;
+      popSound(S.sounds);
+      toast(n ? `${n} piece${n === 1 ? '' : 's'} melted into ${dust.toLocaleString()} Bone Dust.` : 'Nothing melted.', 2800);
+      renderCharacter(wrap, 'crates');   // one re-render at the end, not per piece
+    });
+
     $$('[data-meltbench]', content).forEach(btn => btn.addEventListener('click', async () => {
       // arm-then-confirm, same contract as the Wardrobe melt
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Tap to confirm'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 2600); return; }
@@ -7202,7 +7290,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v256'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v257'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8359,11 +8447,19 @@ async function openFight(pitWrap, fighter, foeCfg) {
         trackEvent('glutton_win', { first: !!r, slimed: !!r?.gear?.slimed });
         if (r) {
           xp += r.xp; coins = r.coins;
-          if (r.gear) extraCards.push({
-            iconHtml: `<span class="slime-ico${r.gear.slimed ? ' slimed' : ''}">${bhIcon('tombstone', 96)}</span>`,
-            name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
-            stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
-          });
+          if (r.gear) {
+            // Show the ACTUAL piece, the way every other gear reward card does
+            // (imgSrc -> the artId's real art). This drew a generic tombstone
+            // icon instead, so beating the Glutton revealed a card that looked
+            // nothing like the gear it had just given you.
+            const gArt = GEAR_BY_ID[r.gear.id] && BH_BY_ID[GEAR_BY_ID[r.gear.id].artId];
+            extraCards.push({
+              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: bhIcon('tombstone', 96) }),
+              slimed: !!r.gear.slimed,
+              name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
+              stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
+            });
+          }
         } else coins = 25; // already cleared this window: pocket change, no re-farm
         // Tell the map he is DOWN on every win, not just the first claim. Firing
         // only inside `if (r)` meant a repeat win left the marker and the Face
