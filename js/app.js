@@ -6673,6 +6673,16 @@ async function renderBoneyard(el) {
     let spireState_ = {};
     let spireInRange = null;
     let spireRemote = new Map();   // id -> server record (who really holds it)
+    // Your own towers carry YOUR name, not the word "YOURS": a spire is a
+    // territory marker, and reading your handle on it is the whole point. Same
+    // name source the Crew tab uses. Offline players have no account name, so
+    // they fall back to the neutral label rather than an empty plate.
+    let myName = null;
+    const loadMyName = async () => {
+      try { const me = await social.socialMe(); myName = (me && (me.name || me.handle)) || null; }
+      catch { myName = null; }
+    };
+    await loadMyName();
     let spireFetchedAt = 0, spireFetchKey = '', spireFetching = false;
     const SPIRE_POLL_MS = 60000;
     async function refreshSpires({ force = false } = {}) {
@@ -6688,6 +6698,7 @@ async function renderBoneyard(el) {
       if (stale && !spireFetching) {
         spireFetching = true;
         try {
+          await loadMyName();
           const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
           if (rows) { spireRemote = new Map(rows.map(r => [r.id, r])); spireFetchedAt = Date.now(); spireFetchKey = key; }
         } finally { spireFetching = false; }
@@ -6717,7 +6728,8 @@ async function renderBoneyard(el) {
         rec.el.classList.toggle('dormant', dormant);
         rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
         $('.spire-flag', rec.el).textContent = rival ? (rival.ownerName || 'RIVAL').toUpperCase()
-          : held ? 'YOURS' : dormant ? 'DORMANT' : 'UNCLAIMED';
+          : held ? (myName ? myName.toUpperCase() : 'YOURS')
+          : dormant ? 'DORMANT' : 'UNCLAIMED';
         const trib = held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
         if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view: { ...view, held }, rival };
@@ -7190,7 +7202,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v254'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v255'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

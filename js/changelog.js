@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 255, date: '2026-08-02', title: 'Your name on your towers', items: [
+    'A Dark Spire you hold now flies <b>your name</b> instead of the word "Yours". It is a territory marker: the whole point is reading your own handle on it from across the map.',
+  ] },
   { n: 254, date: '2026-08-02', title: 'The coin shop works again', items: [
     'Buying crates, Vigor and Battle Charms was dead: the Puffer Pack card above it was left unclosed in the code, so the whole coin shop ended up trapped inside it. The buttons looked completely normal and did nothing. Sorry.',
   ] },
