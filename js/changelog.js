@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 265, date: '2026-08-04', title: 'Dark Spires: towers with a history', items: [
+    'A spire now shows its <b>level</b> on the map. It goes up every time the tower changes hands, and a higher-level tower <b>pays more tribute</b> (up to half again), so an old contested tower is worth taking.',
+    'The <b>Keeper\'s Boon</b> now scales: <b>+5% quest coins per spire you hold</b>, so the second and third tower are worth the walk. Capped at three, deliberately.',
+    'When someone takes your tower you <b>finally get told</b>. The game has always recorded it and never showed you, which made losing a spire feel like a glitch.',
+    'A tower that just changed hands <b>holds its walls for an hour</b>, and taking one off another player now costs <b>one Pit fight</b>. Two friends on the same corner could previously flip a spire back and forth for coins all afternoon.',
+    'Your towers are now defended by your <b>current</b> Bonehead. The defender was frozen at the moment you claimed it, so rivals were fighting a months-old version of you.',
+    'The leaderboard shows <b>how many spires</b> each player is holding.',
+  ] },
   { n: 264, date: '2026-08-04', title: 'The Pit tells you when you have hit the ceiling', items: [
     'The Gauntlet has always had a cap that only lifts when you beat a <b>world boss</b> out on the map, but it was one sentence of small print, so hitting it felt like the game had quietly stopped. Now the section header says <b>AT THE CAP</b>, and a card tells you the rank you are stuck on, that each world boss raises the ceiling by <b>3 ranks</b>, how many you have beaten, and gives you a button straight to the map.',
     'The fight below it now says <b>rematch only</b> instead of looking like a fresh rank.',
