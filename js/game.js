@@ -130,6 +130,13 @@ export const BADGES = [
   { id: 'pit-1', icon: '🥊', name: 'Blooded', desc: 'Win a fight in The Pit' },
   { id: 'pit-25', icon: '💀', name: 'Pit fiend', desc: 'Win 25 Pit fights' },
   { id: 'pit-champ', icon: '👑', name: 'Kingslayer', desc: 'Dethrone the Marrow King' },
+  // WARDEN: the only badges in the game you cannot get from the Pit, the Kitchen or
+  // a crate. They come from holding a Dark Spire over real days, and from defending
+  // one against a siege, so they are proof of a walking habit rather than of grinding.
+  { id: 'warden-7', icon: '🏰', name: 'Warden', desc: 'Hold a Dark Spire for 7 days' },
+  { id: 'warden-30', icon: '🗝', name: 'Keeper of the Gate', desc: 'Hold a Dark Spire for 30 days' },
+  { id: 'warden-100', icon: '👑', name: 'Lord of Spires', desc: 'Hold a Dark Spire for 100 days' },
+  { id: 'siege-1', icon: '⚔', name: 'Siegebreaker', desc: 'Break a siege on one of your spires' },
   // hidden until earned: easter-egg bosses spread by rumor, not by badge list
   { id: 'secret-tumtum', icon: '🥁', name: 'Wabaloo Whisperer', desc: 'Found Tum Tum Wabaloo where he was buried', secret: true },
 ];
@@ -160,6 +167,10 @@ export function badgeCheck(id, st) {
     case 'pit-1': return st.pitWins >= 1;
     case 'pit-25': return st.pitWins >= 25;
     case 'pit-champ': return st.pitChamp;
+    case 'warden-7': return st.spireDaysBest >= 7;
+    case 'warden-30': return st.spireDaysBest >= 30;
+    case 'warden-100': return st.spireDaysBest >= 100;
+    case 'siege-1': return st.siegesBroken >= 1;
     case 'secret-tumtum': return st.secretTumtum;
     default: return false;
   }
@@ -189,6 +200,12 @@ async function buildStats() {
     pitChamp: xp.some(r => r.type === 'pitchamp'),
     secretTumtum: xp.some(r => r.key === 'secret-tumtum'),
     equippedSlots: Object.keys(eq).filter(k => !defaults.has(k)).length + 2, // body + skull always on
+    // longest UNBROKEN hold across all spires, in days, and sieges repelled. The
+    // hold is read from the spire records themselves (server-corrected on sync), so
+    // it survives a reinstall the same way the towers do.
+    spireDaysBest: Math.max(0, ...Object.values((await kvGet('spires', {})) || {})
+      .map(r => Math.floor((Date.now() - (r.claimedAt || Date.now())) / 86400000))),
+    siegesBroken: xp.filter(r => r.type === 'siege').length,
   };
 }
 

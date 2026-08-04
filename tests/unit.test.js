@@ -16,6 +16,7 @@ import { GEAR_ITEMS } from '../js/gear.js';
 import {
   boonBonusFor, levelTributeMult, BOON_PER_SPIRE, BOON_SPIRE_CAP, BOON_QUEST_BONUS,
   LEVEL_TRIBUTE_MAX, TRIBUTE_PER_DAY, TRIBUTE_CAP_DAYS, SPIRE_CAP,
+  wardenTier, WARDEN_TIERS,
 } from '../js/spires.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
@@ -1322,6 +1323,42 @@ test('spire level pays more tribute, but never more than half again', () => {
   // and the absolute worst case a single spire can pay in one collection
   const worst = Math.round(TRIBUTE_CAP_DAYS * TRIBUTE_PER_DAY * LEVEL_TRIBUTE_MAX);
   assert.ok(worst <= 300, `one spire could pay ${worst} coins per collection`);
+});
+
+test('a tower only wears a milestone once it has really been held that long', () => {
+  // off-by-one here would hand out a century tier on day 99, and the tiers are the
+  // only prestige in the game you cannot grind for
+  assert.equal(wardenTier(0).tier, 0);
+  assert.equal(wardenTier(6).tier, 0, 'day 6 is not a Warden yet');
+  assert.equal(wardenTier(7).tier, 1, 'day 7 earns the first tier');
+  assert.equal(wardenTier(29).tier, 1);
+  assert.equal(wardenTier(30).tier, 2);
+  assert.equal(wardenTier(99).tier, 2, 'day 99 is NOT a century tower');
+  assert.equal(wardenTier(100).tier, 3);
+  assert.equal(wardenTier(10000).tier, 3, 'there is nothing above the top tier');
+  // descending order is what makes `find` correct; an ascending list would always
+  // return the lowest tier and silently cap everyone at Warden
+  const days = WARDEN_TIERS.map(t => t.days);
+  assert.deepEqual(days, [...days].sort((a, b) => b - a), 'WARDEN_TIERS must stay descending');
+  for (const t of WARDEN_TIERS) assert.ok(t.name && t.tier > 0, 'every tier needs a name');
+});
+
+test('the Warden badges are the only ones you cannot grind for', () => {
+  const ids = BADGES.map(b => b.id);
+  for (const id of ['warden-7', 'warden-30', 'warden-100', 'siege-1']) {
+    assert.ok(ids.includes(id), `${id} must exist`);
+  }
+  // each one has to be reachable by badgeCheck, or it is decoration
+  assert.equal(badgeCheck('warden-7', { spireDaysBest: 7 }), true);
+  assert.equal(badgeCheck('warden-7', { spireDaysBest: 6 }), false);
+  assert.equal(badgeCheck('warden-30', { spireDaysBest: 30 }), true);
+  assert.equal(badgeCheck('warden-100', { spireDaysBest: 100 }), true);
+  assert.equal(badgeCheck('warden-100', { spireDaysBest: 99 }), false);
+  assert.equal(badgeCheck('siege-1', { siegesBroken: 1 }), true);
+  assert.equal(badgeCheck('siege-1', { siegesBroken: 0 }), false);
+  // and their thresholds must agree with the tower tiers, or the map and the badge
+  // list would tell the player two different stories
+  assert.deepEqual(WARDEN_TIERS.map(t => t.days).sort((a, b) => a - b), [7, 30, 100]);
 });
 
 test('no random pet roll can ever include an exclusive pet', () => {

@@ -112,6 +112,7 @@ export function readSpire(state, s, now = Date.now()) {
     dormant,
     level: rec.level || 1,
     heldDays: Math.floor(daysBetween(rec.claimedAt, now)),
+    wardenTier: wardenTier(Math.floor(daysBetween(rec.claimedAt, now))).tier,
     resolvePct: Math.max(0, Math.min(1, 1 - sinceTend / RESOLVE_DAYS)),
     // Under siege: an NPC is at the gate and there is a deadline. Server-owned
     // (mirrored in by syncSieges) so it survives a reinstall and a rival sees it.
@@ -131,6 +132,18 @@ export function readSpire(state, s, now = Date.now()) {
 export function levelTributeMult(level = 1) {
   return Math.min(LEVEL_TRIBUTE_MAX, 1 + LEVEL_TRIBUTE_STEP * (Math.max(1, level) - 1));
 }
+/* Days-held milestones. A tower visibly ages on the map, and rivals see it too
+ * (their claimedAt arrives with the /spires poll), which is the whole point: a
+ * long-held tower should look like a prize worth taking. Pure + unit-tested. */
+export const WARDEN_TIERS = [
+  { days: 100, tier: 3, name: 'Lord of Spires' },
+  { days: 30, tier: 2, name: 'Keeper of the Gate' },
+  { days: 7, tier: 1, name: 'Warden' },
+];
+export function wardenTier(heldDays = 0) {
+  return WARDEN_TIERS.find(t => heldDays >= t.days) || { days: 0, tier: 0, name: '' };
+}
+
 /** Quest-coin bonus for holding `n` spires. Pure, capped, unit-tested.
  *  Rounded to whole percent: 0.05*3 is 0.15000000000000002 in float, and this
  *  number multiplies every quest payout, so it goes out clean. */

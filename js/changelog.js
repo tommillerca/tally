@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 267, date: '2026-08-04', title: 'Towers that wear their age', items: [
+    'A spire you have held a long time now <b>looks like it</b>. At 7, 30 and 100 days it changes on the map, and the hundred-day version wears a crown of embers. Rival towers show their age too, which is the point: an old tower should look like a prize worth taking.',
+    'Four new badges you <b>cannot get any other way</b>: hold a spire for 7, 30 and 100 days, and break a siege. Every other badge in the game can be earned indoors. These cannot.',
+  ] },
   { n: 266, date: '2026-08-04', title: 'Sieges: something is coming for your tower', items: [
     'About once a week, a named horror lays <b>siege</b> to one of your spires. You get <b>48 hours</b> to walk out there and break it. Beat them and the tower <b>levels up</b> and pays more tribute.',
     'Miss the window and the tower goes <b>dormant, never lost</b>. Walk back any time and it is yours again. Nothing you earned can be taken by a clock.',

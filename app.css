@@ -3703,3 +3703,24 @@ body::before {
 .spire-banner.under-siege summary .gbn-txt i { color: var(--danger); }
 .spire-siege-tag { color: var(--danger); font-weight: 800; font-variant-numeric: tabular-nums; }
 .spire-lvtag { font-family: var(--display); font-weight: 400; font-size: 12px; color: var(--gold); letter-spacing: .02em; }
+
+/* ===== A tower wears its age (v267) =====
+   Days-held milestones at 7 / 30 / 100. CSS only, derived from claimed_at, so it
+   works for RIVAL towers too: an old tower should look like a prize. Filters go on
+   .spire-fx, never the marker root (MapLibre owns that transform). */
+.map-spire[data-age="1"] .spire-fx img { filter: saturate(1.2) brightness(1.05) drop-shadow(0 0 5px rgba(165, 232, 71, .5)); }
+.map-spire[data-age="2"] .spire-fx img { filter: saturate(1.35) brightness(1.1) drop-shadow(0 0 8px rgba(124, 196, 255, .75)); }
+.map-spire[data-age="3"] .spire-fx img { filter: saturate(1.5) brightness(1.15) drop-shadow(0 0 11px rgba(255, 201, 97, .95)); }
+/* a crown of embers on a century tower */
+.map-spire[data-age="3"] .spire-fx::after {
+  content: ''; position: absolute; left: 50%; top: -3px; transform: translateX(-50%);
+  width: 26px; height: 8px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 201, 97, .95), transparent 70%);
+  animation: wardenEmber 2.6s ease-in-out infinite;
+}
+@keyframes wardenEmber { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .map-spire[data-age="3"] .spire-fx::after { animation: none; } }
+/* a siege overrides age: the deadline is what matters right now */
+.map-spire.besieged[data-age] .spire-fx img {
+  filter: hue-rotate(-25deg) saturate(1.9) brightness(1.05) drop-shadow(0 0 7px rgba(255, 109, 94, .95));
+}

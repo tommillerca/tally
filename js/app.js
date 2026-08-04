@@ -7412,6 +7412,11 @@ async function renderBoneyard(el) {
         const siegeUntil = (remote && remote.siegeUntil) || (view.siege ? view.siege.until : 0);
         const siegeName = (remote && remote.siegeName) || (view.siege ? view.siege.name : '');
         const besieged = !!(siegeUntil && siegeUntil > Date.now());
+        // How long it has stood, from whoever's claim it is. A rival's tower shows
+        // its age too, which is exactly the point: an old tower looks worth taking.
+        const heldSince = rival ? (rival.claimedAt || 0) : (held ? (spireState_[s.id]?.claimedAt || 0) : 0);
+        const ageTier = heldSince ? wardenTier(Math.floor((Date.now() - heldSince) / 86400000)).tier : 0;
+        rec.el.dataset.age = String(ageTier);
         rec.el.classList.toggle('besieged', besieged);
         rec.el.classList.toggle('mine', held);
         rec.el.classList.toggle('rival', !!rival);
@@ -7911,7 +7916,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v266'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v267'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9146,6 +9151,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // that. Deliberately pays less than a takeover: keeping what you have should
         // not out-earn going and taking something new.
         coins = 50;
+        // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
+        // count and a repeated settle can never double-count it
+        await award(`siege-${foeCfg.spire.id}-${Date.now().toString(36)}`, 'siege', 12, `Broke the siege at ${foeCfg.spire.name}`);
         const res = await social.defendSpireRemote(foeCfg.spire.id).catch(() => ({ ok: false, reason: 'offline' }));
         await breakSiege(foeCfg.spire.id);
         if (res && res.ok && res.level) await setSpireLevel(foeCfg.spire.id, res.level);

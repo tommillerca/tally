@@ -510,6 +510,7 @@ export default {
           spires: swept.map(r => ({
             id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name,
             siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
+            claimedAt: r.claimed_at,          // so a rival's tower can show its age
             mine: r.owner === auth.playerId,
             defender: r.owner === auth.playerId ? null : JSON.parse(r.defender || 'null'),
             claimedAt: r.claimed_at, tendedAt: r.tended_at, level: r.level,
