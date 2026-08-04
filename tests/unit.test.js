@@ -1285,6 +1285,21 @@ test('beds are priced for every step up to the cap, then stop', () => {
   assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
 });
 
+test('no random pet roll can ever include an exclusive pet', () => {
+  // hatchEgg() has always excluded them; grantPet('random') did not, so the
+  // Founder's Lizard was reachable by chance. Both roll pools are asserted here by
+  // reading the source, because the pools are built inline and cannot be imported.
+  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const pools = [...src.matchAll(/BH_ITEMS\.filter\(i => i\.slot === 'C'([^)]*)\)/g)].map(m => m[1]);
+  assert.ok(pools.length >= 2, `expected the hatch + grant pools, found ${pools.length}`);
+  for (const p of pools) {
+    assert.match(p, /!i\.exclusive/, `a pet pool is built without excluding exclusives: "i.slot === 'C'${p}"`);
+  }
+  // and there IS at least one exclusive pet to protect, or this guard is theatre
+  const exclusives = BH_ITEMS.filter(i => i.slot === 'C' && i.exclusive);
+  assert.ok(exclusives.length > 0, 'no exclusive pets exist, so this guard proves nothing');
+});
+
 test('every weapon rewards a stat that actually exists', () => {
   // The vendor prints "rewards <Stat>" from WEAPONS[].spec, and the Build FAQ now
   // tells players to match the two. A typo'd spec would silently fall back to

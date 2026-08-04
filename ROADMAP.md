@@ -627,3 +627,45 @@ by another route, and there is already a `transmogCost` / `TRANSMOG_HIDE` in
 loot.js to build on. Proposal: a per-slot "hidden" flag that never touches the
 stat calculation, plus a per-item glow toggle. Wants its own increment.
 
+## 2026-08-04 batch: Pit ceiling, pet dupes, hide + glow (v264)
+
+**Pit ceiling (item 1) DONE.** The cap existed but only as one sentence in a note
+paragraph plus a text link, which read as fine print. Now a real state: the section
+summary says AT THE CAP, a gold card names the rank you are stuck on, states that
+each world boss raises the ceiling by 3, shows how many you have beaten, and offers
+a full-width button to the Boneyard. The fight row says "rematch only". Guarded by
+tests/pit-cap-audit.mjs, which also asserts the UNCAPPED state has no gate card, so
+the check cannot pass on both.
+
+**Pet duplicates (item 2): the rule was ALREADY THERE.** Both grant paths
+(`hatchEgg` and `grantPet('random')`) build a `fresh` pool of species you do not own
+and only repeat once nothing fresh remains. Measured the roster to explain what Tom
+actually saw:
+
+| | |
+|---|---|
+| Hatchable species | **5** (3 non-common, 2 common) |
+| First possible duplicate | hatch **#6** |
+| Exclusive, never rollable | CX (Founder's Lizard) |
+
+So duplicates are correct behaviour once you hold all five; the roster is simply
+small. **Open question for Tom: is 5 species enough?** If he wants dupes to feel
+rarer, the fix is more pets, not more logic.
+
+Also found and fixed a real bug while checking: `grantPet('random')` filtered
+`slot === 'C'` WITHOUT excluding `exclusive`, so the Founder's Lizard could be
+handed out by chance, devaluing it for the people who were actually given one.
+`hatchEgg` has always excluded them. Guarded by a unit test that requires every
+inline pet pool in loot.js to carry `!i.exclusive`, proven red.
+
+Second observation, NOT changed, needs Tom's call: both pools prefer
+`rarity !== 'common'`, so the two common pets can only ever appear after all three
+non-commons are owned. That inverts rarity (commons become the last things you get).
+Deliberate-looking, but worth a decision.
+
+**Hide + glow (item 3): half of it already shipped.** `TRANSMOG_HIDE` is wired with
+a Hide cell in the looks picker, per slot, free, and transmog never touches stats.
+The missing half was the glow toggle, now in Settings > App as "Gear glow", gating
+both the epic/legendary weapon halo and the slimed-gear glow. Cosmetic only, proven:
+gear stats are byte-identical with it on and off, and hiding a slot changes no stats
+either.

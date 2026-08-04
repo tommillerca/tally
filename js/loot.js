@@ -467,7 +467,11 @@ export async function petCounts() {
 // no fresh pets. Shared by hatching and code redemption.
 export async function grantPet(petId, source = 'code') {
   const owned = await ownedCosmeticIds();
-  const pets = BH_ITEMS.filter(i => i.slot === 'C');
+  // EXCLUSIVE pets (the Founder's / Day One Lizard) are awarded by name only. This
+  // filter was missing here while hatchEgg has always had it, so a 'random' grant
+  // could hand out a pet that is supposed to be unobtainable, permanently
+  // devaluing it for everyone who was actually given one.
+  const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive);
   let pick;
   if (petId === 'random') {
     const fresh = pets.filter(i => !owned.has(i.id));

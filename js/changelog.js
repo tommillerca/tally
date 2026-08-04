@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 264, date: '2026-08-04', title: 'The Pit tells you when you have hit the ceiling', items: [
+    'The Gauntlet has always had a cap that only lifts when you beat a <b>world boss</b> out on the map, but it was one sentence of small print, so hitting it felt like the game had quietly stopped. Now the section header says <b>AT THE CAP</b>, and a card tells you the rank you are stuck on, that each world boss raises the ceiling by <b>3 ranks</b>, how many you have beaten, and gives you a button straight to the map.',
+    'The fight below it now says <b>rematch only</b> instead of looking like a fresh rank.',
+    'New in Settings: <b>Gear glow</b>. Turn off the coloured halo on epic weapons and slimed pieces for a clean look. It is purely cosmetic and touches no stats.',
+    'The <b>Founder\'s Lizard can no longer turn up by chance</b>. Random pet grants were rolling from the full roster including pets that are only ever awarded by name.',
+  ] },
   { n: 263, date: '2026-08-04', title: 'The dressing room stops flickering', items: [
     'Trying on a garment used to <b>flash the whole screen</b>. Every tap rebuilt the entire Character page, throwing away and re-creating every image in every row for the sake of one hat. Now only two things move: your Bonehead and the ring around the item you picked. The new piece is loaded before the swap, so there is no blink either.',
     'The <b>gear you win from a fight shows its art again</b>. The reward card was drawing its name and rarity over a completely blank panel, because that screen built the card but never filled in the picture.',

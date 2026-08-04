@@ -100,6 +100,7 @@ const S = {
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
   sounds: true,
+  glow: true,      // rarity/slime glow on your Bonehead's gear (Settings > App)
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
 };
@@ -357,6 +358,7 @@ async function boot() {
   }
   requestPersistence();
   S.sounds = (await kvGet('sounds', true)) !== false;
+  S.glow = (await kvGet('glow', true)) !== false;
   equipped().then(eq => showSplash(eq)).catch(() => {});
 
   // Cloud restore (fresh / wiped / new phone): pull the encrypted backup BEFORE
@@ -1571,8 +1573,10 @@ function avatarLayersHtml(eq, opts = {}) {
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     const cls = [
-      (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
-      slimed ? 'bh-slimed' : '',
+      // COSMETIC ONLY. S.glow never touches stats, gear bonuses or the slimed
+      // ledger: it decides whether the halo is drawn, nothing else.
+      S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
+      S.glow && slimed ? 'bh-slimed' : '',
     ].filter(Boolean).join(' ');
     const glow = cls ? ` class="${cls}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
@@ -4642,6 +4646,10 @@ async function renderSettings(el) {
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
     <div class="settings-row">
+      <div class="lab"><b>Gear glow</b><span>The coloured halo on epic weapons and slimed pieces. Turn it off for a clean look; stats are unaffected.</span></div>
+      <div class="seg" style="width:130px"><button id="glowOn" class="${S.glow ? 'on' : ''}">On</button><button id="glowOff" class="${S.glow ? '' : 'on'}">Off</button></div>
+    </div>
+    <div class="settings-row">
       <div class="lab"><b>USDA API key</b><span>Optional: raises online search limit to 1,000/hr. <a href="https://fdc.nal.usda.gov/api-key-signup.html" target="_blank" rel="noopener">Get a free key</a></span></div>
     </div>
     <input class="input" id="fdcKey" placeholder="DEMO_KEY (default)" value="${esc(S.settings.fdcKey || '')}" style="margin-top:2px">
@@ -4788,6 +4796,8 @@ async function renderSettings(el) {
   });
   $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
   $('#sndOff').addEventListener('click', async () => { S.sounds = false; await kvSet('sounds', false); refresh(); });
+  $('#glowOn')?.addEventListener('click', async () => { S.glow = true; await kvSet('glow', true); popSound(S.sounds); refresh(); });
+  $('#glowOff')?.addEventListener('click', async () => { S.glow = false; await kvSet('glow', false); refresh(); });
   $('#hkGuide')?.addEventListener('click', openHealthGuide);
   $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
@@ -7827,7 +7837,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v263'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v264'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7995,15 +8005,22 @@ async function renderPit(wrap) {
     </div>
     </details>`;
   const endlessSect = `
-    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet${champBeaten ? ` · rank ${fightRank}` : ' 🔒'}</summary>
+    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet${champBeaten ? (canNewRank ? ` · rank ${fightRank}` : ' · AT THE CAP') : ' 🔒'}</summary>
     ${champBeaten ? `
-    <p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b> — the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'}.${canNewRank ? '' : ` You've hit the current cap: <b>beat a world boss</b> to unlock rank ${ceiling + 1}.`}</p>
-    <div class="crate-row">
-      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:var(--accent)">${fightRank}</span>
-      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `rematch · +${fightFoe.repeatCoins} coins`}</small></div>
-      <button class="btn small" id="endlessBtn" ${gate}>Fight</button>
-    </div>
-    ${canNewRank ? '' : `<button class="link" id="endlessGate" style="margin:4px 2px 0">Go beat a world boss to climb higher →</button>`}`
+    ${canNewRank
+      ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
+      : `<div class="pit-gate">
+          <div class="pg-head"><span class="pg-ico">${bhIcon('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
+          <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b> out on the map. Each boss you beat raises the ceiling by <b>3 ranks</b>.</p>
+          <div class="pg-meter"><span>${denWins} boss${denWins === 1 ? '' : 'es'} beaten</span><b>cap ${ceiling}</b><span>next boss → cap ${ceiling + 3}</span></div>
+          <button class="btn" id="endlessGate" style="width:100%">Find a world boss on the map</button>
+          <p class="pg-foot">You can still rematch rank ${ceiling} below for coins while you look.</p>
+        </div>`}
+    <div class="crate-row${canNewRank ? '' : ' capped'}">
+      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:${canNewRank ? 'var(--accent)' : 'var(--text-3)'}">${fightRank}</span>
+      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `<b>rematch only</b> · +${fightFoe.repeatCoins} coins, no new rank`}</small></div>
+      <button class="btn small${canNewRank ? '' : ' ghost'}" id="endlessBtn" ${gate}>${canNewRank ? 'Fight' : 'Rematch'}</button>
+    </div>`
     : `
     <div class="crate-row" style="opacity:.75">
       <span class="crate-ico">🔒</span>

@@ -3572,3 +3572,25 @@ body::before {
   object-fit: cover; z-index: 0; pointer-events: none;
 }
 .bh-stage .bh-anim { z-index: 1; }
+
+/* ===== The Gauntlet's ceiling (v264) =====
+   This was a sentence inside a note paragraph and a text link, which Tom read as
+   fine print, so hitting the cap felt like the game had quietly stopped. It is a
+   real state now: named in the section summary, and stated as a card with the
+   reason, the arithmetic, and a way out. */
+.pit-gate {
+  border: 1px solid rgba(255, 201, 97, .45); background: rgba(255, 201, 97, .07);
+  border-radius: 14px; padding: 12px; margin: 2px 0 10px;
+}
+.pit-gate .pg-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.pit-gate .pg-head b { font-family: var(--display); font-weight: 400; font-size: 17px; color: var(--gold); letter-spacing: .02em; }
+.pit-gate .pg-ico { display: grid; place-items: center; }
+.pit-gate .pg-why { font-size: 12.5px; color: var(--text-2); line-height: 1.45; margin: 0 0 9px; }
+.pit-gate .pg-meter {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--surface-2); border-radius: 10px; padding: 7px 10px; margin-bottom: 10px;
+  font-size: 11px; color: var(--text-3); font-weight: 700;
+}
+.pit-gate .pg-meter b { font-size: 13px; color: var(--gold); }
+.pit-gate .pg-foot { font-size: 11.5px; color: var(--text-3); margin: 8px 2px 0; }
+.crate-row.capped { opacity: .8; }
