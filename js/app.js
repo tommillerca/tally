@@ -562,20 +562,24 @@ function spireBannerHtml(held) {
  * card can never drift from the game, plus the two rules that reassure: nothing is
  * ever lost, and the boon is capped. */
 function spireHowItWorksHtml() {
-  const step = (n, ico, title, body) => `
+  // Numbers only, Tom's call. Every icon I tried was borrowed from somewhere it
+  // belonged more (the garden's watering can was the worst of them) and none of
+  // them earned its space. A step number is the only thing here that carries real
+  // information: the order you do it in.
+  const step = (n, title, body) => `
     <div class="sp-step">
-      <span class="sp-lead">${ico}<span class="sp-n">${n}</span></span>
+      <span class="sp-n">${n}</span>
       <div class="sp-txt"><b>${title}</b><small>${body}</small></div>
     </div>`;
   return `<div class="sp-how">
     <div class="sp-how-h">How a spire works</div>
-    ${step(1, bhIcon('tombstone', 22), 'Walk to a tower and beat its warden',
+    ${step(1, 'Walk to a tower and beat its warden',
       `It flies your name from then on. You can hold <b>${SPIRE_CAP}</b>, so pick ones you actually pass.`)}
-    ${step(2, ICONS.coin(20), 'It pays tribute every day',
+    ${step(2, 'It pays tribute every day',
       `<b>${TRIBUTE_PER_DAY} coins</b> and <b>${TRIBUTE_DUST_PER_DAY} dust</b> a day, banking up to ${TRIBUTE_CAP_DAYS} days. You collect it standing there, not from your couch.`)}
-    ${step(3, bhIcon('badge-footprint', 20, 'var(--protein)'), `Visit within ${RESOLVE_DAYS} days to keep it`,
+    ${step(3, `Visit within ${RESOLVE_DAYS} days to keep it`,
       `Any visit resets the clock. Miss it and the tower goes <b>dormant</b>, which is not a loss: walk back and it is yours again.`)}
-    ${step(4, bhIcon('badge-skull', 20, 'var(--danger)'), 'Sometimes something comes for it',
+    ${step(4, 'Sometimes something comes for it',
       `A rival can take it, or a siege can lay in. Beat them and the tower <b>levels up</b> and pays more. Lose the clock and it just goes dormant.`)}
     <div class="sp-rules">
       <span class="sp-rule"><b>+${Math.round(BOON_PER_SPIRE * 100)}%</b> quest coins per spire<i>capped at ${BOON_SPIRE_CAP}</i></span>
