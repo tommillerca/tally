@@ -216,6 +216,96 @@ const run = async () => {
     assert.ok(me.spireDays >= 0);
   });
 
+  /* ---- increment 2: sieges ---- */
+
+  await test('a siege is created for a holder, on their least-tended tower', async () => {
+    const M = await newPlayer('M');
+    const a = spire(20000 + Math.floor(Math.random() * 400));
+    const b = spire(20500 + Math.floor(Math.random() * 400));
+    await M.signed('PUT', `/spires/${a.id}/claim`, { name: a.name, lat: a.lat, lng: a.lng });
+    await M.signed('PUT', `/spires/${b.id}/claim`, { name: b.name, lat: b.lat, lng: b.lng });
+    // make `a` the neglected one, without crossing the dormancy line
+    await warp(a.id, 3 * 86400000);
+    const j = await (await M.signed('GET', '/spires/mine?force=1')).json();
+    const sieged = j.spires.filter(s => s.siegeUntil);
+    assert.equal(sieged.length, 1, 'exactly one tower may be besieged at a time');
+    assert.equal(sieged[0].id, a.id, 'the least-recently-tended tower is the target');
+    assert.ok(sieged[0].siegeName, 'the besieger must be named');
+    const hours = (sieged[0].siegeUntil - Date.now()) / 3600000;
+    assert.ok(hours > 47 && hours <= 48, `expected a 48h window, got ${hours.toFixed(1)}h`);
+  });
+
+  await test('the weekly limiter stops a second siege', async () => {
+    const N = await newPlayer('N');
+    const s = spire(21000 + Math.floor(Math.random() * 400));
+    await N.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
+    const first = await (await N.signed('GET', '/spires/mine?force=1')).json();
+    assert.ok(first.spires[0].siegeUntil, 'the first siege should start');
+    // defend it so nothing is under siege any more, then ask again in the same week
+    const d = await (await N.signed('POST', `/spires/${s.id}/defend`, {})).json();
+    assert.equal(d.ok, true);
+    const second = await (await N.signed('GET', '/spires/mine?force=1')).json();
+    assert.equal(second.spires[0].siegeUntil, null, 'a second siege inside the week must be refused');
+  });
+
+  await test('breaking a siege levels the tower', async () => {
+    const O = await newPlayer('O');
+    const s = spire(22000 + Math.floor(Math.random() * 400));
+    await O.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
+    const before = await (await O.signed('GET', '/spires/mine?force=1')).json();
+    assert.equal(before.spires[0].level, 1);
+    assert.ok(before.spires[0].siegeUntil);
+    const d = await (await O.signed('POST', `/spires/${s.id}/defend`, {})).json();
+    assert.equal(d.level, 2, 'a repelled siege must level the tower');
+    const after = await (await O.signed('GET', '/spires/mine')).json();
+    assert.equal(after.spires[0].siegeUntil, null, 'the siege must be cleared');
+    assert.equal(after.spires[0].level, 2);
+  });
+
+  await test('you cannot defend a tower that is not under siege, or is not yours', async () => {
+    const P = await newPlayer('P');
+    const Q = await newPlayer('Q');
+    const s = spire(23000 + Math.floor(Math.random() * 400));
+    await P.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
+    const none = await P.signed('POST', `/spires/${s.id}/defend`, {});
+    assert.equal(none.status, 409, 'no siege means nothing to defend');
+    await P.signed('GET', '/spires/mine?force=1');
+    const theirs = await Q.signed('POST', `/spires/${s.id}/defend`, {});
+    assert.equal(theirs.status, 403, 'someone else cannot defend my tower');
+  });
+
+  await test('a missed siege makes the tower DORMANT, never lost, and frees the cap', async () => {
+    const R = await newPlayer('R');
+    const s = spire(24000 + Math.floor(Math.random() * 400));
+    await R.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
+    await R.signed('GET', '/spires/mine?force=1');
+    // walk the clock past the 48h window
+    await warp(s.id, 3 * 86400000);
+    await R.signed('GET', '/spires/mine');            // the sweep runs here
+    // then assert against a FRESH read, so this checks what was PERSISTED rather
+    // than the in-memory object the sweeping request happened to hand back
+    const after = await (await R.signed('GET', '/spires/mine')).json();
+    const row = after.spires.find(x => x.id === s.id);
+    assert.ok(row, 'the tower must still EXIST: a missed siege is never a loss');
+    assert.equal(row.siegeUntil, null, 'the siege must be swept');
+    assert.ok(row.tendedAt <= Date.now() - 7 * 86400000 + 5000,
+      `it must read as dormant, tendedAt was ${Date.now() - row.tendedAt}ms ago`);
+    // and the owner is told, through the grants channel
+    const g = await (await R.signed('GET', '/grants?since=0')).json();
+    const note = (g.grants || []).find(x => x.type === 'spire' && /dormant/i.test(x.payload?.note || ''));
+    assert.ok(note, 'the owner must be told the siege broke through');
+  });
+
+  await test('sieges are NOT created in production (the force flag is DEV-only)', async () => {
+    // the flag only exists because wrangler dev sets DEV=1; this documents that
+    // the production path is the 70% roll, never a caller-supplied override
+    const S2 = await newPlayer('S2');
+    const s = spire(25000 + Math.floor(Math.random() * 400));
+    await S2.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
+    const r = await S2.signed('GET', '/spires/mine');
+    assert.equal(r.status, 200, 'the route must work without the flag');
+  });
+
   await test('a junk id is refused by TEND as well as claim', async () => {
     const r = await A.signed('POST', '/spires/..%2Fetc/tend', {});
     assert.ok(r.status >= 400, `expected a 4xx, got ${r.status}`);

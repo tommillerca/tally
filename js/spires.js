@@ -35,6 +35,7 @@ export const BOON_QUEST_BONUS = Math.round(BOON_PER_SPIRE * BOON_SPIRE_CAP * 100
 // see below). It pays a little more tribute, so an old tower is worth taking.
 export const LEVEL_TRIBUTE_STEP = 0.10;  // +10% tribute per level above 1
 export const LEVEL_TRIBUTE_MAX = 1.5;    // ...never more than half again
+export const SIEGE_WARN_MS = 12 * 3600000; // remind me this long before the window shuts
 
 const KV = 'spires';                     // { [id]: {claimedAt, tendedAt, collectedAt, level} }
 
@@ -112,6 +113,11 @@ export function readSpire(state, s, now = Date.now()) {
     level: rec.level || 1,
     heldDays: Math.floor(daysBetween(rec.claimedAt, now)),
     resolvePct: Math.max(0, Math.min(1, 1 - sinceTend / RESOLVE_DAYS)),
+    // Under siege: an NPC is at the gate and there is a deadline. Server-owned
+    // (mirrored in by syncSieges) so it survives a reinstall and a rival sees it.
+    siege: (rec.siege && rec.siege.until > now)
+      ? { until: rec.siege.until, name: rec.siege.name || 'The siege', msLeft: rec.siege.until - now }
+      : null,
     tribute: dormant ? { coins: 0, dust: 0, days: 0, capped: false }
       : {
         coins: Math.round(days * TRIBUTE_PER_DAY * levelTributeMult(rec.level || 1)),
@@ -182,6 +188,51 @@ export async function setSpireLevel(id, level, now = Date.now()) {
   state[id].level = lv;
   await kvSet(KV, state);
   return true;
+}
+
+/** Mirror the server's siege state onto local records. The server is the only
+ *  thing that may start or end a siege; this just makes it readable offline and
+ *  between polls. Returns the sieges that are NEW to this device, so the caller
+ *  can announce them exactly once. */
+export async function syncSieges(rows, now = Date.now()) {
+  if (!Array.isArray(rows)) return [];
+  const state = await spireState();
+  const fresh = [];
+  let dirty = false;
+  for (const r of rows) {
+    const rec = state[r.id];
+    if (!rec) continue;                     // a tower this device has never claimed
+    const had = rec.siege && rec.siege.until;
+    if (r.siegeUntil && r.siegeUntil > now) {
+      if (had !== r.siegeUntil) { rec.siege = { until: r.siegeUntil, name: r.siegeName || 'The siege' }; dirty = true; fresh.push({ id: r.id, name: rec.meta?.name || r.name, until: r.siegeUntil, siegeName: r.siegeName }); }
+    } else if (rec.siege) { delete rec.siege; dirty = true; }
+    // the server also owns level and the true claim date (which survives reinstall)
+    if (r.level && rec.level !== r.level) { rec.level = r.level; dirty = true; }
+    if (r.claimedAt && r.claimedAt < (rec.claimedAt || Infinity)) { rec.claimedAt = r.claimedAt; dirty = true; }
+    if (r.tendedAt && r.tendedAt !== rec.tendedAt) { rec.tendedAt = r.tendedAt; dirty = true; }
+  }
+  if (dirty) await kvSet(KV, state);
+  return fresh;
+}
+
+/** Won the defense: the tower is safe and counts as visited. The server also
+ *  levels it, and syncSieges mirrors that number back on the next poll. */
+export async function breakSiege(id, now = Date.now()) {
+  const state = await spireState();
+  if (!state[id]) return false;
+  delete state[id].siege;
+  state[id].tendedAt = now;
+  await kvSet(KV, state);
+  return true;
+}
+
+/** Towers of mine with an open siege, soonest deadline first. */
+export async function besiegedSpires(now = Date.now()) {
+  const state = await spireState();
+  return Object.keys(state)
+    .map(id => readSpire(state, { id, ...state[id].meta }, now))
+    .filter(s => s.siege)
+    .sort((a, b) => a.siege.until - b.siege.until);
 }
 
 /** Visiting restores resolve. Free, and the reason a weekly circuit exists. */

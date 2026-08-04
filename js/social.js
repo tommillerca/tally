@@ -344,6 +344,30 @@ export async function claimSpireRemote(spire) {
   } catch { return { ok: false, reason: 'offline' }; }
 }
 
+/** Every tower I hold, and the only route that can START a siege (the server
+ *  creates one lazily here, so the 48h window always begins while I am looking).
+ *  Returns null when offline, so callers keep the last known state. */
+export async function fetchMySpires() {
+  try {
+    if (!(await isOnline())) return null;
+    const r = await signedFetch('GET', '/spires/mine');
+    if (!r.ok) return null;
+    return (await r.json()).spires || [];
+  } catch { return null; }
+}
+
+/** Break a siege after winning the defense. {ok, level} or {ok:false, reason}. */
+export async function defendSpireRemote(id) {
+  try {
+    const r = await signedFetch('POST', `/spires/${encodeURIComponent(id)}/defend`, {});
+    if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
+      return { ok: false, reason: b.reason || 'server' };
+    }
+    return await r.json();
+  } catch { return { ok: false, reason: 'offline' }; }
+}
+
 export async function tendSpireRemote(id) {
   try {
     const r = await signedFetch('POST', `/spires/${encodeURIComponent(id)}/tend`, {});

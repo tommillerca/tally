@@ -22,7 +22,7 @@ import {
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
-import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares } from './notify.js';
+import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
@@ -396,8 +396,8 @@ async function boot() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests());
-  onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()); flushAnalytics(); refreshNotifSchedules(); });
+  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+  onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges); flushAnalytics(); refreshNotifSchedules(); });
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
@@ -524,11 +524,15 @@ function openSpireIntro() {
 function spireBannerHtml(held) {
   const owed = held.reduce((n, s) => n + s.tribute.coins, 0);
   const soon = held.filter(s => s.resolvePct < 0.3).length;
-  const line = !held.length ? 'Take one and it pays you to visit'
+  // A SIEGE LEADS. It is the only spire state with a deadline, so it must never sit
+  // below "3 held, all standing" where a player would scroll past it.
+  const sieged = held.filter(s => s.siege).sort((a, b) => a.siege.until - b.siege.until);
+  const line = sieged.length ? `${esc(sieged[0].siege.name)} is at ${esc(sieged[0].name || 'your spire')} · ${fmtCookTime(sieged[0].siege.msLeft)} left`
+    : !held.length ? 'Take one and it pays you to visit'
     : owed ? `${owed} coins waiting to be collected`
     : soon ? `${soon} need${soon === 1 ? 's' : ''} a visit soon`
     : `${held.length} held · all standing`;
-  return `<details class="glutton-banner spire-banner">
+  return `<details class="glutton-banner spire-banner${sieged.length ? ' under-siege' : ''}">
     <summary>
       <span class="gbn-ico spire-ico"><img src="assets/brand/tomb.png" alt=""></span>
       <span class="gbn-txt"><i>Dark Spires</i><b>${esc(line)}</b></span>
@@ -537,10 +541,10 @@ function spireBannerHtml(held) {
     <div class="gbn-body">
       ${held.length ? `<div class="spire-list">${held.map(s => `
         <div class="spire-row">
-          <b>${esc(s.name || 'A spire')}</b>
-          <span class="spire-row-r">${s.tribute.coins ? `${ICONS.coin(12)} ${s.tribute.coins}` : '<span class="q-frac">nothing owed</span>'}</span>
+          <b>${esc(s.name || 'A spire')}${(s.level || 1) > 1 ? ` <span class="spire-lvtag">LV ${s.level}</span>` : ''}</b>
+          <span class="spire-row-r">${s.siege ? `<span class="spire-siege-tag">⚔ ${fmtCookTime(s.siege.msLeft)}</span>` : s.tribute.coins ? `${ICONS.coin(12)} ${s.tribute.coins}` : '<span class="q-frac">nothing owed</span>'}</span>
           <div class="spire-bar"><i style="width:${Math.round(s.resolvePct * 100)}%"></i></div>
-          <small>${s.heldDays} day${s.heldDays === 1 ? '' : 's'} held · resolve ${Math.round(s.resolvePct * 100)}%</small>
+          <small>${s.siege ? `<b>${esc(s.siege.name)} is at the gate</b>` : `${s.heldDays} day${s.heldDays === 1 ? '' : 's'} held · resolve ${Math.round(s.resolvePct * 100)}%`}</small>
         </div>`).join('')}</div>`
         : '<p class="glutton-mech">You hold none yet. Spires sit on the Boneyard map as tall dark gates.</p>'}
       <ul class="spire-terms">
@@ -1913,6 +1917,42 @@ function openSpireSheet(s, view, rival = null) {
     const w = wardenFor(s, levelFor(await totalXp()).level);
     openFight(wrap, fighter, { mode: 'spire', name: w.name, mult: w.mult, aiLevel: w.aiLevel,
       venue: w.venue, spire: s });
+  });
+}
+
+/* The defense. A named NPC is at the gate and the clock is real, so this sheet
+   says who, how long, and what happens either way: winning levels the tower,
+   losing nothing but the clock running out leaves it DORMANT, never lost. */
+function openSiegeSheet(s, view, siege) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Under siege</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <div class="spire-hero besieged">
+        <img class="spire-ico" src="assets/brand/tomb.png" alt="">
+        <div class="spire-hero-title">${esc(s.name)}</div>
+        <div class="spire-quote">LV ${view.level || 1} · YOURS</div>
+      </div>
+      <div class="siege-clock">
+        <span class="sc-name">${esc(siege.name)}</span>
+        <b class="sc-left">${fmtCookTime(Math.max(0, siege.until - Date.now()))}</b>
+        <span class="sc-lab">left to break it</span>
+      </div>
+      <ul class="spire-terms">
+        <li>Beat them and the tower <b>levels up</b>, pays more tribute, and counts as visited.</li>
+        <li>Let the clock run out and it goes <b>dormant</b>. You never lose it: walk back any time and take it again.</li>
+        <li>No other tower of yours can be besieged while this one is.</li>
+      </ul>
+      <button class="btn" id="siegeFight" style="width:100%">Break the siege</button>
+    </div>`, { cls: '', name: 'Siege' });
+  $('#siegeFight', wrap)?.addEventListener('click', async () => {
+    const fighter = await buildFighter();
+    const lvl = view.level || 1;
+    // the besieger scales with the tower it wants: a long-held, high-level spire
+    // is worth more and is defended harder
+    openFight(wrap, fighter, {
+      mode: 'spire', name: siege.name, mult: 1.05 + 0.05 * Math.min(6, lvl - 1),
+      aiLevel: 3, venue: s.name, spire: s, siege: true,
+    });
   });
 }
 
@@ -5339,7 +5379,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
-          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${stageEq.BG && BH_BY_ID[stageEq.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[stageEq.BG])}" alt="">` : ''}${avatarLayersHtml(stageEq, { noYard: true, skip: ['C', 'BG'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${stageEq.BG && BH_BY_ID[stageEq.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[stageEq.BG])}" alt="">` : ''}${avatarLayersHtml(stageEq, { noYard: true, skip: ['C', 'BG'] })}${weaponSheenHtml(stageEq)}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
         </div>
         <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
@@ -7367,29 +7407,40 @@ async function renderBoneyard(el) {
           spireMarkers.set(s.id, rec);
         }
         const dormant = !rival && view.dormant;
+        // a siege is server truth: read it from the poll when we have it, and fall
+        // back to the mirrored local copy between polls
+        const siegeUntil = (remote && remote.siegeUntil) || (view.siege ? view.siege.until : 0);
+        const siegeName = (remote && remote.siegeName) || (view.siege ? view.siege.name : '');
+        const besieged = !!(siegeUntil && siegeUntil > Date.now());
+        rec.el.classList.toggle('besieged', besieged);
         rec.el.classList.toggle('mine', held);
         rec.el.classList.toggle('rival', !!rival);
         rec.el.classList.toggle('free', !held && !rival);
         rec.el.classList.toggle('dormant', dormant);
         rec.el.classList.toggle('inrange', s.dist <= SPIRE_RADIUS_M);
-        $('.spire-flag', rec.el).textContent = rival ? (rival.ownerName || 'RIVAL').toUpperCase()
+        $('.spire-flag', rec.el).textContent = besieged ? 'UNDER SIEGE'
+          : rival ? (rival.ownerName || 'RIVAL').toUpperCase()
           : held ? (myName ? myName.toUpperCase() : 'YOURS')
           : dormant ? 'DORMANT' : 'UNCLAIMED';
         // A tower's level is its history: every takeover and every repelled siege
         // adds one, and it pays more tribute. Worth reading from across the map.
         const lvl = rival ? (rival.level || 1) : (view.level || 1);
         rec.el.classList.toggle('levelled', lvl > 1);
-        const trib = held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
+        const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - Date.now())}`
+          : held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
-        if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view: { ...view, held }, rival };
+        if (s.dist <= SPIRE_RADIUS_M && !spireInRange) {
+          spireInRange = { s, view: { ...view, held }, rival, siege: besieged ? { until: siegeUntil, name: siegeName } : null };
+        }
       }
       const sb = $('#mapSpire', body);
       if (sb) {
         sb.hidden = !spireInRange;
         if (spireInRange) {
-          const { s, view, rival } = spireInRange;
-          sb.textContent = rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
+          const { s, view, rival, siege } = spireInRange;
+          sb.textContent = siege && view.held ? `Break the siege at ${s.name}`
+            : rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
             : !view.held ? `Take ${s.name}`
             : view.tribute.days ? `Collect ${view.tribute.coins} from ${s.name}`
             : `Tend ${s.name}`;
@@ -7588,7 +7639,10 @@ async function renderBoneyard(el) {
     $('#mapSpire', body).addEventListener('click', async () => {
       if (tooFastToAct()) return;
       if (!spireInRange) return;
-      const { s, view, rival } = spireInRange;
+      const { s, view, rival, siege } = spireInRange;
+      // A SIEGE OUTRANKS EVERYTHING. There is a deadline on it, so a besieged tower
+      // must never offer to be tended or milked instead of defended.
+      if (siege && view.held) return openSiegeSheet(s, view, siege);
       if (rival || !view.held) return openSpireSheet(s, view, rival);
       if (view.tribute.days) {
         const r = await collectTribute(s.id);
@@ -7857,7 +7911,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v265'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v266'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7957,6 +8011,36 @@ async function socialSnapshot() {
 // changes what friends see (equip a weapon / outfit / gear / pet), instead of
 // waiting for the 5-min throttled background sync. Debounced ~1.2s so a flurry
 // of equips coalesces into one upload. The Crew tab already pulls live on open,
+/* SIEGES. Asking /spires/mine is what lets the server start one, and it only ever
+   starts one while we are here to see it, so the full 48h is always walkable. This
+   is also the only new notification in the game: announced once on discovery
+   (kv 'siegeSeen' keyed by id+deadline, so a re-open never re-announces), plus a
+   single native reminder 12h out. */
+async function checkSieges() {
+  try {
+    if (navigator.webdriver && !window.__siegeForce) return;
+    const rows = await social.fetchMySpires();
+    if (!rows) return;                       // offline: keep whatever we knew
+    const fresh = await syncSieges(rows);
+    const live = await besiegedSpires();
+    if (!live.length) { await cancelSiegeReminder(); return; }
+    const top = live[0];
+    await scheduleSiegeReminder(top.siege.name, top.name || 'your spire', top.siege.until);
+    if (!fresh.length) return;
+    const seen = new Set((await kvGet('siegeSeen', [])) || []);
+    const announce = fresh.filter(f => !seen.has(`${f.id}:${f.until}`));
+    if (!announce.length) return;
+    for (const f of announce) seen.add(`${f.id}:${f.until}`);
+    // keep the ledger small; only recent keys matter
+    await kvSet('siegeSeen', [...seen].slice(-40));
+    const a = announce[0];
+    const hrs = Math.max(1, Math.round((a.until - Date.now()) / 3600000));
+    notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`).catch(() => {});
+    toast(`${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to defend it.`, 5200);
+    refresh();
+  } catch { /* never let a siege check break a boot */ }
+}
+
 // so friends see new gear within seconds. No-op when offline.
 let _profilePushT = null;
 function pushProfileSoon() {
@@ -9057,6 +9141,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // uniquely-keyed `fight` row (+10 XP and quest credit).
         dispatchEvent(new CustomEvent('bh-glutton-beaten', { detail: { key: gluttonKey(dateKey(), slot) } }));
       }
+      else if (foeCfg.mode === 'spire' && foeCfg.siege) {
+        // A repelled siege: the server clears it and levels the tower, and we mirror
+        // that. Deliberately pays less than a takeover: keeping what you have should
+        // not out-earn going and taking something new.
+        coins = 50;
+        const res = await social.defendSpireRemote(foeCfg.spire.id).catch(() => ({ ok: false, reason: 'offline' }));
+        await breakSiege(foeCfg.spire.id);
+        if (res && res.ok && res.level) await setSpireLevel(foeCfg.spire.id, res.level);
+        await cancelSiegeReminder();
+        const lv = (res && res.level) || (foeCfg.spire.level || 1) + 1;
+        extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
+          name: foeCfg.spire.name, rarity: 'epic', kind: `SIEGE BROKEN · LV ${lv}`,
+          stats: `${esc(foeCfg.name)} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
+        dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
+      }
       else if (foeCfg.mode === 'spire') {
         // Taking a tower: the claim itself is the prize, so the payout is modest
         // and the tribute stream does the real earning. Re-taking a dormant spire
@@ -9342,6 +9441,29 @@ async function restageWardrobe(content, slot) {
     c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
   }
   return true;
+}
+
+/* The charge that runs a top-tier weapon in the Wardrobe.
+ *
+ * WHY IT IS MASKED BY THE ART ITSELF. The sheen element wears the weapon's own PNG
+ * as its mask, so the light can only ever fall inside Cam's silhouette. A free
+ * gradient over the stage would spill onto the Bonehead and the backdrop, and
+ * "never degrade Cam's art" is a rule worth enforcing structurally instead of by
+ * eye. mask-size must be `cover` because .bh-stage img is object-fit: cover; any
+ * other value slides the mask out of register with the layer underneath.
+ *
+ * Colours are sampled FROM the artwork (cyan #92F5FF from the hilt wrap and the
+ * charm's iris, cream #FFF5D6 from the blade edge), not invented.
+ *
+ * Wardrobe only, and only for epic/legendary main-hands: this is the room where
+ * you are looking at your gear. The map, Today and the arena all carry their own
+ * motion already, and one more idle loop there would be noise. Honors the Gear
+ * glow setting, so a player who turned the halo off does not get a light show. */
+function weaponSheenHtml(eq) {
+  if (!S.glow) return '';
+  const w = eq && eq.IR && BH_BY_ID[eq.IR];
+  if (!w || (w.rarity !== 'epic' && w.rarity !== 'legendary' && w.rarity !== 'prestige')) return '';
+  return `<span class="wpn-sheen r-${w.rarity}" style="--wpn:url('${bhAsset(w)}')" aria-hidden="true"></span>`;
 }
 
 const ARCH_META = {

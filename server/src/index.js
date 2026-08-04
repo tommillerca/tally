@@ -105,6 +105,43 @@ async function verifySigned(request, env, bodyText) {
 // A spire untended this long is dormant and stops counting against the cap.
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
+const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
+const SIEGE_COOLDOWN_MS = 7 * 86400000; // at most one siege per player per week
+const SIEGE_CHANCE = 0.7;               // ...and not even every eligible week
+// Graverise-flavour besiegers. Seeded per (spire, week) so the name is stable for
+// everyone looking at the same siege, owner and rival alike.
+const SIEGE_NAMES = ['Gravelord Mulch', 'The Rattling Choir', 'Sister Ossuary', 'Kiln the Unfed',
+  'Marrowjaw', 'The Pale Tithe', 'Hollow Abbot Crane', 'Nine-Finger Vesper'];
+function siegeNameFor(id, at) {
+  let h = 2166136261;
+  const key = `${id}:${Math.floor(at / SIEGE_COOLDOWN_MS)}`;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return SIEGE_NAMES[(h >>> 0) % SIEGE_NAMES.length];
+}
+
+/* Expire any siege whose 48h has run out. NEVER destructive: the tower is not
+   lost, it is backdated into DORMANT, which is the state the whole client already
+   understands (and which frees a cap slot). Idempotent: the grant key carries the
+   window, and tended_at only ever moves backwards to the dormancy line. */
+async function sweepSieges(env, rows, now) {
+  const dead = (rows || []).filter(r => r.siege_until && r.siege_until < now);
+  for (const r of dead) {
+    // ONE value, used for the write AND for the object we hand back. Computing the
+    // dormancy line in SQL and again in JS let the response describe a state the
+    // database was not in, which is how a test can pass over a broken write.
+    const dormantAt = Math.min(r.tended_at, now - SPIRE_DORMANT_MS);
+    await env.DB.prepare(
+      `UPDATE spires SET tended_at = ?, siege_until = NULL, siege_name = NULL, updated_at = ?
+       WHERE id = ? AND siege_until IS NOT NULL`)
+      .bind(dormantAt, now, r.id).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+      .bind(r.owner, `siege-lost-${r.id}-${r.siege_until}`, 'spire', JSON.stringify({
+        note: `${r.siege_name || 'The siege'} broke through at ${r.name}. It stands dormant, not lost: walk back and take it again.`,
+      }), now).run();
+    r.siege_until = null; r.siege_name = null; r.tended_at = dormantAt;
+  }
+  return rows;
+}
 
 export default {
   async fetch(request, env) {
@@ -392,17 +429,87 @@ export default {
          placement and naming (both deterministic from the map cell), so the
          server never invents a tower. */
 
+      /* Every tower I hold, and the ONLY place a siege is ever created.
+         WHY LAZILY, HERE, instead of a cron: there is no server-to-device push
+         channel in this project at all (notifications are scheduled on-device).
+         A cron could start a 48h siege while the app was closed and burn the whole
+         window in silence, which is unwinnable-by-design. Creating it at the moment
+         the owner checks in guarantees they see the full 48 hours. It also means a
+         player on an OLD build is simply never besieged, because old clients never
+         call this route: nobody gets a timer they cannot see. */
+      if (path === '/spires/mine' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const now = Date.now();
+        const rs = await env.DB.prepare(
+          `SELECT id, name, lat, lng, owner, owner_name, claimed_at, tended_at, level, siege_until, siege_name
+             FROM spires WHERE owner = ?`).bind(auth.playerId).all();
+        let rows = await sweepSieges(env, rs.results || [], now);
+
+        // Eligible: I hold a live tower, none of them is already under siege, and
+        // my weekly cooldown has passed. Then a roll, so it is not a chore.
+        const live = rows.filter(r => r.tended_at > now - SPIRE_DORMANT_MS);
+        const besieged = rows.some(r => r.siege_until && r.siege_until > now);
+        const me = await env.DB.prepare('SELECT siege_last FROM players WHERE id = ?').bind(auth.playerId).first();
+        const cooled = !me?.siege_last || (now - me.siege_last) >= SIEGE_COOLDOWN_MS;
+        // DEV-only: force the roll so a test can exercise CREATION deterministically
+        // (eligibility and target choice are the logic worth testing; the dice are
+        // not). Never available in production.
+        const forced = env.DEV === '1' && url.searchParams.get('force') === '1';
+        if (live.length && !besieged && cooled && (forced || Math.random() < SIEGE_CHANCE)) {
+          // the least-recently-tended tower: deterministic (so it is testable) and
+          // it nudges the weekly circuit toward the one being neglected
+          const target = live.slice().sort((a, b) => a.tended_at - b.tended_at)[0];
+          const until = now + SIEGE_WINDOW_MS;
+          const nm = siegeNameFor(target.id, now);
+          await env.DB.batch([
+            env.DB.prepare('UPDATE spires SET siege_until = ?, siege_name = ?, updated_at = ? WHERE id = ? AND owner = ?')
+              .bind(until, nm, now, target.id, auth.playerId),
+            env.DB.prepare('UPDATE players SET siege_last = ? WHERE id = ?').bind(now, auth.playerId),
+          ]);
+          rows = rows.map(r => r.id === target.id ? { ...r, siege_until: until, siege_name: nm } : r);
+        }
+        return json({
+          spires: rows.map(r => ({
+            id: r.id, name: r.name, lat: r.lat, lng: r.lng, level: r.level || 1,
+            claimedAt: r.claimed_at, tendedAt: r.tended_at,
+            siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
+          })),
+        });
+      }
+
+      // Break a siege. Owner only, and only while the window is actually open: a
+      // repelled siege LEVELS the tower, which is what makes level mean something.
+      if (path.startsWith('/spires/') && path.endsWith('/defend') && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const id = path.slice('/spires/'.length, -'/defend'.length);
+        if (!/^sp-[-0-9]+-[-0-9]+$/.test(id)) return json({ error: 'bad spire id' }, 400);
+        const now = Date.now();
+        const row = await env.DB.prepare('SELECT owner, siege_until, level FROM spires WHERE id = ?').bind(id).first();
+        if (!row || row.owner !== auth.playerId) return json({ ok: false, reason: 'not-yours' }, 403);
+        if (!row.siege_until || row.siege_until < now) return json({ ok: false, reason: 'no-siege' }, 409);
+        await env.DB.prepare(
+          `UPDATE spires SET siege_until = NULL, siege_name = NULL, tended_at = ?, level = level + 1, updated_at = ?
+             WHERE id = ? AND owner = ?`).bind(now, now, id, auth.playerId).run();
+        return json({ ok: true, level: (row.level || 1) + 1 });
+      }
+
       // Who holds these spires? ids come from the client's local cell scan.
       if (path === '/spires' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
         const ids = (url.searchParams.get('ids') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 24);
         if (!ids.length) return json({ spires: [] });
-        const q = `SELECT id, name, owner, owner_name, defender, claimed_at, tended_at, level FROM spires WHERE id IN (${ids.map(() => '?').join(',')})`;
+        const q = `SELECT id, name, owner, owner_name, defender, claimed_at, tended_at, level, siege_until, siege_name FROM spires WHERE id IN (${ids.map(() => '?').join(',')})`;
         const rs = await env.DB.prepare(q).bind(...ids).all();
+        // a rival walking past a besieged tower should see it under siege too
+        const swept = await sweepSieges(env, rs.results || [], Date.now());
         return json({
-          spires: (rs.results || []).map(r => ({
+          spires: swept.map(r => ({
             id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name,
+            siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
             mine: r.owner === auth.playerId,
             defender: r.owner === auth.playerId ? null : JSON.parse(r.defender || 'null'),
             claimedAt: r.claimed_at, tendedAt: r.tended_at, level: r.level,
@@ -735,9 +842,15 @@ export default {
       if (env.DEV === '1' && path === '/dev/spire-warp' && request.method === 'POST') {
         const b = await request.json();
         const back = Number(b.backMs) || 0;
-        await env.DB.prepare(`UPDATE spires SET claimed_at = claimed_at - ?, tended_at = tended_at - ? WHERE id = ?`)
-          .bind(back, back, String(b.id || '')).run();
-        const row = await env.DB.prepare('SELECT id, owner, claimed_at, tended_at, level FROM spires WHERE id = ?').bind(String(b.id || '')).first();
+        // move EVERY timer on the row, so "three days passed" means the same thing
+        // to the shield, to dormancy and to an open siege. Shifting only some of
+        // them produced a tower that was somehow both stale and freshly besieged.
+        await env.DB.prepare(
+          `UPDATE spires SET claimed_at = claimed_at - ?, tended_at = tended_at - ?,
+             siege_until = CASE WHEN siege_until IS NULL THEN NULL ELSE siege_until - ? END
+           WHERE id = ?`)
+          .bind(back, back, back, String(b.id || '')).run();
+        const row = await env.DB.prepare('SELECT id, owner, claimed_at, tended_at, level, siege_until FROM spires WHERE id = ?').bind(String(b.id || '')).first();
         return json({ ok: true, row: row || null });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {

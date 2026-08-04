@@ -3611,3 +3611,95 @@ body::before {
    Gold, because it is the only stat on that row you have to walk to earn. */
 .lb-spires { color: var(--gold); font-weight: 800; white-space: nowrap; }
 .lb-spires .bhi { vertical-align: -1px; }
+
+/* ===== Weapon charge: the Wardrobe idle sheen (v266) =====
+   A single charge travels a top-tier weapon hilt-to-tip, then rests. One authored
+   moment on a still screen, not a sparkle loop.
+
+   The element wears the weapon's OWN art as its mask, so the light physically
+   cannot fall outside Cam's silhouette. mask-size is `cover` to match
+   .bh-stage img { object-fit: cover }: any other value and the mask slides out of
+   register with the layer it is lighting.
+
+   TUNED AGAINST THE MEASURED RENDER, not by intuition. The sword occupies about
+   149px of a 248px stage. The first build swept 800px on an exponential ease-out,
+   which put the light past the blade within 4% of the cycle: captured frames at
+   4/7/11/18% were indistinguishable from the resting frame, i.e. an effect nobody
+   would ever see. Travel is now proportional to the art and the ease is gentle, so
+   the charge takes ~1.4s to cross the blade and is legible the whole way. */
+.bh-stage .wpn-sheen {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden;
+  -webkit-mask-image: var(--wpn); mask-image: var(--wpn);
+  -webkit-mask-size: cover; mask-size: cover;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+}
+/* The charge. Colours are sampled from the artwork: cyan #92F5FF from the hilt
+   wrap and the charm's iris, cream #FFF5D6 from the blade's lit edge. The band is
+   raked slightly so it reads as light crossing a bevel, not a bar sliding past,
+   and it is wide enough (18% of travel) to be visible on a 149px sword. */
+.bh-stage .wpn-sheen::after {
+  content: ''; position: absolute; inset: -25% 0 -25% 0; width: 34%;
+  background: linear-gradient(102deg,
+    transparent 0%,
+    rgba(146, 245, 255, 0.34) 26%,
+    rgba(255, 245, 214, 0.62) 50%,
+    rgba(146, 245, 255, 0.34) 74%,
+    transparent 100%);
+  /* OVERLAY, not normal. Painting light on top blew the hanging charm out to a
+     white blob at peak: the eyeball lost its cyan iris and its red veins, which is
+     degrading Cam's art, the one thing this effect must never do. Overlay
+     modulates the pixels underneath instead, so the gold blade brightens while the
+     charm keeps its own colour and linework. */
+  mix-blend-mode: overlay;
+  transform: translate3d(-120%, 0, 0);
+  animation: wpnCharge 6s ease-in-out infinite;
+  will-change: transform;
+}
+/* Legendary and prestige run a touch hotter and slower, so the tiers stay
+   distinguishable at a glance. */
+.bh-stage .wpn-sheen.r-legendary::after,
+.bh-stage .wpn-sheen.r-prestige::after { animation-duration: 7.2s; filter: brightness(1.18); }
+
+/* Travel occupies the first ~23% (about 1.4s of a 6s cycle); the rest is dwell,
+   parked off the art. A charge that ran continuously would be a shimmer, and this
+   is meant to read as one event you occasionally catch. */
+@keyframes wpnCharge {
+  0%   { transform: translate3d(-120%, 0, 0); }
+  23%  { transform: translate3d(330%, 0, 0); }
+  100% { transform: translate3d(330%, 0, 0); }
+}
+/* Reduced motion removes the effect entirely rather than freezing a bright band
+   across the blade, which is what a paused keyframe would leave behind. */
+@media (prefers-reduced-motion: reduce) {
+  .bh-stage .wpn-sheen { display: none; }
+}
+
+/* ===== A spire under siege (v266) =====
+   The one state on the map with a deadline attached, so it gets the loudest
+   treatment: coral, a pulse, and the countdown where the tribute number usually
+   sits. Filters and animation go on .spire-fx, never the marker root, because
+   MapLibre owns the root transform. */
+.map-spire.besieged .spire-fx img {
+  filter: hue-rotate(-25deg) saturate(1.9) brightness(1.05)
+          drop-shadow(0 0 7px rgba(255, 109, 94, .95));
+}
+.map-spire.besieged .spire-flag { background: var(--danger); color: #2a0b08; }
+.map-spire.besieged .spire-tribute { color: var(--danger); font-weight: 800; }
+.map-spire.besieged .spire-fx { animation: siegeThrob 1.15s ease-in-out infinite; }
+@keyframes siegeThrob { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+@media (prefers-reduced-motion: reduce) { .map-spire.besieged .spire-fx { animation: none; } }
+
+.spire-hero.besieged { border-color: rgba(255, 109, 94, .5); }
+.siege-clock {
+  display: grid; justify-items: center; gap: 2px; padding: 12px;
+  margin: 2px 0 12px; border-radius: 14px;
+  border: 1px solid rgba(255, 109, 94, .45); background: rgba(255, 109, 94, .08);
+}
+.siege-clock .sc-name { font-family: var(--display); font-size: 18px; color: var(--danger); letter-spacing: .02em; }
+.siege-clock .sc-left { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.siege-clock .sc-lab { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .08em; }
+.spire-banner.under-siege { border-color: rgba(255, 109, 94, .5); }
+.spire-banner.under-siege summary .gbn-txt i { color: var(--danger); }
+.spire-siege-tag { color: var(--danger); font-weight: 800; font-variant-numeric: tabular-nums; }
+.spire-lvtag { font-family: var(--display); font-weight: 400; font-size: 12px; color: var(--gold); letter-spacing: .02em; }

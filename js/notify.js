@@ -32,11 +32,14 @@ import { dateKey } from './nutrition.js';
 // takes effect once the OS grants permission (requested once at boot); until
 // then nothing fires. Existing users who deliberately turned it off saved
 // {enabled:false} and keep that.
-const DEFAULTS = { enabled: true, reminder: true, streak: true, friends: true };
+// `siege` is the ONE notification type Dark Spires adds. The project has a hard
+// reduced-frequency rule, so it fires at most twice per siege (once on discovery,
+// once at T-12h) and a siege can only happen once a week.
+const DEFAULTS = { enabled: true, reminder: true, streak: true, friends: true, siege: true };
 export async function notifPrefs() { return { ...DEFAULTS, ...((await kvGet('notifPrefs', {})) || {}) }; }
 export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
 
-const ID = { reminder: 1, streak: 2, test: 9, rareLo: 1000, rareHi: 1899 };
+const ID = { reminder: 1, streak: 2, siege: 3, test: 9, rareLo: 1000, rareHi: 1899 };
 
 function ln() { try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null; } catch { return null; } }
 
@@ -81,6 +84,35 @@ export async function notifyNow(title, body) {
     }
   } catch { /* ignore */ }
   return false;
+}
+
+/* A siege has a deadline, so it gets the one reminder this project allows: a
+   nudge 12h before the window shuts. Native only (the web has no background
+   scheduling), cancelled and re-set each time so it can never stack, and cleared
+   outright when the siege ends. Gated on the siege pref. */
+export async function scheduleSiegeReminder(name, spireName, until) {
+  if (notifPlatform() !== 'native') return false;
+  const prefs = await notifPrefs();
+  if (!prefs.enabled || !prefs.siege) return false;
+  const L = ln(); if (!L) return false;
+  const at = until - 12 * 3600000;
+  try {
+    await L.cancel({ notifications: [{ id: ID.siege }] });
+    if (at <= Date.now() + 60000) return false;      // too close to be useful
+    await L.schedule({ notifications: [{
+      id: ID.siege,
+      title: 'The siege is nearly through',
+      body: `${name} has 12 hours left at ${spireName}. Walk out and break it.`,
+      schedule: { at: new Date(at) },
+    }] });
+    return true;
+  } catch { return false; }
+}
+
+export async function cancelSiegeReminder() {
+  if (notifPlatform() !== 'native') return;
+  const L = ln(); if (!L) return;
+  try { await L.cancel({ notifications: [{ id: ID.siege }] }); } catch { /* ignore */ }
 }
 
 // (Re)schedule the recurring reminders per prefs. Native only (web has no

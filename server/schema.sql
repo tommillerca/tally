@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS players (
   profile TEXT,                      -- JSON game snapshot (never food data)
   app_v TEXT,                        -- app version of last snapshot
   created_at INTEGER NOT NULL,
-  last_seen INTEGER NOT NULL
+  last_seen INTEGER NOT NULL,
+  siege_last INTEGER                 -- weekly siege limiter: one per player per 7 days
 );
 
 CREATE TABLE IF NOT EXISTS friendships (
@@ -176,7 +177,9 @@ CREATE TABLE IF NOT EXISTS spires (
   defender TEXT,                     -- JSON snapshot of the owner's fighter
   claimed_at INTEGER NOT NULL,
   tended_at INTEGER NOT NULL,
-  level INTEGER NOT NULL DEFAULT 1,
+  level INTEGER NOT NULL DEFAULT 1,   -- +1 per takeover, +1 per repelled siege
+  siege_until INTEGER,                -- ms epoch the 48h defense window closes; NULL = no siege
+  siege_name TEXT,                    -- the NPC laying siege (owner and rivals see the same one)
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_spires_owner ON spires (owner);
