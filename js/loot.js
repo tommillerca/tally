@@ -143,7 +143,19 @@ export async function boneDustAdd(n) {
   await kvSet('bonedust', d);
   return d;
 }
-export function gearDustValue(g) { return (g && DUST_VALUE.gear[g.rarity]) || 3; }
+// Dust is rarity PLUS the piece's stat points. Tom asked for statted gear to be
+// worth more; measuring first showed that EVERY one of the 276 catalog pieces is
+// statted, so a flat "statted" bonus would have been a 50% dust inflation with no
+// differentiation at all. Stat totals do vary a lot (uncommon 2-6, rare 3-11,
+// legendary 5-18), so paying per point makes a strong roll genuinely worth more
+// than a weak one of the same rarity, which is the decision he was reaching for.
+// Rarity still dominates: a rare's 12 base outweighs any uncommon's points.
+export function gearStatPoints(g) {
+  return g && g.stats ? Object.values(g.stats).reduce((a, v) => a + v, 0) : 0;
+}
+export function gearDustValue(g) {
+  return ((g && DUST_VALUE.gear[g.rarity]) || 3) + gearStatPoints(g);
+}
 export function petDustValue(item) { return (item && DUST_VALUE.pet[item.rarity]) || 10; }
 
 // Melt an owned gear piece into Bone Dust. Auto-unequips it first. Destructive

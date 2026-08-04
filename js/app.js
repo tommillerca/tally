@@ -5640,19 +5640,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // all because tapping one opens the equip sheet. Clearing a backlog of
         // twenty spare drops was the worst chore in the game.
         const spare = rows.filter(g => gearLoNow[g.slot] !== g.id);
+        const hasStats = g => !!(g.stats && Object.keys(g.stats).length);
+        // "junk" is the low-rarity tail, NOT stat-less gear: every catalog piece
+        // carries stats, so a stat-less sweep would have selected nothing.
+        const JUNK_RARITIES = new Set(['common', 'uncommon']);
+        const junk = spare.filter(g => JUNK_RARITIES.has(g.rarity));
         return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>
           <button class="btn danger melt-go" id="meltGo" hidden></button>
           <div class="melt-tools">
             <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
+            ${junk.length && junk.length !== spare.length ? `<button class="link" id="meltJunk">Only the ${junk.length} junk</button>` : ''}
             <button class="link" id="meltNone">Clear</button>
           </div>` + rows.map(g => {
           const worn = gearLoNow[g.slot] === g.id;
           // WORN gear is listed but never bulk-selectable: losing the piece you are
           // wearing to a stray tap is not a mistake worth allowing.
           return `<label class="crate-row melt-row${worn ? ' worn' : ''}">
-            <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}"${worn ? ' disabled' : ''}>
+            <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
             <span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
-            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small></div>
+            <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
+              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ⚡ ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">no stats · looks only</span>'
+            }</small></div>
             ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
                    : `<span class="melt-val">+${gearDustValue(g)}</span>`}
           </label>`;
@@ -5704,6 +5712,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $('#meltAll', content)?.addEventListener('click', e => {
       e.preventDefault();
       $$('.melt-pick', content).forEach(c => { if (!c.disabled) c.checked = true; });
+      syncMeltBar();
+    });
+    $('#meltJunk', content)?.addEventListener('click', e => {
+      e.preventDefault();
+      // the sweep Tom asked for: clear the good stuff, tick only the cosmetics
+      $$('.melt-pick', content).forEach(c => { c.checked = !c.disabled && c.dataset.junk === '1'; });
       syncMeltBar();
     });
     $('#meltNone', content)?.addEventListener('click', e => {

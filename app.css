@@ -1882,7 +1882,10 @@ body::before {
 .q-collapse > summary {
   list-style: none; cursor: pointer; user-select: none;
   display: flex; align-items: center; gap: 8px; padding: 14px 16px;
-  font-size: 13px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-2, #cfc6d6);
+  /* the display face, matching the feature dropdowns (.gbn-txt b) rather than the
+     body-uppercase treatment that read as a different app's component */
+  font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: 0.02em;
+  color: var(--text-2, #cfc6d6);
 }
 .q-collapse > summary::-webkit-details-marker { display: none; }
 .q-collapse > summary::after { content: '▸'; margin-left: auto; color: var(--text-3); transition: transform 0.2s; }
@@ -3425,6 +3428,9 @@ body::before {
 .melt-row .melt-pick { width: 20px; height: 20px; flex: none; accent-color: var(--danger); }
 .melt-row.worn { opacity: 0.6; }
 .melt-val { color: var(--text-2); font-size: 13px; font-weight: 800; }
+/* which pieces carry stats, so a junk sweep cannot eat a statted piece by mistake */
+.melt-stat { color: var(--accent); font-weight: 700; }
+.melt-nostat { color: var(--text-3); }
 /* The confirm bar sits ABOVE the list, with the select-all tools.
    It was `position: sticky; bottom: 6px` as the LAST child of the fold, which
    cannot work: a sticky element is confined to its containing block, and sitting

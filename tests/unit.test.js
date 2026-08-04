@@ -12,6 +12,7 @@ import {
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
+import { GEAR_ITEMS } from '../js/gear.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
@@ -20,7 +21,7 @@ import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
-import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, petDustValue,
+import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedOffspring, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
@@ -1268,6 +1269,27 @@ test('beds are priced for every step up to the cap, then stop', () => {
   assert.equal(plotPrice(PLOTS_MAX), null);
   // rising, so the last bed is a real decision
   assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
+});
+
+test('gear dust pays for stat points, not just rarity', () => {
+  // Tom asked for statted gear to be worth more. Measuring first showed all 276
+  // catalog pieces are statted, so a flat statted bonus would have been pure dust
+  // inflation. Paying per stat point differentiates a strong roll from a weak one.
+  const weak = { rarity: 'rare', stats: { power: 3 } };
+  const strong = { rarity: 'rare', stats: { power: 8, marrow: 3 } };
+  assert.ok(gearDustValue(strong) > gearDustValue(weak),
+    `a stronger roll must pay more: ${gearDustValue(strong)} vs ${gearDustValue(weak)}`);
+  assert.equal(gearStatPoints(strong), 11);
+  assert.equal(gearStatPoints({ rarity: 'rare' }), 0);
+  // rarity still dominates: no uncommon can out-melt any rare
+  const bestUncommon = gearDustValue({ rarity: 'uncommon', stats: { a: 6 } });
+  const worstRare = gearDustValue({ rarity: 'rare', stats: { a: 3 } });
+  assert.ok(worstRare > bestUncommon, `rarity must dominate: rare ${worstRare} vs uncommon ${bestUncommon}`);
+  // and every real catalog piece gets a sane number
+  for (const g of GEAR_ITEMS) {
+    const d = gearDustValue(g);
+    assert.ok(d > 0 && d < 200, `${g.id} melts for ${d}`);
+  }
 });
 
 test('every image the combat stage renders is precached', () => {
