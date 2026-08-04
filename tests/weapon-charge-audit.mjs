@@ -16,7 +16,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const { browser, page } = await boot(process.env.URL);
+// ~200 screenshots in this run. The default 30s CDP timeout is fine against the
+// CDN but not against a local server sharing the machine with another session,
+// where captureScreenshot has stalled past it mid-sweep.
+const { browser, page } = await boot(process.env.URL, { protocolTimeout: 180000 });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -183,6 +186,77 @@ check('and it is LEGIBLE, not a one-frame flash', movingSteps >= 4,
 check('the band rests OFF the art (parked, within noise)', mx(restD) <= noiseFloor * 3,
   `${f(mx(restD))} max vs ${f(noiseFloor * 3)} allowed`);
 fs.rmSync(shotDir, { recursive: true, force: true });
+
+/* ===== Cohesion sweep: the charge must reach every surface the character does.
+ * The mask is compared against the SIBLING ARTWORK's computed object-fit rather
+ * than against the string "cover". Hard-coding cover is what confined this effect
+ * to the Wardrobe: the Today hero, both fight plates, the crew card and the map
+ * marker all draw the stack `contain`, and a cover mask on them lights empty
+ * canvas beside the sword. A surface added later with a different fit fails here
+ * instead of shipping misregistered. */
+await page.evaluate(() => document.getElementById('freeze-idle')?.remove());
+await page.evaluate(() => { window.__charge && window.__charge.play(); });
+
+const probe = label => page.evaluate(l => {
+  const out = [];
+  for (const stack of document.querySelectorAll('.bh-anim')) {
+    const sheen = stack.querySelector(':scope > .wpn-sheen');
+    const art = stack.querySelector('img');
+    if (!art) continue;
+    const fit = getComputedStyle(art).objectFit;
+    const r = stack.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) continue;             // not laid out / hidden
+    out.push({
+      sheen: !!sheen,
+      fit,
+      mask: sheen ? (getComputedStyle(sheen).maskSize || getComputedStyle(sheen).webkitMaskSize) : null,
+      anim: sheen ? getComputedStyle(sheen, '::after').animationName : null,
+      size: `${Math.round(r.width)}x${Math.round(r.height)}`,
+    });
+  }
+  return { surface: l, stacks: out };
+}, label);
+
+const surfaces = [];
+await page.evaluate(() => { location.hash = '#/today'; }); await sleep(2300);
+await page.evaluate(() => document.querySelector('.dw')?.remove());
+surfaces.push(await probe('Today hero'));
+await page.evaluate(() => { location.hash = '#/bonehead'; }); await sleep(2000);
+await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click()); await sleep(1800);
+surfaces.push(await probe('Wardrobe'));
+await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1600);
+const pitBtn = await page.$('#pitBtn');
+if (pitBtn) {
+  await pitBtn.click(); await sleep(1700);
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^fight$/i.test(x.textContent.trim()));
+    if (b) b.click();
+  });
+  await sleep(2600);
+  surfaces.push(await probe('Pit arena'));
+  for (let i = 0; i < 6; i++) {
+    if (!await page.evaluate(() => !!document.querySelector('#sheets > div'))) break;
+    await page.evaluate(() => history.back()); await sleep(500);
+  }
+}
+await page.evaluate(() => { location.hash = '#/map'; }); await sleep(2600);
+surfaces.push(await probe('Map marker'));
+
+let sawSheen = 0, checkedStacks = 0;
+for (const s of surfaces) {
+  const mine = s.stacks.filter(x => x.sheen);
+  checkedStacks += s.stacks.length;
+  sawSheen += mine.length;
+  console.log(`\n${s.surface}: ${s.stacks.length} stack(s), ${mine.length} carrying the charge`);
+  for (const x of s.stacks) console.log(`   ${x.size.padEnd(9)} fit=${x.fit.padEnd(8)} mask=${x.mask || '-'}  ${x.anim || ''}`);
+  for (const x of mine) {
+    check(`${s.surface}: mask is in register with the art`, x.mask === x.fit,
+      `mask-size ${x.mask} vs object-fit ${x.fit}`);
+    check(`${s.surface}: the charge is running`, x.anim === 'wpnCharge', String(x.anim));
+  }
+}
+check('avatar stacks were actually examined (empty set = failure)', checkedStacks > 0, `${checkedStacks} stacks`);
+check('THE CHARGE REACHES MORE THAN THE WARDROBE', sawSheen >= 3, `${sawSheen} stacks across ${surfaces.length} surfaces`);
 
 // Reduced motion must remove it, not freeze a bright bar across the sword.
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);

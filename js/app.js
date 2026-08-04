@@ -1633,7 +1633,12 @@ function avatarLayersHtml(eq, opts = {}) {
   // reached (the map "you" marker, the fight arena) stayed at opacity 0 and the
   // character was simply invisible. Hiding is now owned by the same code that
   // un-hides it, so a missed call costs a little pop-in, never the whole avatar.
-  return `<div class="bh-anim">${layers}</div>`;
+  //
+  // The weapon charge lives INSIDE the stack, next to the layers it lights, for
+  // the same reason the ember eyes do: a cosmetic that only some screens call is
+  // a cosmetic that looks broken on the rest. Emitting it here is what makes it
+  // reach all 17 avatar surfaces instead of only the Wardrobe.
+  return `<div class="bh-anim">${layers}${weaponSheenHtml(eq, skip)}</div>`;
 }
 
 /* Reveal a layered Bonehead only once every layer has decoded, so it appears as
@@ -5524,7 +5529,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
-          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${stageEq.BG && BH_BY_ID[stageEq.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[stageEq.BG])}" alt="">` : ''}${avatarLayersHtml(stageEq, { noYard: true, skip: ['C', 'BG'] })}${weaponSheenHtml(stageEq)}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${stageEq.BG && BH_BY_ID[stageEq.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[stageEq.BG])}" alt="">` : ''}${avatarLayersHtml(stageEq, { noYard: true, skip: ['C', 'BG'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
         </div>
         <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
@@ -9608,12 +9613,19 @@ async function restageWardrobe(content, slot) {
  * Colours are sampled FROM the artwork (cyan #92F5FF from the hilt wrap and the
  * charm's iris, cream #FFF5D6 from the blade edge), not invented.
  *
- * Wardrobe only, and only for epic/legendary main-hands: this is the room where
- * you are looking at your gear. The map, Today and the arena all carry their own
- * motion already, and one more idle loop there would be noise. Honors the Gear
- * glow setting, so a player who turned the halo off does not get a light show. */
-function weaponSheenHtml(eq) {
+ * EVERY SURFACE, and only for epic/legendary main-hands. It shipped Wardrobe-only
+ * on the theory that the arena and the map carry their own motion; that was wrong
+ * in the way cosmetics are always wrong when they are scoped, because a charge
+ * that runs on your character in one room and not the next reads as a bug rather
+ * than as restraint. Rarity is the scarcity control, not screen count. Honors the
+ * Gear glow setting, so a player who turned the halo off does not get a light show.
+ *
+ * `skip` is the caller's slot skip-list: if a surface is not drawing the main hand
+ * then there is no artwork to light, and a sheen masked to an absent layer would
+ * be a rectangle of light over the character. */
+function weaponSheenHtml(eq, skip) {
   if (!S.glow) return '';
+  if (skip && skip.has && skip.has('IR')) return '';
   const w = eq && eq.IR && BH_BY_ID[eq.IR];
   if (!w || (w.rarity !== 'epic' && w.rarity !== 'legendary' && w.rarity !== 'prestige')) return '';
   return `<span class="wpn-sheen r-${w.rarity}" style="--wpn:url('${bhAsset(w)}')" aria-hidden="true"></span>`;

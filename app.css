@@ -766,6 +766,7 @@ body::before {
   48% { transform: translateY(-1px) rotate(1.1deg); }
   74% { transform: translateY(-4px) rotate(-0.3deg); }
 }
+.bh-anim { --av-fit: cover; }  /* the sheen mask reads this too; keep it beside the object-fit below */
 .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
 .bh-bubble {
@@ -845,6 +846,7 @@ body::before {
   text-align: left;
 }
 .hero-scene .bh-anim { animation-duration: 4s; }
+.hero-scene .bh-anim { --av-fit: cover; }
 .hero-scene .bh-anim img { object-fit: cover; }
 .hero-tomb {
   position: absolute; left: 4%; bottom: 12%; width: clamp(70px, 22%, 110px);
@@ -981,6 +983,7 @@ body::before {
 .hero-scene { height: min(47vh, 400px); }
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
 .hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; } /* bonehead stays the hero: full size, prominent */
+.hero-char .bh-anim { --av-fit: contain; }
 .hero-char .bh-anim img { object-fit: contain; }
 /* equipped pet trots along beside the bonehead on the home screen */
 /* width auto so a long creature (lizard) can be scaled up for equal visual mass
@@ -1096,6 +1099,7 @@ body::before {
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.5));
 }
+.fstage .bh-anim { --av-fit: contain; }
 .fstage img { object-fit: contain !important; }
 .mirror-wrap { position: absolute; inset: 0; transform: scaleX(-1); }
 .fstage.lunge-r { transform: translateX(52px) rotate(4deg); }
@@ -1806,6 +1810,7 @@ body::before {
   background: radial-gradient(circle at 50% 35%, rgba(165,232,71,0.16), rgba(0,0,0,0.25)); border: 1px solid var(--line);
 }
 .fc-stage .bh-anim { position: absolute; inset: 0; z-index: 1; }
+.fc-stage .bh-anim { --av-fit: contain; }
 .fc-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .fc-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 /* A 40px SQUARE left wide pets (lizards) tiny inside it while compact ones filled
@@ -2114,6 +2119,7 @@ body::before {
   box-shadow: 0 0 16px rgba(165, 232, 71, 0.45), 0 3px 8px rgba(0, 0, 0, 0.5);
 }
 .map-you-av .bh-anim { position: absolute; left: -55%; top: -12%; width: 210%; height: 210%; animation: none; }
+.map-you-av .bh-anim { --av-fit: contain; }
 .map-you-av .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .map-cone {
   position: absolute; inset: -26px; border-radius: 50%; pointer-events: none;
@@ -3638,10 +3644,19 @@ body::before {
    4/7/11/18% were indistinguishable from the resting frame, i.e. an effect nobody
    would ever see. Travel is now proportional to the art and the ease is gentle, so
    the charge takes ~1.4s to cross the blade and is legible the whole way. */
-.bh-stage .wpn-sheen {
+/* THE MASK MUST MATCH THE SURFACE'S OWN object-fit OR IT SLIDES OFF THE ART.
+   The avatar stack is drawn `cover` on most surfaces but `contain` on the Today
+   hero, both fight plates, the crew card and the map marker. This shipped
+   Wardrobe-only with `mask-size: cover` hard-coded, which was correct for exactly
+   the one screen it ran on; going app-wide with that constant would have lit a
+   band of empty canvas beside the sword on four surfaces. --av-fit is declared
+   next to each surface's object-fit rule and read by both, and
+   tests/weapon-charge-audit.mjs asserts the computed mask-size equals the
+   computed object-fit on every surface, so the two cannot drift apart unnoticed. */
+.wpn-sheen {
   position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden;
   -webkit-mask-image: var(--wpn); mask-image: var(--wpn);
-  -webkit-mask-size: cover; mask-size: cover;
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
 }
@@ -3649,7 +3664,7 @@ body::before {
    wrap and the charm's iris, cream #FFF5D6 from the blade's lit edge. The band is
    raked slightly so it reads as light crossing a bevel, not a bar sliding past,
    and it is wide enough (18% of travel) to be visible on a 149px sword. */
-.bh-stage .wpn-sheen::after {
+.wpn-sheen::after {
   content: ''; position: absolute; inset: -25% 0 -25% 0; width: 34%;
   background: linear-gradient(102deg,
     transparent 0%,
@@ -3669,8 +3684,8 @@ body::before {
 }
 /* Legendary and prestige run a touch hotter and slower, so the tiers stay
    distinguishable at a glance. */
-.bh-stage .wpn-sheen.r-legendary::after,
-.bh-stage .wpn-sheen.r-prestige::after { animation-duration: 7.2s; filter: brightness(1.18); }
+.wpn-sheen.r-legendary::after,
+.wpn-sheen.r-prestige::after { animation-duration: 7.2s; filter: brightness(1.18); }
 
 /* Travel occupies the first ~23% (about 1.4s of a 6s cycle); the rest is dwell,
    parked off the art. A charge that ran continuously would be a shimmer, and this
@@ -3683,7 +3698,7 @@ body::before {
 /* Reduced motion removes the effect entirely rather than freezing a bright band
    across the blade, which is what a paused keyframe would leave behind. */
 @media (prefers-reduced-motion: reduce) {
-  .bh-stage .wpn-sheen { display: none; }
+  .wpn-sheen { display: none; }
 }
 
 /* ===== A spire under siege (v266) =====
