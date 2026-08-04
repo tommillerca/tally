@@ -23,8 +23,9 @@ Tokens live in `:root` in `app.css` and are the only source of truth.
 | `--surface-3` | `#2a2734` | the layer above that (bars, chips) |
 | `--text` | `#f2e9d7` | bone cream, primary |
 | `--text-2` | `#b9ac97` | secondary |
-| `--text-3` | `#7d7365` | tertiary, captions, disabled |
+| `--text-3` | `#8f8578` | tertiary, captions, disabled. 5.00:1 on `--surface`, so it clears AA at any size |
 | `--line` / `--line-strong` | cream at 9% / 17% | hairlines, never a solid grey |
+| `--muted` | `#b9ac97` | alias of `--text-2`; was referenced 12 times and never declared |
 | `--accent` | `#a5e847` | THE action colour. Acid lime |
 | `--accent-ink` | `#16210b` | text on accent |
 | `--gold` | `#ffc961` | prestige, legendary, warnings that are not errors |
@@ -41,8 +42,12 @@ consistent across gear, pets and cards.
 
 - **Display:** `Bangers` (`--display`), self-hosted woff2. Used ~61 times: screen
   titles, card kickers, reward callouts, anything shouting. Never for body.
-- **Body:** the system stack. Weights run 600–900; there is no light weight.
-- Uppercase + `letter-spacing` is the section-header idiom (`.sect-h`).
+- **Body:** the system stack. Weights are **400 / 500 / 600 / 700 / 800 / 900** only.
+  No synthetic steps: 550, 650 and 750 do not exist in the system stack, round
+  unpredictably per platform, and were snapped to the real scale.
+- **One** section-header idiom: 12px / 700 / `.06em` / uppercase / `--text-3`.
+  `.sect-h`, `.q-tier-h` and `.card-title` all use it. They label the same kind of
+  thing (a group of rows) and previously used three different treatments.
 - Numbers that line up use `font-variant-numeric: tabular-nums`.
 
 ## Space and shape
