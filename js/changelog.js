@@ -11,6 +11,8 @@ export const CHANGES = [
     'Every row at the bench now <b>prints its stats</b>, so you can see at a glance what you are about to destroy, and there is an <b>Only the junk</b> shortcut that ticks your commons and uncommons and never touches a rare or legendary.',
     'Melting now pays for <b>stat points as well as rarity</b>, so a strong roll is worth more dust than a weak one of the same tier.',
     'The <b>Quests</b> header on Today is in the game\'s own lettering now instead of looking like a control borrowed from another app.',
+    'The <b>Bone Dust shop</b> no longer spends on one tap. Each item says what it does, and buying now asks you to confirm.',
+    'You can <b>tap a debuff</b> in a fight and actually hit it. The explanations were always there and the chips were 18 pixels tall, so on a phone you missed them every time.',
   ] },
   { n: 260, date: '2026-08-04', title: 'The garden gets its own door', items: [
     'The garden was sitting at the top of the Kitchen, so opening the Kitchen meant walking into a row of empty beds before you could reach a cauldron. Wrong way round. <b>The Kitchen opens on the Cauldrons again</b>, and the garden is one row below them that opens its own screen.',

@@ -2902,6 +2902,20 @@ body::before {
 .fchip .fi { font-size: 12px; }
 .fchip i { font-style: normal; font-size: 10px; font-weight: 800; color: var(--text-1, #f2e9d7); }
 .fchip:active { filter: brightness(1.35); }
+/* The tap target, not the look. These chips were 43x18px against Apple's 44pt
+   minimum, so tapping one on a phone was a coin flip and it read as "the debuff
+   icons do nothing" even though the handler and the tooltip both worked fine. The
+   pseudo-element grows the hit area without making the chip itself any bigger, so
+   the row still fits across the plate. */
+.fchip { position: relative; }
+.fchip::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100%, 40px); height: 40px;
+}
+/* the rows sit above the plates, so the grown targets must not swallow taps meant
+   for the fighter art underneath: only the chips themselves are interactive */
+.fstate { pointer-events: none; }
+.fstate .fchip { pointer-events: auto; }
 .fchip.s-burn { border-color: rgba(255,180,84,.6); background: rgba(255,180,84,.1); }
 .fchip.s-bleed, .fchip.s-rage { border-color: rgba(255,109,94,.6); background: rgba(255,109,94,.1); }
 .fchip.s-poison { border-color: rgba(165,232,71,.5); background: rgba(165,232,71,.08); }
@@ -3516,3 +3530,10 @@ body::before {
 .gd-arrow { color: var(--text-3); font-size: 18px; margin-bottom: 12px; }
 .garden-card .drop-count { background: var(--accent); color: var(--accent-ink); }
 .garden-bnr-ico { display: grid; place-items: center; }
+
+/* Bone Dust shop cells: the item's own description, and an armed state, because a
+   single tap used to spend the dust with no explanation and no confirmation. */
+.dust-cell { text-align: center; }
+.dust-cell .dc-desc { color: var(--text-3); font-size: 10px; line-height: 1.25; font-weight: 600; }
+.dust-cell.arming { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .45); }
+.dust-cell.arming b { color: var(--gold); }

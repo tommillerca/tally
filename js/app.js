@@ -2960,8 +2960,8 @@ async function renderShop(el) {
     <div class="card-title">BONE DUST SHOP</div>
     <p class="note" style="margin:0 2px 10px">Spend salvage (<span class="dust-ico">◆</span> Bone Dust) on a fresh shot at pets, crates and consumables.</p>
     <div class="grid2">
-      ${DUST_SHOP.map(d => `<button class="shop-cell" data-dustbuy="${d.id}" ${dustBal < d.cost ? 'disabled' : ''}>
-        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${d.label}</b><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
+      ${DUST_SHOP.map(d => `<button class="shop-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
+        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${esc(d.label)}</b><small class="dc-desc">${esc(d.desc)}</small><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
     </div>
     <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
   </div>
@@ -3033,6 +3033,22 @@ async function renderShop(el) {
     });
   }));
   el.querySelectorAll('[data-dustbuy]').forEach(btn => btn.addEventListener('click', async () => {
+      // A single tap used to spend on the spot. Tom lost 25 dust just looking at
+      // what a Battle Charm was. Now the first tap only ARMS the cell (and the
+      // card already states what the item does), so buying takes intent.
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.classList.add('arming');
+        const prev = btn.innerHTML;
+        btn.innerHTML = `<span class="crate-ico">${ICONS.coin(26)}</span><b>Spend ${btn.dataset.cost}?</b><small class="dc-desc">tap again to buy</small><small>tap elsewhere to cancel</small>`;
+        clearTimeout(btn._armT);
+        btn._armT = setTimeout(() => {
+          if (!btn.isConnected) return;
+          btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.innerHTML = prev;
+        }, 3200);
+        return;
+      }
+      clearTimeout(btn._armT);
     btn.disabled = true;
     const res = await buyWithDust(btn.dataset.dustbuy);
     if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
@@ -5773,6 +5789,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
       content.querySelectorAll('.wallet-line b').forEach(b => { if (/◆/.test(b.textContent)) b.innerHTML = `<span class="dust-ico">◆</span> ${nd.toLocaleString()}`; });
     }));
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
+      // A single tap used to spend on the spot. Tom lost 25 dust just looking at
+      // what a Battle Charm was. Now the first tap only ARMS the cell (and the
+      // card already states what the item does), so buying takes intent.
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.classList.add('arming');
+        const prev = btn.innerHTML;
+        btn.innerHTML = `<span class="crate-ico">${ICONS.coin(26)}</span><b>Spend ${btn.dataset.cost}?</b><small class="dc-desc">tap again to buy</small><small>tap elsewhere to cancel</small>`;
+        clearTimeout(btn._armT);
+        btn._armT = setTimeout(() => {
+          if (!btn.isConnected) return;
+          btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.innerHTML = prev;
+        }, 3200);
+        return;
+      }
+      clearTimeout(btn._armT);
       btn.disabled = true;
       const res = await buyWithDust(btn.dataset.dustbuy);
       if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
