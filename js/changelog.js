@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 269, date: '2026-08-05', title: 'Your weapon holds its charge everywhere', items: [
+    'The charge that runs an <b>epic or legendary weapon</b> now follows your Bonehead through the whole game: the home screen, the arena, your Crew row and the map, not just the Wardrobe. A cosmetic that only worked in one room read like a bug.',
+    'It is still masked to the weapon\'s own artwork, so the light never spills onto your Bonehead, and it still follows the <b>Gear glow</b> switch in Settings.',
+  ] },
   { n: 268, date: '2026-08-04', title: 'Today, tidied', items: [
     'The Glutton, Dark Spires, the Puffer Pack and the Bone Garden used to be four identical cards stacked down the screen, all shouting equally. They are now one <b>Out there today</b> card, and it puts whatever is actually waiting on you at the top: a siege first, then a ready crop or unclaimed tribute, then everything else.',
     'Only the row that needs you gets the green highlight now. Previously everything was green, which meant none of it stood out.',
