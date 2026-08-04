@@ -3484,3 +3484,19 @@ body::before {
 .hv-ico .bhi { filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .5)); }
 .hv-name { font-weight: 800; font-size: 17px; }
 .hv-sub { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+
+/* the Kitchen's single garden row: a doorway, not a section */
+.garden-row { width: 100%; background: none; border: none; border-bottom: 1px solid var(--line); color: var(--text); font: inherit; cursor: pointer; }
+.garden-row .gr-ttl { display: block; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.garden-row b { display: block; font-size: 14.5px; }
+.garden-row small { display: block; color: var(--text-3); font-size: 12px; }
+.garden-row.ripe { border-radius: 12px; border: 1px solid rgba(165, 232, 71, .45); background: rgba(165, 232, 71, .06); padding: 11px 10px; }
+/* the intro card's plant -> water -> harvest strip */
+.gd-stages { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 14px 0 4px; }
+.gd-stage { display: grid; justify-items: center; gap: 3px; }
+.gd-stage > span { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: rgba(165, 232, 71, .08); border: 1px solid rgba(165, 232, 71, .28); }
+.gd-stage .bhi { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.gd-stage i { font-style: normal; font-size: 8.5px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); }
+.gd-arrow { color: var(--text-3); font-size: 18px; margin-bottom: 12px; }
+.garden-card .drop-count { background: var(--accent); color: var(--accent-ink); }
+.garden-bnr-ico { display: grid; place-items: center; }

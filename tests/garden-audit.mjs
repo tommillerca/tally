@@ -24,6 +24,15 @@ const openKitchen = async () => {
   await kb.click();
   await sleep(1700);
 };
+// the beds moved out of the Kitchen into their own screen: the Kitchen keeps one
+// row, so every bed interaction goes through it now
+const openGarden = async () => {
+  await openKitchen();
+  const row = await page.$('#gardenRow');
+  if (!row) throw new Error('the Kitchen has no garden row');
+  await row.click();
+  await sleep(1600);
+};
 
 // a glut to compost with
 await page.evaluate(async () => {
@@ -32,6 +41,17 @@ await page.evaluate(async () => {
 });
 
 await openKitchen();
+const kitchenFirst = await page.evaluate(() => ({
+  firstSection: document.querySelector('#kitchenBody .sect-h')?.textContent.trim().split('\n')[0].trim(),
+  bedsInKitchen: document.querySelectorAll('#kitchenBody .plot-card').length,
+  row: !!document.getElementById('gardenRow'),
+}));
+console.log('kitchen:', JSON.stringify(kitchenFirst));
+check('the Kitchen still opens on the Cauldrons', /Cauldrons/i.test(kitchenFirst.firstSection || ''), kitchenFirst.firstSection);
+check('with no bed grid in it', kitchenFirst.bedsInKitchen === 0, `${kitchenFirst.bedsInKitchen} beds`);
+check('and one row into the garden', kitchenFirst.row);
+await page.evaluate(() => document.getElementById('gardenRow').click());
+await sleep(1600);
 const first = await page.evaluate(() => ({
   hasGarden: /BONE GARDEN|Bone Garden/.test(document.body.textContent),
   beds: document.querySelectorAll('.plot-card').length,
@@ -86,7 +106,7 @@ console.log('at the cap:', JSON.stringify(capped));
 check('the heap closes for the day at the cap', capped.left === 0 && capped.disabled);
 
 // plant via the bed, water, then harvest after fast-forwarding the readyAt
-await openKitchen();
+await openGarden();
 await page.evaluate(() => document.querySelector('.plot-card.locked[data-plant]').click());
 await sleep(1200);
 const sow = await page.evaluate(() => ({ options: document.querySelectorAll('#plantBody [data-sow]').length, label: document.querySelector('#plantBody .recipe-need')?.textContent.trim() }));
@@ -122,16 +142,16 @@ await page.evaluate(async () => {
   g.plots = g.plots.map(p => p ? { ...p, readyAt: Date.now() - 1000 } : p);
   await db.kvSet('garden', g);
 });
-await openKitchen();
+await openGarden();
 const ripe = await page.evaluate(() => ({
-  sheet: document.querySelector('#sheets .sheet h2')?.textContent.trim() || 'none',
+  sheet: [...document.querySelectorAll('#sheets .sheet h2')].slice(-1)[0]?.textContent.trim() || 'none',
   cards: document.querySelectorAll('.plot-card').length,
   ready: document.querySelectorAll('.plot-card.ready').length,
   flag: document.querySelector('.plot-flag.crop')?.textContent.trim(),
   harvestBtn: !!document.querySelector('[data-harvest]'),
 }));
 console.log('ripe:', JSON.stringify(ripe));
-check('the Kitchen is actually open (an empty sample is not a pass)', ripe.sheet === 'Kitchen' && ripe.cards > 0, `${ripe.sheet} / ${ripe.cards} cards`);
+check('the garden is actually open (an empty sample is not a pass)', ripe.sheet === 'The Bone Garden' && ripe.cards > 0, `${ripe.sheet} / ${ripe.cards} cards`);
 check('the bed reads as ready', ripe.ready === 1 && ripe.flag === 'READY' && ripe.harvestBtn);
 if (!ripe.harvestBtn) { console.log('cannot harvest what is not ready; stopping here'); await browser.close(); process.exit(1); }
 

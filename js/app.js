@@ -412,6 +412,7 @@ async function boot() {
   }).catch(() => {});
   maybeShowWhatsNew();
   maybeShowDropPopup();
+  maybeShowGardenPopup();
   maybeShowSpireIntro();
   maybePromptRecovery();
   maybePromptName();
@@ -547,6 +548,82 @@ function spireBannerHtml(held) {
         <li>Holding any spire grants the <b>Keeper's Boon</b>: +10% quest coins.</li>
       </ul>
       <button class="btn ghost" id="spireToMap" style="width:100%">Open the Boneyard</button>
+    </div>
+  </details>`;
+}
+
+/* ---------- the Bone Garden announcement ---------- */
+// Same etiquette as the drop card: five launches, then the pinned Today banner
+// carries it. A feature nobody finds is a feature nobody has.
+const GARDEN_SEEN_KEY = 'gardenIntroSeen';
+
+async function maybeShowGardenPopup() {
+  try {
+    if ((navigator.webdriver && !window.__gardenForce) || !S.settings) return;
+    const seen = await kvGet(GARDEN_SEEN_KEY, 0);
+    if (seen >= 5) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;      // busy boot: does NOT consume one of the 5 showings
+      }
+      await kvSet(GARDEN_SEEN_KEY, seen + 1);
+      openGardenPopup();
+    };
+    setTimeout(tick, 3000);   // after the drop card, never on top of it
+  } catch { /* never block boot */ }
+}
+
+// The three growth stages read left to right, so the card explains the loop
+// without a word of instruction.
+function gardenStagesHtml() {
+  return `<div class="gd-stages">
+    <span class="gd-stage"><span>${bhIcon('garden-seed', 34)}</span><i>PLANT</i></span>
+    <span class="gd-arrow">›</span>
+    <span class="gd-stage"><span>${bhIcon('garden-water', 34, '#7cc4ff')}</span><i>WATER</i></span>
+    <span class="gd-arrow">›</span>
+    <span class="gd-stage"><span>${bhIcon('garden-sprout', 40)}</span><i>HARVEST</i></span>
+  </div>`;
+}
+
+function openGardenPopup() {
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil garden-veil';
+  veil.innerHTML = `
+    <div class="drop-card garden-card">
+      <span class="drop-count">3 BEDS</span>
+      <p class="drop-eyebrow">NEW IN THE KITCHEN</p>
+      <h1 class="drop-title">The <em>Bone</em> Garden</h1>
+      <p class="drop-sub">Grow your own ingredients. Plant a seed, water it once while it grows, and pick more than you put in.</p>
+      ${gardenStagesHtml()}
+      <p class="drop-how"><b>Seeds come off your walks.</b> Roughly one in three Boneyard spawns drops one. Short on seeds? The compost heap turns a spare ingredient into 1 to 3, three times a day. Nothing in the garden ever dies.</p>
+      <button class="drop-cta" id="gardenSeeBtn">SEE THE GARDEN</button>
+      <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#gardenLaterBtn', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#gardenSeeBtn', veil).addEventListener('click', async () => {
+    await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
+    close();
+    openGardenSheet(() => refresh());
+  });
+}
+
+// The pinned Today dropdown, same shape as the Glutton and drop banners.
+function gardenBannerHtml(cropsRipe) {
+  return `<details class="glutton-banner garden-banner">
+    <summary>
+      <span class="gbn-ico garden-bnr-ico">${bhIcon(cropsRipe ? 'garden-sprout' : 'garden-seedling', 26)}</span>
+      <span class="gbn-txt"><i>The Bone Garden</i><b>${cropsRipe ? `${cropsRipe} ${cropsRipe === 1 ? 'crop is' : 'crops are'} ready to pick` : 'Grow your own ingredients'}</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      ${gardenStagesHtml()}
+      <p class="glutton-mech"><b>Three beds in the Kitchen.</b> Seeds come off your walks, or compost a spare ingredient into 1 to 3 of them. A common takes 3 hours and pays 2, or 3 if you watered it, or 4 on a bumper crop. Nothing ever dies.</p>
+      <button class="btn ghost" id="gardenToKitchen" style="width:100%">Open the garden</button>
     </div>
   </details>`;
 }
@@ -1065,6 +1142,7 @@ async function renderToday(el) {
   ${isToday ? gluttonBannerHtml() : ''}
   ${isToday ? spireBannerHtml(heldSpiresNow) : ''}
   ${isToday ? dropBannerHtml() : ''}
+  ${isToday ? gardenBannerHtml(cropsRipe) : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -1194,6 +1272,10 @@ async function renderToday(el) {
   $('details.drop-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#dropToShop')?.scrollIntoView({ block: 'center' });
   });
+  $('details.garden-banner')?.addEventListener('toggle', e => {
+    if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
+  });
+  $('#gardenToKitchen')?.addEventListener('click', () => openGardenSheet(() => refresh()));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -1776,7 +1858,113 @@ function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0) {
   </div>`;
 }
 
-/* ---- The Bone Garden: plant / compost / harvest ---- */
+/* ---- The Bone Garden: its own screen, reached from the Kitchen ---- *
+ *
+ * It started as a section AT THE TOP of the Kitchen sheet and that was wrong: you
+ * open the Kitchen to cook, and walking in to a grid of empty beds buried the
+ * cauldrons under a system you had not asked for yet. So the Kitchen keeps ONE
+ * row, the way the Today screen keeps one row per feature, and the garden gets a
+ * screen with room for the beds, the pouch and the heap. */
+
+// The row in the Kitchen. Reads its state so a ripe crop is obvious without
+// opening anything, and stays quiet the rest of the time.
+function gardenRowHtml(garden, seedTotal) {
+  const ready = garden.readyCount, thirsty = garden.thirsty;
+  const status = ready ? `<b style="color:var(--accent)">${ready} ${ready === 1 ? 'crop is' : 'crops are'} ready to pick</b>`
+    : thirsty ? `<b>${thirsty} ${thirsty === 1 ? 'bed needs' : 'beds need'} water</b>`
+    : garden.growing ? `<b>${garden.growing} growing</b>`
+    : seedTotal ? `<b>${seedTotal} seed${seedTotal === 1 ? '' : 's'} to plant</b>`
+    : '<b>Grow your own ingredients</b>';
+  const sub = ready ? 'Bring them in' : thirsty ? 'A watered bed pays its top yield'
+    : garden.growing ? 'Check back when it is done' : seedTotal ? 'Beds are standing empty' : 'Seeds come off your walks';
+  return `<button class="crate-row garden-row${ready ? ' ripe' : ''}" id="gardenRow">
+    <span class="crate-ico">${bhIcon(ready ? 'garden-sprout' : garden.growing ? 'garden-seedling' : 'garden-bed', 26)}</span>
+    <span style="flex:1;text-align:left"><span class="gr-ttl">The Bone Garden</span>${status}<small>${esc(sub)}</small></span>
+    <span class="gbn-chev">›</span>
+  </button>`;
+}
+
+function openGardenSheet(after) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Bone Garden</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="gardenBody"></div>`, { cls: '', onClose: () => after?.() });
+  const body = $('#gardenBody', wrap);
+
+  // one card per bed: empty / growing (thirsty or not) / ready
+  const plotCard = p => {
+    if (p.empty) return `<button class="plot-card locked" data-plant="${p.index}">
+      <span class="plot-ico">${bhIcon('garden-bed', 32)}</span><b>Empty bed</b><small>plant a seed</small></button>`;
+    const pct = p.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - p.remainingMs / Math.max(1, p.readyAt - p.plantedAt)) * 100)));
+    return `<div class="plot-card ${p.ready ? 'ready' : p.canWater ? 'thirsty' : 'growing'}">
+      ${p.ready ? '<i class="plot-flag crop">READY</i>' : p.canWater ? '<i class="plot-flag">THIRSTY</i>' : ''}
+      <span class="plot-ico">${bhIcon(p.ready ? 'garden-sprout' : 'garden-seedling', p.ready ? 38 : 34, p.rare ? '#9fe3cf' : undefined)}</span>
+      <b>${esc(p.name)}</b>
+      ${p.ready
+        ? `<small>${p.watered ? 'watered · full yield' : 'unwatered'}</small><button class="btn small plot-btn" data-harvest="${p.index}">Harvest</button>`
+        : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(p.remainingMs)} left</small>
+           ${p.canWater ? `<button class="btn small ghost plot-btn" data-water="${p.index}">Water</button>` : '<small class="plot-done">watered</small>'}`}
+    </div>`;
+  };
+
+  async function render() {
+    if (!body.isConnected) return;
+    const [garden, compost] = await Promise.all([gardenState(), compostStatus()]);
+    const bedPrice = plotPrice(garden.plotsOwned);
+    const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
+    body.innerHTML = `
+      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Beds · ${garden.plotsOwned} of ${PLOTS_MAX}
+        ${bedPrice != null ? `<button class="btn small ghost" id="buyBed">Dig a bed · ${bedPrice.toLocaleString()}${ICONS.coin(13)}</button>` : ''}</div>
+      <div class="plot-row">${garden.plots.map(plotCard).join('')}</div>
+      <p class="note" style="margin:2px 2px 12px">Water a bed once while it grows and it pays its top yield. Miss the window and it still grows, just lean. <b>Nothing ever dies.</b></p>
+      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}
+        <button class="btn small ghost" id="compostBtn">Compost · ${compost.left} left</button></div>
+      ${seedTotal ? `<div class="ingredient-grid">
+        ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="ing-cell seed-cell" data-plantseed="${id}">
+          <span class="ing-ico">${bhIcon('garden-seed', 24, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
+          <span class="ing-n">${garden.seeds[id]}</span><span class="ing-name">${esc(seedName(id))}</span></button>`).join('')}
+      </div>` : '<p class="note" style="margin:2px 2px 10px">No seeds yet. They turn up while you walk the Boneyard, or compost a spare ingredient into some.</p>'}
+      <p class="note" style="margin:2px 2px 4px">Whatever you harvest lands in your ingredients, ready for the cauldrons.</p>`;
+
+    $$('[data-water]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const res = await waterPlot(Number(btn.dataset.water));
+      if (res.ok) { popSound(S.sounds); toast('Watered. That bed will pay its best.', 2400); }
+      render();
+    }));
+    $$('[data-harvest]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const res = await harvestPlot(Number(btn.dataset.harvest));
+      if (!res.ok) { render(); return; }
+      await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
+      confettiBurst(innerWidth / 2, innerHeight * 0.35, res.bumper ? 26 : 16); levelSound(S.sounds);
+      showHarvest(res);
+      render();
+    }));
+    $$('[data-plant]', body).forEach(btn => btn.addEventListener('click', () => openPlantSheet(Number(btn.dataset.plant), render)));
+    $$('[data-plantseed]', body).forEach(btn => btn.addEventListener('click', async () => {
+      // tapping a seed in the pouch plants it in the first free bed, which is what
+      // you meant; if every bed is busy, say so instead of doing nothing
+      const res = await plantSeed(btn.dataset.plantseed);
+      if (!res.ok) toast(res.reason === 'full' || res.reason === 'occupied' ? 'Every bed is busy. Harvest one, or dig another bed.' : 'No seeds of that kind.', 2800);
+      else { popSound(S.sounds); toast(`${seedName(btn.dataset.plantseed)} planted. ${fmtCookTime(res.readyAt - Date.now())} to grow.`, 2800); }
+      render();
+    }));
+    $('#compostBtn', body)?.addEventListener('click', () => openCompostSheet(render));
+    $('#buyBed', body)?.addEventListener('click', async () => {
+      const price = plotPrice(garden.plotsOwned);
+      if (price == null) return;
+      if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
+      await coinsAdd(-price);
+      await addPlot();
+      popSound(S.sounds);
+      toast(`Bed dug. ${garden.plotsOwned + 1} growing at once.`, 3000);
+      render();
+    });
+  }
+  render();
+  // live countdown while the sheet is open, same as the cauldrons
+  const timer = setInterval(() => { if (body.isConnected) render(); else clearInterval(timer); }, 1000);
+}
+
+/* ---- plant / compost / harvest ---- */
 
 // Pick what goes in a specific bed. Separate from tapping a seed in the pouch
 // (which fills the first free bed) because tapping the bed itself should let you
@@ -1907,22 +2095,6 @@ async function openKitchen() {
           : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small>`}
       </div>`;
     };
-    // one card per bed: empty / growing (thirsty or not) / ready
-    const plotCard = p => {
-      if (p.empty) return `<button class="plot-card locked" data-plant="${p.index}">
-        <span class="plot-ico">${bhIcon('garden-bed', 32)}</span><b>Empty bed</b><small>plant a seed</small></button>`;
-      const pct = p.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - p.remainingMs / Math.max(1, p.readyAt - p.plantedAt)) * 100)));
-      return `<div class="plot-card ${p.ready ? 'ready' : p.canWater ? 'thirsty' : 'growing'}">
-        ${p.ready ? '<i class="plot-flag crop">READY</i>' : p.canWater ? '<i class="plot-flag">THIRSTY</i>' : ''}
-        <span class="plot-ico">${bhIcon(p.ready ? 'garden-sprout' : 'garden-seedling', p.ready ? 38 : 34, p.rare ? '#9fe3cf' : undefined)}</span>
-        <b>${esc(p.name)}</b>
-        ${p.ready
-          ? `<small>${p.watered ? 'watered · full yield' : 'unwatered'}</small><button class="btn small plot-btn" data-harvest="${p.index}">Harvest</button>`
-          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(p.remainingMs)} left</small>
-             ${p.canWater ? `<button class="btn small ghost plot-btn" data-water="${p.index}">Water</button>` : '<small class="plot-done">watered</small>'}`}
-      </div>`;
-    };
-    const bedPrice = plotPrice(garden.plotsOwned);
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const buyPrice = nextPotPrice(cook.potsOwned);
     body.innerHTML = `
@@ -1931,22 +2103,12 @@ async function openKitchen() {
         <div class="kitchen-hero-title">THE HAUNTED KITCHEN</div>
         <div class="kitchen-quote">Something is always simmering.</div>
       </div>
-      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">The Bone Garden · ${garden.plotsOwned} of ${PLOTS_MAX} beds
-        ${bedPrice != null ? `<button class="btn small ghost" id="buyBed">Dig a bed · ${bedPrice.toLocaleString()}${ICONS.coin(13)}</button>` : ''}</div>
-      <div class="plot-row">${garden.plots.map(plotCard).join('')}</div>
-      <p class="note" style="margin:2px 2px 10px">Water a bed once while it grows and it pays its top yield. Miss the window and it still grows, just lean. <b>Nothing ever dies.</b></p>
-      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}
-        <button class="btn small ghost" id="compostBtn">Compost · ${compost.left} left</button></div>
-      ${seedTotal ? `<div class="ingredient-grid">
-        ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="ing-cell seed-cell" data-plantseed="${id}">
-          <span class="ing-ico">${bhIcon('garden-seed', 24, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
-          <span class="ing-n">${garden.seeds[id]}</span><span class="ing-name">${esc(seedName(id))}</span></button>`).join('')}
-      </div>` : '<p class="note" style="margin:2px 2px 10px">No seeds yet. They turn up while you walk the Boneyard, or compost a spare ingredient into some.</p>'}
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
         ${buyPrice != null ? `<button class="pot-card buy" id="buyPot"><span class="pot-ico">➕</span><b>Extra pot</b><small>${buyPrice.toLocaleString()} ${ICONS.coin(12)}</small></button>` : ''}
       </div>
+      ${gardenRowHtml(garden, seedTotal)}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
@@ -1971,40 +2133,7 @@ async function openKitchen() {
       ${RECIPES.map(recipeCard).join('')}
       <div class="sect-h">Potions · drink one mid-fight, any class</div>
       ${POTIONS.map(recipeCard).join('')}`;
-    /* ---- the garden ---- */
-    $$('[data-water]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const res = await waterPlot(Number(btn.dataset.water));
-      if (res.ok) { popSound(S.sounds); toast('Watered. That bed will pay its best.', 2400); }
-      render();
-    }));
-    $$('[data-harvest]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const res = await harvestPlot(Number(btn.dataset.harvest));
-      if (!res.ok) { render(); return; }
-      await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
-      confettiBurst(innerWidth / 2, innerHeight * 0.35, res.bumper ? 26 : 16); levelSound(S.sounds);
-      showHarvest(res);
-      render();
-    }));
-    $$('[data-plant]', body).forEach(btn => btn.addEventListener('click', () => openPlantSheet(Number(btn.dataset.plant), render)));
-    $$('[data-plantseed]', body).forEach(btn => btn.addEventListener('click', async () => {
-      // tapping a seed in the pouch plants it in the first free bed, which is what
-      // you meant; if every bed is busy, say so instead of doing nothing
-      const res = await plantSeed(btn.dataset.plantseed);
-      if (!res.ok) toast(res.reason === 'full' || res.reason === 'occupied' ? 'Every bed is busy. Harvest one, or buy another bed.' : 'No seeds of that kind.', 2800);
-      else { popSound(S.sounds); toast(`${seedName(btn.dataset.plantseed)} planted. ${fmtCookTime(res.readyAt - Date.now())} to grow.`, 2800); }
-      render();
-    }));
-    $('#compostBtn', body)?.addEventListener('click', () => openCompostSheet(render));
-    $('#buyBed', body)?.addEventListener('click', async () => {
-      const price = plotPrice(garden.plotsOwned);
-      if (price == null) return;
-      if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
-      await coinsAdd(-price);
-      await addPlot();
-      popSound(S.sounds);
-      toast(`Bed dug. ${garden.plotsOwned + 1} growing at once.`, 3000);
-      render();
-    });
+    $('#gardenRow', body)?.addEventListener('click', () => openGardenSheet(render));
     $$('[data-serve]', body).forEach(btn => btn.addEventListener('click', async () => {
       const dish = await collectDish(Number(btn.dataset.serve));
       if (dish) {
@@ -7580,7 +7709,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v259'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v260'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

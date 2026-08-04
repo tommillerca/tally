@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 260, date: '2026-08-04', title: 'The garden gets its own door', items: [
+    'The garden was sitting at the top of the Kitchen, so opening the Kitchen meant walking into a row of empty beds before you could reach a cauldron. Wrong way round. <b>The Kitchen opens on the Cauldrons again</b>, and the garden is one row below them that opens its own screen.',
+    'New players get an <b>intro card</b> on their next few opens, and a pinned <b>Bone Garden</b> dropdown on Today after that, same as the Puffer Pack.',
+  ] },
   { n: 259, date: '2026-08-04', title: 'The Bone Garden', items: [
     'There is a <b>garden in the Kitchen</b>. Plant a seed in a bed, water it once while it grows, and come back to more of that ingredient than you started with.',
     '<b>Seeds come off walks.</b> Roughly one in three Boneyard spawns now drops a seed of whatever it gave you, and the rare Ectoplasm <b>Spore</b> only ever comes from out there.',
