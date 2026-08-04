@@ -1776,11 +1776,27 @@ function gluttonBlightMapHtml() {
   </svg></div>`;
 }
 
-async function openGluttonSheet() {
-  const allXp = await db.all('xp');
+// Which appearance are we on? The window is the source of truth, but a fight that
+// STARTS inside a window can settle after it closes, and the settle used to fall
+// back to slot 0 in that case: the win got filed under an appearance that was
+// never fought, so the sheet looked unbeaten. The slot is captured when the
+// encounter opens and carried through the fight instead.
+function gluttonSlotNow() {
   const w = gluttonWindow();
-  // "beaten" is per APPEARANCE now, not forever: he's back next window.
-  const beaten = w.active && allXp.some(r => r.key === gluttonKey(dateKey(), w.slot));
+  return w.active ? w.slot : 0;
+}
+async function gluttonBeaten(slot) {
+  const allXp = await db.all('xp');
+  return allXp.some(r => r.key === gluttonKey(dateKey(), slot));
+}
+
+async function openGluttonSheet() {
+  const slot = gluttonSlotNow();
+  // "beaten" is per APPEARANCE, not forever: he's back next window. Note this no
+  // longer requires w.active — a win recorded for this slot reads as beaten even
+  // if the window closed while you were fighting, which is exactly the state that
+  // used to re-offer the fight.
+  const beaten = await gluttonBeaten(slot);
   const wrap = openSheet(`
     <button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Done</button>
     <div class="sheet-body glutton-card" style="border:none;background:none;padding-top:8px">
@@ -1793,14 +1809,56 @@ async function openGluttonSheet() {
         ? '<p class="glutton-beaten">Cleansed for now. He crawls back out at his next feeding.</p>'
         : '<button class="glutton-cta" id="gluttonFight">FACE THE GLUTTON</button>'}
     </div>`, { cls: '', name: 'The Glutton' });
+  /* THREE independent guards, because this is the third attempt at the same
+     exploit and the previous two each relied on a single mechanism.
+
+     Attempt one moved the map marker. Attempt two used history.go(-2) to pop the
+     fight AND this sheet. Neither touched the sheet's own markup, which is built
+     once at open time: land back here by any route (a loot reveal changing the
+     history depth so go(-2) pops the wrong two entries, an iOS edge-swipe, a
+     backdrop tap) and the button was still sitting there, still wired. A Glutton
+     fight costs no Vigor and every win mints a uniquely-keyed `fight` row, so one
+     stale button is a farm.
+
+     So: the sheet HEALS itself on the win event, it re-checks on becoming visible
+     again, and the handler re-reads the ledger before it will open a fight. Any
+     one of the three alone kills it. */
+  const healCleansed = () => {
+    const cta = $('#gluttonFight', wrap);
+    if (!cta) return;
+    const p = document.createElement('p');
+    p.className = 'glutton-beaten';
+    p.textContent = 'Cleansed for now. He crawls back out at his next feeding.';
+    cta.replaceWith(p);
+  };
+  const onBeaten = () => healCleansed();
+  addEventListener('bh-glutton-beaten', onBeaten);
+  // the sheet outlives the listener otherwise: stop leaking one per open
+  const mo = new MutationObserver(() => { if (!wrap.isConnected) { removeEventListener('bh-glutton-beaten', onBeaten); mo.disconnect(); } });
+  mo.observe(document.getElementById('sheets'), { childList: true });
+  // coming back to a backgrounded app, or back from any pushed sheet, re-checks
+  document.addEventListener('visibilitychange', async () => {
+    if (!document.hidden && wrap.isConnected && await gluttonBeaten(slot)) healCleansed();
+  });
+
   $('#gluttonFight', wrap)?.addEventListener('click', async () => {
+    // last line of defence: the ledger, read at the moment of the tap
+    if (await gluttonBeaten(slot)) {
+      healCleansed();
+      toast('Already cleansed. He crawls back out at his next feeding.', 3000);
+      return;
+    }
     const fighter = await buildFighter();
     openFight(wrap, fighter, {
       mode: 'glutton', name: 'The Glutton', mult: 1.3, aiLevel: 3,
       talents: ['heavyhands', 'marrowlust', 'bonebreaker'], venue: 'The Blighted Yard',
+      // carry the appearance INTO the fight, so a settle after the window closes
+      // still files the win under the appearance that was actually fought
+      gluttonSlot: slot,
     });
   });
 }
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton = () => openGluttonSheet();
 
 /* The spire pitch, shown when you stand at an unclaimed one. States what you get
    in plain terms, because a wall of territory rules is how a good idea dies. */
@@ -6685,7 +6743,12 @@ const APPROACH_LOCK_M = 400; // within this, a spawn is "yours": it won't move/d
 // Decoding them once up front means every marker paints on its first frame,
 // including the ones that appear later as you walk. Spawn pips are inline SVG and
 // need nothing. Failures are ignored: this is a warm-up, never a gate.
-const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png'];
+// The map marker art, PLUS the Glutton's combat plates. Those are ~90KB each and
+// the arena renders them as plain <img> tags at fight start, so on a cold cache
+// the boss simply was not there for the opening moves. Warmed with the map, which
+// is the screen you must be on to reach him.
+const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png',
+  'assets/bh/glutton/combat/idle.png', 'assets/bh/glutton/combat/tongue.png', 'assets/bh/glutton/combat/middle.png'];
 let _mapArtWarm = null;
 function warmMapArt() {
   if (!_mapArtWarm) {
@@ -7709,7 +7772,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v260'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v261'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8860,8 +8923,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // one-time world-boss spectacle, same idempotent shape as a secret boss.
         // Twice-daily event: pays once per appearance, so the reward is sized
         // like a den clear (not the old one-off jackpot) to keep the economy sane.
-        const w = gluttonWindow();
-        const slot = w.active ? w.slot : 0;
+        // the appearance carried in from the encounter; falling back to the live
+        // window filed a win under slot 0 whenever the window closed mid-fight,
+        // which is one of the ways he read as unbeaten afterwards
+        const slot = foeCfg.gluttonSlot != null ? foeCfg.gluttonSlot : gluttonSlotNow();
         const r = await claimGluttonWin(dateKey(), slot);
         trackEvent('glutton_win', { first: !!r, slimed: !!r?.gear?.slimed });
         if (r) {

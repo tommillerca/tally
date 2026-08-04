@@ -1270,5 +1270,23 @@ test('beds are priced for every step up to the cap, then stop', () => {
   assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
 });
 
+test('every image the combat stage renders is precached', () => {
+  // The Glutton was invisible for the opening moves because sw.js precached the
+  // hero portraits (glutton/idle.png) but not the COMBAT plates the arena
+  // actually renders, which are ~90KB each and lost the race to the first paint.
+  // Same class of failure as the invisible punch in v245.
+  const sw = readFileSync(join(here, '..', 'sw.js'), 'utf8');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const glutton = readFileSync(join(here, '..', 'js', 'glutton.js'), 'utf8');
+  const rendered = [...glutton.matchAll(/src="(assets\/[^"]+\.png)"/g)].map(m => m[1]);
+  assert.ok(rendered.length >= 3, `expected the stage to render plates, found ${rendered.length}`);
+  const missing = rendered.filter(src => !sw.includes(src));
+  assert.deepEqual(missing, [], `not precached: ${missing.join(', ')}`);
+  // and warmed before the fight, so the first paint is decoded rather than fetched
+  const combat = rendered.filter(s2 => s2.includes('/combat/'));
+  const unwarmed = combat.filter(src => !app.includes(src));
+  assert.deepEqual(unwarmed, [], `not warmed by the app: ${unwarmed.join(', ')}`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v260';
+const VERSION = 'tally-v261';
 const PRECACHE = [
   './',
   './index.html',
@@ -50,6 +50,12 @@ const PRECACHE = [
   './assets/bh/glutton/bub1.png',
   './assets/bh/glutton/bub2.png',
   './assets/bh/glutton/bub3.png',
+  // the COMBAT plates, which are what the arena actually renders. Only the
+  // hero/portrait set was listed, so the boss loaded over the network at fight
+  // start and was invisible for the opening moves on a cold cache.
+  './assets/bh/glutton/combat/idle.png',
+  './assets/bh/glutton/combat/tongue.png',
+  './assets/bh/glutton/combat/middle.png',
   './js/glutton.js',
   './assets/shortcut/Sync-Boneheadz.shortcut',
   './icons/maskable-512.png',
