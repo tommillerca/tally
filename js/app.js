@@ -9319,7 +9319,31 @@ async function renderTalents(wrap) {
   }
   $$('[data-tpplus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpplus, +1)));
   $$('[data-tpminus]', body).forEach(b => b.addEventListener('click', () => adjustAlloc(b.dataset.tpminus, -1)));
-  $('#tpReset', body)?.addEventListener('click', async () => { await kvSet('trainalloc', {}); popSound(S.sounds); renderTalents(wrap); });
+  // Refund-and-respend already worked, but on ONE tap, which is the same trap that
+  // cost Tom 25 dust in the shop. Wiping a build is worse: it drops your stats
+  // mid-session, and your Dark Spire defender and friend-battle clone are both built
+  // from these stats, so a stray tap could lose you a tower. Arm first, and say what
+  // comes back.
+  $('#tpReset', body)?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    const spent = fighter.tpTotal - fighter.tpAvail;
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.classList.add('danger');
+      btn.textContent = `Refund all ${spent} point${spent === 1 ? '' : 's'}? Tap again`;
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => {
+        if (!btn.isConnected) return;
+        btn.dataset.armed = '0'; btn.classList.remove('danger'); btn.textContent = 'Reset training';
+      }, 3600);
+      return;
+    }
+    clearTimeout(btn._t);
+    await kvSet('trainalloc', {});
+    popSound(S.sounds);
+    toast(`${spent} training point${spent === 1 ? '' : 's'} refunded. Spend them again below: your stats stay low until you do.`, 4200);
+    renderTalents(wrap);
+  });
   // weapons now live in the Shop tab (v150); Build just links there
   $('#toShopMerchant', body)?.addEventListener('click', () => openCharacter('shop'));
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
