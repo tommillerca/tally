@@ -9,6 +9,7 @@ export const CHANGES = [
     'Only one of your towers can be besieged at a time, it targets the one you have <b>neglected longest</b>, and it can only happen once a week. It is a reason to do the rounds, not a chore.',
     'This is the <b>only new notification</b> in the game: one when it starts, and one 12 hours before the window shuts. You can switch it off in Settings.',
     'A besieged tower is impossible to miss: it burns red on the map with a countdown, and it takes over the top of your Dark Spires card.',
+    'Unrelated, and just for the look of it: your <b>epic and legendary weapons now hold a charge</b> in the Wardrobe. A slow pulse of light runs the blade every few seconds. It is masked to the weapon\'s own artwork so it never spills onto your Bonehead, and it follows the Gear glow switch in Settings.',
   ] },
   { n: 265, date: '2026-08-04', title: 'Dark Spires: towers with a history', items: [
     'A spire now shows its <b>level</b> on the map. It goes up every time the tower changes hands, and a higher-level tower <b>pays more tribute</b> (up to half again), so an old contested tower is worth taking.',
