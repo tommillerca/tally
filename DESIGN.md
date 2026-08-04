@@ -11,7 +11,7 @@ A midnight arcade cabinet. Near-black grounds, one acid-lime accent that means
 "go", warm bone-cream text, and comic lettering for anything with a pulse. Quiet
 chrome so the artwork is the loudest thing on every screen.
 
-## Colour
+## Colors
 
 Tokens live in `:root` in `app.css` and are the only source of truth.
 
@@ -37,7 +37,7 @@ borrowed for ornament. Rarity has its own scale (common cream, uncommon green,
 rare `#6fd0ff`, epic `#c084fc`, legendary gold, prestige `#ff6b8b`) and it is
 consistent across gear, pets and cards.
 
-## Type
+## Typography
 
 - **Display:** `Bangers` (`--display`), self-hosted woff2. Used ~61 times: screen
   titles, card kickers, reward callouts, anything shouting. Never for body.
