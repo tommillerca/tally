@@ -25,7 +25,16 @@ export const TRIBUTE_PER_DAY = 60;       // coins accrued per held spire per day
 export const TRIBUTE_DUST_PER_DAY = 8;
 export const TRIBUTE_CAP_DAYS = 3;       // stops idle hoarding; collect in person
 export const RESOLVE_DAYS = 7;           // untended for this long -> dormant
-export const BOON_QUEST_BONUS = 0.10;    // Keeper's Boon while you hold any spire
+// Keeper's Boon, per held spire, HARD-CAPPED at BOON_SPIRE_CAP spires. Tom's
+// call: the cap lives in this formula rather than being inherited from SPIRE_CAP,
+// so raising the tower cap later can never quietly inflate quest coins.
+export const BOON_PER_SPIRE = 0.05;      // +5% quest coins each
+export const BOON_SPIRE_CAP = 3;         // ...counting at most three
+export const BOON_QUEST_BONUS = Math.round(BOON_PER_SPIRE * BOON_SPIRE_CAP * 100) / 100;  // 0.15 ceiling
+// A tower's LEVEL grows on takeovers and successful defenses (server-authoritative,
+// see below). It pays a little more tribute, so an old tower is worth taking.
+export const LEVEL_TRIBUTE_STEP = 0.10;  // +10% tribute per level above 1
+export const LEVEL_TRIBUTE_MAX = 1.5;    // ...never more than half again
 
 const KV = 'spires';                     // { [id]: {claimedAt, tendedAt, collectedAt, level} }
 
@@ -104,8 +113,24 @@ export function readSpire(state, s, now = Date.now()) {
     heldDays: Math.floor(daysBetween(rec.claimedAt, now)),
     resolvePct: Math.max(0, Math.min(1, 1 - sinceTend / RESOLVE_DAYS)),
     tribute: dormant ? { coins: 0, dust: 0, days: 0, capped: false }
-      : { coins: days * TRIBUTE_PER_DAY, dust: days * TRIBUTE_DUST_PER_DAY, days, capped: cappedFor },
+      : {
+        coins: Math.round(days * TRIBUTE_PER_DAY * levelTributeMult(rec.level || 1)),
+        dust: Math.round(days * TRIBUTE_DUST_PER_DAY * levelTributeMult(rec.level || 1)),
+        days, capped: cappedFor,
+      },
   };
+}
+
+/** Tribute multiplier for a tower's level. Pure, capped, unit-tested. */
+export function levelTributeMult(level = 1) {
+  return Math.min(LEVEL_TRIBUTE_MAX, 1 + LEVEL_TRIBUTE_STEP * (Math.max(1, level) - 1));
+}
+/** Quest-coin bonus for holding `n` spires. Pure, capped, unit-tested.
+ *  Rounded to whole percent: 0.05*3 is 0.15000000000000002 in float, and this
+ *  number multiplies every quest payout, so it goes out clean. */
+export function boonBonusFor(n = 0) {
+  const raw = BOON_PER_SPIRE * Math.min(BOON_SPIRE_CAP, Math.max(0, n));
+  return Math.round(raw * 100) / 100;
 }
 
 export async function heldSpires(now = Date.now()) {
@@ -118,7 +143,7 @@ export async function heldSpires(now = Date.now()) {
 /** Keeper's Boon: a small always-on perk for holding ANY spire. */
 export async function keepersBoon(now = Date.now()) {
   const held = await heldSpires(now);
-  return held.length ? { questCoinBonus: BOON_QUEST_BONUS, spires: held.length } : null;
+  return held.length ? { questCoinBonus: boonBonusFor(held.length), spires: held.length } : null;
 }
 
 /** Claim after beating the warden. Refuses past the cap so choice stays real. */
@@ -130,13 +155,33 @@ export async function claimSpire(s, now = Date.now()) {
     claimedAt: state[s.id]?.claimedAt || now,
     tendedAt: now,
     collectedAt: now,
-    level: (state[s.id]?.level || 0) + 1,
+    // NOT incremented here any more. A spire is a shared object, so its level has
+    // to read the same on every phone: the SERVER owns it (+1 per takeover, +1 per
+    // successful defense) and refreshSpires mirrors it back into this record. Local
+    // increments here were double-counting against the server's and diverging.
+    level: state[s.id]?.level || 1,
     // keep the identity with the record so heldSpires can name a spire the
     // player is nowhere near (Today card, future leaderboard)
     meta: { name: s.name, lat: s.lat, lng: s.lng, cx: s.cx, cy: s.cy, warden: s.warden },
   };
   await kvSet(KV, state);
   return { ok: true, level: state[s.id].level };
+}
+
+/** Mirror the SERVER's level onto a local record. The server owns this number
+ *  (+1 per takeover, +1 per successful defense) because a spire is a shared
+ *  object and its level has to read the same on every phone. No-ops for a spire
+ *  we do not hold locally, and never lowers a level we already have unless the
+ *  server says so explicitly. */
+export async function setSpireLevel(id, level, now = Date.now()) {
+  const lv = Math.max(1, Math.floor(Number(level) || 0));
+  if (!lv) return false;
+  const state = await spireState();
+  if (!state[id]) return false;
+  if (state[id].level === lv) return false;
+  state[id].level = lv;
+  await kvSet(KV, state);
+  return true;
 }
 
 /** Visiting restores resolve. Free, and the reason a weekly circuit exists. */

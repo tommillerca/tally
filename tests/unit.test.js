@@ -13,6 +13,10 @@ import {
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { GEAR_ITEMS } from '../js/gear.js';
+import {
+  boonBonusFor, levelTributeMult, BOON_PER_SPIRE, BOON_SPIRE_CAP, BOON_QUEST_BONUS,
+  LEVEL_TRIBUTE_MAX, TRIBUTE_PER_DAY, TRIBUTE_CAP_DAYS, SPIRE_CAP,
+} from '../js/spires.js';
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
@@ -1283,6 +1287,41 @@ test('beds are priced for every step up to the cap, then stop', () => {
   assert.equal(plotPrice(PLOTS_MAX), null);
   // rising, so the last bed is a real decision
   assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
+});
+
+/* ---------- Dark Spires economy ---------- *
+ * Tom's explicit worry: an uncapped Keeper's Boon would ruin the economy. These
+ * assert the CEILINGS, not the happy path, because the failure mode is a number
+ * quietly growing past what quests are balanced for. */
+test("the Keeper's Boon is capped at three spires, whatever the tower cap becomes", () => {
+  assert.equal(boonBonusFor(0), 0);
+  assert.equal(+boonBonusFor(1).toFixed(4), 0.05);
+  assert.equal(+boonBonusFor(2).toFixed(4), 0.10);
+  assert.equal(+boonBonusFor(3).toFixed(4), 0.15);
+  // the whole point: MORE than three pays nothing extra, so raising SPIRE_CAP
+  // later cannot inflate quest coins by accident
+  for (const n of [4, 5, 10, 99]) {
+    assert.equal(+boonBonusFor(n).toFixed(4), 0.15, `${n} spires must still pay 15%`);
+  }
+  assert.equal(+BOON_QUEST_BONUS.toFixed(4), 0.15, 'the exported ceiling must match');
+  assert.ok(BOON_SPIRE_CAP <= SPIRE_CAP, 'a boon cap above the tower cap would be dead config');
+  // check the value that actually reaches a payout, not the raw float product
+  assert.ok(boonBonusFor(BOON_SPIRE_CAP) <= 0.15, 'the boon ceiling must not exceed 15%');
+  assert.ok(BOON_PER_SPIRE > 0, 'a zero rate would make the whole perk dead');
+});
+
+test('spire level pays more tribute, but never more than half again', () => {
+  assert.equal(levelTributeMult(1), 1);
+  assert.equal(+levelTributeMult(2).toFixed(4), 1.1);
+  assert.equal(+levelTributeMult(6).toFixed(4), 1.5);
+  // a tower that has changed hands fifty times must not print money
+  for (const lv of [6, 10, 50, 500]) {
+    assert.equal(levelTributeMult(lv), LEVEL_TRIBUTE_MAX, `level ${lv} must stay at the cap`);
+  }
+  assert.equal(levelTributeMult(0), 1, 'a missing level reads as level 1');
+  // and the absolute worst case a single spire can pay in one collection
+  const worst = Math.round(TRIBUTE_CAP_DAYS * TRIBUTE_PER_DAY * LEVEL_TRIBUTE_MAX);
+  assert.ok(worst <= 300, `one spire could pay ${worst} coins per collection`);
 });
 
 test('no random pet roll can ever include an exclusive pet', () => {

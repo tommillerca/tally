@@ -3594,3 +3594,20 @@ body::before {
 .pit-gate .pg-meter b { font-size: 13px; color: var(--gold); }
 .pit-gate .pg-foot { font-size: 11.5px; color: var(--text-3); margin: 8px 2px 0; }
 .crate-row.capped { opacity: .8; }
+
+/* A spire's level: +1 on every takeover and every repelled siege, and it pays
+   more tribute. Sits opposite the owner pennant so a contested tower reads as
+   contested from across the map. Hidden at level 1 via :empty. */
+.map-spire .spire-lv {
+  position: absolute; top: -6px; left: -4px; z-index: 3;
+  font-family: var(--display); font-size: 11px; letter-spacing: .03em;
+  padding: 1px 5px; border-radius: 7px;
+  background: var(--gold); color: #201500;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .55);
+}
+.map-spire .spire-lv:empty { display: none; }
+
+/* Territory on the leaderboard: how many towers someone is holding right now.
+   Gold, because it is the only stat on that row you have to walk to earn. */
+.lb-spires { color: var(--gold); font-weight: 800; white-space: nowrap; }
+.lb-spires .bhi { vertical-align: -1px; }

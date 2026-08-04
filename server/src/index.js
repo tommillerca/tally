@@ -104,6 +104,7 @@ async function verifySigned(request, env, bodyText) {
 /* ---------------- routes ---------------- */
 // A spire untended this long is dormant and stops counting against the cap.
 const SPIRE_DORMANT_MS = 7 * 86400000;
+const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 
 export default {
   async fetch(request, env) {
@@ -148,8 +149,15 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const body = JSON.parse(bodyText || '{}');
         if (!body.snapshot || typeof body.snapshot !== 'object') return json({ error: 'missing snapshot' }, 400);
+        const snap = JSON.stringify(body.snapshot);
+        const nowP = Date.now();
         await env.DB.prepare('UPDATE players SET profile = ?, app_v = ?, last_seen = ? WHERE id = ?')
-          .bind(JSON.stringify(body.snapshot), String(body.appV || ''), Date.now(), auth.playerId).run();
+          .bind(snap, String(body.appV || ''), nowP, auth.playerId).run();
+        // Keep every tower I hold defended by my CURRENT build. The snapshot used
+        // to be frozen at claim time, so a rival months later fought the weaker
+        // version of me that first took the spire. Cheap: indexed by owner.
+        await env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
+          .bind(snap, nowP, auth.playerId).run();
         return json({ ok: true });
       }
 
@@ -414,11 +422,17 @@ export default {
         if (!b.name || typeof b.lat !== 'number' || typeof b.lng !== 'number') return json({ error: 'missing spire' }, 400);
         const now = Date.now();
         const me = await env.DB.prepare('SELECT id, name, handle, profile FROM players WHERE id = ?').bind(auth.playerId).first();
-        const prev = await env.DB.prepare('SELECT owner, owner_name, level FROM spires WHERE id = ?').bind(id).first();
+        const prev = await env.DB.prepare('SELECT owner, owner_name, level, claimed_at FROM spires WHERE id = ?').bind(id).first();
+        // SHIELD: a tower just taken cannot be taken straight back. Two friends at
+        // one corner could otherwise ping-pong a spire for 80 coins a pass, and
+        // spire fights are free. Derived from claimed_at, so no new column.
+        if (prev && prev.owner !== auth.playerId && (prev.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
+          return json({ error: 'shielded', until: (prev.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
+        }
         if (prev && prev.owner === auth.playerId) {
           await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ?')
             .bind(now, now, me.profile || null, id).run();
-          return json({ ok: true, already: true });
+          return json({ ok: true, already: true, level: prev.level || 1 });
         }
         // Cap: three live spires each, enforced HERE too. A client-only cap is a
         // suggestion, and this is the rule that keeps towers available to others.
@@ -439,7 +453,10 @@ export default {
               note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
             }), now).run();
         }
-        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null });
+        // the level AFTER this write is the number the client must mirror: a fresh
+        // claim is 1, a takeover is the previous level + 1
+        const lvl = prev ? (prev.level || 1) + 1 : 1;
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: lvl });
       }
 
       // A visit restores resolve. Owner only.
@@ -448,6 +465,7 @@ export default {
         const auth = await verifySigned(request, env, bodyText);
         if (auth.err) return json({ error: auth.err }, 401);
         const id = path.slice('/spires/'.length, -'/tend'.length);
+        if (!/^sp-[-0-9]+-[-0-9]+$/.test(id)) return json({ error: 'bad spire id' }, 400);
         const now = Date.now();
         const r = await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ? WHERE id = ? AND owner = ?')
           .bind(now, now, id, auth.playerId).run();
@@ -467,8 +485,11 @@ export default {
                   json_extract(profile,'$.levelName') lvlName,
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
                   json_extract(profile,'$.outfit') outfit,
-                  last_seen
-           FROM players ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`).all();
+                  last_seen,
+                  (SELECT COUNT(*) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) spires,
+                  (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
+           FROM players ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
+          .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
         const players = (rows.results || []).map(r => ({
           playerId: r.id,
           name: r.name || r.handle,
@@ -478,6 +499,8 @@ export default {
           outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(), // cosmetic ids only; art renders client-side
           friendCode: r.friend_code,
           lastSeen: r.last_seen,
+          spires: r.spires || 0,
+          spireDays: Math.floor((r.held_ms || 0) / 86400000),
           you: r.id === auth.playerId,
         }));
         return json({ players });
@@ -705,6 +728,17 @@ export default {
         await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
           .bind(b.playerId, b.key, b.type || 'social', JSON.stringify(b.payload || {}), Date.now()).run();
         return json({ ok: true });
+      }
+      // Backdate a spire's timers so a test can simulate "an hour later" or "eight
+      // days later" without sleeping. DEV only, and it can only ever move a row's
+      // OWN timestamps: it grants nothing and cannot change ownership.
+      if (env.DEV === '1' && path === '/dev/spire-warp' && request.method === 'POST') {
+        const b = await request.json();
+        const back = Number(b.backMs) || 0;
+        await env.DB.prepare(`UPDATE spires SET claimed_at = claimed_at - ?, tended_at = tended_at - ? WHERE id = ?`)
+          .bind(back, back, String(b.id || '')).run();
+        const row = await env.DB.prepare('SELECT id, owner, claimed_at, tended_at, level FROM spires WHERE id = ?').bind(String(b.id || '')).first();
+        return json({ ok: true, row: row || null });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
         const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v FROM players WHERE id = ?')

@@ -327,12 +327,18 @@ export async function fetchSpires(ids) {
   } catch { return null; }
 }
 
-/** Take a spire. Returns {ok, tookFrom} or {ok:false, reason:'cap'|'offline'}. */
+/** Take a spire. Returns {ok, tookFrom, level} or
+ *  {ok:false, reason:'cap'|'shielded'|'server'|'offline'}. A 409 now carries WHICH
+ *  rule refused it: the three-tower cap, or the 1h shield on a freshly taken
+ *  tower. Reading the body matters because the two need different copy. */
 export async function claimSpireRemote(spire) {
   try {
     const r = await signedFetch('PUT', `/spires/${encodeURIComponent(spire.id)}/claim`,
       { name: spire.name, lat: spire.lat, lng: spire.lng });
-    if (r.status === 409) return { ok: false, reason: 'cap' };
+    if (r.status === 409) {
+      const b = await r.json().catch(() => ({}));
+      return { ok: false, reason: b.error === 'shielded' ? 'shielded' : 'cap', until: b.until || 0, cap: b.cap || 3 };
+    }
     if (!r.ok) return { ok: false, reason: 'server' };
     return await r.json();
   } catch { return { ok: false, reason: 'offline' }; }

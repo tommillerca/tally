@@ -1880,14 +1880,23 @@ function openSpireSheet(s, view, rival = null) {
       <ul class="spire-terms">
         <li>It pays <b>tribute</b> every day, up to ${TRIBUTE_CAP_DAYS} days' worth. Collect it here, in person.</li>
         <li>Visit within <b>${RESOLVE_DAYS} days</b> to keep it. Miss that and it goes dormant, never lost.</li>
-        <li>Holding any spire earns the <b>Keeper's Boon</b>: +10% coins from quests.</li>
+        <li>Each spire you hold earns the <b>Keeper's Boon</b>: <b>+${Math.round(BOON_PER_SPIRE * 100)}% quest coins</b> each, up to +${Math.round(boonBonusFor(BOON_SPIRE_CAP) * 100)}%.</li>
+        <li>A tower <b>levels up</b> every time it changes hands or survives a siege, and pays more tribute for it.</li>
         <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
+        ${rival ? '<li>Taking one off another player costs <b>one Pit fight</b>, and a tower just taken holds its walls for an hour.</li>' : ''}
       </ul>
       <button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>
     </div>`, { cls: '', name: 'Dark Spire' });
   $('#spireFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
     if (rival) {
+      // Taking a tower off a PLAYER costs a Pit fight. Spire fights were free, so
+      // two friends at one corner could flip a spire back and forth for 80 coins a
+      // pass all afternoon. The 1h server shield stops the fast loop; this makes
+      // the slow one cost something. NPC wardens stay free: walking out to an
+      // unclaimed tower should never be gated.
+      const spent = await spendPitFight();
+      if (!spent) { toast('No fights left in the tank. Log a meal or take a walk, then come back for it.', 4200); return; }
       // A rival's tower is defended by a faithful clone of THEIR fighter, the
       // same snapshot friend battles already use. No stats invented for them.
       const d = rival.defender || {};
@@ -4107,7 +4116,7 @@ async function renderFriends(el) {
         return `<div class="lb-row ${p.you ? 'me' : ''}">
           <span class="lb-rank r${i + 1}">${i + 1}</span>
           ${lbAvatar(p)}
-          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -7330,7 +7339,13 @@ async function renderBoneyard(el) {
         try {
           await loadMyName();
           const rows = await social.fetchSpires(near.map(s => s.id)).catch(() => null);
-          if (rows) { spireRemote = new Map(rows.map(r => [r.id, r])); spireFetchedAt = Date.now(); spireFetchKey = key; }
+          if (rows) {
+            spireRemote = new Map(rows.map(r => [r.id, r]));
+            spireFetchedAt = Date.now(); spireFetchKey = key;
+            // The server owns spire level. Mirror it onto my own records so the
+            // pennant and the tribute multiplier agree with every other phone.
+            for (const r of rows) if (r.mine && r.level) await setSpireLevel(r.id, r.level);
+          }
         } finally { spireFetching = false; }
       }
       const live = new Set(near.map(s => s.id));
@@ -7347,7 +7362,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-spire';
-          el.innerHTML = `<div class="spire-fx"><span class="spire-flag"></span><img src="assets/brand/tomb.png" alt=""><span class="spire-tribute"></span></div>`;
+          el.innerHTML = `<div class="spire-fx"><span class="spire-flag"></span><span class="spire-lv"></span><img src="assets/brand/tomb.png" alt=""><span class="spire-tribute"></span></div>`;
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el, anchor: 'bottom' }), el };
           spireMarkers.set(s.id, rec);
         }
@@ -7360,7 +7375,12 @@ async function renderBoneyard(el) {
         $('.spire-flag', rec.el).textContent = rival ? (rival.ownerName || 'RIVAL').toUpperCase()
           : held ? (myName ? myName.toUpperCase() : 'YOURS')
           : dormant ? 'DORMANT' : 'UNCLAIMED';
+        // A tower's level is its history: every takeover and every repelled siege
+        // adds one, and it pays more tribute. Worth reading from across the map.
+        const lvl = rival ? (rival.level || 1) : (view.level || 1);
+        rec.el.classList.toggle('levelled', lvl > 1);
         const trib = held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
+        $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
         if (s.dist <= SPIRE_RADIUS_M && !spireInRange) spireInRange = { s, view: { ...view, held }, rival };
       }
@@ -7837,7 +7857,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v264'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v265'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -7847,9 +7867,15 @@ function presentGrantDelivery(r) {
   const cheers = [];      // reward-less friend cheers
   const coinGifts = [];   // coins-only gifts (shown as a line, not a card)
   const giftInfos = [];   // every gift (for the OS notification)
+  const spireNews = [];    // towers lost or left dormant while I was away
   for (const g of r.appliedGrants || []) {
     const p = g.payload || {};
     if (g.type === 'cheer') { cheers.push(p); continue; }
+    // A LOST TOWER. The server has always sent this grant and the client has
+    // always applied it to the ledger, but nothing here displayed it, so having
+    // your spire taken was completely silent. It is the revenge-walk hook: it
+    // gets a card of its own.
+    if (g.type === 'spire') { spireNews.push(p); continue; }
     coinsSum += p.coins || 0; xpSum += p.xp || 0;
     const kind = p.gift ? 'GIFT' : 'CREW DELIVERY';
     if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
@@ -7859,6 +7885,13 @@ function presentGrantDelivery(r) {
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
+  }
+  for (const p of spireNews) {
+    cards.push({
+      iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
+      name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
+      stats: esc(p.note || 'One of your towers no longer flies your name.'),
+    });
   }
   // OS notification for friend gifts + cheers (so it feels like an event, not
   // just an in-app toast). Fire-and-forget; gated on the Crew notif pref.
@@ -9028,15 +9061,28 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // Taking a tower: the claim itself is the prize, so the payout is modest
         // and the tribute stream does the real earning. Re-taking a dormant spire
         // pays the same, because walking back out there deserves the same.
-        const r = await claimSpire(foeCfg.spire);
+        // REMOTE FIRST. This used to write the local record before asking the
+        // server, so a refused claim (cap, or now a shield) left the client
+        // believing it owned a tower until the next 60s poll corrected it.
+        // Offline is the one case we still trust locally: that is the fail-soft
+        // rule the whole social layer is built on.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
-        if (remote && remote.ok === false && remote.reason === 'cap') {
+        const refused = remote && remote.ok === false && remote.reason !== 'offline';
+        const r = refused ? { ok: false, reason: remote.reason } : await claimSpire(foeCfg.spire);
+        if (refused && remote.reason === 'shielded') {
+          coins = 40;
+          const mins = Math.max(1, Math.ceil(((remote.until || 0) - Date.now()) / 60000));
+          toast(`That tower was just taken. Its walls hold for another ${mins} min: come back and it is yours.`, 4600);
+        } else if (refused) {
           coins = 40;
           toast(`You already hold ${SPIRE_CAP} spires. Let one go dormant to take another.`, 4200);
         } else if (r.ok) {
           coins = 80;
+          // the server owns the level; mirror what it just told us
+          if (remote && remote.ok && remote.level) await setSpireLevel(foeCfg.spire.id, remote.level);
+          const lvl = (remote && remote.level) || r.level || 1;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
-            name: foeCfg.spire.name, rarity: 'epic', kind: 'DARK SPIRE',
+            name: foeCfg.spire.name, rarity: 'epic', kind: lvl > 1 ? `DARK SPIRE · LV ${lvl}` : 'DARK SPIRE',
             stats: remote && remote.tookFrom
               ? `Taken from ${remote.tookFrom}. It flies your name now: come back to collect tribute and keep it standing.`
               : `It flies your name now. Come back to collect tribute and keep it standing.` });
