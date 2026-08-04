@@ -9225,6 +9225,7 @@ function buildFaqHtml(fighter, openAttr = '') {
         <div class="faq-qa"><b>Should I spread points around or stack one?</b><small>Stacking one or two is stronger than spreading five thin, because each stat only helps the things it is attached to. Two is the sweet spot.</small></div>
         <div class="faq-qa"><b>Do stats matter more than gear?</b><small>Neither wins on its own. Gear adds the same kinds of points, so a good piece can cover a stat you skipped. Check what you are wearing before you respec.</small></div>
         <div class="faq-qa"><b>What is Armor?</b><small>Damage reduction. <b>${nm('marrow')}</b> gives armor against melee, <b>${nm('reflex')}</b> against magic, and worn gear adds to both. You can see both percentages just below.</small></div>
+        <div class="faq-qa"><b>Which weapon should I buy?</b><small>The one that matches the stat you are stacking. Every weapon in the <b>Bone Merchant</b> prints what it rewards, so a Power build wants a Power weapon and a ${nm('hype')} build wants a caster one. A mismatch is not wasted, it just does less for you. The plain <b>Taped Pipe</b> has no bonus and no penalty, so it is never a wrong answer.</small></div>
         <div class="faq-qa"><b>What are talents, then?</b><small>A separate pool, one per level, spent on the trees further down this tab. Stats decide how hard you hit; talents decide what moves you get.</small></div>
       </details>
     </div>

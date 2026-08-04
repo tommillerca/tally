@@ -61,6 +61,17 @@ const advice = await page.evaluate(async () => {
 });
 check('no playstyle points at a stat that does not exist', advice.length === 0, JSON.stringify(advice));
 
+// weapons interact with stats, and a player could buy a caster weapon for a Power
+// build. The FAQ has to say so, and it has to name the vendor they buy from.
+const weapons = await page.evaluate(() => {
+  const t = document.querySelector('.faq-card').textContent;
+  return { mentionsWeapons: /weapon/i.test(t), namesVendor: /Bone Merchant/.test(t), saysMatch: /matches the stat you are stacking/i.test(t), reassures: /never a wrong answer/i.test(t) };
+});
+console.log('weapon guidance:', JSON.stringify(weapons));
+check('the FAQ covers which weapon to buy', weapons.mentionsWeapons && weapons.saysMatch, JSON.stringify(weapons));
+check('and names the vendor it comes from', weapons.namesVendor);
+check('and reassures that the plain weapon is always fine', weapons.reassures);
+
 const el = await page.$('.faq-card');
 await el.screenshot({ path: `${DIR}/build-faq.png` });
 console.log('shot build-faq');

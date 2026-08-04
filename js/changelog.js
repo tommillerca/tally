@@ -8,6 +8,7 @@ export const CHANGES = [
     'Under that, folded away for anyone who wants it: <b>what every stat actually does</b> in a fight, who it suits, what habit grows it, and the real per-point numbers.',
     'It also says the two things nobody was being told: you can <b>ignore the whole system</b> and the game still plays fine, and <b>nothing is permanent</b>, because Reset training hands every point back whenever you want.',
     'Stacking one or two stats beats spreading five thin. That is now written down instead of being something you had to work out.',
+    'It also answers <b>which weapon to buy</b>. Every weapon at the Bone Merchant rewards a particular stat, so a Power build wants a Power weapon. A mismatch is not wasted, it just does less, and the plain Taped Pipe is never a wrong answer.',
   ] },
   { n: 261, date: '2026-08-04', title: 'The Glutton stays cleansed. For real this time.', items: [
     'Beating him left the <b>FACE THE GLUTTON</b> button sitting there, still working, so he was farmable. Twice before I fixed the wrong thing: the map marker, then the way the screens closed. Neither touched the card itself, which was written once when it opened and never updated. It now <b>rewrites itself</b> the moment he goes down, re-checks whenever you come back to it, and re-checks the record again on the tap. Any one of the three stops it on its own.',

@@ -17,6 +17,7 @@ import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
+import { STAT_META, WEAPONS } from '../js/pit.js';
 import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
@@ -1269,6 +1270,21 @@ test('beds are priced for every step up to the cap, then stop', () => {
   assert.equal(plotPrice(PLOTS_MAX), null);
   // rising, so the last bed is a real decision
   assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
+});
+
+test('every weapon rewards a stat that actually exists', () => {
+  // The vendor prints "rewards <Stat>" from WEAPONS[].spec, and the Build FAQ now
+  // tells players to match the two. A typo'd spec would silently fall back to
+  // "all-rounder" in the shop, quietly breaking that advice.
+  const keys = new Set(STAT_META.map(m => m.key));
+  for (const [id, w] of Object.entries(WEAPONS)) {
+    if (w.spec === null || w.spec === undefined) continue;
+    assert.ok(keys.has(w.spec), `weapon ${id} rewards "${w.spec}", which is not a stat`);
+  }
+  // and at least one weapon exists for every stat, so no build is left without one
+  const covered = new Set(Object.values(WEAPONS).map(w => w.spec).filter(Boolean));
+  const missing = [...keys].filter(k => !covered.has(k));
+  assert.deepEqual(missing, [], `no weapon rewards: ${missing.join(', ')}`);
 });
 
 test('gear dust pays for stat points, not just rarity', () => {
