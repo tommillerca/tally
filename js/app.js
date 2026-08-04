@@ -1597,6 +1597,12 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 // NOTE: the `noYard` option some callers still pass is a legacy no-op — the
 // yard-decor slot was retired, so there is no anchored decor layer any more.
+/* Eye items whose ARTWORK depicts something lit, so a glow is telling the truth
+ * about the drawing rather than adding an effect to it. E4 is two coals with hot
+ * cream centres; E9 (fire in the socket) and E2 are the obvious next candidates
+ * once Tom decides they should breathe too. */
+const EMBER_EYES = new Set(['E4']);
+
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
@@ -1612,6 +1618,11 @@ function avatarLayersHtml(eq, opts = {}) {
       // ledger: it decides whether the halo is drawn, nothing else.
       S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
       S.glow && slimed ? 'bh-slimed' : '',
+      // EMBER EYES: the eye items drawn as lit coals get a slow breathing glow.
+      // A set rather than a rarity test, because "does this art depict light?" is
+      // a property of the drawing, not of how rare it is. Add ids here as Cam
+      // draws more lit eyes.
+      S.glow && s.code === 'E' && EMBER_EYES.has(itemId) ? 'eye-ember' : '',
     ].filter(Boolean).join(' ');
     const glow = cls ? ` class="${cls}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
