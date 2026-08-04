@@ -5641,6 +5641,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // twenty spare drops was the worst chore in the game.
         const spare = rows.filter(g => gearLoNow[g.slot] !== g.id);
         return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>
+          <button class="btn danger melt-go" id="meltGo" hidden></button>
           <div class="melt-tools">
             <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
             <button class="link" id="meltNone">Clear</button>
@@ -5655,8 +5656,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
                    : `<span class="melt-val">+${gearDustValue(g)}</span>`}
           </label>`;
-        }).join('') + `<button class="btn danger melt-go" id="meltGo" hidden></button></details>`;
+        }).join('') + `</details>`;
       })()}`;
+    $('.melt-fold', content)?.addEventListener('toggle', e => {
+      if (e.target.open) e.target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
         toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);

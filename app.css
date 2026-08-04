@@ -3425,9 +3425,19 @@ body::before {
 .melt-row .melt-pick { width: 20px; height: 20px; flex: none; accent-color: var(--danger); }
 .melt-row.worn { opacity: 0.6; }
 .melt-val { color: var(--text-2); font-size: 13px; font-weight: 800; }
-/* the confirm bar sticks to the bottom of the fold so it is reachable with a
-   long list open, rather than making you scroll back to find it */
-.melt-go { position: sticky; bottom: 6px; width: 100%; margin-top: 10px; z-index: 2; }
+/* The confirm bar sits ABOVE the list, with the select-all tools.
+   It was `position: sticky; bottom: 6px` as the LAST child of the fold, which
+   cannot work: a sticky element is confined to its containing block, and sitting
+   at the bottom of that block already it had nowhere to travel. What it did
+   instead was paint its label, with .btn.danger's TRANSPARENT background, across
+   whichever gear row happened to be behind it. Above the list it is visible the
+   moment the fold opens, cannot overlap a row, and needs no z-index at all. */
+.melt-go.btn.danger {
+  width: 100%; margin: 0 0 10px;
+  background: var(--surface-2);
+  border: 1px solid rgba(255, 122, 110, 0.55);
+}
+.melt-tools { padding-bottom: 6px; }
 
 /* ===== The Bone Garden (v259) ===== */
 /* Beds share the cauldron card language on purpose: both are things on a timer in
