@@ -1245,6 +1245,7 @@ async function renderToday(el) {
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
+  ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
   `;
 
   // animate ring, macro bars, and the remaining number from their previous states
@@ -2385,6 +2386,73 @@ async function openKitchen() {
 // how the day's calorie target splits across meals (a per-meal cap you can see)
 const MEAL_SPLIT = [0.25, 0.35, 0.30, 0.10]; // breakfast / lunch / dinner / snacks
 
+/* What he says about an empty meal.
+ *
+ * The critique found the emptiest state on the primary screen was also the only
+ * one with no voice: an empty Dinner was a header and a dashed button. Every
+ * other empty state in this app says something.
+ *
+ * House rules, same as the home-screen speech: never imply the player SHOULD be
+ * eating (or shouldn't), never nag, never treat an unlogged meal as a failure.
+ * These are observations from a skeleton with no stomach, not reminders. */
+const EMPTY_MEAL_LINES = {
+  Breakfast: [
+    'Nothing yet. The day is young and so are you, relatively.',
+    'Empty. I have gone about nine hundred mornings without one.',
+    'Blank. No notes, no opinions.',
+  ],
+  Lunch: [
+    'Nothing logged. Midday is a suggestion anyway.',
+    'Empty so far. I am not keeping score, I am keeping a list.',
+    'Blank. Whenever you get to it.',
+  ],
+  Dinner: [
+    'Dinner is a blank page. I have no notes.',
+    'Nothing here yet. The evening is still deciding.',
+    'Empty. Some days end quietly.',
+  ],
+  Snacks: [
+    'No snacks logged. Suspicious, but I believe you.',
+    'Empty. A rare and noble sight.',
+    'Nothing here. Or nothing that got written down.',
+  ],
+};
+function emptyMealLine(name) {
+  const pool = EMPTY_MEAL_LINES[name];
+  if (!pool) return '';
+  if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
+  return pool[(S.speechSalt + name.length) % pool.length];
+}
+
+/* The last thing on the page.
+ *
+ * Peak-end says the close carries disproportionate weight, and Today used to end
+ * on "Fiber 21 g · Sugar 44 g · Sodium 262 mg" in the faintest text on the screen.
+ * A logging screen should not end on a lab result. He signs off instead.
+ *
+ * Never a verdict on the food. The only thing being acknowledged is that the
+ * player showed up and wrote it down. */
+function signOffLine(count, tot, targets) {
+  if (S.speechSalt == null) S.speechSalt = Math.floor(Math.random() * 1e6);
+  const pick = arr => arr[(S.speechSalt + arr.length) % arr.length];
+  if (!count) return pick([
+    'Nothing written down yet. I will be here.',
+    'A blank day. It stays blank until you say otherwise.',
+    'No entries. No hurry.',
+  ]);
+  const protHit = targets && targets.p && tot.p >= targets.p;
+  if (protHit) return pick([
+    `${count} logged and the protein landed. The bones thank you personally.`,
+    `${count} entries, protein target met. Structurally, an excellent day.`,
+  ]);
+  return pick([
+    `${count} things written down today. That is the whole job.`,
+    `${count} logged. The ledger is honest, which is all I ask.`,
+    `${count} entries. Nothing else required of you.`,
+    `That is ${count} in the book. See you tomorrow.`,
+  ]);
+}
+
 function mealBlock(name, i, entries, yEntries, budget = 0) {
   const kcal = Math.round(dayTotals(entries).kcal);
   const over = budget > 0 && kcal > budget;
@@ -2401,6 +2469,7 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
         <div class="n"><div class="name">${esc(e.name)}</div><div class="sub">${esc(e.portionLabel || '')}</div></div>
         <span class="kc">${Math.round(e.kcal)}</span>
       </button>`).join('')}
+    ${!entries.length ? `<p class="meal-empty">${esc(emptyMealLine(name))}</p>` : ''}
     ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy yesterday's ${name} (${Math.round(dayTotals(yEntries).kcal)} kcal)</button>` : ''}
   </section>`;
 }

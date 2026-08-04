@@ -3874,3 +3874,47 @@ body::before {
 .out-there .glutton-banner.under-siege > summary .gbn-txt i { color: var(--danger); }
 .out-there .glutton-banner.has-action > summary .gbn-txt i { color: var(--accent); }
 .out-there .glutton-banner.has-action > summary .gbn-txt b { color: var(--text); }
+
+/* ===== "The Bonehead's ledger": his voice carries into the log (v269) =====
+   Today read as two design languages bolted at the day strip: an authored game
+   above it, a generic dark tracker below. This closes the seam with LETTERING and
+   VOICE rather than layout.
+
+   The display face goes on the things that are spoken NOUNS (the meal names, the
+   ring's own label) and deliberately NOT on section headers, which stay the one
+   unified chrome idiom. Content gets his lettering; furniture does not. */
+.meal-head h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 20px;
+  letter-spacing: .02em;
+}
+.ring-center .lbl {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: .04em;
+  color: var(--text-2);
+}
+/* An empty meal used to be a header and a dashed button, the only voiceless empty
+   state in the app. */
+.meal-empty {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: .02em;
+  color: var(--text-3);
+  margin: 2px 2px 9px;
+}
+/* The close. The page ended on a micronutrient string in the faintest text on the
+   screen; peak-end says the last thing carries more weight than that deserves. */
+.day-signoff {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: .02em;
+  color: var(--text-2);
+  text-align: center;
+  margin: 18px 16px 4px;
+  line-height: 1.35;
+}
