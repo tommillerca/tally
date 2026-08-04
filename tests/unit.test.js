@@ -24,6 +24,11 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustVa
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedOffspring, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import {
+  rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
+  SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
+  HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
+} from '../js/garden.js';
 import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
 import { existsSync } from 'node:fs';
 
@@ -1185,6 +1190,84 @@ test('every <details> in a rendered template is closed with </details>', () => {
   const opens = (src.match(/<details[\s>]/g) || []).length;
   const closes = (src.match(/<\/details>/g) || []).length;
   assert.equal(opens, closes, `${opens} <details> opened but ${closes} closed in app.js`);
+});
+
+/* ---------- The Bone Garden ---------- *
+ * These are the economy numbers, so they are asserted rather than eyeballed. The
+ * failure that matters is not a crash, it is a multiplier quietly drifting above
+ * what walking pays, which is invisible until every buff is permanently on. */
+test('composting rolls 1 to 3 seeds and the odds sum to 1', () => {
+  assert.equal(SEED_ODDS.reduce((a, b) => a + b, 0).toFixed(6), '1.000000');
+  assert.equal(rollSeeds(() => 0), 1);
+  assert.equal(rollSeeds(() => 0.54), 1);
+  assert.equal(rollSeeds(() => 0.56), 2);
+  assert.equal(rollSeeds(() => 0.89), 2);
+  assert.equal(rollSeeds(() => 0.91), 3);
+  assert.equal(rollSeeds(() => 0.999999), 3);
+});
+
+test('a common seed always returns more than the ingredient it cost', () => {
+  // Tom's rule, and the reason the loop is worth doing at all
+  for (const watered of [false, true]) {
+    for (const r of [0, 0.5, 0.99]) {
+      const { n } = harvestYield({ rare: false, watered }, () => r);
+      assert.ok(n > 1, `common yield ${n} must beat the 1 ingredient composted`);
+    }
+  }
+});
+
+test('watering is worth exactly +1, and the bumper roll another +1', () => {
+  assert.deepEqual(harvestYield({ rare: false, watered: false }, () => 0.5), { n: HARVEST_BASE, bumper: false });
+  assert.deepEqual(harvestYield({ rare: false, watered: true }, () => 0.5), { n: HARVEST_BASE + 1, bumper: false });
+  assert.deepEqual(harvestYield({ rare: false, watered: true }, () => 0.0), { n: HARVEST_BASE + 2, bumper: true });
+  assert.equal(harvestYield({ rare: false, watered: false }, () => 0.0).n, HARVEST_BASE + 1);
+});
+
+test('a rare spore never bumpers and caps at two', () => {
+  assert.deepEqual(harvestYield({ rare: true, watered: false }, () => 0), { n: HARVEST_BASE_RARE, bumper: false });
+  assert.deepEqual(harvestYield({ rare: true, watered: true }, () => 0), { n: HARVEST_BASE_RARE + 1, bumper: false });
+});
+
+test('the closed compost loop stays under what a walk pays', () => {
+  // The whole balance argument in one number. Best case per day: every compost
+  // rolls 3 seeds and every bed comes in watered with a bumper.
+  const bestSeedsPerDay = COMPOSTS_PER_DAY * 3;
+  const bestPerSeed = harvestYield({ rare: false, watered: true }, () => 0).n;
+  const ceiling = bestSeedsPerDay * bestPerSeed - COMPOSTS_PER_DAY;   // net of what was composted
+  assert.ok(ceiling <= 40, `closed-loop ceiling of ${ceiling}/day is too generous`);
+  // and the realistic case (average roll, watered, no bumper) is about one walk
+  const typical = Math.round(COMPOSTS_PER_DAY * 1.55 * (HARVEST_BASE + 1) - COMPOSTS_PER_DAY);
+  assert.ok(typical >= 6 && typical <= 15, `typical net of ${typical}/day should sit near one walk`);
+});
+
+test('walking is the better seed source', () => {
+  // 30% of spawns, and a walk passes far more than three spawns, so a walker
+  // out-earns the heap. If this ever inverts, the garden has replaced the map.
+  assert.ok(SPAWN_SEED_CHANCE >= 0.25, 'seeds must be a real walk reward, not a rumour');
+  assert.equal(rollSpawnSeed(() => SPAWN_SEED_CHANCE - 0.01), true);
+  assert.equal(rollSpawnSeed(() => SPAWN_SEED_CHANCE + 0.01), false);
+});
+
+test('every ingredient is plantable except that the rare takes far longer', () => {
+  assert.deepEqual(SEED_IDS.filter(id => !INGREDIENTS[id]), []);
+  assert.equal(SEED_IDS.length, Object.keys(INGREDIENTS).length);
+  const rare = SEED_IDS.filter(isRareSeed);
+  assert.equal(rare.length, 1);
+  assert.equal(seedName(rare[0]), 'Spore');
+  assert.equal(growMinutes(rare[0]), GROW_MIN_RARE);
+  assert.ok(GROW_MIN_RARE >= GROW_MIN * 3);
+  for (const id of SEED_IDS.filter(i => !isRareSeed(i))) assert.equal(growMinutes(id), GROW_MIN);
+});
+
+test('beds are priced for every step up to the cap, then stop', () => {
+  assert.equal(PLOT_PRICES.length, PLOTS_MAX - PLOTS_FREE);
+  for (let owned = PLOTS_FREE; owned < PLOTS_MAX; owned++) {
+    assert.equal(typeof plotPrice(owned), 'number', `no price for the bed after ${owned}`);
+    assert.ok(plotPrice(owned) > 0);
+  }
+  assert.equal(plotPrice(PLOTS_MAX), null);
+  // rising, so the last bed is a real decision
+  assert.ok(PLOT_PRICES.every((p, i) => i === 0 || p > PLOT_PRICES[i - 1]));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

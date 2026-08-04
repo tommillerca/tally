@@ -199,6 +199,31 @@
    "replaces": "cooking.js RECIPES bonemeal-kibble \ud83e\uddb4",
    "tint": "#b8a878",
    "custom": false
+  },
+  {
+   "file": "garden-seed.svg",
+   "tint": "#a7b24c",
+   "source": "game-icons.net"
+  },
+  {
+   "file": "garden-sprout.svg",
+   "tint": "#a7b24c",
+   "source": "game-icons.net"
+  },
+  {
+   "file": "garden-seedling.svg",
+   "tint": "#7f8a4a",
+   "source": "game-icons.net"
+  },
+  {
+   "file": "garden-water.svg",
+   "tint": "#7cc4ff",
+   "source": "game-icons.net"
+  },
+  {
+   "file": "garden-bed.svg",
+   "tint": "#6b6357",
+   "source": "game-icons.net"
   }
  ]
 }

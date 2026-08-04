@@ -3,6 +3,15 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 259, date: '2026-08-04', title: 'The Bone Garden', items: [
+    'There is a <b>garden in the Kitchen</b>. Plant a seed in a bed, water it once while it grows, and come back to more of that ingredient than you started with.',
+    '<b>Seeds come off walks.</b> Roughly one in three Boneyard spawns now drops a seed of whatever it gave you, and the rare Ectoplasm <b>Spore</b> only ever comes from out there.',
+    'Short on seeds? The <b>compost heap</b> turns one spare ingredient into 1 to 3 seeds of the same kind. It takes three a day, on purpose: the garden is a way to grow what you found, not a way to print food.',
+    'Three beds free, up to five for coins. Commons take 3 hours and pay 2, or 3 if you watered them, or 4 on a <b>bumper crop</b>. A Spore takes 12 and pays 1 or 2.',
+    'Miss the watering window and the crop still comes in, just lean. <b>Nothing in the garden ever dies.</b>',
+    'Two new quests: bring in a crop today, and harvest 8 in a week.',
+    'Also fixed: <b>tapping a reward card never advanced it</b>. Every crate reveal said "tap or swipe" while only swiping worked, because the tap was being delivered to the wrong element.',
+  ] },
   { n: 258, date: '2026-08-04', title: 'Your Bonehead has more to say', items: [
     'He had nine things to say and picked one <b>per calendar day</b>, so he repeated himself all day long. Now every time you open the app he says something different, and there are roughly <b>90 lines</b> instead of thirty.',
     'He also notices more: a big step day, a dish finishing in the pot, a Dark Spire flying your name, a full tank of Pit fights.',

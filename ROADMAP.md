@@ -518,3 +518,40 @@ So the task is getting Fitbit data INTO that store:
   the GitHub handle (reads as Tom's name). Fix = custom domain (e.g. boneheadz.app):
   CNAME in repo + DNS + switch capacitor.config server.url + privacy/listing URLs, then
   one native rebuild + re-upload. Tom deferred 2026-07-22 ("leave it for now").
+
+## The Bone Garden (shipped v259)
+
+Tom's Stardew-style idea: grow ingredients in the Kitchen. Seeds from walks or by
+destroying an ingredient, RNG seed count, RNG harvest always above 1.
+
+**The balance argument, kept here because the numbers are the design.** Composting
+an ingredient into seeds and harvesting more than you planted is a multiplier above
+1, and it compounds. Tom's first shape (1 ingredient -> avg 2 seeds -> avg 2.5 each)
+is 5x per cycle: 1 -> 5 -> 25 -> 125. Ingredients gate the dishes and dishes are
+combat buffs, so unthrottled that means every buff permanently on and the Boneyard
+stops mattering.
+
+The throttle is SEEDS, not plots:
+
+| Dial | Value | Why |
+|---|---|---|
+| Composts per day | 3 | caps the closed loop at ~4.6 seeds/day whatever else you own |
+| Seeds per compost | 1 / 2 / 3 at 55 / 35 / 10% | Tom's RNG, kept |
+| Beds | 3 free, 5 max (1,500 then 4,000 coins) | second throttle, not the first |
+| Grow time | 3h common, 12h Spore | two cycles a day at most |
+| Yield | 2 base, +1 watered, +1 bumper (10%) | always beats the 1 spent |
+| Spore yield | 1 base, +1 watered, no bumper | protects the Feast gate |
+| Seed off a spawn | 30% | walking stays the best seed source |
+
+Net closed loop is about 9 ingredients a day, roughly one walk, and it needs two
+app opens. Guarded in tests/unit.test.js: each dial has an assertion that goes red
+when the dial is moved to the value that breaks it (proven, not assumed).
+
+Ectoplasm cannot be composted at all. Spores only come off rare map finds and world
+bosses, so the Necromancer's Feast stays something you earn outside.
+
+**Open / deferred**
+- Watering is not yet quest-tracked (no xp row per water); the two shipped quests
+  are harvest-based. A "water every bed today" quest needs a water counter.
+- No cross-player garden anything (gifting seeds, visiting a friend's patch).
+- The single dial if it plays too generous is composts/day. Two halves the loop.

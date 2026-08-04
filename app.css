@@ -3428,3 +3428,59 @@ body::before {
 /* the confirm bar sticks to the bottom of the fold so it is reachable with a
    long list open, rather than making you scroll back to find it */
 .melt-go { position: sticky; bottom: 6px; width: 100%; margin-top: 10px; z-index: 2; }
+
+/* ===== The Bone Garden (v259) ===== */
+/* Beds share the cauldron card language on purpose: both are things on a timer in
+   the same room, so they should read as one status block, not two systems. */
+.plot-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.plot-card {
+  position: relative; display: grid; gap: 3px; justify-items: center; text-align: center;
+  padding: 11px 6px 10px; border-radius: 14px; background: var(--surface-2);
+  border: 2px solid var(--line); min-height: 116px; align-content: center;
+  color: var(--text); font: inherit;
+}
+.plot-card.ready { border-color: rgba(165, 232, 71, .55); box-shadow: 0 0 12px rgba(165, 232, 71, .18); }
+.plot-card.thirsty { border-color: rgba(124, 196, 255, .45); }
+.plot-card.locked { border-style: dashed; cursor: pointer; }
+.plot-card.locked { opacity: .8; }
+.plot-card .plot-ico { line-height: 1; font-size: 24px; }
+.plot-card .plot-ico .bhi { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.plot-card b { font-size: 12.5px; }
+.plot-card small { font-size: 10.5px; color: var(--text-3); }
+.plot-card .plot-done { color: rgba(124, 196, 255, .8); font-weight: 700; }
+.plot-card .cook-bar { width: 100%; }
+/* the flag pokes outside the card, so the row needs the headroom or it clips */
+.plot-row { padding-top: 6px; }
+.plot-flag {
+  position: absolute; top: -8px; right: -4px; font-size: 9px; font-weight: 800; letter-spacing: .04em;
+  padding: 2px 6px; border-radius: 8px; background: #7cc4ff; color: #0b1622;
+}
+.plot-flag.crop { background: var(--accent); color: var(--accent-ink); }
+.plot-btn { width: auto; padding: 4px 11px; font-size: 11.5px; margin-top: 3px; }
+/* seeds live in the ingredient grid but are tappable, so they need button reset */
+.ing-cell.seed-cell { color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+
+.compost-card { border: 1px solid rgba(165, 232, 71, .3); background: rgba(165, 232, 71, .06); border-radius: 12px; padding: 11px 10px; }
+.compost-top { display: flex; align-items: center; gap: 10px; }
+.compost-top b { font-size: 14.5px; }
+.compost-top small { display: block; color: var(--text-3); font-size: 11.5px; }
+.odds { display: flex; gap: 6px; margin-top: 8px; }
+.odds span {
+  flex: 1; text-align: center; font-size: 10px; font-weight: 800; padding: 4px 0; border-radius: 8px;
+  background: var(--surface-3); color: var(--text-2);
+}
+.odds span b { display: block; font-size: 13px; color: var(--text); }
+
+.hv-wrap { padding: 6px 0 2px; text-align: center; }
+.hv-card {
+  display: block; margin: 0 auto; width: min(240px, 82%); padding: 18px 14px 16px; border-radius: 18px;
+  background: radial-gradient(120% 90% at 50% 0%, #2b3a24, #171d18);
+  border: 2px solid rgba(165, 232, 71, .55); box-shadow: 0 0 26px rgba(165, 232, 71, .2);
+}
+.hv-card.bumper { border-color: rgba(255, 201, 97, .7); box-shadow: 0 0 30px rgba(255, 201, 97, .24); }
+.hv-kick { font-family: var(--display); font-size: 22px; color: #cfe8b4; letter-spacing: 1px; }
+.hv-card.bumper .hv-kick { color: var(--gold); }
+.hv-ico { margin: 8px 0 4px; display: grid; place-items: center; }
+.hv-ico .bhi { filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .5)); }
+.hv-name { font-weight: 800; font-size: 17px; }
+.hv-sub { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
