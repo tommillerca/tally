@@ -5320,14 +5320,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
-          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${avatarLayersHtml(stageEq, { noYard: true, skip: ['C'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
+          <div class="bh-stage lg${curtains ? ' dressing' : ''}">${stageEq.BG && BH_BY_ID[stageEq.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[stageEq.BG])}" alt="">` : ''}${avatarLayersHtml(stageEq, { noYard: true, skip: ['C', 'BG'] })}${curtains ? '<div class="curt l"></div><div class="curt r"></div>' : ''}</div>
         </div>
         <div class="pd-col">${RIGHT.map(pdSlot).join('')}</div>
       </div>
       <div class="pd-bottom">${BOTTOM.map(pdSlot).join('')}</div>
       <div class="pd-stats">${STAT_META.map(statChip).join('')}</div>
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
-      <div class="ward-grid">
+      <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
@@ -5452,7 +5452,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       await equip(slot, cell.dataset.equip || null);
       S.lookPreview = null;
       popSound(S.sounds); pushProfileSoon();
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      // Update IN PLACE. This used to call renderCharacter(), which rebuilt the
+      // whole screen for one garment: every image element in every cell was
+      // destroyed and re-created, so each tap flashed the entire page. Only two
+      // things actually change when you equip something, so only those two move.
+      const done = await restageWardrobe(content, slot);
+      if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     }));
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
@@ -7822,7 +7827,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v262'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v263'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9230,6 +9235,44 @@ function buildFaqHtml(fighter, openAttr = '') {
       </details>
     </div>
   </details>`;
+}
+
+/* Swap the wardrobe's Bonehead and its selection ring without re-rendering the
+ * screen. Returns false if the DOM is not what we expect, so the caller can fall
+ * back to a full render rather than silently leaving a stale character on screen.
+ *
+ * The new garment is DECODED BEFORE the swap. Without that the fresh <img> paints
+ * empty for a frame, which is the same class of bug as the invisible punch: a
+ * layer stack is only ever meaningful complete. */
+async function restageWardrobe(content, slot) {
+  const stage = $('.bh-stage.lg', content);
+  if (!stage) return false;
+  const eqNow = await equipped();
+  const html = (eqNow.BG && BH_BY_ID[eqNow.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[eqNow.BG])}" alt="">` : '')
+    + avatarLayersHtml(eqNow, { noYard: true, skip: ['C', 'BG'] });
+  // preload every layer, capped, so the swap lands on decoded art
+  const srcs = [...html.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
+  await Promise.race([
+    Promise.all(srcs.map(src => new Promise(res => {
+      const im = new Image();
+      im.onload = im.onerror = res;
+      im.src = src;
+    }))),
+    new Promise(res => setTimeout(res, 450)),
+  ]);
+  const curtains = $$('.curt', stage).map(c => c.outerHTML).join('');
+  stage.innerHTML = html + curtains;
+  // NOT composeAvatars(): that hides the stack until it decodes, and we just
+  // decoded it. Calling it here would reintroduce the very flash this removes.
+  // move the ring inside THIS slot's grid only: every slot renders its own grid, so
+  // a global toggle would light up the wrong cells in every other section
+  const grid = $(`.ward-grid[data-wslot="${slot}"]`, content);
+  if (!grid) return false;
+  const wanted = eqNow[slot] || '';
+  for (const c of $$('[data-equip]', grid)) {
+    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
+  }
+  return true;
 }
 
 const ARCH_META = {

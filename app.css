@@ -3560,3 +3560,15 @@ body::before {
 .faq-stat, .faq-qa { padding: 7px 2px; border-bottom: 1px solid var(--line); }
 .faq-stat:last-child, .faq-qa:last-child { border-bottom: none; }
 .faq-stat b, .faq-qa b { font-size: 13px; }
+
+/* The chosen background is a BACKDROP, not part of the character.
+   It used to sit inside .bh-anim, which carries the idle bob (translateY + rotate),
+   so the whole scene swayed and the backdrop's own edges slid into view against the
+   stage. Same lesson as the map markers: never animate the root of a layer stack,
+   move an inner child. Every other avatar surface already did this via skip:['BG'];
+   the wardrobe was the one that did not. */
+.bh-stage .bh-backdrop {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; pointer-events: none;
+}
+.bh-stage .bh-anim { z-index: 1; }
