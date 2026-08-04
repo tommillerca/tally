@@ -5,6 +5,7 @@
 export const CHANGES = [
   { n: 263, date: '2026-08-04', title: 'The dressing room stops flickering', items: [
     'Trying on a garment used to <b>flash the whole screen</b>. Every tap rebuilt the entire Character page, throwing away and re-creating every image in every row for the sake of one hat. Now only two things move: your Bonehead and the ring around the item you picked. The new piece is loaded before the swap, so there is no blink either.',
+    'The <b>gear you win from a fight shows its art again</b>. The reward card was drawing its name and rarity over a completely blank panel, because that screen built the card but never filled in the picture.',
     'Your <b>chosen background no longer sways</b> with you. It was sitting inside the part of the stage that carries the idle animation, so it drifted with every breath and you could see its edges sliding against the frame. It is a backdrop now, and it holds still while your Bonehead moves.',
   ] },
   { n: 262, date: '2026-08-04', title: 'How do I build my fighter?', items: [

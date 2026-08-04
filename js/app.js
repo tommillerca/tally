@@ -9106,6 +9106,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : foeCfg.mode === 'glutton' ? 'Done' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);
       const overEl = $('.fight-over', body);
+      // Any pack card with imgSrc renders an EMPTY <canvas> until hydratePackArt
+      // fills it. openPackReveal and wireLootChoice both call it; the plain reward
+      // cards here never did, so every gear reward on this screen showed its name
+      // and rarity over a blank art panel. Hydrating the whole block covers the
+      // reward cards AND anything added to it later.
+      if (overEl) hydratePackArt(overEl);
       if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
       if (bossLoot) {
         wireLootChoice($('.loot-choice', body), gid => claimDenLoot(bossLoot.key, gid), picked => {

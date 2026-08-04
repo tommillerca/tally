@@ -1179,6 +1179,19 @@ test('every named import from a local module actually exists', () => {
   assert.deepEqual(problems, [], problems.join('\n      '));
 });
 
+test('every screen that renders pack cards also hydrates their art', () => {
+  // packCardHtml() emits a <canvas> for imgSrc cards that stays BLANK until
+  // hydratePackArt() fills it. The Pit victory screen rendered cards without ever
+  // calling it, so every gear reward showed its name over an empty panel. Guard:
+  // the file must call hydratePackArt at least once per place that builds cards.
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const builders = (src.match(/packCardHtml\(/g) || []).length;
+  const hydrators = (src.match(/hydratePackArt\(/g) || []).length;
+  // one definition + one call per rendering surface
+  assert.ok(hydrators >= 4, `only ${hydrators} hydratePackArt call sites for ${builders} packCardHtml uses`);
+});
+
 test('every <details> in a rendered template is closed with </details>', () => {
   // A <details> closed with </div> does not error: the parser silently nests
   // everything after it INSIDE the collapsed element. That shipped in v253 and
