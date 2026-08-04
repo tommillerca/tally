@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 268, date: '2026-08-04', title: 'Today, tidied', items: [
+    'The Glutton, Dark Spires, the Puffer Pack and the Bone Garden used to be four identical cards stacked down the screen, all shouting equally. They are now one <b>Out there today</b> card, and it puts whatever is actually waiting on you at the top: a siege first, then a ready crop or unclaimed tribute, then everything else.',
+    'Only the row that needs you gets the green highlight now. Previously everything was green, which meant none of it stood out.',
+    'Your <b>meals, and the calorie ring</b>, are written in the game\'s own lettering. The log always looked like a different app bolted onto the bottom of this one.',
+    'An empty meal <b>says something</b> instead of sitting there blank, and the day ends with a word from your Bonehead rather than a line of fibre and sodium numbers.',
+    '<b>Small grey text is readable now.</b> Twenty-one places on this screen sat below the accessibility contrast floor, and every one of them was the smallest type on the page.',
+    'Equipped <b>ember eyes now glow</b>, on your character everywhere they appear: the wardrobe, the home screen, the arena, your Crew row and the map.',
+  ] },
   { n: 267, date: '2026-08-04', title: 'Towers that wear their age', items: [
     'The Dark Spires card now <b>explains itself</b>: four numbered steps showing how a tower is taken, what it pays, how you keep it, and what can come for it, with the real numbers instead of four lines of prose.',
     'A spire you have held a long time now <b>looks like it</b>. At 7, 30 and 100 days it changes on the map, and the hundred-day version wears a crown of embers. Rival towers show their age too, which is the point: an old tower should look like a prize worth taking.',
