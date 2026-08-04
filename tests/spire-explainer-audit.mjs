@@ -69,6 +69,28 @@ console.log(JSON.stringify(info, null, 1));
 check('the explainer renders in the banner', !info.none);
 check('it is four numbered steps', info.steps === 4 && info.numbered.join('') === '1234', JSON.stringify(info.numbered));
 check('each step is drawn, not just text', info.icons === 4, `${info.icons} icons`);
+// Each icon must MEAN its step. A watering can shipped here first, borrowed from the
+// Bone Garden purely because the mechanic is internally called "tend", which told a
+// player nothing about a tower. No garden or kitchen icon belongs on this card.
+const iconIds = await page.evaluate(async () => {
+  // bhIcon() emits inline <svg> paths, so the icon ID never appears in the DOM: a
+  // DOM-based check here can NEVER fail, which is worse than no check. Read the
+  // source of the builder instead.
+  const src = await (await fetch('./js/app.js')).text();
+  const i = src.indexOf('function spireHowItWorksHtml');
+  const fn = src.slice(i, src.indexOf('\n}', i));
+  return {
+    hasGardenIcon: /garden-(seed|seedling|sprout|water|bed)/.test(fn),
+    hasDishIcon: /dish-|ingr-/.test(fn),
+    tower: /bhIcon\('tombstone'/.test(fn),
+    coin: /ICONS\.coin/.test(fn),
+    foot: /bhIcon\('badge-footprint'/.test(fn),
+    threat: /bhIcon\('badge-skull'/.test(fn),
+  };
+});
+console.log('icon vocabulary:', JSON.stringify(iconIds));
+check('no garden or kitchen icon is borrowed onto a spire card', !iconIds.hasGardenIcon && !iconIds.hasDishIcon, JSON.stringify(iconIds));
+check('the icons match their steps: tower, coin, footprint, threat', iconIds.tower && iconIds.coin && iconIds.foot && iconIds.threat, JSON.stringify(iconIds));
 check('there is a three-chip rule strip', info.rules === 3, String(info.rules));
 check('the tower cap comes from the constant', info.saysCap);
 check('tribute coins AND dust per day come from the constants', info.saysTribute);

@@ -573,7 +573,7 @@ function spireHowItWorksHtml() {
       `It flies your name from then on. You can hold <b>${SPIRE_CAP}</b>, so pick ones you actually pass.`)}
     ${step(2, ICONS.coin(20), 'It pays tribute every day',
       `<b>${TRIBUTE_PER_DAY} coins</b> and <b>${TRIBUTE_DUST_PER_DAY} dust</b> a day, banking up to ${TRIBUTE_CAP_DAYS} days. You collect it standing there, not from your couch.`)}
-    ${step(3, bhIcon('garden-water', 20), `Visit within ${RESOLVE_DAYS} days to keep it`,
+    ${step(3, bhIcon('badge-footprint', 20, 'var(--protein)'), `Visit within ${RESOLVE_DAYS} days to keep it`,
       `Any visit resets the clock. Miss it and the tower goes <b>dormant</b>, which is not a loss: walk back and it is yours again.`)}
     ${step(4, bhIcon('badge-skull', 20, 'var(--danger)'), 'Sometimes something comes for it',
       `A rival can take it, or a siege can lay in. Beat them and the tower <b>levels up</b> and pays more. Lose the clock and it just goes dormant.`)}
