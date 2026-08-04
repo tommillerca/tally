@@ -50,8 +50,11 @@ check('and passes the shield expiry through', parse.passesUntil);
 
 const order = await page.evaluate(async () => {
   const src = await (await fetch('./js/app.js')).text();
-  const i = src.indexOf("foeCfg.mode === 'spire'");
-  const block = src.slice(i, i + 2200);
+  // v266 added a SIEGE branch above the claim branch, so a plain indexOf for
+  // "mode === 'spire'" now lands on the wrong one. Anchor on the claim branch's own
+  // first line instead, which cannot be confused with the siege one.
+  const i = src.indexOf('// REMOTE FIRST.');
+  const block = src.slice(i, i + 2400);
   const iRemote = block.indexOf('claimSpireRemote');
   const iLocal = block.indexOf('await claimSpire(');
   return {

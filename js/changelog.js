@@ -4,6 +4,7 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
   { n: 267, date: '2026-08-04', title: 'Towers that wear their age', items: [
+    'The Dark Spires card now <b>explains itself</b>: four numbered steps showing how a tower is taken, what it pays, how you keep it, and what can come for it, with the real numbers instead of four lines of prose.',
     'A spire you have held a long time now <b>looks like it</b>. At 7, 30 and 100 days it changes on the map, and the hundred-day version wears a crown of embers. Rival towers show their age too, which is the point: an old tower should look like a prize worth taking.',
     'Four new badges you <b>cannot get any other way</b>: hold a spire for 7, 30 and 100 days, and break a siege. Every other badge in the game can be earned indoors. These cannot.',
   ] },

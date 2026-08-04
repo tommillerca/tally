@@ -31,7 +31,9 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
-  SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS } from './spires.js';
+  setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS,
+  SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
+  BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
@@ -547,15 +549,41 @@ function spireBannerHtml(held) {
           <small>${s.siege ? `<b>${esc(s.siege.name)} is at the gate</b>` : `${s.heldDays} day${s.heldDays === 1 ? '' : 's'} held · resolve ${Math.round(s.resolvePct * 100)}%`}</small>
         </div>`).join('')}</div>`
         : '<p class="glutton-mech">You hold none yet. Spires sit on the Boneyard map as tall dark gates.</p>'}
-      <ul class="spire-terms">
-        <li>Beat the warden at a spire to claim it. You can hold <b>${SPIRE_CAP}</b>.</li>
-        <li><b>Tribute</b> builds up to ${TRIBUTE_CAP_DAYS} days' worth and is collected on site.</li>
-        <li>Any visit restores <b>resolve</b>. Untended for ${RESOLVE_DAYS} days it goes dormant, and you can always take it back.</li>
-        <li>Holding any spire grants the <b>Keeper's Boon</b>: +10% quest coins.</li>
-      </ul>
+      ${spireHowItWorksHtml()}
       <button class="btn ghost" id="spireToMap" style="width:100%">Open the Boneyard</button>
     </div>
   </details>`;
+}
+
+/* HOW A SPIRE WORKS, drawn rather than written. The old card was four lines of
+ * prose that nobody read, so the mechanics people kept asking about (what tribute
+ * is, what dormant means, what a siege does to you) were invisible. This is the
+ * loop as four numbered steps with real numbers pulled from the constants, so the
+ * card can never drift from the game, plus the two rules that reassure: nothing is
+ * ever lost, and the boon is capped. */
+function spireHowItWorksHtml() {
+  const step = (n, ico, title, body) => `
+    <div class="sp-step">
+      <span class="sp-n">${n}</span>
+      <span class="sp-ico">${ico}</span>
+      <div class="sp-txt"><b>${title}</b><small>${body}</small></div>
+    </div>`;
+  return `<div class="sp-how">
+    <div class="sp-how-h">How a spire works</div>
+    ${step(1, bhIcon('tombstone', 22), 'Walk to a tower and beat its warden',
+      `It flies your name from then on. You can hold <b>${SPIRE_CAP}</b>, so pick ones you actually pass.`)}
+    ${step(2, ICONS.coin(20), 'It pays tribute every day',
+      `<b>${TRIBUTE_PER_DAY} coins</b> and <b>${TRIBUTE_DUST_PER_DAY} dust</b> a day, banking up to ${TRIBUTE_CAP_DAYS} days. You collect it standing there, not from your couch.`)}
+    ${step(3, bhIcon('garden-water', 20), `Visit within ${RESOLVE_DAYS} days to keep it`,
+      `Any visit resets the clock. Miss it and the tower goes <b>dormant</b>, which is not a loss: walk back and it is yours again.`)}
+    ${step(4, '<span class="sp-emoji">⚔</span>', 'Sometimes something comes for it',
+      `A rival can take it, or a siege can lay in. Beat them and the tower <b>levels up</b> and pays more. Lose the clock and it just goes dormant.`)}
+    <div class="sp-rules">
+      <span class="sp-rule"><b>+${Math.round(BOON_PER_SPIRE * 100)}%</b> quest coins per spire<i>capped at ${BOON_SPIRE_CAP}</i></span>
+      <span class="sp-rule"><b>7 / 30 / 100</b> days held<i>the tower changes</i></span>
+      <span class="sp-rule"><b>Never lost</b> to a clock<i>only ever dormant</i></span>
+    </div>
+  </div>`;
 }
 
 /* ---------- the Bone Garden announcement ---------- */

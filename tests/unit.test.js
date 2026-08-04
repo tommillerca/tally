@@ -1197,6 +1197,34 @@ test('every screen that renders pack cards also hydrates their art', () => {
   assert.ok(hydrators >= 4, `only ${hydrators} hydratePackArt call sites for ${builders} packCardHtml uses`);
 });
 
+test('every js/spires.js name app.js USES is actually imported', () => {
+  /* This exists because of a real, self-inflicted outage. The spires import in
+   * app.js is a two-line statement; I pattern-matched a different shape, so five
+   * function imports and four constants silently never landed. app.js then referenced
+   * TRIBUTE_PER_DAY, syncSieges, wardenTier and others as undefined globals, the
+   * Today render threw inside an async function whose rejection nothing catches, and
+   * the ENTIRE home screen rendered blank with no page error at all.
+   *
+   * The existing import test only checks that imported names EXIST in the target
+   * module. It cannot see a name that is used but never imported, which is the more
+   * dangerous direction. This closes that gap for the module it bit us on. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const spires = readFileSync(join(here, '..', 'js', 'spires.js'), 'utf8');
+  const exported = [...spires.matchAll(/export (?:async )?function (\w+)|export const (\w+)/g)]
+    .map(m => m[1] || m[2]);
+  assert.ok(exported.length > 10, `expected spires.js exports, found ${exported.length}`);
+  const stmt = app.match(/import \{[^}]*\} from '\.\/spires\.js';/s);
+  assert.ok(stmt, 'app.js must import from spires.js');
+  const imported = new Set(stmt[0].replace(/import \{|\} from.*/gs, '').split(',').map(x => x.trim()).filter(Boolean));
+  // strip the import statement itself, then look for uses of each export
+  const body = app.replace(stmt[0], '');
+  const missing = exported.filter(name => {
+    if (imported.has(name)) return false;
+    return new RegExp(`(?<![\\w.'"\`])${name}\\s*[(,)\\.;:}\\]]`).test(body);
+  });
+  assert.deepEqual(missing, [], `app.js uses these spires.js exports without importing them: ${missing.join(', ')}`);
+});
+
 test('every <details> in a rendered template is closed with </details>', () => {
   // A <details> closed with </div> does not error: the parser silently nests
   // everything after it INSIDE the collapsed element. That shipped in v253 and
