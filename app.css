@@ -3812,3 +3812,54 @@ body::before {
     filter: drop-shadow(0 0 3px rgba(255, 83, 43, 0.6));
   }
 }
+
+/* ===== "Out there today": the four feature banners, consolidated (v268) =====
+   Each banner keeps its own <details> and body; what it loses is its own card
+   chrome, because four bordered cards in a row read as four competing pages
+   rather than one list of what is live. Inside the shared card they become rows
+   with hairline dividers: the standard .crate-row rhythm this app already uses
+   everywhere else for "icon, text, action". */
+.card.out-there { padding-bottom: 4px; }
+.out-there .ot-head { margin-bottom: 2px; }
+.out-there .glutton-banner {
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+}
+.out-there .glutton-banner:first-of-type { border-top: none; }
+/* tighter rows: 62px x4 was 248px of chrome before any content */
+.out-there .glutton-banner > summary { padding: 9px 2px; gap: 10px; }
+.out-there .gbn-ico { width: 32px; height: 32px; border-radius: 9px; }
+.out-there .gbn-txt b { font-size: 14.5px; }
+.out-there .gbn-body { padding: 0 2px 12px; }
+/* an expanded row gets a faint ground so the open panel reads as belonging to the
+   row above it rather than floating in the card */
+.out-there .glutton-banner[open] { background: rgba(255, 255, 255, 0.018); }
+/* A SIEGE is the one state here with a clock. It keeps its accent even inside the
+   shared card, because urgency has to survive consolidation. */
+.out-there .glutton-banner.under-siege { border-left: 2px solid var(--danger); padding-left: 8px; }
+
+/* Inside the shared card, the per-row eyebrow steps down.
+   The card is already titled "Out there today" in tracked uppercase; repeating
+   that treatment on every row gave three levels of shouting where two do the job,
+   and it is the pattern the craft floor calls out as grammar you did not choose.
+   The eyebrow is still the feature's name, so it stays: just quieter, tighter, and
+   in ONE colour. Four different accent eyebrows spent the accent on four things at
+   once, and this system's accent is supposed to mark the single next action. */
+/* `.drop-banner summary .gbn-txt i` and `.spire-banner summary .gbn-txt i` each
+   set their own accent and both outrank a plain `.out-there .gbn-txt i`, so the
+   quiet treatment has to match their specificity or three of the four rows keep
+   shouting. Measured, not guessed: the confirm pass reported two different eyebrow
+   colours in a card that is supposed to have one. */
+.out-there .glutton-banner > summary .gbn-txt i {
+  font-size: 9px;
+  letter-spacing: .12em;
+  color: var(--text-3);
+}
+/* ...and the accent comes back only where something is actually waiting on the
+   player: a siege clock, or tribute/crops sitting uncollected. */
+.out-there .glutton-banner.under-siege > summary .gbn-txt i { color: var(--danger); }
+.out-there .glutton-banner.has-action > summary .gbn-txt i { color: var(--accent); }
+.out-there .glutton-banner.has-action > summary .gbn-txt b { color: var(--text); }

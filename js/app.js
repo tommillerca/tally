@@ -1176,10 +1176,7 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
-  ${isToday ? gluttonBannerHtml() : ''}
-  ${isToday ? spireBannerHtml(heldSpiresNow) : ''}
-  ${isToday ? dropBannerHtml() : ''}
-  ${isToday ? gardenBannerHtml(cropsRipe) : ''}
+  ${isToday ? outThereHtml({ held: heldSpiresNow, cropsRipe }) : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -1781,6 +1778,43 @@ function gluttonLoreHtml() {
 }
 // A collapsible teaser banner on Today (above Quests), not a fight entry point:
 // he's a world boss now, only fightable by finding his marker on the live map.
+/* ONE card instead of four competing ones.
+ *
+ * Today used to stack the Glutton, Dark Spires, the Puffer Pack and the Bone
+ * Garden as four separate cards, each 62px, each with the same icon + uppercase
+ * eyebrow + Bangers title + chevron. Four identical shouts is silence: nothing
+ * earned attention because everything looked equally urgent, and every feature
+ * shipped from here on would have added another 62px forever.
+ *
+ * They keep their own <details> bodies and their own button ids, so every handler
+ * and every expanded panel still works exactly as before. What changes is that
+ * they now share one container and are ORDERED BY URGENCY, because a deadline
+ * must never sit below a standing offer. */
+function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
+  const sieged = held.filter(s => s.siege).length;
+  const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
+  const soon = held.filter(s => s.resolvePct < 0.3).length;
+  // `act` marks a row that is WAITING ON THE PLAYER. Only those get the accent, so
+  // the colour still means "do this next" instead of decorating every row.
+  const act = h => h.replace('class="glutton-banner', 'class="glutton-banner has-action');
+  const rows = [
+    // a siege has a clock on it, so it outranks everything
+    { pri: sieged ? 0 : owed ? 30 : soon ? 35 : 45,
+      html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
+    // the Glutton's feeding window closes; still time-limited, just less sharp
+    { pri: 10, html: gluttonBannerHtml() },
+    // crops rot into nothing, but a ready crop is money sitting on the table
+    { pri: cropsRipe ? 20 : 50,
+      html: cropsRipe ? act(gardenBannerHtml(cropsRipe)) : gardenBannerHtml(cropsRipe) },
+    // evergreen: the shop is not going anywhere
+    { pri: 60, html: dropBannerHtml() },
+  ].sort((a, b) => a.pri - b.pri);
+  return `<div class="card out-there">
+    <div class="sect-h ot-head">Out there today</div>
+    ${rows.map(r => r.html).join('')}
+  </div>`;
+}
+
 function gluttonBannerHtml() {
   return `<details class="glutton-banner">
     <summary>
