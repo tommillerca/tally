@@ -564,8 +564,7 @@ function spireBannerHtml(held) {
 function spireHowItWorksHtml() {
   const step = (n, ico, title, body) => `
     <div class="sp-step">
-      <span class="sp-n">${n}</span>
-      <span class="sp-ico">${ico}</span>
+      <span class="sp-lead">${ico}<span class="sp-n">${n}</span></span>
       <div class="sp-txt"><b>${title}</b><small>${body}</small></div>
     </div>`;
   return `<div class="sp-how">
@@ -576,7 +575,7 @@ function spireHowItWorksHtml() {
       `<b>${TRIBUTE_PER_DAY} coins</b> and <b>${TRIBUTE_DUST_PER_DAY} dust</b> a day, banking up to ${TRIBUTE_CAP_DAYS} days. You collect it standing there, not from your couch.`)}
     ${step(3, bhIcon('garden-water', 20), `Visit within ${RESOLVE_DAYS} days to keep it`,
       `Any visit resets the clock. Miss it and the tower goes <b>dormant</b>, which is not a loss: walk back and it is yours again.`)}
-    ${step(4, '<span class="sp-emoji">⚔</span>', 'Sometimes something comes for it',
+    ${step(4, bhIcon('badge-skull', 20, 'var(--danger)'), 'Sometimes something comes for it',
       `A rival can take it, or a siege can lay in. Beat them and the tower <b>levels up</b> and pays more. Lose the clock and it just goes dormant.`)}
     <div class="sp-rules">
       <span class="sp-rule"><b>+${Math.round(BOON_PER_SPIRE * 100)}%</b> quest coins per spire<i>capped at ${BOON_SPIRE_CAP}</i></span>

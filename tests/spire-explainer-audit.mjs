@@ -53,7 +53,7 @@ const info = await page.evaluate(async () => {
     steps: card.querySelectorAll('.sp-step').length,
     numbered: [...card.querySelectorAll('.sp-n')].map(n => n.textContent.trim()),
     rules: card.querySelectorAll('.sp-rule').length,
-    icons: card.querySelectorAll('.sp-ico svg, .sp-ico .sp-emoji').length,
+    icons: card.querySelectorAll('.sp-lead svg, .sp-lead .sp-emoji').length,
     // every figure must match the constants, not a hardcoded string
     saysCap: txt.includes(`hold ${sp.SPIRE_CAP}`),
     saysTribute: txt.includes(`${sp.TRIBUTE_PER_DAY} coins`) && txt.includes(`${sp.TRIBUTE_DUST_PER_DAY} dust`),
@@ -78,6 +78,43 @@ check('the boon rate AND its cap come from the constants', info.saysBoon);
 check('the milestone days are stated', info.saysTiers);
 check('it reassures that nothing is ever lost', info.reassures);
 check('the old prose list is gone', info.noProseList);
+
+/* The bug Tom spotted: `.sp-txt b` made every INLINE bold a block, so each bold
+ * fragment inside a sentence broke onto its own line. Measured, not eyeballed: an
+ * inline <b> must compute to display:inline AND sit on the same baseline as the
+ * text around it. */
+const inlineBolds = await page.evaluate(() => {
+  const bolds = [...document.querySelectorAll('.sp-txt small b')];
+  return bolds.map(b => {
+    const cs = getComputedStyle(b);
+    const prev = b.previousSibling;                       // the text before it
+    let sameLine = null;
+    if (prev && prev.nodeType === 3 && prev.textContent.trim()) {
+      const r = document.createRange();
+      r.selectNodeContents(prev);
+      const pr = r.getBoundingClientRect(), br = b.getBoundingClientRect();
+      sameLine = Math.abs(pr.bottom - br.bottom) < 6;     // same baseline
+    }
+    return { display: cs.display, fontSize: cs.fontSize, sameLine, text: b.textContent.slice(0, 14) };
+  });
+});
+console.log('inline bolds:', JSON.stringify(inlineBolds));
+check('there ARE inline bolds to check (an empty set is not a pass)', inlineBolds.length >= 3, `${inlineBolds.length} found`);
+check('every inline bold is display:inline, not a block', inlineBolds.every(b => b.display === 'inline'), JSON.stringify(inlineBolds.map(b => b.display)));
+// NOT asserting "same line as the preceding text": a bold can legitimately land at
+// the start of a wrapped line, and that is normal flow, not the bug. `display` is
+// the thing that was broken and it is checked above; font-size too, since the old
+// rule also inflated inline bolds to the heading size.
+check('and none of them is inflated to the heading size', inlineBolds.every(b => b.fontSize === '12px'), JSON.stringify(inlineBolds.map(b => b.fontSize)));
+const heads = await page.evaluate(() => [...document.querySelectorAll('.sp-txt > b')].map(b => getComputedStyle(b).display));
+check('while the step HEADINGS are still blocks', heads.length === 4 && heads.every(d => d === 'block'), JSON.stringify(heads));
+const lead = await page.evaluate(() => {
+  const l = document.querySelector('.sp-lead');
+  const t = document.querySelector('.sp-txt');
+  return { leadW: Math.round(l.getBoundingClientRect().width), textW: Math.round(t.getBoundingClientRect().width) };
+});
+console.log('columns:', JSON.stringify(lead));
+check('the text column gets most of the width', lead.textW > lead.leadW * 5, JSON.stringify(lead));
 
 const el = await page.$('details.spire-banner');
 if (el) { await el.screenshot({ path: `${DIR}/spire-explainer.png` }); console.log('shot spire-explainer'); }
