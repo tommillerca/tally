@@ -1353,6 +1353,23 @@ test('spire level pays more tribute, but never more than half again', () => {
   assert.ok(worst <= 300, `one spire could pay ${worst} coins per collection`);
 });
 
+test('every badge icon maps to a drawn pack icon, not a raw emoji', () => {
+  /* app.js renders badges through badgeIconHtml(), which looks the emoji up in
+   * BADGE_ICON and falls back to the RAW EMOJI when it misses. Three of the four
+   * Warden badges shipped with emoji that had no mapping, so they would have drawn
+   * as system emoji in a row of hand-drawn icons. The fallback is silent, which is
+   * why this needs a test rather than a glance. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const tbl = app.slice(app.indexOf('const BADGE_ICON = {'), app.indexOf('};', app.indexOf('const BADGE_ICON = {')));
+  assert.ok(tbl.length > 100, 'could not find the BADGE_ICON table');
+  const KNOWN_RAW = new Set(['secret-tumtum']);   // pre-existing secret badge, no pack art
+  const unmapped = BADGES
+    .filter(b => !KNOWN_RAW.has(b.id))
+    .filter(b => !tbl.includes(`'${(b.icon || '').replace(/\uFE0F/g, '')}'`))
+    .map(b => `${b.id} (${b.icon})`);
+  assert.deepEqual(unmapped, [], `these badges would render as raw emoji: ${unmapped.join(', ')}`);
+});
+
 test('a tower only wears a milestone once it has really been held that long', () => {
   // off-by-one here would hand out a century tier on day 99, and the tiers are the
   // only prestige in the game you cannot grind for

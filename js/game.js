@@ -133,10 +133,10 @@ export const BADGES = [
   // WARDEN: the only badges in the game you cannot get from the Pit, the Kitchen or
   // a crate. They come from holding a Dark Spire over real days, and from defending
   // one against a siege, so they are proof of a walking habit rather than of grinding.
-  { id: 'warden-7', icon: '🏰', name: 'Warden', desc: 'Hold a Dark Spire for 7 days' },
-  { id: 'warden-30', icon: '🗝', name: 'Keeper of the Gate', desc: 'Hold a Dark Spire for 30 days' },
+  { id: 'warden-7', icon: '🏚', name: 'Warden', desc: 'Hold a Dark Spire for 7 days' },
+  { id: 'warden-30', icon: '🗿', name: 'Keeper of the Gate', desc: 'Hold a Dark Spire for 30 days' },
   { id: 'warden-100', icon: '👑', name: 'Lord of Spires', desc: 'Hold a Dark Spire for 100 days' },
-  { id: 'siege-1', icon: '⚔', name: 'Siegebreaker', desc: 'Break a siege on one of your spires' },
+  { id: 'siege-1', icon: '🥊', name: 'Siegebreaker', desc: 'Break a siege on one of your spires' },
   // hidden until earned: easter-egg bosses spread by rumor, not by badge list
   { id: 'secret-tumtum', icon: '🥁', name: 'Wabaloo Whisperer', desc: 'Found Tum Tum Wabaloo where he was buried', secret: true },
 ];
