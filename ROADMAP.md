@@ -555,3 +555,75 @@ bosses, so the Necromancer's Feast stays something you earn outside.
   are harvest-based. A "water every bed today" quest needs a water counter.
 - No cross-player garden anything (gifting seeds, visiting a friend's patch).
 - The single dial if it plays too generous is composts/day. Two halves the loop.
+
+## Notes from Tom, 4 Aug 2026 (screenshots in _feedback_shots/2026-08-04-notes-*.jpg)
+
+Twelve items. Two were clear defects with a measurable root cause and are FIXED in
+v261. The rest are design changes and are logged here awaiting approval, per the
+notes process: investigate, log, plan, wait.
+
+### FIXED in v261
+
+**1. The Glutton is still farmable (third report).** Root cause was never the map
+marker (attempt one) or the way the sheets closed (attempt two). `openGluttonSheet`
+builds its markup once and computes `beaten` at open time; nothing re-renders it,
+so the FACE THE GLUTTON button survives the win, still wired. `history.go(-2)` is
+count arithmetic and breaks whenever the gear loot reveal adds a sheet to the
+stack. Fixed with three independent guards (self-heal on the win event, ledger
+re-read on tap, ledger re-read on reopen), each proven red in isolation. Also fixed
+the `slot = w.active ? w.slot : 0` fallback, which filed a win that settled after
+the feeding window against an appearance that was never fought.
+
+**2. The Glutton has no avatar for the first few moves.** The arena renders
+`assets/bh/glutton/combat/*.png` (~90KB each); sw.js precached only the hero
+portraits and nothing warmed the combat plates, so the first fight of a session
+raced the network. Added to the precache and to `warmMapArt`, guarded by a unit
+test that derives the required list from what `js/glutton.js` actually renders.
+
+### AWAITING APPROVAL
+
+**3. Bone Dust shop is too hard to find.** Agreed. It currently lives inside the
+Backpack tab's Salvage Bench. Proposal: a Dust row in the Wardrobe tab header
+next to the coin/dust chips, since that is where you are already thinking about
+gear. Cheap: it is a route, not a new system.
+
+**4. Unclear which gear in the melt list has stats.** The melt rows show a dust
+value but not whether the piece is statted. Proposal: a stat badge on each row plus
+a "commons only" quick-select next to "select all unworn", so a junk sweep cannot
+eat a statted piece by accident.
+
+**5. Statted gear should give more dust.** Needs checking against
+`gearDustValue()` before I claim either way; if it is already rarity-scaled the ask
+may really be "scale by stat count too".
+
+**6. UI bug on the melt button.** The screenshot Tom referenced was not among the
+four attached. Blocked pending that screenshot. Separately, the victory screen in
+`2026-08-04-notes-3.jpg` shows the GEAR reward card rendering EMPTY (name present,
+art panel blank), which looks like the v257 imgSrc change not drawing its canvas.
+Investigating that as its own defect.
+
+**7. Quests menu font is off-brand.** It uses the body face while the feature
+banners use the display face. One-line change; wants a look at both together
+before committing.
+
+**8. Combat debuff icons are not tappable.** True. They are decorative spans.
+Proposal: a tap target per status that opens a one-line explanation, same pattern
+as the map legend.
+
+**9. Build tab confuses new players, and auto-assigned stat points are wrong.**
+Two parts. (a) A collapsible "what do these do" card at the top of the tab. (b)
+Tom wants the bonus points that currently steer toward whatever task you do most
+to become player-assigned instead. (b) is an economy change touching existing
+saves, so it needs a migration plan: existing auto-allocated points must not
+vanish or double.
+
+**10. No duplicate pets from eggs until each has been seen once.** Proposal: hatch
+from the unseen pool first, falling back to the full pool once the set is complete.
+Needs a check on how duplicates currently feed the instancing/breeding system so a
+"no dupes" rule does not starve it.
+
+**11. Hide a garment but keep its stats, and toggle item glow.** This is transmog
+by another route, and there is already a `transmogCost` / `TRANSMOG_HIDE` in
+loot.js to build on. Proposal: a per-slot "hidden" flag that never touches the
+stat calculation, plus a per-item glow toggle. Wants its own increment.
+
