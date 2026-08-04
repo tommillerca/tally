@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 262, date: '2026-08-04', title: 'How do I build my fighter?', items: [
+    'The Build tab opens with a <b>plain-language guide</b>. Pick how you want to fight (hit hard, survive anything, move fast, cast spells) and it tells you exactly which two stats to put your points in. No jargon, no numbers.',
+    'Under that, folded away for anyone who wants it: <b>what every stat actually does</b> in a fight, who it suits, what habit grows it, and the real per-point numbers.',
+    'It also says the two things nobody was being told: you can <b>ignore the whole system</b> and the game still plays fine, and <b>nothing is permanent</b>, because Reset training hands every point back whenever you want.',
+    'Stacking one or two stats beats spreading five thin. That is now written down instead of being something you had to work out.',
+  ] },
   { n: 261, date: '2026-08-04', title: 'The Glutton stays cleansed. For real this time.', items: [
     'Beating him left the <b>FACE THE GLUTTON</b> button sitting there, still working, so he was farmable. Twice before I fixed the wrong thing: the map marker, then the way the screens closed. Neither touched the card itself, which was written once when it opened and never updated. It now <b>rewrites itself</b> the moment he goes down, re-checks whenever you come back to it, and re-checks the record again on the tap. Any one of the three stops it on its own.',
     'A win that landed after his feeding window closed was being filed against the wrong appearance, which also made him read as unbeaten. The appearance is now carried through the fight.',

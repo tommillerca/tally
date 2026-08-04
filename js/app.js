@@ -57,7 +57,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
 import {
-  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP,
+  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
@@ -7822,7 +7822,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v261'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v262'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9162,6 +9162,75 @@ async function openFight(pitWrap, fighter, foeCfg) {
 /* ================= talents ================= */
 
 // The Bone Merchant reads your build and recommends an archetype of weapon.
+/* The Build tab FAQ. Tom's brief: the playerbase is a mix of gamers and
+ * non-gamers, so hold hands where needed without dumbing it down.
+ *
+ * Two layers, in this order:
+ *   1. PLAYSTYLES. Plain language, no jargon, no numbers. "I want to hit hard" ->
+ *      here is where your points go. A non-gamer should be able to act on this
+ *      without knowing what a stat is.
+ *   2. THE DETAIL, folded away. Per-stat mechanics straight out of STAT_META (so
+ *      this card can never drift from what the engine actually does) plus the real
+ *      numbers a gamer wants.
+ *
+ * The most important line for a non-gamer is the last one: you can ignore all of
+ * this and still play. An RPG system nobody understands must not read as homework.
+ */
+const BUILD_PLAYSTYLES = [
+  { ico: '🦴', name: 'I want to hit hard',
+    put: ['power', 'marrow'],
+    plain: 'Big damage, and enough HP to stay standing while you swing. The simplest way to play and it never stops working.' },
+  { ico: '🛡', name: 'I want to survive anything',
+    put: ['marrow', 'reflex'],
+    plain: 'More HP and better armor. Fights take longer, but you win the ones other builds lose. Good if you would rather not think mid-fight.' },
+  { ico: '⚡', name: 'I want to move fast',
+    put: ['wind', 'reflex'],
+    plain: 'More moves per turn and more lucky big hits. The most active way to play, because you always have fuel to do something.' },
+  { ico: '☠', name: 'I want to cast spells',
+    put: ['hype', 'wind'],
+    plain: 'Bolts, heals and a Signature move that charges quickly. Needs Stamina to keep casting, so take both.' },
+];
+
+function buildFaqHtml(fighter, openAttr = '') {
+  const nm = k => (STAT_META.find(m => m.key === k) || {}).label || k;
+  return `<details class="bsect faq-card" data-bsect="faq" ${openAttr}>
+    <summary class="bsect-head"><b>How do I build my fighter?</b><span class="note">start here</span></summary>
+    <div class="bsect-body">
+      <p class="note" style="margin:2px 2px 12px">Your stats grow on their own from your real habits. <b>Training points are extra</b>, on top of that, and they are yours to place. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
+
+      <div class="sect-h">Pick how you want to fight</div>
+      ${BUILD_PLAYSTYLES.map(p => `<div class="faq-style">
+        <span class="faq-ico">${p.ico}</span>
+        <div>
+          <b>${esc(p.name)}</b>
+          <small>${esc(p.plain)}</small>
+          <small class="faq-put">Put your points in <b>${p.put.map(nm).join('</b> and <b>')}</b></small>
+        </div>
+      </div>`).join('')}
+
+      <details class="faq-deep">
+        <summary>What each stat actually does</summary>
+        ${STAT_META.map(m => `<div class="faq-stat">
+          <b>${esc(m.label)}</b>
+          <small>${esc(m.combat)}</small>
+          <small class="faq-put">Suits: ${esc(m.spec)} · grows from ${esc(m.fedBy)}</small>
+        </div>`).join('')}
+        <p class="note" style="margin:8px 2px 2px">Each training point adds <b>+${TRAIN_STEP}</b> to a stat, up to <b>+${TRAIN_CAP}</b> in any one of them. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows out of the habits, not out of grinding.</p>
+      </details>
+
+      <details class="faq-deep">
+        <summary>Common questions</summary>
+        <div class="faq-qa"><b>Can I change my mind?</b><small>Yes, always. <b>Reset training</b> below hands back every point you have spent so you can place them again. It asks before it does it.</small></div>
+        <div class="faq-qa"><b>Do I need to do any of this?</b><small><b>No.</b> Leave every point unspent and the game plays perfectly well. Your habits already raise your stats, and Pit foes scale to you, so you are never locked out of anything. This is here for people who enjoy tinkering.</small></div>
+        <div class="faq-qa"><b>Should I spread points around or stack one?</b><small>Stacking one or two is stronger than spreading five thin, because each stat only helps the things it is attached to. Two is the sweet spot.</small></div>
+        <div class="faq-qa"><b>Do stats matter more than gear?</b><small>Neither wins on its own. Gear adds the same kinds of points, so a good piece can cover a stat you skipped. Check what you are wearing before you respec.</small></div>
+        <div class="faq-qa"><b>What is Armor?</b><small>Damage reduction. <b>${nm('marrow')}</b> gives armor against melee, <b>${nm('reflex')}</b> against magic, and worn gear adds to both. You can see both percentages just below.</small></div>
+        <div class="faq-qa"><b>What are talents, then?</b><small>A separate pool, one per level, spent on the trees further down this tab. Stats decide how hard you hit; talents decide what moves you get.</small></div>
+      </details>
+    </div>
+  </details>`;
+}
+
 const ARCH_META = {
   melee:   { label: 'Melee', blurb: 'Power & Marrow bruisers', ico: '🦴' },
   caster:  { label: 'Caster', blurb: 'Hype spellcasters', ico: '☠' },
@@ -9212,7 +9281,7 @@ async function renderTalents(wrap) {
   const sectOpen = (key, dflt = false) => (prevOpen.has(key) ? prevOpen.get(key) : dflt) ? 'open' : '';
 
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
-  const statBlock = `
+  const statBlock = buildFaqHtml(fighter, sectOpen('faq', false)) + `
     <details class="bsect" data-bsect="fighter" ${sectOpen('fighter', true)}>
     <summary class="bsect-head"><b>Your Fighter</b><span class="note">${d.maxHp} HP · ${d.maxWind} Stamina · ${fighter.tpAvail} TP</span></summary>
     <div class="bsect-body">

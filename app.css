@@ -3537,3 +3537,26 @@ body::before {
 .dust-cell .dc-desc { color: var(--text-3); font-size: 10px; line-height: 1.25; font-weight: 600; }
 .dust-cell.arming { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .45); }
 .dust-cell.arming b { color: var(--gold); }
+
+/* ===== Build tab FAQ (v262) ===== */
+/* Two reading levels in one card: the playstyles are always legible at a glance for
+   someone who does not think of themselves as a gamer; the mechanics are folded so
+   they are available without being homework. */
+.faq-card { border-color: rgba(124, 196, 255, .35); }
+.faq-card > summary .note { color: var(--protein); }
+.faq-style { display: flex; gap: 11px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+.faq-style:last-of-type { border-bottom: none; }
+.faq-ico { flex: none; width: 30px; height: 30px; display: grid; place-items: center; font-size: 19px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+.faq-style b { display: block; font-size: 14px; }
+.faq-style small, .faq-stat small, .faq-qa small { display: block; color: var(--text-2); font-size: 12px; line-height: 1.4; margin-top: 2px; }
+.faq-put { color: var(--text-3) !important; }
+.faq-put b { display: inline !important; color: var(--accent); font-size: inherit !important; }
+.faq-deep { margin-top: 10px; border-top: 1px solid var(--line); }
+.faq-deep > summary { list-style: none; cursor: pointer; padding: 10px 2px 8px; font-size: 13px; font-weight: 750; color: var(--protein); }
+.faq-deep > summary::-webkit-details-marker { display: none; }
+.faq-deep > summary::after { content: ' ›'; display: inline-block; transition: transform .18s; }
+.faq-deep[open] > summary::after { transform: rotate(90deg); }
+.faq-stat, .faq-qa { padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.faq-stat:last-child, .faq-qa:last-child { border-bottom: none; }
+.faq-stat b, .faq-qa b { font-size: 13px; }
