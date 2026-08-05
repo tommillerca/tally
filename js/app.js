@@ -2197,7 +2197,16 @@ function openGardenSheet(after) {
   }
   render();
   // live countdown while the sheet is open, same as the cauldrons
-  const timer = setInterval(() => { if (body.isConnected) render(); else clearInterval(timer); }, 1000);
+  // These screens re-render every second to tick their timers, which REPLACES the
+  // markup and therefore throws away any half-made decision. That gave a player
+  // under a second to confirm a purchase before the button reset itself. Hold the
+  // tick while something is armed: a countdown being one second stale matters far
+  // less than a confirm that vanishes under your thumb.
+  const timer = setInterval(() => {
+    if (!body.isConnected) { clearInterval(timer); return; }
+    if (body.querySelector('.arming')) return;
+    render();
+  }, 1000);
 }
 
 /* ---- plant / compost / harvest ---- */
@@ -2431,7 +2440,16 @@ async function openKitchen() {
   }
   await render();
   // live countdown while the sheet is open
-  const timer = setInterval(() => { if (body.isConnected) render(); else clearInterval(timer); }, 1000);
+  // These screens re-render every second to tick their timers, which REPLACES the
+  // markup and therefore throws away any half-made decision. That gave a player
+  // under a second to confirm a purchase before the button reset itself. Hold the
+  // tick while something is armed: a countdown being one second stale matters far
+  // less than a confirm that vanishes under your thumb.
+  const timer = setInterval(() => {
+    if (!body.isConnected) { clearInterval(timer); return; }
+    if (body.querySelector('.arming')) return;
+    render();
+  }, 1000);
 }
 
 
