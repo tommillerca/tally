@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 270, date: '2026-08-05', title: 'One tap never spends', items: [
+    'A player bought a <b>1,000-coin cauldron by accident</b> on a single tap. Every purchase in the game now takes <b>two</b>: the first tap asks, the second buys, and it forgets after a few seconds so a stray tap later cannot trigger it.',
+    'That was already true of the coin shop and the drop. It was <b>not</b> true of the extra cauldron, the extra garden bed, foraging, changing a look, or the <b>Bone Merchant</b>, which is the most expensive tap in the game at up to 6,000 coins and 350 dust.',
+    'Anything that costs nothing stays one tap. Reverting a look, or hiding a slot, is free and instant: a confirmation on something free is just friction.',
+  ] },
   { n: 269, date: '2026-08-05', title: 'Your weapon holds its charge everywhere', items: [
     'The charge that runs an <b>epic or legendary weapon</b> now follows your Bonehead through the whole game: the home screen, the arena, your Crew row and the map, not just the Wardrobe. A cosmetic that only worked in one room read like a bug.',
     'It is still masked to the weapon\'s own artwork, so the light never spills onto your Bonehead, and it still follows the <b>Gear glow</b> switch in Settings.',

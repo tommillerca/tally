@@ -1353,6 +1353,53 @@ test('spire level pays more tribute, but never more than half again', () => {
   assert.ok(worst <= 300, `one spire could pay ${worst} coins per collection`);
 });
 
+test('no control that spends coins or dust buys on a single tap', () => {
+  /* Tom's rule, after a player bought a 1,000-coin cauldron by accident: one tap
+   * must never spend. This is a STRUCTURAL guard because the failure is invisible
+   * (the button works perfectly, it just works too eagerly) and because the sweep
+   * has to hold for buttons nobody has written yet.
+   *
+   * Every handler that deducts currency must sit behind either armToConfirm() or the
+   * older inline dataset.armed dance. The check is: find each spend call, walk back
+   * to the handler that contains it, and require a confirm gate in that handler. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  // the spend controls, by the attribute/id their handler is bound to
+  const CONTROLS = [
+    ['#buyPot', 'the extra cauldron'],
+    ['#buyBed', 'the extra garden bed'],
+    ['#forageBtn', 'foraging'],
+    ['[data-buy]', 'the coin shop'],
+    ['[data-dustbuy]', 'the Bone Dust shop'],
+    ['[data-buydrop]', 'the featured drop'],
+    ['[data-buyweapon]', 'the Bone Merchant'],
+  ];
+  const unguarded = [];
+  const lines = src.split('\n');
+  for (const [sel, label] of CONTROLS) {
+    // Windows of raw characters were too loose: a 2900-char window around one button
+    // picked up the NEXT button's armToConfirm and passed a genuinely unguarded
+    // control. So this works line by line. A control is guarded when the line that
+    // binds it calls armToConfirm, or when the handler it opens uses the older
+    // inline dataset.armed dance within its own body.
+    const hits = lines.map((ln, n) => [ln, n]).filter(([ln]) => ln.includes(sel));
+    assert.ok(hits.length, `${label}: control ${sel} has vanished from app.js`);
+    const guarded = hits.some(([ln, n]) => {
+      if (ln.includes('armToConfirm(')) return true;
+      if (!/addEventListener|forEach/.test(ln)) return false;   // markup, not a binding
+      return lines.slice(n, n + 26).some(x => x.includes('dataset.armed'));
+    });
+    if (!guarded) unguarded.push(`${label} (${sel})`);
+  }
+  assert.deepEqual(unguarded, [], `these spend on ONE tap: ${unguarded.join(', ')}`);
+  // and the shared helper must actually require a second tap before running the buy
+  const helper = src.slice(src.indexOf('function armToConfirm'), src.indexOf('function badgeIconHtml'));
+  assert.match(helper, /dataset\.armed !== '1'/, 'armToConfirm must check the armed flag');
+  assert.match(helper, /return;/, 'the first tap must RETURN before spending');
+  assert.match(helper, /setTimeout\(restore/, 'an armed button must cool off on its own');
+  assert.ok(helper.indexOf("dataset.armed !== '1'") < helper.indexOf('await onConfirm()'),
+    'the arm check must come BEFORE the purchase runs');
+});
+
 test('every badge icon maps to a drawn pack icon, not a raw emoji', () => {
   /* app.js renders badges through badgeIconHtml(), which looks the emoji up in
    * BADGE_ICON and falls back to the RAW EMOJI when it misses. Three of the four

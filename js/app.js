@@ -272,6 +272,47 @@ const BADGE_ICON = {
   '👟': 'badge-footprint', '🎩': 'badge-tophat', '🧥': 'badge-coat', '🦴': 'ingr-marrow',
   '🪧': 'badge-signpost', '🗿': 'badge-moai', '🏚': 'tombstone',
 };
+/* ONE TAP MUST NEVER SPEND. Tom's rule, after a player bought a 1,000-coin cauldron
+ * by accident, and after he lost 25 dust to the Bone Dust shop the same way.
+ *
+ * Four separate places had grown their own copy of this arm-then-confirm dance and
+ * four more had none at all, which is exactly how the expensive ones got missed. So
+ * it lives here once. Wrap ANY control that spends coins or dust:
+ *
+ *   armToConfirm(btn, 'Spend 1,000?', async () => { ...actually buy... });
+ *
+ * The first tap only arms and relabels; the second buys. It cools off on its own so
+ * a forgotten armed button can never be triggered by a later stray tap, and it
+ * restores the original label whatever happens. */
+const ARM_COOLOFF_MS = 3200;
+function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS } = {}) {
+  if (!btn || btn.dataset.armWired === '1') return;
+  btn.dataset.armWired = '1';
+  let t = null;
+  const restore = () => {
+    if (!btn.isConnected) return;
+    btn.dataset.armed = '0';
+    btn.classList.remove('arming');
+    if (btn.dataset.armLabel != null) btn.innerHTML = btn.dataset.armLabel;
+  };
+  btn.addEventListener('click', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (btn.dataset.armed !== '1') {
+      if (btn.dataset.armLabel == null) btn.dataset.armLabel = btn.innerHTML;
+      btn.dataset.armed = '1';
+      btn.classList.add('arming');
+      btn.innerHTML = esc(confirmLabel);
+      clearTimeout(t);
+      t = setTimeout(restore, cooloff);
+      return;
+    }
+    clearTimeout(t);
+    restore();
+    await onConfirm();
+  });
+}
+
 function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').replace(/️/g, '')]; return id ? `<span class="bhi-wrap">${bhIcon(id, s)}</span>` : (emoji || ''); }
 
 /* ================= splash montage ================= */
@@ -2141,16 +2182,18 @@ function openGardenSheet(after) {
       render();
     }));
     $('#compostBtn', body)?.addEventListener('click', () => openCompostSheet(render));
-    $('#buyBed', body)?.addEventListener('click', async () => {
+    {
       const price = plotPrice(garden.plotsOwned);
-      if (price == null) return;
-      if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
-      await coinsAdd(-price);
-      await addPlot();
-      popSound(S.sounds);
-      toast(`Bed dug. ${garden.plotsOwned + 1} growing at once.`, 3000);
-      render();
-    });
+      armToConfirm($('#buyBed', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
+        if (price == null) return;
+        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
+        await coinsAdd(-price);
+        await addPlot();
+        popSound(S.sounds);
+        toast(`Bed dug. ${garden.plotsOwned + 1} growing at once.`, 3000);
+        render();
+      });
+    }
   }
   render();
   // live countdown while the sheet is open, same as the cauldrons
@@ -2346,16 +2389,20 @@ async function openKitchen() {
       await discardPantryDish(Number(btn.dataset.toss));
       render();
     }));
-    $('#buyPot', body)?.addEventListener('click', async () => {
+    // THE CAULDRON. A player bought one of these by accident on a single tap, which
+    // is what made one-tap-spending a rule rather than a preference.
+    {
       const price = nextPotPrice(cook.potsOwned);
-      if (price == null) return;
-      if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another pot.`, 2800); return; }
-      await coinsAdd(-price);
-      await addPot();
-      popSound(S.sounds);
-      toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
-      render();
-    });
+      armToConfirm($('#buyPot', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
+        if (price == null) return;
+        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another pot.`, 2800); return; }
+        await coinsAdd(-price);
+        await addPot();
+        popSound(S.sounds);
+        toast(`New cauldron bought! You can now cook ${cook.potsOwned + 1} dishes at once.`, 3200);
+        render();
+      });
+    }
     $('#transmuteBtn', body)?.addEventListener('click', async () => {
       const res = await doTransmute();
       if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients (you have ${res.have}).`, 3000); return; }
@@ -2364,7 +2411,7 @@ async function openKitchen() {
       toast(`${INGREDIENTS[res.yields].icon} Transmuted a rare ${INGREDIENTS[res.yields].name}!`, 3000);
       render();
     });
-    $('#forageBtn', body)?.addEventListener('click', async () => {
+    armToConfirm($('#forageBtn', body), 'Spend 45?', async () => {
       const FORAGE_COST = 45;
       if ((await coins()) < FORAGE_COST) { toast('Not enough coins to forage. Walk the Boneyard for free ingredients.', 3000); return; }
       await coinsAdd(-FORAGE_COST);
@@ -3178,7 +3225,12 @@ async function renderShop(el) {
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
   }));
-  el.querySelectorAll('[data-buyweapon]').forEach(b => b.addEventListener('click', async () => {
+  // the priciest single tap in the game: up to 6,000 coins AND 350 Bone Dust
+  el.querySelectorAll('[data-buyweapon]').forEach(b => armToConfirm(b, (() => {
+    const id = b.dataset.buyweapon;
+    const c = weaponCoinCost(id), d = weaponDustCost(id);
+    return c != null ? `Spend ${c.toLocaleString()}${d ? ` + ${d}◆` : ''}?` : 'Spend?';
+  })(), async () => {
     b.disabled = true;
     const res = await buyWeapon(b.dataset.buyweapon);
     if (!res.ok) {
@@ -5602,7 +5654,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
           ${changed
             ? (afford
-                ? `<button class="btn" data-look-apply="${esc(sel)}">${cost ? `Wear it · ${cost} dust` : 'Wear it · free'}</button>`
+                ? `<button class="btn" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">${cost ? `Wear it · ${cost} dust` : 'Wear it · free'}</button>`
                 : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
             : ''}
         </div>
@@ -5675,7 +5727,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
-    $$('[data-look-apply]', content).forEach(btn => btn.addEventListener('click', async () => {
+    $$('[data-look-apply]', content).forEach(btn => {
+      // free actions (revert to the gear's own look, or hide the slot) stay one tap:
+      // a confirm on something that costs nothing is just friction
+      const price = Number(btn.dataset.lookPrice || 0);
+      if (price > 0) { armToConfirm(btn, `Spend ${price}◆?`, () => applyLook(btn)); return; }
+      btn.addEventListener('click', () => applyLook(btn));
+    });
+    async function applyLook(btn) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
       if (!res.ok) {
@@ -5686,7 +5745,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
       renderCharacter(wrap, 'wardrobe', { instant: true });
-    }));
+    }
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
     // special ability. Tapping the already-selected piece, or the panel button, equips.
     $$('[data-equipgear]', content).forEach(cell => cell.addEventListener('click', async () => {
@@ -8066,7 +8125,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v269'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v270'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

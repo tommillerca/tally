@@ -830,6 +830,26 @@ export default {
         return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, generatedAt: Date.now() });
       }
 
+      /* Admin: hand a specific player coins through the normal grants channel, so a
+         mis-tap or a bug can be made good without touching their device. Gated on
+         ADMIN_TOKEN, the same secret the dashboard uses. Deliberately narrow:
+         coins only, a required note so the player is told WHY, an explicit key so a
+         repeated call cannot pay twice, and a cap so a fat finger here cannot mint a
+         fortune. It cannot take anything away. */
+      if (path === '/admin/grant' && request.method === 'POST') {
+        const token = request.headers.get('x-admin-token') || '';
+        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const b = await request.json().catch(() => ({}));
+        const coins = Math.floor(Number(b.coins) || 0);
+        if (!b.playerId || !b.key || !b.note) return json({ error: 'playerId, key and note are required' }, 400);
+        if (!(coins > 0) || coins > 20000) return json({ error: 'coins must be 1..20000' }, 400);
+        const who = await env.DB.prepare('SELECT id, name, handle FROM players WHERE id = ?').bind(String(b.playerId)).first();
+        if (!who) return json({ error: 'no such player' }, 404);
+        const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          .bind(who.id, String(b.key), 'social', JSON.stringify({ coins, note: String(b.note).slice(0, 160) }), Date.now()).run();
+        return json({ ok: true, to: who.name || who.handle, coins, inserted: !!(r.meta?.changes) });
+      }
+
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).
       if (env.DEV === '1' && path === '/dev/grant' && request.method === 'POST') {
         const b = await request.json();

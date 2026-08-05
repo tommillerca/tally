@@ -306,6 +306,35 @@ const run = async () => {
     assert.equal(r.status, 200, 'the route must work without the flag');
   });
 
+  await test('the admin grant route needs the token, a note, a key and a sane amount', async () => {
+    const url = `${BASE}/admin/grant`;
+    const post = (body, tok) => fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(tok ? { 'x-admin-token': tok } : {}) },
+      body: JSON.stringify(body),
+    });
+    const T = 'devtoken';   // wrangler dev sets this via --var
+    assert.equal((await post({ playerId: 'x', key: 'k', note: 'n', coins: 1 })).status, 401, 'no token must be refused');
+    assert.equal((await post({ playerId: 'x', key: 'k', note: 'n', coins: 1 }, 'wrong')).status, 401);
+    assert.equal((await post({ key: 'k', note: 'n', coins: 1 }, T)).status, 400, 'playerId is required');
+    assert.equal((await post({ playerId: 'x', key: 'k', coins: 1 }, T)).status, 400, 'a note is required: the player must be told why');
+    assert.equal((await post({ playerId: 'x', key: 'k', note: 'n', coins: 0 }, T)).status, 400, 'zero is not a grant');
+    assert.equal((await post({ playerId: 'x', key: 'k', note: 'n', coins: 999999 }, T)).status, 400, 'a fat finger must not mint a fortune');
+    assert.equal((await post({ playerId: 'nobody', key: 'k', note: 'n', coins: 5 }, T)).status, 404, 'an unknown player is a 404');
+    // a real one, and it must be idempotent by key
+    const P = await newPlayer('AG');
+    const key = `admin-test-${Math.floor(Math.random() * 1e6)}`;
+    const first = await (await post({ playerId: P.me.playerId, key, note: 'test make-good', coins: 1000 }, T)).json();
+    assert.equal(first.ok, true);
+    assert.equal(first.inserted, true);
+    const again = await (await post({ playerId: P.me.playerId, key, note: 'test make-good', coins: 1000 }, T)).json();
+    assert.equal(again.inserted, false, 'the same key must never pay twice');
+    const g = await (await P.signed('GET', '/grants?since=0')).json();
+    const mine = (g.grants || []).filter(x => x.payload?.note === 'test make-good');
+    assert.equal(mine.length, 1, 'exactly one grant should be waiting');
+    assert.equal(mine[0].payload.coins, 1000);
+  });
+
   await test('a junk id is refused by TEND as well as claim', async () => {
     const r = await A.signed('POST', '/spires/..%2Fetc/tend', {});
     assert.ok(r.status >= 400, `expected a 4xx, got ${r.status}`);

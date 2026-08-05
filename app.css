@@ -3933,3 +3933,8 @@ body::before {
   margin: 18px 16px 4px;
   line-height: 1.35;
 }
+
+/* An armed purchase button: gold while it waits for the second tap, so "are you
+   sure" reads as a state rather than as a new button appearing. */
+.btn.arming, .shop-cell.arming { border-color: var(--gold); color: var(--gold); }
+.btn.arming { box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .4); }
