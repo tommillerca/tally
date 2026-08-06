@@ -1070,29 +1070,33 @@ body::before {
 .bar.fwind { height: 5px; } .bar.fwind i { background: var(--protein); }
 .bar.fhype { height: 5px; } .bar.fhype i { background: var(--carbs); }
 .range-pill {
-  justify-self: center; font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em;
-  color: var(--text-3); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  justify-self: center; font-family: var(--display); font-weight: 400;
+  font-size: var(--fs-4); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text); background: var(--coral);
+  border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--sh-sm);
+  padding: 2px 12px;
 }
 .fight-log { min-height: 34px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 6px; }
 .fight-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .fight-act {
-  display: grid; gap: 2px; justify-items: center; padding: 10px 4px 8px;
-  background: var(--surface-2); border: 1px solid var(--line); border-radius: 13px;
+  display: grid; gap: 2px; justify-items: center; padding: 11px 5px 9px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm);
 }
 .fight-act b { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: 0.6px; }
 .fight-act small { font-size: 10px; color: var(--text-3); font-weight: 700; }
 .fight-act:disabled { opacity: 0.35; }
-.fight-act.endturn { border-color: rgba(165, 232, 71, 0.4); }
-.fight-act.endturn b { color: var(--accent); }
+.fight-act.endturn { background: var(--accent); border-color: var(--ink); }
+.fight-act.endturn b, .fight-act.endturn small { color: var(--accent-ink); }
 .shake { animation: fshake 0.4s ease; }
 @keyframes fshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px) rotate(-1deg); } 60% { transform: translateX(4px) rotate(1deg); } }
 .fight-over { text-align: center; padding: 18px 0 8px; }
 
 /* ---------- the pit: arena ---------- */
 .arena {
-  position: relative; height: 258px; border-radius: 18px; overflow: hidden;
+  position: relative; height: 258px; border-radius: var(--radius); overflow: hidden;
   background: radial-gradient(ellipse at 50% 120%, #1d1a14 0%, #14120e 45%, #0e0d12 100%);
-  border: 1px solid var(--line-strong);
+  border: 2px solid var(--ink); box-shadow: var(--sh);
 }
 .arena-floor {
   position: absolute; left: -10%; right: -10%; bottom: 26px; height: 3px;
@@ -1107,20 +1111,38 @@ body::before {
   display: grid; gap: 6px; justify-items: center;
 }
 /* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
-.fight-hud { position: absolute; top: 8px; left: 10px; right: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16%; z-index: 6; pointer-events: none; }
-.hud-side { flex: 1; max-width: 42%; display: grid; gap: 3px; }
+.fight-hud {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 9px 10px 8px; z-index: 6; pointer-events: none;
+  background: var(--surface); border-bottom: 2px solid var(--ink);
+}
+.hud-side { flex: 1; max-width: 46%; display: grid; gap: 4px; }
 /* fixed-height single line so BOTH HP bars sit on the same guide regardless of
    name length (a long foe name like "Loose Bones" used to wrap taller and drop
    its bar below yours) */
-.hud-side .fname { font-size: 11.5px; letter-spacing: 0.4px; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; height: 15px; line-height: 15px; }
+.hud-side .fname {
+  font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .05em;
+  color: var(--text); background: var(--surface-2);
+  border: 2px solid var(--ink); border-radius: 8px; box-shadow: var(--sh-sm);
+  padding: 1px 8px; display: inline-block; justify-self: start;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hud-side.foe .fname { justify-self: end; }
 .hud-side.foe .fname { text-align: right; }
-.hud-side .bar.fhp { height: 7px; }
+.hud-side .bar.fhp { height: 11px; border: 2px solid var(--ink); border-radius: 999px; }
 .hud-pet { display: flex; align-items: center; gap: 5px; width: 72%; margin-top: 2px; transition: opacity .4s, filter .4s; }
 .hud-side.foe .hud-pet { margin-left: auto; flex-direction: row-reverse; }
-.hud-pet .petname { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-pet .petname {
+  max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  background: rgba(42, 45, 40, .8); border-radius: 6px; padding: 1px 6px;
+}
 .hud-pet .bar { flex: 1; height: 4px; }
 .hud-pet.down { opacity: 0.35; filter: grayscale(1); }
 .microbars { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.microbars .bar { height: 8px; border: 2px solid var(--ink); border-radius: 999px; }
+.hud-pet .bar { border: 1.5px solid var(--ink); border-radius: 999px; height: 7px; }
 .fstage {
   width: 112px; height: 112px; min-height: 112px; border-radius: 16px;
   background: transparent; border: none; overflow: visible;
@@ -1381,9 +1403,9 @@ body::before {
 }
 .chip.ch-tab svg, .chip.ch-tab img { opacity: 0.75; }
 .chip.ch-tab.on {
-  color: var(--accent); border-color: rgba(165, 232, 71, 0.55);
-  background: rgba(165, 232, 71, 0.08);
-  box-shadow: 0 0 16px rgba(165, 232, 71, 0.14), inset 0 0 12px rgba(165, 232, 71, 0.05);
+  color: var(--text); border-color: var(--ink);
+  background: var(--coral);
+  box-shadow: var(--sh-sm);
 }
 .chip.ch-tab.on svg, .chip.ch-tab.on img { opacity: 1; }
 .ch-badge {
@@ -2338,20 +2360,42 @@ body::before {
 .egg-row .q-bar.egg-bar i { background: var(--accent); }
 
 /* ===== wardrobe: paperdoll (WoW-style equip screen) ===== */
-.paperdoll { display: grid; grid-template-columns: 66px 1fr 66px; gap: 8px; align-items: start; margin-top: 4px; }
+.paperdoll { display: grid; grid-template-columns: 66px 1fr 66px; gap: 7px; align-items: stretch; margin-top: 0; }
 .pd-col { display: grid; gap: 7px; }
-.pd-center { display: grid; }
-.pd-center .bh-stage.lg { width: 100%; height: auto; aspect-ratio: 1; margin: 0; }
+.pd-center {
+  display: grid; position: relative; overflow: hidden;
+  background: var(--coral); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh);
+}
+.pd-center::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background-image: var(--grain); background-size: 150px 150px; opacity: .07;
+}
+/* The stage FILLS the coral panel: no square aspect-ratio, and none of its own
+   background or border, which were painting over the coral so only a small square
+   of it ever showed. Tom, 2026-08-07: "the colour doesn't take up the whole
+   centre part". Overscanned horizontally and anchored low, as the mockup does. */
+.pd-center .bh-stage.lg {
+  width: 100%; height: 100%; aspect-ratio: auto; min-height: 312px; margin: 0;
+  background: transparent; border: 0; border-radius: 0;
+}
+.pd-center .bh-stage.lg .bh-anim { inset: 0 -14%; }
+.pd-center .bh-stage.lg .bh-anim img { object-fit: contain; object-position: 50% 72%; }
+.pd-center .bh-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 /* slot = art on top (as big as fits), label as its own strip below — never overlap */
 .pd-slot {
-  position: relative; width: 66px; height: 66px; border-radius: 13px;
-  background: var(--surface); border: 1.5px solid var(--line-strong);
+  position: relative; width: 66px; height: 78px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: flex; flex-direction: column; align-items: stretch; overflow: hidden; padding: 0;
 }
 .pd-slot img { position: static; flex: 1 1 auto; min-height: 0; width: 100%; height: auto; object-fit: contain; padding: 4px 4px 0; pointer-events: none; }
+.pd-slot .pd-art {
+  flex: 0 0 auto; width: 100%; height: auto; aspect-ratio: 1;
+  object-fit: contain; padding: 1px 1px 0; pointer-events: none;
+}
 .pd-slot .pd-empty { flex: 1; display: grid; place-items: center; color: var(--text-3); font-size: 20px; opacity: 0.55; }
 .pd-slot .pd-tag {
-  position: static; flex: none; font-size: 8px; font-weight: 800; line-height: 1.4;
+  position: static; flex: none; margin-top: auto; font-size: 8px; font-weight: 800; line-height: 1.4;
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2, #cfc6d6);
   background: rgba(13, 12, 18, 0.85); padding: 2px 0; pointer-events: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -2361,12 +2405,17 @@ body::before {
   color: var(--accent); background: rgba(13, 12, 18, 0.82); padding: 1.5px 1px; pointer-events: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2;
 }
-.pd-slot.sel { border-color: var(--accent); box-shadow: 0 0 10px rgba(165, 232, 71, 0.35); }
+.pd-slot.sel { border-color: var(--coral); box-shadow: var(--sh-sm); }
+.pd-slot.sel .pd-tag { color: var(--coral); }
 .pd-slot.gear-on.r-rare { border-color: #7cc4ff; }
 .pd-slot.gear-on.r-epic { border-color: var(--violet); }
 .pd-slot.gear-on.r-legendary { border-color: #ffb454; }
-.pd-bottom { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; justify-items: center; margin-top: 8px; }
-.pd-bottom .pd-slot { width: 100%; }
+.pd-bottom {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 7px; justify-items: stretch; margin-top: 7px;
+}
+/* wider tiles down here, so keep the tile proportion and let the art fill it */
+.pd-bottom .pd-slot { width: 100%; height: auto; aspect-ratio: 88 / 76; }
 .pd-stats { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 12px 0 2px; }
 .pd-stat {
   display: inline-flex; align-items: baseline; gap: 4px;
@@ -3311,7 +3360,7 @@ body::before {
 
 /* THE COLLECTION (v222): entry card sits under the four tab cards, full width
    because a 2x2 grid has no natural fifth cell. */
-.looks-card {
+.looks-card { padding-block: 10px;
   display: block; width: 100%; text-align: left; margin-top: 10px; padding: 12px 14px;
   border-radius: 15px; background: var(--surface); border: 1.5px solid var(--line-strong);
 }
@@ -4680,3 +4729,94 @@ body::before {
   background: var(--surface); border: 2px solid var(--ink); border-radius: 999px;
   padding: 1px 7px; white-space: nowrap;
 }
+
+/* Wardrobe header, as approved: one row, gold level badge, rank beside it, then
+   the wallet chips. The app had a two-row stack that I had only repainted. */
+.ward-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 0 0 10px; }
+.ward-lv {
+  background: var(--gold); color: var(--ink);
+  border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--sh-sm);
+  padding: 1px 10px 2px;
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .04em;
+}
+.ward-rank {
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-4);
+  letter-spacing: .05em; color: var(--text-2); text-transform: uppercase;
+}
+.ward-head .bh-pill:first-of-type { margin-left: auto; }
+
+/* A backdrop has no silhouette: show a swatch, not art stretched across the tile. */
+.pd-slot .pd-swatch {
+  flex: 0 1 auto; width: 50px; height: 50px; margin: 8px auto 0;
+  border-radius: 9px; border: 2px solid var(--ink);
+  background-size: cover; background-position: center;
+}
+/* long slot names have to fit their tile */
+.pd-slot .pd-tag {
+  font-size: 8.5px; letter-spacing: 0;
+  /* the longest slot name has to fit the tile, not ellipse away */
+  padding-inline: 1px; text-overflow: clip;
+}
+.pd-slot[data-pd="BG"] .pd-tag { font-size: 7.5px; }
+
+/* The hub has to fit the paper doll AND its body row on one screen, so this
+   screen runs tighter than the others. The title is a SIBLING of #chBody, which
+   is why an earlier `#chBody .page-h1` rule matched nothing. */
+.hub-title { font-size: 26px; margin-bottom: 4px; }
+.looks-card { margin-top: 6px; padding-block: 9px; }
+#chBody .fit-rail { margin-bottom: 4px; }
+
+/* ============================================================================
+   THE HAUNTED KITCHEN scene (market-quality-mockups/kitchen.html rev 3).
+   Tom rejected rev 1 as "soulless and lack lustre": the Kitchen is the most
+   flavour-heavy room in the game and it opened on clean chrome. This is the
+   approved answer, an illustrated night scene with slow ambient motion.
+   NOTE: the scene art is a PLACEHOLDER I drew to prove the concept. It is on the
+   list to go to Cam with the crate-reveal stage and the onboarding hero.
+   ============================================================================ */
+/* the marquee is a SCENE, not a text card: the kitchen at night */
+
+.marquee { position: relative; text-align: center; padding: 20px 14px 0; margin-bottom: 16px;
+    background:
+      radial-gradient(130% 90% at 50% 108%, rgba(162,224,166,.28), rgba(162,224,166,0) 55%),
+      radial-gradient(80% 60% at 82% -12%, rgba(114,168,241,.16), rgba(114,168,241,0) 60%),
+      linear-gradient(180deg, #0e1410, #131a14 60%, #16201a);
+    border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); overflow: hidden; height: 178px; }
+
+.marquee::before { content:''; position:absolute; inset:0; background: var(--grain); opacity:.07; }
+
+.marquee h2 { position: relative; z-index: 3; font-family: var(--display); font-size: 30px; font-weight: 400;
+    letter-spacing: .04em; color: var(--mint); text-shadow: 2px 3px 0 rgba(10,14,10,.9); }
+
+.marquee p { position: relative; z-index: 3; font-family: var(--display); font-size: 14px; letter-spacing: .06em;
+    color: var(--text-3); margin-top: 1px; }
+
+.scene { position: absolute; inset: auto 0 -6px; height: 108px; z-index: 2; pointer-events: none; }
+
+.scene svg { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); }
+
+.spore { position: absolute; border-radius: 50%; background: var(--mint); opacity: .55; }
+
+.spore.g { background: var(--gold); opacity: .45; }
+
+.garland { position: absolute; top: -4px; left: -6px; right: -6px; z-index: 2; }
+
+@keyframes wisp { 0% { transform: translateY(4px); opacity: 0; } 25% { opacity: var(--wo, .3); }
+    75% { opacity: var(--wo, .3); } 100% { transform: translateY(-10px); opacity: 0; } }
+
+.wisp { animation: wisp 3.2s linear infinite; }
+
+@keyframes bub { 0%, 55% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1); opacity: 1; }
+    92% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+
+.bub { transform-origin: center; transform-box: fill-box; animation: bub 2.6s ease-in-out infinite; }
+
+.flame { transform-origin: 50% 100%; transform-box: fill-box; animation: flick 1.4s ease-in-out infinite; }
+
+.spore { animation: drift var(--dur, 6s) linear infinite; animation-delay: var(--del, 0s); }
+
+@keyframes stirr { 0%, 100% { transform: rotate(22deg); } 50% { transform: rotate(27deg); } }
+
+.stir { transform-origin: 128px 46px; transform-box: view-box; animation: stirr 2.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) { .wisp, .bub, .flame, .spore, .stir { animation: none; } }

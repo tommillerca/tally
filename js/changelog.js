@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 276, date: '2026-08-07', title: 'The Wardrobe, the Pit and the Kitchen', items: [
+    'The <b>Wardrobe</b> is rebuilt. Your Bonehead stands in a framed panel that fills the space instead of floating in the middle of it, the equipment slots are bigger so you can actually see what you are wearing, and everything fits on one screen without scrolling.',
+    'The <b>Pit</b> no longer floats health bars over the fighters. Both sides now have a proper plate above the arena holding names, health, stamina, your pet and any effects running, so the art underneath is never covered. End Turn reads like the main action it is.',
+    'The <b>Kitchen</b> opens on the kitchen itself: a pot bubbling over a fire at night, steam, spores drifting through the dark and a bone stirring the brew. It used to be a title on an empty card.',
+    'A long-standing alignment bug: the bottom row of equipment slots was laid out for five slots when there are four, so it always sat off to one side.',
+  ] },
   { n: 275, date: '2026-08-07', title: 'The home screen, and breeding that makes sense', items: [
     '<b>Today looks like the rest of the game now.</b> Your Bonehead sits in a framed poster with a hand-inked edge, your level and rank read as one plate, and the shortcut buttons match the panels everywhere else. This was designed a while back and I simply never built it: the update before this changed the Boneyard and the logging screens but left the home screen alone.',
     '<b>Breeding works differently, and it should make sense now.</b> You pick the pet you are KEEPING and a spare to feed into it. Your pet stays itself: same name, same level, same look, one rank of lineage stronger (+5% to every stat). The spare is destroyed. Before, both pets were deleted and a third was created, which is why it kept asking which species you wanted.',

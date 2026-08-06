@@ -226,6 +226,7 @@ const ICONS = {
 const t1Stroke = (s, d) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 ICONS.close = (s = 18) => t1Stroke(s, `<path d="M6 6l12 12M18 6L6 18"/>`);
 ICONS.chev = (s = 16) => t1Stroke(s, `<path d="M9 5l7 7-7 7"/>`);
+ICONS.hidden = (s = 18) => t1Stroke(s, `<circle cx="12" cy="12" r="8.6"/><path d="M6 18L18 6"/>`);
 ICONS.warn = (s = 16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2l9 15.6H3z" fill="#ff6d5e" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8.6v4.6" stroke="#2a2d28" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.15" fill="#2a2d28"/></svg>`;
 /* Bone Dust: a violet sticker gem in the game's own style, replacing the ◆ text
    glyph it has used everywhere since launch. Flat fill + ink outline, like the coin. */
@@ -2431,7 +2432,56 @@ function showHarvest(res) {
 async function openKitchen() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="kitchenBody"></div>`, { cls: '', onClose: () => refresh() });
+    <div class="sheet-body">
+      <!-- the scene sits BESIDE the render target: render() replaces
+           #kitchenBody on every tick and would otherwise wipe it, and
+           restart every animation each time the pot state changed. -->
+      <div class="marquee">
+    <svg class="garland" width="100%" height="26" viewBox="0 0 375 26" preserveAspectRatio="none">
+      <path d="M-4 2 Q 60 22 130 12 Q 200 2 260 14 Q 320 24 380 6" fill="none" stroke="#2A2D28" stroke-width="2.5"/>
+      <g fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.4">
+        <rect x="52" y="12" width="5" height="12" rx="2.5" transform="rotate(8 54 18)"/>
+        <rect x="126" y="10" width="5" height="12" rx="2.5" transform="rotate(-6 128 16)"/>
+        <rect x="196" y="6" width="5" height="12" rx="2.5" transform="rotate(5 198 12)"/>
+        <rect x="268" y="12" width="5" height="12" rx="2.5" transform="rotate(-9 270 18)"/>
+      </g>
+    </svg>
+    <h2>THE HAUNTED KITCHEN</h2>
+    <p>SOMETHING IS ALWAYS SIMMERING.</p>
+    <div class="scene">
+      <svg width="190" height="108" viewBox="0 0 190 108">
+        <!-- steam wisps -->
+        <path class="wisp" style="--wo:.28" d="M78 44 C 72 32, 84 28, 80 16" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
+        <path class="wisp w2" style="--wo:.38" d="M98 40 C 104 28, 92 24, 98 10" fill="none" stroke="#F0EDD6" stroke-width="3.4" stroke-linecap="round"/>
+        <path class="wisp w3" style="--wo:.24" d="M116 46 C 112 36, 122 32, 118 22" fill="none" stroke="#F0EDD6" stroke-width="3" stroke-linecap="round"/>
+        <!-- fire glow + logs -->
+        <ellipse cx="95" cy="102" rx="52" ry="9" fill="#0a0e0a"/>
+        <path d="M70 99 l16 -8 M86 99 l-16 -8 M104 99 l16 -8 M120 99 l-16 -8" stroke="#5a4632" stroke-width="4.5" stroke-linecap="round"/>
+        <g class="flame"><path d="M88 96 c-2 -7 3 -9 4 -14 c4 5 8 6 7 12 c-1 4 -3 6 -5 6 c-3 0 -5 -1 -6 -4z" fill="#E2AB36" stroke="#2A2D28" stroke-width="1.6"/>
+        <path d="M92 95 c-1 -3 1.5 -4 2 -7 c2 2.5 4 3 3.5 6 c-.4 2 -1.6 3 -2.7 3 c-1.4 0 -2.4 -.7 -2.8 -2z" fill="#FCF35E"/></g>
+        <!-- cauldron -->
+        <path d="M48 56 h94 c2 26 -14 44 -47 44 s-49 -18 -47 -44z" fill="#3a3f3a" stroke="#2A2D28" stroke-width="3"/>
+        <ellipse cx="95" cy="56" rx="47" ry="12" fill="#A2E0A6" stroke="#2A2D28" stroke-width="3"/>
+        <ellipse cx="80" cy="54" rx="6" ry="3.4" fill="#c9f0cb"/><circle class="bub b4" cx="88" cy="57" r="2.6" fill="#c9f0cb"/>
+        <circle cx="112" cy="58" r="3.4" fill="#c9f0cb"/>
+        <circle class="bub" cx="66" cy="50" r="3" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
+        <circle class="bub b2" cx="124" cy="46" r="4" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.6"/>
+        <circle class="bub b3" cx="103" cy="42" r="2.6" fill="#A2E0A6" stroke="#2A2D28" stroke-width="1.4"/>
+        <!-- a bone stirring out of the pot -->
+        <g class="stir"><rect x="125" y="14" width="6" height="34" rx="3" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
+        <circle cx="125" cy="14" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/>
+        <circle cx="132" cy="12" r="4.4" fill="#F0EDD6" stroke="#2A2D28" stroke-width="1.8"/></g>
+      </svg>
+      <i class="spore" style="left:14%; bottom:64px; width:5px; height:5px; --dur:7s; --dx:6px; --so:.55"></i>
+      <i class="spore g" style="left:22%; bottom:34px; width:4px; height:4px; --dur:5.5s; --del:-2s; --dx:-5px; --so:.45"></i>
+      <i class="spore" style="left:79%; bottom:70px; width:6px; height:6px; --dur:6.5s; --del:-3.5s; --dx:-7px; --so:.55"></i>
+      <i class="spore g" style="left:86%; bottom:40px; width:4px; height:4px; --dur:5s; --del:-1.2s; --dx:5px; --so:.45"></i>
+      <i class="spore" style="left:70%; bottom:22px; width:3px; height:3px; --dur:4.5s; --del:-2.8s; --dx:4px; --so:.4"></i>
+      <i class="spore" style="left:30%; bottom:84px; width:3px; height:3px; --dur:6s; --del:-4.4s; --dx:-4px; --so:.4"></i>
+    </div>
+  </div>
+      <div id="kitchenBody"></div>
+    </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
   async function render() {
@@ -2460,11 +2510,6 @@ async function openKitchen() {
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const buyPrice = nextPotPrice(cook.potsOwned);
     body.innerHTML = `
-      <div class="kitchen-hero">
-        <div class="kitchen-atmos"><span class="k-embers"></span><span class="k-steam l"></span><span class="k-steam r"></span></div>
-        <div class="kitchen-hero-title">THE HAUNTED KITCHEN</div>
-        <div class="kitchen-quote">Something is always simmering.</div>
-      </div>
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
@@ -5647,7 +5692,7 @@ let pendingHubTab = null;
 async function renderBonehead(el) {
   const tab = pendingHubTab || 'wardrobe';
   pendingHubTab = null;
-  el.innerHTML = `<h1 class="page-h1">Your Bonehead</h1><div id="chBody"></div>`;
+  el.innerHTML = `<h1 class="page-h1 hub-title">Your Bonehead</h1><div id="chBody"></div>`;
   await renderCharacter(el, tab);
 }
 
@@ -5747,15 +5792,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
     ${tab === 'wardrobe' ? `
-    <div class="bh-hero mini">
-      <div class="bh-hero-meta" style="justify-items:start">
-        <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
-        <div class="bh-pills">
-          <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
-<span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
-          ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
-        </div>
-      </div>
+    <div class="ward-head">
+      <span class="ward-lv">Lv ${lvl.level}</span>
+      <span class="ward-rank">${esc(lvl.name)}</span>
+      <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
+      <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
+      ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
     </div>` : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
@@ -5814,8 +5856,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const mog = mogOf(code);
       const label = isGearSlot ? GEAR_SLOT_LABELS[code] : meta.label;
       return `<button class="pd-slot ${slot === code ? 'sel' : ''} ${g ? 'gear-on r-' + g.rarity : ''}" data-pd="${code}" title="${esc(label)}${mog ? ' (look changed)' : ''}">
-        ${art ? `<img src="${bhAsset(art)}" alt="" loading="lazy">` : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? '🚫' : '+'}</span>`}
-        ${mog ? '<span class="pd-mog" title="Look changed">✨</span>' : ''}
+        ${art
+          ? (code === 'BG'
+              ? `<span class="pd-swatch" style="background-image:url('${esc(bhAsset(art))}')"></span>`
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhAsset(art))}"></canvas>`)
+          : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
+        ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
         ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>` : ''}
       </button>`;
@@ -5997,6 +6043,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     });
+    /* Trim the transparent padding off every paper-doll slot, the same way the
+       reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
+       <img> rendered them as specks in a 66px slot. Runs AFTER content.innerHTML,
+       which is where the slots actually live (#chContent, not #chBody). */
+    hydratePackArt(content, '.pd-art[data-art]');
     $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
@@ -6573,8 +6624,8 @@ function packCardHtml(c, { selectable = false } = {}) {
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
 }
-function hydratePackArt(scope) {
-  return Promise.all($$('.pc-canvas[data-art]', scope)
+function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
+  return Promise.all($$(sel, scope)
     .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'))));
 }
 
@@ -8591,7 +8642,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v275'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v276'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

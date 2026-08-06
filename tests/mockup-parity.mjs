@@ -32,9 +32,9 @@ const MOCKS = path.resolve(ROOT, '../market-quality-mockups');
 const APPROVED = [
   // Phase 0, approved 2026-08-06 at rev 3 ("okay im liking this now")
   { screen: 'Today',      mock: 'today.html',        built: true,  markers: ['hero-lvrow', 'hero-scene', 'var(--coral)'] },
-  { screen: 'Wardrobe',   mock: 'wardrobe.html',     built: false, markers: [] },
-  { screen: 'The Pit',    mock: 'pit.html',          built: false, markers: [] },
-  { screen: 'Kitchen',    mock: 'kitchen.html',      built: false, markers: [] },
+  { screen: 'Wardrobe',   mock: 'wardrobe.html',     built: true,  markers: ['ward-head', 'ward-lv', 'pd-swatch', 'pd-center'] },
+  { screen: 'The Pit',    mock: 'pit.html',          built: true,  markers: ['fight-hud', 'border-bottom: 2px solid var(--ink)', 'range-pill'] },
+  { screen: 'Kitchen',    mock: 'kitchen.html',      built: true,  markers: ['marquee', 'garland', 'wisp', 'spore'] },
   // Tier 1, approved 2026-08-06 ("these are looking really good let's build them")
   { screen: 'Add food',        mock: 't1-picker.html',   built: true, markers: ['t1-routes', 't1-budget', 't1-frow'] },
   { screen: 'Portion sheet',   mock: 't1-portion.html',  built: true, markers: ['t1-hero', 't1-payoff', 't1-step'] },
