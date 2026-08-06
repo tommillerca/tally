@@ -95,43 +95,39 @@ Boneheadz; never fake, relabel, or generate art in Cam's style and present it as
   captured by driving the real controls, NOT the mockups; the folder name predates
   the merge into v272).
 
+- **Tier 2: all 6 moments BUILT and shipped in v273.** Crate reveal, fight
+  victory + gear choice, level up, pet hatch, pack reveal, breed result. Mockups
+  at `market-quality-mockups/t2-*.html`.
+- **Breeding now explains itself (v273).** Tom, 2026-08-07: "a lot of people are
+  confused". Cause was in the pre-commit copy, not the result screen. See §6.
+- **v274, the glyph sweep, is PUSHED but not yet live** (Pages was degraded).
+
 ### IN PROGRESS / NEXT
 
-- **NOT PUSHED. Awaiting Tom's explicit approval.** Everything is verified against
-  a local `python3 -m http.server`, so the LIVE check still has to happen after
-  the push: drive the real controls on `https://tommillerca.github.io/tally/?demo`
-  and poll the deployed `sw.js` for `tally-v272`.
-- **Tier 1 is now COMPLETE, all 8 surfaces plus the boss-den tap sheet**
-  (`openDenSheet` in `js/app.js`). Tapping a den opens it; spawns and minis keep
-  the light `.map-poi-tip` tooltip, because a sheet for a coin pile is ceremony
-  over nothing. Gear odds come from `denGearOdds(tier)`, a new export in `poi.js`
-  that reads the roll's OWN `RARITY_WEIGHTS`, so the sheet can never advertise a
-  chance the game does not honour.
-- **THREE BUGS FIXED in the same push.** All three logged in `ROADMAP.md` with
-  their evidence. See §7 traps 12-14.
-- **NEXT: Tier 2, "the moments"** (crate reveal, level up, fight victory + gear
-  card, pet hatch), per the surface inventory. Those are the screenshot beats and
-  the biggest single lift left. Mockups first, same as Tier 1.
+**VERIFIED ON LIVE 2026-08-07, driving real controls, not just a version poll:**
+`t1-audit` 34/34, `t2-audit` 20/20, `spire-gate` 10/10 against
+`https://tommillerca.github.io/tally/`. Live serves **tally-v273**.
 
-### Test suite as it now stands (all four must be green before a push)
-
-```bash
-cd "/Users/tommiller/Documents/Hyperframes Editor/tally" && node tests/unit.test.js
-```
-```bash
-cd "/Users/tommiller/Documents/Hyperframes Editor/tally" && node tests/gate-audit.mjs
-```
-```bash
-cd "/Users/tommiller/Documents/Hyperframes Editor/tally" && node tests/t1-audit.mjs
-```
-```bash
-cd "/Users/tommiller/Documents/Hyperframes Editor/tally" && node tests/spire-gate.mjs
-```
-Currently 120/120, clean, 34/34, 10/10. `SHOTS=/some/dir` on the last two writes
-screenshots. Every guard in them has been proven red; each file's header records
-the exact break that does it.
-
----
+- **v274 needs its live check once Pages catches up.** Poll `sw.js` for
+  `tally-v274`, then re-run `glyph-audit` plus `t1`/`t2` against the live URL.
+- **GitHub outage note:** on 2026-08-06 Actions and Pages both went to major
+  outage and the Pages build job was CANCELLED by GitHub, so a correct push sat
+  undeployed for hours. The status page still said major outage after deploys had
+  resumed, so trust the live `sw.js`, not githubstatus.
+- **NEXT, the rest of Phase 3: the emoji ICON SETS.** These were left out of v274
+  on purpose because they need icon-art decisions rather than mechanics:
+  28 badge icons (`js/game.js`), 17 ingredient/recipe icons (`js/cooking.js`),
+  20 in `js/app.js` (nudge cards, class picker), 7 in `js/loot.js`.
+  `badgeIconHtml()` / `ingIconHtml()` ALREADY map an emoji to a pack icon where
+  one exists, so the job is filling the map, not building the mechanism.
+  53 prose/voice emoji stay by Tom's rule.
+- **Then Onboarding** (Tier 4, mockups first). Highest-leverage screen for going
+  to market: two hard-cut screens that never mention the game, and Skip silently
+  assigns a fake 30yo / 178cm / 180lb body.
+- **Still owed, small:** the 5 CSS classes the Tier 1 rewrite orphaned
+  (`.food-row`, `.action-tiles`/`.action-tile`, `.stepper`, `.src-badge`,
+  `.grid3`). `.action-tile` shares its v180 rule with `.hero-act`, which is still
+  in use: delete the selector, not the rule.
 
 ## 3. Directory & file map
 
