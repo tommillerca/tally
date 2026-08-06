@@ -226,6 +226,7 @@ const ICONS = {
 const t1Stroke = (s, d) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 ICONS.close = (s = 18) => t1Stroke(s, `<path d="M6 6l12 12M18 6L6 18"/>`);
 ICONS.chev = (s = 16) => t1Stroke(s, `<path d="M9 5l7 7-7 7"/>`);
+ICONS.warn = (s = 16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2l9 15.6H3z" fill="#ff6d5e" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8.6v4.6" stroke="#2a2d28" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.15" fill="#2a2d28"/></svg>`;
 /* Bone Dust: a violet sticker gem in the game's own style, replacing the ◆ text
    glyph it has used everywhere since launch. Flat fill + ink outline, like the coin. */
 ICONS.dust = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6l7.8 9.4-7.8 9.4-7.8-9.4z" fill="#9b92e8" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6.4l4.6 5.6-4.6 5.6" fill="none" stroke="#f2e9d7" stroke-width="1.3" opacity=".55"/></svg>`;
@@ -1239,8 +1240,7 @@ async function renderToday(el) {
     <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }))}</div>
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
-        <span class="hero-lv">Lv ${lvl.level}</span>
-        <span class="hero-title">${esc(lvl.name)}</span>
+        <span class="hero-lvrow"><span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span></span>
         <span class="hero-xpbar"><i style="width:${lvl.pct}%"></i></span>
         <span class="hero-xpnum">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP · Lv ${lvl.level + 1} unlocks a Golden Crate</span>
       </button>
@@ -6881,8 +6881,17 @@ async function openStable() {
     const a = sel[0] ? insts.find(x => x.iid === sel[0]) : null;
     const b = sel[1] ? insts.find(x => x.iid === sel[1]) : null;
     const pair = a && b;
-    if (pair && offSp !== a.sp && offSp !== b.sp) offSp = a.sp;
-    const offLineage = pair ? Math.max(a.lineage || 0, b.lineage || 0) + 1 : 0;
+    // offSp now holds the IID of the pet being KEPT, not a species. There is no
+    // offspring under the feed model: the keeper is the same pet all the way
+    // through, so the old "which one does it become?" question had no answer.
+    if (pair && offSp !== a.iid && offSp !== b.iid) offSp = a.iid;
+    const keeper = pair ? (offSp === b.iid ? b : a) : null;
+    const spare = pair ? (offSp === b.iid ? a : b) : null;
+    const offLineage = keeper ? (keeper.lineage || 0) + 1 : 0;
+    const spareLvl = spare ? petLevel(bank[spare.iid] || 0) : 0;
+    // "maybe you shouldn't": a shiny, a bred bloodline or a levelled pet is a
+    // real loss, and the player has to be told BEFORE they commit.
+    const spareIsPrecious = !!spare && (spare.shiny || (spare.lineage || 0) > 0 || spareLvl >= 5);
     const cost = breedCost(offLineage);
     const afford = st.dust >= cost;
     const canBreedNow = pair && st.ready && afford;
@@ -6914,39 +6923,41 @@ async function openStable() {
     }).join('');
 
 
-    const spChips = pair ? [a, b].filter((x, i, arr) => arr.findIndex(y => y.sp === x.sp) === i)
-      .map(x => `<button class="chip ${offSp === x.sp ? 'on' : ''}" data-offsp="${x.sp}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}</button>`).join('') : '';
+    const spChips = pair ? [a, b]
+      .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
 
     body.innerHTML = `
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${st.dust.toLocaleString()}</b></div>
-      ${pair ? `<div class="breed-bar">
+      ${pair ? `<div class="breed-bar${spareIsPrecious ? ' careful' : ''}">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
-            <span class="bt-in">
-              <span class="bt-row">
-                <span class="bt-pet">${petPortraitHtml(a.sp, 38, a.shiny)}</span>
-                <span class="bt-plus">+</span>
-                <span class="bt-pet">${petPortraitHtml(b.sp, 38, b.shiny)}</span>
-              </span>
-              <small>Both destroyed</small>
+            <span class="bt-out">
+              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(keeper.sp, 44, keeper.shiny)}</span></span>
+              <small>Kept &middot; lineage ${keeper.lineage || 0} &rarr; ${offLineage}</small>
             </span>
             <span class="bt-arrow">${ICONS.chev(20)}</span>
-            <span class="bt-out">
-              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(offSp, 44, a.shiny || b.shiny)}</span></span>
-              <small>One kept</small>
+            <span class="bt-in">
+              <span class="bt-row"><span class="bt-pet">${petPortraitHtml(spare.sp, 38, spare.shiny)}</span></span>
+              <small>Fed in &middot; gone</small>
             </span>
           </div>
           <ul class="breed-facts">
-            <li><b>Both parents are gone for good.</b> You end up with one pet, not three.</li>
-            <li>It keeps the <b>higher parent's level</b>, so you lose no walking.</li>
-            <li><b>Lineage ${offLineage}</b> gives it <b>+${Math.round(offLineage * 5)}% to every stat</b>.${a.shiny || b.shiny ? ' A shiny parent passes its colour on.' : ''}</li>
+            <li>You keep <b>${esc((BH_BY_ID[keeper.sp] || {}).name || keeper.sp)}</b>. Same pet, same name, <b>same level and look</b>.</li>
+            <li>It reaches <b>lineage ${offLineage}</b>: <b>+${Math.round(offLineage * 5)}% to every stat</b>.</li>
+            <li><b>${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} is destroyed</b> and does not come back.</li>
           </ul>
-          <div class="breed-pick"><span class="note">Which one does it become?</span><div class="breed-sp">${spChips}</div></div>
+          ${spareIsPrecious ? `<div class="breed-warn">
+            ${ICONS.warn(17)}
+            <div><b>You are about to destroy ${spare.shiny ? 'a SHINY' : (spare.lineage || 0) > 0 ? `a lineage ${spare.lineage} pet` : `a level ${spareLvl} pet`}.</b>
+            ${spare.shiny ? 'Shinies are about a 1 in 30 hatch and its colour will NOT carry over.' : (spare.lineage || 0) > 0 ? 'Its bloodline is lost; lineage does not transfer.' : 'Its levels are lost.'}
+            Feed a plain spare in instead unless you are sure.</div>
+          </div>` : ''}
+          <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
           <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
-          <button class="btn danger-ish" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed and destroy both</button>
+          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
         </div>`
-      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. <b>Breed</b> fuses two pets into one stronger pet: <b>both go in, one comes out</b>, and the two you picked are gone. <b>Destroy</b> trades a spare for Bone Dust.</p>`}
+      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. <b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}`;
 
     $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
@@ -6989,22 +7000,25 @@ async function openStable() {
       // breeding CONSUMES both parents. If one is shiny, warn once — the shiny
       // colour carries to (and overtakes any common colour in) the offspring,
       // but the parent itself is gone. Arm-then-confirm.
-      const shinyParent = sel.some(iid => (insts.find(x => x.iid === iid) || {}).shiny);
+      const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
+      const spareName = (BH_BY_ID[spareInst.sp] || {}).name || 'that pet';
       const btn = e.currentTarget;
-      /* ARM ON EVERY BREED, not just a shiny pairing. It permanently destroys two
-         pets, and since v270 every irreversible spend in the game takes two taps.
-         A shiny still gets its own louder warning. */
+      /* ARM ON EVERY BREED. It permanently destroys a pet, and since v270 every
+         irreversible spend takes two taps. A precious spare gets a louder line,
+         because "maybe you shouldn't" is the whole point of the pause. */
       if (btn.dataset.armed !== '1') {
         btn.dataset.armed = '1';
         const t = btn.textContent;
-        btn.textContent = shinyParent ? 'Destroy a SHINY too?' : 'Destroy both pets?';
-        toast(shinyParent
-          ? 'A shiny is in this pairing. Its colour carries to the offspring, but the shiny itself is gone for good. Tap again to confirm.'
-          : 'Both pets are destroyed and you get one back. Tap again to confirm.', 4600);
-        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 4600);
+        btn.textContent = spareInst.shiny ? `Destroy the SHINY ${spareName}?` : `Destroy ${spareName}?`;
+        btn.classList.add('danger-ish');
+        toast(spareInst.shiny
+          ? `${spareName} is SHINY, roughly a 1 in 30 hatch, and its colour will not carry over. Destroying it is permanent. Tap again only if you are sure.`
+          : `${spareName} is destroyed for good and your keeper gains a lineage rank. Tap again to confirm.`, 5200);
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; btn.classList.remove('danger-ish'); } }, 5200);
         return;
       }
-      const res = await breedPets(sel[0], sel[1], offSp);
+      const keepIid = offSp, feedIid = sel.find(x => x !== offSp);
+      const res = await breedPets(keepIid, feedIid);
       if (!res.ok) { toast(BREED_ERR[res.reason] || 'Could not breed those.'); render(); return; }
       sel = []; offSp = null;
       await render();                          // refresh the stable underneath
@@ -7034,17 +7048,16 @@ function openPetBreedResult(off) {
       <div class="grainy"></div>
       <div class="reveal-eyebrow">Bred in the Stable</div>
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
+      <div class="reveal-sub">${esc(it.name || off.sp)} got stronger</div>
       <div class="reveal-body">
         <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny)}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
         <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
-        ${parents.length === 2 ? `<div class="fused">
+        ${parents.length ? `<div class="fused">
           <div class="fused-row">
             <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny)}</span>
-            <span class="fused-plus">+</span>
-            <span class="gone-pet">${petPortraitHtml(parents[1].sp, 42, parents[1].shiny)}</span>
           </div>
-          <div class="fused-note">Both parents were consumed</div>
+          <div class="fused-note">${esc((BH_BY_ID[parents[0].sp] || {}).name || parents[0].sp)} was fed in</div>
         </div>` : ''}
       </div>
       <div class="reveal-foot">
@@ -7602,12 +7615,12 @@ async function renderBoneyard(el) {
     // player marker: mini bonehead + facing cone + the collect-radius ring
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
-    youEl.innerHTML = `<div class="map-radius" hidden></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+    youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
     composeAvatars(youEl);   // marker is built outside route(), so it needs its own call
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
     const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
 
-    /* The 55 m collect rule, drawn instead of explained in a paragraph. Sized
+    /* The collect rule, drawn instead of explained in a paragraph. Sized
        from the map's OWN projection (player pixel vs a point COLLECT_RADIUS_M
        north of it), not from a zoom-to-pixels guess, so it stays truthful at any
        zoom. Recomputed on zoom and on every fix. */
@@ -8578,7 +8591,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v274'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v275'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -10346,6 +10359,21 @@ async function renderTalents(wrap) {
   });
   // weapons now live in the Shop tab (v150); Build just links there
   $('#toShopMerchant', body)?.addEventListener('click', () => openCharacter('shop'));
+  /* Keep the Build tab's unspent-point badge honest without a full hub re-render.
+     Recomputed from the SAME source renderCharacter uses, so the two can never
+     disagree about the number. */
+  async function syncTalentBadge() {
+    const tabBtn = document.querySelector('.ch-tab[data-tab="talents"]');
+    if (!tabBtn) return;
+    const [arr, xp] = await Promise.all([kvGet('talents', []), totalXp()]);
+    const left = Math.max(0, talentPoints(levelFor(xp).level) - arr.length);
+    const badge = tabBtn.querySelector('.ch-badge');
+    if (left > 0) {
+      if (badge) badge.textContent = String(left);
+      else tabBtn.insertAdjacentHTML('beforeend', `<i class="ch-badge">${left}</i>`);
+    } else if (badge) badge.remove();
+  }
+
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
     if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;
@@ -10354,11 +10382,13 @@ async function renderTalents(wrap) {
     popSound(S.sounds);
     confettiBurst(innerWidth / 2, innerHeight * 0.3, 12);
     renderTalents(wrap);
+    syncTalentBadge();
   }));
   $('#respecBtn', body)?.addEventListener('click', async () => {
     await kvSet('talents', []);
     toast('Points refunded. Build something new.');
     renderTalents(wrap);
+    syncTalentBadge();
   });
 }
 

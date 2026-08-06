@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 275, date: '2026-08-07', title: 'The home screen, and breeding that makes sense', items: [
+    '<b>Today looks like the rest of the game now.</b> Your Bonehead sits in a framed poster with a hand-inked edge, your level and rank read as one plate, and the shortcut buttons match the panels everywhere else. This was designed a while back and I simply never built it: the update before this changed the Boneyard and the logging screens but left the home screen alone.',
+    '<b>Breeding works differently, and it should make sense now.</b> You pick the pet you are KEEPING and a spare to feed into it. Your pet stays itself: same name, same level, same look, one rank of lineage stronger (+5% to every stat). The spare is destroyed. Before, both pets were deleted and a third was created, which is why it kept asking which species you wanted.',
+    'Because of that, a <b>shiny keeps its own look</b> and can no longer be moved onto another pet. If you try to feed a shiny, a bred bloodline or a levelled pet into something else, the game says so plainly first and makes you confirm twice.',
+    'The <b>Build tab</b> stopped showing an unspent talent point after you had already spent it. It updates as you spend now, without leaving the tab.',
+    'You can <b>grab things on the map from further away</b>: the collect range went from 55 m to 75 m, and the ring around you on the map grew with it.',
+  ] },
   { n: 274, date: '2026-08-07', title: 'Drawn, not typed', items: [
     'The game was drawing a lot of its interface with <b>text characters</b> sitting next to Cam\'s artwork: ticks, stars, arrows, close crosses, energy bolts and dots. They are drawn art now, in the game\'s own style.',
     '<b>Bone Dust finally has an icon.</b> It is a core currency and it has been a plain diamond character in two dozen places since launch. It is a violet gem now, drawn like the coin.',

@@ -258,18 +258,23 @@ const clarity = await page.evaluate(() => {
   return {
     heading: !!bar.querySelector('.breed-h'),
     trade: !!bar.querySelector('.breed-trade'),
-    destroyedLabel: /both destroyed/i.test(t),
-    keptLabel: /one kept/i.test(t),
-    saysGone: /gone for good/i.test(t),
+    keptLabel: /kept/i.test(t),
+    fedLabel: /fed in/i.test(t),
+    saysDestroyed: /is destroyed/i.test(t),
+    saysSameLevel: /same level and look/i.test(t),
+    picker: /which one are you keeping/i.test(t),
     facts: bar.querySelectorAll('.breed-facts li').length,
     btn: (btn?.textContent || '').trim(),
   };
 });
-// the player must be told the cost BEFORE committing, in words, not just a total
+/* The FEED model (Tom 2026-08-07): a spare goes into a pet you keep. The panel
+   must say which pet survives, that it keeps its level and look, and that the
+   spare is destroyed, all BEFORE the tap. */
 ok('BREED-CLARITY the panel states the trade up front',
-   clarity.heading && clarity.trade && clarity.destroyedLabel && clarity.keptLabel && clarity.saysGone && clarity.facts >= 3,
+   clarity.heading && clarity.trade && clarity.keptLabel && clarity.fedLabel
+   && clarity.saysDestroyed && clarity.saysSameLevel && clarity.picker && clarity.facts >= 3,
    JSON.stringify(clarity));
-ok('BREED-CLARITY the button names what it does', /destroy/i.test(clarity.btn), `"${clarity.btn}"`);
+ok('BREED-CLARITY the button names the pet being destroyed', /^Feed .+ in$/.test(clarity.btn), `"${clarity.btn}"`);
 await shot('breed-panel');
 
 // and it must ARM: breeding permanently destroys two pets
@@ -292,7 +297,7 @@ const bred = await page.evaluate(async () => {
   return { takeover: !!t, showsParents: !!fused, note: (document.querySelector('.fused-note')?.textContent || '').trim() };
 });
 ok('TAKEOVER breed result owns the screen', bred.takeover, JSON.stringify(bred));
-ok('BREED result shows the parents it consumed', bred.showsParents && /consumed/i.test(bred.note), JSON.stringify(bred));
+ok('BREED result shows the pet it consumed', bred.showsParents && /was fed in/i.test(bred.note), JSON.stringify(bred));
 await shot('breed-result');
 
 ok('NO page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

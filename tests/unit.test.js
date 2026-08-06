@@ -29,7 +29,7 @@ import {
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
-  removeInstance, breedOffspring, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
+  removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -954,20 +954,32 @@ test('pet leveling: steps credit ONLY the equipped species (benched pets frozen)
   assert.deepEqual(creditSteps(before, null, 500), before, 'no equipped pet -> nothing banked');
 });
 
-test('breeding: offspring takes the chosen species at max(parent lineage)+1, inherits shiny', () => {
-  const a = { iid: 'a', sp: 'C1', lineage: 2, shiny: false };
-  const b = { iid: 'b', sp: 'C3', lineage: 4, shiny: true };
-  const off = breedOffspring(a, b, 'C1', 'new1');
-  assert.equal(off.sp, 'C1', 'offspring is the chosen species');
-  assert.equal(off.lineage, 5, 'lineage = higher parent (4) + 1');
-  assert.equal(off.shiny, true, 'inherits shiny if either parent was');
-  assert.equal(off.iid, 'new1');
-  const off2 = breedOffspring({ iid: 'x', sp: 'C4', lineage: 0, shiny: false }, { iid: 'y', sp: 'C4', lineage: 0, shiny: false }, 'C4', 'n2');
-  assert.equal(off2.lineage, 1, 'two lineage-0 pets breed a lineage-1');
-  assert.equal(off2.shiny, false);
+/* THE MODEL CHANGED (Tom's call 2026-08-07). Breeding used to destroy BOTH pets
+   and mint a third, which is why it needed a species picker and why a shiny
+   behaved like a transferable skin. It now FEEDS A SPARE into a pet you keep:
+   the keeper is the same pet throughout and only gains a lineage rank.
+   These tests are the record of the new rules. */
+test('breeding: the fed pet is reported so the reveal can show what it cost', () => {
+  const fed = { iid: 'y', sp: 'C3', lineage: 4, shiny: true };
+  const [rec] = breedParents(fed);
+  assert.equal(rec.sp, 'C3');
+  assert.equal(rec.shiny, true, 'the reveal has to be able to say a shiny was lost');
+  assert.equal(rec.lineage, 4);
+  assert.equal(breedParents(fed).length, 1, 'exactly ONE pet is consumed, not two');
 });
 
-test('breeding: cost escalates with the offspring lineage', () => {
+test('breeding: lineage is earned per feeding, never transferred from the spare', () => {
+  /* Feeding a lineage-4 pet into a lineage-0 keeper must NOT vault the keeper to
+     5: otherwise sacrificing your best pet is a strategy instead of a mistake.
+     The rule is keeper.lineage + 1, which is what breedCost is quoted against. */
+  const keeperLineage = 0, spareLineage = 4;
+  const next = keeperLineage + 1;
+  assert.equal(next, 1, 'keeper goes 0 -> 1 regardless of the spare');
+  assert.notEqual(next, spareLineage + 1, 'the spare lineage does not carry');
+  assert.equal(breedCost(next), 60, 'and the price is quoted for the rank actually gained');
+});
+
+test('breeding: cost escalates with the lineage rank being bought', () => {
   assert.ok(breedCost(2) > breedCost(1), 'higher lineage costs more');
   assert.equal(breedCost(1), 60);
 });

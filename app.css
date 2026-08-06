@@ -853,11 +853,18 @@ body::before {
 /* ---------- pogo-style hero scene ---------- */
 .hero-scene {
   position: relative; overflow: hidden; cursor: pointer;
-  margin: -14px calc(-1 * var(--pad)) 14px;
+  /* a framed poster, inset, not a full-bleed band */
+  margin: 0 0 16px;
   height: min(54vh, 440px);
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--line-strong);
+  background: var(--coral);
+  border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh);
   text-align: left;
+}
+/* the deck's grain over the coral, pointer-transparent */
+.hero-scene::after {
+  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background-image: var(--grain); background-size: 150px 150px; opacity: .07;
 }
 .hero-scene .bh-anim { animation-duration: 4s; }
 .hero-scene .bh-anim { --av-fit: cover; }
@@ -878,6 +885,8 @@ body::before {
 }
 .hero-top-right { display: flex; gap: 7px; }
 .hero-top .streak-chip, .hero-top .bh-coin, .hero-top .bh-crates {
+  background: rgba(42, 45, 40, .82); border: 2px solid var(--ink); color: var(--text);
+  box-shadow: var(--sh-sm);
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .hero-bubble {
@@ -933,16 +942,21 @@ body::before {
   padding: 3px 10px; border-radius: 999px;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
-.hero-xpbar { display: block; height: 9px; border-radius: 6px; background: rgba(13, 12, 18, 0.45); border: 1.5px solid rgba(13, 12, 18, 0.65); overflow: hidden; margin-top: 4px; }
-.hero-xpbar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #e0a83a, var(--gold)); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
-.hero-xpnum { font-size: 11.5px; color: var(--text-2); font-weight: 600; }
+.hero-xpbar { display: block; height: 13px; border-radius: 999px; background: rgba(42, 45, 40, .75); border: 2px solid var(--ink); overflow: hidden; margin-top: 5px; }
+.hero-xpbar i { display: block; height: 100%; border-radius: 999px; background: var(--gold); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+.hero-xpnum {
+  font-size: var(--fs-1); color: var(--text); font-weight: 600;
+  background: rgba(42, 45, 40, .82); border-radius: 999px;
+  padding: 3px 10px; display: inline-block; margin-top: 6px;
+}
 .hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
 
 .hero-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
 .hero-act {
   display: grid; justify-items: center; gap: 5px; padding: 11px 2px 9px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 15px;
-  font-size: 10.5px; font-weight: 700; color: var(--text-2);
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm);
+  font-size: var(--fs-0); font-weight: 700; color: var(--text-2);
   white-space: nowrap; overflow: hidden;
 }
 .hero-act:active { background: var(--surface-2); }
@@ -4632,3 +4646,37 @@ body::before {
 }
 .ap-pips { display: inline-flex; gap: 3px; align-items: center; vertical-align: -1px; }
 .ap-pips i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Today hero: the level plate from the approved mockup. A gold Bangers badge with
+   the rank name beside it, both readable on the coral poster. */
+.hero-lvrow { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.hero-meta .hero-lv { font-size: 34px; }   /* room for the rank name beside it */
+.hero-meta .hero-title {
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-4); letter-spacing: .05em;
+  color: var(--text); text-shadow: 2px 2px 0 rgba(42, 45, 40, .95); text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* "Maybe you shouldn't." Feeding a shiny, a bred bloodline or a levelled pet into
+   another is a real loss, so it gets a panel rather than another line of body
+   copy. Tom's call 2026-08-07: make it clear BEFORE the sacrifice. */
+.breed-warn {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: rgba(255, 109, 94, .12);
+  border: 2px solid var(--danger); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin: 4px 0 12px;
+  font-size: var(--fs-2); line-height: 1.45; color: var(--text-2);
+}
+.breed-warn svg { flex: none; margin-top: 1px; }
+.breed-warn b { color: var(--text); display: block; margin-bottom: 2px; }
+/* a pairing carrying something precious frames the whole panel */
+.breed-bar.careful { border-color: var(--danger); }
+
+/* the collect ring's own label, read from COLLECT_RADIUS_M so it can never
+   disagree with the radius actually being enforced */
+.map-radius b {
+  position: absolute; left: 50%; bottom: -11px; transform: translateX(-50%);
+  font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--accent);
+  background: var(--surface); border: 2px solid var(--ink); border-radius: 999px;
+  padding: 1px 7px; white-space: nowrap;
+}

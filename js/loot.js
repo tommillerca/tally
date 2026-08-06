@@ -312,19 +312,15 @@ export function removeInstance(instances, iid) {
  * Fuse two owned pets: BOTH are consumed, producing one offspring of a chosen
  * parent's species at lineage = max(parents) + 1 (a permanent stat bump + glow).
  * Costs Bone Dust (escalating with the target lineage) plus a steps cooldown so
- * it stays tied to walking. The offspring inherits shiny if either parent was. */
+ * it stays tied to walking. The KEEPER keeps its own look: a shiny fed in is lost
+ * with it, which is what makes a shiny worth keeping. */
 export const BREED_COOLDOWN_STEPS = 6000;
-export function breedCost(offspringLineage) { return 30 + Math.max(1, offspringLineage) * 30; }
-// pure: the offspring instance from two parents (iid supplied by the caller)
-export function breedOffspring(a, b, offspringSp, iid) {
-  const lineage = Math.max(a.lineage || 0, b.lineage || 0) + 1;
-  return { iid, sp: offspringSp, lineage, shiny: !!(a.shiny || b.shiny), hatchedAtSteps: 0 };
-}
+export function breedCost(newLineage) { return 30 + Math.max(1, newLineage) * 30; }
 
-/* The two pets a breed consumed, for the reveal to show. Display-only: kept off
-   the stored instance so nothing in the save grows a field it does not need. */
-export function breedParents(a, b) {
-  return [{ sp: a.sp, shiny: !!a.shiny, lineage: a.lineage || 0 }, { sp: b.sp, shiny: !!b.shiny, lineage: b.lineage || 0 }];
+/* The pet a breed consumed, for the reveal to show. Display-only: kept off the
+   stored instance so nothing in the save grows a field it does not need. */
+export function breedParents(fed) {
+  return [{ sp: fed.sp, shiny: !!fed.shiny, lineage: fed.lineage || 0 }];
 }
 
 // Live status for the breeding UI (dust, cooldown, whether you have >=2 pets).
@@ -338,52 +334,51 @@ export async function breedStatus() {
 }
 
 // Breed two instances by iid. offspringSp must be one of the two parents' species.
-export async function breedPets(iidA, iidB, offspringSp) {
-  if (!iidA || !iidB || iidA === iidB) return { ok: false, reason: 'pick-two' };
+export async function breedPets(keepIid, feedIid) {
+  if (!keepIid || !feedIid || keepIid === feedIid) return { ok: false, reason: 'pick-two' };
   let list = await petInstances();
-  const a = list.find(x => x.iid === iidA);
-  const b = list.find(x => x.iid === iidB);
-  if (!a || !b) return { ok: false, reason: 'gone' };
-  if (offspringSp !== a.sp && offspringSp !== b.sp) return { ok: false, reason: 'bad-species' };
+  const keep = list.find(x => x.iid === keepIid);
+  const fed = list.find(x => x.iid === feedIid);
+  if (!keep || !fed) return { ok: false, reason: 'gone' };
   const lifetime = await lifetimeStepsSum();
   const credit = await kvGet('petBreedCredit', null);
   if (credit != null && lifetime - credit < BREED_COOLDOWN_STEPS) {
     return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
   }
-  const offLineage = Math.max(a.lineage || 0, b.lineage || 0) + 1;
-  const cost = breedCost(offLineage);
+  const newLineage = (keep.lineage || 0) + 1;
+  const cost = breedCost(newLineage);
   if ((await boneDust()) < cost) return { ok: false, reason: 'dust', cost };
-  // consume both parents, add the offspring
-  const off = breedOffspring(a, b, offspringSp, newIid(offspringSp));
-  const consumed = breedParents(a, b);   // for the reveal: show what it cost
-  const wasEquipped = (await kvGet('petEquipped', null));
-  const parentEquipped = wasEquipped === iidA || wasEquipped === iidB;
-  list = removeInstance(list, iidA).instances;
-  list = removeInstance(list, iidB).instances;
-  list = addInstance(list, off);
+
+  const consumed = breedParents(fed);
+  // lineage is EARNED per feeding, not transferred: feeding a high-lineage pet in
+  // does not vault the keeper up to it, so sacrificing a good pet is a waste
+  // rather than a strategy.
+  keep.lineage = newLineage;
+  list = removeInstance(list, feedIid).instances;
   await savePetInstances(list);
   await boneDustAdd(-cost);
   await kvSet('petBreedCredit', lifetime);
-  // offspring inherits the higher parent's level so breeding never loses progress
+
+  // the keeper is the SAME pet, so its level bank is untouched. Only drop the
+  // bank entry for the pet that is gone.
   const bank = await petLevelBank();
-  off._startSteps = Math.max(bank[iidA] || 0, bank[iidB] || 0);
-  bank[off.iid] = off._startSteps;
-  delete bank[iidA]; delete bank[iidB];
+  delete bank[feedIid];
   await kvSet('petLvlSteps', bank);
-  // if you bred away the pet you had out, the offspring takes its place
-  if (parentEquipped) { await kvSet('petEquipped', off.iid); await equip('C', off.sp); }
-  // any parent species now extinct: drop ownership + clear legacy anchor
-  for (const sp of [a.sp, b.sp]) {
-    if (speciesCount(list, sp) === 0) {
-      const inv = await db.all('inv');
-      const row = inv.find(r => r.kind === 'cos' && r.itemId === sp);
-      if (row) await db.del('inv', row.id);
-      const eqp = await equipped({ raw: true });
-      if (eqp.C === sp && off.sp !== sp) await equip('C', off.sp);
-      const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[sp]; await kvSet('pets', petsRec);
-    }
+
+  // if you fed away the pet you had out, the keeper takes its place
+  const wasEquipped = (await kvGet('petEquipped', null));
+  if (wasEquipped === feedIid) { await kvSet('petEquipped', keep.iid); await equip('C', keep.sp); }
+
+  // the fed species may now be extinct: same cleanup as before
+  if (speciesCount(list, fed.sp) === 0) {
+    const inv = await db.all('inv');
+    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed.sp);
+    if (row) await db.del('inv', row.id);
+    const eqp = await equipped({ raw: true });
+    if (eqp.C === fed.sp && keep.sp !== fed.sp) await equip('C', keep.sp);
+    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed.sp]; await kvSet('pets', petsRec);
   }
-  return { ok: true, offspring: { ...off, parents: consumed }, cost };
+  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed.sp }, cost };
 }
 
 let _iidSeq = 0;

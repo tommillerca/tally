@@ -17,7 +17,7 @@ import { coinsAdd, grantCrate } from './loot.js';
 import { dateKey } from './nutrition.js';
 
 const CELL_DEG = 0.005;           // ~550 m grid
-export const COLLECT_RADIUS_M = 55;   // a touch roomier (Tom)
+export const COLLECT_RADIUS_M = 75;   // roomier again (Tom, 2026-08-07: ~33% more than 55)
 export const SPAWN_TTL_MIN = 45;      // each spawn slot lives this long, then relocates
 const SLOTS = 2;                      // spawn slots per cell (fewer coin/bone piles)
 export const NEAR_M = 1600;           // full-density hunt radius around you
