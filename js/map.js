@@ -54,7 +54,23 @@ export function createBoneyardMap(maplibregl, container, { lat, lng }) {
 }
 
 // A DOM marker that keeps map-space alignment (stays put as the camera eases).
+/* One choke point for every DOM marker on the Boneyard, and the one place that
+   has to survive teardown.
+   Leaving the Boneyard runs cleanup(): map.remove() then `map = null`. But the
+   refresh functions are async (they await the server for spire ownership, and
+   queryRenderedFeatures for walkable snapping), so a refresh started before you
+   left can resolve after, and it will happily build a marker for a map that no
+   longer exists. maplibre's Marker.addTo(null) then throws
+   `Cannot read properties of null (reading '_getUIString')`, an uncaught
+   TypeError with a stack that points into the vendor bundle and names nothing
+   useful. Reproducible by opening the Boneyard, leaving, and going back.
+   A dead-marker stub rather than null, because ~6 call sites immediately do
+   rec.marker.setLngLat(...) on the way back out. */
 export function domMarker(maplibregl, map, { lat, lng, el, anchor = 'center' }) {
+  if (!map) {
+    try { el?.remove(); } catch { /* never attached */ }
+    return { setLngLat() { return this; }, remove() { return this; }, getElement: () => el, _dead: true };
+  }
   const m = new maplibregl.Marker({ element: el, anchor })
     .setLngLat([lng, lat])
     .addTo(map);

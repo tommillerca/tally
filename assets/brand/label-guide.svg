@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="188" viewBox="0 0 150 188" role="img" aria-label="Nutrition Facts panel">
+  <rect x="4" y="4" width="142" height="180" rx="6" fill="#F0EDD6" stroke="#2A2D28" stroke-width="3"/>
+  <text x="14" y="30" font-family="Arial Black, Arial, sans-serif" font-size="17" fill="#15151a">Nutrition</text>
+  <text x="14" y="46" font-family="Arial Black, Arial, sans-serif" font-size="17" fill="#15151a">Facts</text>
+  <rect x="14" y="54" width="122" height="3" fill="#15151a"/>
+  <text x="14" y="70" font-family="Arial, sans-serif" font-size="9" fill="#15151a">Serving size 55 g</text>
+  <rect x="14" y="76" width="122" height="7" fill="#15151a"/>
+  <text x="14" y="98" font-family="Arial Black, Arial, sans-serif" font-size="13" fill="#15151a">Calories</text>
+  <text x="136" y="98" text-anchor="end" font-family="Arial Black, Arial, sans-serif" font-size="17" fill="#15151a">240</text>
+  <rect x="14" y="104" width="122" height="2" fill="#15151a"/>
+  <g font-family="Arial, sans-serif" font-size="9" fill="#15151a">
+    <text x="14" y="119">Total Fat 9 g</text><text x="136" y="119" text-anchor="end">12%</text>
+    <text x="14" y="133">Total Carbs 31 g</text><text x="136" y="133" text-anchor="end">11%</text>
+    <text x="24" y="147">Fiber 4 g</text><text x="136" y="147" text-anchor="end">14%</text>
+    <text x="24" y="161">Sugars 12 g</text>
+    <text x="14" y="175">Protein 8 g</text><text x="136" y="175" text-anchor="end">16%</text>
+  </g>
+  <rect x="14" y="110" width="122" height="1.6" fill="#15151a"/>
+  <rect x="14" y="124" width="122" height="1" fill="#8d8a7c"/>
+  <rect x="14" y="138" width="122" height="1" fill="#8d8a7c"/>
+  <rect x="14" y="152" width="122" height="1" fill="#8d8a7c"/>
+  <rect x="14" y="166" width="122" height="1.6" fill="#15151a"/>
+</svg>

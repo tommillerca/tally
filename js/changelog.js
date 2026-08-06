@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 272, date: '2026-08-07', title: 'A fresh coat, starting with the daily loop', items: [
+    'The first big <b>design refresh</b>. Every screen in the add-food flow has been rebuilt: the picker, portions, quick add, the barcode scanner, the label scan and the food form. It is the thing you do every day and it looked the least like the rest of the game.',
+    'Logging is <b>fewer taps and less scrolling</b>. Your recent foods are on screen straight away, and the picker shows what is left in your day so you are choosing against a number instead of guessing.',
+    '<b>The game always paid you XP for logging and never told you.</b> Now the portion screen shows what the food in front of you is worth before you add it.',
+    'The <b>Boneyard</b> got the same treatment: a proper header, one clear card for whatever is nearest, your collect range drawn on the map, and loot markers that look like they belong in this game. Tapping a boss den now tells you who is holding it and what it pays, so you can decide if it is worth the walk.',
+    'Two fixes worth naming. A <b>Dark Spire</b> could be beaten and then fought again immediately, over and over, for coins it should not have paid. And taking a tower off another player was supposed to cost a Pit fight, which it never did.',
+    'More screens get this treatment over the next few releases.',
+  ] },
   { n: 270, date: '2026-08-05', title: 'One tap never spends', items: [
     'A player bought a <b>1,000-coin cauldron by accident</b> on a single tap. Every purchase in the game now takes <b>two</b>: the first tap asks, the second buys, and it forgets after a few seconds so a stray tap later cannot trigger it.',
     'That was already true of the coin shop and the drop. It was <b>not</b> true of the extra cauldron, the extra garden bed, foraging, changing a look, or the <b>Bone Merchant</b>, which is the most expensive tap in the game at up to 6,000 coins and 350 dust.',

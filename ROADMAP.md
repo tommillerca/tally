@@ -9,6 +9,62 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🗺️ Leaving the Boneyard and coming back could throw (BUG, FIXED, found 2026-08-07)
+
+**Found by** the new `tests/spire-gate.mjs` while auditing the spire fix, not by a report.
+Reproducible 3/3: open the Boneyard, leave, come back, and an uncaught
+`TypeError: Cannot read properties of null (reading '_getUIString')` fires.
+
+**Cause.** `cleanup()` correctly does `map.remove()` then `map = null`, but the refresh
+functions are async: they await the server for spire ownership and `queryRenderedFeatures`
+for walkable snapping. A refresh started before you left resolves after, and builds a marker
+for a map that no longer exists. maplibre's `Marker.addTo(null)` throws, and the stack points
+into the vendor bundle naming nothing useful. Three separate `map.loaded()` call sites were
+also dereferencing a nulled `map`.
+
+**Fix.** A single guard in `domMarker()` in `js/map.js`, the choke point every Boneyard marker
+routes through, returning a dead-marker stub (about six call sites immediately call
+`rec.marker.setLngLat(...)` on the way out, so null would just move the crash). Plus
+`map &&` on the three `map.loaded()` sites. Proven red by removing the guard.
+
+---
+
+## 🗼 Dark Spires: beat a tower, walk straight back in (BUG, FIXED, noted 2026-08-07)
+
+**Tom's note.** "the spires on the map had the same problem as the glutton where once you
+beat it you can just go right back in and fight again."
+
+**Confirmed, and it was two separate defects.**
+
+1. **No ledger at all.** `spireKey(id, day)` has existed in `js/spires.js` since Dark Spires
+   shipped and was imported by NOTHING. A spire fight therefore wrote no per-day row, so
+   nothing could gate a second attempt. The loop: beat a tower whose claim is then refused
+   (you hold `SPIRE_CAP` already, or the tower is inside its 1h server shield) and the fight
+   pays 40 coins while the button still reads "Take". Re-fight, +40, forever. Losing was
+   equally free to retry, so the tower could simply be reran until you won.
+2. **The energy gate never fired.** `const spent = await spendPitFight(); if (!spent)`:
+   `spendPitFight()` returns `{ ok: false }` when tapped out, and an object is always truthy,
+   so taking a rival's tower was free at ANY energy level. The comment directly above it
+   explains this gate exists to stop two friends flipping a spire for 80 coins a pass, which
+   means the mitigation had never worked a single time.
+
+**Fix.** One attempt per tower per day, mirroring the glutton's per-slot ledger exactly:
+settle writes `spireKey(id, dateKey())` as an xp row of type `spiretry` on win, loss AND draw
+(outside the win/lose branches on purpose), the map snapshots those rows the way it already
+snapshots `gluttonCleared`, and both the button and the click handler refuse. Defending your
+own tower (breaking a siege), collecting tribute and tending are NOT gated: none of them is a
+farmable fight. Plus `!spent.ok`.
+
+**DECISION for Tom, dial if you want it looser:** one attempt per tower per day is my call,
+chosen because it matches the glutton's existing rule rather than inventing a new one. The
+alternatives are a cooldown in hours, or gating only the refused-claim case and leaving honest
+losses retryable.
+
+**Guards, both proven red.** `tests/gate-audit.mjs` scans for the class of mistake (truthiness
+on an `{ok}` result) and fails naming the file and line; `tests/spire-gate.mjs` drives the real
+map, teleports onto a real spire, and asserts the tower is attackable with no ledger row and
+refuses with one, including a stale tap that re-enables the button.
+
 ## 🧢 Drop calendar: 10 featured pieces after the Puffer Pack — DECISION (planned 2026-08-02)
 
 **Tom's ask.** Plan 10 key pieces for featured drops or weekly sale items, coolest weapons

@@ -31,6 +31,18 @@
   --radius: 20px;
   --radius-sm: 13px;
   --pad: 16px;
+  /* ---- brand-deck tokens (Phase 1 foundation, added with the Tier 1 rebuild).
+     These are the values the approved mockups were built on. Components move
+     onto them screen by screen; nothing above is redefined. ---- */
+  --coral: #fd6857;                       /* the deck's lead accent. Was absent entirely */
+  --coral-soft: rgba(253, 104, 87, 0.15);
+  --violet: #9b92e8;                      /* deck rarity: replaces the Tailwind #c084fc */
+  --mint: #a2e0a6;
+  --sh: 4px 5px 0 rgba(0, 0, 0, 0.55);    /* the sticker shadow: hard offset, never blurred */
+  --sh-sm: 3px 4px 0 rgba(0, 0, 0, 0.55);
+  /* type scale, 8 steps, no half-pixels. The app currently ships 52 sizes. */
+  --fs-0: 11px; --fs-1: 12px; --fs-2: 13px; --fs-3: 15px;
+  --fs-4: 17px; --fs-5: 21px; --fs-6: 28px; --fs-7: 40px;
   /* --muted was referenced 12 times and declared nowhere. An unresolvable var()
      on `color` inherits, so every one of those rendered at full primary
      brightness and silently flattened the hierarchy it was meant to create. */
@@ -710,7 +722,9 @@ body::before {
    Backdrop lives on body + body::before above; components are re-skinned here.
    ============================================================================ */
 :root {
-  --ink: #100c14; /* the near-black hand-inked outline */
+  /* the hand-inked outline. Moved to the deck's warm ink (#2A2D28) with the Tier 1
+     rebuild; the old #100c14 was a cold near-black the deck does not contain. */
+  --ink: #2a2d28;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 /* panels: grain blended into the surface + a thick dark keyline + soft drop edge */
@@ -3938,3 +3952,507 @@ body::before {
    sure" reads as a state rather than as a new button appearing. */
 .btn.arming, .shop-cell.arming { border-color: var(--gold); color: var(--gold); }
 .btn.arming { box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .4); }
+
+/* ============================================================================
+   TIER 1: THE DAILY LOOP. The add-food flow, rebuilt on the brand-deck tokens
+   from the mockups Tom approved 2026-08-06 (market-quality-mockups/t1-*.html).
+
+   Everything here is a Phase 2 component recipe, not a one-off screen style:
+   .t1-seg, .t1-search, .t1-route, .t1-frow, .t1-field, .t1-step, .t1-tag.
+   They are prefixed because the legacy .chip/.action-tile/.food-row/.field
+   families are still in use on ~35 other surfaces; those get migrated onto
+   these recipes screen by screen, NOT by redefining them underneath.
+   ============================================================================ */
+
+/* ---- sheet chrome ---- */
+.sheet.t1 { border: 2px solid var(--ink); box-shadow: 0 -6px 0 rgba(0, 0, 0, 0.5); }
+.sheet.t1 .sheet-head {
+  border-bottom: 2px solid var(--ink);
+  padding: 10px var(--pad) 12px;
+  align-items: flex-start;
+}
+.sheet.t1 .sheet-head h2 { font-size: var(--fs-6); letter-spacing: .02em; line-height: 1; }
+.sheet.t1 .sheet-head .hd { min-width: 0; flex: 1; }
+.sheet.t1 .sheet-head .hd .sub { font-size: var(--fs-1); color: var(--text-3); margin-top: 4px; }
+.sheet.t1 .sheet-head .hd .sub.xp { color: var(--gold); font-weight: 800; letter-spacing: .08em; }
+.t1-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.t1-icon-btn {
+  width: 40px; height: 40px; min-height: 40px; border-radius: 11px; flex: none;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: grid; place-items: center; color: var(--text-3);
+}
+.t1-icon-btn.gold { color: var(--gold); }
+.t1-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* the body has to be the shrinking child or a pinned foot pushes off-screen */
+.sheet.t1 .sheet-body { flex: 1 1 auto; min-height: 0; }
+.t1-foot {
+  flex: none; padding: 12px var(--pad) calc(var(--sab) + 18px);
+  background: var(--surface); border-top: 2px solid var(--ink);
+}
+.t1-foot .t1-g2 .btn { width: 100%; }
+.t1-foot .why { text-align: center; font-size: var(--fs-1); color: var(--text-3); margin-top: 9px; }
+
+/* ---- segmented control: replaces four loose meal pills ---- */
+.t1-seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); overflow: hidden;
+}
+.t1-seg button {
+  padding: 10px 4px; min-height: 44px;
+  font-size: var(--fs-2); font-weight: 700; color: var(--text-3);
+  border-right: 2px solid var(--ink);
+}
+.t1-seg button:last-child { border-right: 0; }
+.t1-seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+/* serving lists are any length: three options fill the width, six scroll. One
+   recipe rather than a chip row for long lists and a segment for short ones. */
+.t1-seg.scroll { grid-auto-columns: minmax(96px, 1fr); overflow-x: auto; scrollbar-width: none; }
+.t1-seg.scroll::-webkit-scrollbar { display: none; }
+.t1-macros .tr i { min-width: 3px; }   /* a real 2% share should still be visible */
+
+/* ---- search ---- */
+.t1-search { position: relative; }
+.t1-search input {
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 12px 13px 12px 42px;
+  font-size: var(--fs-3); width: 100%; outline: none; min-height: 48px;
+}
+.t1-search input:focus { border-color: var(--accent); }
+.t1-search > svg {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; stroke: var(--coral); fill: none; stroke-width: 2.1;
+  stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+}
+
+/* ---- the four capture routes, one row ---- */
+.t1-routes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t1-route {
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 3px 7px; min-height: 62px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.t1-route:active { background: var(--surface-3); }
+.t1-route svg { width: 19px; height: 19px; stroke: var(--text); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.t1-route b { font-size: var(--fs-0); font-weight: 700; color: var(--text-3); }
+.t1-route .xp { font-size: 9px; font-weight: 800; letter-spacing: .04em; color: var(--gold); }
+
+/* ---- the day's remaining budget, the number you decide against ---- */
+.t1-budget {
+  display: flex; align-items: center; gap: 11px; flex: none;
+  padding: 10px var(--pad) 11px;
+  background: var(--surface-2); border-bottom: 2px solid var(--ink);
+}
+.t1-budget .n { font-family: var(--display); font-size: var(--fs-5); line-height: 1; letter-spacing: .02em; color: var(--accent); }
+.t1-budget .n.over { color: var(--danger); }
+.t1-budget .n small { font-family: inherit; font-size: var(--fs-1); font-weight: 700; color: var(--text-3); letter-spacing: .04em; margin-left: 4px; }
+.t1-budget .tr { flex: 1; height: 10px; background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.t1-budget .tr i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.t1-budget .p { font-size: var(--fs-1); font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* ---- section rule ---- */
+.t1-sect { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.t1-sect b { font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--coral); }
+.t1-sect i { flex: 1; height: 2px; background: var(--line); }
+.t1-sect .spin { margin-left: auto; flex: none; }
+
+/* ---- food row: the kcal medallion anchors it, protein earns its column
+        because protein is the macro the game actually pays for (+40 XP) ---- */
+.t1-frow {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 9px 0; border-top: 1px solid var(--line); min-height: 64px;
+}
+.t1-frow:first-of-type { border-top: 0; }
+.t1-frow:active { background: var(--surface-2); }
+.t1-med {
+  flex: none; width: 46px; height: 46px; border-radius: 13px;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+}
+.t1-med b { font-family: var(--display); font-size: var(--fs-4); font-weight: 400; letter-spacing: .02em; }
+.t1-med small { font-size: 8px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); margin-top: 2px; }
+.t1-frow .nm { flex: 1; min-width: 0; }
+.t1-frow .nm b { display: block; font-size: var(--fs-3); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t1-frow .nm small { display: block; font-size: var(--fs-1); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t1-frow .pg { flex: none; text-align: right; }
+.t1-frow .pg b { font-size: var(--fs-2); font-weight: 800; color: var(--protein); font-variant-numeric: tabular-nums; }
+.t1-frow .pg small { display: block; font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); }
+
+.t1-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  border: 2px solid var(--ink); border-radius: 8px; padding: 1px 6px;
+  background: var(--surface-2); color: var(--text-3);
+}
+.t1-tag.warn { background: var(--coral-soft); color: var(--coral); }
+
+/* ---- portion hero + the payoff block ---- */
+.t1-hero {
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh); padding: 14px 15px 13px; margin-bottom: 14px;
+}
+.t1-hero .k { display: flex; align-items: baseline; gap: 7px; }
+.t1-hero .k b { font-family: var(--display); font-size: var(--fs-7); font-weight: 400; line-height: .9; letter-spacing: .02em; color: var(--gold); font-variant-numeric: tabular-nums; }
+.t1-hero .k small { font-size: var(--fs-1); font-weight: 800; letter-spacing: .1em; color: var(--text-3); }
+.t1-hero .k .of { margin-left: auto; font-size: var(--fs-1); font-weight: 700; color: var(--text-3); text-align: right; }
+.t1-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.t1-macros small { display: block; font-size: 9px; font-weight: 800; letter-spacing: .09em; color: var(--text-3); margin-bottom: 4px; }
+.t1-macros b { display: block; font-size: var(--fs-3); font-weight: 800; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.t1-macros .tr { height: 8px; background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.t1-macros .tr i { display: block; height: 100%; border-radius: 999px; }
+.t1-macros .mp b { color: var(--protein); } .t1-macros .mp .tr i { background: var(--protein); }
+.t1-macros .mc b { color: var(--carbs); }   .t1-macros .mc .tr i { background: var(--carbs); }
+.t1-macros .mf b { color: var(--fat); }     .t1-macros .mf .tr i { background: var(--fat); }
+
+/* Every number in here is one onFoodLogged already awards. None of it was
+   visible until AFTER the tap, which made the whole economy invisible. */
+.t1-payoff {
+  margin-top: 14px; background: var(--surface-2);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh);
+  overflow: hidden;
+}
+.t1-payoff h3 {
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--coral); padding: 10px 14px 8px;
+}
+.t1-pr { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 2px solid var(--ink); }
+.t1-pr .xp { flex: none; min-width: 44px; font-family: var(--display); font-size: var(--fs-4); letter-spacing: .02em; color: var(--gold); }
+.t1-pr .t { font-size: var(--fs-2); }
+.t1-pr.hit { background: rgba(var(--gold-rgb), .1); }
+.t1-pr.hit .t { font-weight: 700; }
+.t1-pr.rest .t { color: var(--text-3); }
+.t1-pr .left { margin-left: auto; font-size: var(--fs-2); font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.t1-pr .left.over { color: var(--danger); }
+
+/* ---- stepper ---- */
+.t1-step { display: grid; grid-template-columns: 54px 1fr 54px; gap: 8px; align-items: stretch; }
+.t1-step button, .t1-step .val {
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); min-height: 56px;
+}
+.t1-step button { position: relative; }
+/* drawn +/-: a Bangers hyphen sits tiny and off-centre at this size */
+.t1-step button::before, .t1-step button.plus::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 20px; height: 4px; border-radius: 2px; background: var(--text);
+  transform: translate(-50%, -50%);
+}
+.t1-step button.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
+.t1-step .val { text-align: center; padding: 9px 2px 8px; }
+.t1-step .val input {
+  width: 100%; background: none; border: none; text-align: center; outline: none;
+  font-family: var(--display); font-size: var(--fs-6); letter-spacing: .02em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.t1-step .val small { display: block; font-size: var(--fs-0); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin-top: 3px; }
+
+/* ---- form field ---- */
+.t1-field { margin-bottom: 10px; }
+.t1-field label { display: block; font-size: var(--fs-0); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
+.t1-field label .u { text-transform: none; margin-left: 3px; font-weight: 700; opacity: .72; }
+.t1-field input {
+  width: 100%; background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 11px 12px; font-size: var(--fs-3); outline: none; min-height: 46px;
+}
+.t1-field input:focus { border-color: var(--accent); }
+.t1-field.hot input { border-color: var(--accent); font-family: var(--display); font-size: var(--fs-6); letter-spacing: .02em; padding: 6px 12px; }
+.t1-field.check input { border-color: var(--coral); }
+.t1-field .lbl { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.t1-field .lbl label { margin: 0; }
+.t1-field .lbl .t1-tag { padding: 0 5px; font-size: 9px; }
+.t1-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.t1-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+/* ---- label-scan stage + rules ---- */
+.t1-stage {
+  position: relative; height: 232px; margin-bottom: 14px; overflow: hidden;
+  background:
+    radial-gradient(110% 80% at 50% 108%, rgba(162, 224, 166, .14), rgba(162, 224, 166, 0) 58%),
+    linear-gradient(180deg, #0e0d13, #14131b);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh);
+}
+.t1-stage img { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-3deg); width: 148px; }
+.t1-stage .brk i { position: absolute; width: 26px; height: 26px; border: 4px solid var(--accent); border-radius: 5px; }
+.t1-stage .brk i:nth-child(1) { left: 52px; top: 22px; border-right: 0; border-bottom: 0; }
+.t1-stage .brk i:nth-child(2) { right: 52px; top: 22px; border-left: 0; border-bottom: 0; }
+.t1-stage .brk i:nth-child(3) { left: 52px; bottom: 22px; border-right: 0; border-top: 0; }
+.t1-stage .brk i:nth-child(4) { right: 52px; bottom: 22px; border-left: 0; border-top: 0; }
+.t1-rules { display: grid; gap: 8px; }
+.t1-rules div { display: flex; align-items: center; gap: 10px; font-size: var(--fs-2); }
+.t1-rules span {
+  flex: none; width: 24px; height: 24px; border-radius: 8px;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: grid; place-items: center;
+  font-family: var(--display); font-size: 14px; color: var(--coral);
+}
+.t1-priv {
+  display: flex; align-items: center; gap: 9px; margin-top: 13px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 12px; font-size: var(--fs-1); color: var(--text-3);
+}
+.t1-priv b { color: var(--text); font-weight: 700; }
+.t1-priv svg { width: 15px; height: 15px; flex: none; stroke: var(--mint); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- label-confirm banner ---- */
+.t1-read {
+  display: flex; align-items: center; gap: 11px; margin-bottom: 11px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh); padding: 9px 11px;
+}
+.t1-read .th { flex: none; width: 44px; height: 52px; border-radius: 9px; border: 2px solid var(--ink); overflow: hidden; background: var(--surface-3); }
+.t1-read .th img { width: 100%; height: 100%; object-fit: cover; }
+.t1-read .tx { flex: 1; min-width: 0; }
+.t1-read .tx b { display: block; font-size: var(--fs-3); font-weight: 700; }
+.t1-read .tx small { font-size: var(--fs-1); color: var(--text-3); }
+.t1-read .again { flex: none; align-self: center; color: var(--coral); font-size: var(--fs-1); font-weight: 800; letter-spacing: .04em; }
+
+/* ---- scanner: brackets and a plated manual route, not a rect in a void ---- */
+.sheet.scanner.t1 { border: 0; box-shadow: none; }
+.sheet.scanner .scan-head { position: absolute; left: 0; right: 0; top: 74px; text-align: center; z-index: 3; pointer-events: none; }
+.sheet.scanner .scan-head b { font-family: var(--display); font-size: var(--fs-5); letter-spacing: .04em; color: var(--text); }
+.sheet.scanner .scan-head span { display: block; font-size: var(--fs-1); font-weight: 800; letter-spacing: .09em; color: var(--gold); margin-top: 3px; }
+.reticle.t1 {
+  width: min(80%, 340px); height: 220px; top: 46%;
+  outline: 0; box-shadow: none; border-radius: 0;
+}
+.reticle.t1 i {
+  position: absolute; width: 34px; height: 34px;
+  border: 4px solid var(--text); border-radius: 6px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .6);
+}
+.reticle.t1 i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.reticle.t1 i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.reticle.t1 i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.reticle.t1 i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.reticle.t1::after { left: 8px; right: 8px; height: 3px; box-shadow: 0 0 0 2px rgba(42, 45, 40, .55); animation-duration: 2.4s; }
+.sheet.scanner .scan-hint { top: auto; bottom: 172px; padding: 0 20px; }
+/* the status used to sit ON the reticle: at 44% - 130px it lands exactly where
+   the bracket tops are, and a two-line "camera denied" message crossed them.
+   It shares the hint's slot instead, and the hint hides while it is speaking. */
+/* exactly the hint's slot, because the two are mutually exclusive. bottom:226px
+   was tried first and put a two-line message on the BOTTOM brackets instead of
+   the top ones; there is no gap between the reticle and the hint big enough. */
+.sheet.scanner .scan-status { top: auto; bottom: 172px; padding: 0 20px; }
+.sheet.scanner .scan-status:empty { display: none; }
+.sheet.scanner .scan-status span.plate {
+  display: inline-block; max-width: 320px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 13px;
+  font-size: var(--fs-2); font-weight: 700; text-align: center; text-shadow: none;
+}
+.sheet.scanner .scan-status span.plate small { display: block; font-weight: 500; font-size: var(--fs-1); color: var(--text-2); margin-top: 3px; }
+.sheet.scanner .scan-hint span {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: var(--sh-sm); padding: 7px 14px;
+  font-size: var(--fs-2); font-weight: 700; color: var(--text); text-shadow: none;
+}
+.sheet.scanner .scan-tools { left: 14px; right: 14px; top: 16px; justify-content: space-between; }
+.sheet.scanner .scan-tools .icon-btn {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--sh-sm); color: var(--text);
+}
+.sheet.scanner .scan-tools .icon-btn.on { background: #fcf35e; color: var(--ink); }
+.sheet.scanner .scan-foot { background: var(--surface); border-top: 2px solid var(--ink); display: block; }
+.sheet.scanner .scan-foot .row { display: flex; gap: 10px; align-items: stretch; }
+.sheet.scanner .scan-foot .row .t1-search { flex: 1; }
+.sheet.scanner .scan-foot .row .t1-search > svg { stroke: var(--text-3); }
+.sheet.scanner .scan-foot .row .btn { width: auto; flex: none; padding: 11px 16px; }
+.sheet.scanner .scan-alt {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 12px; font-size: var(--fs-2); color: var(--text-3);
+}
+.sheet.scanner .scan-alt b { color: var(--coral); font-weight: 800; }
+
+/* ============================================================================
+   TIER 1: THE BONEYARD. Chrome only; the basemap style and Cam's den art are
+   unchanged. From the mockups Tom approved 2026-08-06 (t1-boneyard*.html).
+
+   The old chrome was a purple glass "?" bubble top-left, a differently-styled
+   recentre circle bottom-right, a blurred pill readout, a separate floating
+   Collect button, and a wrapped tip paragraph over the map. Five treatments,
+   no two alike. This is two: a plated top bar and one action card.
+   ============================================================================ */
+
+.map-topbar {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 7;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(var(--sat, 0px) + 11px) 14px 11px;
+  background: var(--surface); border-bottom: 2px solid var(--ink);
+}
+.map-topbar .mt-tx { flex: 1; min-width: 0; }
+.map-topbar h1 {
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-5);
+  letter-spacing: .03em; line-height: 1; text-transform: uppercase;
+}
+.map-topbar small { display: block; font-size: var(--fs-1); color: var(--text-3); margin-top: 3px; }
+.map-topbar small b { color: var(--accent); font-weight: 800; }
+.map-ctl {
+  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: grid; place-items: center; color: var(--text);
+}
+.map-ctl svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.map-ctl .bhi svg, .map-ctl svg.bhi { stroke: none; }
+/* the legend hangs off the top bar now, not off a floating bubble */
+.map-legend { top: calc(var(--sat, 0px) + 66px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
+
+/* one action card: what is nearest, how far, and the verb. Replaces the pill
+   readout AND the separately floating Collect button. */
+.map-act {
+  position: absolute; left: 14px; right: 14px; bottom: calc(var(--sab, 0px) + 14px); z-index: 6;
+  display: flex; align-items: center; gap: 11px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh); padding: 10px 12px;
+}
+.map-act .ma-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; }
+.map-act .ic {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface-2); border: 3px solid var(--line-strong);
+  display: grid; place-items: center;
+}
+.map-act.live .ic, .map-act .ic.near { border-color: var(--accent); }
+.map-act .ic.warn { border-color: var(--gold); }
+.map-act .tx { min-width: 0; }
+.map-act .tx b { display: block; font-size: var(--fs-3); font-weight: 700; }
+.map-act .tx small { display: block; font-size: var(--fs-1); color: var(--text-3); }
+.map-act .btn.map-collect {
+  position: static; width: auto; flex: none; padding: 10px 16px; font-size: 17px;
+  box-shadow: var(--sh-sm); animation: bubblePop 0.3s cubic-bezier(0.34, 1.6, 0.64, 1);
+}
+/* the boss/mini/spire buttons stack ABOVE the card instead of fighting it */
+.btn.map-den, .btn.map-mini { bottom: calc(var(--sab, 0px) + 84px); }
+.btn.map-den ~ .btn.map-collect, .btn.map-mini ~ .btn.map-collect { bottom: auto; }
+.btn.map-spire-btn { bottom: calc(var(--sab, 0px) + 84px); }
+.map-attrib { bottom: calc(var(--sab, 0px) + 82px); }
+
+/* MARKERS. Die-cut sticker discs: bone edge, ink keyline, hard offset shadow,
+   plus a drawn ground shadow so loot sits in the world instead of hovering.
+   Rarity is the edge colour. The soft glows are gone (the deck bans them on
+   chrome); the in-range cue is a thicker lime edge and a scale pop. */
+.map-spawn {
+  position: relative;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--text);
+  display: grid; place-items: center;
+  box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5);
+}
+.map-spawn::after {
+  content: ''; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  width: 26px; height: 6px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
+}
+.map-spawn.rare { border-color: var(--violet); box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5); animation: none; }
+.map-spawn.inrange { border-color: var(--accent); border-width: 4px; animation: spawnReady 1.4s ease-in-out infinite; }
+@keyframes spawnReady { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+.map-spawn.far { width: 30px; height: 30px; border-width: 2.5px; opacity: 0.66; }
+.map-spawn.far::after { width: 18px; height: 5px; bottom: -7px; }
+.map-spawn.far.rare { opacity: 0.95; }
+
+/* Cam's illustrated grave, used as drawn. It gets a ground shadow and loses the
+   glow; the art is not replaced with a chip. */
+.map-den-mark { position: relative; }
+.map-den-mark::after {
+  content: ''; position: absolute; left: 50%; bottom: 1px; transform: translateX(-50%);
+  width: 34px; height: 9px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); z-index: -1;
+}
+.map-den-mark.inrange { animation: spawnReady 1.4s ease-in-out infinite; }
+
+/* the player: same die-cut treatment, no glow */
+.map-you-av {
+  border: 3px solid var(--text); background: var(--bone, #64605a);
+  box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5);
+}
+.map-radius {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  border-radius: 50%; pointer-events: none; z-index: -2;
+  border: 2px dashed rgba(165, 232, 71, 0.5); background: rgba(165, 232, 71, 0.07);
+}
+
+/* Mini-boss marker: same die-cut treatment as the loot discs, and the ☠ dingbat
+   swapped for a real drawn skull (JS side). The purple was Tailwind's #c084fc;
+   the deck's violet replaces it. Glow filters dropped. */
+.map-mini-mark {
+  position: relative;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--violet);
+  box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5);
+  filter: none;
+}
+.map-mini-mark::after {
+  content: ''; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+  width: 22px; height: 5px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
+}
+.map-mini-mark.t2 { border-color: var(--gold); background: var(--surface); filter: none; }
+.map-mini-mark.inrange { border-width: 4px; animation: spawnReady 1.4s ease-in-out infinite; }
+.map-mini-mark svg { width: 17px; height: 17px; }
+
+/* the in-range action buttons join the sticker family: same offset shadow as the
+   card they sit above, and the deck's violet instead of Tailwind's */
+.btn.map-den, .btn.map-mini, .btn.map-glutton, .btn.map-spire-btn { box-shadow: var(--sh); }
+.btn.map-mini { background: var(--violet); color: #1a1024; }
+
+/* OSM attribution is a licence requirement. The bottom of the map stacks up to
+   three things (action card, den/mini button, spire button), and at bottom:88px
+   the den button covered it completely. It lives under the top bar instead,
+   where only the legend shares the row and the legend is right-aligned. */
+.map-attrib {
+  left: 14px; right: auto; bottom: auto; top: calc(var(--sat, 0px) + 68px);
+  background: rgba(13, 12, 18, 0.8); border: 1px solid var(--line-strong);
+  color: rgba(242, 233, 215, 0.72);
+}
+
+/* the den tier pips are drawn skulls now, not ☠ text, so lay them out as icons */
+.map-den-mark .den-skulls { display: flex; gap: 1px; align-items: center; justify-content: center; }
+/* the .big / .roaming / .secret tier tints still drive these, because the icons
+   are emitted with color:currentColor rather than a baked inline tint. */
+.map-den-mark .den-skulls svg { width: 13px; height: 13px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.7)); }
+
+/* A tower that has already fought you off today: reads as deliberately closed
+   rather than a washed-out lime button. Same treatment as the out-of-range
+   action in the Boneyard tap sheet. */
+.btn.map-spire-btn.spent {
+  background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1;
+}
+
+/* ---- boss-den tap sheet (Tier 1 Boneyard). Cam's grave art used as drawn. ---- */
+.den-hero {
+  display: flex; align-items: center; gap: 13px; margin-bottom: 13px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: var(--sh); padding: 11px 13px;
+}
+.den-hero .art { flex: none; width: 62px; height: 74px; }
+.den-hero .art img { width: 100%; height: 100%; object-fit: contain; }
+.den-hero .who { min-width: 0; }
+.den-hero .who b { display: block; font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .02em; line-height: 1.05; text-transform: uppercase; }
+.den-hero .who small { display: block; font-size: var(--fs-2); color: var(--text-3); margin-top: 3px; }
+.den-hero .who .tier {
+  display: inline-block; margin-top: 7px;
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .07em;
+  background: var(--gold); color: #201500; border: 2px solid var(--ink); border-radius: 7px; padding: 1px 7px;
+}
+.den-pays { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
+.den-pays .p {
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 6px 7px; text-align: center;
+}
+.den-pays .p > span { display: flex; justify-content: center; margin-bottom: 4px; }
+.den-pays .p b { display: block; font-family: var(--display); font-weight: 400; font-size: var(--fs-4); letter-spacing: .02em; }
+.den-pays .p small { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); }
+.den-odds { display: flex; gap: 7px; }
+.den-odds span {
+  flex: 1; text-align: center; padding: 5px 4px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: 8px;
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .04em;
+}
+.den-odds i { display: block; font-style: normal; font-family: var(--display); font-weight: 400; font-size: var(--fs-3); letter-spacing: .02em; color: var(--text); }
+.den-odds .uncommon { color: var(--mint); }
+.den-odds .rare { color: var(--protein); }
+.den-odds .legendary { color: var(--gold); }
+.den-walk {
+  display: flex; align-items: center; gap: 11px; margin-top: 13px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 10px 12px;
+}
+.den-walk .ic { flex: none; display: flex; color: var(--text-3); }
+.den-walk .d { font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .02em; line-height: 1; color: var(--gold); }
+.den-walk small { font-size: var(--fs-2); color: var(--text-3); }
+.t1-foot .btn.spent { background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1; }

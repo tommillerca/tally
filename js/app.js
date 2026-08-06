@@ -31,14 +31,14 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
-  setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS,
+  setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
+import { densNear, denKey, denRewardLabel, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -217,6 +217,20 @@ const ICONS = {
   paw: (s = 23) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
 };
 
+/* Tier 1 additions. Stroke icons sized at the call site, so they can sit in a
+   40px control without the CSS having to know which icon it got. */
+const t1Stroke = (s, d) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+ICONS.close = (s = 18) => t1Stroke(s, `<path d="M6 6l12 12M18 6L6 18"/>`);
+ICONS.torchIco = (s = 18) => t1Stroke(s, `<path d="M9 2h6l-1 5h3l-8 15 1.6-9H7z"/>`);
+ICONS.crosshair = (s = 18) => t1Stroke(s, `<circle cx="12" cy="12" r="7.4"/><path d="M12 1.6v3.4M12 19v3.4M1.6 12H5M19 12h3.4"/>`);
+ICONS.lock = (s = 15) => t1Stroke(s, `<rect x="4.5" y="10" width="15" height="10" rx="2.4"/><path d="M8 10V7.6a4 4 0 0 1 8 0V10"/>`);
+ICONS.camera = (s = 18) => t1Stroke(s, `<path d="M3.4 8.4h3.4l1.6-2.4h7.2l1.6 2.4h3.4v10.2H3.4z"/><circle cx="12" cy="13.2" r="3.4"/>`);
+ICONS.photos = (s = 18) => t1Stroke(s, `<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.4"/><path d="M3.6 16.4l4.6-4.4 3.4 3 3.2-3.6 5.6 5.4"/><circle cx="8.6" cy="9.4" r="1.5"/>`);
+ICONS.barcodeIco = (s = 19) => t1Stroke(s, `<path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/>`);
+ICONS.labelIco = (s = 19) => t1Stroke(s, `<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>`);
+ICONS.boltStroke = (s = 19) => t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
+ICONS.searchIco = (s = 18) => t1Stroke(s, `<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>`);
+
 ICONS.pit = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
@@ -240,9 +254,9 @@ function crateIcon(kind, s = 22) {
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
 function mapLegendHtml() {
-  const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">☠☠</span></div></div>`;
+  const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
   const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type)}</div>`;
-  const mini = `<div class="map-mini-mark"><span class="mini-glyph">☠</span></div>`;
+  const mini = `<div class="map-mini-mark">${bhIcon('badge-skull', 17)}</div>`;
   const rows = [
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
@@ -1090,6 +1104,29 @@ function foodSubtitle(food) {
 function foodDefaultKcal(food) {
   const n = nutrientsFor(food, { mode: 'serving', idx: 0, qty: 1 });
   return n ? Math.round(n.kcal) : null;
+}
+// one default serving, all macros: the Tier 1 food row shows protein next to
+// kcal because protein is the macro the game actually pays for (+40 XP).
+function foodDefaultNutr(food) {
+  return nutrientsFor(food, { mode: 'serving', idx: 0, qty: 1 });
+}
+
+/* What is left in the day, including the active-calorie credit renderToday
+   applies, so the picker and Today can never disagree about the number. */
+async function dayBudget() {
+  const entries = await entriesFor(S.date);
+  const hk = await db.get('health', S.date);
+  const bonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
+  const targets = S.settings.targets || {};
+  const target = (targets.kcal || 0) + (bonus > 0 ? bonus : 0);
+  const tot = dayTotals(entries);
+  return {
+    target, used: tot.kcal, left: target - tot.kcal,
+    p: tot.p, pTarget: targets.p || 0,
+    proteinHit: !!(targets.p && tot.p >= targets.p),
+    meals: new Set(entries.map(e => e.meal)),
+    firstOfDay: entries.length === 0,
+  };
 }
 
 /* ================= today ================= */
@@ -1993,6 +2030,69 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton =
 
 /* The spire pitch, shown when you stand at an unclaimed one. States what you get
    in plain terms, because a wall of territory rules is how a good idea dies. */
+/* Tapping a boss den. The map can show you WHERE a tower is; it cannot tell you
+   whether it is worth the walk, which is the whole reason this sheet exists (Tom,
+   2026-08-06, on the persistent distance list: "showing the distance from things
+   doesnt seem useful i can jsut look at the map"). Every value shown is real and
+   already computed: the weekly theme and boss, the tier, `den.reward`, and the
+   gear odds straight off the roll's own weights.
+   `onFight` is passed in so this sheet never has to know how a fight is built. */
+function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
+  const odds = denGearOdds(den.tier || 0);
+  const r = den.reward || {};
+  const crateName = r.crate === 'golden' ? 'Golden' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
+  const pay = [
+    crateName ? [crateIcon(r.crate, 22), crateName.toUpperCase(), 'CRATE'] : null,
+    r.coins ? [ICONS.coin(22), String(r.coins), 'COINS'] : null,
+    r.xp ? [ICONS.star(20), String(r.xp), 'XP'] : null,
+  ].filter(Boolean);
+
+  const wrap = openSheet(`
+    <div class="sheet-head">
+      <div class="hd">
+        <h2>${den.roaming ? 'Roaming den' : 'Boss den'}</h2>
+        <div class="sub">${den.roaming ? 'Here today, gone tomorrow' : 'Rerolls its boss every Monday'}</div>
+      </div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
+    </div>
+    <div class="sheet-body">
+      <div class="den-hero">
+        <span class="art"><img src="assets/brand/tombstone.png" alt=""></span>
+        <div class="who">
+          <b>${esc(den.name || 'Boss den')}</b>
+          <small>${esc(den.boss || 'Warden')}</small>
+          <span class="tier">TIER ${(den.tier || 0) + 1}</span>
+        </div>
+      </div>
+      ${pay.length ? `${t1Sect('Pays out')}
+      <div class="den-pays">
+        ${pay.map(([ico, big, lab]) => `<div class="p"><span>${ico}</span><b>${esc(big)}</b><small>${lab}</small></div>`).join('')}
+      </div>` : ''}
+      ${t1Sect('Gear drop')}
+      <p class="note" style="margin-bottom:7px">Two pieces drop, you keep one. This den's odds:</p>
+      <div class="den-odds">
+        ${odds.map(o => `<span class="${o.rarity}"><i>${o.pct}%</i>${o.rarity.toUpperCase()}</span>`).join('')}
+      </div>
+      <div class="den-walk">
+        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <div><div class="d">${den.dist != null ? esc(fmtDist(den.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough to fight' : `Get within ${DEN_RADIUS_M} m to start`}</small></div>
+      </div>
+    </div>
+    <div class="t1-foot">
+      <button class="btn${inRange && !cleared ? '' : ' spent'}" id="denFight"${inRange && !cleared ? '' : ' disabled'}>
+        ${cleared ? 'Already cleared today' : `Fight ${esc(den.boss || 'the warden')}`}
+      </button>
+      ${cleared
+        ? '<div class="why">It pays again tomorrow. The tribute is once a day per den.</div>'
+        : inRange ? '' : `<div class="why">Walk to within ${DEN_RADIUS_M} m and this lights up.</div>`}
+    </div>`, { cls: 't1', name: 'den-sheet' });
+
+  if (inRange && !cleared && onFight) {
+    $('#denFight', wrap).addEventListener('click', () => { history.back(); setTimeout(onFight, 220); });
+  }
+  return wrap;
+}
+
 function openSpireSheet(s, view, rival = null) {
   const holder = rival ? (rival.ownerName || 'A rival') : s.warden;
   const wrap = openSheet(`
@@ -2022,8 +2122,12 @@ function openSpireSheet(s, view, rival = null) {
       // pass all afternoon. The 1h server shield stops the fast loop; this makes
       // the slow one cost something. NPC wardens stay free: walking out to an
       // unclaimed tower should never be gated.
+      // spendPitFight returns {ok:false} when tapped out, and an object is always
+      // truthy, so `if (!spent)` NEVER fired: this gate has never once blocked a
+      // rival-tower fight, at any energy level. The comment above described a rule
+      // the code did not implement.
       const spent = await spendPitFight();
-      if (!spent) { toast('No fights left in the tank. Log a meal or take a walk, then come back for it.', 4200); return; }
+      if (!spent.ok) { toast('No fights left in the tank. Log a meal or take a walk, then come back for it.', 4200); return; }
       // A rival's tower is defended by a faithful clone of THEIR fighter, the
       // same snapshot friend battles already use. No stats invented for them.
       const d = rival.defender || {};
@@ -2548,27 +2652,44 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
 
 function openAdd(meal = 0) {
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>Add food</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head">
+      <div class="hd"><h2>Add food</h2></div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Done">${ICONS.close(17)}</button></div>
+    </div>
+    <div class="t1-budget" id="addBudget" hidden></div>
     <div class="sheet-body">
-      <div class="chips" id="mealChips" style="margin-bottom:12px">
-        ${MEALS.map((m, i) => `<button class="chip ${i === meal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="mealChips">
+        ${MEALS.map((m, i) => `<button class="${i === meal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
       </div>
-      <div class="action-tiles">
-        <button class="action-tile" id="actScan">${ICONS.barcode}Scan barcode</button>
-        <button class="action-tile" id="actLabel">${ICONS.label}Scan label</button>
-        <button class="action-tile" id="actQuick">${ICONS.bolt}Quick add</button>
-        <button class="action-tile" id="actMyFoods">${ICONS.bone(20)}My foods</button>
+      <div class="t1-routes" style="margin:12px 0 4px">
+        <button class="t1-route" id="actScan">${ICONS.barcodeIco()}<b>Barcode</b><span class="xp">+15 XP</span></button>
+        <button class="t1-route" id="actLabel">${ICONS.labelIco()}<b>Label</b><span class="xp">+20 XP</span></button>
+        <button class="t1-route" id="actQuick">${ICONS.boltStroke()}<b>Quick</b></button>
+        <button class="t1-route" id="actMyFoods">${ICONS.bone(19)}<b>My foods</b></button>
       </div>
-      <div class="search-wrap">${ICONS.search}<input id="q" class="input" type="search" placeholder="Search foods" autocomplete="off" enterkeyhint="search"></div>
+      <div style="height:12px"></div>
+      <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
       <div id="results"></div>
-    </div>`, { cls: 'full' });
+    </div>`, { cls: 'full t1' });
+
+  // the number you are deciding against. Async so the sheet opens instantly.
+  dayBudget().then(b => {
+    const el = $('#addBudget', wrap);
+    if (!el || !el.isConnected) return;
+    const pct = b.target > 0 ? Math.max(0, Math.min(100, (b.used / b.target) * 100)) : 0;
+    el.innerHTML = `
+      <div class="n${b.left < 0 ? ' over' : ''}">${Math.abs(Math.round(b.left)).toLocaleString()}<small>${b.left < 0 ? 'OVER' : 'LEFT'}</small></div>
+      <div class="tr"><i style="width:${pct}%"></i></div>
+      ${b.pTarget ? `<div class="p">${Math.round(b.p)} / ${Math.round(b.pTarget)} P</div>` : ''}`;
+    el.hidden = false;
+  });
 
   $('#actMyFoods', wrap)?.addEventListener('click', () => { closeAllSheetsViaHistory(); setTimeout(() => { location.hash = '#/foods'; }, 200); });
 
   let curMeal = meal;
-  $$('#mealChips .chip', wrap).forEach(c => c.addEventListener('click', () => {
+  $$('#mealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#mealChips .chip', wrap).forEach(x => x.classList.toggle('on', x === c));
+    $$('#mealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
   }));
   $('#actScan', wrap).addEventListener('click', () => openScanner(() => curMeal));
   $('#actLabel', wrap).addEventListener('click', () => openLabelFlow(() => curMeal));
@@ -2582,14 +2703,15 @@ function openAdd(meal = 0) {
     const favs = allSearchableFoods().filter(f => f.favorite).slice(0, 6);
     let html = '';
     if (recents.length) {
-      html += '<div class="sect-h">Recent</div>' + recents.map(r => {
+      html += t1Sect('Log it again') + recents.map(r => {
         if (r.food) return foodRowHtml(r.food);
-        return `<button class="food-row" data-relog="${r.entry.id}">
-          <div class="n"><div class="name">${esc(r.entry.name)}</div><div class="sub">${esc(r.entry.portionLabel || 'quick add')}</div></div>
-          <span class="kc">${Math.round(r.entry.kcal)}<small>kcal</small></span></button>`;
+        return `<button class="t1-frow" data-relog="${r.entry.id}">
+          <span class="t1-med"><b>${Math.round(r.entry.kcal)}</b><small>KCAL</small></span>
+          <span class="nm"><b>${esc(r.entry.name)}</b><small>${esc(r.entry.portionLabel || 'quick add')}</small></span>
+          ${r.entry.p ? `<span class="pg"><b>${fmtG(r.entry.p)}g</b><small>PROTEIN</small></span>` : ''}</button>`;
       }).join('');
     }
-    if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
+    if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
     results.innerHTML = html;
     bindRows();
@@ -2629,7 +2751,7 @@ function openAdd(meal = 0) {
   async function runOnlineSearch(q) {
     if (!q) return;
     const holder = $('#onlineSect', results);
-    if (holder) holder.innerHTML = '<div class="sect-h">Online results <span class="spin"></span></div>';
+    if (holder) holder.innerHTML = t1Sect('Online results', '<span class="spin"></span>');
     try {
       let foods = S.onlineCache.get(q.toLowerCase());
       if (!foods) {
@@ -2639,7 +2761,7 @@ function openAdd(meal = 0) {
       if (input.value.trim() !== q) return;
       const sect = $('#onlineSect', results);
       if (!sect) return;
-      sect.innerHTML = '<div class="sect-h">Online results</div>' +
+      sect.innerHTML = t1Sect('Online results') +
         (foods.length ? foods.map(foodRowHtml).join('') : '<p class="note" style="padding:8px 2px">Nothing found online. Try the barcode or label scanner.</p>');
       bindRows();
     } catch (e) {
@@ -2659,7 +2781,7 @@ function openAdd(meal = 0) {
       const local = searchFoods(allSearchableFoods(), q, 25);
       results.innerHTML =
         (local.length ? local.map(foodRowHtml).join('') : '<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>') +
-        `<div id="onlineSect">${q.length >= 3 ? `<button class="food-row" data-online><div class="n"><div class="name" style="color:var(--accent)">Search online for "${esc(q)}"</div><div class="sub">USDA + Open Food Facts databases</div></div></button>` : ''}</div>`;
+        `<div id="onlineSect">${q.length >= 3 ? `<button class="t1-frow" data-online><span class="t1-med">${ICONS.searchIco(19)}</span><span class="nm"><b style="color:var(--accent)">Search online for "${esc(q)}"</b><small>USDA + Open Food Facts</small></span></button>` : ''}</div>`;
       bindRows();
     }, 120);
   });
@@ -2668,11 +2790,15 @@ function openAdd(meal = 0) {
   showDefault();
 }
 
+const t1Sect = (label, extra = '') => `<div class="t1-sect"><b>${label}</b><i></i>${extra}</div>`;
+
 function foodRowHtml(f) {
-  const kcal = foodDefaultKcal(f);
-  return `<button class="food-row" data-food="${esc(f.id)}">
-    <div class="n"><div class="name">${esc(f.name)}</div><div class="sub">${esc(foodSubtitle(f))}</div></div>
-    <span class="kc">${kcal != null ? kcal : '·'}<small>kcal</small></span>
+  const n = foodDefaultNutr(f);
+  const kcal = n ? Math.round(n.kcal) : null;
+  return `<button class="t1-frow" data-food="${esc(f.id)}">
+    <span class="t1-med"><b>${kcal != null ? kcal : '·'}</b><small>KCAL</small></span>
+    <span class="nm"><b>${esc(f.name)}</b><small>${esc(foodSubtitle(f))}</small></span>
+    ${n && n.p ? `<span class="pg"><b>${fmtG(n.p)}g</b><small>PROTEIN</small></span>` : ''}
   </button>`;
 }
 
@@ -2687,70 +2813,98 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   const wrap = openSheet(`
     <div class="sheet-head">
-      <div style="min-width:0">
+      <div class="hd">
         <h2 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(food.name)}</h2>
-        <div class="note" style="margin-top:2px">${esc(food.brand || '')}${food.brand ? ' · ' : ''}<span class="src-badge">${srcLabel}</span></div>
+        <div class="sub">${esc(food.brand || '')}${food.brand ? ' · ' : ''}<span class="t1-tag">${srcLabel}</span></div>
       </div>
-      <div style="display:flex;align-items:center;gap:4px">
-        <button id="favBtn" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
-        <button class="sheet-close">Cancel</button>
+      <div class="t1-tools">
+        <button id="favBtn" class="t1-icon-btn${food.favorite ? ' gold' : ''}" aria-label="Favorite">${ICONS.star(!!food.favorite)}</button>
+        <button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button>
       </div>
     </div>
     <div class="sheet-body">
-      <div class="preview">
-        <div class="kcal"><span id="pvKcal">0</span><small>kcal</small></div>
-        <div class="pcf">
-          <span><i class="dot p"></i><span id="pvP">0</span>P</span>
-          <span><i class="dot c"></i><span id="pvC">0</span>C</span>
-          <span><i class="dot f"></i><span id="pvF">0</span>F</span>
+      <div class="t1-hero">
+        <div class="k"><b id="pvKcal">0</b><small>KCAL</small><span class="of" id="pvServ"></span></div>
+        <div class="t1-macros">
+          <div class="mp"><small>PROTEIN</small><b id="pvP">0g</b><div class="tr"><i id="pvPBar"></i></div></div>
+          <div class="mc"><small>CARBS</small><b id="pvC">0g</b><div class="tr"><i id="pvCBar"></i></div></div>
+          <div class="mf"><small>FAT</small><b id="pvF">0g</b><div class="tr"><i id="pvFBar"></i></div></div>
         </div>
       </div>
-      <div class="chips scroll" id="servChips">
-        ${(food.servings || []).map((s, i) => `<button class="chip" data-serv="${i}">${esc(s.label)}</button>`).join('')}
-        ${food.per100 ? '<button class="chip" data-grams>grams</button>' : ''}
+      <div class="t1-seg scroll" id="servChips">
+        ${(food.servings || []).map((s, i) => `<button data-serv="${i}">${esc(s.label)}</button>`).join('')}
+        ${food.per100 ? '<button data-grams>grams</button>' : ''}
       </div>
       <div style="height:12px"></div>
       <div id="qtyArea"></div>
       <div style="height:14px"></div>
-      <div class="chips" id="pMealChips">
-        ${MEALS.map((m, i) => `<button class="chip ${i === curMeal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="pMealChips">
+        ${MEALS.map((m, i) => `<button class="${i === curMeal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
       </div>
+      <div class="t1-payoff" id="payoff" hidden></div>
       <div style="height:16px"></div>
-      <button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button>
-      ${editing ? '<div style="height:8px"></div><button class="btn danger" id="delBtn">Delete entry</button>' : ''}
+      ${editing ? '<button class="btn danger" id="delBtn">Delete entry</button>' : ''}
       ${food.source === 'custom' ? '<div style="height:8px"></div><button class="btn ghost" id="editFoodBtn">Edit food details</button>' : ''}
-    </div>`);
+    </div>
+    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1' });
+
+  /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
+     visible before the tap, which is why the XP economy read as invisible.
+     Editing an existing entry pays nothing new, so the block stays hidden. */
+  let budget = null;
+  if (!editing) dayBudget().then(b => { budget = b; preview(); });
+  function renderPayoff(n) {
+    const box = $('#payoff', wrap);
+    if (!box || editing || !budget || !n) return;
+    const rows = [];
+    rows.push(['+10', 'Logged a food', '']);
+    if (budget.firstOfDay) rows.push(['+15', 'First log of the day', '']);
+    if (via === 'scan') rows.push(['+15', 'Barcode scan', '']);
+    if (via === 'label') rows.push(['+20', 'Label scan', '']);
+    if (budget.pTarget && !budget.proteinHit && budget.p + (n.p || 0) >= budget.pTarget) {
+      rows.push(['+40', 'Hits your protein target for today', 'hit']);
+    }
+    const meals = new Set([...budget.meals, curMeal]);
+    if (!budget.meals.has(curMeal) && [0, 1, 2].every(m => meals.has(m))) {
+      rows.push(['+20', 'All meals logged today', 'hit']);
+    }
+    const left = budget.left - n.kcal;
+    box.innerHTML = `<h3>What this does</h3>` + rows.map(([xp, t, cls]) =>
+      `<div class="t1-pr${cls ? ' ' + cls : ''}"><span class="xp">${xp}</span><span class="t">${t}</span></div>`).join('') +
+      `<div class="t1-pr rest"><span class="xp">&nbsp;</span><span class="t">Left after this</span>
+        <span class="left${left < 0 ? ' over' : ''}">${Math.abs(Math.round(left)).toLocaleString()} kcal${left < 0 ? ' over' : ''}</span></div>`;
+    box.hidden = false;
+  }
 
   const qtyArea = $('#qtyArea', wrap);
 
   function renderQty() {
     if (sel.mode === 'grams') {
       qtyArea.innerHTML = `
-        <div class="stepper">
-          <button data-d="-10">-</button>
-          <input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams">
-          <button data-d="10">+</button>
-        </div>
-        <div class="note" style="text-align:center;margin-top:8px">grams</div>`;
+        <div class="t1-step">
+          <button data-d="-10" aria-label="less"></button>
+          <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams"><small>GRAMS</small></div>
+          <button class="plus" data-d="10" aria-label="more"></button>
+        </div>`;
       $('#gramsIn', wrap).addEventListener('input', e => { sel.grams = num(e.target.value) || 0; preview(); });
-      $$('.stepper button', qtyArea).forEach(b => b.addEventListener('click', () => {
+      $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         sel.grams = Math.max(1, (sel.grams || 0) + Number(b.dataset.d));
         $('#gramsIn', wrap).value = fmtQty(sel.grams);
         preview();
       }));
     } else {
       qtyArea.innerHTML = `
-        <div class="stepper">
-          <button data-d="-0.25">-</button>
-          <input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings">
-          <button data-d="0.25">+</button>
+        <div class="t1-step">
+          <button data-d="-0.25" aria-label="fewer"></button>
+          <div class="val"><input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings"><small>SERVINGS</small></div>
+          <button class="plus" data-d="0.25" aria-label="more"></button>
         </div>
-        <div class="note" style="text-align:center;margin-top:8px">servings · tap the number to type any amount (e.g. 1.33)</div>`;
+        <div class="note" style="text-align:center;margin-top:8px">Tap the number to type any amount, e.g. 1.33</div>`;
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
       qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
-      $$('.stepper button', qtyArea).forEach(b => b.addEventListener('click', () => {
+      $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
         qin.value = fmtQty(sel.qty);
         preview();
@@ -2760,7 +2914,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
   }
 
   function markChips() {
-    $$('#servChips .chip', wrap).forEach(c => {
+    $$('#servChips button', wrap).forEach(c => {
       const on = c.hasAttribute('data-grams') ? sel.mode === 'grams' : (sel.mode === 'serving' && Number(c.dataset.serv) === sel.idx);
       c.classList.toggle('on', on);
     });
@@ -2769,12 +2923,24 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
   function preview() {
     const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
     $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
-    $('#pvP', wrap).textContent = fmtG(n.p) + 'g ';
-    $('#pvC', wrap).textContent = fmtG(n.c) + 'g ';
-    $('#pvF', wrap).textContent = fmtG(n.f) + 'g ';
+    $('#pvP', wrap).textContent = fmtG(n.p) + 'g';
+    $('#pvC', wrap).textContent = fmtG(n.c) + 'g';
+    $('#pvF', wrap).textContent = fmtG(n.f) + 'g';
+    $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
+    /* The bars show THIS food's own macro split, not its share of the day. A
+       single apple against a daily protein target is 1% and every bar reads as
+       broken; its share of its own calories is always meaningful. */
+    const kp = (n.p || 0) * 4, kc = (n.c || 0) * 4, kf = (n.f || 0) * 9;
+    const sum = kp + kc + kf;
+    const bar = (id, part) => {
+      const el = $(id, wrap);
+      if (el) el.style.width = sum > 0 ? Math.round((part / sum) * 100) + '%' : '0%';
+    };
+    bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
+    renderPayoff(n);
   }
 
-  $$('#servChips .chip', wrap).forEach(c => c.addEventListener('click', () => {
+  $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
     if (c.hasAttribute('data-grams')) {
       const cur = nutrientsFor(food, sel);
       sel.mode = 'grams';
@@ -2785,14 +2951,16 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     renderQty(); preview();
   }));
 
-  $$('#pMealChips .chip', wrap).forEach(c => c.addEventListener('click', () => {
+  $$('#pMealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#pMealChips .chip', wrap).forEach(x => x.classList.toggle('on', x === c));
+    $$('#pMealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    preview(); // the all-meals bonus depends on which meal this lands in
   }));
 
   $('#favBtn', wrap).addEventListener('click', async () => {
     food.favorite = !food.favorite;
     $('#favBtn', wrap).innerHTML = ICONS.star(!!food.favorite);
+    $('#favBtn', wrap).classList.toggle('gold', !!food.favorite);
     if (food.source !== 'generic') await db.put('foods', food);
     else await kvSet('fav-' + food.id, food.favorite); // generic favs live in kv
   });
@@ -2839,7 +3007,14 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
   if (food.source === 'custom') $('#editFoodBtn', wrap)?.addEventListener('click', () => openFoodForm({ existing: food, meal: curMeal }));
 
   // restore generic favorite state async
-  if (food.source === 'generic') kvGet('fav-' + food.id).then(v => { if (v != null) { food.favorite = v; $('#favBtn', wrap).innerHTML = ICONS.star(!!v); } });
+  if (food.source === 'generic') kvGet('fav-' + food.id).then(v => {
+    if (v == null) return;
+    food.favorite = v;
+    const fb = $('#favBtn', wrap);
+    if (!fb) return;
+    fb.innerHTML = ICONS.star(!!v);
+    fb.classList.toggle('gold', !!v);
+  });
 
   renderQty();
   preview();
@@ -2864,19 +3039,23 @@ async function openEntryEdit(entryId) {
 
 function openQuickAdd(getMeal, entry = null) {
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>${entry ? 'Edit quick add' : 'Quick add'}</h2><button class="sheet-close">Cancel</button></div>
+    <div class="sheet-head">
+      <div class="hd"><h2>${entry ? 'Edit quick add' : 'Quick add'}</h2></div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+    </div>
     <div class="sheet-body">
-      <div class="field"><label>Name (optional)</label><input id="qaName" placeholder="e.g. Dinner out" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}"></div>
-      <div class="field"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}"></div>
-      <div class="grid3">
-        <div class="field"><label>Protein g</label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}"></div>
-        <div class="field"><label>Carbs g</label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}"></div>
-        <div class="field"><label>Fat g</label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}"></div>
+      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}"></div>
+      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}"></div>
+      ${t1Sect('Macros, if you know them')}
+      <div class="t1-g3">
+        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}"></div>
+        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}"></div>
+        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}"></div>
       </div>
-      <div style="height:8px"></div>
-      <button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button>
-      ${entry ? '<div style="height:8px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
-    </div>`);
+      ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
+      ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
+    </div>
+    <div class="t1-foot"><button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button></div>`, { cls: 't1' });
   $('#qaKcal', wrap).focus();
   $('#qaAdd', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
@@ -2919,18 +3098,22 @@ async function openScanner(getMeal) {
   const wrap = openSheet(`
     <div class="scan-stage">
       <video muted playsinline></video>
-      <div class="reticle"></div>
+      <div class="scan-head"><b>SCAN A BARCODE</b><span>+15 XP</span></div>
+      <div class="reticle t1"><i></i><i></i><i></i><i></i></div>
       <div class="scan-status" id="scanStatus"></div>
-      <div class="scan-hint">Fill the box with the barcode · hold ~20 cm so it stays sharp</div>
+      <div class="scan-hint"><span>${ICONS.crosshair(15)}Fill the brackets, hold about 20 cm away</span></div>
       <div class="scan-tools">
-        <button class="icon-btn" id="torchBtn" hidden aria-label="Flashlight"><svg viewBox="0 0 24 24"><path d="M8 2h8l-1 7h3l-9 13 2-9H7z"/></svg></button>
-        <button class="icon-btn sheet-close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="icon-btn sheet-close" aria-label="Close">${ICONS.close(18)}</button>
+        <button class="icon-btn" id="torchBtn" hidden aria-label="Flashlight">${ICONS.torchIco(18)}</button>
       </div>
     </div>
     <div class="scan-foot">
-      <input class="input" id="manualCode" type="text" inputmode="numeric" placeholder="Type barcode digits" autocomplete="off">
-      <button class="btn small" id="manualGo" style="flex:none">Look up</button>
-    </div>`, { cls: 'scanner', onClose: () => scanner && scanner.stop() });
+      <div class="row">
+        <div class="t1-search">${ICONS.barcodeIco(17)}<input id="manualCode" type="text" inputmode="numeric" placeholder="Type the digits instead" autocomplete="off"></div>
+        <button class="btn small" id="manualGo">Look up</button>
+      </div>
+      <button class="scan-alt" id="scanToLabel">No barcode on it? <b>Scan the label</b></button>
+    </div>`, { cls: 'scanner t1', onClose: () => scanner && scanner.stop() });
 
   const video = $('video', wrap);
   const status = $('#scanStatus', wrap);
@@ -2940,17 +3123,31 @@ async function openScanner(getMeal) {
   scanner = createScanner(video, {
     onCode: code => { audioTick(); handleBarcode(code, getMeal); },
     onState: (st) => {
-      if (st === 'denied') status.innerHTML = `Camera access denied.<br><span style="font-weight:500;font-size:12.5px">Allow camera for Boneheadz Gym in ${/android/i.test(navigator.userAgent || '') ? 'Settings → Apps → Boneheadz Gym → Permissions → Camera' : 'iOS Settings'}, or type the barcode below.</span>`;
-      else if (st === 'error') status.textContent = 'Camera unavailable. Type the barcode below.';
-      else if (st === 'stalled') status.textContent = 'Camera is not sending frames. Close and reopen the scanner.';
-      else if (st === 'running') { status.textContent = ''; if (scanner.hasTorch()) $('#torchBtn', wrap).hidden = false; }
-      else status.textContent = 'Starting camera...';
+      // the status and the aiming hint share one slot, so only one can speak
+      const say = (msg, sub = '') => {
+        status.innerHTML = `<span class="plate">${msg}${sub ? `<small>${sub}</small>` : ''}</span>`;
+        const h = $('.scan-hint', wrap); if (h) h.hidden = true;
+      };
+      if (st === 'denied') say('Camera access denied', `Allow camera for Boneheadz Gym in ${/android/i.test(navigator.userAgent || '') ? 'Settings, Apps, Boneheadz Gym, Permissions, Camera' : 'iOS Settings'}, or type the barcode below.`);
+      else if (st === 'error') say('Camera unavailable', 'Type the barcode below.');
+      else if (st === 'stalled') say('The camera stopped sending frames', 'Close and reopen the scanner.');
+      else if (st === 'running') {
+        status.textContent = '';
+        const h = $('.scan-hint', wrap); if (h) h.hidden = false;
+        if (scanner.hasTorch()) $('#torchBtn', wrap).hidden = false;
+      } else say('Starting the camera');
     },
   });
   scanner.start();
 
   let torchOn = false;
-  $('#torchBtn', wrap).addEventListener('click', () => { torchOn = !torchOn; scanner.setTorch(torchOn); });
+  $('#torchBtn', wrap).addEventListener('click', (ev) => {
+    torchOn = !torchOn;
+    scanner.setTorch(torchOn);
+    ev.currentTarget.classList.toggle('on', torchOn);
+  });
+  // the miss-case used to need a whole extra sheet to discover
+  $('#scanToLabel', wrap).addEventListener('click', () => { scanner.stop(); openLabelFlow(getMeal); });
   $('#manualGo', wrap).addEventListener('click', () => {
     const code = $('#manualCode', wrap).value.replace(/\D/g, '');
     if (code.length >= 8) handleBarcode(code, getMeal);
@@ -2959,27 +3156,30 @@ async function openScanner(getMeal) {
 
   async function handleBarcode(code, getMeal) {
     scanner.stop();
-    status.innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Looking up ' + code;
+    $('.scan-hint', wrap)?.setAttribute('hidden', '');
+    status.innerHTML = `<span class="plate"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Looking up ${esc(code)}</span>`;
     // 1. local (previously scanned / created)
     let food = S.userFoods.find(f => f.barcode && barcodeMatch(f.barcode, code));
     // 2. Open Food Facts
     if (!food) { food = await fetchOffProduct(code); }
     // 3. USDA branded fallback
-    if (!food) { status.textContent = 'Checking USDA...'; food = await fetchFdcByBarcode(code, S.settings.fdcKey || 'DEMO_KEY'); }
+    if (!food) { status.innerHTML = '<span class="plate">Checking USDA</span>'; food = await fetchFdcByBarcode(code, S.settings.fdcKey || 'DEMO_KEY'); }
     if (food) {
       openPortion(food, { meal: getMeal(), via: 'scan' });
       return;
     }
     status.textContent = '';
     openSheet(`
-      <div class="sheet-head"><h2>New food</h2><button class="sheet-close">Back</button></div>
+      <div class="sheet-head">
+        <div class="hd"><h2>Not in the books</h2><div class="sub">Barcode ${esc(code)}</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Back">${ICONS.close(17)}</button></div>
+      </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:14px">We couldn't find this barcode in the food databases (lots of packaged foods aren't listed). Snap the nutrition label instead, it takes a few seconds and it's yours forever after:</p>
-        <button class="btn" id="missLabel">📷 Scan the nutrition label</button>
-        <div style="height:8px"></div>
+        <p class="note" style="margin-bottom:14px">Plenty of packaged food was never listed in the databases. Snap the nutrition label instead: a few seconds now, and it is yours forever after.</p>
+        <button class="btn" id="missLabel">${ICONS.camera(18)}Scan the label</button>
+        <div style="height:10px"></div>
         <button class="btn ghost" id="missManual">Type it in manually</button>
-        <p class="note" style="margin-top:12px;font-size:11.5px;opacity:.7">Barcode ${esc(code)}</p>
-      </div>`);
+      </div>`, { cls: 't1' });
     $('#missLabel').addEventListener('click', () => openLabelFlow(getMeal, code));
     $('#missManual').addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
   }
@@ -2994,16 +3194,31 @@ function barcodeMatch(a, b) {
 
 function openLabelFlow(getMeal, barcode = null) {
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>Scan nutrition label</h2><button class="sheet-close">Cancel</button></div>
+    <div class="sheet-head">
+      <div class="hd"><h2>Scan a label</h2><div class="sub xp">+20 XP</div></div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+    </div>
     <div class="sheet-body">
-      <p class="note" style="margin-bottom:14px">Take a straight-on photo of the Nutrition Facts panel in good light. Boneheadz reads it on-device; nothing is uploaded.</p>
+      <div class="t1-stage" id="labelStage">
+        <img src="assets/brand/label-guide.svg" alt="" onerror="this.remove()">
+        <div class="brk"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="t1-rules">
+        <div><span>1</span>Shoot it straight on, not at an angle</div>
+        <div><span>2</span>Good light, no glare across the numbers</div>
+        <div><span>3</span>Fill the frame with the panel itself</div>
+      </div>
+      <div class="t1-priv">${ICONS.lock(15)}<div><b>Read on your phone.</b> The photo never leaves the device.</div></div>
       <input type="file" accept="image/*" capture="environment" id="labelFile" hidden>
       <input type="file" accept="image/*" id="labelPick" hidden>
-      <button class="btn" id="takeBtn">Take photo</button>
-      <div style="height:8px"></div>
-      <button class="btn ghost" id="pickBtn">Choose from library</button>
-      <div id="ocrArea" style="margin-top:16px"></div>
-    </div>`);
+      <div id="ocrArea" style="margin-top:14px"></div>
+    </div>
+    <div class="t1-foot">
+      <div class="t1-g2">
+        <button class="btn" id="takeBtn">${ICONS.camera(18)}Photo</button>
+        <button class="btn ghost" id="pickBtn">${ICONS.photos(18)}Library</button>
+      </div>
+    </div>`, { cls: 't1' });
 
   const area = $('#ocrArea', wrap);
   $('#takeBtn', wrap).addEventListener('click', () => $('#labelFile', wrap).click());
@@ -3012,10 +3227,15 @@ function openLabelFlow(getMeal, barcode = null) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
+    // the guide and the rules have done their job once there is a photo; leaving
+    // them above the read would stack two labels in one sheet.
+    $('#labelStage', wrap)?.remove();
+    $('.t1-rules', wrap)?.remove();
+    $('.t1-priv', wrap)?.remove();
     area.innerHTML = `
-      <img src="${url}" alt="label" style="width:100%;border-radius:14px;max-height:260px;object-fit:contain;background:var(--surface-2)">
+      <img src="${url}" alt="label" style="width:100%;border:2px solid var(--ink);border-radius:14px;max-height:300px;object-fit:contain;background:var(--surface-2)">
       <div class="progress"><i id="ocrBar" style="width:4%"></i></div>
-      <p class="note" style="text-align:center" id="ocrMsg">Reading label... first use downloads the reader (~10 MB)</p>`;
+      <p class="note" style="text-align:center" id="ocrMsg">Reading the label. First use downloads the reader, about 10 MB.</p>`;
     try {
       const { ocrLabel } = await import('./ocr.js');
       const text = await ocrLabel(file, p => { const b = $('#ocrBar', wrap); if (b) b.style.width = Math.round(p * 100) + '%'; });
@@ -3059,32 +3279,60 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     return '';
   };
 
+  /* After a label read this screen IS the confirmation step, so it says so, and
+     the fields the reader could not fill are flagged where the eye already is
+     instead of in a paragraph at the top. */
+  const READ_KEYS = ['kcal', 'p', 'c', 'f', 'fiber', 'sugar', 'sodium'];
+  const readCount = fromLabel
+    ? READ_KEYS.filter(k => v(k) !== '' && v(k) != null).length + (servingGrams ? 1 : 0)
+    : 0;
+  const missing = k => (fromLabel && (v(k) === '' || v(k) == null) ? ' check' : '');
+  const flag = k => (missing(k) ? '<span class="t1-tag warn">Check</span>' : '');
+  const fld = (id, label, key, unit = '', extra = '') => `
+    <div class="t1-field${missing(key)}">
+      <div class="lbl"><label>${label}${unit ? `<span class="u">${unit}</span>` : ''}</label>${flag(key)}</div>
+      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}">
+    </div>`;
+
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>${f ? 'Edit food' : 'New food'}</h2><button class="sheet-close">Cancel</button></div>
+    <div class="sheet-head">
+      <div class="hd">
+        <h2>${fromLabel ? 'Check the numbers' : f ? 'Edit food' : 'New food'}</h2>
+        <div class="sub">${fromLabel ? 'Then it is yours forever' : barcode ? `Barcode ${esc(barcode)}` : 'Saved to My foods'}</div>
+      </div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+    </div>
     <div class="sheet-body">
-      ${photoUrl ? `<img src="${photoUrl}" alt="label" style="width:100%;border-radius:14px;max-height:190px;object-fit:contain;background:var(--surface-2);margin-bottom:12px">` : ''}
+      ${photoUrl ? `<div class="t1-read">
+        <span class="th"><img src="${photoUrl}" alt="label"></span>
+        <span class="tx"><b>Read ${readCount} of 8 fields</b><small>${8 - readCount > 0 ? `${8 - readCount} need a look, flagged below` : 'Everything came through'}</small></span>
+        <button class="again" id="ffRetake">RETAKE</button>
+      </div>` : ''}
       ${warnings.length ? `<div class="warn">${warnings.map(esc).join('<br>')}</div>` : ''}
-      <div class="field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || '')}"></div>
-      <div class="field"><label>Brand (optional)</label><input id="ffBrand" value="${esc(f?.brand || '')}"></div>
-      <div class="grid2">
-        <div class="field"><label>Serving name</label><input id="ffServ" value="${esc(servingLabel)}"></div>
-        <div class="field"><label>Serving grams (optional)</label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55"></div>
+      ${t1Sect('What is it')}
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || '')}"></div>
+      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
+      ${t1Sect('One serving')}
+      <div class="t1-g2">
+        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}"></div>
+        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55"></div>
       </div>
-      <div class="sect-h" style="margin-top:6px">Per serving</div>
-      <div class="grid2">
-        <div class="field"><label>Calories</label><input id="ffKcal" type="text" inputmode="numeric" value="${v('kcal')}"></div>
-        <div class="field"><label>Protein g</label><input id="ffP" type="text" inputmode="decimal" value="${v('p')}"></div>
-        <div class="field"><label>Carbs g</label><input id="ffC" type="text" inputmode="decimal" value="${v('c')}"></div>
-        <div class="field"><label>Fat g</label><input id="ffF" type="text" inputmode="decimal" value="${v('f')}"></div>
-        <div class="field"><label>Fiber g</label><input id="ffFib" type="text" inputmode="decimal" value="${v('fiber')}"></div>
-        <div class="field"><label>Sugar g</label><input id="ffSug" type="text" inputmode="decimal" value="${v('sugar')}"></div>
+      ${t1Sect('Per serving')}
+      <div class="t1-g2">
+        ${fld('ffKcal', 'Calories', 'kcal', '', 'numeric')}
+        ${fld('ffP', 'Protein', 'p', 'g')}
+        ${fld('ffC', 'Carbs', 'c', 'g')}
+        ${fld('ffF', 'Fat', 'f', 'g')}
+        ${fld('ffFib', 'Fiber', 'fiber', 'g')}
+        ${fld('ffSug', 'Sugars', 'sugar', 'g')}
       </div>
-      <div class="field"><label>Sodium mg</label><input id="ffNa" type="text" inputmode="numeric" value="${v('sodium')}"></div>
-      ${barcode ? `<p class="note">Will be linked to barcode ${esc(barcode)} so scanning finds it instantly next time.</p>` : ''}
-      <div style="height:10px"></div>
-      <button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button>
-      ${f ? '<div style="height:8px"></div><button class="btn danger" id="ffDel">Delete food</button>' : ''}
-    </div>`);
+      ${fld('ffNa', 'Sodium', 'sodium', 'mg', 'numeric')}
+      ${barcode ? `<p class="note">Linked to barcode ${esc(barcode)}, so scanning finds it instantly next time.</p>` : ''}
+      ${f ? '<div style="height:12px"></div><button class="btn danger" id="ffDel">Delete food</button>' : ''}
+    </div>
+    <div class="t1-foot"><button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button></div>`, { cls: 't1' });
+
+  $('#ffRetake', wrap)?.addEventListener('click', () => history.back());
 
   $('#ffSave', wrap).addEventListener('click', async () => {
     const name = $('#ffName', wrap).value.trim();
@@ -7191,16 +7439,25 @@ async function renderBoneyard(el) {
       <div class="map-stage" id="mapStage">
         <div class="map-canvas" id="mapCanvas"></div>
         <div class="map-attrib">© OpenStreetMap</div>
-        <button class="map-key-btn" id="mapKeyBtn" aria-label="Map key">?</button>
+        <div class="map-topbar">
+          <div class="mt-tx"><h1>Boneyard</h1><small id="mapCount">Reading the bones</small></div>
+          <button class="map-ctl" id="mapRecenter" hidden aria-label="Recentre">${ICONS.crosshair(18)}</button>
+          <button class="map-ctl" id="mapKeyBtn" aria-label="Map key">${bhIcon('badge-map', 19)}</button>
+        </div>
         <div class="map-legend" id="mapLegend" hidden>${mapLegendHtml()}</div>
-        <button class="map-recenter" id="mapRecenter" hidden>⌖</button>
-        <div class="map-readout" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span>  Reading the bones...</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
         <button class="btn map-den" id="mapSecret" hidden></button>
         <button class="btn map-mini" id="mapMini" hidden>Fight</button>
         <button class="btn map-den" id="mapGlutton" hidden>Face The Glutton</button>
         <button class="btn map-spire-btn" id="mapSpire" hidden></button>
-        <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
+        <!-- the nearest-spawn readout and the Collect button were two separate
+             floating things; they are one card now. #mapReadout is re-rendered on
+             every fix, so #mapCollect has to be its SIBLING or the innerHTML
+             update would destroy the button and its listener. -->
+        <div class="map-act" id="mapAct">
+          <div class="ma-body" id="mapReadout"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Reading the bones</div>
+          <button class="btn map-collect" id="mapCollect" hidden>Collect</button>
+        </div>
       </div>`;
 
     // Map key: toggle the legend; tapping the map closes it.
@@ -7262,13 +7519,35 @@ async function renderBoneyard(el) {
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
     });
 
-    // player marker: mini bonehead + facing cone
+    // player marker: mini bonehead + facing cone + the collect-radius ring
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
-    youEl.innerHTML = `<div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+    youEl.innerHTML = `<div class="map-radius" hidden></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
     composeAvatars(youEl);   // marker is built outside route(), so it needs its own call
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
     const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
+
+    /* The 55 m collect rule, drawn instead of explained in a paragraph. Sized
+       from the map's OWN projection (player pixel vs a point COLLECT_RADIUS_M
+       north of it), not from a zoom-to-pixels guess, so it stays truthful at any
+       zoom. Recomputed on zoom and on every fix. */
+    const radiusEl = $('.map-radius', youEl);
+    function sizeRadius() {
+      if (!radiusEl) return;
+      try {
+        const a = map.project([lng, lat]);
+        // 1 deg latitude ~ 111,320 m; due north so longitude is untouched
+        const b = map.project([lng, lat + COLLECT_RADIUS_M / 111320]);
+        const px = Math.abs(a.y - b.y);
+        // below a few pixels the ring is noise, not information
+        if (!isFinite(px) || px < 14) { radiusEl.hidden = true; return; }
+        radiusEl.style.width = radiusEl.style.height = (px * 2) + 'px';
+        radiusEl.hidden = false;
+      } catch { radiusEl.hidden = true; }
+    }
+    map.on('zoom', sizeRadius);
+    map.on('move', sizeRadius);
+    sizeRadius();
 
     const date = dateKey();
     const week = isoWeekKey();
@@ -7288,6 +7567,20 @@ async function renderBoneyard(el) {
     // Twice-daily world event: cleared windows are remembered per appearance,
     // so he comes back tomorrow morning but can't be farmed inside one window.
     const gluttonCleared = new Set(xpRows0.filter(r => r.type === 'glutton').map(r => r.key));
+    /* One attempt per tower per day. `spireKey` has existed in spires.js since
+       Dark Spires shipped and was wired to NOTHING, so a spire fight had no
+       ledger at all: beat a tower whose claim is then refused (you are at
+       SPIRE_CAP, or it is inside its 1h shield) and the button still said "Take",
+       paying 40 coins per rerun forever. Losing was equally free to retry.
+       Same shape as gluttonCleared, including the re-read on focus. */
+    const spireTried = new Set(xpRows0.filter(r => r.type === 'spiretry').map(r => r.key));
+    // dateKey() at call time, not the map-open `date`: settle writes with the key
+    // for the day it settles on, and a map left open past midnight would otherwise
+    // check yesterday's key forever.
+    const spireSpentToday = id => spireTried.has(spireKey(id, dateKey()));
+    const syncSpireTried = async () => {
+      for (const r of await db.all('xp')) if (r.type === 'spiretry') spireTried.add(r.key);
+    };
     const gluttonLive = () => { const w = gluttonWindow(); return (w.active && !gluttonCleared.has(gluttonKey(date, w.slot))) ? w : null; };
     // gluttonCleared starts as a SNAPSHOT taken when this screen opened, so any
     // clear that happens elsewhere (or a slot/date the event payload got wrong)
@@ -7319,7 +7612,7 @@ async function renderBoneyard(el) {
     function placeWalkable(raw, cache, id) {
       const cached = cache.get(id);
       if (cached) return cached;                     // already resolved to a walkable spot
-      if (!map.loaded()) return null;                // not ready → hide for now, retry
+      if (!map || !map.loaded()) return null;         // gone or not ready → hide for now, retry
       const c = map.getCanvas();
       const pt = map.project([raw.lng, raw.lat]);
       const onScreen = pt.x > -120 && pt.y > -120 && pt.x < c.clientWidth + 120 && pt.y < c.clientHeight + 120;
@@ -7404,7 +7697,32 @@ async function renderBoneyard(el) {
     mapEl.addEventListener('click', ev => {
       if (reportOpen) return;
       const el = ev.target && ev.target.closest && ev.target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
-      if (el) { showPoiTip(el); ev.stopPropagation(); } else hidePoiTip();
+      if (el) {
+        // A boss den gets the full sheet: it is the only marker where "is this
+        // worth the walk" is a real question (tier, payout, gear odds). A bone
+        // pile or a mini keeps the light tooltip; a sheet for a coin pile would
+        // be ceremony over nothing.
+        const denRec = [...denMarkers.values()].find(r => r.el === el);
+        if (denRec) {
+          hidePoiTip();
+          const d = denRec.den;
+          openDenSheet(d, {
+            cleared: claimedBoss.has(denKey(dateKey(), d)),
+            inRange: d.dist != null && d.dist <= DEN_RADIUS_M,
+            // reuse the existing #mapDen path rather than rebuilding the fight:
+            // it owns escalation, the paired add and the too-fast gate. Point it
+            // at the den that was actually TAPPED, since two dens can be in
+            // range at once and the button targets whichever it found first.
+            onFight: () => {
+              const btn = $('#mapDen', body);
+              if (!btn) return;
+              btn.dataset.denId = d.id;
+              btn.click();
+            },
+          });
+        } else showPoiTip(el);
+        ev.stopPropagation();
+      } else hidePoiTip();
     });
     map.on('movestart', hidePoiTip);
 
@@ -7464,7 +7782,7 @@ async function renderBoneyard(el) {
           // visuals + animations live on .den-fx, NOT the marker root — MapLibre
           // owns the root's transform to position the marker, so a transform-based
           // CSS animation on the root would fight it and strand the marker at 0,0.
-          el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${'☠'.repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
+          el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
         } else {
@@ -7479,7 +7797,10 @@ async function renderBoneyard(el) {
       const db2 = $('#mapDen', body);
       if (db2) {
         db2.hidden = !openDen;
-        if (openDen) { db2.textContent = `☠ Enter ${openDen.name}`; db2.dataset.denId = openDen.id; }
+        // drawn skull, not a ☠ dingbat, on a button that sits over hand-inked art
+        // drawn skull, not a ☠ dingbat. Tinted to the button's ink, because the
+        // icon's default bone fill is nearly invisible on amber.
+        if (openDen) { db2.innerHTML = `${bhIcon('badge-skull', 19, '#201500')}Enter ${esc(openDen.name)}`; db2.dataset.denId = openDen.id; }
       }
       return dens;
     }
@@ -7503,7 +7824,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-mini-mark';
-          el.innerHTML = `<span class="mini-glyph">☠</span>`;
+          el.innerHTML = bhIcon('badge-skull', 17);
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
         } else {
@@ -7558,7 +7879,7 @@ async function renderBoneyard(el) {
       // see matches where loot actually stops spawning. Convert metres -> px at
       // the current zoom via map.project (falls back to a fixed size pre-load).
       const halo = gluttonRec.el.querySelector('.glutton-blight-halo');
-      if (halo && map.loaded()) {
+      if (halo && map && map.loaded()) {
         try {
           const a = map.project([glng, glat]);
           const b = map.project([glng, glat + GLUTTON_BLIGHT_M / 111320]);
@@ -7671,7 +7992,14 @@ async function renderBoneyard(el) {
         sb.hidden = !spireInRange;
         if (spireInRange) {
           const { s, view, rival, siege } = spireInRange;
+          // A tower you do not hold is one attempt a day. Defending your own
+          // (breaking a siege), collecting tribute and tending are NOT gated:
+          // they are not fights you can farm.
+          const takeSpent = !view.held && spireSpentToday(s.id);
+          sb.disabled = takeSpent;
+          sb.classList.toggle('spent', takeSpent);
           sb.textContent = siege && view.held ? `Break the siege at ${s.name}`
+            : takeSpent ? `${s.name} holds you off until tomorrow`
             : rival ? `Take ${s.name} from ${rival.ownerName || 'them'}`
             : !view.held ? `Take ${s.name}`
             : view.tribute.days ? `Collect ${view.tribute.coins} from ${s.name}`
@@ -7752,7 +8080,7 @@ async function renderBoneyard(el) {
       // so none sit in a backyard/building, and SUPPRESS any that would land in
       // open water with nothing reachable nearby. The seeded anchor (ledger key)
       // is untouched; only the shown + collectible position moves. Cached per id.
-      if (map.loaded()) {
+      if (map && map.loaded()) {
         for (let i = live.length - 1; i >= 0; i--) {
           const s = live[i];
           const placed = placeWalkable({ lat: s.lat, lng: s.lng }, spawnSnap, s.id);
@@ -7784,6 +8112,16 @@ async function renderBoneyard(el) {
       for (const [id, rec] of spawnMarkers) {
         if (!liveIds.has(id)) { rec.marker.remove(); spawnMarkers.delete(id); }
       }
+      // the one thing the map itself cannot tell you: how much is out there, and
+      // how much of it you have already picked up today. `collected` holds keys
+      // shaped `spawn-<date>-<id>` across every day, so filter to this one.
+      const cnt = $('#mapCount', body);
+      if (cnt) {
+        const near = live.filter(s => !s.far).length;
+        const got = [...collected].filter(k => k.startsWith(`spawn-${date}-`)).length;
+        cnt.innerHTML = `<b>${near || 'Nothing'}</b> ${near === 1 ? 'spawn nearby' : near ? 'nearby' : 'nearby yet'}`
+          + (got ? ` · ${got} collected today` : '');
+      }
       for (const s of live) {
         let rec = spawnMarkers.get(s.id);
         if (!rec) {
@@ -7810,16 +8148,23 @@ async function renderBoneyard(el) {
       if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
       const tooFast = youSpeed > MAX_LOOT_SPEED;
       const ro = $('#mapReadout', body);
-      if (ro) ro.innerHTML = tooFast
-        ? '<b style="color:var(--gold)">Too fast to loot.</b> Slow down to a walk to collect.'
-        : nearest
-          ? `<b>${SPAWN_TYPES[nearest.type].label}</b> · ${nearest.dist <= COLLECT_RADIUS_M ? '<b style="color:var(--accent)">IN RANGE!</b>' : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}`
-          : 'Cleared nearby. Keep walking, spawns keep surfacing across the map.';
-      const btn = $('#mapCollect', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
+      if (ro) {
+        const icon = nearest ? `<span class="ic${inRange ? ' near' : ''}">${spawnIcon(nearest.type, 20)}</span>` : '';
+        ro.innerHTML = tooFast
+          ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
+          : nearest
+            ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${inRange
+                ? 'At your feet'
+                : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}</small></span>`
+            : `<span class="tx"><b>Cleared nearby</b><small>Keep walking, spawns keep surfacing.</small></span>`;
+      }
+      const card = $('#mapAct', body);
+      if (card) card.classList.toggle('live', !!inRange && !tooFast);
+      const btn = $('#mapCollect', body);
       if (btn) {
         btn.hidden = !inRange;
-        if (inRange) { btn.textContent = tooFast ? 'Slow down to loot' : `Collect ${SPAWN_TYPES[nearest.type].label}`; btn.disabled = tooFast; }
+        if (inRange) { btn.textContent = tooFast ? 'Slow down' : 'Grab it'; btn.disabled = tooFast; }
         btn.dataset.spawnId = inRange ? nearest.id : '';
       }
     }
@@ -7875,6 +8220,12 @@ async function renderBoneyard(el) {
       // A SIEGE OUTRANKS EVERYTHING. There is a deadline on it, so a besieged tower
       // must never offer to be tended or milked instead of defended.
       if (siege && view.held) return openSiegeSheet(s, view, siege);
+      // belt as well as braces: the button is disabled, but a stale tap or a
+      // second entry point must not get a free run at a tower again today.
+      if (!view.held && spireSpentToday(s.id)) {
+        toast(`${s.name} has already fought you off today. Come back tomorrow.`, 3600);
+        return;
+      }
       if (rival || !view.held) return openSpireSheet(s, view, rival);
       if (view.tribute.days) {
         const r = await collectTribute(s.id);
@@ -7967,10 +8318,13 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
-    const onSpireClaimed = () => { refreshSpires({ force: true }); };
+    const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
+    // a LOST attempt dispatches only this one, and it still has to spend the day
+    const onSpireTried = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
+    addEventListener('bh-spire-tried', onSpireTried);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -7997,6 +8351,7 @@ async function renderBoneyard(el) {
         if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(heading)}deg)`; }
       }
       youMarker.setLngLat([lng, lat]);
+      sizeRadius();   // lat changed, so metres-per-pixel did too
       youWalk.move(lat, lng);
       if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
       refreshWorld();
@@ -8143,7 +8498,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v270'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v272'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9471,6 +9826,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     } else if (fight.over.winner === 'f') {
       coins = 5;
       await coinsAdd(coins);
+    }
+    /* Spend the day's attempt on this tower, whatever the outcome. Outside the
+       win/lose branches on purpose: a loss and a draw have to consume it too, or
+       you simply rerun the fight until you win. Sieges are exempt (defending what
+       you own is not farmable), and so is a fight the claim actually stuck for,
+       because holding it changes the button anyway. */
+    if (foeCfg.mode === 'spire' && !foeCfg.siege && foeCfg.spire) {
+      await award(spireKey(foeCfg.spire.id, dateKey()), 'spiretry', 0, `Fought for ${foeCfg.spire.name}`);
+      dispatchEvent(new CustomEvent('bh-spire-tried', { detail: { id: foeCfg.spire.id } }));
     }
     const title = won ? 'VICTORY' : fight.over.winner === 'draw' ? 'DOUBLE KO' : 'DOWN, NOT OUT';
     const friendRepeat = foeCfg.mode === 'friend' && !foeCfg._friendFirst;

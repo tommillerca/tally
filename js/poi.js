@@ -207,6 +207,20 @@ export function escalateDen(den, wins) {
   return { mult: soloMult, bossMult, aiLevel, add };
 }
 
+/* The gear-drop odds for a den, read off the SAME weights the roll uses, so the
+   sheet can never advertise a chance the game does not honour. Percentages are
+   rounded for display and the largest slice absorbs the rounding, so they always
+   read as exactly 100. */
+export function denGearOdds(tier = 0) {
+  const w = RARITY_WEIGHTS[Math.min(Math.max(0, tier | 0), RARITY_WEIGHTS.length - 1)];
+  const total = w[0] + w[1] + w[2];
+  const pcts = w.map(x => Math.round((x / total) * 100));
+  const drift = 100 - (pcts[0] + pcts[1] + pcts[2]);
+  const biggest = pcts.indexOf(Math.max(...pcts));
+  pcts[biggest] += drift;
+  return RARITY_TIERS.map((rarity, i) => ({ rarity, pct: pcts[i] }));
+}
+
 export function denRewardLabel(r) {
   const bits = [];
   if (r.crate) bits.push(r.crate === 'golden' ? 'Golden Crate' : r.crate === 'egg' ? 'Step Egg' : 'Common Crate');
