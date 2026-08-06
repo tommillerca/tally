@@ -336,7 +336,7 @@ svg { display: block; }
   font-size: 16px; font-weight: 800; letter-spacing: -0.01em;
 }
 .btn:active { transform: scale(0.985); }
-.btn:disabled { opacity: 0.45; }
+.btn:disabled { background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1; }
 .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
 .btn.danger { background: transparent; color: var(--danger); border: 1px solid rgba(255, 122, 110, 0.35); }
 .btn.small { width: auto; padding: 9px 14px; font-size: 13.5px; border-radius: 11px; }
@@ -565,17 +565,17 @@ a { color: var(--accent); text-decoration: none; }
 }
 .ward-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ward-cell.r-common { border-color: rgba(159, 172, 159, 0.4); }
-.ward-cell.r-uncommon { border-color: rgba(74, 222, 128, 0.55); }
-.ward-cell.r-rare { border-color: rgba(111, 208, 255, 0.6); }
-.ward-cell.r-epic { border-color: rgba(192, 132, 252, 0.65); box-shadow: 0 0 11px rgba(192, 132, 252, 0.22); }
+.ward-cell.r-uncommon { border-color: rgba(162, 224, 166, 0.55); }
+.ward-cell.r-rare { border-color: rgba(124, 196, 255, 0.6); }
+.ward-cell.r-epic { border-color: rgba(155,146,232,0.65); box-shadow: 0 0 11px rgba(155,146,232,0.22); }
 .ward-cell.r-legendary { border-color: rgba(255, 201, 97, 0.8); box-shadow: 0 0 12px rgba(255, 201, 97, 0.25); }
 
 /* rarity glow on pets: the pet card + the in-fight battle body (epic/legendary) */
-.pet-card.r-epic { box-shadow: 0 0 14px rgba(192, 132, 252, 0.28); }
+.pet-card.r-epic { box-shadow: 0 0 14px rgba(155,146,232,0.28); }
 .pet-card.r-legendary { box-shadow: 0 0 16px rgba(255, 201, 97, 0.3); }
-.fstage.petmini.r-epic img { filter: drop-shadow(0 0 7px rgba(192, 132, 252, 0.9)); }
+.fstage.petmini.r-epic img { filter: drop-shadow(0 0 7px rgba(155,146,232,0.9)); }
 .fstage.petmini.r-legendary img { filter: drop-shadow(0 0 8px rgba(255, 201, 97, 0.95)); }
-.fstage.petmini.r-rare img { filter: drop-shadow(0 0 5px rgba(111, 208, 255, 0.7)); }
+.fstage.petmini.r-rare img { filter: drop-shadow(0 0 5px rgba(124, 196, 255, 0.7)); }
 /* per-meal cap + auto-sync label */
 .meal-head .kcal.over { color: var(--danger); }
 .card-title .link.auto { color: var(--accent); font-weight: 700; cursor: default; }
@@ -703,8 +703,8 @@ a { color: var(--accent); text-decoration: none; }
 .reveal-card b { display: block; font-size: 15px; }
 .reveal-card small { color: var(--text-3); font-size: 12px; display: block; }
 .rar-chip { font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
-.reveal-card.r-rare { border-color: rgba(111, 208, 255, 0.5); }
-.reveal-card.r-epic { border-color: rgba(192, 132, 252, 0.55); }
+.reveal-card.r-rare { border-color: rgba(124, 196, 255, 0.5); }
+.reveal-card.r-epic { border-color: rgba(155,146,232,0.55); }
 .reveal-card.r-legendary { border-color: rgba(255, 201, 97, 0.7); box-shadow: 0 0 18px rgba(255, 201, 97, 0.2); }
 
 
@@ -982,7 +982,7 @@ body::before {
 .wn-list { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
 .wn-list li { font-size: 13.5px; line-height: 1.4; color: var(--text-2); }
 /* weapon / off-hand rarity glow on the avatar (epic/legendary held items) */
-.bh-anim img.wpn-glow.r-epic { filter: drop-shadow(0 0 5px rgba(192, 132, 252, 0.85)); }
+.bh-anim img.wpn-glow.r-epic { filter: drop-shadow(0 0 5px rgba(155,146,232,0.85)); }
 .bh-anim img.wpn-glow.r-legendary { filter: drop-shadow(0 0 6px rgba(255, 201, 97, 0.95)); }
 .bh-anim img.wpn-glow.r-prestige { filter: drop-shadow(0 0 7px rgba(255, 107, 139, 0.98)); }
 /* gear tier-set bonuses */
@@ -1605,7 +1605,7 @@ body::before {
 }
 .weap-card.r-common { border-left-color: #9fac9f; }
 .weap-card.r-rare { border-left-color: #60a5fa; }
-.weap-card.r-epic { border-left-color: #c084fc; }
+.weap-card.r-epic { border-left-color: var(--violet); }
 .weap-card.r-legendary { border-left-color: #ffc961; }
 .weap-card.r-prestige { border-left-color: #ff6b8b; background: linear-gradient(105deg, rgba(255,107,139,0.10), var(--surface-2) 55%); box-shadow: 0 0 12px rgba(255,107,139,0.18); }
 .weap-card.on { box-shadow: 0 0 0 2px var(--accent) inset; }
@@ -1617,7 +1617,7 @@ body::before {
 .weap-cta .q-frac { align-self: center; }
 .weap-card.owned { opacity: 0.92; }
 .weap-tier { font-size: 10px; letter-spacing: -1px; }
-.weap-tier.t1 { color: #60a5fa; } .weap-tier.t2 { color: #c084fc; } .weap-tier.t3 { color: #ffc961; }
+.weap-tier.t1 { color: #60a5fa; } .weap-tier.t2 { color: var(--violet); } .weap-tier.t3 { color: #ffc961; }
 .weap-tier.t4 { color: #ff6b8b; }
 .cta-dust { opacity: 0.9; font-size: 0.92em; }
 .wallet-dust { font-size: 12px; color: var(--text-3); font-family: system-ui, sans-serif; letter-spacing: 0; }
@@ -1955,7 +1955,7 @@ body::before {
 @keyframes hatchFlash { 0% { opacity: 0.9; transform: scale(0.3) } 100% { opacity: 0; transform: scale(3.4) } }
 .hatch-pet { position: absolute; transform: scale(0.1); opacity: 0; z-index: 3; }
 .hatch-pet img { width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45)); }
-.hatch-pet.r-epic img { filter: drop-shadow(0 0 10px rgba(192, 132, 252, 0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
+.hatch-pet.r-epic img { filter: drop-shadow(0 0 10px rgba(155,146,232,0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
 .hatch-pet.r-legendary img { filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.95)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
 .hatch-stage.burst .hatch-pet { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.12s forwards; }
 @keyframes hatchRise { 0% { transform: scale(0.1) translateY(18px); opacity: 0 } 60% { opacity: 1 } 100% { transform: scale(1) translateY(0); opacity: 1 } }
@@ -1989,7 +1989,7 @@ body::before {
 /* the hatched pet, front & centre: big portrait, name + rarity below */
 .hatch-prize { display: grid; justify-items: center; gap: 5px; margin: 6px auto 0; }
 .hatch-prize img { width: 148px; height: 148px; object-fit: contain; filter: drop-shadow(0 7px 8px rgba(0, 0, 0, 0.5)); }
-.hatch-prize.r-epic img { filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.85)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
+.hatch-prize.r-epic img { filter: drop-shadow(0 0 12px rgba(155,146,232,0.85)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
 .hatch-prize.r-legendary img { filter: drop-shadow(0 0 15px rgba(255, 201, 97, 0.95)) drop-shadow(0 7px 8px rgba(0, 0, 0, 0.45)); }
 .hatch-prize b { font-size: 20px; letter-spacing: -0.01em; }
 .hatch-prize small { color: var(--text-3); font-size: 12.5px; }
@@ -2210,8 +2210,7 @@ body::before {
 .map-mini-mark {
   width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
   background: radial-gradient(circle at 50% 38%, #5a3a7a, #2a1836);
-  border: 2px solid #c084fc; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-  filter: drop-shadow(0 0 3px rgba(192, 132, 252, 0.5));
+  border: 2px solid var(--violet); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 .map-mini-mark .mini-glyph { font-size: 15px; color: #f2e9d7; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
 .map-mini-mark.t2 { border-color: var(--amber); background: radial-gradient(circle at 50% 38%, #7a5a2a, #3a2810); filter: drop-shadow(0 0 4px rgba(255, 180, 84, 0.6)); }
@@ -2230,7 +2229,7 @@ body::before {
 .btn.map-den ~ .btn.map-collect { bottom: calc(var(--sab, 0px) + 14px); }
 .btn.map-mini {
   position: absolute; left: 16px; right: 16px; bottom: calc(var(--sab, 0px) + 66px); z-index: 6;
-  width: auto; background: #c084fc; color: #1a1024;
+  width: auto; background: var(--violet); color: #1a1024;
   animation: bubblePop 0.3s cubic-bezier(0.34, 1.6, 0.64, 1);
 }
 /* Map key (legend): a ? button toggles a card whose rows reuse the exact marker
@@ -2290,7 +2289,7 @@ body::before {
 .gear-inspect.r-common { border-left-color: #9fac9f; }
 .gear-inspect.r-uncommon { border-left-color: #9fac9f; }
 .gear-inspect.r-rare { border-left-color: #60a5fa; }
-.gear-inspect.r-epic { border-left-color: #c084fc; }
+.gear-inspect.r-epic { border-left-color: var(--violet); }
 .gear-inspect.r-legendary { border-left-color: #ffc961; box-shadow: 0 0 14px rgba(255, 201, 97, 0.28); }
 .gear-inspect img { width: 62px; height: 62px; object-fit: contain; filter: drop-shadow(0 4px 5px rgba(0,0,0,.5)); }
 .gear-inspect .gi-body { min-width: 0; display: grid; gap: 3px; }
@@ -2316,7 +2315,7 @@ body::before {
 .gear-chip span { font-size: 10px; color: var(--text-3); }
 .gear-chip.on span { color: var(--accent); font-weight: 700; }
 .gear-chip.on.r-rare { border-color: #7cc4ff66; }
-.gear-chip.on.r-epic { border-color: #c084fc66; }
+.gear-chip.on.r-epic { border-color: rgba(155,146,232,.4); }
 .gear-chip.on.r-legendary { border-color: #ffb45466; }
 .reveal-card.gear b::before { content: '⚔ '; }
 
@@ -2350,7 +2349,7 @@ body::before {
 }
 .pd-slot.sel { border-color: var(--accent); box-shadow: 0 0 10px rgba(165, 232, 71, 0.35); }
 .pd-slot.gear-on.r-rare { border-color: #7cc4ff; }
-.pd-slot.gear-on.r-epic { border-color: #c084fc; }
+.pd-slot.gear-on.r-epic { border-color: var(--violet); }
 .pd-slot.gear-on.r-legendary { border-color: #ffb454; }
 .pd-bottom { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; justify-items: center; margin-top: 8px; }
 .pd-bottom .pd-slot { width: 100%; }
@@ -2402,7 +2401,7 @@ body::before {
 .pet-card { display: flex; gap: 12px; align-items: center; padding: 10px; margin: 8px 0 4px;
   background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: 15px; }
 .pet-card.r-legendary { border-color: #ffb454; box-shadow: 0 0 14px rgba(255,180,84,.4); }
-.pet-card.r-epic { border-color: #c084fc88; }
+.pet-card.r-epic { border-color: rgba(155,146,232,.53); }
 .pet-card img { width: 60px; height: 60px; object-fit: contain; flex: none; }
 .pet-card-meta { display: grid; gap: 2px; min-width: 0; }
 .pet-card-meta b { font-size: 14px; }
@@ -2469,9 +2468,9 @@ body::before {
 .pet-stats b { font-size: 12.5px; font-weight: 800; color: var(--ink); }
 .rar-lbl { font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .rar-lbl.r-common { color: #9fac9f; }
-.rar-lbl.r-uncommon { color: #4ade80; }
-.rar-lbl.r-rare { color: #6fd0ff; }
-.rar-lbl.r-epic { color: #c084fc; }
+.rar-lbl.r-uncommon { color: var(--mint); }
+.rar-lbl.r-rare { color: var(--protein); }
+.rar-lbl.r-epic { color: var(--violet); }
 .rar-lbl.r-legendary { color: #ffc961; }
 .pet-tree { display: grid; gap: 8px; margin: 4px 0 6px; }
 .pet-tier { display: grid; gap: 4px; }
@@ -2646,7 +2645,59 @@ body::before {
 .hm-legend .note { font-size: 10.5px; }
 
 /* ---- pack-crack loot reveal ---- */
-.pack-reveal { display: flex; flex-direction: column; align-items: center; min-height: 78vh; padding: 10px 16px 24px; }
+/* A reveal sheet goes edge to edge: the normal 24px + safe-area gap at the top
+   let a hub panel show above the moment. */
+.sheet.takeover { height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310; }
+.sheet.takeover ~ .sheet-backdrop, .sheet.takeover + .sheet-backdrop { z-index: 309; }
+.sheet.takeover .sheet-grab { display: none; }
+/* TAKEOVER. A reveal fills the sheet and paints its own ground, so nothing of
+   the screen underneath shows through behind the moment. */
+.reveal-take {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  height: 100%; flex: 1; min-height: 0;
+  padding: calc(var(--sat) + 14px) 16px calc(var(--sab) + 18px);
+  overflow: hidden;
+}
+.reveal-take::before {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(120% 70% at 50% 92%, rgba(253,104,87,.18), rgba(253,104,87,0) 60%),
+    radial-gradient(90% 55% at 50% 6%, rgba(155,146,232,.15), rgba(155,146,232,0) 62%),
+    linear-gradient(180deg, #0a0910, #100e18 55%, #0b0a11);
+}
+.reveal-take.warm::before {
+  background:
+    radial-gradient(120% 70% at 50% 88%, rgba(var(--gold-rgb),.22), rgba(255,201,97,0) 58%),
+    linear-gradient(180deg, #0a0910, #14110d 60%, #0b0a11);
+}
+.reveal-take.cool::before {
+  background:
+    radial-gradient(120% 72% at 50% 90%, rgba(162,224,166,.18), rgba(162,224,166,0) 58%),
+    linear-gradient(180deg, #0a0910, #0e1410 60%, #0b0a11);
+}
+.reveal-take > * { position: relative; z-index: 1; }
+.reveal-take .grainy { position: absolute; inset: 0; z-index: 0; background-image: var(--grain); background-size: 150px 150px; opacity: .06; pointer-events: none; }
+
+.pack-reveal { display: flex; flex-direction: column; align-items: center; flex: 1; min-height: 0; width: 100%; }
+
+/* how many cards are left, as something you can see rather than read */
+.pack-pips { display: flex; gap: 6px; justify-content: center; align-items: center; margin: 2px 0 8px; }
+.pack-pips i { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-2); border: 2px solid var(--ink); }
+.pack-pips i.done { background: var(--text-3); }
+.pack-pips i.on { background: var(--accent); transform: scale(1.35); }
+
+/* the eyebrow above a payoff */
+.reveal-eyebrow { font-size: var(--fs-0); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--coral); text-align: center; }
+/* the big stamp */
+.reveal-stamp {
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-7); line-height: .96;
+  letter-spacing: .03em; text-transform: uppercase; text-align: center;
+  color: var(--accent); text-shadow: 3px 4px 0 var(--ink); margin-top: 4px;
+}
+.reveal-stamp.gold { color: var(--gold); }
+.reveal-sub { font-size: var(--fs-2); color: var(--text-3); text-align: center; margin-top: 5px; }
+.reveal-foot { margin-top: auto; width: 100%; }
+.reveal-hint { text-align: center; font-size: var(--fs-1); color: var(--text-3); margin-top: 9px; }
 .pack-count { font-size: 12px; font-weight: 700; color: var(--text-3); letter-spacing: .08em; margin: 2px 0 6px; }
 .pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; position: relative; perspective: 1100px; touch-action: pan-y; }
 .pack-crate { display: grid; place-items: center; }
@@ -2660,8 +2711,8 @@ body::before {
   background-color: var(--surface-2);
   background-image: radial-gradient(rgba(242, 233, 215, 0.05) 1px, transparent 1.4px);
   background-size: 13px 13px;
-  border: 3px solid rgba(159,172,159,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5);
-  display: flex; flex-direction: column; align-items: center; padding: 16px 14px 14px; overflow: hidden;
+  border: 3px solid var(--text); box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55);
+  display: flex; flex-direction: column; align-items: stretch; padding: 8px 8px 0; overflow: hidden;
   /* entrance via TRANSITION (transform/opacity) so the rarity glow can own `animation` */
   opacity: 0; transform: scale(.8) rotateY(-30deg); transition: opacity .45s ease, transform .55s cubic-bezier(.2,1.1,.35,1); user-select: none;
 }
@@ -2673,21 +2724,21 @@ body::before {
 .pack-rays { position: absolute; z-index: 0; top: 50%; left: 50%; width: 150%; aspect-ratio: 1; transform: translate(-50%,-50%); pointer-events: none; border-radius: 50%;
   background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.10) 0deg 5deg, transparent 5deg 17deg); animation: raySpin 14s linear infinite; opacity: .5;
   -webkit-mask: radial-gradient(circle, #000 20%, transparent 68%); mask: radial-gradient(circle, #000 20%, transparent 68%); }
-.pack-rays.r-rare { background: repeating-conic-gradient(from 0deg, rgba(111,208,255,.16) 0deg 5deg, transparent 5deg 17deg); opacity: .55; }
-.pack-rays.r-epic { background: repeating-conic-gradient(from 0deg, rgba(192,132,252,.2) 0deg 5deg, transparent 5deg 16deg); opacity: .7; }
+.pack-rays.r-rare { background: repeating-conic-gradient(from 0deg, rgba(124,196,255,.16) 0deg 5deg, transparent 5deg 17deg); opacity: .55; }
+.pack-rays.r-epic { background: repeating-conic-gradient(from 0deg, rgba(155,146,232,.22) 0deg 5deg, transparent 5deg 16deg); opacity: .7; }
 .pack-rays.r-legendary { background: repeating-conic-gradient(from 0deg, rgba(var(--gold-rgb),.26) 0deg 5deg, transparent 5deg 15deg); opacity: .9; animation-duration: 10s; }
 @keyframes raySpin { to { transform: translate(-50%,-50%) rotate(360deg); } }
 /* one-shot bloom flash on epic+ reveal */
 .pack-flash { position: absolute; z-index: 3; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.9), transparent 55%); opacity: 0; animation: bloom .6s ease-out 1; }
 @keyframes bloom { 0% { opacity: 0; transform: scale(.6); } 20% { opacity: .85; } 100% { opacity: 0; transform: scale(1.4); } }
-.pack-card.r-uncommon { border-color: rgba(74,222,128,.6); }
+.pack-card.r-uncommon { border-color: var(--mint); }
 /* rarity fanfare: a pulsing glow that intensifies by tier. common/uncommon: none. */
-.pack-card.r-rare { border-color: rgba(111,208,255,.7); animation: glowRare 2.3s ease-in-out infinite; }
-.pack-card.r-epic { border-color: rgba(192,132,252,.8); animation: glowEpic 1.9s ease-in-out infinite; }
-.pack-card.r-legendary { border-color: rgba(255,201,97,.95); animation: glowLegend 1.5s ease-in-out infinite; }
-@keyframes glowRare { 0%,100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 12px rgba(111,208,255,.25); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 26px rgba(111,208,255,.55); } }
-@keyframes glowEpic { 0%,100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 16px rgba(192,132,252,.35); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 34px rgba(192,132,252,.7); } }
-@keyframes glowLegend { 0%,100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 20px rgba(255,201,97,.45); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 44px rgba(255,201,97,.9); } }
+.pack-card.r-rare { border-color: var(--protein); animation: glowRare 2.3s ease-in-out infinite; }
+.pack-card.r-epic { border-color: var(--violet); animation: glowEpic 1.9s ease-in-out infinite; }
+.pack-card.r-legendary { border-color: var(--gold); animation: glowLegend 1.5s ease-in-out infinite; }
+@keyframes glowRare { 0%,100% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 12px rgba(124,196,255,.25); } 50% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 26px rgba(124,196,255,.5); } }
+@keyframes glowEpic { 0%,100% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 16px rgba(155,146,232,.32); } 50% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 34px rgba(155,146,232,.62); } }
+@keyframes glowLegend { 0%,100% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 20px rgba(var(--gold-rgb),.42); } 50% { box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.55), 0 0 44px rgba(var(--gold-rgb),.85); } }
 /* floating sparkles on epic+ */
 /* sparkles are drawn SVGs (flat gold + dark outline) in the game's art style */
 .pc-spark { position: absolute; line-height: 0; opacity: 0; pointer-events: none; }
@@ -2702,19 +2753,40 @@ body::before {
 /* a NARROW moving rainbow band (not a full-face wash) so the flat face stays flat */
 .pack-card.holo .pc-foil { opacity: 1; background: linear-gradient(115deg, transparent 34%, rgba(120,200,255,.10) 43%, rgba(200,140,255,.17) 50%, rgba(255,210,120,.10) 57%, transparent 66%); background-size: 250% 250%; animation: holoShift 3.4s linear infinite; }
 @keyframes holoShift { 0% { background-position: 120% 0; } 100% { background-position: -60% 0; } }
-.pc-kind { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; color: var(--text-3); align-self: flex-start; }
-.pc-art { flex: 1; width: 100%; display: grid; place-items: center; margin: 4px 0; }
-.pc-canvas { width: 88%; height: auto; max-height: 100%; filter: drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
-.pc-icon { font-size: 96px; display: grid; place-items: center; }
-.pc-icon .bhi-wrap svg, .pc-icon svg { width: 108px; height: 108px; }
-.pc-name { font-family: var(--display); font-weight: 400; letter-spacing: .5px; font-size: 22px; text-align: center; line-height: 1.05; margin-top: 2px; }
-.pc-rar { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; margin-top: 3px; }
-.pc-stats { font-size: 12px; color: var(--text-2); text-align: center; margin-top: 6px; line-height: 1.35; }
+.pc-kind { font-size: var(--fs-0); font-weight: 800; letter-spacing: .1em; color: var(--text-3); text-align: left; padding: 2px 2px 6px; text-transform: uppercase; }
+.pc-art {
+  flex: 1; width: 100%; display: grid; place-items: center; min-height: 0;
+  border: 2px solid var(--ink); border-radius: 12px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(242,233,215,.07), rgba(242,233,215,0) 62%), var(--surface);
+}
+.pc-plate { margin: 8px -8px 0; padding: 8px 10px 9px; border-top: 2px solid var(--ink); text-align: center; }
+.pc-canvas { width: 86%; height: auto; max-height: 86%; filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
+.pc-icon { font-size: 96px; display: grid; place-items: center; width: 100%; height: 100%; }
+.pc-icon .bhi-wrap svg, .pc-icon svg { width: 62%; height: 62%; max-width: 168px; max-height: 168px; }
+.pc-name { font-family: var(--display); font-weight: 400; letter-spacing: .02em; font-size: var(--fs-5); text-align: center; line-height: 1.05; }
+.pc-rar {
+  display: inline-block; margin-top: 5px;
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  border: 2px solid var(--ink); border-radius: 7px; padding: 1px 8px;
+  background: var(--surface-2);
+}
+.pack-card.r-uncommon .pc-rar { background: var(--mint); color: var(--ink); }
+.pack-card.r-rare .pc-rar { background: var(--protein); color: var(--ink); }
+.pack-card.r-epic .pc-rar { background: var(--violet); color: var(--ink); }
+.pack-card.r-legendary .pc-rar { background: var(--gold); color: var(--ink); }
+.pc-stats { font-size: var(--fs-1); color: var(--text-3); text-align: center; margin-top: 6px; line-height: 1.35; }
 .pc-perk { font-size: 12.5px; font-weight: 800; color: var(--gold); margin-top: 7px; }
 .pc-perk-desc { font-size: 11px; color: var(--text-3); line-height: 1.3; margin-top: 1px; }
-.pack-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; min-height: 22px; }
+.pack-foot { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; min-height: 22px; }
 .pack-hint { font-size: 12px; color: var(--text-3); letter-spacing: .04em; animation: hintPulse 1.8s ease-in-out infinite; }
-.pack-coins { font-size: 15px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
+.pack-coins {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: var(--sh-sm); padding: 6px 13px;
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-4); letter-spacing: .02em;
+  color: var(--gold);
+}
+.pack-hint { order: 99; flex-basis: 100%; text-align: center; }
 @keyframes hintPulse { 0%,100% { opacity: .45; } 50% { opacity: .9; } }
 @media (prefers-reduced-motion: reduce) {
   .pack-card { transition: opacity .2s; transform: none; }
@@ -3211,9 +3283,9 @@ body::before {
 }
 .fit-chip.editing { border-color: var(--danger, #ff6b6b); }
 .fit-chip .fc-pip { width: 9px; height: 9px; border-radius: 99px; flex: none; background: #9fac9f; }
-.fit-chip .fc-pip.r-uncommon { background: #4ade80; }
-.fit-chip .fc-pip.r-rare { background: #6fd0ff; }
-.fit-chip .fc-pip.r-epic { background: #c084fc; }
+.fit-chip .fc-pip.r-uncommon { background: var(--mint); }
+.fit-chip .fc-pip.r-rare { background: var(--protein); }
+.fit-chip .fc-pip.r-epic { background: var(--violet); }
 .fit-chip .fc-pip.r-legendary { background: #ffc961; }
 .fit-chip .fc-cost { font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--accent); margin-left: 2px; }
 .fit-chip .fc-x {
@@ -3251,9 +3323,9 @@ body::before {
 }
 .col-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .col-cell.r-common { border-color: rgba(159, 172, 159, .4); }
-.col-cell.r-uncommon { border-color: rgba(74, 222, 128, .55); }
-.col-cell.r-rare { border-color: rgba(111, 208, 255, .6); }
-.col-cell.r-epic { border-color: rgba(192, 132, 252, .65); box-shadow: 0 0 9px rgba(192, 132, 252, .2); }
+.col-cell.r-uncommon { border-color: rgba(162, 224, 166, .55); }
+.col-cell.r-rare { border-color: rgba(124, 196, 255, .6); }
+.col-cell.r-epic { border-color: rgba(155,146,232,.65); box-shadow: 0 0 9px rgba(155,146,232,.2); }
 .col-cell.r-legendary { border-color: rgba(255, 201, 97, .8); box-shadow: 0 0 10px rgba(255, 201, 97, .22); }
 .col-cell.selected { outline: 2px solid var(--protein); outline-offset: 1px; }
 /* LOCKED: identical for every piece. No art, no silhouette of the real shape,
@@ -3269,7 +3341,7 @@ body::before {
   display: flex; align-items: center; gap: 11px; margin-top: 9px; padding: 9px 11px;
   border-radius: 12px; background: var(--surface-2); border: 1.5px solid var(--line);
 }
-.col-inspect.r-epic { border-color: rgba(192, 132, 252, .5); }
+.col-inspect.r-epic { border-color: rgba(155,146,232,.5); }
 .col-inspect.r-legendary { border-color: rgba(255, 201, 97, .6); }
 .col-inspect img { width: 42px; height: 42px; object-fit: contain; flex: none; }
 .col-inspect .ci-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -4456,3 +4528,97 @@ body::before {
 .den-walk .d { font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .02em; line-height: 1; color: var(--gold); }
 .den-walk small { font-size: var(--fs-2); color: var(--text-3); }
 .t1-foot .btn.spent { background: var(--surface-2); color: var(--text-3); box-shadow: var(--sh-sm); opacity: 1; }
+
+/* What a breed COST you. Both parents are consumed and the screen celebrating it
+   never said so, which is a large part of why players are confused about what
+   breeding does. The two parents show struck through, under the offspring. */
+.fused { margin-top: 16px; }
+.fused-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.gone-pet {
+  position: relative; width: 60px; height: 60px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: grid; place-items: center; opacity: .5; overflow: hidden;
+}
+.gone-pet .bh-stage, .gone-pet canvas, .gone-pet img { filter: grayscale(.75); }
+.gone-pet::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 84%; height: 2.5px;
+  background: var(--danger); border-radius: 2px; transform: translate(-50%, -50%) rotate(-32deg);
+}
+.fused-plus { font-family: var(--display); font-weight: 400; font-size: var(--fs-5); color: var(--text-3); }
+.fused-note {
+  text-align: center; margin-top: 7px;
+  font-size: var(--fs-1); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--danger);
+}
+
+/* the middle of a takeover scrolls if it has to; the stamp and the button do not */
+.reveal-body {
+  flex: 1; min-height: 0; width: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 2px;
+}
+
+/* ---- the pre-breed panel. Players kept being surprised that breeding destroys
+   both pets: with nothing selected the copy said "fuse them into a stronger one",
+   and once paired, "both parents consumed" was the last clause of a run-on line
+   in the dimmest text on the screen. Now the trade is the headline. ---- */
+.breed-h {
+  font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--coral); margin-bottom: 8px;
+}
+.breed-trade {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 10px 8px; margin-bottom: 10px;
+}
+.breed-trade .bt-in, .breed-trade .bt-out { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.breed-trade .bt-row { display: inline-flex; align-items: center; gap: 6px; }
+.breed-trade .bt-in small, .breed-trade .bt-out small {
+  font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3);
+}
+.breed-trade .bt-in small { color: var(--danger); }
+.breed-trade .bt-out small { color: var(--accent); }
+.breed-trade .bt-pet {
+  position: relative; width: 46px; height: 46px; border-radius: 50%; overflow: hidden;
+  background: var(--surface); border: 2px solid var(--ink); display: grid; place-items: center;
+  opacity: .55;
+}
+.breed-trade .bt-pet::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 84%; height: 2px;
+  background: var(--danger); border-radius: 2px; transform: translate(-50%, -50%) rotate(-32deg);
+}
+.breed-trade .bt-pet.keep { width: 54px; height: 54px; opacity: 1; border-color: var(--accent); border-width: 3px; }
+.breed-trade .bt-pet.keep::after { display: none; }
+.breed-trade .bt-plus { font-family: var(--display); font-weight: 400; font-size: var(--fs-4); color: var(--text-3); }
+.breed-trade .bt-arrow { color: var(--text-3); display: flex; }
+.breed-facts { margin: 0 0 10px; padding-left: 18px; }
+.breed-facts li { font-size: var(--fs-2); color: var(--text-2); line-height: 1.45; margin-bottom: 4px; }
+.breed-facts b { color: var(--text); }
+.breed-pick { margin-bottom: 8px; }
+.breed-pick .note { display: block; margin-bottom: 5px; }
+.btn.danger-ish { background: var(--danger); color: #2a0d09; }
+
+/* victory: loot already banked is a ROW, so it cannot out-shout the gear choice.
+   As full cards it stood as tall as the two pieces you actually have to pick
+   between, and the pick was the thing pushed off-screen. */
+.got-rows { display: grid; gap: 7px; margin: 10px 0 2px; }
+.got-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 7px 10px;
+}
+.got-row .got-ic { flex: none; width: 36px; height: 36px; border-radius: 9px; background: var(--surface-2); border: 2px solid var(--ink); display: grid; place-items: center; }
+.got-row .got-ic svg, .got-row .got-ic .bhi-wrap svg { width: 22px; height: 22px; }
+.got-row b { flex: 1; min-width: 0; font-size: var(--fs-3); font-weight: 700; }
+.got-rar {
+  flex: none; font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  border: 2px solid var(--ink); border-radius: 6px; padding: 1px 6px; background: var(--surface-2);
+}
+.got-rar.r-uncommon { background: var(--mint); color: var(--ink); }
+.got-rar.r-rare { background: var(--protein); color: var(--ink); }
+.got-rar.r-epic { background: var(--violet); color: var(--ink); }
+.got-rar.r-legendary { background: var(--gold); color: var(--ink); }
+/* the ⚔ dingbat rendered as a stray ✕ on the live screen */
+.choice-h { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; }
+.choice-h b { font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
+.choice-h i { flex: 1; height: 2px; background: var(--line); }

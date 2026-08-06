@@ -321,6 +321,12 @@ export function breedOffspring(a, b, offspringSp, iid) {
   return { iid, sp: offspringSp, lineage, shiny: !!(a.shiny || b.shiny), hatchedAtSteps: 0 };
 }
 
+/* The two pets a breed consumed, for the reveal to show. Display-only: kept off
+   the stored instance so nothing in the save grows a field it does not need. */
+export function breedParents(a, b) {
+  return [{ sp: a.sp, shiny: !!a.shiny, lineage: a.lineage || 0 }, { sp: b.sp, shiny: !!b.shiny, lineage: b.lineage || 0 }];
+}
+
 // Live status for the breeding UI (dust, cooldown, whether you have >=2 pets).
 export async function breedStatus() {
   const [list, dust, lifetime, credit] = await Promise.all([
@@ -349,6 +355,7 @@ export async function breedPets(iidA, iidB, offspringSp) {
   if ((await boneDust()) < cost) return { ok: false, reason: 'dust', cost };
   // consume both parents, add the offspring
   const off = breedOffspring(a, b, offspringSp, newIid(offspringSp));
+  const consumed = breedParents(a, b);   // for the reveal: show what it cost
   const wasEquipped = (await kvGet('petEquipped', null));
   const parentEquipped = wasEquipped === iidA || wasEquipped === iidB;
   list = removeInstance(list, iidA).instances;
@@ -376,7 +383,7 @@ export async function breedPets(iidA, iidB, offspringSp) {
       const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[sp]; await kvSet('pets', petsRec);
     }
   }
-  return { ok: true, offspring: off, cost };
+  return { ok: true, offspring: { ...off, parents: consumed }, cost };
 }
 
 let _iidSeq = 0;

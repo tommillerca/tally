@@ -4,12 +4,22 @@
 export const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let canvas = null, ctx = null, parts = [], raf = 0;
+let fxLayer = 300;
+
+/* Where the particle canvas sits in the stack. A full-screen takeover reveal
+   raises itself above the default 300 so its card can never be covered, and
+   drops the particles behind it: they still burst around the card, they just do
+   not land on its name. Every other call site keeps 300. */
+export function setFxLayer(z = 300) {
+  fxLayer = z;
+  if (canvas) canvas.style.zIndex = String(z);
+}
 
 function ensureCanvas() {
   if (canvas) return;
   canvas = document.createElement('canvas');
   canvas.className = 'fx-canvas';
-  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:300';
+  canvas.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${fxLayer}`;
   document.body.appendChild(canvas);
   const fit = () => { canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio; };
   fit();

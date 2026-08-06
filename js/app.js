@@ -1,6 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
-import { confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
+import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, evaluateBadges, earnedBadgeIds,
@@ -209,7 +209,11 @@ const ICONS = {
   label: '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>',
   bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
-  star: (on) => `<svg viewBox="0 0 24 24" style="width:21px;height:21px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`,
+  star: (a, filled) => {
+    const px = typeof a === 'number' ? a : 21;
+    const on = typeof a === 'number' ? filled !== false : !!a;
+    return `<svg class="ico" viewBox="0 0 24 24" style="width:${px}px;height:${px}px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`;
+  },
   coin: (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
   flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
   boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
@@ -221,6 +225,8 @@ const ICONS = {
    40px control without the CSS having to know which icon it got. */
 const t1Stroke = (s, d) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 ICONS.close = (s = 18) => t1Stroke(s, `<path d="M6 6l12 12M18 6L6 18"/>`);
+ICONS.chev = (s = 16) => t1Stroke(s, `<path d="M9 5l7 7-7 7"/>`);
+ICONS.quest = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M5.4 3.4h10.2c1 0 1.8.8 1.8 1.8v13.6c0 1-.8 1.8-1.8 1.8H5.4c-1 0-1.8-.8-1.8-1.8V5.2c0-1 .8-1.8 1.8-1.8z" fill="#f2e9d7" stroke="#3a352a" stroke-width="1.6" stroke-linejoin="round"/><path d="M17.4 7.4h1.4c1 0 1.8.8 1.8 1.8v9.6c0 1-.8 1.8-1.8 1.8" fill="none" stroke="#3a352a" stroke-width="1.5" stroke-linecap="round"/><path d="M6.6 7.4h7.2M6.6 11h7.2M6.6 14.6h4.6" stroke="#3a352a" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 ICONS.torchIco = (s = 18) => t1Stroke(s, `<path d="M9 2h6l-1 5h3l-8 15 1.6-9H7z"/>`);
 ICONS.crosshair = (s = 18) => t1Stroke(s, `<circle cx="12" cy="12" r="7.4"/><path d="M12 1.6v3.4M12 19v3.4M1.6 12H5M19 12h3.4"/>`);
 ICONS.lock = (s = 15) => t1Stroke(s, `<rect x="4.5" y="10" width="15" height="10" rx="2.4"/><path d="M8 10V7.6a4 4 0 0 1 8 0V10"/>`);
@@ -1258,7 +1264,7 @@ async function renderToday(el) {
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
-    <summary><span class="q-sum-ico">${ICONS.quest ? ICONS.quest(18) : '📜'}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
+    <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
     ${questTiers.map(tier => `
     <div class="q-tier ${tier.period}">
@@ -5581,14 +5587,18 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       </div>` : ''}`;
   }
   const wrap = openSheet(`
-    <div class="sheet-body" style="text-align:center;padding-top:${levelUp ? 10 : 26}px">
-      ${hero || `<div style="font-size:44px;line-height:1">${streakMilestone ? '🔥' : '🏅'}</div>`}
-      <div style="height:10px"></div>
-      ${bits.join('<div style="height:14px"></div>')}
-      <div style="height:22px"></div>
-      <button class="btn" id="celeOk">${levelUp ? 'RATTLE ON' : 'Keep it going'}</button>
-      <div style="height:6px"></div>
-    </div>`);
+    <div class="reveal-take${levelUp ? ' warm' : ''}">
+      <div class="grainy"></div>
+      <div class="reveal-eyebrow">${levelUp ? 'Level up' : streakMilestone ? 'Streak milestone' : 'Badge earned'}</div>
+      <div class="reveal-body">
+        ${hero || `<div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>`}
+        ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
+      </div>
+      <div class="reveal-foot">
+        <button class="btn" id="celeOk">${levelUp ? 'RATTLE ON' : 'Keep it going'}</button>
+      </div>
+    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+  setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
@@ -5662,14 +5672,18 @@ function openHatchReveal(res, charWrap) {
     : `<div class="lvl-stamp" style="font-size:26px">A FAMILIAR FRIEND</div>
        <p class="note">This egg hatched a pet you already know. It scampered back into your crew and left you +${res.coins} coins. Keep hatching for shinies.</p>`;
   const wrap2 = openSheet(`
-    <div class="sheet-body" style="text-align:center;padding-top:22px">
-      ${stageHtml}
-      <div class="hatch-reveal${reduced ? ' show' : ''}">
-        ${revealHtml}
-        <div style="height:16px"></div>
+    <div class="reveal-take cool">
+      <div class="grainy"></div>
+      <div class="reveal-eyebrow">Step egg</div>
+      <div class="reveal-body">
+        ${stageHtml}
+        <div class="hatch-reveal${reduced ? ' show' : ''}">${revealHtml}</div>
+      </div>
+      <div class="reveal-foot">
         <button class="btn" id="hatchOk">${item ? 'Adopt' : 'Nice'}</button>
       </div>
-    </div>`);
+    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+  setFxLayer(305);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
@@ -6508,7 +6522,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       // grillz) BOLD and crisp instead of smoothing it into mush: an integer
       // nearest-neighbor step preserves the hard cartoon outlines, then one
       // small smooth pass removes the jaggies. (Art style: clean thick lines.)
-      const scale = Math.min(cw * p / bw, ch * p / bh, 4.5);
+      const scale = Math.min(cw * p / bw, ch * p / bh, 7);
       const dw = bw * scale, dh = bh * scale;
       const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, cw, ch);
       let src = img, sx = x0, sy = y0, sw = bw, sh = bh;
@@ -6537,7 +6551,15 @@ function packCardHtml(c, { selectable = false } = {}) {
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
-  const inner = `<div class="pc-foil"></div><div class="pc-glare"></div>${sparks}<div class="pc-kind">${esc(c.kind || '')}</div><div class="pc-art">${art}</div><div class="pc-name">${esc(c.name)}</div><div class="pc-rar" style="color:${rar.color}">${rar.label}</div>${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}`;
+  /* name + rarity + stats sit on a bottom PLATE. The rarity is a chip tinted by
+     the card's own .r-<rarity> class, not inline-coloured text, so the frame and
+     the label can never disagree about what you just pulled. */
+  const inner = `<div class="pc-foil"></div><div class="pc-glare"></div>${sparks}`
+    + `<div class="pc-kind">${esc(c.kind || '')}</div>`
+    + `<div class="pc-art">${art}</div>`
+    + `<div class="pc-plate"><div class="pc-name">${esc(c.name)}</div>`
+    + `<div class="pc-rar">${rar.label}</div>`
+    + `${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}</div>`;
   return selectable
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
@@ -6559,19 +6581,28 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     if (src) { const im = new Image(); im.src = src; }
   }
   return new Promise(resolve => {
+    /* a TAKEOVER, not a sheet over a live screen: this is the payoff. The count
+       is pips you can read at a glance instead of a grey "1 / 3". */
     const wrap = openSheet(`
-      <div class="pack-reveal" id="packReveal">
-        ${cards.length ? '<div class="pack-count" id="packCount"></div>' : ''}
-        <div class="pack-stage" id="packStage"></div>
-        <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
-      </div>`);
+      <div class="reveal-take">
+        <div class="grainy"></div>
+        <div class="pack-reveal" id="packReveal">
+          ${cards.length > 1 ? `<div class="pack-pips" id="packCount">${cards.map(() => '<i></i>').join('')}</div>` : ''}
+          <div class="pack-stage" id="packStage"></div>
+          <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
+        </div>
+      </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    setFxLayer(305);   // particles burst BEHIND the card, never across its name
     const stage = $('#packStage', wrap), countEl = $('#packCount', wrap);
     let i = 0;
     const done = () => { history.back(); setTimeout(resolve, 150); };
     const advance = () => { i++; if (i >= cards.length) return done(); renderCard(); };
     function renderCard() {
       const c = cards[i];
-      if (countEl) countEl.textContent = `${i + 1} / ${cards.length}`;
+      if (countEl) $$('i', countEl).forEach((p, n) => {
+        p.classList.toggle('done', n < i);
+        p.classList.toggle('on', n === i);
+      });
       const tier = RAR_ORDER.indexOf(c.rarity);
       const reduced = reducedMotion || navigator.webdriver;
       // god-rays behind rare+, a bloom flash for epic+, then the tiltable card
@@ -6880,14 +6911,33 @@ async function openStable() {
     body.innerHTML = `
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${st.dust.toLocaleString()}</b></div>
       ${pair ? `<div class="breed-bar">
-          <b>Breed these two → offspring</b>
-          <div class="breed-sp">${spChips}</div>
-          <p class="note" style="margin:4px 0">${esc((BH_BY_ID[offSp] || {}).name || offSp)} · <b>Lineage ★${offLineage}</b> (+${Math.round(offLineage * 5)}% stats)${a.shiny || b.shiny ? ' · ✦ Shiny' : ''} · both parents consumed</p>
-          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">◆</span> ${cost}${afford ? '' : ' — not enough'}</b></div>
+          <div class="breed-h">What breeding does</div>
+          <div class="breed-trade">
+            <span class="bt-in">
+              <span class="bt-row">
+                <span class="bt-pet">${petPortraitHtml(a.sp, 38, a.shiny)}</span>
+                <span class="bt-plus">+</span>
+                <span class="bt-pet">${petPortraitHtml(b.sp, 38, b.shiny)}</span>
+              </span>
+              <small>Both destroyed</small>
+            </span>
+            <span class="bt-arrow">${ICONS.chev(20)}</span>
+            <span class="bt-out">
+              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(offSp, 44, a.shiny || b.shiny)}</span></span>
+              <small>One kept</small>
+            </span>
+          </div>
+          <ul class="breed-facts">
+            <li><b>Both parents are gone for good.</b> You end up with one pet, not three.</li>
+            <li>It keeps the <b>higher parent's level</b>, so you lose no walking.</li>
+            <li><b>Lineage ${offLineage}</b> gives it <b>+${Math.round(offLineage * 5)}% to every stat</b>.${a.shiny || b.shiny ? ' A shiny parent passes its colour on.' : ''}</li>
+          </ul>
+          <div class="breed-pick"><span class="note">Which one does it become?</span><div class="breed-sp">${spChips}</div></div>
+          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">◆</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
-          <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed</button>
+          <button class="btn danger-ish" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed and destroy both</button>
         </div>`
-      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. Flag two with <b>Breed</b> to fuse them into a stronger one, or <b>Destroy</b> a spare for Bone Dust.</p>`}
+      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. <b>Breed</b> fuses two pets into one stronger pet: <b>both go in, one comes out</b>, and the two you picked are gone. <b>Destroy</b> trades a spare for Bone Dust.</p>`}
       ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}`;
 
     $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
@@ -6932,9 +6982,16 @@ async function openStable() {
       // but the parent itself is gone. Arm-then-confirm.
       const shinyParent = sel.some(iid => (insts.find(x => x.iid === iid) || {}).shiny);
       const btn = e.currentTarget;
-      if (shinyParent && btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1'; const t = btn.textContent; btn.textContent = 'Breed with shiny?';
-        toast('✨ A shiny is in this pairing. Its colour carries to the offspring, but both parents are consumed. Tap Breed again to confirm.', 4600);
+      /* ARM ON EVERY BREED, not just a shiny pairing. It permanently destroys two
+         pets, and since v270 every irreversible spend in the game takes two taps.
+         A shiny still gets its own louder warning. */
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        const t = btn.textContent;
+        btn.textContent = shinyParent ? 'Destroy a SHINY too?' : 'Destroy both pets?';
+        toast(shinyParent
+          ? 'A shiny is in this pairing. Its colour carries to the offspring, but the shiny itself is gone for good. Tap again to confirm.'
+          : 'Both pets are destroyed and you get one back. Tap again to confirm.', 4600);
         setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = t; } }, 4600);
         return;
       }
@@ -6962,16 +7019,30 @@ async function openStable() {
 function openPetBreedResult(off) {
   const it = BH_BY_ID[off.sp] || {};
   confettiRain(70); levelSound(S.sounds);
+  const parents = (off.parents || []).slice(0, 2);
   const wrap = openSheet(`
-    <div class="sheet-body" style="text-align:center;padding-top:14px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny)}</div></div>
-      <div class="lvl-stamp" style="font-size:28px">LINEAGE ★${off.lineage}!</div>
-      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
-      <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
-      <div style="height:16px"></div>
-      <button class="btn" id="celeOk">Adopt</button>
-      <div style="height:6px"></div>
-    </div>`);
+    <div class="reveal-take cool">
+      <div class="grainy"></div>
+      <div class="reveal-eyebrow">Bred in the Stable</div>
+      <div class="reveal-stamp">Lineage ${off.lineage}</div>
+      <div class="reveal-body">
+        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny)}</div></div>
+        <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+        <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
+        ${parents.length === 2 ? `<div class="fused">
+          <div class="fused-row">
+            <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny)}</span>
+            <span class="fused-plus">+</span>
+            <span class="gone-pet">${petPortraitHtml(parents[1].sp, 42, parents[1].shiny)}</span>
+          </div>
+          <div class="fused-note">Both parents were consumed</div>
+        </div>` : ''}
+      </div>
+      <div class="reveal-foot">
+        <button class="btn" id="celeOk">Adopt</button>
+      </div>
+    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+  setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
@@ -8498,7 +8569,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v272'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v273'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9836,33 +9907,43 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await award(spireKey(foeCfg.spire.id, dateKey()), 'spiretry', 0, `Fought for ${foeCfg.spire.name}`);
       dispatchEvent(new CustomEvent('bh-spire-tried', { detail: { id: foeCfg.spire.id } }));
     }
+    // the fight is decided, so the escape hatch stops making sense
+    const fleeBtn = $('.sheet-head .sheet-close', wrap);
+    if (fleeBtn && /flee/i.test(fleeBtn.textContent || '')) fleeBtn.hidden = true;
     const title = won ? 'VICTORY' : fight.over.winner === 'draw' ? 'DOUBLE KO' : 'DOWN, NOT OUT';
     const friendRepeat = foeCfg.mode === 'friend' && !foeCfg._friendFirst;
     const rewardHtml = friendRepeat
       ? `<p class="note" style="margin:8px 0 16px">${won ? 'Nice win!' : 'Good scrap.'} You already claimed today's reward against ${esc(foeCfg.name)}. Battle a different friend for more coins + XP.</p>`
       : won
-      ? `<div class="sect-h" style="text-align:center;margin:10px 0 6px">You won</div>
-         <div class="reward-row">
+      ? `<div class="reward-row">
            <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
          </div>
-         ${extraCards.length ? `<div class="sect-h" style="text-align:center;margin:14px 0 2px;color:var(--text-2)">${bossLoot ? 'Also earned (added automatically)' : 'Your loot'}</div><div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>` : ''}`
+         ${extraCards.length ? (bossLoot
+            /* a gear choice is pending, so the automatic loot is NEWS, not a
+               decision: rows, so it cannot out-shout the thing needing a tap. */
+            ? `<div class="got-rows">${extraCards.map(c => {
+                 const r = RARITIES[c.rarity] || RARITIES.common;
+                 return `<div class="got-row"><span class="got-ic">${c.iconHtml || ''}</span><b>${esc(c.name)}</b><span class="got-rar r-${c.rarity}">${r.label}</span></div>`;
+               }).join('')}</div>`
+            : `<div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>`) : ''}`
       : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
           <div class="cele-big" style="color:${won ? 'var(--accent)' : 'var(--text-2)'}">${title}</div>
-          ${rewardHtml}
           ${bossLoot ? `
           <div class="loot-choice">
-            <div class="sect-h" style="text-align:center;color:var(--accent)">⚔ CHOOSE ONE TO KEEP</div>
-            <p class="note" style="text-align:center;margin:2px 0 4px">The boss dropped two pieces. Tap to compare, then keep one, the other is left behind.</p>
+            <div class="choice-h"><i></i><b>Choose one to keep</b><i></i></div>
+            <p class="note" style="text-align:center;margin:2px 0 6px">Two pieces dropped. Tap to compare; the one you leave behind is gone.</p>
             <div class="loot-cards">
               ${bossLoot.choices.map(g => lootCardHtml(g)).join('')}
             </div>
             <button class="btn loot-keep" disabled>Tap a piece to choose</button>
           </div>` : ''}
+          ${rewardHtml}
+
           <div style="height:12px"></div>
           <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : foeCfg.mode === 'glutton' ? 'Done' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);

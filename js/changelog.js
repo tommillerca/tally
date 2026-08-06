@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 273, date: '2026-08-07', title: 'The good bits look like the good bits', items: [
+    'The <b>payoff screens</b> are rebuilt: opening a crate, levelling up, winning a boss fight, hatching a pet, cracking a drop pack and breeding. Every one of them used to slide up as a small panel over whatever you were already looking at. They take the whole screen now.',
+    'Crate and drop cards are proper <b>trading cards</b>, with the item big, its name on a plate, and a rarity you can read at a glance. Rarity colours are the game\'s own everywhere now, instead of two different purples depending on the screen.',
+    '<b>Breeding explains itself before you commit.</b> The Stable now shows the two pets going in, the one coming out, and says plainly that both parents are destroyed, and it takes two taps like every other permanent spend.',
+    'The breed result shows <b>which two pets it cost you</b>, which the old one never did.',
+    'After a boss fight, the <b>gear you have to choose between comes first</b>. It used to sit below two full-size cards of loot that had already been added automatically, so the only thing needing a decision was the only thing off the bottom of the screen. The game also stopped offering to <b>Flee</b> a fight you had already won.',
+  ] },
   { n: 272, date: '2026-08-07', title: 'A fresh coat, starting with the daily loop', items: [
     'The first big <b>design refresh</b>. Every screen in the add-food flow has been rebuilt: the picker, portions, quick add, the barcode scanner, the label scan and the food form. It is the thing you do every day and it looked the least like the rest of the game.',
     'Logging is <b>fewer taps and less scrolling</b>. Your recent foods are on screen straight away, and the picker shows what is left in your day so you are choosing against a number instead of guessing.',
