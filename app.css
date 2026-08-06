@@ -4622,3 +4622,13 @@ body::before {
 .choice-h { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; }
 .choice-h b { font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
 .choice-h i { flex: 1; height: 2px; background: var(--line); }
+
+/* Status and cost dots, drawn instead of ● text glyphs sitting beside hand-inked
+   art. A real element also means the online dot can carry its own colour rather
+   than inheriting the label's. */
+.live-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); border: 1.5px solid var(--ink); vertical-align: 0;
+}
+.ap-pips { display: inline-flex; gap: 3px; align-items: center; vertical-align: -1px; }
+.ap-pips i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }

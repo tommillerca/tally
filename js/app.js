@@ -226,6 +226,13 @@ const ICONS = {
 const t1Stroke = (s, d) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 ICONS.close = (s = 18) => t1Stroke(s, `<path d="M6 6l12 12M18 6L6 18"/>`);
 ICONS.chev = (s = 16) => t1Stroke(s, `<path d="M9 5l7 7-7 7"/>`);
+/* Bone Dust: a violet sticker gem in the game's own style, replacing the ◆ text
+   glyph it has used everywhere since launch. Flat fill + ink outline, like the coin. */
+ICONS.dust = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6l7.8 9.4-7.8 9.4-7.8-9.4z" fill="#9b92e8" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6.4l4.6 5.6-4.6 5.6" fill="none" stroke="#f2e9d7" stroke-width="1.3" opacity=".55"/></svg>`;
+/* a drawn tick, for the 18 places a ✓ text glyph marked something done */
+ICONS.check = (s = 14) => t1Stroke(s, `<path d="M4.5 12.5l5 5 10-11"/>`);
+ICONS.up = (s = 12) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 5l7 11H5z" fill="currentColor"/></svg>`;
+ICONS.down = (s = 12) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 19L5 8h14z" fill="currentColor"/></svg>`;
 ICONS.quest = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M5.4 3.4h10.2c1 0 1.8.8 1.8 1.8v13.6c0 1-.8 1.8-1.8 1.8H5.4c-1 0-1.8-.8-1.8-1.8V5.2c0-1 .8-1.8 1.8-1.8z" fill="#f2e9d7" stroke="#3a352a" stroke-width="1.6" stroke-linejoin="round"/><path d="M17.4 7.4h1.4c1 0 1.8.8 1.8 1.8v9.6c0 1-.8 1.8-1.8 1.8" fill="none" stroke="#3a352a" stroke-width="1.5" stroke-linecap="round"/><path d="M6.6 7.4h7.2M6.6 11h7.2M6.6 14.6h4.6" stroke="#3a352a" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 ICONS.torchIco = (s = 18) => t1Stroke(s, `<path d="M9 2h6l-1 5h3l-8 15 1.6-9H7z"/>`);
 ICONS.crosshair = (s = 18) => t1Stroke(s, `<circle cx="12" cy="12" r="7.4"/><path d="M12 1.6v3.4M12 19v3.4M1.6 12H5M19 12h3.4"/>`);
@@ -277,7 +284,7 @@ function mapLegendHtml() {
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
 }
 function consumableIcon(type, s = 20) {
-  if (type === 'vigor') return `<span style="font-size:${Math.round(s * 0.92)}px;line-height:1">⚡</span>`;
+  if (type === 'vigor') return ICONS.boltIco(s);
   return `<span class="bhi-wrap">${bhIcon('charm', s)}</span>`;
 }
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
@@ -605,7 +612,7 @@ function spireBannerHtml(held) {
       ${held.length ? `<div class="spire-list">${held.map(s => `
         <div class="spire-row">
           <b>${esc(s.name || 'A spire')}${(s.level || 1) > 1 ? ` <span class="spire-lvtag">LV ${s.level}</span>` : ''}</b>
-          <span class="spire-row-r">${s.siege ? `<span class="spire-siege-tag">⚔ ${fmtCookTime(s.siege.msLeft)}</span>` : s.tribute.coins ? `${ICONS.coin(12)} ${s.tribute.coins}` : '<span class="q-frac">nothing owed</span>'}</span>
+          <span class="spire-row-r">${s.siege ? `<span class="spire-siege-tag">${ICONS.pit(11)} ${fmtCookTime(s.siege.msLeft)}</span>` : s.tribute.coins ? `${ICONS.coin(12)} ${s.tribute.coins}` : '<span class="q-frac">nothing owed</span>'}</span>
           <div class="spire-bar"><i style="width:${Math.round(s.resolvePct * 100)}%"></i></div>
           <small>${s.siege ? `<b>${esc(s.siege.name)} is at the gate</b>` : `${s.heldDays} day${s.heldDays === 1 ? '' : 's'} held · resolve ${Math.round(s.resolvePct * 100)}%`}</small>
         </div>`).join('')}</div>`
@@ -1224,7 +1231,7 @@ async function renderToday(el) {
       <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
       <div class="hero-top-right">
         <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
-        <button class="bh-coin" id="dustBtn" title="Bone Dust"><span class="dust-ico">◆</span> <b>${dustBal.toLocaleString()}</b></button>
+        <button class="bh-coin" id="dustBtn" title="Bone Dust"><span class="dust-ico">${ICONS.dust(13)}</span> <b>${dustBal.toLocaleString()}</b></button>
         <button class="bh-coin" id="vigorBtn" title="Pit fights ready">${ICONS.boltIco(13)} <b>${pitEnergy.ready}</b></button>
         ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
       </div>
@@ -1275,11 +1282,11 @@ async function renderToday(el) {
         const pct = Math.min(100, Math.round((st.cur / st.target) * 100));
         return `<div class="q-row ${tier.period !== 'day' ? 'longterm' : ''}">
           <div class="q-main">
-            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}${q.dust ? ` <span class="dust-ico">◆</span>${q.dust}` : ''}${q.item ? ' ' + consumableIcon(q.item, 12) : ''}${q.ingredient ? ' ' + ingIconHtml(q.ingredient, 12) : ''}</span></div>
+            <div class="q-name">${esc(q.name)} <span class="q-coins">+${q.coins}${ICONS.coin(11)}${q.crate ? ' ' + crateIcon(q.crate, 12) : ''}${q.dust ? ` <span class="dust-ico">${ICONS.dust(13)}</span>${q.dust}` : ''}${q.item ? ' ' + consumableIcon(q.item, 12) : ''}${q.ingredient ? ' ' + ingIconHtml(q.ingredient, 12) : ''}</span></div>
             <div class="q-desc">${esc(q.desc)}</div>
             <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
-          ${st.claimed ? '<span class="q-done">✓</span>'
+          ${st.claimed ? '<span class="q-done">${ICONS.check(13)}</span>'
             : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
             : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
         </div>`;
@@ -1486,7 +1493,7 @@ async function renderToday(el) {
 
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
   return `<div class="macro">
-    <div class="row"><span>${label}${glow ? ' <span class="hit-dot">✓</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
+    <div class="row"><span>${label}${glow ? ' <span class="hit-dot">${ICONS.check(11)}</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
     <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
   </div>`;
 }
@@ -1753,7 +1760,7 @@ function healthCardHtml(hk, isToday) {
   const goal = 10000;
   const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
   return `<div class="card">
-    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? '<span class="link auto" title="Syncs automatically on open">Auto ✓</span>' : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
+    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? '<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>' : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
     ${hk ? `
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
@@ -1806,7 +1813,7 @@ function wellnessCardHtml(w) {
     <div class="well-row ${done ? 'done' : ''}">
       <span class="well-ico">${ico}</span>
       <div class="well-body"><b>${title}</b><small>${done ? doneLbl : todoLbl}</small>${extra}</div>
-      ${done ? '<span class="well-check">✓</span>' : `<button class="btn small ${cls}" id="${btnId}">${btnLabel}</button>`}
+      ${done ? `<span class="well-check">${ICONS.check(14)}</span>` : `<button class="btn small ${cls}" id="${btnId}">${btnLabel}</button>`}
     </div>`;
   const waterBar = `<div class="well-bar"><i style="width:${Math.round(w.water / WATER_GOAL * 100)}%"></i></div>`;
   return `<div class="card wellness-card">
@@ -1838,7 +1845,7 @@ function sleepRowHtml(w) {
         <small>${line}</small>
         ${auto ? '' : `<div class="sleep-picks">${chips}</div>`}
       </div>
-      ${logged ? '<span class="well-check">✓</span>' : ''}
+      ${logged ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
     </div>`;
 }
 
@@ -2470,7 +2477,7 @@ async function openKitchen() {
       ${pantry.length
         ? pantry.map((p, i) => { const r = RECIPE_BY_ID[p.recipeId]; return `<div class="crate-row"><span class="crate-ico">${r ? recipeIconHtml(r, 26) : (p.icon || '🍲')}</span>
             <div style="flex:1"><b>${esc(p.name)}</b><small>${r && r.buff ? esc(foodBuffLabel({ ...r.buff, ...(r.buff.kind === 'combat' ? { fightsLeft: r.buff.fights } : {}) })) : 'Ready to eat'}</small></div>
-            <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">✕</button></div>`; }).join('')
+            <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">${ICONS.close(13)}</button></div>`; }).join('')
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
@@ -2504,7 +2511,7 @@ async function openKitchen() {
       render();
     }));
     $$('[data-toss]', body).forEach(btn => btn.addEventListener('click', async () => {
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = '✓?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = '✕'; } }, 2400); return; }
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Toss it?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = ICONS.close(13); } }, 2400); return; }
       await discardPantryDish(Number(btn.dataset.toss));
       render();
     }));
@@ -3410,9 +3417,9 @@ async function renderShop(el) {
     const on = fighter.loadout === w.id;
     const cost = weaponCoinCost(w.id);
     const dust = weaponDustCost(w.id);
-    const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${'★'.repeat(w.tier)}</span>` : '';
+    const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${ICONS.star(12).repeat(w.tier)}</span>` : '';
     const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
-    const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">◆</span> ${dust}</span>` : ''}`;
+    const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">${ICONS.dust(13)}</span> ${dust}</span>` : ''}`;
     const cta = ownedW
       ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
       : cost != null
@@ -3442,7 +3449,7 @@ async function renderShop(el) {
   // so the hub supplies both and a second title would just repeat itself.
   el.innerHTML = `
 
-  <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">◆</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
+  <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">${ICONS.dust(13)}</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
 
   <details class="drop-sect" id="dropSect">
     <summary>
@@ -3480,10 +3487,10 @@ async function renderShop(el) {
 
   <div class="card">
     <div class="card-title">BONE DUST SHOP</div>
-    <p class="note" style="margin:0 2px 10px">Spend salvage (<span class="dust-ico">◆</span> Bone Dust) on a fresh shot at pets, crates and consumables.</p>
+    <p class="note" style="margin:0 2px 10px">Spend salvage (<span class="dust-ico">${ICONS.dust(13)}</span> Bone Dust) on a fresh shot at pets, crates and consumables.</p>
     <div class="grid2">
       ${DUST_SHOP.map(d => `<button class="shop-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
-        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${esc(d.label)}</b><small class="dc-desc">${esc(d.desc)}</small><small><span class="dust-ico">◆</span> ${d.cost}</small></button>`).join('')}
+        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${esc(d.label)}</b><small class="dc-desc">${esc(d.desc)}</small><small><span class="dust-ico">${ICONS.dust(13)}</span> ${d.cost}</small></button>`).join('')}
     </div>
     <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
   </div>
@@ -3501,7 +3508,7 @@ async function renderShop(el) {
   el.querySelectorAll('[data-buyweapon]').forEach(b => armToConfirm(b, (() => {
     const id = b.dataset.buyweapon;
     const c = weaponCoinCost(id), d = weaponDustCost(id);
-    return c != null ? `Spend ${c.toLocaleString()}${d ? ` + ${d}◆` : ''}?` : 'Spend?';
+    return c != null ? `Spend ${c.toLocaleString()}${d ? ` + ${d} dust` : ''}?` : 'Spend?';
   })(), async () => {
     b.disabled = true;
     const res = await buyWeapon(b.dataset.buyweapon);
@@ -3989,7 +3996,7 @@ async function openMetricDetail(metricKey) {
   if (delta != null && Math.abs(delta) >= (metricKey === 'weight' ? 0.2 : 1)) {
     const down = delta < 0;
     const good = metric.goodLow == null ? null : (metric.goodLow ? down : !down);
-    deltaHtml = `<span class="now-d ${good === false ? 'bad' : ''}">${down ? '▼' : '▲'}${metricNum(metricKey, Math.abs(delta))} vs baseline</span>`;
+    deltaHtml = `<span class="now-d ${good === false ? 'bad' : ''}">${down ? ICONS.down(11) : ICONS.up(11)}${metricNum(metricKey, Math.abs(delta))} vs baseline</span>`;
   }
 
   const bodyHtml = (rangeKey) => {
@@ -4102,7 +4109,9 @@ function readinessHtml(r) {
   for (let i = 0; i <= N; i++) { const a = (start + sweep * i / N) * Math.PI / 180, r1 = (i % 5 === 0) ? R + 12 : R + 8, r2 = R + 15; ticks += `<line x1="${(cx + Math.cos(a) * r1).toFixed(1)}" y1="${(cy + Math.sin(a) * r1).toFixed(1)}" x2="${(cx + Math.cos(a) * r2).toFixed(1)}" y2="${(cy + Math.sin(a) * r2).toFixed(1)}"/>`; }
   const capA = (start + sweep * s / 100) * Math.PI / 180;
   const capX = (cx + Math.cos(capA) * R).toFixed(1), capY = (cy + Math.sin(capA) * R).toFixed(1);
-  const arrow = (v, goodLow) => v == null ? '' : (goodLow ? (v < 0 ? `<i class="up">▼${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">▲${Math.round(v)}</i>` : '') : (v > 0 ? `<i class="up">▲${Math.round(v)}</i>` : v < 0 ? `<i class="warn">▼${Math.abs(Math.round(v))}</i>` : ''));
+  const arrow = (v, goodLow) => v == null ? '' : (goodLow
+    ? (v < 0 ? `<i class="up">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : v > 0 ? `<i class="warn">${ICONS.up(10)}${Math.round(v)}</i>` : '')
+    : (v > 0 ? `<i class="up">${ICONS.up(10)}${Math.round(v)}</i>` : v < 0 ? `<i class="warn">${ICONS.down(10)}${Math.abs(Math.round(v))}</i>` : ''));
   const tile = (mk, lab, val, unit, tr) => `<button class="rd-tile${mk ? '' : ' static'}"${mk ? ` data-metric="${mk}"` : ''}><span class="rl">${lab}</span><span class="rv">${val}<small>${unit}</small></span>${tr}</button>`;
   const hm = h => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
   // Sleep tile: when the watch gave us a score, that's the headline (Tom wanted
@@ -4450,7 +4459,7 @@ function friendCardHtml(f) {
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
     <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}${ol.on ? '<span class="fc-online" title="Online now"></span>' : ''}</div>
     <div class="fc-body">
-      <div class="fc-name">${esc(f.alias || f.name)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</div>
+      <div class="fc-name">${esc(f.alias || f.name)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</div>
       <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}${f.alias ? ` · ${esc(f.name)}` : ''}</div>
       <div class="fc-chips">${chips.join('') || '<span class="fc-chip">Tap to view</span>'}</div>
     </div>
@@ -4623,14 +4632,14 @@ async function renderFriends(el) {
       <p class="note" style="margin:0 0 10px">Every Bonehead in the game, ranked by level. Add anyone: they accept by adding you back.</p>
       ${players.map((p, i) => {
         const btn = p.you ? '<span class="lb-tag you">You</span>'
-          : friendIds.has(p.playerId) ? '<span class="lb-tag crew">✓ Crew</span>'
+          : friendIds.has(p.playerId) ? `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
         const ol = onlineLabel(p.lastSeen);
         return `<div class="lb-row ${p.you ? 'me' : ''}">
           <span class="lb-rank r${i + 1}">${i + 1}</span>
           ${lbAvatar(p)}
-          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '● online' : ol.text}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -4638,7 +4647,7 @@ async function renderFriends(el) {
       b.disabled = true; b.textContent = '...';
       const r = await social.friendRequest(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ Add'; toast('Could not send that request. Try again.', 2600); return; }
-      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = '<span class="lb-tag crew">✓ Crew</span>'; }
+      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`; }
       else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
       await paint();
     }));
@@ -4772,7 +4781,7 @@ async function openGiftSheet(f) {
       <p class="note" style="margin:0 0 14px">To <b>${esc(f.alias || f.name)}</b>. Gifts land in their Backpack the next time they open the app.</p>
       <div class="gift-free ${alreadyFree ? 'done' : ''}" id="giftFreeCard">
         <div class="gift-free-l"><div class="gift-free-t">${ICONS.coin(16)} Free daily gift</div><div class="note">A surprise drop: coins, a crate, sometimes an egg. Once a day per friend, on the house.</div></div>
-        <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? 'Sent ✓' : 'Send'}</button>
+        <button class="btn small" id="giftFree"${alreadyFree ? ' disabled' : ''}>${alreadyFree ? `Sent ${ICONS.check(11)}` : 'Send'}</button>
       </div>
       <div class="gift-spend">
         <div class="nb-lab">Or send your own coins <span class="fp-alias-hint" id="giftBal">you have ${bal}</span></div>
@@ -4787,12 +4796,12 @@ async function openGiftSheet(f) {
     const r = await social.sendGift(f.playerId, 'free');
     if (r.ok) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
-      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent ✓';
+      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20); coinSound(S.sounds);
       toast(`You sent ${esc(f.alias || f.name)} ${giftRewardLabel(r.reward)}!`, 3600);
     } else if (r.status === 409) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
-      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent ✓';
+      $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
       toast(`You already sent ${esc(f.alias || f.name)} their free gift today.`, 3400);
     } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
   });
@@ -5808,7 +5817,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${art ? `<img src="${bhAsset(art)}" alt="" loading="lazy">` : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? '🚫' : '+'}</span>`}
         ${mog ? '<span class="pd-mog" title="Look changed">✨</span>' : ''}
         <span class="pd-tag">${esc(label)}</span>
-        ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>` : ''}
+        ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>` : ''}
       </button>`;
     };
     const LEFT = ['H', 'E', 'M', 'T', 'P'];
@@ -5848,8 +5857,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
           const price = fitPrices[i];
           return `<button class="fit-chip ${S.fitEdit === f.id ? 'editing' : ''}" data-fit="${f.id}" title="${esc(f.name)}">
             <span class="fc-pip r-${art ? art.rarity : 'common'}"></span>
-            ${esc(f.name)}${price ? `<i class="fc-cost">${price} ◆</i>` : ''}
-            ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">✕</i>' : ''}
+            ${esc(f.name)}${price ? `<i class="fc-cost">${price} <span class="dust-ico">${ICONS.dust(11)}</span></i>` : ''}
+            ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">' + ICONS.close(12) + '</i>' : ''}
           </button>`;
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
@@ -5880,7 +5889,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           return `
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
             <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
-            <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ⚡' : ''}</span>
+            <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
         }).join('')}
@@ -5900,7 +5909,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <div class="gi-body">
             <b>${esc(ig.name)}</b>
             <span class="gi-stats">${gearLabel(ig)}</span>
-            ${ig.talent ? `<span class="gi-talent">⚡ ${esc(ig.talentName)}</span><small class="gi-desc">${esc(TALENT_DESC[ig.talent] || 'a special ability')}</small>` : '<small class="gi-desc">No special ability. Pure stats.</small>'}
+            ${ig.talent ? `<span class="gi-talent">${ICONS.boltIco(12)} ${esc(ig.talentName)}</span><small class="gi-desc">${esc(TALENT_DESC[ig.talent] || 'a special ability')}</small>` : '<small class="gi-desc">No special ability. Pure stats.</small>'}
             <span class="rar-chip" style="color:${rar.color}">${rar.label} · ${GEAR_SLOT_LABELS[ig.slot]}${ig.minLevel > 1 ? ` · Lv ${ig.minLevel}` : ''}</span>
           </div>
           <div class="gi-actions">
@@ -5938,9 +5947,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
             : ''}
         </div>
-        <p class="note" style="text-align:center;margin-top:8px">Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b>◆ ${dustBal}</b>.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
+        <p class="note" style="text-align:center;margin-top:8px">Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
       })()}
-      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; ⚡ pieces grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
+      ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     // --- saved fits: tap to wear, long-press for rename / bin ---
     $$('[data-fit]', content).forEach(chip => {
@@ -6011,7 +6020,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       // free actions (revert to the gear's own look, or hide the slot) stay one tap:
       // a confirm on something that costs nothing is just friction
       const price = Number(btn.dataset.lookPrice || 0);
-      if (price > 0) { armToConfirm(btn, `Spend ${price}◆?`, () => applyLook(btn)); return; }
+      if (price > 0) { armToConfirm(btn, `Spend ${price} dust?`, () => applyLook(btn)); return; }
       btn.addEventListener('click', () => applyLook(btn));
     });
     async function applyLook(btn) {
@@ -6196,7 +6205,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="sect-h">Salvage Bench · nothing wasted</div>
-      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${dust.toLocaleString()}</b></div>
+      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
       <p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
       ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
       ${(() => {
@@ -6214,7 +6223,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // carries stats, so a stat-less sweep would have selected nothing.
         const JUNK_RARITIES = new Set(['common', 'uncommon']);
         const junk = spare.filter(g => JUNK_RARITIES.has(g.rarity));
-        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${totalDust.toLocaleString()}</summary>
+        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">${ICONS.dust(13)}</span> ${totalDust.toLocaleString()}</summary>
           <button class="btn danger melt-go" id="meltGo" hidden></button>
           <div class="melt-tools">
             <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
@@ -6228,7 +6237,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
             <span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
             <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
-              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ⚡ ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">no stats · looks only</span>'
+              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ${ICONS.boltIco(11)} ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">no stats · looks only</span>'
             }</small></div>
             ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
                    : `<span class="melt-val">+${gearDustValue(g)}</span>`}
@@ -6275,7 +6284,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const dust = picks.reduce((a, c) => a + (parseInt(c.dataset.dust, 10) || 0), 0);
       go.hidden = !picks.length;
       go.dataset.armed = '0';
-      go.innerHTML = `Melt ${picks.length} piece${picks.length === 1 ? '' : 's'} · <span class="dust-ico">◆</span> +${dust.toLocaleString()}`;
+      go.innerHTML = `Melt ${picks.length} piece${picks.length === 1 ? '' : 's'} · <span class="dust-ico">${ICONS.dust(13)}</span> +${dust.toLocaleString()}`;
     };
     $$('.melt-pick', content).forEach(c => c.addEventListener('change', syncMeltBar));
     $('#meltAll', content)?.addEventListener('click', e => {
@@ -6336,10 +6345,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       else if (fold) {
         const total = left.reduce((a, b) => a + (parseInt((b.textContent.match(/\d+/) || [0])[0], 10) || 0), 0);
         const sum = fold.querySelector('summary');
-        if (sum) sum.innerHTML = `Melt gear · ${left.length} spare piece${left.length === 1 ? '' : 's'} worth <span class="dust-ico">◆</span> ${total.toLocaleString()}`;
+        if (sum) sum.innerHTML = `Melt gear · ${left.length} spare piece${left.length === 1 ? '' : 's'} worth <span class="dust-ico">${ICONS.dust(13)}</span> ${total.toLocaleString()}`;
       }
       const nd = await boneDust();
-      content.querySelectorAll('.wallet-line b').forEach(b => { if (/◆/.test(b.textContent)) b.innerHTML = `<span class="dust-ico">◆</span> ${nd.toLocaleString()}`; });
+      content.querySelectorAll('.wallet-line b').forEach(b => { if (b.querySelector('.dust-ico')) b.innerHTML = `<span class="dust-ico">${ICONS.dust(13)}</span> ${nd.toLocaleString()}`; });
     }));
     $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
       // A single tap used to spend on the spot. Tom lost 25 dust just looking at
@@ -6455,7 +6464,7 @@ function wireLootChoice(scope, claimFn, onDone) {
     // the piece you KEPT stays bright + gets a "kept" ring; the one you left
     // behind greys out. (Previously inverted: it greyed the kept one.)
     cards.forEach(c => { const won = c.dataset.gear === sel; c.classList.toggle('kept', won); c.classList.toggle('taken', !won); c.classList.remove('selected'); c.disabled = true; });
-    if (keep) { keep.disabled = true; keep.textContent = `✓ ${picked.name} kept`; }
+    if (keep) { keep.disabled = true; keep.textContent = `${picked.name} kept`; }
     confettiBurst(innerWidth / 2, innerHeight * 0.4, 22);
     popSound(S.sounds);
     onDone?.(picked);
@@ -6478,10 +6487,10 @@ function petPanelHtml(petId, fighter) {
     <div class="pet-card r-${rarity} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
       ${petSpriteHtml(petId, 60)}
       <div class="pet-card-meta">
-        <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">★${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
+        <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
         ${statLine}
-        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8%.' : ''}${lineage ? ` Lineage ★${lineage}: +${lineage * 5}% to all stats.` : ''}</span>
+        <span class="note" style="font-size:11.5px">${esc(fam.blurb)} Passive: ${passives[fam.passive]}.${shiny ? ' Shiny: +8%.' : ''}${lineage ? ` Lineage ${lineage}: +${lineage * 5}% to all stats.` : ''}</span>
       </div>
     </div>
     <div class="pet-tree">
@@ -6810,7 +6819,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
     <div class="sheet-body" style="text-align:center;padding-top:12px">
       <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny)}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
-      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">★${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
+      <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
       ${newTalent ? `<div class="cele-bubble">New talent unlocked. Choose it in the Stable.</div>
         <button class="btn" id="petTalentBtn">Pick my talent</button>
@@ -6851,7 +6860,7 @@ async function openStable() {
       const isEq = inst.iid === eqIid;
       const nextRow = PET_TREES[fam.key].find(row => lvl < row.tier);
       const nextHint = nextRow
-        ? `<p class="tree-next">★ Next talent at <b>Lv ${nextRow.tier}</b>${isEq ? ', keep walking this pet' : ', equip this pet to keep leveling it'} (top tier is Lv 10).</p>`
+        ? `<p class="tree-next">${ICONS.star(12)} Next talent at <b>Lv ${nextRow.tier}</b>${isEq ? ', keep walking this pet' : ', equip this pet to keep leveling it'} (top tier is Lv 10).</p>`
         : `<p class="tree-next">Every talent unlocked, this pet is fully trained.</p>`;
       let html = `<div class="pet-tree-inline"><p class="tree-head">${esc((BH_BY_ID[inst.sp] || {}).name || '')} talents${isEq ? ' · ACTIVE' : ''}</p>${nextHint}
         <div class="pet-tree">${PET_TREES[fam.key].map(row => `
@@ -6891,12 +6900,12 @@ async function openStable() {
         return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
           <div class="stable-portrait">${petPortraitHtml(sp, 60, x.shiny)}</div>
           <div class="stable-info">
-            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">★${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}<span class="stable-chev">${isOpen ? '▴ talents' : '▾ talents'}</span></b>
+            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">${ICONS.star(11)}${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}<span class="stable-chev">${isOpen ? '▴ talents' : '▾ talents'}</span></b>
             <small>${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
             <div class="stable-acts">
               ${isEq ? '<span class="stable-active-lbl">Leveling this one</span>' : `<button class="btn tiny" data-eq="${x.iid}">Equip</button>`}
-              <button class="btn tiny ${inSel ? 'on' : 'ghost'}" data-breedsel="${x.iid}">${inSel ? 'Breeding ✓' : 'Breed'}</button>
-              <button class="btn tiny danger" data-destroy="${x.iid}" data-dust="${dustVal}">Destroy · <span class="dust-ico">◆</span>${dustVal}</button>
+              <button class="btn tiny ${inSel ? 'on' : 'ghost'}" data-breedsel="${x.iid}">${inSel ? `Breeding ${ICONS.check(11)}` : 'Breed'}</button>
+              <button class="btn tiny danger" data-destroy="${x.iid}" data-dust="${dustVal}">Destroy · <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}</button>
             </div>
           </div>
         </div>${isOpen ? petTalentTree(x, lvl, openPicks) : ''}`;
@@ -6909,7 +6918,7 @@ async function openStable() {
       .map(x => `<button class="chip ${offSp === x.sp ? 'on' : ''}" data-offsp="${x.sp}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}</button>`).join('') : '';
 
     body.innerHTML = `
-      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">◆</span> ${st.dust.toLocaleString()}</b></div>
+      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${st.dust.toLocaleString()}</b></div>
       ${pair ? `<div class="breed-bar">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
@@ -6933,7 +6942,7 @@ async function openStable() {
             <li><b>Lineage ${offLineage}</b> gives it <b>+${Math.round(offLineage * 5)}% to every stat</b>.${a.shiny || b.shiny ? ' A shiny parent passes its colour on.' : ''}</li>
           </ul>
           <div class="breed-pick"><span class="note">Which one does it become?</span><div class="breed-sp">${spChips}</div></div>
-          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">◆</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
+          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
           <button class="btn danger-ish" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Breed and destroy both</button>
         </div>`
@@ -6964,8 +6973,8 @@ async function openStable() {
       const dustVal = btn.dataset.dust || '?';
       if (btn.dataset.armed !== '1') {
         btn.dataset.armed = '1'; const t = btn.innerHTML;
-        btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">◆</span>${dustVal}?` : `Melt for <span class="dust-ico">◆</span>${dustVal}?`;
-        if (isShiny) toast(`⚠️ That's a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent and only gives ◆${dustVal} Bone Dust. Tap again to confirm.`, 4600);
+        btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?` : `Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
+        if (isShiny) toast(`⚠️ That's a SHINY pet, ultra-rare (~3% on hatch). Destroying it is permanent and only gives ${dustVal} Bone Dust. Tap again to confirm.`, 4600);
         setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
         return;
       }
@@ -7912,7 +7921,7 @@ async function renderBoneyard(el) {
         // den takes precedence over a mini if both are in range (bosses are the event)
         const denOpen = !$('#mapDen', body)?.hidden;
         mb.hidden = !open || denOpen;
-        if (open && !denOpen) { mb.textContent = `⚔ Fight the ${open.name}`; mb.dataset.miniId = open.id; }
+        if (open && !denOpen) { mb.innerHTML = `${ICONS.pit(15)} Fight the ${esc(open.name)}`; mb.dataset.miniId = open.id; }
       }
     }
 
@@ -8569,7 +8578,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v273'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v274'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8760,22 +8769,22 @@ async function renderPit(wrap) {
       </div>`).join('')}
     </details>`;
   const ladderSect = `
-    <details class="pit-sect"${ladderOpen ? ' open' : ''}><summary>The Ladder${champOpen ? ' ✓' : ` · rung ${Math.min(rungsBeaten + 1, LADDER.length)}/${LADDER.length}`}</summary>
+    <details class="pit-sect"${ladderOpen ? ' open' : ''}><summary>The Ladder${champOpen ? ' ' + ICONS.check(12) : ` · rung ${Math.min(rungsBeaten + 1, LADDER.length)}/${LADDER.length}`}</summary>
     ${LADDER.map(r => {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="crate-row">
         <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
-        <div style="flex:1"><b>${r.name} ${done ? '✓' : ''}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · +${r.repeatCoins} coins` : `first win: ${r.coins} coins + ${r.xp} XP`}</small></div>
+        <div style="flex:1"><b>${r.name} ${done ? ICONS.check(12) : ''}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · +${r.repeatCoins} coins` : `first win: ${r.coins} coins + ${r.xp} XP`}</small></div>
         ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'Rematch' : 'Fight'}</button>`}
       </div>`;
     }).join('')}
     </details>`;
   const champSect = `
-    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion${champBeaten ? ' ✓' : ''}</summary>
+    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion${champBeaten ? ' ' + ICONS.check(12) + '' : ''}</summary>
     <div class="crate-row">
       <span class="crate-ico">${crateIcon('golden', 24)}</span>
-      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? '✓' : ''}</b><small>${champBeaten ? `rematch · +${CHAMPION.repeatCoins} coins` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
+      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? ICONS.check(12) : ''}</b><small>${champBeaten ? `rematch · +${CHAMPION.repeatCoins} coins` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
       ${champOpen ? `<button class="btn small ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'Rematch' : 'Fight'}</button>` : `<span class="q-frac">beat the ladder</span>`}
     </div>
     </details>`;
@@ -9512,12 +9521,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const get = id => legal.find(a => a.id === id);
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${hint || `${'●'.repeat(a.ap)}${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
+        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
       const mc = MISS_CHANCE[id];
-      return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : '●'.repeat(ACTIONS[id].ap)}`;
+      return `~${est} dmg · ${mc ? Math.round((1 - mc) * 100) + '% hit' : `<span class="ap-pips">${'<i></i>'.repeat(ACTIONS[id].ap)}</span>`}`;
     };
     const guardAmt = Math.round(16 + player.stats.marrow * 0.15);
     // THE defensive move (Rattle retired): shield + stamina, heckle adds a weaken
@@ -9752,7 +9761,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (r) {
           xp += r.xp || 0; coins = r.coins || 0;
           if (r.crate) extraCards.push(crateCard(r.crate));
-          if (r.dust) extraCards.push({ iconHtml: '<span class="dust-ico" style="font-size:76px;line-height:1">◆</span>', name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it at the Salvage Bench' });
+          if (r.dust) extraCards.push({ iconHtml: `<span class="dust-ico">${ICONS.dust(112)}</span>`, name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it at the Salvage Bench' });
         } else coins = 8; // already beaten today
       }
       else if (foeCfg.mode === 'secret') {
@@ -10287,7 +10296,7 @@ async function renderTalents(wrap) {
             const pips = max > 1
               ? `<span class="tal-ranks">${Array.from({ length: max }, (_, r) => `<i class="${r < cur ? 'on' : ''}" style="${r < cur ? `background:${tree.color}` : ''}"></i>`).join('')}</span>`
               : '';
-            const pipTxt = max > 1 ? `${cur}/${max}` : (full ? '✓' : tier === 4 ? '★' : 'T' + tier);
+            const pipTxt = max > 1 ? `${cur}/${max}` : (full ? ICONS.check(11) : tier === 4 ? ICONS.star(11) : 'T' + tier);
             return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
               <span class="tal-pip" style="${cur > 0 ? `background:${tree.color};border-color:${tree.color}` : ''}">${pipTxt}</span>
               <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small>${pips}</span>

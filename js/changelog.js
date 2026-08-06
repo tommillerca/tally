@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 274, date: '2026-08-07', title: 'Drawn, not typed', items: [
+    'The game was drawing a lot of its interface with <b>text characters</b> sitting next to Cam\'s artwork: ticks, stars, arrows, close crosses, energy bolts and dots. They are drawn art now, in the game\'s own style.',
+    '<b>Bone Dust finally has an icon.</b> It is a core currency and it has been a plain diamond character in two dozen places since launch. It is a violet gem now, drawn like the coin.',
+    'The <b>Quests</b> header had been rendering a scroll emoji this whole time because its icon was never actually wired up. Fixed, along with a couple of other icons that were silently falling back or ignoring the size they were asked for.',
+    'Emoji stay where they belong: in the things your Bonehead says.',
+  ] },
   { n: 273, date: '2026-08-07', title: 'The good bits look like the good bits', items: [
     'The <b>payoff screens</b> are rebuilt: opening a crate, levelling up, winning a boss fight, hatching a pet, cracking a drop pack and breeding. Every one of them used to slide up as a small panel over whatever you were already looking at. They take the whole screen now.',
     'Crate and drop cards are proper <b>trading cards</b>, with the item big, its name on a plate, and a rarity you can read at a glance. Rarity colours are the game\'s own everywhere now, instead of two different purples depending on the screen.',
