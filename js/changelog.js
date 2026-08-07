@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 283, date: '2026-08-08', title: 'Balance pass', items: [
+    'Two builds were doing far more damage than anything else in the game, and one of them got further ahead the higher your level went. Both are reined in: the <b>Alchemist\'s Catalyst</b> now has a ceiling on how much your Toxicity can multiply a hit, and there is a cap on how far any stack of buffs can multiply a single attack.',
+    '<b>Gear can no longer hand you a free extra action</b> each turn. Set bonuses still grant moves and damage, but an extra action has to be paid for with a talent point like everyone else pays.',
+    'Nothing you own changed. No stats were reset, no talents refunded, and every other build measured the same before and after.',
+  ] },
   { n: 282, date: '2026-08-08', title: 'Levels that are worth hitting', items: [
     'Every level used to pay exactly the same thing. Now <b>every fifth level</b> adds a bonus crate, <b>every tenth</b> adds Bone Dust and a Step Egg on top, and <b>every twenty-fifth</b> is a proper event. It keeps going at 50, 75, 100 and past.',
     'Milestone levels get their own stamp on the level-up screen, so 25 does not feel like 24.',

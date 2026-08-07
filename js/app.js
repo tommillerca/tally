@@ -8919,7 +8919,17 @@ async function buildFighter() {
   const talents = await kvGet('talents', []);
   // keep the player's talent array WITH repeats (ranks matter); gear/set talents
   // are single-rank moves, add them only if not already specced.
-  const extraTalents = [...gearTalents(gearLo, gOwned, level), ...setInfo.talents].filter(id => !talents.includes(id));
+  //
+  // ECONOMY-BENDING TALENTS ARE NOT FREE (2026-08-08). A gear affix or a 4-piece
+  // set could previously hand you ANY talent, including ones that change how many
+  // actions you get per turn. The sim measured that: Light Feet (+1 AP) is worth
+  // almost nothing on its own, because stamina is the real limiter, but bolted
+  // onto a stamina-engine build it took the stack from 2.07x to 2.99x baseline
+  // damage. That is a 45% power swing from a bonus that costs no talent point and
+  // skips the tier gates everyone else pays. Gear can still grant MOVES and
+  // damage passives; it can no longer grant action economy.
+  const extraTalents = [...gearTalents(gearLo, gOwned, level), ...setInfo.talents]
+    .filter(id => !talents.includes(id) && !ECONOMY_TALENTS.has(id));
   const fightTalents = [...talents, ...extraTalents];
   // battle pet: the equipped INSTANCE (its own level, lineage, shiny)
   let battlePet = null, petMeta = null;
@@ -8933,6 +8943,12 @@ async function buildFighter() {
   }
   return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
 }
+
+/* Talents that change ACTION ECONOMY rather than raw numbers. Gear and set
+   bonuses must never grant these: an extra action per turn multiplies every
+   other multiplier you own, so it is the one thing that has to be paid for with
+   a talent point like everyone else's. Measured in tests/fight-sim.mjs. */
+const ECONOMY_TALENTS = new Set(['lightfeet']);
 
 // v146: unlock guidance. The Build screen (talent trees + Bone Merchant) is buried
 // under the Pit, so "you have points to spend" or "you can afford a weapon" moments
@@ -9017,7 +9033,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v282'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v283'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

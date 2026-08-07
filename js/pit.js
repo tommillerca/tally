@@ -522,6 +522,20 @@ export function applyPetAction(fight, actionId) {
 }
 export const TURN_CAP = 30;
 
+/* BALANCE CEILINGS (added 2026-08-08, numbers measured by tests/fight-sim.mjs).
+ *
+ * Tom: "Are any builds or classes or gear in the game currently broken? Once we
+ * monetize I can't be having certain exploits that are overpowered."
+ *
+ * The sim's answer: the damage chain in resolveHit is fully multiplicative and
+ * had no ceiling. Measured at identical stats, the deepest stack (Alchemist
+ * catalyst + the stamina engine + a free +1 AP from a 4-piece set) hit 3.39x
+ * baseline damage, and the Alchemist's lead GREW with level (1.75x at stat 40,
+ * 2.14x at 150), which is the shape of a build that gets more broken the longer
+ * someone plays. Raise these only with sim numbers in hand. */
+export const BUILD_MULT_CAP = 2.2;   // ceiling on the whole talent/buff chain
+export const CATALYST_CAP = 0.45;    // Catalyst's Toxicity ride, was uncapped at +100%
+
 // Passive Block/Dodge are retired: defense is now active (Bone Guard's absorb
 // pool + Rattle's weaken), so there is no attacker-vs-defender-state matrix.
 // Kept as a stable {mult:1} shim so callers/tests don't need to branch.
@@ -552,6 +566,11 @@ export function resolveHit({ move, attacker, defender, rng }) {
   dmg *= a.magic ? attacker.d.magicMult : attacker.d.powerMult;
   if (!a.magic) dmg *= attacker.weapon.mult(move, attacker.stats);
   dmg *= counter.mult;
+  // Everything from here to the armor step is TALENT AND BUFF multipliers, and
+  // they all multiply. The total is measured and capped below (BUILD_MULT_CAP):
+  // the chain had no ceiling, so the deepest stack measured 3.39x baseline
+  // damage and, worse, its lead GREW with level. See tests/fight-sim.mjs.
+  const preTalent = dmg;
   if (move === 'haymaker' && attacker.talents.has('heavyhands')) dmg *= 1.15;
   if (move === 'smite' && attacker.talents.has('judgement') && (defender.stagger || defender.sunder)) dmg *= 1.5;
   if (move === 'frostbolt' && attacker.talents.has('frostbite') && defender.wind < 30) dmg *= 1.4;
@@ -563,7 +582,13 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (a.school === 'fire' || a.school === 'frost') dmg *= 1 + rkOf(attacker, 'attunement') * 0.03;
   if (a.school === 'alchemy') {
     dmg *= 1 + rkOf(attacker, 'potency') * 0.03;                                   // Potency
-    dmg *= 1 + Math.floor((attacker.toxicity || 0) / 10) * rkOf(attacker, 'catalyst') * 0.02; // Catalyst: ride the Toxicity
+    // Catalyst rides your Toxicity. Uncapped it reached +100% on its own (rank 5
+    // at 100 toxicity) and was the single biggest outlier in the sim, so the
+    // ride is capped at +45%, which lands the build at 1.81x baseline at the
+    // stat clamp, inside the band the guard enforces. Still the Alchemist's
+    // identity, just not
+    // twice everyone else's damage for free.
+    dmg *= 1 + Math.min(CATALYST_CAP, Math.floor((attacker.toxicity || 0) / 10) * rkOf(attacker, 'catalyst') * 0.02);
     if (attacker.talents.has('overdose') && (attacker.toxicity || 0) >= 60) dmg *= 1.15;       // Overdose
   }
   if (attacker.elixir) dmg *= 1 + attacker.elixir.pct; // Fury potion (kitchen brew)
@@ -576,6 +601,15 @@ export function resolveHit({ move, attacker, defender, rng }) {
   if (attacker.pet && attacker.pet.passive === 'yourDamage') dmg *= (1 + attacker.pet.passivePct);
   if (defender.pet && defender.pet.passive === 'damageTaken') dmg *= (1 - defender.pet.passivePct);
   if (attacker.foodDamagePct) dmg *= (1 + attacker.foodDamagePct); // Marrow Stew etc.
+  // THE CEILING. Applied to the product of every talent/buff/debuff multiplier
+  // above, before crit and glance (which are variance, not build power). This is
+  // a backstop as much as a nerf: it means a future talent cannot re-create the
+  // 3.39x stack by accident, because the chain can no longer exceed the cap
+  // however many ways you find to multiply it.
+  if (preTalent > 0) {
+    const chain = dmg / preTalent;
+    if (chain > BUILD_MULT_CAP) dmg = preTalent * BUILD_MULT_CAP;
+  }
   const crit = rng() < attacker.d.critChance;
   if (crit) dmg *= 1.5;
   const glance = !immune && rng() < defender.d.glanceChance;
