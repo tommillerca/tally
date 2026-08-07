@@ -55,6 +55,13 @@ const APPROVED = [
   { screen: 'Pet hatch',     mock: 't2-hatch.html',   built: true, markers: ['reveal-take cool'] },
   { screen: 'Pack reveal',   mock: 't2-pack.html',    built: true, markers: ['pack-pips'] },
   { screen: 'Breed result',  mock: 't2-breed.html',   built: true, markers: ['fused-note', 'breed-trade'] },
+  // Tier 3, approved 2026-08-07 ("Approved, build all six")
+  { screen: 'Shop',       mock: 't3-shop.html',     built: true, markers: ['t3-drop', 't3-dropsect', 't3-price', 't3-forage'] },
+  { screen: 'Backpack',   mock: 't3-backpack.html', built: true, markers: ['t3-qty', 't3-egg', 't3-cells'] },
+  { screen: 'Build',      mock: 't3-build.html',    built: true, markers: ['t3-fighter', 't3-armor', 't3-faq', 't3-pm'] },
+  { screen: 'Pit entry',  mock: 't3-pitentry.html', built: true, markers: ['t3-hero', 't3-energy', 't3-rung'] },
+  { screen: 'Garden',     mock: 't3-garden.html',   built: true, markers: ['t3-beds', 't3-bed', 't3-pouch', 't3-seed'] },
+  { screen: 'Stable',     mock: 't3-stable.html',   built: true, markers: ['t3-petcard', 't3-steps', 't3-ghosty'] },
 ];
 
 const src = ['js/app.js', 'app.css'].map(f => readFileSync(path.join(ROOT, f), 'utf8')).join('\n');

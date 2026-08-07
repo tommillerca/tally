@@ -246,7 +246,7 @@ const flagged = await page.evaluate(async () => {
   b[0].click(); await new Promise(r => setTimeout(r, 700));
   const again = [...document.querySelectorAll('[data-breedsel]')];
   (again[1] || b[1]).click(); await new Promise(r => setTimeout(r, 1000));
-  return document.querySelectorAll('.stable-card.breedsel').length;
+  return document.querySelectorAll('.t3-petcard.breedsel').length;   // Tier 3 renamed the card (v280)
 });
 ok('BREED two pets can be flagged', flagged === 2, `${flagged} flagged, ready=${bset.ready}`);
 

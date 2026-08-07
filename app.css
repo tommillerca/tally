@@ -4924,3 +4924,301 @@ body::before {
 .screen > .route-in { animation: routeIn .2s ease-out; }
 @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }
+
+/* ============================================================================
+   TIER 3: THE DEPTH SCREENS. Shop, Backpack, Build, Pit entry, Garden, Stable,
+   built from the mockups Tom approved 2026-08-07 (market-quality-mockups/
+   t3-*.html + t3.css). One language: everything interactive is a sticker (2px
+   ink border + hard offset shadow), prices are gold chips (violet for dust),
+   section heads are the coral rule, heroes are framed posters.
+
+   EVERY class is t3-prefixed. The mockup's own names (.hero, .drop, .sect,
+   .egg, .faq, .wallet, .cell, .chip, .bar, .btn) collide with nine existing
+   rules in this file, and a cascade fight over padding is exactly the bug
+   class the project keeps paying for. Same convention as the .t1-* block.
+
+   Token translation from the mockups' tokens.css:
+     --panel -> --surface     --panel-2 -> --surface-2   --bone-hi -> --text
+     --text-dim -> --text-2   --hair -> --line           --lime -> --accent
+     --r -> --radius          --r-sm -> --radius-sm      --sky -> --protein
+   ========================================================================== */
+
+/* --- shared: section rule, price chips, cells, rows, stat allocators ------ */
+.t3-sect { display: flex; align-items: center; gap: 8px; margin: 16px 0 9px; }
+.t3-sect b { font-size: var(--fs-0); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--coral); }
+.t3-sect i { flex: 1; height: 2px; background: var(--line); }
+.t3-sect .r { margin-left: auto; flex: none; }
+
+.t3-price {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--gold); color: var(--ink); border: 2px solid var(--ink); border-radius: 9px;
+  box-shadow: var(--sh-sm); padding: 1px 8px;
+  font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: .03em;
+}
+.t3-price.dust { background: var(--violet); }
+.t3-price.free { background: var(--mint); }
+.t3-price svg { display: block; }
+
+.t3-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.t3-cell {
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 12px 8px 10px; text-align: center; position: relative;
+  color: var(--text); font: inherit; width: 100%; display: block;
+}
+.t3-cell:disabled { opacity: .5; }
+.t3-cell:not(:disabled):active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 rgba(0, 0, 0, .55); }
+.t3-cell .art { height: 64px; display: grid; place-items: center; margin-bottom: 6px; }
+.t3-cell .art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.t3-cell b {
+  display: block; font-family: var(--display); font-weight: 400; font-size: 16px;
+  letter-spacing: .04em; color: var(--text); margin-bottom: 6px;
+}
+.t3-cell small { display: block; font-size: var(--fs-1); color: var(--text-2); margin-top: 5px; line-height: 1.35; }
+
+.t3-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--line); }
+.t3-row:first-of-type { border-top: 0; }
+.t3-med {
+  flex: none; width: 40px; height: 40px; border-radius: 11px;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  display: grid; place-items: center; font-family: var(--display); font-size: 18px; color: var(--gold);
+}
+.t3-tx { flex: 1; min-width: 0; text-align: left; }
+.t3-tx b { display: block; font-size: var(--fs-3); font-weight: 700; color: var(--text); }
+.t3-tx small { font-size: var(--fs-1); color: var(--text-2); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.t3-row .btn { width: auto; padding: 9px 16px; font-size: 16px; box-shadow: var(--sh-sm); flex: none; }
+.t3-lock {
+  flex: none; font-size: var(--fs-0); font-weight: 800; letter-spacing: .07em;
+  color: var(--text-2); border: 2px solid var(--ink); border-radius: 8px; padding: 3px 9px; background: var(--surface-2);
+}
+
+.t3-stat {
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 10px 12px; margin-bottom: 9px;
+}
+.t3-stat .top { display: flex; align-items: baseline; gap: 9px; }
+.t3-stat .top b { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: .04em; color: var(--text); }
+.t3-stat .top .v { margin-left: auto; font-family: var(--display); font-size: 22px; color: var(--gold); }
+.t3-stat .bar { height: 10px; margin-top: 7px; }
+.t3-stat .foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.t3-stat .foot small { flex: 1; font-size: var(--fs-1); color: var(--text-2); line-height: 1.35; }
+/* drawn +/- steppers: two bars, the plus rotates one of them */
+.t3-pm {
+  flex: none; width: 38px; height: 38px; border-radius: 10px; position: relative;
+  background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+}
+.t3-pm::before, .t3-pm.plus::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 14px; height: 3px; border-radius: 2px; background: var(--text); transform: translate(-50%, -50%);
+}
+.t3-pm.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
+.t3-pm:disabled { opacity: .4; }
+.t3-pm:not(:disabled):active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 rgba(0, 0, 0, .55); }
+
+/* --- shop ---------------------------------------------------------------- */
+.t3-wallet { display: flex; gap: 7px; margin: 0 0 12px; }
+.t3-drop {
+  position: relative; display: block; width: 100%; text-align: left;
+  background: var(--coral); border: 2px solid var(--ink);
+  border-radius: var(--radius); box-shadow: var(--sh); overflow: hidden; padding: 13px 14px;
+}
+.t3-drop::before { content: ''; position: absolute; inset: 0; background: var(--grain); opacity: .07; pointer-events: none; }
+.t3-drop > * { position: relative; }
+.t3-drop .new {
+  position: absolute; right: 12px; top: 12px; background: var(--gold); color: var(--ink);
+  border: 2px solid var(--ink); border-radius: 8px; box-shadow: var(--sh-sm);
+  padding: 1px 8px; font-size: var(--fs-0); font-weight: 800; letter-spacing: .08em; z-index: 2;
+}
+.t3-drop .eyebrow { color: var(--text); opacity: .85; font-size: var(--fs-0); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.t3-drop h2 { font-family: var(--display); font-weight: 400; font-size: 24px; letter-spacing: .03em; color: var(--text); margin: 2px 0 8px; }
+.t3-drop .row { display: flex; align-items: center; gap: 12px; }
+.t3-drop .art {
+  flex: none; width: 84px; height: 84px; border-radius: 12px; background: rgba(42, 45, 40, .35);
+  border: 2px solid var(--ink); display: grid; place-items: center; overflow: hidden;
+}
+.t3-drop .art img { width: 86%; height: 86%; object-fit: contain; }
+.t3-drop .tx { flex: 1; min-width: 0; }
+.t3-drop .tx small { display: block; color: var(--text); opacity: .9; font-size: var(--fs-2); line-height: 1.4; margin-bottom: 8px; }
+.t3-forage {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 11px 13px; margin-top: 12px; color: var(--text);
+}
+.t3-forage b { flex: 1; font-size: var(--fs-3); }
+.t3-forage small { color: var(--text-2); }
+
+/* --- backpack ------------------------------------------------------------ */
+.t3-qty {
+  position: absolute; top: -8px; right: -8px; min-width: 24px; height: 24px;
+  background: var(--coral); color: var(--text); border: 2px solid var(--ink); border-radius: 999px;
+  font-size: var(--fs-0); font-weight: 800; display: grid; place-items: center; padding: 0 5px; z-index: 2;
+}
+.t3-cell .btn { width: 100%; margin-top: 4px; padding: 9px 4px; font-size: 16px; box-shadow: var(--sh-sm); }
+.t3-egg {
+  display: flex; align-items: center; gap: 12px; background: var(--surface);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); padding: 12px 13px;
+}
+.t3-egg .art { flex: none; display: grid; place-items: center; }
+.t3-egg .tx { flex: 1; min-width: 0; }
+.t3-egg .tx b { display: block; font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .04em; color: var(--text); }
+.t3-egg .bar { height: 10px; margin-top: 6px; }
+.t3-egg .bar > i { background: var(--protein); }
+.t3-egg small { font-size: var(--fs-1); color: var(--text-2); }
+
+/* --- build --------------------------------------------------------------- */
+.t3-fighter {
+  display: flex; align-items: center; gap: 12px; background: var(--surface-2);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); padding: 12px 14px; margin-bottom: 10px;
+}
+.t3-fighter .n { flex: 1; min-width: 0; }
+.t3-fighter .n b { display: block; font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: .04em; color: var(--text); }
+.t3-fighter .n small { font-size: var(--fs-1); color: var(--text-2); }
+.t3-fighter .tp {
+  flex: none; text-align: center; background: var(--coral); border: 2px solid var(--ink); border-radius: 11px;
+  box-shadow: var(--sh-sm); padding: 4px 12px;
+}
+.t3-fighter .tp b { display: block; font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--text); line-height: 1; }
+.t3-fighter .tp small { font-size: 8.5px; font-weight: 800; letter-spacing: .08em; color: var(--text); }
+.t3-armor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.t3-armor .t3-cell b { color: var(--protein); font-size: 24px; margin-bottom: 2px; }
+.t3-armor .t3-cell .lab { font-family: var(--display); font-size: 13px; letter-spacing: .05em; color: var(--text); }
+.t3-armor .t3-cell small { margin-top: 2px; }
+.t3-faq {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  background: var(--surface); border: 2px solid var(--ink);
+  border-radius: 999px; box-shadow: var(--sh-sm); padding: 9px 15px; margin-bottom: 12px;
+  font-size: var(--fs-2); font-weight: 700; color: var(--text);
+}
+.t3-faq b { color: var(--coral); margin-left: auto; }
+
+/* --- pit entry ----------------------------------------------------------- */
+.t3-hero {
+  position: relative; border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh);
+  overflow: hidden; background: #121016; padding: 22px 14px 16px; text-align: center; margin-bottom: 12px;
+}
+.t3-hero > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 70%; opacity: .5; }
+.t3-hero > *:not(img) { position: relative; }
+.t3-hero h2 { font-family: var(--display); font-weight: 400; font-size: 30px; letter-spacing: .04em; color: var(--text); text-shadow: 3px 4px 0 var(--ink); }
+.t3-hero p { font-family: var(--display); font-weight: 400; font-size: 13px; letter-spacing: .14em; color: var(--accent); margin-top: 2px; }
+.t3-hero .stats { display: inline-flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; justify-content: center; }
+.t3-hero .chip { background: rgba(42, 45, 40, .85); color: var(--text); }
+.t3-energy {
+  display: flex; align-items: center; gap: 11px; background: var(--surface);
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); padding: 11px 13px; margin-bottom: 12px;
+}
+.t3-energy .ic {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2);
+  border: 3px solid var(--accent); display: grid; place-items: center;
+}
+.t3-energy .tx { flex: 1; min-width: 0; }
+.t3-energy .tx b { display: block; font-size: var(--fs-3); font-weight: 700; color: var(--text); }
+.t3-energy .bar { height: 9px; margin-top: 5px; }
+.t3-energy .bar > i { background: var(--accent); }
+.t3-energy small { font-size: var(--fs-1); color: var(--text-2); }
+.t3-rung {
+  flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--surface-2);
+  border: 2px solid var(--ink); box-shadow: var(--sh-sm); display: grid; place-items: center;
+  font-family: var(--display); font-weight: 400; font-size: 17px; color: var(--accent);
+}
+.t3-row.done .t3-rung { color: var(--text-2); }
+.t3-row.done .t3-tx b { color: var(--text-2); text-decoration: line-through; }
+
+/* --- garden -------------------------------------------------------------- */
+.t3-beds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.t3-bed {
+  position: relative; background: #241d15; border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 12px 6px 9px; text-align: center; overflow: hidden;
+  color: var(--text); width: 100%; display: block;
+}
+/* soil: a bed you own reads as a thing, not a dashed void */
+.t3-bed::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34%; background: #2e2418; border-top: 2px solid var(--ink); }
+.t3-bed > * { position: relative; }
+.t3-bed .art { height: 52px; display: grid; place-items: center; }
+.t3-bed b { display: block; font-family: var(--display); font-weight: 400; font-size: 12px; letter-spacing: .05em; color: var(--text); margin-top: 4px; }
+.t3-bed small { display: block; font-size: 9.5px; color: var(--text-2); margin-top: 2px; }
+/* the thirsty bed carries the ONE loud cue on this screen */
+.t3-bed.thirsty { border-color: var(--protein); }
+.t3-bed .drop {
+  position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--protein); border: 2px solid var(--ink); display: grid; place-items: center; z-index: 2;
+}
+.t3-bed.empty { background: var(--surface); }
+.t3-bed.empty::before { display: none; }
+.t3-bed.empty .art { opacity: .5; }
+.t3-bed.buy { background: var(--surface); border-style: dashed; box-shadow: none; }
+.t3-bed.buy::before { display: none; }
+.t3-bed:disabled { opacity: .55; }
+.t3-timer { height: 8px; margin-top: 6px; border-width: 1.5px; }
+.t3-timer > i { background: var(--mint); }
+.t3-pouch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t3-seed {
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 4px 7px; text-align: center; color: var(--text); width: 100%; display: block;
+}
+.t3-seed b { display: block; font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--gold); }
+.t3-seed small { font-size: 8.5px; font-weight: 800; letter-spacing: .05em; color: var(--text-2); text-transform: uppercase; }
+.t3-seed.out { opacity: .5; }
+
+/* --- stable -------------------------------------------------------------- */
+/* the pet card joins the Tier 2 trading-card language: rarity IS the frame */
+.t3-petcard {
+  display: flex; gap: 12px; background: var(--surface); border: 3px solid var(--text-3);
+  border-radius: 15px; box-shadow: 0 0 0 2px var(--ink), 4px 5px 0 rgba(0, 0, 0, .55);
+  padding: 11px 12px; margin-bottom: 11px;
+}
+.t3-petcard.r-uncommon { border-color: var(--mint); }
+.t3-petcard.r-rare { border-color: var(--protein); }
+.t3-petcard.r-epic { border-color: var(--violet); }
+.t3-petcard.r-legendary { border-color: var(--gold); }
+.t3-petcard.active { border-color: var(--accent); }
+.t3-petcard .portrait {
+  flex: none; width: 74px; height: 74px; border-radius: 12px;
+  background: var(--surface-2); border: 2px solid var(--ink); display: grid; place-items: center; overflow: hidden;
+}
+.t3-petcard .tx { flex: 1; min-width: 0; }
+.t3-petcard .nm { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.t3-petcard .nm b { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .03em; color: var(--text); }
+.t3-petcard .nm .lv {
+  background: var(--gold); color: var(--ink); border: 2px solid var(--ink); border-radius: 8px;
+  padding: 0 7px; font-family: var(--display); font-weight: 400; font-size: 13px;
+}
+.t3-petcard .nm .on {
+  background: var(--accent); color: var(--ink); border: 2px solid var(--ink); border-radius: 8px;
+  padding: 0 7px; font-size: 9px; font-weight: 800; letter-spacing: .06em; align-self: center;
+}
+.t3-petcard .st { font-size: var(--fs-1); color: var(--text-2); margin-top: 3px; }
+.t3-petcard .acts { display: flex; gap: 7px; margin-top: 8px; flex-wrap: wrap; }
+.t3-petcard .acts .btn { width: auto; padding: 7px 13px; font-size: 14px; box-shadow: var(--sh-sm); }
+.t3-ghosty {
+  background: var(--surface-2); color: var(--text); border: 2px solid var(--ink);
+  border-radius: var(--radius-sm); padding: 7px 13px; font-family: var(--display); font-weight: 400;
+  font-size: 14px; letter-spacing: .04em; box-shadow: var(--sh-sm);
+}
+.t3-ghosty.danger { color: #ff8a7d; }
+.t3-ghosty:active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 rgba(0, 0, 0, .55); }
+.t3-steps { height: 8px; margin-top: 6px; border-width: 1.5px; }
+.t3-steps > i { background: var(--gold); }
+/* the drop poster IS the disclosure control: tapping it opens the real
+   per-item grid below (the existing .drop-grid), so the promo and the
+   purchase live in one place instead of two competing cards */
+.t3-dropsect { margin: 0; }
+.t3-dropsect > summary.t3-drop { list-style: none; cursor: pointer; }
+.t3-dropsect > summary.t3-drop::-webkit-details-marker { display: none; }
+.t3-dropsect[open] > summary.t3-drop { border-radius: var(--radius) var(--radius) 0 0; }
+.t3-dropbody {
+  background: var(--surface); border: 2px solid var(--ink); border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--sh); padding: 12px 13px 13px;
+}
+.t3-dropbody .drop-sub2 { margin: 0 0 12px; }
+/* armed Tier 3 cell: the helper swaps innerHTML for the confirm question, so the
+   cell needs to read as a question rather than a half-empty tile */
+.t3-cell.arming {
+  border-color: var(--gold); color: var(--gold); background: var(--ink);
+  font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .03em;
+  display: grid; place-items: center; min-height: 132px;
+}
+.t3-art { width: 100%; height: 100%; object-fit: contain; }
+/* the Pit poster reuses the drawn arena atmosphere as its backdrop */
+.t3-hero .pit-hero-atmos { position: absolute; inset: 0; opacity: .85; }
+.t3-hero.empty, .t3-energy.empty .ic { border-color: var(--coral); }
+.t3-ghosty.on { background: var(--accent); color: var(--ink); }
+.t3-petcard.breedsel { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--accent), 4px 5px 0 rgba(0, 0, 0, .55); }

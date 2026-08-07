@@ -3,9 +3,17 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 280, date: '2026-08-08', title: 'The deep screens get their turn', items: [
+    'The <b>Shop</b> leads with the current drop as a proper poster, and every price is a chip you can read at a glance.',
+    'The <b>Backpack</b> stacks your crates by type so a pile of eight is one card to crack, not eight rows to grind, and an incubating egg finally shows how far it has to go.',
+    '<b>Build</b> is no longer an essay. Your fighter, your armour and each stat sit on their own plates, with real plus and minus buttons for spending training points.',
+    'The <b>Pit</b> opens on the ladder instead of a stack of closed drawers, and a locked rung now tells you what to beat to open it.',
+    'In the <b>Garden</b>, a bed you own looks like soil rather than an empty box, and the one that needs water is the only loud thing on the screen. Tap a bed to water or harvest it.',
+    'Your pets in the <b>Stable</b> are trading cards now: the frame is the rarity, the active one glows, and talents have their own button instead of hiding behind a tap on the card.',
+  ] },
   { n: 279, date: '2026-08-07', title: 'Squashing day', items: [
     '<b>The Boneyard behaves.</b> Spawns no longer flash over water while you pan, Dark Spires stand on reachable ground like everything else, and the dead space at the top of the map on newer iPhones is gone.',
-    '<b>Fights look right.</b> Long enemy names no longer push the enemy health bar off the edge of the screen, and a slow connection can no longer leave a broken-image box floating on a fighter.',
+    '<b>Fights look right.</b> A slow connection can no longer leave a broken-image box sitting on top of a fighter, and the health bars hold their place no matter how long an enemy\'s name is.',
     '<b>Friends look right.</b> A crewmate\'s shiny pet now shows off its colours everywhere: their card, their profile, and the leaderboard.',
     'The leaderboard now lists <b>real players only</b>: installs that never finished setup no longer pad it out as level-1 ghosts.',
     'Small fixes: the confirm step when spending dust is readable now, the protein goal check draws properly, and the skull in the Wardrobe knows its place.',

@@ -38,7 +38,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, petStepsToNext, petSignature } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -2300,20 +2300,26 @@ function openGardenSheet(after) {
     <div class="sheet-body" id="gardenBody"></div>`, { cls: '', onClose: () => after?.() });
   const body = $('#gardenBody', wrap);
 
-  // one card per bed: empty / growing (thirsty or not) / ready
+  // Tier 3 (mockup t3-garden.html, approved 2026-08-07): a bed you own is SOIL,
+  // not a dashed void, so an occupied plot reads as a thing. The bed that needs
+  // water carries the only loud cue on the screen (sky edge + a drawn droplet).
   const plotCard = p => {
-    if (p.empty) return `<button class="plot-card locked" data-plant="${p.index}">
-      <span class="plot-ico">${bhIcon('garden-bed', 32)}</span><b>Empty bed</b><small>plant a seed</small></button>`;
+    if (p.empty) return `<button class="t3-bed empty" data-plant="${p.index}">
+      <span class="art">${bhIcon('garden-bed', 40)}</span><b>EMPTY BED</b><small>plant a seed</small></button>`;
     const pct = p.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - p.remainingMs / Math.max(1, p.readyAt - p.plantedAt)) * 100)));
-    return `<div class="plot-card ${p.ready ? 'ready' : p.canWater ? 'thirsty' : 'growing'}">
-      ${p.ready ? '<i class="plot-flag crop">READY</i>' : p.canWater ? '<i class="plot-flag">THIRSTY</i>' : ''}
-      <span class="plot-ico">${bhIcon(p.ready ? 'garden-sprout' : 'garden-seedling', p.ready ? 38 : 34, p.rare ? '#9fe3cf' : undefined)}</span>
-      <b>${esc(p.name)}</b>
-      ${p.ready
-        ? `<small>${p.watered ? 'watered · full yield' : 'unwatered'}</small><button class="btn small plot-btn" data-harvest="${p.index}">Harvest</button>`
-        : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(p.remainingMs)} left</small>
-           ${p.canWater ? `<button class="btn small ghost plot-btn" data-water="${p.index}">Water</button>` : '<small class="plot-done">watered</small>'}`}
-    </div>`;
+    const inner = `
+      ${p.canWater ? `<span class="drop"><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--ink)"><path d="M12 3c3 4.5 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 3-6.5 6-11z"/></svg></span>` : ''}
+      <span class="art">${bhIcon(p.ready ? 'garden-sprout' : 'garden-seedling', 40, p.rare ? '#9fe3cf' : undefined)}</span>
+      <b>${esc(p.name).toUpperCase()}</b>
+      <small>${p.ready ? (p.watered ? 'watered · full yield' : 'unwatered') : p.canWater ? 'needs water' : `${fmtCookTime(p.remainingMs)} left`}</small>
+      ${p.ready ? '' : `<div class="bar t3-timer"><i style="width:${pct}%"></i></div>`}`;
+    // ready -> harvest, thirsty -> water: the bed IS the button in both states,
+    // which is the whole point of making it read as a tappable plot
+    return p.ready
+      ? `<button class="t3-bed ready" data-harvest="${p.index}">${inner}</button>`
+      : p.canWater
+        ? `<button class="t3-bed thirsty" data-water="${p.index}">${inner}</button>`
+        : `<div class="t3-bed growing">${inner}</div>`;
   };
 
   async function render() {
@@ -2322,18 +2328,21 @@ function openGardenSheet(after) {
     const bedPrice = plotPrice(garden.plotsOwned);
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     body.innerHTML = `
-      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Beds · ${garden.plotsOwned} of ${PLOTS_MAX}
-        ${bedPrice != null ? `<button class="btn small ghost" id="buyBed">Dig a bed · ${bedPrice.toLocaleString()}${ICONS.coin(13)}</button>` : ''}</div>
-      <div class="plot-row">${garden.plots.map(plotCard).join('')}</div>
-      <p class="note" style="margin:2px 2px 12px">Water a bed once while it grows and it pays its top yield. Miss the window and it still grows, just lean. <b>Nothing ever dies.</b></p>
-      <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}
-        <button class="btn small ghost" id="compostBtn">Compost · ${compost.left} left</button></div>
-      ${seedTotal ? `<div class="ingredient-grid">
-        ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="ing-cell seed-cell" data-plantseed="${id}">
-          <span class="ing-ico">${bhIcon('garden-seed', 24, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
-          <span class="ing-n">${garden.seeds[id]}</span><span class="ing-name">${esc(seedName(id))}</span></button>`).join('')}
+      <p class="note" style="margin:2px 2px 12px">Water once while it grows and a bed pays its top yield. Miss it and it still grows, just lean. <b style="color:var(--text)">Nothing ever dies.</b></p>
+      <div class="t3-sect"><b>Beds · ${garden.plotsOwned} of ${PLOTS_MAX}</b><i></i></div>
+      <div class="t3-beds">
+        ${garden.plots.map(plotCard).join('')}
+        ${bedPrice != null ? `<button class="t3-bed buy" id="buyBed">
+          <span class="art">${bhIcon('garden-bed', 36)}</span><b>DIG A BED</b>
+          <span class="t3-price" style="margin-top:3px">${ICONS.coin(12)} ${bedPrice.toLocaleString()}</span></button>` : ''}
+      </div>
+      <div class="t3-sect"><b>Seed pouch${seedTotal ? ` · ${seedTotal}` : ''}</b><i></i><button class="r chip" id="compostBtn" style="font-size:11px">Compost · ${compost.left} left</button></div>
+      ${seedTotal ? `<div class="t3-pouch">
+        ${SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<button class="t3-seed" data-plantseed="${id}">
+          ${bhIcon('garden-seed', 22, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}
+          <b>x${garden.seeds[id]}</b><small>${esc(seedName(id))}</small></button>`).join('')}
       </div>` : '<p class="note" style="margin:2px 2px 10px">No seeds yet. They turn up while you walk the Boneyard, or compost a spare ingredient into some.</p>'}
-      <p class="note" style="margin:2px 2px 4px">Whatever you harvest lands in your ingredients, ready for the cauldrons.</p>`;
+      <p class="note" style="margin:10px 2px 4px">Seeds turn up while you walk the Boneyard. Harvests land in your ingredients, ready for the cauldrons.</p>`;
 
     $$('[data-water]', body).forEach(btn => btn.addEventListener('click', async () => {
       const res = await waterPlot(Number(btn.dataset.water));
@@ -3570,19 +3579,34 @@ async function renderShop(el) {
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
   // so the hub supplies both and a second title would just repeat itself.
+  // Tier 3 (mockup t3-shop.html, approved 2026-08-07): wallet chips, the drop as
+  // a coral poster that opens the real per-item grid, sticker cells with gold
+  // price chips, the merchant as rows. The mockup showed the drop as a single
+  // 600-coin pack; the game sells the pieces individually, so the poster quotes
+  // the real "from" price and opens the real grid rather than inventing a SKU.
+  const dropCheapest = Math.min(...DROP.items.map(d => d.cost));
+  const dropOwned = DROP.items.filter(d => ownedCos.has(d.id)).length;
+  const shopDesc = { vigor: '+3 Pit fights right now', xp2: 'Next Pit wins pay more' };
+  // The mockup is a standalone screen with its own wallet row. In the app the
+  // Shop is a hub tab whose header already carries the balances, so the dust
+  // pill moved up there rather than printing the same two numbers twice.
   el.innerHTML = `
 
-  <div class="wallet-line" style="margin:0 2px 16px"><span class="note">Your wallet</span><b>${ICONS.coin(15)} ${coinBal.toLocaleString()} <span class="wallet-dust">· <span class="dust-ico">${ICONS.dust(13)}</span> ${dustBal.toLocaleString()} Bone Dust</span></b></div>
-
-  <details class="drop-sect" id="dropSect">
-    <summary>
-      <span class="drop-sect-ico"><img src="${bhAsset(BH_BY_ID[DROP.items[5].id])}" alt=""></span>
-      <span class="drop-sect-sum"><i>Fresh drop</i><b>${esc(DROP.title).toUpperCase()}</b></span>
-      <span class="new">NEW</span>
-      <span class="gbn-chev">›</span>
+  <details class="t3-dropsect" id="dropSect">
+    <summary class="t3-drop">
+      ${dropOwned < DROP.items.length ? '<span class="new">NEW</span>' : ''}
+      <span class="eyebrow">Fresh drop · ${DROP.items.length} pieces${dropOwned ? ` · ${dropOwned} yours` : ''}</span>
+      <h2>${esc(DROP.title).toUpperCase()}</h2>
+      <div class="row">
+        <div class="art"><canvas class="t3-art" width="220" height="220" data-art="${esc(bhAsset(BH_BY_ID[DROP.items[5].id]))}"></canvas></div>
+        <div class="tx">
+          <small>${esc(DROP.blurb)} Every piece also drops from crates like any legendary.</small>
+          <span class="t3-price">${ICONS.coin(13)} from ${dropCheapest.toLocaleString()}</span>
+        </div>
+      </div>
     </summary>
-    <div class="drop-sect-body">
-      <p class="drop-sub2">${esc(DROP.blurb)} Match the set or mix it filthy. ${esc(DROP.acquire)}</p>
+    <div class="t3-dropbody">
+      <p class="drop-sub2">${esc(DROP.acquire)}</p>
       <div class="drop-grid">
         ${DROP.items.map(d => {
           const it = BH_BY_ID[d.id];
@@ -3599,30 +3623,32 @@ async function renderShop(el) {
     </div>
   </details>
 
-  <div class="card">
-    <div class="card-title">COIN SHOP</div>
-    <div class="grid2">
-      ${SHOP.map(s => `<button class="shop-cell" data-buy="${s.id}" ${coinBal < s.cost ? 'disabled' : ''}>
-        <span class="crate-ico">${s.id === 'crate-daily' ? crateIcon('daily', 26) : s.id === 'crate-golden' ? crateIcon('golden', 26) : consumableIcon(s.id, 26)}</span><b>${s.label}</b><small>${ICONS.coin(12)} ${s.cost}</small></button>`).join('')}
-    </div>
-    <button class="btn ghost small" id="shopForage" style="margin-top:12px">Forage for ingredients in the Kitchen</button>
+  <div class="t3-sect"><b>Coin shop</b><i></i></div>
+  <div class="t3-cells">
+    ${SHOP.map(s => `<button class="t3-cell" data-buy="${s.id}" data-label="${esc(s.label)}" ${coinBal < s.cost ? 'disabled' : ''}>
+      <span class="art">${s.id === 'crate-daily' ? crateIcon('daily', 54) : s.id === 'crate-golden' ? crateIcon('golden', 54) : consumableIcon(s.id, 46)}</span>
+      <b>${esc(s.label).toUpperCase()}</b>
+      <span class="t3-price">${ICONS.coin(13)} ${s.cost}</span>
+      ${shopDesc[s.id] ? `<small>${shopDesc[s.id]}</small>` : ''}
+    </button>`).join('')}
   </div>
 
-  <div class="card">
-    <div class="card-title">BONE DUST SHOP</div>
-    <p class="note" style="margin:0 2px 10px">Spend salvage (<span class="dust-ico">${ICONS.dust(13)}</span> Bone Dust) on a fresh shot at pets, crates and consumables.</p>
-    <div class="grid2">
-      ${DUST_SHOP.map(d => `<button class="shop-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
-        <span class="crate-ico">${d.id === 'egg' ? crateIcon('egg', 26) : d.id === 'crate-daily' ? crateIcon('daily', 26) : consumableIcon(d.id, 26)}</span><b>${esc(d.label)}</b><small class="dc-desc">${esc(d.desc)}</small><small><span class="dust-ico">${ICONS.dust(13)}</span> ${d.cost}</small></button>`).join('')}
-    </div>
-    <button class="btn ghost small" id="shopSalvage" style="margin-top:12px">Melt gear for Bone Dust at the Salvage Bench</button>
+  <div class="t3-sect"><b>Bone Dust shop</b><i></i><span class="r chip" style="font-size:11px">Melt gear to earn it</span></div>
+  <div class="t3-cells">
+    ${DUST_SHOP.map(d => `<button class="t3-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
+      <span class="art">${d.id === 'egg' ? crateIcon('egg', 54) : d.id === 'crate-daily' ? crateIcon('daily', 54) : consumableIcon(d.id, 46)}</span>
+      <b>${esc(d.label).toUpperCase()}</b>
+      <span class="t3-price dust">${ICONS.dust(13)} ${d.cost}</span>
+      <small>${esc(d.desc)}</small>
+    </button>`).join('')}
   </div>
+  <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
 
-  <details class="card shop-fold">
-    <summary class="card-title">THE BONE MERCHANT · <span style="color:var(--accent)">${ARCH_META[recArch].label} suits you</span></summary>
-    <p class="note" style="margin:10px 2px 12px">Weapons multiply your effort; they never replace it. Melt spare gear at the Salvage Bench for the Bone Dust the top-tier pieces need.</p>
-    ${merchantHtml}
-  </details>`;
+  <div class="t3-sect"><b>Bone Merchant</b><i></i><span class="r chip" style="font-size:11px">${ARCH_META[recArch].label} suits you</span></div>
+  <p class="note" style="margin:0 2px 10px">Weapons multiply your effort; they never replace it.</p>
+  ${merchantHtml}
+
+  <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
@@ -3648,24 +3674,16 @@ async function renderShop(el) {
     toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
     rerender();
   }));
-  el.querySelectorAll('[data-buy]').forEach((b => {
-      let t = null;
-      const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
-      b.addEventListener('click', async () => {
-        if (b.dataset.armed !== '1') {
-          b.dataset.label = b.dataset.label || b.textContent;
-          b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
-          clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
-          return;
-        }
-        clearTimeout(t); reset();
-        const r = await buyShopItem(b.dataset.buy);
-        if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
-        popSound(S.sounds);
-        toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
-        rerender();
-      });
-    }));
+  // Both shop grids use the shared arm-then-confirm helper now. They each used to
+  // carry their own copy of the dance, and the coin one swapped textContent,
+  // which would wipe a Tier 3 cell's art and price chip on the first tap.
+  el.querySelectorAll('[data-buy]').forEach(b => armToConfirm(b, `Spend ${SHOP.find(s => s.id === b.dataset.buy)?.cost ?? ''}?`, async () => {
+    const r = await buyShopItem(b.dataset.buy);
+    if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+    popSound(S.sounds);
+    toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+    rerender();
+  }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
   el.querySelectorAll('[data-buydrop]').forEach((b => {
@@ -3689,23 +3707,9 @@ async function renderShop(el) {
       rerender();
     });
   }));
-  el.querySelectorAll('[data-dustbuy]').forEach(btn => btn.addEventListener('click', async () => {
-      // A single tap used to spend on the spot. Tom lost 25 dust just looking at
-      // what a Battle Charm was. Now the first tap only ARMS the cell (and the
-      // card already states what the item does), so buying takes intent.
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        btn.classList.add('arming');
-        const prev = btn.innerHTML;
-        btn.innerHTML = `<span class="crate-ico">${ICONS.coin(26)}</span><b>Spend ${btn.dataset.cost}?</b><small class="dc-desc">tap again to buy</small><small>tap elsewhere to cancel</small>`;
-        clearTimeout(btn._armT);
-        btn._armT = setTimeout(() => {
-          if (!btn.isConnected) return;
-          btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.innerHTML = prev;
-        }, 3200);
-        return;
-      }
-      clearTimeout(btn._armT);
+  // A single tap used to spend on the spot. Tom lost 25 dust just looking at what
+  // a Battle Charm was, so the first tap only ARMS the cell.
+  el.querySelectorAll('[data-dustbuy]').forEach(btn => armToConfirm(btn, `Spend ${btn.dataset.cost} dust?`, async () => {
     btn.disabled = true;
     const res = await buyWithDust(btn.dataset.dustbuy);
     if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
@@ -3713,6 +3717,9 @@ async function renderShop(el) {
     toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it in your Backpack.' : 'Added to your consumables.', 2800);
     rerender();
   }));
+  // the drop art sits small inside a 640² sprite sheet, so trim it to its ink
+  // the same way the reveal cards do rather than showing a stamp in a big box
+  hydratePackArt(el, '.t3-art[data-art]');
   $('#shopForage', el)?.addEventListener('click', openKitchen);
   $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
 }
@@ -5945,7 +5952,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // content and the browser clamps the real scroller's offset.
   const scroller = body.closest('.screen') || body;
   const keepScroll = opts.instant ? scroller.scrollTop : null;
-  const [xp, eq, coinBal, inv, boost] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges()]);
+  const [xp, eq, coinBal, inv, boost, dustBal] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust()]);
   const lvl = levelFor(xp);
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
@@ -5964,6 +5971,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="ward-lv">Lv ${lvl.level}</span>
       <span class="ward-rank">${esc(lvl.name)}</span>
       <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
+      <span class="bh-pill">${ICONS.dust(13)} ${dustBal.toLocaleString()}</span>
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
     </div>` : `
@@ -5974,6 +5982,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
         <div class="bh-pills">
           <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
+          <span class="bh-pill">${ICONS.dust(13)} ${dustBal.toLocaleString()}</span>
 <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
           ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
         </div>
@@ -6386,48 +6395,65 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
     content.innerHTML = `
-      ${(pendingLoot || []).length ? `<div class="sect-h" style="margin-top:2px">Boss loot · tap to compare, keep one per drop</div>
+      ${(pendingLoot || []).length ? `<div class="t3-sect" style="margin-top:2px"><b>Boss loot · keep one per drop</b><i></i></div>
       ${pendingLoot.map((p, i) => `
         <div class="loot-pending" data-lootkey="${esc(p.key)}">
           <small>${esc(p.den)} dropped:</small>
           <div class="loot-cards">${p.choices.map(id => GEAR_BY_ID[id] ? lootCardHtml(GEAR_BY_ID[id]) : '').join('')}</div>
           <button class="btn loot-keep" disabled>Tap a piece to preview</button>
         </div>`).join('')}` : ''}
-      ${eggs.length ? `<div class="sect-h" style="margin-top:2px">Eggs · hatch by walking</div>
+      ${/* Tier 3 (mockup t3-backpack.html): crates as crackable cells with a
+            quantity badge, the egg as a card with its own bar, consumables as
+            rows. Crates group BY TYPE now: eight identical rows each saying
+            "Golden Crate / Open" was a list to grind, not a stash to raid. */''}
+      <div class="t3-sect"><b>Crates · tap to crack</b><i></i>${crates.length ? `<span class="r chip" style="font-size:11px">${crates.length} to open</span>` : ''}</div>
+      ${crates.length ? `<div class="t3-cells">${(() => {
+        const byType = new Map();
+        for (const c of crates) { if (!byType.has(c.crate)) byType.set(c.crate, []); byType.get(c.crate).push(c); }
+        return [...byType.entries()].map(([kind, list]) => {
+          const def = CRATES[kind] || CRATES.daily;
+          return `<div class="t3-cell">
+            ${list.length > 1 ? `<span class="t3-qty">${list.length}</span>` : ''}
+            <span class="art">${crateIcon(kind, 56)}</span>
+            <b>${esc(def.label).toUpperCase()}</b>
+            <button class="btn" data-open="${list[0].id}">OPEN</button>
+          </div>`;
+        }).join('');
+      })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
         const pct = Math.min(100, Math.round(p.walked / p.goal * 100));
-        return `<div class="crate-row egg-row">
-          <span class="crate-ico">${crateIcon('egg', 27)}</span>
-          <div style="flex:1">
-            <b>${p.ready ? 'Ready to hatch!' : 'Incubating...'}</b>
-            <div class="q-bar egg-bar"><i style="width:${pct}%"></i></div>
-            <small>${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps · a PET is inside</small>
+        return `<div class="t3-egg" style="margin-bottom:9px">
+          <span class="art">${crateIcon('egg', 46)}</span>
+          <div class="tx">
+            <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
+            <div class="bar"><i style="width:${pct}%"></i></div>
+            <small>${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}</small>
           </div>
-          ${p.ready ? `<button class="btn small" data-hatch="${e.id}">Hatch</button>` : `<span class="q-frac">${(p.goal - p.walked).toLocaleString()} to go</span>`}
+          ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:16px;box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
       }).join('')}` : ''}
-      <div class="sect-h" style="margin-top:${eggs.length ? '14px' : '2px'}">Crates${crates.length ? ` · ${crates.length} to open` : ''}</div>
-      ${crates.length ? crates.map(c => {
-        const def = CRATES[c.crate] || CRATES.daily;
-        return `<div class="crate-row">
-          <span class="crate-ico">${crateIcon(c.crate, 27)}</span>
-          <div style="flex:1"><b>${def.label}</b><small>from ${esc(c.source || 'quests')}</small></div>
-          <button class="btn small" data-open="${c.id}">Open</button>
-        </div>`;
-      }).join('') : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
-      <div class="sect-h">Consumables</div>
-      <div class="crate-row"><span class="crate-ico">${consumableIcon('xp2', 24)}</span><div style="flex:1"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
-        ${boosts ? `<button class="btn small ghost" id="useBoost">Activate (x${boosts})</button>` : `<span class="q-frac">x0</span>`}</div>
-      <div class="crate-row"><span class="crate-ico">${consumableIcon('vigor', 24)}</span><div style="flex:1"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
-        ${vigors ? `<button class="btn small ghost" id="useVigor">Drink (x${vigors})</button>` : `<span class="q-frac">x0</span>`}</div>
+      <div class="t3-sect"><b>Consumables</b><i></i></div>
+      <div class="t3-row">
+        <span class="t3-med">${consumableIcon('xp2', 20)}</span>
+        <div class="t3-tx"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
+        <span class="t3-lock">x${boosts}</span>
+        ${boosts ? '<button class="btn" id="useBoost">USE</button>' : ''}
+      </div>
+      <div class="t3-row">
+        <span class="t3-med">${consumableIcon('vigor', 20)}</span>
+        <div class="t3-tx"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
+        <span class="t3-lock">x${vigors}</span>
+        ${vigors ? '<button class="btn" id="useVigor">USE</button>' : ''}
+      </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
-      <div class="sect-h">Kitchen · food &amp; buffs</div>
+      <div class="t3-sect"><b>Kitchen · food &amp; buffs</b><i></i></div>
       ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
-      <div class="sect-h">Salvage Bench · nothing wasted</div>
+      <div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
       <p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
       ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
@@ -7064,7 +7090,10 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 async function openStable() {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
-  let openIid = null; // which pet's talent tree is expanded inline (default: active pet)
+  // undefined = never chosen (open the active pet's tree); null = deliberately
+  // CLOSED. Both used to be null, so render() re-opened the active pet's tree
+  // every time you closed it and the control looked broken.
+  let openIid;        // which pet's talent tree is expanded inline
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
@@ -7074,7 +7103,7 @@ async function openStable() {
     const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     // expanded talent tree: default to the active pet so it's visible right away
-    if (openIid == null || !insts.some(x => x.iid === openIid)) openIid = eqIid;
+    if (openIid === undefined || (openIid !== null && !insts.some(x => x.iid === openIid))) openIid = eqIid;
     const openInst = insts.find(x => x.iid === openIid) || null;
     const openPicks = openInst ? await petPicks(openInst.sp) : [];
     // inline talent tree for one pet, rendered directly under its card
@@ -7129,20 +7158,33 @@ async function openStable() {
         const inSel = sel.includes(x.iid);
         const isOpen = x.iid === openIid;
         const dustVal = petDustValue(it) + (x.shiny ? 15 : 0) + (x.lineage || 0) * 8;
-        return `<div class="stable-card r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' equipped' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
-          <div class="stable-portrait">${petPortraitHtml(sp, 60, x.shiny)}</div>
-          <div class="stable-info">
-            <b>Lv ${lvl}${x.lineage ? ` <span class="lin-tag">${ICONS.star(11)}${x.lineage}</span>` : ''}${x.shiny ? ` <span class="shiny-tag">✦</span>` : ''}${isEq ? ' <span class="stable-eqbadge">ACTIVE</span>' : ''}<span class="stable-chev">${isOpen ? '▴ talents' : '▾ talents'}</span></b>
-            <small>${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
-            <div class="stable-acts">
-              ${isEq ? '<span class="stable-active-lbl">Leveling this one</span>' : `<button class="btn tiny" data-eq="${x.iid}">Equip</button>`}
-              <button class="btn tiny ${inSel ? 'on' : 'ghost'}" data-breedsel="${x.iid}">${inSel ? `Breeding ${ICONS.check(11)}` : 'Breed'}</button>
-              <button class="btn tiny danger" data-destroy="${x.iid}" data-dust="${dustVal}">Destroy · <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}</button>
+        // Tier 3 (mockup t3-stable.html, approved 2026-08-07): the pet card joins
+        // the Tier 2 trading-card language. Rarity IS the frame; the active pet's
+        // frame goes lime. Level and ACTIVE are chips, growth is a bar.
+        const span = lvl >= PET_MAX_LEVEL ? 0 : (PET_LEVEL_STEPS[lvl] || 0) - (PET_LEVEL_STEPS[lvl - 1] || 0);
+        const pct = lvl >= PET_MAX_LEVEL ? 100 : Math.max(0, Math.min(100, Math.round((1 - toNext / Math.max(1, span)) * 100)));
+        return `<div class="t3-petcard r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
+          <span class="portrait">${petPortraitHtml(sp, 60, x.shiny)}</span>
+          <div class="tx">
+            <div class="nm">
+              <b>${esc(it.name || sp).toUpperCase()}</b>
+              <span class="lv">LV ${lvl}</span>
+              ${isEq ? '<span class="on">ACTIVE</span>' : ''}
+              ${x.lineage ? `<span class="lin-tag">${ICONS.star(11)}${x.lineage}</span>` : ''}
+              ${x.shiny ? `<span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''}
+            </div>
+            <div class="st">${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</div>
+            <div class="bar t3-steps"><i style="width:${pct}%"></i></div>
+            <div class="acts">
+              ${isEq ? '' : `<button class="btn" data-eq="${x.iid}">EQUIP</button>`}
+              <button class="t3-ghosty" data-pettree="${x.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
+              <button class="t3-ghosty${inSel ? ' on' : ''}" data-breedsel="${x.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
+              <button class="t3-ghosty danger" data-destroy="${x.iid}" data-dust="${dustVal}">DESTROY ${dustVal}</button>
             </div>
           </div>
         </div>${isOpen ? petTalentTree(x, lvl, openPicks) : ''}`;
       }).join('');
-      return `<div class="sect-h">${esc(it.name || sp)} <span class="rar-lbl r-${it.rarity || 'common'}">${(RARITIES[it.rarity] || {}).label || ''}</span> · ${bySp[sp].length}</div>${cards}`;
+      return `<div class="t3-sect"><b>${esc(it.name || sp)} · ${(RARITIES[it.rarity] || {}).label || ''}</b><i></i><span class="r chip" style="font-size:11px">${bySp[sp].length}</span></div>${cards}`;
     }).join('');
 
 
@@ -7150,7 +7192,10 @@ async function openStable() {
       .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
 
     body.innerHTML = `
-      <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${st.dust.toLocaleString()}</b></div>
+      <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
+        <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
+        <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
+      </div>
       ${pair ? `<div class="breed-bar${spareIsPrecious ? ' careful' : ''}">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
@@ -7180,12 +7225,20 @@ async function openStable() {
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
         </div>`
-      : `<p class="note" style="margin:2px 2px 10px">Only your <b>active</b> pet levels as you walk. Tap <b>Equip</b> to pick it. <b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+      : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}`;
 
     $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
       if (e.target.closest('button')) return; // don't hijack Equip/Breed/Destroy
       const iid = card.dataset.petsel;
+      openIid = (openIid === iid) ? null : iid;
+      render();
+    }));
+    // the card is still tappable, but the mockup gives the talent tree its own
+    // named control: "tap the card somewhere that isn't a button" is not an
+    // affordance anyone finds
+    $$('[data-pettree]', body).forEach(btn => btn.addEventListener('click', () => {
+      const iid = btn.dataset.pettree;
       openIid = (openIid === iid) ? null : iid;
       render();
     }));
@@ -8835,7 +8888,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v279'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v280'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9017,36 +9070,37 @@ async function renderPit(wrap) {
   // once you've beaten the Champion, the endless Gauntlet (your live fight) leads
   // and the beaten Ladder/Champion tuck away below.
   const ladderOpen = !champOpen;              // still climbing the ladder
+  // Tier 3 (mockup t3-pitentry.html, approved 2026-08-07): the collapsed
+  // <details> stack becomes a flat, readable board. Rungs are numbered plates,
+  // a locked rung says WHY ("BEAT RUNG 1") instead of just "locked", and the
+  // live fight is never hidden behind a summary you have to open.
   const sparringSect = `
-    <details class="pit-sect"><summary>Sparring · no stakes</summary>
+    <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
-      <div class="crate-row"><span class="crate-ico">${ICONS.pit(22)}</span>
-        <div style="flex:1"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
-        <button class="btn small ghost" data-spar="${m}" data-name="${name}">Fight</button>
-      </div>`).join('')}
-    </details>`;
+      <div class="t3-row"><span class="t3-med">${ICONS.pit(20)}</span>
+        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <button class="btn ghost" data-spar="${m}" data-name="${name}">FIGHT</button>
+      </div>`).join('')}`;
   const ladderSect = `
-    <details class="pit-sect"${ladderOpen ? ' open' : ''}><summary>The Ladder${champOpen ? ' ' + ICONS.check(12) : ` · rung ${Math.min(rungsBeaten + 1, LADDER.length)}/${LADDER.length}`}</summary>
+    <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:11px">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
     ${LADDER.map(r => {
       const done = beaten.has(`pitrung-${r.rung}`);
       const locked = r.rung > rungsBeaten + 1;
-      return `<div class="crate-row">
-        <span class="crate-ico" style="font-family:var(--display);font-size:19px;color:${done ? 'var(--text-3)' : 'var(--accent)'}">${r.rung}</span>
-        <div style="flex:1"><b>${r.name} ${done ? ICONS.check(12) : ''}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · +${r.repeatCoins} coins` : `first win: ${r.coins} coins + ${r.xp} XP`}</small></div>
-        ${locked ? '<span class="q-frac">locked</span>' : `<button class="btn small ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'Rematch' : 'Fight'}</button>`}
+      return `<div class="t3-row${done ? ' done' : ''}">
+        <span class="t3-rung">${r.rung}</span>
+        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp} XP`}</small></div>
+        ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
-    }).join('')}
-    </details>`;
+    }).join('')}`;
   const champSect = `
-    <details class="pit-sect"${champOpen && !champBeaten ? ' open' : ''}><summary>Champion${champBeaten ? ' ' + ICONS.check(12) + '' : ''}</summary>
-    <div class="crate-row">
-      <span class="crate-ico">${crateIcon('golden', 24)}</span>
-      <div style="flex:1"><b>${CHAMPION.name} ${champBeaten ? ICONS.check(12) : ''}</b><small>${champBeaten ? `rematch · +${CHAMPION.repeatCoins} coins` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
-      ${champOpen ? `<button class="btn small ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'Rematch' : 'Fight'}</button>` : `<span class="q-frac">beat the ladder</span>`}
-    </div>
-    </details>`;
+    <div class="t3-sect"><b>After the ladder</b><i></i></div>
+    <div class="t3-row${champBeaten ? ' done' : ''}">
+      <span class="t3-med">${crateIcon('golden', 22)}</span>
+      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
+      ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
+    </div>`;
   const endlessSect = `
-    <details class="pit-sect"${champBeaten ? ' open' : ''}><summary>Endless · The Gauntlet${champBeaten ? (canNewRank ? ` · rank ${fightRank}` : ' · AT THE CAP') : ' 🔒'}</summary>
+    <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
@@ -9057,24 +9111,27 @@ async function renderPit(wrap) {
           <button class="btn" id="endlessGate" style="width:100%">Find a world boss on the map</button>
           <p class="pg-foot">You can still rematch rank ${ceiling} below for coins while you look.</p>
         </div>`}
-    <div class="crate-row${canNewRank ? '' : ' capped'}">
-      <span class="crate-ico" style="font-family:var(--display);font-size:18px;color:${canNewRank ? 'var(--accent)' : 'var(--text-3)'}">${fightRank}</span>
-      <div style="flex:1"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${fightFoe.coins} coins` : `<b>rematch only</b> · +${fightFoe.repeatCoins} coins, no new rank`}</small></div>
-      <button class="btn small${canNewRank ? '' : ' ghost'}" id="endlessBtn" ${gate}>${canNewRank ? 'Fight' : 'Rematch'}</button>
+    <div class="t3-row${canNewRank ? '' : ' capped'}">
+      <span class="t3-rung">${fightRank}</span>
+      <div class="t3-tx"><b>${esc(fightFoe.name)}</b><small>${Math.round(fightFoe.mult * 100)}% stats · ${canNewRank ? `${fightFoe.xp} XP + ${ICONS.coin(12)}${fightFoe.coins}` : `<b>rematch only</b> · ${ICONS.coin(12)}${fightFoe.repeatCoins}, no new rank`}</small></div>
+      <button class="btn${canNewRank ? '' : ' ghost'}" id="endlessBtn" ${gate}>${canNewRank ? 'FIGHT' : 'REMATCH'}</button>
     </div>`
     : `
-    <div class="crate-row" style="opacity:.75">
-      <span class="crate-ico">🔒</span>
-      <div style="flex:1"><b>The Gauntlet</b><small>Beat the Champion to enter, then foes scale <b>forever</b>. The climb never ends.</small></div>
-    </div>`}
-    </details>`;
+    <div class="t3-row">
+      <span class="t3-med">${ICONS.lock(20)}</span>
+      <div class="t3-tx"><b>The Gauntlet</b><small>Foes scale <b>forever</b>. The climb never ends.</small></div>
+      <span class="t3-lock">BEAT THE CHAMPION</span>
+    </div>`}`;
   // beaten the Champion → your live endless fight leads, spent content tucks below.
   const pitSections = (champBeaten
     ? [endlessSect, ladderSect, champSect, sparringSect]
     : [ladderSect, champSect, sparringSect, endlessSect]).join('');
 
+  // The mockup's hero sat on a raster capture of the arena. The app already
+  // draws that arena in CSS, live and lighter than shipping a screenshot as
+  // art, so the poster keeps the drawn scene and takes the mockup's typography.
   body.innerHTML = `
-    <div class="pit-hero">
+    <div class="t3-hero">
       <div class="pit-hero-atmos">
         <span class="pit-arch"></span>
         <span class="pit-crowd"></span>
@@ -9082,22 +9139,23 @@ async function renderPit(wrap) {
         <span class="pit-banner l"></span><span class="pit-banner r"></span>
         <span class="pit-fog"></span>
       </div>
-      <img class="pit-emblem" src="assets/brand/sword.png" alt="" draggable="false">
-      <div class="pit-hero-title">THE PIT</div>
-      <div class="pit-quote">Many enter. Few leave.</div>
-      <div class="pit-hero-sub">${d.maxHp} HP · ${d.maxWind} STAMINA${wins ? ` · ${wins} win${wins === 1 ? '' : 's'}` : ''}</div>
-    </div>
-    <p class="note" style="margin:12px 2px 8px">Step into the ring. Your fighter mirrors your habits: protein powers the swing, steps power the lungs, streaks thicken the bones. Pick your fight below.</p>
-    <button class="btn ghost" id="buildBtn" style="margin:2px 0 6px">${ICONS.pit(18)} Shape your build · stats, weapon &amp; talents${unspent > 0 ? ` <i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
-    <div class="pit-energy ${tapped ? 'empty' : ''}">
-      <span class="pe-ico">${ICONS.pit(20)}</span>
-      <div style="flex:1">
-        <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} ready</b>
-        <div class="pe-bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · rest up! log a meal or take a walk to earn Vigor' : ' · earn more by logging food &amp; walking'}</small>
+      <h2>MANY ENTER.<br>FEW LEAVE.</h2>
+      <p>${champBeaten ? `THE GAUNTLET · RANK ${fightRank}` : `THE LADDER · RUNG ${Math.min(rungsBeaten + 1, LADDER.length)} OF ${LADDER.length}`}</p>
+      <div class="stats">
+        <span class="chip">${d.maxHp} HP</span>
+        <span class="chip">${d.maxWind} STAMINA</span>
+        <span class="chip">${ICONS.boltIco(13)} ${energy.ready} READY</span>
       </div>
     </div>
-    <p class="note" style="margin:6px 2px 8px">Sparring is always free. Ladder, Champion and Gauntlet fights cost one charge: ${FREE_FIGHTS} free a day, then Vigor you earn by logging food and getting your steps.</p>
+    <div class="t3-energy ${tapped ? 'empty' : ''}">
+      <span class="ic">${ICONS.boltIco(20)}</span>
+      <div class="tx">
+        <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
+        <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · log a meal or take a walk to earn Vigor' : ' · log food and walk to earn more'}</small>
+      </div>
+    </div>
+    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${ICONS.pit(20)}<b>Shape your build</b><small>stats, weapon &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
@@ -10315,7 +10373,7 @@ const BUILD_PLAYSTYLES = [
 function buildFaqHtml(fighter, openAttr = '') {
   const nm = k => (STAT_META.find(m => m.key === k) || {}).label || k;
   return `<details class="bsect faq-card" data-bsect="faq" ${openAttr}>
-    <summary class="bsect-head"><b>How do I build my fighter?</b><span class="note">start here</span></summary>
+    <summary class="t3-faq">How do I build my fighter?<b>Start here ›</b></summary>
     <div class="bsect-body">
       <p class="note" style="margin:2px 2px 12px">Your stats grow on their own from your real habits. <b>Training points are extra</b>, on top of that, and they are yours to place. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
 
@@ -10452,6 +10510,13 @@ async function openTalents(pitWrap) {
   renderTalents(wrap);
 }
 
+// Bar colour per stat, so the five allocators read apart at a glance (the
+// mockup's palette). Lives here, not in STAT_META: pit.js is fight logic and
+// has no business carrying a hex code.
+const STAT_BAR_COLOR = {
+  power: 'var(--accent)', marrow: 'var(--protein)', wind: 'var(--gold)',
+  reflex: 'var(--violet)', hype: 'var(--coral)',
+};
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
@@ -10471,42 +10536,38 @@ async function renderTalents(wrap) {
   const sectOpen = (key, dflt = false) => (prevOpen.has(key) ? prevOpen.get(key) : dflt) ? 'open' : '';
 
   // ----- Fighter stats (moved out of the Pit): what each stat DOES + spec it powers -----
-  const statBlock = buildFaqHtml(fighter, sectOpen('faq', false)) + `
-    <details class="bsect" data-bsect="fighter" ${sectOpen('fighter', true)}>
-    <summary class="bsect-head"><b>Your Fighter</b><span class="note">${d.maxHp} HP · ${d.maxWind} Stamina · ${fighter.tpAvail} TP</span></summary>
-    <div class="bsect-body">
-    <p class="note" style="margin:2px 2px 10px">Your base stats grow from your real habits. Spend <b>training points</b> to lean into a stat and shape your build. Every point here is a choice about how you fight.</p>
-    <div class="def-readout">
-      <span class="def-chip"><small>Armor</small><b>${Math.round(d.armor * 100)}%</b><i>vs melee</i></span>
-      <span class="def-chip"><small>Spell Armor</small><b>${Math.round(d.spellArmor * 100)}%</b><i>vs magic</i></span>
+  // Tier 3 (mockup t3-build.html, approved 2026-08-07): the essay is gone. A
+  // fighter plate with the unspent points as a coral badge, the FAQ as one pill,
+  // armor as two tiles, and each stat as a plated row with its bar, one line of
+  // meaning and real drawn +/- steppers.
+  const statBlock = `
+    <div class="t3-fighter">
+      <div class="n"><b>YOUR FIGHTER</b><small>${d.maxHp} HP · ${d.maxWind} Stamina · grows from your real habits</small></div>
+      ${fighter.tpAvail ? `<div class="tp"><b>${fighter.tpAvail}</b><small>TO SPEND</small></div>` : ''}
     </div>
-    <p class="note" style="margin:0 2px 10px">Armor cuts incoming damage by type. Physical Armor grows from Marrow, Spell Armor from Reflex, and worn gear adds to both.</p>
-    <div class="stat-build">
-      ${STAT_META.map(m => {
-        const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
-        const gb = fighter.gearBonus?.[m.key] || 0;
-        return `
-        <div class="statx">
-          <div class="statx-top">
-            <span class="statx-name">${m.label}</span>
-            <span class="statx-val">${fighter.stats[m.key]}${bonus ? ` <span class="stat-bonus">+${bonus}</span>` : ''}${gb ? ` <span class="stat-gear">+${gb} gear</span>` : ''}</span>
-          </div>
-          <div class="statline">
-            <div class="bar pitstat" style="flex:1"><i style="width:${fighter.stats[m.key]}%"></i>${bonus ? `<span class="statbase" style="left:${fighter.baseStats[m.key]}%"></span>` : ''}</div>
-            <button class="tp-btn" data-tpminus="${m.key}" ${(fighter.alloc[m.key] || 0) <= 0 ? 'disabled' : ''}>−</button>
-            <button class="tp-btn" data-tpplus="${m.key}" ${fighter.tpAvail <= 0 ? 'disabled' : ''}>+</button>
-          </div>
-          <div class="statx-do">${esc(m.combat)}</div>
-          <div class="statx-spec"><b>Good for:</b> ${esc(m.spec)} <span class="statx-from">· grows from ${esc(m.fedBy)}</span></div>
-        </div>`;
-      }).join('')}
-      <div class="tp-bar">
-        <span><b>Training points</b> · earned from protein hits, closing days + every 25,000 steps</span>
-        <span class="tp-count">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span>
-      </div>
-      ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-top:8px">Reset training</button>' : ''}
+    ` + buildFaqHtml(fighter, sectOpen('faq', false)) + `
+    <div class="t3-armor">
+      <div class="t3-cell"><b>${Math.round(d.armor * 100)}%</b><span class="lab">ARMOR</span><small>cuts melee damage · grows from Marrow</small></div>
+      <div class="t3-cell"><b>${Math.round(d.spellArmor * 100)}%</b><span class="lab">SPELL ARMOR</span><small>cuts magic damage · grows from Reflex</small></div>
     </div>
-    </div></details>
+
+    <div class="t3-sect"><b>Training points</b><i></i><span class="r chip" style="font-size:11px">${fighter.tpAvail} to spend${fighter.tpTotal ? ` · ${fighter.tpTotal - fighter.tpAvail}/${fighter.tpTotal} used` : ''}</span></div>
+    ${STAT_META.map(m => {
+      const bonus = (fighter.alloc[m.key] || 0) * TRAIN_STEP;
+      const gb = fighter.gearBonus?.[m.key] || 0;
+      return `
+      <div class="t3-stat">
+        <div class="top"><b>${m.label.toUpperCase()}</b><span class="v">${fighter.stats[m.key]}${bonus ? `<span class="stat-bonus"> +${bonus}</span>` : ''}${gb ? `<span class="stat-gear"> +${gb} gear</span>` : ''}</span></div>
+        <div class="bar"><i style="width:${Math.min(100, fighter.stats[m.key])}%;background:${STAT_BAR_COLOR[m.key] || 'var(--accent)'}"></i></div>
+        <div class="foot">
+          <small>${esc(m.combat)}</small>
+          <button class="t3-pm" data-tpminus="${m.key}" aria-label="Spend one less point on ${esc(m.label)}" ${(fighter.alloc[m.key] || 0) <= 0 ? 'disabled' : ''}></button>
+          <button class="t3-pm plus" data-tpplus="${m.key}" aria-label="Spend a point on ${esc(m.label)}" ${fighter.tpAvail <= 0 ? 'disabled' : ''}></button>
+        </div>
+      </div>`;
+    }).join('')}
+    <p class="note" style="margin:2px 2px 10px">Points come from hitting protein, closing days on budget, and every 25,000 steps.</p>
+    ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-bottom:6px">Reset training</button>' : ''}
     <button class="card bsect-link" id="toShopMerchant">
       <div><b>The Bone Merchant</b><span class="note" style="display:block">Buy &amp; equip weapons in the Shop · you own ${fighter.owned.length}/${Object.keys(WEAPONS).length}</span></div>
       <span class="crew-chev">›</span>
@@ -10525,10 +10586,10 @@ async function renderTalents(wrap) {
 
   body.innerHTML = `
     ${statBlock}
-    <div class="tal-head" style="margin-top:14px">
-      <div><b style="font-family:var(--display);font-size:24px;letter-spacing:1px">${unspent}</b> <span class="note">talent point${unspent === 1 ? '' : 's'} to spend</span></div>
-      <span class="note">1 point per level · Lv ${lvl.level}</span>
-    </div>
+    ${/* The mockup put a row here linking to "the talent tree". The trees are
+          already inline on this screen, so a button pointing 100px down would be
+          furniture: the section rule + its count carries the same job. */''}
+    <div class="t3-sect"><b>Talents</b><i></i><span class="r chip" style="font-size:11px">${unspent} to pick · Lv ${lvl.level}</span></div>
     <p class="note" style="margin:2px 2px 14px">Specs change how you fight: new moves, new rhythms. Mix trees or go deep. Respec any time, free.</p>
     ${TALENT_TREES.map(tree => {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);

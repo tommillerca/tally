@@ -114,7 +114,7 @@ export async function seed(page, opts = {}) {
     }
     const kv = {};
     if (o.coins != null) kv.coins = o.coins;
-    if (o.dust != null) kv.dust = o.dust;
+    if (o.dust != null) kv.bonedust = o.dust;   // loot.js reads 'bonedust'; 'dust' seeded nothing
     if (Object.keys(kv).length) {
       await new Promise((res2, rej) => {
         const tx = db.transaction('kv', 'readwrite');
