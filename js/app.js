@@ -5903,6 +5903,8 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   confettiRain();
   levelSound(S.sounds);
   haptic.reward();
+  // a milestone level gets a stamp of its own, so 25 does not feel like 24
+  const ms = levelRewards && levelRewards.milestone;
   let hero = '';
   if (levelUp) {
     const eq = await equipped();
@@ -5915,10 +5917,13 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       </div>
       <div class="lvl-stamp">LEVEL ${levelUp.level}!</div>
       <div class="cele-sub" style="font-size:16px;margin-top:2px">${esc(levelUp.name)}</div>
+      ${ms ? `<div class="lvl-milestone t-${ms.tier}">${ms.label}</div>` : ''}
       <div class="cele-bubble">${esc(line)}</div>
       ${levelRewards ? `<div class="lvl-rewards">
         <span class="bh-pill">${ICONS.coin(15)} +${levelRewards.coins}</span>
         <span class="bh-pill">${crateIcon('golden', 15)} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+        ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(14)} +${levelRewards.dust}</span>` : ''}
+        ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
       </div>` : ''}`;
   }
   const wrap = openSheet(`
@@ -8035,6 +8040,22 @@ async function renderBoneyard(el) {
     const denSnap = new Map();      // id -> {lat,lng} | null(suppressed)
     const miniSnap = new Map();     // id -> {lat,lng} | null(suppressed)
     const spireSnap = new Map();    // id -> {lat,lng} | null(suppressed)
+
+    /* The egg strip: the one number on this screen that walking moves. Refreshed
+       on its own slow clock, because the spawn refresh runs every 5s and reading
+       IndexedDB that often to render one line would be silly. */
+    let eggStrip = null, eggStripAt = 0;
+    async function refreshEggStrip() {
+      if (Date.now() - eggStripAt < 25000) return;
+      eggStripAt = Date.now();
+      try {
+        const [inv, steps] = await Promise.all([inventory(), lifetimeStepsSum()]);
+        const eggs = inv.filter(r => r.kind === 'egg').map(r => eggProgress(r, steps)).filter(p => !p.ready);
+        if (!eggs.length) { eggStrip = null; return; }
+        const soonest = eggs.reduce((a, b) => (a.goal - a.walked <= b.goal - b.walked ? a : b));
+        eggStrip = { left: Math.max(0, soonest.goal - soonest.walked), n: eggs.length };
+      } catch { eggStrip = null; }
+    }
     const denMarkers = new Map();   // id -> {marker, el, den}
     const miniMarkers = new Map();  // id -> {marker, el, mini}
     const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
@@ -8069,7 +8090,6 @@ async function renderBoneyard(el) {
     };
     let gluttonRec = null; // single marker, not a Map (one-of-a-kind world boss)
     let gluttonPos = null; // where he ACTUALLY ended up, so the blight matches the marker
-    let lastNearest = null;
     // Anti-cheat: block looting/fighting above a driving speed. GPS speed (m/s)
     // when the device reports it, else derived from raw position deltas. ~8 m/s
     // = ~29 km/h: comfortably above running/cycling, clearly a vehicle.
@@ -8539,6 +8559,7 @@ async function renderBoneyard(el) {
     }
 
     async function refreshWorld() {
+      await refreshEggStrip();   // self-throttled to ~25s; drives the map's purpose line
       const rows = await db.all('xp');
       claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
@@ -8610,12 +8631,16 @@ async function renderBoneyard(el) {
       // the one thing the map itself cannot tell you: how much is out there, and
       // how much of it you have already picked up today. `collected` holds keys
       // shaped `spawn-<date>-<id>` across every day, so filter to this one.
+      // Tom, 2026-08-06: "how many are nearby or collected is a stat no one will
+      // care about. It might be more useful to see how many steps are left on a
+      // hatching egg". So an incubating egg owns this line when there is one:
+      // it is the only number on this screen that walking actually moves.
       const cnt = $('#mapCount', body);
       if (cnt) {
         const near = live.filter(s => !s.far).length;
-        const got = [...collected].filter(k => k.startsWith(`spawn-${date}-`)).length;
-        cnt.innerHTML = `<b>${near || 'Nothing'}</b> ${near === 1 ? 'spawn nearby' : near ? 'nearby' : 'nearby yet'}`
-          + (got ? ` · ${got} collected today` : '');
+        cnt.innerHTML = eggStrip
+          ? `<b>${eggStrip.left.toLocaleString()}</b> steps to hatch`
+          : `<b>${near || 'Nothing'}</b> ${near === 1 ? 'spawn nearby' : near ? 'nearby' : 'nearby yet'}`;
       }
       for (const s of live) {
         let rec = spawnMarkers.get(s.id);
@@ -8634,25 +8659,24 @@ async function renderBoneyard(el) {
       // readout + collect button (drive off the near field, not distant beacons)
       const reachable = live.filter(s => !s.far);
       const nearest = reachable.length ? reachable.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
-      let trend = '';
-      if (nearest && lastNearest && lastNearest.id === nearest.id) {
-        const d = nearest.dist - lastNearest.dist;
-        if (d <= -2) trend = ' · getting closer!';
-        else if (d >= 2) trend = ' · getting farther';
-      }
-      if (nearest) lastNearest = { id: nearest.id, dist: nearest.dist };
       const tooFast = youSpeed > MAX_LOOT_SPEED;
       const ro = $('#mapReadout', body);
       const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
       if (ro) {
         const icon = nearest ? `<span class="ic${inRange ? ' near' : ''}">${spawnIcon(nearest.type, 20)}</span>` : '';
+        // The compass bearing and the "getting closer" trend are gone: the map
+        // already shows where the thing is, and a second, worse copy of the map
+        // in words is what Tom called out. When nothing is at your feet, this
+        // card carries PURPOSE instead: the egg your steps are actually feeding.
         ro.innerHTML = tooFast
           ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
-          : nearest
-            ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${inRange
-                ? 'At your feet'
-                : `${fmtDist(nearest.dist)} ${compassLabel(nearest.bearing)} ${bearingArrow(nearest.bearing)}${trend}`}</small></span>`
-            : `<span class="tx"><b>Cleared nearby</b><small>Keep walking, spawns keep surfacing.</small></span>`;
+          : inRange
+            ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>At your feet</small></span>`
+            : eggStrip
+              ? `<span class="ic">${crateIcon('egg', 20)}</span><span class="tx"><b>${eggStrip.left.toLocaleString()} steps to hatch</b><small>${eggStrip.n > 1 ? `${eggStrip.n} eggs incubating · ` : ''}every step out here counts</small></span>`
+              : nearest
+                ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${fmtDist(nearest.dist)} away</small></span>`
+                : `<span class="tx"><b>Cleared nearby</b><small>Keep walking, spawns keep surfacing.</small></span>`;
       }
       const card = $('#mapAct', body);
       if (card) card.classList.toggle('live', !!inRange && !tooFast);
@@ -8858,7 +8882,6 @@ async function renderBoneyard(el) {
   if (await kvGet('map-seen', false)) startMap();
 }
 
-const bearingArrow = b => ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][Math.round(b / 45) % 8];
 
 async function buildFighter() {
   const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
@@ -8994,7 +9017,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v281'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v282'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

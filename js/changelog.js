@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 282, date: '2026-08-08', title: 'Levels that are worth hitting', items: [
+    'Every level used to pay exactly the same thing. Now <b>every fifth level</b> adds a bonus crate, <b>every tenth</b> adds Bone Dust and a Step Egg on top, and <b>every twenty-fifth</b> is a proper event. It keeps going at 50, 75, 100 and past.',
+    'Milestone levels get their own stamp on the level-up screen, so 25 does not feel like 24.',
+    'On the <b>Boneyard</b>, the line at the top now counts the <b>steps left on your hatching egg</b> instead of how many spawns are nearby. The compass directions are gone: the map already shows you where things are.',
+  ] },
   { n: 281, date: '2026-08-08', title: 'Nothing gets lost', items: [
     'Gifts and cheers from your Crew now land in a <b>Deliveries</b> list on the Crew tab. Miss the popup and it is still there, with who sent it and when. Everything anyone has ever sent you is in there already.',
     'The <b>Crew tab tells you</b> when something is waiting, and clears once you have looked.',

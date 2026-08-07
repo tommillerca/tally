@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, grantConsumable, coinsAdd, boneDustAdd } from './loot.js';
+import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days a Streak Freeze protected back when the
@@ -89,8 +89,30 @@ export function levelCoins(level) { return 20 + level * 5; }
 
 // one reward drop per level, ever: ledger rows `levelup-N` make it idempotent,
 // safe across multi-level jumps and every XP source
+/* MILESTONE LEVELS.
+ *
+ * Tom, 2026-08-06: "Do all level ups give the same reward? I feel like this is a
+ * very boring strategy if true. Most games have levels that are bigger rewards
+ * than others to keep it dynamic."
+ *
+ * They did: every level paid coins + exactly one Golden Crate, forever, with only
+ * the coin number creeping up. So every fifth level now pays a second crate,
+ * every tenth adds Bone Dust and a Step Egg, and every twenty-fifth is a proper
+ * event. Deliberately ECONOMY-ONLY: more cosmetic rolls, more pets, more dust to
+ * spend on looks. Nothing here sells power, which is the standing game rule and
+ * the thing cosmetic-only monetization depends on.
+ *
+ * Levels are uncapped, so this keeps paying out at 75, 100, 125 and beyond.
+ */
+export function levelMilestone(L) {
+  if (L % 25 === 0) return { tier: 'marquee', crates: 2, dust: 150, egg: true, label: 'MILESTONE' };
+  if (L % 10 === 0) return { tier: 'big', crates: 1, dust: 75, egg: true, label: 'BIG LEVEL' };
+  if (L % 5 === 0) return { tier: 'small', crates: 1, dust: 0, egg: false, label: 'BONUS CRATE' };
+  return null;
+}
+
 export async function grantLevelRewards(fromLevel, toLevel) {
-  let coins = 0, crates = 0;
+  let coins = 0, crates = 0, dust = 0, eggs = 0, milestone = null;
   for (let L = fromLevel + 1; L <= toLevel; L++) {
     const got = await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
     const row = await db.get('xp', `levelup-${L}`);
@@ -99,8 +121,18 @@ export async function grantLevelRewards(fromLevel, toLevel) {
     await coinsAdd(levelCoins(L));
     await grantCrate('golden', 'level-' + L);
     coins += levelCoins(L); crates += 1;
+    // the milestone rides the SAME claimed-once ledger row, so a multi-level
+    // jump pays each milestone it passed exactly once and a retry pays nothing
+    const m = levelMilestone(L);
+    if (!m) continue;
+    for (let i = 0; i < m.crates; i++) await grantCrate('golden', `milestone-${L}-${i}`);
+    if (m.dust) await boneDustAdd(m.dust);
+    if (m.egg) await grantEgg(`milestone-${L}`);
+    crates += m.crates; dust += m.dust; eggs += m.egg ? 1 : 0;
+    // the biggest one reached in this jump is the one the celebration announces
+    if (!milestone || m.tier === 'marquee' || (m.tier === 'big' && milestone.tier === 'small')) milestone = { ...m, level: L };
   }
-  return { coins, crates };
+  return { coins, crates, dust, eggs, milestone };
 }
 
 /* ---------------- badges ---------------- */

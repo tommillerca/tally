@@ -5224,3 +5224,13 @@ body::before {
 .t3-petcard.breedsel { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--accent), 4px 5px 0 rgba(0, 0, 0, .55); }
 /* an unread delivery, until you open the tab that lists it */
 .t3-row.unread { background: rgba(253, 104, 87, .07); }
+/* a milestone level wears a stamp, so 25 does not read like 24 */
+.lvl-milestone {
+  display: inline-block; margin-top: 8px; padding: 3px 12px;
+  font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: .12em;
+  color: var(--ink); background: var(--gold);
+  border: 2px solid var(--ink); border-radius: 9px; box-shadow: var(--sh-sm);
+  transform: rotate(-2deg);
+}
+.lvl-milestone.t-big { background: var(--violet); color: var(--text); }
+.lvl-milestone.t-marquee { background: var(--coral); color: var(--text); font-size: 18px; letter-spacing: .16em; }
