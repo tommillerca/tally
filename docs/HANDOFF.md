@@ -1,6 +1,6 @@
 # HANDOFF: Boneheadz Gym, design elevation to market quality
 
-_Last updated: 2026-08-08. Written for a future Claude with zero memory of the session. Favor the specifics below; where something is uncertain it's in **§8 Open Questions**, not guessed._
+_Last updated: 2026-08-08 (v285). Written for a future Claude with zero memory of the session. Favor the specifics below; where something is uncertain it's in **§8 Open Questions**, not guessed._
 
 > **This handoff covers the DESIGN ELEVATION initiative only.** The app's general
 > engineering context (features, economy, server, release ritual) is in
@@ -65,6 +65,50 @@ Boneheadz; never fake, relabel, or generate art in Cam's style and present it as
 ---
 
 ## 2. Current status
+
+### SHIPPED 2026-08-08 (v285, verified on LIVE)
+
+Tom, on the Last Light question left open from the overnight run: _"do waht you
+think balances last light best it cannot be a 100% winrate that's broken"_, plus
+four things he hit while playing v284.
+
+- **Last Light no longer makes a fight unloseable.** Measured with
+  `tests/fight-sim.mjs` at 300 seeds: sustain + Last Light won **99% at even
+  stats and 95% against a foe 20% stronger**. Revive size alone was NOT the
+  lever: at 1 HP with healing intact it still measured 97% at even stats,
+  because the build simply heals back up. So the fix is the wound, not the
+  number: **1 HP, and all healing on you is halved for the rest of the fight**.
+  Now 63% / 41%, versus 55% / 36% for the same build with no capstone at all, so
+  it stays the strongest tier-4 in the game without removing the loss condition.
+- **`healUp()` is now the single heal path in `js/pit.js`.** All 13 heal sites
+  route through it. Five of them (pet lifesteal, pet shield, warden basic, pet
+  guard, Bone Broth regen) previously skipped `healMult` entirely, which is
+  exactly the shape of hole a clause like this leaks through. `tests/balance.mjs`
+  fails if any site goes back to writing `hp` directly.
+- **Deliveries: history is not news.** The watermark defaulted to 0, so the first
+  open counted every gift ever received as unread ("way too much"), and it
+  rendered up to 40 rows at the top of the Crew tab ("it defeats the tab
+  itself"). Now the watermark stamps at the newest existing delivery on first
+  read, the card shows what is genuinely new (else the last 3), and the archive
+  is behind one **Show all** tap.
+- **New Boneheadz** dropped its 7-day window (on a pre-launch community that
+  meant permanently hidden) for "the newest players you have not added yet".
+- **Leaderboard rows open a profile.** Same sheet in a new `stranger` mode: no
+  gift / cheer / nickname / Remove (all friends-only, they would 403 on the
+  server), plus the one action that is available, Add.
+- **Herb patch**, a new Boneyard spawn that always pays 2 garden seeds. ~19% of
+  spawns; expected seeds per spawn goes 0.30 -> 0.62, which beds (not seeds) still
+  bottleneck. Flagged to Tom rather than tuned silently.
+- **Today's level badge** is the gold sticker plate `today.html` specifies. The
+  stroked-text version shipped in Phase 0 and Tom read the whole screen as
+  unbuilt. `mockup-parity` passed it because its markers only check that a token
+  appears *somewhere* in app.js, not that a screen got the treatment.
+
+Repairs made in the same pass: `tests/garden-audit.mjs` had been **crashing** on
+stale `.plot-card` selectors ever since the v280 Tier 3 Garden rebuild (confirmed
+it fails identically against live v284, so it was not tonight's changes); 27
+checks green again. `tests/unit.test.js` now derives valid spawn types from
+`SPAWN_TYPES` instead of a hard-coded list.
 
 ### SHIPPED OVERNIGHT 2026-08-07 -> 08 (v279 to v284, all verified on LIVE)
 
@@ -345,10 +389,11 @@ a backstop, and `ECONOMY_TALENTS` in `js/app.js` so gear and 4-piece sets can no
 longer grant action economy (Light Feet is worth ~nothing alone because STAMINA
 is the real limiter, but on an engine build it was +45%).
 
-**Left alone deliberately: Last Light.** It takes an 80% win rate to 100%, but
-that is the extra life itself, not a tunable number (still 98% at an 8% revive
-cushion). Nerfing it means removing the mechanic, which is a design call for Tom,
-not something to do unilaterally. **Open question for him, see §8.**
+**Last Light: FIXED in v285 (Tom's call 2026-08-08, "it cannot be a 100%
+winrate that's broken").** My earlier read that it was untunable was wrong in one
+specific way: the extra life is not the whole value, the RECOVERY after it is. A
+1 HP revive with healing intact still measured 97% at even stats. Halving healing
+for the rest of the fight is what restores the loss condition (63% / 41%). See §2.
 
 ## 7. Environment & gotchas
 
@@ -479,15 +524,44 @@ reinstall. Default `python3` is miniconda 3.13 with PIL/numpy;
    Cosmetic only, nobody has complained. Regenerate with `node render.mjs` plus the
    strip-building step if a clean set is wanted for a deck.
 
-5. **Last Light (Gravewarden T4) makes you effectively unlosable.** Measured
-   2026-08-08: an 80% win rate against a ladder-tier foe becomes 100% with that
-   one talent, and it is structural (98% even if the revive cushion is cut from
-   20% to 8%), because the value is the extra life, not the HP. It is a capstone
-   doing exactly what it says. **Tom's call whether "cannot lose" is acceptable
-   for a T4 capstone.** Options: leave it, make it mutually exclusive with Second
-   Wind, or have it leave you at 1 HP with no heal. Not touched.
+5. **Last Light (Gravewarden T4) makes you effectively unlosable. (Closed
+   2026-08-08, shipped in v285.)** Tom: "do waht you think balances last light
+   best it cannot be a 100% winrate that's broken." Now 1 HP + halved healing for
+   the rest of the fight: 63% at even stats, 41% against a stronger foe. My
+   original framing ("structural, only removable") was wrong: the recovery after
+   the revive was the real multiplier, not the extra life. Guarded by
+   `tests/balance.mjs` CHEATDEATH, proven red at 100%/97%.
 
-6. **Whether the pet should cameo in the Wardrobe panel.** Tom asked whether the pet
+7. **Crow Lord's flock wins 100% at EVERY difficulty. OPEN, Tom's call.**
+   Found while verifying the Last Light fix, not asked for and not touched.
+   Measured 2026-08-08 (`tests/fight-sim.mjs`, 200 seeds), win rate vs a foe at
+   0.8x / 1.0x / 1.2x of your own stats: **100% / 100% / 100%**, against a
+   no-talent baseline of 79% / 35% / 15%. It does break down eventually (59% at
+   1.5x, 28% at 2x), so it is not unbounded, but at every difficulty the game
+   actually serves it cannot lose. Two contributing facts:
+   - the per-turn peck is free: it costs no AP and needs no action, so a greedy
+     policy gets it for nothing, and
+   - `js/pit.js` applies it as `foe.hp = Math.max(0, foe.hp - dmg)` **directly**,
+     bypassing `dealDamage()`, so it ignores wards and every cheat-death check.
+     Note this is the existing convention for all passive damage (DoTs, minion,
+     totem all bypass too), so changing it is a system-wide decision, not a
+     one-line fix. **Do not "fix" the bypass in isolation.**
+   The balance guard deliberately does NOT cover it yet: adding a generic
+   win-rate ceiling would put the suite red on shipped code, and silencing it
+   with an exception would be a check that cannot fail. Decide the nerf first.
+
+8. **Nutrition-label photo scanning is weak. OPEN, needs Tom's decision, not
+   started.** Tom, 2026-08-08: "the nutrition label photo doesnt work well at all
+   we need some AI api or something because this part of the app has always been
+   so weak." Agreed on the diagnosis (it is on-device OCR against a regex).
+   Blocked on choices only he can make, because all of them cost money or change
+   the privacy story: which vision API, whose account and key pays per scan,
+   whether a photo of the user's food leaves the device (this is a health app
+   heading for App Review, so the privacy label changes), and what happens
+   offline. **Do not wire an API key into the client**: the key would ship to
+   every player. It has to proxy through the existing `bonez-api` Worker.
+
+9. **Whether the pet should cameo in the Wardrobe panel.** Tom asked whether the pet
    was missing there. It never has been in that panel (pets appear on Today, in
    fights, and in the Stable). He did not ask for it to be added. Flagged as an easy
    add if he wants it; **not assumed.**
