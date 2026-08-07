@@ -5063,30 +5063,39 @@ body::before {
    ============================================================================ */
 /* the marquee is a SCENE, not a text card: the kitchen at night */
 
-.marquee { position: relative; text-align: center; padding: 20px 14px 0; margin-bottom: 16px;
+/* REBALANCED 2026-08-07. Tom: "i think we can make the banner for the haunted
+   kitchen much smaller now because it's banner heavy." It was: 178px of marquee
+   sitting directly on top of two 130px doors, so the first screen was three
+   posters stacked and none of them led. The identity stays (the cauldron is
+   good art) but it becomes a HEADER: half the height, title on the left, the
+   scene pushed to the right where it decorates rather than competes. */
+.marquee { position: relative; text-align: left; padding: 13px 15px 0; margin-bottom: 12px;
     background:
       radial-gradient(130% 90% at 50% 108%, rgba(162,224,166,.28), rgba(162,224,166,0) 55%),
       radial-gradient(80% 60% at 82% -12%, rgba(114,168,241,.16), rgba(114,168,241,0) 60%),
       linear-gradient(180deg, #0e1410, #131a14 60%, #16201a);
-    border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); overflow: hidden; height: 178px; }
+    border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh); overflow: hidden; height: 92px; }
 
 .marquee::before { content:''; position:absolute; inset:0; background: var(--grain); opacity:.07; }
 
-.marquee h2 { position: relative; z-index: 3; font-family: var(--display); font-size: 30px; font-weight: 400;
-    letter-spacing: .04em; color: var(--mint); text-shadow: 2px 3px 0 rgba(10,14,10,.9); }
+.marquee h2 { position: relative; z-index: 3; font-family: var(--display); font-size: 22px; font-weight: 400;
+    letter-spacing: .03em; color: var(--mint); text-shadow: 2px 2px 0 rgba(10,14,10,.9); max-width: 68%; line-height: 1.05; }
 
-.marquee p { position: relative; z-index: 3; font-family: var(--display); font-size: 14px; letter-spacing: .06em;
-    color: var(--text-3); margin-top: 1px; }
+.marquee p { position: relative; z-index: 3; font-family: var(--display); font-size: 11px; letter-spacing: .07em;
+    color: var(--text-3); margin-top: 2px; max-width: 68%; }
 
-.scene { position: absolute; inset: auto 0 -6px; height: 108px; z-index: 2; pointer-events: none; }
-
-.scene svg { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); }
+.scene { position: absolute; inset: auto 0 -8px; height: 92px; z-index: 2; pointer-events: none; }
+/* to the RIGHT and scaled down: the cauldron used to sit dead centre under the
+   title, which is what made the band need 178px in the first place */
+.scene svg { position: absolute; left: auto; right: 2px; bottom: 0; transform: scale(.66); transform-origin: bottom right; }
 
 .spore { position: absolute; border-radius: 50%; background: var(--mint); opacity: .55; }
 
 .spore.g { background: var(--gold); opacity: .45; }
 
-.garland { position: absolute; top: -4px; left: -6px; right: -6px; z-index: 2; }
+/* high enough to clear the title at the new band height, low enough that the
+   bulbs are not sliced by the top edge (measured at both -4 and -13 first) */
+.garland { position: absolute; top: -7px; left: -6px; right: -6px; z-index: 2; }
 
 @keyframes wisp { 0% { transform: translateY(4px); opacity: 0; } 25% { opacity: var(--wo, .3); }
     75% { opacity: var(--wo, .3); } 100% { transform: translateY(-10px); opacity: 0; } }
@@ -5619,7 +5628,7 @@ body::before {
 .kd-door {
   position: relative; display: block; width: 100%; text-align: left; overflow: hidden;
   border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh);
-  padding: 14px 15px 13px; color: var(--text);
+  padding: 12px 14px 12px; color: var(--text);
 }
 .kd-door::after { content: ''; position: absolute; inset: 0; background-image: var(--grain); background-size: 150px 150px; opacity: .08; pointer-events: none; }
 .kd-door.cook { background: linear-gradient(150deg, #40261f 0%, #2a1a17 70%); }
@@ -5627,12 +5636,12 @@ body::before {
 .kd-art { position: absolute; right: 10px; bottom: -6px; opacity: .3; pointer-events: none; }
 .kd-eye { display: block; font-family: var(--display); font-weight: 400; font-size: 12px;
   letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
-.kd-door b { display: block; font-family: var(--display); font-weight: 400; font-size: 30px;
-  line-height: 1; color: var(--text); letter-spacing: .03em; margin-top: 2px; }
+.kd-door b { display: block; font-family: var(--display); font-weight: 400; font-size: 26px;
+  line-height: 1; color: var(--text); letter-spacing: .03em; margin-top: 1px; }
 .kd-door.grow b { color: var(--mint, #a2e0a6); }
 .kd-door p { position: relative; z-index: 1; font-size: var(--fs-2); color: var(--text-3);
-  margin-top: 6px; max-width: 68%; line-height: 1.4; }
-.kd-pills { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  margin-top: 5px; max-width: 66%; line-height: 1.35; }
+.kd-pills { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
 .kd-pill {
   display: inline-flex; align-items: center; gap: 5px;
   background: rgba(42, 45, 40, .7); color: var(--text);

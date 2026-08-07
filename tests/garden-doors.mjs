@@ -125,6 +125,29 @@ ok('DOORS GROW says what the garden actually holds right now',
   /1 crop ready/i.test(doors.grow || '') && /5 seeds unplanted/i.test(doors.grow || ''), String(doors.grow));
 ok('DOORS the ingredients stay on the shared screen', doors.ingredients > 0, `${doors.ingredients} cells`);
 
+/* BALANCE. Tom, 2026-08-07: "i think we can make the banner for the haunted
+   kitchen much smaller now because it's banner heavy." It was 178px of marquee
+   sitting on top of two doors, which pushed GROW off the bottom of an 852px
+   phone: the door that fixes the discovery problem needed a scroll to be seen.
+   The band is 92px now and both doors land above the fold.
+   PROVE-RED (confirmed 2026-08-07): put .marquee back to height:178px and the
+   first BALANCE check fails, {"marquee":178,"cook":146}. The second one did NOT
+   go red at 178px on this 852px phone (GROW still ended at 617), so it is a
+   floor for smaller screens rather than a proven guard, and it is written down
+   that way instead of being claimed as one. */
+const balance = await page.evaluate(() => {
+  const h = s => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().height) : null; };
+  const g = document.querySelector('#doorGrow');
+  return { marquee: h('.marquee'), cook: h('#doorCook'), grow: h('#doorGrow'),
+    growBottom: g ? Math.round(g.getBoundingClientRect().bottom) : null, vh: innerHeight };
+});
+ok('BALANCE the banner does not outweigh the doors it sits on',
+  balance.marquee != null && balance.marquee < balance.cook,
+  JSON.stringify({ marquee: balance.marquee, cook: balance.cook }));
+ok('BALANCE both doors are on screen without scrolling',
+  balance.growBottom != null && balance.growBottom <= balance.vh,
+  JSON.stringify({ growBottom: balance.growBottom, viewport: balance.vh }));
+
 await page.evaluate(() => document.getElementById('doorGrow')?.click());
 await sleep(1400);
 const grew = await page.evaluate(() => document.querySelectorAll('.sheet-head h2')[document.querySelectorAll('.sheet-head h2').length - 1]?.textContent.trim());
