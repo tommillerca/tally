@@ -1,6 +1,6 @@
 # HANDOFF: Boneheadz Gym, design elevation to market quality
 
-_Last updated: 2026-08-07. Written for a future Claude with zero memory of the session. Favor the specifics below; where something is uncertain it's in **§8 Open Questions**, not guessed._
+_Last updated: 2026-08-08. Written for a future Claude with zero memory of the session. Favor the specifics below; where something is uncertain it's in **§8 Open Questions**, not guessed._
 
 > **This handoff covers the DESIGN ELEVATION initiative only.** The app's general
 > engineering context (features, economy, server, release ritual) is in
@@ -65,6 +65,39 @@ Boneheadz; never fake, relabel, or generate art in Cam's style and present it as
 ---
 
 ## 2. Current status
+
+### SHIPPED OVERNIGHT 2026-08-07 -> 08 (v279 to v284, all verified on LIVE)
+
+Tom's Aug 6 notes list, planned then built. He approved the sequencing and left
+it running: "Get the answers you need from me now because then i want you to go
+all night and work without me." Three answers he gave up front: build all six
+Tier 3 mockups, apply balance nerfs tonight, and purge the dead player rows.
+
+- **v279 bug batch (9 fixes).** Protein-goal glyph rendering as literal
+  `${ICONS.check(11)}` (a nested quote broke the template literal); fight HUD
+  `min-width:0`; avatar `onerror` so a cold cache cannot leave a broken-image box
+  on a fighter; `.btn.arming` was gold-on-lime at 1.05:1; paperdoll skull pad and
+  bottom-row clip; Boneyard counted the notch inset TWICE; POIs flashed raw over
+  water mid-pan (the `map.loaded()` gate); spires never got the walkability snap;
+  and the level-1 "bots" (see below).
+- **v280 Tier 3**: Shop, Backpack, Build, Pit entry, Garden, Stable, from the six
+  approved mockups. All classes `t3-` prefixed (the mockups' own names collide
+  with nine existing rules in app.css).
+- **v281 Crew deliveries inbox** + unread tab badge + New Boneheadz list.
+- **v282 milestone levels** (every 5th/10th/25th) + the Boneyard purpose strip.
+- **v283 balance pass**, measured by a new headless fight sim. See §6.
+- **v284 the housebound player's path**: Remote Den, workout-fuelled incubation,
+  user-defined Routines.
+
+**The level-1 "bot" players are fixed and the dead rows are gone.** They were
+NOT the tests (every puppeteer run has `navigator.webdriver === true` and the
+`NOSOCIAL` gate holds). `social.bootSync()` ran BEFORE the onboarding gate, so
+every fresh install minted a cloud player with a NULL profile, and the
+leaderboard SQL had no WHERE clause, so `COALESCE(level, 1)` rendered them all
+as level 1. Registration moved to onboarding completion, the leaderboard filters
+`profile IS NOT NULL`, and **81 orphaned rows were deleted from production D1**
+(118 players -> 37; only rows with no backup, no recovery, no spire and no
+friendship were touched).
 
 ### DONE
 
@@ -287,6 +320,36 @@ URL=https://tommillerca.github.io/tally/ node tests/fx-audit.js
 
 ---
 
+### Balance: the fight sim is how you answer "is X overpowered?" (2026-08-08)
+
+`js/pit.js` is pure (imports only `pets.js`, no DOM, no IndexedDB), so a real
+fight runs headless in a millisecond. **Do not reason about balance from reading
+the code; run the sim.** My own code-reading produced two confident theories that
+the sim disproved outright (lifesteal stacking and Hallowed Marrow both measure
+at exactly 1.00x).
+
+    node tests/fight-sim.mjs --seeds 200    # the board
+    node tests/balance.mjs                  # the guard (every build in a 0.7x-1.85x band)
+
+Measured 2026-08-08. Damage/turn vs a dummy, stats held IDENTICAL across rows so
+the only variable is the talents:
+
+| | before caps | after caps |
+|---|---|---|
+| worst stack (catalyst + stamina engine + free +1 AP) | 3.39x | 2.99x |
+| Alchemist at stat 55 / at the 150 clamp | 1.96x / 2.14x **and climbing** | 1.59x / 1.81x, flat |
+
+Three fixes, all in code with comments: `CATALYST_CAP = 0.45` (was uncapped and
+reached +100% alone), `BUILD_MULT_CAP = 2.2` on the whole multiplicative chain as
+a backstop, and `ECONOMY_TALENTS` in `js/app.js` so gear and 4-piece sets can no
+longer grant action economy (Light Feet is worth ~nothing alone because STAMINA
+is the real limiter, but on an engine build it was +45%).
+
+**Left alone deliberately: Last Light.** It takes an 80% win rate to 100%, but
+that is the extra life itself, not a tunable number (still 98% at an 8% revive
+cushion). Nerfing it means removing the mechanic, which is a design call for Tom,
+not something to do unilaterally. **Open question for him, see §8.**
+
 ## 7. Environment & gotchas
 
 **Machine facts.** macOS. Media toolbelt is already installed and on PATH
@@ -416,7 +479,15 @@ reinstall. Default `python3` is miniconda 3.13 with PIL/numpy;
    Cosmetic only, nobody has complained. Regenerate with `node render.mjs` plus the
    strip-building step if a clean set is wanted for a deck.
 
-5. **Whether the pet should cameo in the Wardrobe panel.** Tom asked whether the pet
+5. **Last Light (Gravewarden T4) makes you effectively unlosable.** Measured
+   2026-08-08: an 80% win rate against a ladder-tier foe becomes 100% with that
+   one talent, and it is structural (98% even if the revive cushion is cut from
+   20% to 8%), because the value is the extra life, not the HP. It is a capstone
+   doing exactly what it says. **Tom's call whether "cannot lose" is acceptable
+   for a T4 capstone.** Options: leave it, make it mutually exclusive with Second
+   Wind, or have it leave you at 1 HP with no heal. Not touched.
+
+6. **Whether the pet should cameo in the Wardrobe panel.** Tom asked whether the pet
    was missing there. It never has been in that panel (pets appear on Today, in
    fights, and in the Stable). He did not ask for it to be added. Flagged as an easy
    add if he wants it; **not assumed.**
