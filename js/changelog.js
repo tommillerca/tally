@@ -3,9 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 300, date: '2026-08-08', title: 'Everyone in the race counts the same week', items: [
-    'The Step Race board was showing totals from before the race started. Your steps are counted <b>on your own phone</b>, so anyone who had not updated yet kept sending a number that included days the race had not begun. The board now <b>only ranks totals counted under the current rules</b>, so nobody can lead with a head start.',
-    'If someone you know is missing from the standings, they just need to open the app once to update.',
+  { n: 301, date: '2026-08-08', title: 'Everyone in the race counts the same week', items: [
+    'The Step Race board was showing totals from before the race started. Your steps are counted <b>on your own phone</b>, so anyone who had not updated yet kept sending a number that included days the race had not begun. The board now <b>only ranks totals counted under the current rules</b>, so nobody leads with a head start. If a friend is missing from the standings, they need to open the app once to update.',
+    '<b>You are always on your own board</b> now, with the count from your own phone, even in the seconds before it reaches the server. No more being told nobody has walked a step on a day you walked five thousand.',
+    'Tapping a <b>Dark Spire</b> is a proper poster of whoever holds it: their Bonehead full size on their tower, their pet, the title they earned by holding it that long, and their name on the plate. Take it and it flies yours.',
+    'Your <b>Deliveries</b> history scrolls inside its own box instead of swallowing the Crew tab, so the button that closes it stays where your thumb is.',
   ] },
   { n: 295, date: '2026-08-08', title: 'Gifts get opened', items: [
     'A gift from your Crew now <b>arrives sealed</b>. It waits on the Crew tab with the sender\'s name on it until you open it yourself, and opening it is a proper reveal rather than a number quietly changing.',

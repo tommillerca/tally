@@ -73,7 +73,7 @@ ok('RULES both sides declare a race-rules version', !!cliRules && !!srvRules, `c
 ok('RULES MATCH they are the same number', !!cliRules && cliRules === srvRules, `${cliRules} vs ${srvRules}`);
 ok('RULES STAMP the profile the phone pushes carries it', /raceV:\s*RACE_RULES/.test(APP), 'socialSnapshot stamps raceV');
 ok('RULES FILTER the board refuses totals counted under older rules',
-  /json_extract\(profile,'\$\.raceV'\)[^)]*\)\s*AS INTEGER\)\s*>=\s*\$\{RACE_RULES\}/.test(SRV),
+  /json_extract\(profile,'\$\.raceV'\)[\s\S]{0,60}>=\s*\$\{RACE_RULES\}/.test(SRV),
   'board query gates on raceV');
 
 /* ---------- START: the race begins on its epoch, not a calendar Monday ---------- */

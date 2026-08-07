@@ -157,7 +157,7 @@ if (!shown.visible) {
     const btn0 = document.querySelector('#deliveriesMore');
     if (!btn0) return { ran: false };
     btn0.click();
-    await new Promise(r => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, 900));   // the card scrolls itself into view
     const btn = document.querySelector('#deliveriesMore');
     const box = document.querySelector('#deliveriesList .dlv-rows');
     const vh = window.innerHeight;

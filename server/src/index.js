@@ -133,6 +133,13 @@ const STEP_RACE_PRIZE_COINS = STEP_RACE_PODIUM[0].coins;
    updates, rather than beating everyone with a number nobody else was allowed
    to count. Must match RACE_RULES in js/app.js. */
 const RACE_RULES = 2;
+/* NO GRANDFATHER CLAUSE. Tried one on 2026-08-07: rank a row anyway if it was
+   written after the corrected build went live, so the board would not sit empty
+   during adoption. It is unsound and MEASURED to be unsound: last_seen records
+   when the row was written, not which code computed it. The 33,272 row re-synced
+   twenty minutes after the fix was serving and pushed 33,608, because that phone
+   is still running the old bundle. A timestamp cannot tell you what version did
+   the arithmetic. Only the stamp can. */
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it

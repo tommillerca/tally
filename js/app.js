@@ -5124,6 +5124,12 @@ async function renderFriends(el) {
       box.innerHTML = (open ? rows : shown).map(rowHtml).join('');
       btn.textContent = open ? 'Show less' : `Show all ${rows.length}`;
       if (!open) box.scrollTop = 0;
+      /* Capping the box is only half of it: the card sits below the standings and
+         the Crew list, so on a 852px phone the button still landed at y=1119 with
+         the archive open. Bring the card to the top of the screen when it opens,
+         and the whole thing (header, 44vh of history, and the way back out) fits
+         on one screen. */
+      if (open) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     card.hidden = false;
     await kvSet('crewSeenTs', Date.now());
@@ -5308,7 +5314,25 @@ async function renderFriends(el) {
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
     const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
     const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
-    const rows = race.players || [];
+    /* YOU ARE ALWAYS ON YOUR OWN BOARD.
+       Tom, 2026-08-07: "ship the fix to the step race before you do anything else
+       right now it shows no leaders." The server can legitimately leave you off:
+       your push may not have landed yet, or your total may be gated out because it
+       was counted under older rules. Either way an empty board while you have
+       personally walked 4,000 steps reads as broken, and telling a walker "nobody
+       has walked a step yet" is simply false. Your own count is the one number
+       this device knows for certain, so it goes in regardless and the ranks are
+       recomputed around it. */
+    const rows = (race.players || []).slice();
+    if (!rows.some(p => p.you)) {
+      const own = await weekStepsNow();
+      if (own.weekKey === wk && own.steps > 0) {
+        rows.push({ name: (await social.displayName()) || 'You', steps: own.steps, outfit: myFit, you: true });
+        rows.sort((a, b) => b.steps - a.steps);
+        rows.forEach((p, i) => { p.rank = i + 1; });
+        race.yourRank = rows.findIndex(p => p.you) + 1;
+      }
+    }
     const lead = rows.length ? rows[0].steps : 0;
     const mine = rows.find(p => p.you) || null;
     const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
@@ -9650,7 +9674,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v300'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v301'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
