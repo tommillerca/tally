@@ -4706,6 +4706,14 @@ body::before {
 .sp-hero.mine .who b { color: var(--accent); }
 .sp-hero.rival { border-color: var(--coral); }
 .sp-hero.rival .who b { color: var(--coral); }
+/* THE KEEPER IS THE HERO of this sheet, not the building. A rival's real fit is
+   in the payload already (it is the build you have to beat), so show the person
+   you are up against at a size you can actually read. */
+.sp-hero.keeper .art { width: 84px; height: 96px; }
+.sp-keeper { position: relative; display: block; width: 100%; height: 100%; }
+.sp-keeper .bh-anim { position: absolute; inset: 0; }
+.sp-keeper img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.sp-hero.keeper.mine .art { filter: drop-shadow(0 0 0 transparent); }
 .den-hero .who .tier.warden { background: var(--violet); color: #17131f; }
 .den-hero .who .tier.warden.t3 { background: var(--coral); color: #2a0d08; }
 .sp-siege {
@@ -4852,6 +4860,13 @@ body::before {
   font-family: var(--display); font-weight: 400; font-size: var(--fs-4); letter-spacing: .05em;
   color: var(--text); text-shadow: 2px 2px 0 rgba(42, 45, 40, .95); text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* The base .hero-title carries a 3.5px text-stroke, which paints ~2px OUTSIDE
+     the glyph on each side. `overflow: hidden` (needed for the ellipsis on a long
+     rank name) was cutting that stroke off the first and last letters: Tom,
+     2026-08-08, "the text on bonegrandmaster 21 is cutting off on the edges".
+     Pad the box and pull it back with the same negative margin, so the stroke has
+     room and nothing moves. */
+  padding: 0 3px; margin: 0 -3px;
 }
 
 /* "Maybe you shouldn't." Feeding a shiny, a bred bloodline or a levelled pet into
@@ -5377,3 +5392,16 @@ body::before {
 /* a routine you wrote yourself carries its own remove control */
 .routine-x { flex: none; font-size: 11px; color: var(--text-3); padding: 4px 2px 4px 8px; }
 .well-row.done .routine-x { opacity: .6; }
+
+/* The Boneyard arrives as ONE picture. Spawns, dens, minis and the Glutton paint
+   from local data; spires alone need a network round trip, so without this they
+   pop in a beat later and the map assembles itself in front of you. Hidden until
+   the first full pass completes, then everything fades up together. */
+#mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire {
+  opacity: 0; transition: opacity .22s ease;
+}
+#mapStage.markers-in .map-spawn, #mapStage.markers-in .map-den-mark,
+#mapStage.markers-in .map-mini-mark, #mapStage.markers-in .map-spire { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire { transition: none; }
+}

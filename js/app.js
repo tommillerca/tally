@@ -2292,8 +2292,16 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton =
  * the loudest things on the sheet, and the tower's level is its history: every
  * takeover and every repelled siege adds one.
  */
-function openSpireInfoSheet(info, onAct = null) {
+async function openSpireInfoSheet(info, onAct = null) {
   const { s, view, held, rival, dormant, besieged, siegeUntil, siegeName, lvl, heldSince } = info;
+  /* THE KEEPER, LOUD AND PROUD. Tom, 2026-08-08: "when i click it i want it to
+     show loud and proud the bonehead of whoever is keeping it."
+     A rival's tower already ships their full profile snapshot as `defender` (it
+     is what you fight), so their real fit is right there; your own towers null
+     that field server-side, so for those it is your own equipped look. Only a
+     tower nobody holds falls back to the tombstone. */
+  const keeperFit = held ? await equipped() : (rival && rival.defender && rival.defender.outfit) || null;
+  const keeperPet = held ? null : (rival && rival.defender && rival.defender.pet) || null;
   const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
   const holder = held ? 'You hold it' : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
@@ -2316,8 +2324,10 @@ function openSpireInfoSheet(info, onAct = null) {
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="den-hero sp-hero${held ? ' mine' : rival ? ' rival' : ''}">
-        <span class="art"><img src="assets/brand/tomb.png" alt=""></span>
+      <div class="den-hero sp-hero${held ? ' mine' : rival ? ' rival' : ''}${keeperFit ? ' keeper' : ''}">
+        <span class="art">${keeperFit
+          ? `<span class="sp-keeper">${avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })}</span>`
+          : `<img src="assets/brand/tomb.png" alt="">`}</span>
         <div class="who">
           <b>${holder}</b>
           <small>${esc(standing)}</small>
@@ -2344,6 +2354,7 @@ function openSpireInfoSheet(info, onAct = null) {
       : !held ? 'Take this tower'
       : view.tribute && view.tribute.days ? 'Collect the tribute'
       : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet' });
+  composeAvatars(document);
   // delegate to the existing in-range button rather than restating the rules of
   // taking, tending and sieges: that flow already owns energy, shields and adds
   if (inRange && onAct) $('#spireAct')?.addEventListener('click', () => { history.back(); setTimeout(onAct, 220); });
@@ -8992,6 +9003,17 @@ async function renderBoneyard(el) {
       refreshSecrets();
       refreshGlutton();
       await refreshSpires();
+      /* ONE ARRIVAL, NOT FIVE. Tom, 2026-08-08: "it seems like the spires load in
+         after other icons. all the icons should be appearing at the same time it
+         looks cheap when everything staggers in."
+         Everything above paints synchronously from local data; spires alone wait
+         on a network round trip, so they always landed last. The marker layer
+         starts hidden and is revealed once, after the FIRST complete pass, so the
+         map arrives as one picture. Later passes update in place. */
+      const stage = $('#mapStage', body);
+      if (stage && !stage.classList.contains('markers-in')) {
+        requestAnimationFrame(() => stage.classList.add('markers-in'));
+      }
     }
 
     const raresCued = new Set(); // rares we've already announced this session
@@ -9457,7 +9479,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v293'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v294'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
