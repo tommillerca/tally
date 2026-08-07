@@ -5130,7 +5130,19 @@ async function renderFriends(el) {
     const wk = raceWeekKey(dateKey());
     const race = await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
-    if (!card || !card.isConnected || !race) return;
+    if (!card || !card.isConnected) return;
+    /* NEVER DEFAULT TO HIDDEN (anti-regression rule 8). The banner used to bail
+       whenever the fetch came back empty, which is exactly the state the race
+       launches in: on day one nobody has synced a step, so the announcement said
+       "SEE THE BOARD" and the board did not exist. Degrade to ugly, not gone. */
+    if (!race) {
+      card.innerHTML = `<summary>
+        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>Could not reach the Crew server. Your steps are still counting.</small></span>
+        <span class="gbn-chev">›</span></summary>`;
+      card.hidden = false;
+      return;
+    }
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
     const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
     const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
@@ -5142,7 +5154,7 @@ async function renderFriends(el) {
     // the one line the collapsed banner exists to show
     const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
       : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
-      : behind ? `You are ${ordinal(race.yourRank)}, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
+      : behind ? `You are <b>${ordinal(race.yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
       : 'You are in front. Keep it that way.';
 
     const podium = race.podium || [];
@@ -5150,7 +5162,10 @@ async function renderFriends(el) {
       <summary>
         <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
         <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
-        <span class="gbn-txt"><i>The Step Race · ${clock}</i><b>${standing}</b></span>
+        <span class="gbn-txt">
+          <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
+          <small>${standing}</small>
+        </span>
         <span class="gbn-chev">›</span>
       </summary>
       <div class="gbn-body">
@@ -9418,7 +9433,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v291'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v292'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

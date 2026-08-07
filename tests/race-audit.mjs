@@ -124,6 +124,31 @@ if (poster && poster.open) {
     poster.terms.some(t => new RegExp(`top ${cliPlaces.length}`, 'i').test(t)), poster.terms.join(' / ').slice(0, 160));
 }
 
+/* ---------- NEVER DEFAULT TO HIDDEN (anti-regression rule 8) ----------
+ * The banner used to bail whenever the race fetch came back empty, which is
+ * EXACTLY the state the race launches in: on day one nobody has synced a step,
+ * so the announcement said "SEE THE BOARD" and there was no board. This drives
+ * the Crew tab with no reachable server, which is the failing case.
+ * PROVE-RED: restore `if (!race) return` in hydrateRace and VISIBLE fails. */
+await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  await db.kvSet('social', { playerId: 'race-audit', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+});
+await page.evaluate(() => { location.hash = '#/friends'; });
+await sleep(2600);
+const banner = await page.evaluate(() => {
+  const c = document.querySelector('#raceCard');
+  if (!c) return { present: false };
+  return {
+    present: true, hidden: c.hidden,
+    title: c.querySelector('.race-h b')?.textContent.trim() || null,
+    line: c.querySelector('.gbn-txt small')?.textContent.trim() || null,
+  };
+});
+ok('VISIBLE the banner still shows when the race fetch fails', banner.present && banner.hidden === false, JSON.stringify(banner));
+ok('VISIBLE it keeps its title rather than degrading to nothing', /STEP RACE/i.test(banner.title || ''), String(banner.title));
+ok('VISIBLE and it says something true instead of sitting empty', !!(banner.line && banner.line.length > 10), String(banner.line));
+
 /* ---------- the card renders as the approved mockup, not the old list ---------- */
 ok('CARD it is the collapsed banner, not a flat list', /race-banner/.test(APP) && !/race-rows/.test(APP),
   'details banner present, old .race-rows gone');

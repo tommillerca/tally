@@ -1784,6 +1784,25 @@ body::before {
 .race-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .race-banner .gbn-txt, .race-banner .gbn-ico, .race-banner .gbn-chev { position: relative; z-index: 1; }
 
+/* THE TITLE IS THE TITLE. v1 of this banner demoted it to a 10px uppercase
+   eyebrow with the countdown in grey body text, and Tom called it: "your old
+   step race banner looked cooler whyd you change it?" Collapsing the card was
+   the ask; shrinking its identity was not. */
+.race-h { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.race-h b {
+  font-family: var(--display); font-weight: 400; font-size: var(--fs-5);
+  letter-spacing: .03em; color: var(--text);
+}
+.race-clock {
+  flex: none; display: inline-flex; align-items: center;
+  background: var(--coral); color: var(--text); border: 2px solid var(--ink);
+  border-radius: 999px; box-shadow: var(--sh-sm);
+  padding: 1px 9px; font-size: var(--fs-0); font-weight: 800; letter-spacing: .06em;
+  white-space: nowrap;
+}
+.race-banner .gbn-txt small { display: block; font-size: var(--fs-2); color: var(--text); }
+.race-banner .gbn-txt small b { color: var(--accent); font-weight: 800; }
+
 .race-champ {
   display: flex; align-items: center; gap: 9px; margin-bottom: 12px;
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
