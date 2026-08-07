@@ -398,10 +398,11 @@ reinstall. Default `python3` is miniconda 3.13 with PIL/numpy;
    flow next**, since between them they are the entire first-run experience and the
    most-used surface in the app. **Blocked on Tom. Do not start building either way.**
 
-2. **Monetization model.** Explicitly deferred to Phase 7 and explicitly Tom's call.
-   Options to price out when we get there: one-time unlock, cosmetic-only IAP (fits
-   the wardrobe naturally, zero pay-to-win), or a subscription for premium tracking.
-   Constraint: never sell power. Nothing in Phases 0-6 depends on this.
+2. **Monetization model: DECIDED 2026-08-07, do not reopen. Cosmetic-only IAP.**
+   Tom's call, chosen over one-time unlock, subscription, and cosmetics+Founder's.
+   Public launch is now the stated MAIN GOAL. Constraint unchanged: never sell
+   power. Build path: StoreKit/Play Billing + the existing drop pipeline.
+   (Closed.)
 
 3. **Illustrated scene art from Cam.** The Kitchen scene currently shipped in the
    mockup is **my placeholder SVG**, animated to prove the ambience concept. The
