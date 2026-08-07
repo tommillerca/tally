@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 279, date: '2026-08-07', title: 'Squashing day', items: [
+    '<b>The Boneyard behaves.</b> Spawns no longer flash over water while you pan, Dark Spires stand on reachable ground like everything else, and the dead space at the top of the map on newer iPhones is gone.',
+    '<b>Fights look right.</b> Long enemy names no longer push the enemy health bar off the edge of the screen, and a slow connection can no longer leave a broken-image box floating on a fighter.',
+    '<b>Friends look right.</b> A crewmate\'s shiny pet now shows off its colours everywhere: their card, their profile, and the leaderboard.',
+    'The leaderboard now lists <b>real players only</b>: installs that never finished setup no longer pad it out as level-1 ghosts.',
+    'Small fixes: the confirm step when spending dust is readable now, the protein goal check draws properly, and the skull in the Wardrobe knows its place.',
+  ] },
   { n: 278, date: '2026-08-07', title: 'It feels like a game now', items: [
     '<b>Haptics.</b> Collecting on the map, landing a hit in the Pit, confirming a spend, levelling up and pulling something legendary all give a little thump on phones that can. There is an on/off switch in Settings next to Sounds.',
     '<b>Sheets close like they opened.</b> Every panel in the game used to vanish in a single frame on the way out. They slide away now, and screens fade in when you switch tabs instead of hard-cutting.',

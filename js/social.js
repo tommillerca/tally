@@ -635,6 +635,17 @@ export async function bootSync() {
     // ensure online (idempotent; ensureIdentity recovers the key from the OS
     // keychain first, so a wiped device comes back as the SAME account)
     if (!(await kvGet('social', null))) {
+      // A brand-new install has no identity ANYWHERE. Never mint one here:
+      // bootSync runs before the onboarding gate, and registering at that
+      // moment filled the leaderboard with abandoned level-1 "players" (one
+      // per install that never finished onboarding). New players register at
+      // onboarding completion; a device with a prior identity (kv or
+      // keychain) is a reinstall and still restores right here.
+      const prior = await kvGet('identity', null);
+      if (!(prior && prior.privJwk)) {
+        const kc = await readKeychainIdentity();
+        if (!(kc.id && kc.id.privJwk)) return { restored: false, reason: 'new-player' };
+      }
       const r = await goOnline();
       if (!r.ok) return { restored: false, reason: 'offline' };
     }

@@ -266,5 +266,26 @@ await test('friends: remove drops the edge for both sides', async () => {
   assert.ok(!bList.friends.some(x => x.playerId === player.playerId), 'B no longer friends with A');
 });
 
+// Leaderboard: never-synced registrations must be invisible (they COALESCE to
+// level-1 "bots"; 98 of 118 production rows were these), and a shiny pet must
+// ride the payload so the board can render it shiny.
+// PROVE-RED: drop the WHERE profile IS NOT NULL, or the pet field, from
+// /leaderboard in src/index.js and the matching assert fails by name.
+await test('leaderboard: hides never-synced players, carries pet.shiny', async () => {
+  const synced = await makeKeys();
+  const ghost = await makeKeys();
+  const sp = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: synced.pubJwk }) })).json();
+  const gp = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: ghost.pubJwk }) })).json();
+  // level 999: the local dev DB accumulates a synced player per past run, and
+  // the board is LIMIT 100, so a modest level can legitimately miss the page
+  const body = JSON.stringify({ snapshot: { level: 999, outfit: { SK: 'SK0-1', C: 'C3' }, pet: { id: 'C3', level: 6, shiny: true }, gear: [] }, appV: 'test' });
+  assert.equal((await signedFetch(synced.kp, sp.playerId, 'PUT', '/profile', body)).status, 200);
+  const board = await (await signedFetch(synced.kp, sp.playerId, 'GET', '/leaderboard')).json();
+  const me = board.players.find(x => x.playerId === sp.playerId);
+  assert.ok(me, 'synced player is on the board');
+  assert.ok(me.pet && me.pet.shiny === true && me.pet.id === 'C3', 'pet rides the leaderboard payload with shiny intact');
+  assert.ok(!board.players.some(x => x.playerId === gp.playerId), 'never-synced registration is hidden');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

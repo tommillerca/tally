@@ -593,10 +593,13 @@ export default {
                   json_extract(profile,'$.levelName') lvlName,
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
                   json_extract(profile,'$.outfit') outfit,
+                  json_extract(profile,'$.pet') pet,
                   last_seen,
                   (SELECT COUNT(*) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) spires,
                   (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
-           FROM players ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
+           FROM players
+           WHERE profile IS NOT NULL -- a registration that never synced a snapshot COALESCEs to a level-1 "bot"; hide it
+           ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
           .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
         const players = (rows.results || []).map(r => ({
           playerId: r.id,
@@ -605,6 +608,7 @@ export default {
           levelName: r.lvlName || null,
           badges: r.badges || 0,
           outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(), // cosmetic ids only; art renders client-side
+          pet: (() => { try { return r.pet ? JSON.parse(r.pet) : null; } catch { return null; } })(), // {id, level, shiny, lineage}: the board must show a shiny as its shiny
           friendCode: r.friend_code,
           lastSeen: r.last_seen,
           spires: r.spires || 0,

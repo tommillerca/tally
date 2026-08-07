@@ -160,13 +160,17 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
 // mass:true normalises flat species up so they read the same size as round ones.
 // Opt-in, because the fight arena's 76px stage is tuned against the fighter sprite
 // and scaling the pet there re-creates the combat overlap fixed back in v49.
-function petSpriteHtml(petId, px, ground = false, { mass = false } = {}) {
+// opts.shiny OVERRIDES the S.shinyPets lookup. S.shinyPets is the VIEWER's own
+// collection, so it is only correct for the viewer's own pet: rendering a
+// FRIEND's pet through it showed their shiny in base colours (Brock's lizard).
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
   // different size from its base pet.
   const S2 = mass ? Math.round(px * petScale(petId)) : px;
-  if (petId !== 'CX' && S.shinyPets.has(petId)) {
+  const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
+  if (petId !== 'CX' && isShiny) {
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
@@ -1530,7 +1534,7 @@ async function renderToday(el) {
 
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
   return `<div class="macro">
-    <div class="row"><span>${label}${glow ? ' <span class="hit-dot">${ICONS.check(11)}</span>' : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
+    <div class="row"><span>${label}${glow ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
     <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
   </div>`;
 }
@@ -1737,6 +1741,11 @@ function avatarLayersHtml(eq, opts = {}) {
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
     const item = BH_BY_ID[itemId];
+    // opts.shinyPetId: the ONE renderer that keeps the pet inside the stack
+    // (the leaderboard) needs the shiny recolour swapped in; the shiny PNG
+    // shares the base art's canvas geometry so it stacks identically
+    const src = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
+      ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     const cls = [
@@ -1754,7 +1763,9 @@ function avatarLayersHtml(eq, opts = {}) {
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
-    return `<img${glow} src="${bhAsset(item)}" alt="">`;
+    // onerror removes the node: a failed layer (cold cache, flaky network)
+    // must degrade to a missing garment, never iOS's blue "?" box over the body
+    return `<img${glow} src="${src}" alt="" onerror="this.remove()">`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -1768,6 +1779,17 @@ function avatarLayersHtml(eq, opts = {}) {
   // reach all 17 avatar surfaces instead of only the Wardrobe.
   return `<div class="bh-anim">${layers}${weaponSheenHtml(eq, skip)}</div>`;
 }
+
+// A leaderboard/podium row's Bonehead. The ONE renderer that keeps the pet
+// inside the stack, so it must pass the row's own shiny flag through: reading
+// S.shinyPets here would paint every friend's pet from the VIEWER's collection
+// (how Brock's shiny lizard rendered base-purple on the board).
+const lbAvatar = (p, cls = 'lb-av') =>
+  `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
+    { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
+// Test hook (webdriver only): the board renders from a server payload, so
+// "does a shiny row render shiny" was only ever checkable on a real phone.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lbAvatar;
 
 /* Reveal a layered Bonehead only once every layer has decoded, so it appears as
    one finished character instead of assembling on screen. Cheap after the first
@@ -4699,8 +4721,6 @@ async function renderFriends(el) {
   // Every row shows the player's actual Bonehead — the customization IS the flex.
   let lbData = null; // one fetch shared by the podium tile + the full sheet
   const fetchLb = async () => (lbData || (lbData = await social.leaderboard()));
-  const lbAvatar = (p, cls = 'lb-av') =>
-    `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG'] })}</div>`;
   // the Crew-tab tile: top-3 Boneheadz on a podium (center = #1, raised)
   const hydratePodium = async () => {
     const players = await fetchLb();
@@ -4800,7 +4820,7 @@ function openFriendProfile(f, onChange) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, !!p.pet.shiny, { mass: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
@@ -5709,6 +5729,12 @@ async function saveInitialSettings(np) {
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), 1200);
+  // The cloud account is created HERE, not at first boot: bootSync no longer
+  // registers brand-new installs (that minted one abandoned level-1 "player"
+  // per bounced install). Finishing onboarding is the opt-in moment.
+  if (!(S.demo || navigator.webdriver === true)) {
+    social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
+  }
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', route);
   bindTabs();
@@ -6001,7 +6027,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${art
           ? (code === 'BG'
               ? `<span class="pd-swatch" style="background-image:url('${esc(bhAsset(art))}')"></span>`
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhAsset(art))}"></canvas>`)
+              // trim-normalize makes a compact skull render as big as a whole
+              // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhAsset(art))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -6770,7 +6798,7 @@ function packCardHtml(c, { selectable = false } = {}) {
 }
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   return Promise.all($$(sel, scope)
-    .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'))));
+    .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
 }
 
 // Pokemon-pack-crack reveal: cards you flip through one at a time, big centered
@@ -7847,6 +7875,7 @@ async function renderBoneyard(el) {
     const spawnSnap = new Map();    // id -> {lat,lng} | null(suppressed), placed onto walkable ground
     const denSnap = new Map();      // id -> {lat,lng} | null(suppressed)
     const miniSnap = new Map();     // id -> {lat,lng} | null(suppressed)
+    const spireSnap = new Map();    // id -> {lat,lng} | null(suppressed)
     const denMarkers = new Map();   // id -> {marker, el, den}
     const miniMarkers = new Map();  // id -> {marker, el, mini}
     const secretMarkers = new Map(); // key -> {marker, el} (easter-egg dens, materialize on approach)
@@ -7897,6 +7926,7 @@ async function renderBoneyard(el) {
     // retrying on the next refresh/idle until its tiles load and it either snaps
     // (appears on the nearest path) or stays hidden (water). The seeded ledger key
     // never moves; only the shown position does.
+    const SNAP_MAX_M = 60; // was 80: generous enough to pull a POI across a highway or "onto" the far bank
     function placeWalkable(raw, cache, id) {
       const cached = cache.get(id);
       if (cached) return cached;                     // already resolved to a walkable spot
@@ -7905,9 +7935,14 @@ async function renderBoneyard(el) {
       const pt = map.project([raw.lng, raw.lat]);
       const onScreen = pt.x > -120 && pt.y > -120 && pt.x < c.clientWidth + 120 && pt.y < c.clientHeight + 120;
       if (!onScreen) return null;                    // can't query off-screen tiles → hide until it pans in
-      const feats = map.queryRenderedFeatures([[pt.x - 95, pt.y - 95], [pt.x + 95, pt.y + 95]]);
-      const snap = snapToWalkable(raw, feats, 80);
-      if (snap) { const r = { lat: snap.lat, lng: snap.lng }; cache.set(id, r); return r; }
+      // query box sized from the snap radius (a fixed 95px was smaller than the
+      // radius at street zoom, so real paths just outside the box were invisible
+      // and reachable POIs got hidden). +25% margin covers projection skew.
+      const ptN = map.project([raw.lng, raw.lat + SNAP_MAX_M / 111320]);
+      const r = Math.max(40, Math.abs(pt.y - ptN.y) * 1.25);
+      const feats = map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]]);
+      const snap = snapToWalkable(raw, feats, SNAP_MAX_M);
+      if (snap) { const p = { lat: snap.lat, lng: snap.lng }; cache.set(id, p); return p; }
       return null;                                   // no reachable ground yet (water / backyard / tiles loading) → hide
     }
 
@@ -8202,7 +8237,16 @@ async function renderBoneyard(el) {
     const SPIRE_POLL_MS = 60000;
     async function refreshSpires({ force = false } = {}) {
       spireState_ = await spireState();
-      const near = spiresNear(lat, lng).slice(0, 4);
+      // Spires were the one POI family that skipped the walkability snap, so
+      // they alone could stand in lakes and backyards. Same rule as dens now:
+      // snap to reachable ground or stay hidden; distance from the placed spot.
+      const near = spiresNear(lat, lng).slice(0, 4).filter(s => {
+        const placed = placeWalkable({ lat: s.lat, lng: s.lng }, spireSnap, s.id);
+        if (placed === null) return false;
+        s.lat = placed.lat; s.lng = placed.lng;
+        s.dist = distanceM(lat, lng, s.lat, s.lng);
+        return true;
+      });
       // Ownership is shared, so ask the server who holds these. THROTTLED: this
       // runs on the 5s world tick, and polling ownership twelve times a minute
       // would burn battery and data to learn nothing. Refresh at most once a
@@ -8368,11 +8412,15 @@ async function renderBoneyard(el) {
       // so none sit in a backyard/building, and SUPPRESS any that would land in
       // open water with nothing reachable nearby. The seeded anchor (ledger key)
       // is untouched; only the shown + collectible position moves. Cached per id.
-      if (map && map.loaded()) {
+      // NO map.loaded() gate here: loaded() is false throughout a pan while
+      // tiles fetch, and skipping this block rendered raw water POIs mid-move
+      // (the "flash near water" bug). placeWalkable itself returns null while
+      // unready, so an unresolved spawn stays hidden instead of showing raw.
+      if (map) {
         for (let i = live.length - 1; i >= 0; i--) {
           const s = live[i];
           const placed = placeWalkable({ lat: s.lat, lng: s.lng }, spawnSnap, s.id);
-          if (placed === null) { live.splice(i, 1); continue; } // in the sea → drop it
+          if (placed === null) { live.splice(i, 1); continue; } // in the sea / unresolved → hide
           s.lat = placed.lat; s.lng = placed.lng; s.dist = distanceM(lat, lng, s.lat, s.lng); s.bearing = bearingDeg(lat, lng, s.lat, s.lng);
         }
         live.sort((a, b) => a.dist - b.dist);
@@ -8787,7 +8835,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v278'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v279'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
