@@ -132,6 +132,61 @@ if (!shown.visible) {
   ok('INBOX tapping Show all reveals the full history', all === 4, `${all} rows after expanding`);
   const after = await readInbox();
   ok('BADGE opening the tab clears the unread count', after.unseen === 0, `unseen=${after.unseen}`);
+
+  /* REACH: EXPANDING MUST NOT STRAND THE CONTROL THAT COLLAPSES IT.
+     Tom, 2026-08-07: "the deliveries section when expanded becomes huge. it
+     should only open and show less of past delivered gifts and or have a scroll
+     feature. the issue is the button to close it becomes too far down to reach
+     and collapse again." Show all used to replace the list with every row AND
+     delete its own button, so a long history ran off the bottom of the phone with
+     no way back. Thirty rows is a real history and 852px is a real iPhone.
+     PROVE-RED (confirmed 2026-08-07): put back
+     `list.innerHTML = rows.map(rowHtml).join('')` and REACH fails on both counts,
+     the button gone and the box unbounded. */
+  await page.evaluate(async () => {
+    const { db } = await import('./js/db.js');
+    for (let i = 0; i < 30; i++) {
+      await db.put('xp', { key: `gift-bulk-${i}`, type: 'gift', xp: 5, label: `Brock sent you gift ${i}`, ts: Date.now() - (i + 2) * 86400e3 });
+    }
+    location.hash = '#/today';
+  });
+  await sleep(500);
+  await page.evaluate(() => { location.hash = '#/friends'; });
+  await sleep(2200);
+  const reach = await page.evaluate(async () => {
+    const btn0 = document.querySelector('#deliveriesMore');
+    if (!btn0) return { ran: false };
+    btn0.click();
+    await new Promise(r => setTimeout(r, 250));
+    const btn = document.querySelector('#deliveriesMore');
+    const box = document.querySelector('#deliveriesList .dlv-rows');
+    const vh = window.innerHeight;
+    const r = btn ? btn.getBoundingClientRect() : null;
+    return {
+      ran: true, vh,
+      rows: box ? box.querySelectorAll('.t3-row').length : 0,
+      boxH: box ? Math.round(box.getBoundingClientRect().height) : null,
+      scrolls: box ? box.scrollHeight > box.clientHeight + 4 : false,
+      btnText: btn ? btn.textContent.trim() : null,
+      btnBottom: r ? Math.round(r.bottom) : null,
+    };
+  });
+  ok('REACH the expanded archive actually holds the history (an empty list is a FAILURE)',
+    reach.ran && reach.rows >= 30, JSON.stringify({ rows: reach.rows }));
+  ok('REACH it is capped and scrolls inside its own box rather than growing the page',
+    reach.ran && reach.boxH < reach.vh * 0.55 && reach.scrolls === true,
+    JSON.stringify({ boxH: reach.boxH, vh: reach.vh, scrolls: reach.scrolls }));
+  ok('REACH the collapse control survives expanding and stays on screen',
+    reach.ran && /show less/i.test(reach.btnText || '') && reach.btnBottom > 0 && reach.btnBottom <= reach.vh,
+    JSON.stringify({ btnText: reach.btnText, btnBottom: reach.btnBottom, vh: reach.vh }));
+  const collapsed = await page.evaluate(async () => {
+    document.querySelector('#deliveriesMore')?.click();
+    await new Promise(r => setTimeout(r, 250));
+    const box = document.querySelector('#deliveriesList .dlv-rows');
+    return { rows: box ? box.querySelectorAll('.t3-row').length : -1, btn: document.querySelector('#deliveriesMore')?.textContent.trim() };
+  });
+  ok('REACH and tapping it again really does collapse the list',
+    collapsed.rows > 0 && collapsed.rows <= 3 && /show all/i.test(collapsed.btn || ''), JSON.stringify(collapsed));
 }
 
 await browser.close();

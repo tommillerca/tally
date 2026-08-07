@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 300, date: '2026-08-08', title: 'Everyone in the race counts the same week', items: [
+    'The Step Race board was showing totals from before the race started. Your steps are counted <b>on your own phone</b>, so anyone who had not updated yet kept sending a number that included days the race had not begun. The board now <b>only ranks totals counted under the current rules</b>, so nobody can lead with a head start.',
+    'If someone you know is missing from the standings, they just need to open the app once to update.',
+  ] },
   { n: 295, date: '2026-08-08', title: 'Gifts get opened', items: [
     'A gift from your Crew now <b>arrives sealed</b>. It waits on the Crew tab with the sender\'s name on it until you open it yourself, and opening it is a proper reveal rather than a number quietly changing.',
     'Small fixes: your rank name is no longer clipped at the edges on iPhone, the Boneyard\'s icons all appear together instead of the spires arriving late, and tapping a Dark Spire shows the <b>Bonehead of whoever holds it</b>.',

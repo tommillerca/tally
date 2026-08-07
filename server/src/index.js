@@ -125,6 +125,14 @@ const STEP_RACE_PODIUM = [
   { coins: 400, crate: 'daily', dust: 0, place: '5th' },
 ];
 const STEP_RACE_PRIZE_COINS = STEP_RACE_PODIUM[0].coins;
+/* RANK ONLY TOTALS COUNTED UNDER THE CURRENT RULES. weekSteps is summed on the
+   phone, so a player who has not updated keeps pushing a total counted by an
+   older window. v296 backdated the race by two days; v299 fixed it, and the
+   board still led with 33,272 because that row was written by a phone that had
+   not picked the fix up yet. A stale client is now simply unranked until it
+   updates, rather than beating everyone with a number nobody else was allowed
+   to count. Must match RACE_RULES in js/app.js. */
+const RACE_RULES = 2;
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -669,6 +677,7 @@ export default {
              FROM players
             WHERE profile IS NOT NULL
               AND json_extract(profile,'$.weekKey') = ?
+              AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
               AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0
             ORDER BY steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 

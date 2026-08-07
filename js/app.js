@@ -2341,10 +2341,16 @@ async function openSpireInfoSheet(info, onAct = null) {
      that field server-side, so for those it is your own equipped look. Only a
      tower nobody holds falls back to the tombstone. */
   const keeperFit = held ? await equipped() : (rival && rival.defender && rival.defender.outfit) || null;
-  const keeperPet = held ? null : (rival && rival.defender && rival.defender.pet) || null;
+  /* Their pet turns up too: it is their whole character, not just the fit. Your
+     own tower ships no defender snapshot, so read the pet off your equipped slot. */
+  const keeperPet = held
+    ? (keeperFit && keeperFit.C ? { id: keeperFit.C } : null)
+    : (rival && rival.defender && rival.defender.pet) || null;
   const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
-  const holder = held ? 'You hold it' : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
+  // The plate is a NAMEPLATE, so a tower you hold flies YOUR name, not "You hold it".
+  const myName = held ? await social.displayName() : null;
+  const holder = held ? esc(myName || 'You') : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
   const standing = heldSince
     ? (days >= 1 ? `Standing ${days} day${days === 1 ? '' : 's'}` : 'Taken today')
     : 'Never been taken';
@@ -2364,14 +2370,22 @@ async function openSpireInfoSheet(info, onAct = null) {
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="den-hero sp-hero${held ? ' mine' : rival ? ' rival' : ''}${keeperFit ? ' keeper' : ''}">
-        <span class="art">${keeperFit
-          ? `<span class="sp-keeper">${avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })}</span>`
-          : `<img src="assets/brand/tomb.png" alt="">`}</span>
-        <div class="who">
+      <div class="spp-wrap">
+        <div class="spp${keeperFit ? (held ? ' mine' : rival ? ' rival' : '') : ' empty'}">
+          <span class="spot"></span>
+          <span class="tower"><img src="assets/brand/tomb.png" alt=""></span>
+          ${wt.tier ? `<span class="ribbon t${wt.tier}">${bhIcon('badge-crown', 15)}${esc(wt.name.toUpperCase())}</span>` : ''}
+          <span class="lvchip">LV ${lvl} TOWER</span>
+          <div class="keeper">
+            <div class="bh">${keeperFit
+              ? avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })
+              : `<img src="assets/brand/tomb.png" alt="">`}</div>
+            ${keeperPet && keeperPet.id ? `<span class="pet">${petSpriteHtml(keeperPet.id, 64, false, { shiny: !!keeperPet.shiny })}</span>` : ''}
+          </div>
+        </div>
+        <div class="spp-plate${held ? ' mine' : ''}">
           <b>${holder}</b>
           <small>${esc(standing)}</small>
-          ${wt.tier ? `<span class="tier warden t${wt.tier}">${esc(wt.name.toUpperCase())}</span>` : `<span class="tier">LV ${lvl} TOWER</span>`}
         </div>
       </div>
       ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - Date.now())))} unless you break it.</div>` : ''}
@@ -2398,6 +2412,12 @@ async function openSpireInfoSheet(info, onAct = null) {
   // delegate to the existing in-range button rather than restating the rules of
   // taking, tending and sieges: that flow already owns energy, shields and adds
   if (inRange && onAct) $('#spireAct')?.addEventListener('click', () => { history.back(); setTimeout(onAct, 220); });
+}
+/* Test hook (webdriver only): the keeper poster only exists when a real rival
+   holds a real tower you happen to be standing near, which is not a state a test
+   can walk into. It takes the same `info` the map builds. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__spireSheet = info => openSpireInfoSheet(info);
 }
 
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
@@ -5079,7 +5099,7 @@ async function renderFriends(el) {
         <span class="open">OPEN</span>
       </button>`).join('');
     const rest = rows.length - shown.length;
-    list.innerHTML = sealedHtml + shown.map(rowHtml).join('')
+    list.innerHTML = sealedHtml + `<div class="dlv-rows">${shown.map(rowHtml).join('')}</div>`
       + (rest > 0 ? `<button class="btn small ghost" id="deliveriesMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
     $$('[data-gift]', list).forEach(b => b.addEventListener('click', async () => {
       if (b.dataset.busy === '1') return;
@@ -5092,8 +5112,18 @@ async function renderFriends(el) {
       await paintDeliveries();
       await refreshCrewBadge();
     }));
-    $('#deliveriesMore', list)?.addEventListener('click', () => {
-      list.innerHTML = rows.map(rowHtml).join('');
+    /* THE WAY OUT HAS TO STAY IN REACH. Tom, 2026-08-07: "the deliveries section
+       when expanded becomes huge... the button to close it becomes too far down
+       to reach and collapse again." Expanding used to replace the list with every
+       row and drop the button entirely, so a long history pushed the rest of the
+       tab off the bottom with no way back. The archive now scrolls inside its own
+       box and the control stays put, flipping to Show less. */
+    $('#deliveriesMore', list)?.addEventListener('click', ev => {
+      const box = $('.dlv-rows', list), btn = ev.currentTarget;
+      const open = box.classList.toggle('all');
+      box.innerHTML = (open ? rows : shown).map(rowHtml).join('');
+      btn.textContent = open ? 'Show less' : `Show all ${rows.length}`;
+      if (!open) box.scrollTop = 0;
     });
     card.hidden = false;
     await kvSet('crewSeenTs', Date.now());
@@ -9620,7 +9650,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v299'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v300'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9713,6 +9743,17 @@ async function refreshNotifSchedules() {
 const RACE_EPOCH = '2026-08-07';
 const RACE_LIVE = true;    // art approved by Tom 2026-08-08; the race starts the day this ships
 const RACE_DAYS = 7;
+/* THE RULES VERSION THE NUMBER WAS COUNTED UNDER.
+   weekSteps is summed on the PHONE and the server ranks whatever it is handed,
+   so a player who has not updated keeps pushing a total counted by the old
+   rules. That is exactly what happened: v296 backdated the window by two days,
+   and after v299 fixed it the board still showed 33,272 for a player whose app
+   had last synced before the fix landed. Nothing was wrong with the fix; the
+   number on the server predated it.
+   Bump this whenever raceWeekDates/weekStepsNow changes what counts, and the
+   server will ignore every total counted under the older rule rather than rank
+   it against fresh ones. Must match RACE_RULES in server/src/index.js. */
+const RACE_RULES = 2;
 
 function raceWeekKey(date = dateKey()) {
   const ms = Date.parse(date + 'T00:00:00') - Date.parse(RACE_EPOCH + 'T00:00:00');
@@ -9763,6 +9804,8 @@ async function socialSnapshot() {
   return {
     weekKey: wk.weekKey,
     weekSteps: wk.steps,
+    raceV: RACE_RULES,   // which rules counted it; the server ranks only current ones
+
     level: lvl.level,
     levelName: lvl.name,
     stats: fighter.stats,

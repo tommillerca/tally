@@ -4711,23 +4711,69 @@ body::before {
   font-size: var(--fs-0); font-weight: 800; letter-spacing: .07em;
   background: var(--gold); color: #201500; border: 2px solid var(--ink); border-radius: 7px; padding: 1px 7px;
 }
-/* A spire is somebody's turf, so the sheet says whose at a glance: your own
-   tower reads in the accent, a rival's in coral, and an earned warden title
-   outranks the plain level chip. */
-.sp-hero.mine { border-color: var(--accent); }
-.sp-hero.mine .who b { color: var(--accent); }
-.sp-hero.rival { border-color: var(--coral); }
-.sp-hero.rival .who b { color: var(--coral); }
-/* THE KEEPER IS THE HERO of this sheet, not the building. A rival's real fit is
-   in the payload already (it is the build you have to beat), so show the person
-   you are up against at a size you can actually read. */
-.sp-hero.keeper .art { width: 84px; height: 96px; }
-.sp-keeper { position: relative; display: block; width: 100%; height: 100%; }
-.sp-keeper .bh-anim { position: absolute; inset: 0; }
-.sp-keeper img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.sp-hero.keeper.mine .art { filter: drop-shadow(0 0 0 transparent); }
 .den-hero .who .tier.warden { background: var(--violet); color: #17131f; }
 .den-hero .who .tier.warden.t3 { background: var(--coral); color: #2a0d08; }
+
+/* ---- THE SPIRE'S KEEPER: a poster, not a database row ----------------------
+   Tom, 2026-08-08: "i told you the bonehead controlling it should be loud and
+   proud... make it feel like someone is excited and proud to be defending their
+   neighbourhood spire." v1 dropped their avatar into the same 84px thumbnail
+   slot the boss dens use, which is filing-cabinet treatment for the one screen
+   in the game that is about a PERSON. Built to market-quality-mockups/spire.html:
+   full-bleed, spotlit, standing on their tower, name on a plate, and the title
+   they only get by holding it. The building is scenery behind them. */
+.spp {
+  position: relative; margin-bottom: 0;
+  border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--sh);
+  overflow: hidden; background: linear-gradient(180deg, #3b2f52 0%, #241d33 62%, #191426 100%);
+}
+.spp::after { content: ''; position: absolute; inset: 0; background-image: var(--grain); background-size: 150px 150px; opacity: .09; pointer-events: none; }
+.spp.mine { border-color: var(--accent); }
+.spp.rival { border-color: var(--coral); }
+.spp .spot {
+  position: absolute; left: 50%; top: -6%; width: 250px; height: 250px; transform: translateX(-50%);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 201, 97, .34), rgba(255, 201, 97, 0) 66%);
+}
+.spp .tower { position: absolute; left: 50%; bottom: 0; width: 150px; transform: translateX(-50%); opacity: .36; }
+.spp .tower img { width: 100%; display: block; filter: grayscale(.3) brightness(.8); }
+.spp .keeper { position: relative; height: 250px; display: grid; place-items: end center; }
+.spp .bh { position: relative; width: 170px; height: 215px; margin-bottom: 6px; }
+.spp .bh img, .spp .bh .bh-anim { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.spp .bh img { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .55)); }
+/* nobody holds it: the tombstone is the figure, and there is nobody to spotlight */
+.spp.empty .spot { display: none; }
+.spp.empty .tower { position: static; width: auto; opacity: 1; transform: none; }
+.spp.empty .keeper { height: 200px; }
+.spp.empty .bh img { filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .5)); }
+.spp .pet { position: absolute; right: 22px; bottom: 10px; width: 64px; }
+.spp .pet img { width: 100%; display: block; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5)); }
+/* the title you only get by HOLDING it, which is the whole brag */
+.spp .ribbon {
+  position: absolute; left: 0; top: 16px; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--violet); color: #17131f; border: 2px solid var(--ink); border-left: 0;
+  border-radius: 0 999px 999px 0; box-shadow: var(--sh-sm);
+  padding: 3px 12px 3px 10px; font-family: var(--display); font-weight: 400; font-size: var(--fs-2); letter-spacing: .04em;
+}
+.spp .ribbon.t3 { background: var(--coral); color: #2a0d08; }
+.spp .lvchip {
+  position: absolute; right: 12px; top: 16px; background: var(--surface-2); color: var(--text);
+  border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--sh-sm);
+  padding: 2px 9px; font-family: var(--display); font-weight: 400; font-size: var(--fs-2); letter-spacing: .04em;
+}
+/* the nameplate sits ON the poster's bottom edge, half over the art */
+.spp-plate {
+  position: relative; z-index: 2; margin: -20px 14px 0; text-align: center;
+  background: var(--coral); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh); padding: 8px 12px 9px;
+}
+.spp-plate.mine { background: var(--accent); }
+.spp-plate b {
+  display: block; font-family: var(--display); font-weight: 400; font-size: var(--fs-6);
+  color: #2a0d08; letter-spacing: .03em; line-height: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.spp-plate small { display: block; font-size: var(--fs-1); color: rgba(42, 45, 40, .85); font-weight: 700; margin-top: 3px; }
+.spp-wrap { margin-bottom: 14px; }
 .sp-siege {
   margin: 0 0 13px; padding: 9px 11px; font-size: var(--fs-1);
   background: var(--surface-2); color: var(--text-2);
@@ -5460,3 +5506,7 @@ body::before {
 
 /* the multi-bed harvest list: one row per bed picked, under the summary card */
 .hv-list { display: grid; gap: 6px; margin: 12px 18px 0; }
+
+/* The delivery archive scrolls inside its own box so the control that collapses
+   it never leaves the screen. See paintDeliveries in js/app.js. */
+.dlv-rows.all { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
