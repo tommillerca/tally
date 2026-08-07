@@ -594,7 +594,7 @@ export default {
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
                   json_extract(profile,'$.outfit') outfit,
                   json_extract(profile,'$.pet') pet,
-                  last_seen,
+                  last_seen, created_at,
                   (SELECT COUNT(*) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) spires,
                   (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
            FROM players
@@ -611,6 +611,7 @@ export default {
           pet: (() => { try { return r.pet ? JSON.parse(r.pet) : null; } catch { return null; } })(), // {id, level, shiny, lineage}: the board must show a shiny as its shiny
           friendCode: r.friend_code,
           lastSeen: r.last_seen,
+          joinedAt: r.created_at,   // powers the Crew's "new Boneheadz" welcome list
           spires: r.spires || 0,
           spireDays: Math.floor((r.held_ms || 0) / 86400000),
           you: r.id === auth.playerId,

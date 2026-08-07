@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 281, date: '2026-08-08', title: 'Nothing gets lost', items: [
+    'Gifts and cheers from your Crew now land in a <b>Deliveries</b> list on the Crew tab. Miss the popup and it is still there, with who sent it and when. Everything anyone has ever sent you is in there already.',
+    'The <b>Crew tab tells you</b> when something is waiting, and clears once you have looked.',
+    'A <b>New Boneheadz</b> section shows players who joined this week, so there is always someone to add.',
+  ] },
   { n: 280, date: '2026-08-08', title: 'The deep screens get their turn', items: [
     'The <b>Shop</b> leads with the current drop as a proper poster, and every price is a chip you can read at a glance.',
     'The <b>Backpack</b> stacks your crates by type so a pile of eight is one card to crack, not eight rows to grind, and an incubating egg finally shows how far it has to go.',

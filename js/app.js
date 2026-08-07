@@ -857,11 +857,47 @@ function setCrewBadge(n) {
   if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
   else el.hidden = true;
 }
+/* THE DELIVERIES INBOX.
+ *
+ * Tom, 2026-08-06: "if you miss the pop up from a gift then you don't know your
+ * friend sent it or how many friends sent one."
+ *
+ * He was right, and the data was already there the whole time: applyGrant writes
+ * every gift, cheer and crew reward into the xp ledger with the server's note as
+ * its label ("Vile Nightmare #8 sent you a gift!"). Nothing ever read it back.
+ * So this is a reader, not a new store: no schema change, and every gift ever
+ * received is already in the list the first time you open it.
+ */
+const DELIVERY_TYPES = new Set(['gift', 'cheer', 'social', 'welcome', 'spire']);
+async function crewDeliveries(limit = 40) {
+  const rows = await db.all('xp');
+  return rows.filter(r => DELIVERY_TYPES.has(r.type) && r.label)
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .slice(0, limit);
+}
+async function unseenDeliveryCount() {
+  const seen = (await kvGet('crewSeenTs', 0)) || 0;
+  return (await crewDeliveries(60)).filter(r => (r.ts || 0) > seen).length;
+}
+// Test hooks (webdriver only): the inbox reads a ledger the Crew tab only
+// renders once you have an account, so the reader has to be checkable directly.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__crewDeliveries = () => crewDeliveries();
+  window.__unseenDeliveries = () => unseenDeliveryCount();
+  window.__refreshCrewBadge = () => refreshCrewBadge();
+}
+// The badge is the sum of what is waiting for you in the tab: friend requests
+// AND unread deliveries. It used to count requests only, so a gift never
+// announced itself anywhere you could go back and find it.
+async function setCrewBadgeFrom(incomingCount) {
+  try { setCrewBadge((incomingCount || 0) + (await unseenDeliveryCount())); }
+  catch { setCrewBadge(incomingCount || 0); }
+}
 async function refreshCrewBadge() {
   try {
-    if (!(await social.isOnline())) { setCrewBadge(0); return; }
+    if (!(await social.isOnline())) { await setCrewBadgeFrom(0); return; }
     const d = await social.listFriends();
-    setCrewBadge((d.incoming || []).length);
+    await setCrewBadgeFrom((d.incoming || []).length);
   } catch { /* noop */ }
 }
 
@@ -869,7 +905,7 @@ async function checkFriendRequests() {
   try {
     if (!(await social.isOnline())) return;
     const { fresh, incoming } = await social.newFriendRequests();
-    setCrewBadge((incoming || []).length); // keep the tab badge current even when nothing is "new"
+    await setCrewBadgeFrom((incoming || []).length); // requests + unread deliveries
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
@@ -4675,6 +4711,18 @@ async function renderFriends(el) {
       </div>
     </div>
 
+    <div class="card" id="deliveriesCard" hidden>
+      <div class="card-title">DELIVERIES</div>
+      <p class="note" style="margin:0 0 10px">Everything your Crew has sent you. Miss the popup and it still lands here.</p>
+      <div id="deliveriesList"></div>
+    </div>
+
+    <div class="card" id="newcomersCard" hidden>
+      <div class="card-title">NEW BONEHEADZ</div>
+      <p class="note" style="margin:0 0 10px">Joined this week. Add one and you both get a Crew to send things to.</p>
+      <div id="newcomersList"></div>
+    </div>
+
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">🏆 LEADERBOARD</div>
       <div class="lb-podium" id="lbPodium" hidden></div>
@@ -4692,12 +4740,35 @@ async function renderFriends(el) {
       <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
     </div>`;
 
+  // Deliveries: read the ledger, mark them seen, then drop the badge. Opening
+  // the tab IS the read receipt, which is the whole point of the inbox.
+  const paintDeliveries = async () => {
+    const rows = await crewDeliveries();
+    const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
+    if (!card || !list) return;
+    if (!rows.length) { card.hidden = true; return; }
+    const seen = (await kvGet('crewSeenTs', 0)) || 0;
+    list.innerHTML = rows.map(r => `
+      <div class="t3-row${(r.ts || 0) > seen ? ' unread' : ''}">
+        <span class="t3-med">${r.type === 'spire' ? bhIcon('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
+        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
+        ${(r.ts || 0) > seen ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
+      </div>`).join('');
+    card.hidden = false;
+    await kvSet('crewSeenTs', Date.now());
+  };
+
+  // The inbox is LOCAL data (the xp ledger), so it paints immediately and never
+  // waits on the friends fetch: on a bad signal your gift history is still
+  // there, which is the entire point of having an inbox.
+  paintDeliveries();
+
   let data = { friends: [], incoming: [], outgoing: [] };
   const paint = async () => {
     data = await social.listFriends();
     const list = $('#friendsList', el);
     if (list) list.innerHTML = friendsListHtml(data);
-    setCrewBadge((data.incoming || []).length); // keep the tab badge in sync after accept/decline/add
+    await setCrewBadgeFrom((data.incoming || []).length); // in sync after accept/decline/add
     // seeing the tab means these requests are no longer "new" for notifications
     await kvSet('knownIncoming', (data.incoming || []).map(f => f.playerId));
   };
@@ -4783,6 +4854,40 @@ async function renderFriends(el) {
   };
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
+
+  /* NEW BONEHEADZ. A public launch's first problem is that a new player opens
+     the Crew tab and it is empty. This surfaces the people who joined this week
+     from the same leaderboard fetch (no extra request), so there is always
+     somebody to add. Add is the real action available: /gift is friends-only,
+     so a "welcome gift" button would just 403. */
+  const hydrateNewcomers = async () => {
+    const players = await fetchLb();
+    const card = $('#newcomersCard', el), list = $('#newcomersList', el);
+    if (!card || !list || !card.isConnected || !players) return;
+    const WEEK = 7 * 86400000;
+    const known = new Set([...(data.friends || []), ...(data.outgoing || [])].map(f => f.playerId));
+    const fresh = players
+      .filter(p => !p.you && p.joinedAt && Date.now() - p.joinedAt < WEEK && !known.has(p.playerId))
+      .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
+      .slice(0, 5);
+    if (!fresh.length) { card.hidden = true; return; }
+    list.innerHTML = fresh.map(p => `
+      <div class="t3-row">
+        ${lbAvatar(p, 'lb-av')}
+        <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level} · joined ${esc(onlineLabel(p.joinedAt).text || 'just now')}</small></div>
+        <button class="btn ghost" data-lbadd="${esc(p.friendCode)}">+ ADD</button>
+      </div>`).join('');
+    $$('[data-lbadd]', list).forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; b.textContent = '...';
+      const r = await social.friendRequest(b.dataset.lbadd);
+      if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
+      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
+      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+      await paint();
+      hydrateNewcomers();
+    }));
+    card.hidden = false;
+  };
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
   $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
   $('#crewShare', el)?.addEventListener('click', shareCode);
@@ -4807,6 +4912,7 @@ async function renderFriends(el) {
   });
 
   await paint();
+  hydrateNewcomers();   // needs `data` from paint(), so it runs after it
 }
 
 // Test hook (webdriver only), same pattern as __strikeFx / __bhFight. A friend
@@ -8888,7 +8994,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v280'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v281'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

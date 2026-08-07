@@ -5222,3 +5222,5 @@ body::before {
 .t3-hero.empty, .t3-energy.empty .ic { border-color: var(--coral); }
 .t3-ghosty.on { background: var(--accent); color: var(--ink); }
 .t3-petcard.breedsel { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--accent), 4px 5px 0 rgba(0, 0, 0, .55); }
+/* an unread delivery, until you open the tab that lists it */
+.t3-row.unread { background: rgba(253, 104, 87, .07); }
