@@ -4573,6 +4573,13 @@ body::before {
 
 /* one action card: what is nearest, how far, and the verb. Replaces the pill
    readout AND the separately floating Collect button. */
+/* `display: flex` here BEATS the hidden attribute's UA `display: none`, so when
+   v296 started hiding this card unless something was in reach, it never actually
+   hid: it just sat there forever showing its initial "Reading the bones"
+   placeholder, which reads as a map that never loads. Tom, 2026-08-08: "the
+   boneyard now says reading the bones with a loading tab for sooooo long...
+   unplayable". */
+.map-act[hidden] { display: none; }
 .map-act {
   position: absolute; left: 14px; right: 14px; bottom: calc(var(--sab, 0px) + 14px); z-index: 6;
   display: flex; align-items: center; gap: 11px;
@@ -5450,3 +5457,6 @@ body::before {
      choosing between have to stay visible above it */
   max-height: 58vh; overflow-y: auto; overscroll-behavior: contain;
 }
+
+/* the multi-bed harvest list: one row per bed picked, under the summary card */
+.hv-list { display: grid; gap: 6px; margin: 12px 18px 0; }

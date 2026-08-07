@@ -90,6 +90,18 @@ ok('TODAY the current day falls inside its own race period',
   JSON.stringify({ today: todayIn.today, week: todayIn.week, inWindow: todayIn.days ? todayIn.days.includes(todayIn.today) : null }));
 ok('TODAY the epoch is not dated in the future', epoch <= todayIn.today, `epoch ${epoch} vs today ${todayIn.today}`);
 
+/* NOTHING BEFORE THE START LINE COUNTS. v296's clock-skew padding also counted
+   the two days BEFORE the epoch, which backdated the race: Tom opened it to
+   31,000 steps walked before it existed. A race that counts last week is not a
+   race.
+   PROVE-RED (confirmed 2026-08-07): push a pre-epoch day back into
+   raceWeekDates() and WINDOW fails naming it. */
+const pre = (todayIn.days || []).filter(d => d < epoch);
+ok('WINDOW period one counts no day before the race started', pre.length === 0,
+  pre.length ? `counts ${pre.join(', ')} which pre-date ${epoch}` : `${(todayIn.days || []).length} days, all from ${epoch}`);
+ok('WINDOW it is exactly the declared race length', (todayIn.days || []).length === 7,
+  `${(todayIn.days || []).length} days`);
+
 const periods = await page.evaluate(async ep => {
   const w = window.__raceWeek;
   if (!w) return null;

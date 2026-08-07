@@ -2764,26 +2764,60 @@ function openCompostSheet(after) {
 }
 
 // The payoff moment. A crop you cared for reads differently from one you forgot.
+/* ONE HARVEST SHEET, however many beds you pick. Tom, 2026-08-08: "if you loot
+   multiple grown crops then back to the garden stacks behind multiple times,
+   obviously one back to the garden is all you should click when done not three."
+   Every harvest used to openSheet() its own panel, so three ripe beds meant three
+   panels to dismiss. A second harvest now folds into the one already open. */
+let harvestBatch = null;   // { items, wrap } while a harvest sheet is on screen
+
+function harvestBodyHtml(items) {
+  const one = items.length === 1 ? items[0] : null;
+  const kickOf = r => r.bumper ? 'BUMPER CROP' : r.watered ? 'FINE HARVEST' : 'HARVEST';
+  const subOf = r => r.rare
+    ? (r.watered ? 'Watered on time' : 'Grown without watering')
+    : r.bumper ? `Watered and then some: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on the day`
+    : r.watered ? `${HARVEST_BASE} base, +1 for the care` : `${HARVEST_BASE} base · water it next time for more`;
+  if (one) {
+    return `<div class="hv-card${one.bumper ? ' bumper' : ''}">
+      <div class="hv-kick">${kickOf(one)}</div>
+      <div class="hv-ico">${bhIcon('garden-sprout', 96, one.rare ? '#9fe3cf' : undefined)}</div>
+      <div class="hv-name">${esc(one.name)} ×${one.n}</div>
+      <div class="hv-sub">${esc(subOf(one))}</div>
+    </div>`;
+  }
+  const total = items.reduce((a, r) => a + (r.n || 0), 0);
+  return `<div class="hv-card${items.some(r => r.bumper) ? ' bumper' : ''}">
+      <div class="hv-kick">${items.length} BEDS PICKED</div>
+      <div class="hv-ico">${bhIcon('garden-sprout', 96)}</div>
+      <div class="hv-name">${total} crops</div>
+      <div class="hv-sub">All of it is in your ingredients</div>
+    </div>
+    <div class="hv-list">${items.map(r => `<div class="t3-row">
+      <span class="t3-med">${bhIcon('garden-sprout', 20, r.rare ? '#9fe3cf' : undefined)}</span>
+      <div class="t3-tx"><b>${esc(r.name)} ×${r.n}</b><small>${esc(kickOf(r).toLowerCase())}</small></div>
+    </div>`).join('')}</div>`;
+}
+
 function showHarvest(res) {
-  const kick = res.bumper ? 'BUMPER CROP' : res.watered ? 'FINE HARVEST' : 'HARVEST';
-  const sub = res.rare
-    ? (res.watered ? 'Watered on time' : 'Grown without watering')
-    : res.bumper ? `Watered and then some: ${HARVEST_BASE} base, +${res.n - HARVEST_BASE} on the day`
-    : res.watered ? `${HARVEST_BASE} base, +1 for the care` : `${HARVEST_BASE} base · water it next time for more`;
+  // already picking? fold this bed into the panel that is open
+  if (harvestBatch && harvestBatch.wrap && harvestBatch.wrap.isConnected) {
+    harvestBatch.items.push(res);
+    const slot = $('#hvBody', harvestBatch.wrap);
+    if (slot) slot.innerHTML = harvestBodyHtml(harvestBatch.items);
+    return;
+  }
+  const items = [res];
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Harvest</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <div class="hv-wrap">
-        <div class="hv-card${res.bumper ? ' bumper' : ''}">
-          <div class="hv-kick">${kick}</div>
-          <div class="hv-ico">${bhIcon('garden-sprout', 96, res.rare ? '#9fe3cf' : undefined)}</div>
-          <div class="hv-name">${esc(res.name)} ×${res.n}</div>
-          <div class="hv-sub">${esc(sub)}</div>
-        </div>
-        <p class="note" style="margin:14px 18px 12px">That bed is empty again. Plant another seed, or leave it fallow.</p>
+        <div id="hvBody">${harvestBodyHtml(items)}</div>
+        <p class="note" style="margin:14px 18px 12px">Those beds are empty again. Plant another seed, or leave them fallow.</p>
         <button class="btn sheet-close" style="width:100%">Back to the garden</button>
       </div>
-    </div>`, { cls: '' });
+    </div>`, { cls: '', onClose: () => { harvestBatch = null; } });
+  harvestBatch = { items, wrap };
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
 }
 
@@ -9095,7 +9129,9 @@ async function renderBoneyard(el) {
       refreshMinis();
       refreshSecrets();
       refreshGlutton();
-      await refreshSpires();
+      // the spire fetch must never gate the reveal: if the network hangs, the map
+      // would sit blank forever behind opacity 0
+      await Promise.race([refreshSpires(), new Promise(r => setTimeout(r, 2500))]);
       /* ONE ARRIVAL, NOT FIVE. Tom, 2026-08-08: "it seems like the spires load in
          after other icons. all the icons should be appearing at the same time it
          looks cheap when everything staggers in."
@@ -9204,30 +9240,30 @@ async function renderBoneyard(el) {
       const reachable = live.filter(s => !s.far);
       const nearest = reachable.length ? reachable.reduce((a, b) => (a.dist < b.dist ? a : b)) : null;
       const tooFast = youSpeed > MAX_LOOT_SPEED;
+      const inRange = !!(nearest && nearest.dist <= COLLECT_RADIUS_M);
+      /* THE BAR IS FOR THINGS AT YOUR FEET. Tom, 2026-08-08: "clicking the bottom
+         thing that says herb patch 105m away doesnt tell me what the herb patch
+         is? im unsure we even need this bottom bar floating feature". A distance
+         readout is a worse copy of the map, and it named the find without ever
+         saying what it was for. It shows only when something is in reach (or you
+         are moving too fast to loot), and it says what the thing PAYS.
+
+         `tooFast` can be true with NOTHING nearby, and the first cut of this
+         dereferenced nearest.type regardless. That threw on every refresh, which
+         killed the rest of the pass: the markers were never revealed and the card
+         was never hidden, so the Boneyard sat on "Reading the bones" and Tom
+         called it unplayable. Hence showBar, and no nearest access without it. */
+      const showBar = (inRange && !!nearest) || tooFast;
       const ro = $('#mapReadout', body);
-      const inRange = nearest && nearest.dist <= COLLECT_RADIUS_M;
-      if (ro) {
-        const icon = nearest ? `<span class="ic${inRange ? ' near' : ''}">${spawnIcon(nearest.type, 20)}</span>` : '';
-        // The compass bearing and the "getting closer" trend are gone: the map
-        // already shows where the thing is, and a second, worse copy of the map
-        // in words is what Tom called out. When nothing is at your feet, this
-        // card carries PURPOSE instead: the egg your steps are actually feeding.
-        /* THE BAR IS FOR THINGS AT YOUR FEET. Tom, 2026-08-08: "clicking the
-           bottom thing that says herb patch 105m away doesnt tell me what the
-           herb patch is? im unsure we even need this bottom bar floating feature".
-           He is right: a distance readout is a worse copy of the map, and it
-           named the find without ever saying what it was for. It now appears
-           ONLY when something is in reach (or you are moving too fast to loot),
-           and it says what the thing PAYS. The rest of the time the map gets the
-           space back, and the standing line at the top carries the purpose. */
+      if (ro && showBar) {
         ro.innerHTML = tooFast
           ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
-          : `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
+          : `<span class="ic near">${spawnIcon(nearest.type, 20)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
       }
       const card = $('#mapAct', body);
       if (card) {
-        card.hidden = !(inRange || tooFast);
-        card.classList.toggle('live', !!inRange && !tooFast);
+        card.hidden = !showBar;
+        card.classList.toggle('live', inRange && !tooFast);
       }
       const btn = $('#mapCollect', body);
       if (btn) {
@@ -9584,7 +9620,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v298'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v299'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9704,11 +9740,14 @@ function ordinal(n) {
 }
 function raceWeekDates(weekKey) {
   const t0 = Date.parse(weekKey + 'T00:00:00');
-  const days = Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
-  // period one also owns everything before the epoch, so a launch-day steps
-  // total is never thrown away because the clock disagreed by a few hours
-  if (weekKey === RACE_EPOCH) days.push(dateKey(new Date(t0 - 86400000)), dateKey(new Date(t0 - 2 * 86400000)));
-  return days;
+  /* EXACTLY the seven days from this period's start. NOTHING before it.
+     v296 tried to be safe about clock skew by also counting the two days BEFORE
+     the epoch, and that quietly backdated the race: Tom opened it to 31,000 steps
+     he had walked before the race existed. A race that counts what you did last
+     week is not a race. The epoch is today and raceWeekKey already clamps an
+     earlier date into period one, so there is nothing left for the padding to
+     protect against. */
+  return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
 }
 
 async function weekStepsNow(date = dateKey()) {
