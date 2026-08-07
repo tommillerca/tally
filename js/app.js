@@ -5323,8 +5323,17 @@ async function renderFriends(el) {
        never came back. Adding one gets you a Crew member who will never play.
        So the bar is EVIDENCE OF PLAY: past level 1, or seen in the last fortnight.
        Newest first among those who qualify. */
-    const FORTNIGHT = 14 * 86400000;
-    const playing = p => (p.level || 1) > 1 || (p.lastSeen && Date.now() - p.lastSeen < FORTNIGHT);
+    /* EVIDENCE OF PLAY, not evidence of arrival. v286 accepted "seen in the last
+       fortnight", which every brand-new signup passes by definition, so the
+       section filled with real-but-untouched level-1 accounts and read as bots
+       (Tom, 2026-08-08: "youre clearly still making random lvl 1 bots... and
+       flooding the new who's new section". Checked: 41 players before two full
+       test runs and 41 after, so the accounts are real installs, not my tests.
+       The complaint stands either way.)
+       The bar is now something you can only get by PLAYING: past level 1, or you
+       came back on a later day than you joined. */
+    const DAY = 86400000;
+    const playing = p => (p.level || 1) > 1 || (p.lastSeen && p.joinedAt && p.lastSeen - p.joinedAt > DAY);
     const fresh = players
       .filter(p => !p.you && !known.has(p.playerId) && playing(p))
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
@@ -9569,7 +9578,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v296'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v297'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
