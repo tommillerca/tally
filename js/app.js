@@ -4406,7 +4406,8 @@ function parseDisplayName(name) {
 
 async function openNameBuilder(after) {
   const me = await social.socialMe();
-  let sel = parseDisplayName(me && me.name) || randomName();
+  // the pick made at onboarding seeds the first real (server) name
+  let sel = parseDisplayName(me && me.name) || (await kvGet('onbName', null)) || randomName();
   const chipRow = (list) => list.map((w, i) => `<button class="nb-chip chip" data-i="${i}">${esc(w)}</button>`).join('');
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Your Bonehead name</h2><button class="sheet-close">Done</button></div>
@@ -4494,12 +4495,12 @@ function friendRowAvatar(f) {
 function friendCardHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petPortraitHtml(p.pet.id, 40, false, { mass: true })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petPortraitHtml(p.pet.id, 40, !!p.pet.shiny, { mass: true })}</div>` : '';
   const chips = [];
   if (p.level) chips.push(`<span class="fc-chip lvl">Lv ${p.level}</span>`);
   if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
   if (p.gear && p.gear.length) chips.push(`<span class="fc-chip">${p.gear.length} gear</span>`);
-  if (p.pet) chips.push(`<span class="fc-chip">🥚 Lv ${p.pet.level}</span>`);
+  if (p.pet) chips.push(`<span class="fc-chip">${bhIcon('egg', 12)} Lv ${p.pet.level}</span>`);
   const ol = onlineLabel(f.lastSeen);
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
     <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}${ol.on ? '<span class="fc-online" title="Online now"></span>' : ''}</div>
@@ -4743,7 +4744,7 @@ function openFriendProfile(f, onChange) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, !!p.pet.shiny, { mass: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
@@ -5518,39 +5519,104 @@ function openProfileSheet() {
   });
 }
 
-function renderOnboarding() {
+/* Onboarding, rebuilt to the approved mockups (market-quality-mockups/onb-*.html,
+   signed off 2026-08-07). Three steps with one job each: sell the actual product,
+   hand the player their character, capture the plan HONESTLY. The old version was
+   a feature list any tracker ships, a hard cut to a form, and a Skip that faked a
+   body silently. Every step is a funnel event: launch lives or dies here. */
+function renderOnboarding(step = 0, ctx = {}) {
   const el = $('#screen');
   $('#tabbar').style.display = 'none';
-  el.innerHTML = `
-  <div class="onb">
-    <img src="assets/brand/logo.png" alt="" style="width:150px;margin-bottom:14px">
-    <h1>BONEHEADZ GYM</h1>
-    <p class="tag">Feed the bones. Scan barcodes, photograph labels, and log meals in seconds while a very cool skeleton earns loot on your behalf. Private: your data never leaves this device.</p>
-    <div class="feature">${ICONS.barcode.replace('<svg', '<svg class="fi"')}<div><b>Instant barcode scanning</b><span>Millions of packaged foods via Open Food Facts + USDA</span></div></div>
-    <div class="feature">${ICONS.label.replace('<svg', '<svg class="fi"')}<div><b>Label camera</b><span>Photograph any Nutrition Facts panel, Boneheadz reads it on-device</span></div></div>
-    <div class="feature">${ICONS.bolt.replace('<svg', '<svg class="fi"')}<div><b>Built for consistency</b><span>Recents, favorites, copy-yesterday, streaks</span></div></div>
-    <div class="spacer"></div>
-    <button class="btn" id="onbGo">Set up my plan</button>
-    <div style="height:9px"></div>
-    <button class="btn ghost" id="onbSkip">Skip, use defaults</button>
-  </div>`;
-  $('#onbGo').addEventListener('click', () => {
-    el.innerHTML = `<div class="onb" style="padding-top:calc(var(--sat) + 18px)">
-      <h1 style="font-size:26px;margin-bottom:14px">Your plan</h1>
-      <div id="pfHost">${profileFormHtml({ }, 'lb')}</div>
-      <button class="btn" id="onbSave">Start tracking</button>
-      <div style="height:30px"></div>
+  trackEvent('onb_step', { n: step });
+  const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
+  const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
+  const ly = id => BH_BY_ID[id] ? `<img class="ly" src="${bhAsset(BH_BY_ID[id])}" alt="">` : '';
+
+  if (step === 0) {
+    el.innerHTML = `
+    <div class="onb onb-in">
+      ${dots}
+      <h1>FEED THE<br>BONES</h1>
+      <p class="onb-sub">The food tracker with a <b>skeleton in it</b>. Log your meals, and your Bonehead earns the loot.</p>
+      <div class="onb-poster">
+        ${['B0-1', 'FW1', 'P1', 'SK0-1', 'H11-1', 'IL1-1', 'IR1'].map(ly).join('')}
+        <div class="onb-pet"><img src="assets/bh/anim/cloud/body-noeyes.png" alt=""><img src="assets/bh/anim/cloud/eyes.png" alt=""></div>
+      </div>
+      <div class="onb-foot">
+        <button class="btn" id="onbGo">Meet your Bonehead</button>
+        <button class="onb-quiet" id="onbRestore">Played before? <b>Restore a backup</b></button>
+      </div>
     </div>`;
-    const get = bindProfileForm(el, { units: 'lb' });
-    $('#onbSave').addEventListener('click', async () => {
-      const np = get();
-      if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
-      await saveInitialSettings(np);
+    $('#onbGo').addEventListener('click', () => renderOnboarding(1, ctx));
+    // switching phones is a launch-day path, not a Settings scavenger hunt
+    $('#onbRestore').addEventListener('click', () => { trackEvent('onb_restore'); openRestoreSheet(); });
+    return;
+  }
+
+  if (step === 1) {
+    // the BARE starter (kicks default is null): gear is what you earn, so the
+    // reveal shows what you start with, not a dressed promo shot
+    if (!ctx.pick) ctx.pick = randomName();
+    el.innerHTML = `
+    <div class="onb onb-in">
+      ${back}${dots}
+      <h1>THIS ONE'S<br>YOURS</h1>
+      <div class="onb-poster bare">${['B0-1', 'SK0-1'].map(ly).join('')}</div>
+      <div class="onb-nameplate">
+        <span class="nm" id="onbName">${esc(buildDisplayName(ctx.pick.adj, ctx.pick.noun, ctx.pick.num))}</span>
+        <button class="onb-reroll" id="onbReroll" aria-label="New name">${t1Stroke(18, '<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/>')}</button>
+      </div>
+      <div class="onb-earns">
+        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP and coins, every meal</small></div>
+        <div class="onb-earn"><span class="ic">${bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
+        <div class="onb-earn"><span class="ic">${ICONS.pit(18)}</span><b>FIGHT</b><small>Spend it all in the Pit</small></div>
+      </div>
+      <div class="onb-foot">
+        <button class="btn" id="onbMe">That's me</button>
+        <span class="onb-quiet">Every piece of gear is earned by playing. Nothing is pay-to-win.</span>
+      </div>
+    </div>`;
+    $('#onbBack')?.addEventListener('click', () => renderOnboarding(0, ctx));
+    $('#onbReroll').addEventListener('click', () => {
+      ctx.pick = randomName();
+      $('#onbName').textContent = buildDisplayName(ctx.pick.adj, ctx.pick.noun, ctx.pick.num);
+      popSound(S.sounds);
     });
+    $('#onbMe').addEventListener('click', async () => {
+      // names live on the server (Crew), which needs the account that does not
+      // exist yet: stash the pick and the Crew name builder starts from it
+      await kvSet('onbName', ctx.pick);
+      renderOnboarding(2, ctx);
+    });
+    return;
+  }
+
+  el.innerHTML = `
+  <div class="onb onb-in onb-plan">
+    ${back}${dots}
+    <h1>THE PLAN</h1>
+    <p class="onb-sub left">Four questions. Your Bonehead does the maths.</p>
+    <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
+    <button class="btn" id="onbSave">Start tracking</button>
+    <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
+    <div style="height:26px"></div>
+  </div>`;
+  $('#onbBack')?.addEventListener('click', () => renderOnboarding(1, ctx));
+  const get = bindProfileForm(el, { units: 'lb' });
+  $('#onbSave').addEventListener('click', async () => {
+    const np = get();
+    if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
+    trackEvent('onb_done', { skip: 0 });
+    await saveInitialSettings(np);
   });
+  /* the Skip is HONEST: it says the body it assumes instead of silently faking
+     one, and it still tells you where to fix it */
   $('#onbSkip').addEventListener('click', async () => {
+    trackEvent('onb_done', { skip: 1 });
+    /* no toast here: the skip line above already stated the defaults BEFORE the
+       tap (the honest half), and the welcome-kit toast fires ~1.2s in and there
+       is only one toast slot, so anything said here is stomped unread. */
     await saveInitialSettings({ sex: 'm', age: 30, heightCm: 178, weightKg: lbToKg(180), activity: 'moderate', goal: 'recomp', units: 'lb' });
-    toast('Using defaults. Tune them in Settings.', 3000);
   });
 }
 
@@ -8642,7 +8708,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v276'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v277'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -8734,7 +8800,7 @@ async function socialSnapshot() {
     gearLo: fighter.gearLo,
     gear: [...gOwned].slice(0, 400),
     badges: earned.size ?? [...earned].length,
-    pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level } : null,
+    pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level, shiny: !!fighter.petMeta.shiny, lineage: fighter.petMeta.lineage || 0 } : null,
   };
 }
 

@@ -44,6 +44,10 @@ const APPROVED = [
   { screen: 'Food form',       mock: 't1-foodform.html', built: true, markers: ['t1-read', 't1-field'] },
   { screen: 'Boneyard',        mock: 't1-boneyard.html', built: true, markers: ['map-topbar', 'map-act', 'map-radius'] },
   { screen: 'Boss den sheet',  mock: 't1-boneyard-tap.html', built: true, markers: ['den-hero', 'den-odds', 'den-pays'] },
+  // Onboarding, approved 2026-08-07 ("approved"; launch is the stated main goal)
+  { screen: 'Onboarding hook',   mock: 'onb-1.html', built: true, markers: ['onb-poster', 'onbRestore'] },
+  { screen: 'Onboarding reveal', mock: 'onb-2.html', built: true, markers: ['onbReroll', 'onb-nameplate', 'onb-earns'] },
+  { screen: 'Onboarding plan',   mock: 'onb-3.html', built: true, markers: ['onbSkip', 'onb-plan'] },
   // Tier 2, approved 2026-08-07 ("these look good, start building tier 2")
   { screen: 'Crate reveal',  mock: 't2-crate.html',   built: true, markers: ['reveal-take', 'pc-plate'] },
   { screen: 'Level up',      mock: 't2-levelup.html', built: true, markers: ['reveal-take', 'reveal-eyebrow'] },

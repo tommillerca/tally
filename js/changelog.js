@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 277, date: '2026-08-07', title: 'A proper welcome', items: [
+    'The <b>first-run experience is new</b>. Instead of a feature list and a form, the game introduces itself: meet your Bonehead, name it (or keep rerolling until one makes you laugh), see how logging, walking and fighting feed each other, then set your plan.',
+    'The name you pick carries into the <b>Crew</b> when you go online later.',
+    '<b>Switching phones?</b> Restore a backup is now right on the first screen instead of hiding in Settings.',
+    'Skipping setup now <b>tells you the default plan it is using</b> instead of quietly assuming one.',
+  ] },
   { n: 276, date: '2026-08-07', title: 'The Wardrobe, the Pit and the Kitchen', items: [
     'The <b>Wardrobe</b> is rebuilt. Your Bonehead stands in a framed panel that fills the space instead of floating in the middle of it, the equipment slots are bigger so you can actually see what you are wearing, and everything fits on one screen without scrolling.',
     'The <b>Pit</b> no longer floats health bars over the fighters. Both sides now have a proper plate above the arena holding names, health, stamina, your pet and any effects running, so the art underneath is never covered. End Turn reads like the main action it is.',
