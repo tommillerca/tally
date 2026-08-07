@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The same near-black the iOS icon uses, so the adaptive background and the
+         circular foreground art meet with no visible seam. Was #FFFFFF, the
+         Capacitor default, which is why Android shipped a generic white tile. -->
+    <color name="ic_launcher_background">#0D0C12</color>
 </resources>

@@ -4829,8 +4829,12 @@ async function renderFriends(el) {
          a greeting, so it moves to the bottom where you go looking for it. -->
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
+      <!-- never greet the tab with an empty box: this card is the FIRST thing on
+           the screen now, so it says something before the fetch lands and says
+           something honest if the fetch never does -->
       <div class="lb-podium" id="lbPodium" hidden></div>
       <div class="lb-youare" id="lbYouAre" hidden></div>
+      <div class="lb-wait" id="lbWait">Counting the Boneheadz... <span class="spin"></span></div>
       <p class="note" style="margin:8px 0 0">Every Bonehead ranked by level. Tap anyone to see their fit, gear and badges.</p>
       <span class="ul-chev">›</span>
     </button>
@@ -4944,7 +4948,13 @@ async function renderFriends(el) {
   const hydratePodium = async () => {
     const players = await fetchLb();
     const pod = $('#lbPodium', el);
-    if (!pod || !pod.isConnected || !players || !players.length) return;
+    const wait = $('#lbWait', el);
+    if (!pod || !pod.isConnected) return;
+    if (!players || !players.length) {
+      if (wait) wait.textContent = players ? 'No standings yet. Be the first name on the board.' : 'Could not reach the Crew server. Tap to try again.';
+      return;
+    }
+    if (wait) wait.hidden = true;
     const top = players.slice(0, 3);
     const order = top.length === 3 ? [top[1], top[0], top[2]] : top; // silver, GOLD, bronze
     pod.innerHTML = order.map(p => {
@@ -9250,7 +9260,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v286'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v287'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

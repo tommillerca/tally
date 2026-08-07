@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 287, date: '2026-08-08', title: 'Android gets its face back', needsBuild: true, items: [
+    'The <b>Android app icon</b> was still the generic placeholder from the app framework instead of the Bonehead. It now matches iPhone exactly. You will see it after the next Play Store update lands.',
+    'The Crew tab no longer greets you with an empty box while the standings load, or if it cannot reach the server.',
+  ] },
   { n: 286, date: '2026-08-08', title: 'The Crew tab, rebuilt around the standings', items: [
     'The <b>Crew tab now opens on the leaderboard</b>, with the top three and <b>where you stand</b> right there. Your Crew is next, then what has arrived for you. Your own friend code moved to the bottom, where you go looking for it rather than being greeted by it.',
     '<b>Tap any Dark Spire on the Boneyard</b> to see whose it is: who holds it, the title they have earned for holding it that long, how many days it has stood, and what the tower is worth. If you are close enough, you can take it from there.',

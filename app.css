@@ -1767,6 +1767,7 @@ body::before {
   padding: 8px 10px; border: 2px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+.lb-wait { margin-top: 10px; font-size: var(--fs-1); color: var(--text-3); }
 .lb-youare b { font-family: var(--display); font-size: var(--fs-4); color: var(--accent); }
 .lb-youare span { font-size: var(--fs-1); color: var(--text-2); min-width: 0; }
 .lb-pod {
