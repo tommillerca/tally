@@ -650,6 +650,14 @@ function openRaceIntro() {
   $('#raceIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
 }
 
+/* Test hook (webdriver only), same pattern as __openFriendProfile. The poster is
+   fired from the boot path behind a one-shot kv flag, so by the time a test can
+   set anything the gate has already returned: without this the only way to check
+   the announcement renders is to watch a real phone on release day. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__raceIntro = async () => { raceIntroFit = await equipped(); openRaceIntro(); };
+}
+
 let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
 async function maybeShowRaceIntro() {
   try {
@@ -9410,7 +9418,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v290'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v291'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

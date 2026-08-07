@@ -94,6 +94,36 @@ if (periods) {
     `d7=${periods.d7} d8=${periods.d8}`);
 }
 
+/* ---------- ANNOUNCE: the poster renders, and quotes the shipped purse ---------- */
+const poster = await page.evaluate(async () => {
+  if (!window.__raceIntro) return null;
+  await window.__raceIntro();
+  await new Promise(r => setTimeout(r, 600));
+  const v = document.querySelector('.race-veil');
+  if (!v) return { open: false };
+  return {
+    open: true,
+    eyebrow: v.querySelector('.drop-eyebrow')?.textContent.trim(),
+    title: (v.querySelector('.drop-title')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    terms: [...v.querySelectorAll('.spire-terms li')].map(l => l.textContent.replace(/\s+/g, ' ').trim()),
+    artLayers: v.querySelectorAll('.race-intro-art img').length,
+    cta: v.querySelector('.drop-cta')?.textContent.trim(),
+  };
+});
+ok('ANNOUNCE the poster opens', poster && poster.open, JSON.stringify(poster && poster.title));
+if (poster && poster.open) {
+  ok('ANNOUNCE it draws the player\'s own bonehead (an empty stage is a FAILURE)', poster.artLayers > 0, `${poster.artLayers} layers`);
+  ok('ANNOUNCE it says the race starts today, not on a Monday',
+    /today/i.test(poster.eyebrow || '') && poster.terms.some(t => /from today/i.test(t)),
+    `${poster.eyebrow} | ${poster.terms[0]}`);
+  const first = cliPlaces[0];
+  ok('ANNOUNCE it quotes the SHIPPED first prize, not a hard-coded one',
+    poster.terms.some(t => t.includes(first.coins.toLocaleString())),
+    `looking for ${first.coins.toLocaleString()} in: ${poster.terms.join(' / ').slice(0, 160)}`);
+  ok('ANNOUNCE it says everyone gets paid down to fifth',
+    poster.terms.some(t => new RegExp(`top ${cliPlaces.length}`, 'i').test(t)), poster.terms.join(' / ').slice(0, 160));
+}
+
 /* ---------- the card renders as the approved mockup, not the old list ---------- */
 ok('CARD it is the collapsed banner, not a flat list', /race-banner/.test(APP) && !/race-rows/.test(APP),
   'details banner present, old .race-rows gone');
