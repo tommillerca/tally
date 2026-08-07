@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 303, date: '2026-08-08', title: 'Spire exploit closed, and the fight HUD reads properly', items: [
+    '<b>You could re-take a Dark Spire you already owned</b> and get paid the full takeover every time, and re-fight a siege that was already broken for the same. Both are closed: the server always knew nothing had changed, the game just was not listening. A repeat now pays pocket change, and a tower you hold no longer offers to be taken.',
+    'In fights, <b>every health bar states its numbers</b>, so the second enemy is no longer a mystery sliver, and a long boss name is not cut off any more.',
+    'A <b>shiny pet</b> no longer has a yellow box drawn around it in the arena. It glows instead.',
+    'A <b>nickname sits beside</b> your friend\'s Bonehead name now instead of replacing it, so you can still see who they actually are.',
+    'When a pet levels up, <b>Pick my talent</b> takes you to that exact pet in the Stable with its tree already open, instead of dropping you at the top of the list.',
+  ] },
   { n: 302, date: '2026-08-08', title: 'Your Bonehead and your pet, done properly', items: [
     'A <b>shiny pet now shows up as shiny everywhere</b>. It was being drawn in its base colours on the startup animation, the level-up card, the Bonehead tab, your map marker, the Dark Spire poster and in fights. Six screens, same mistake in each.',
     'The <b>Today screen is rebuilt</b>. Your Bonehead is centred and nothing crosses him any more: your level and XP moved to their own band underneath instead of sitting over his legs and cutting your pet in half. Your pet stands <b>beside him on the same ground</b>, and the speech bubble comes out of his jaw rather than the top of his head.',

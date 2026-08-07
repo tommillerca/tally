@@ -1156,12 +1156,19 @@ body::before {
 }
 /* min-width:0 is load-bearing: without it a long foe name sets the flex floor,
    both sides sum past 100% and the arena's overflow:hidden eats the right HUD */
-.hud-side { flex: 1; min-width: 0; max-width: 46%; display: grid; gap: 4px; }
+/* The two sides are NOT symmetrical and pretending they are truncated every boss.
+   Your side's name is the word "You", four characters, and it was holding 46% of
+   the bar; a den boss got the same 46% and lost its tail to an ellipsis at 151px.
+   Tom, 2026-08-07: "the combat page had the right side of the enemies name cut
+   off." Measured: "Grave Warden of the Old Bones" needs 192px and now has 207. */
+.hud-side { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.hud-side.you { max-width: 38%; }
+.hud-side.foe { max-width: 58%; }
 /* fixed-height single line so BOTH HP bars sit on the same guide regardless of
    name length (a long foe name like "Loose Bones" used to wrap taller and drop
    its bar below yours) */
 .hud-side .fname {
-  font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .05em;
+  font-family: var(--display); font-weight: 400; font-size: 13px; letter-spacing: .04em;
   color: var(--text); background: var(--surface-2);
   border: 2px solid var(--ink); border-radius: 8px; box-shadow: var(--sh-sm);
   padding: 1px 8px; display: inline-block; justify-self: start;
@@ -2840,7 +2847,18 @@ body::before {
 .shiny-spark { position: absolute; top: -2px; right: -2px; line-height: 0; animation: shinySpark 1.8s ease-in-out infinite; pointer-events: none; }
 @keyframes shinySpark { 0%,100% { opacity: .5; transform: scale(.85) rotate(-8deg); } 50% { opacity: 1; transform: scale(1.15) rotate(8deg); } }
 .shiny-tag { font-size: 10px; font-weight: 800; color: var(--gold); letter-spacing: .04em; vertical-align: middle; }
-.pet-card.is-shiny, .petmini.is-shiny { box-shadow: 0 0 0 2px rgba(var(--gold-rgb),.6), 0 0 16px rgba(var(--gold-rgb),.35); }
+/* On a CARD the gold edge reads as a rare frame. On the arena stage it read as a
+   yellow BOX drawn around the creature, because .petmini is a square stage with
+   no card around it. Tom, 2026-08-07: "My shiny pet also had a yellow box around
+   it in every fight?" The arena gets the same prestige as a glow on the DRAWING
+   instead of an outline on its container. */
+.pet-card.is-shiny { box-shadow: 0 0 0 2px rgba(var(--gold-rgb),.6), 0 0 16px rgba(var(--gold-rgb),.35); }
+/* The glow goes on the STAGE, not the img: `.fstage.petmini.r-epic img` already
+   owns the img's filter for rarity, and a second filter rule there simply replaced
+   it (measured: the shiny lizard came out epic-violet with no gold at all). A
+   filter on the container composes over whatever the child already draws, so a
+   shiny epic reads as both. */
+.petmini.is-shiny { box-shadow: none; filter: drop-shadow(0 0 7px rgba(var(--gold-rgb),.9)); }
 .hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(var(--gold-rgb),.9)); }
 @media (prefers-reduced-motion: reduce) {
   .pet-shiny, .shiny-spark { animation: none; }
@@ -5551,3 +5569,36 @@ body::before {
 /* The delivery archive scrolls inside its own box so the control that collapses
    it never leaves the screen. See paintDeliveries in js/app.js. */
 .dlv-rows.all { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* HP readouts in the fight HUD. A proportional bar says what fraction is left and
+   never how much that is, which is why the second enemy's health was unreadable
+   (Tom, 2026-08-07). The number sits on the outside edge of each side so the bars
+   still line up across the arena. */
+.hp-line { display: flex; align-items: center; gap: 6px; }
+.hp-line .bar { flex: 1; min-width: 0; }
+.hp-num {
+  flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap;
+}
+.hp-num.sm { font-size: 9.5px; color: var(--text-3); }
+.hud-pet.down .hp-num { opacity: .45; }
+
+/* A nickname is your private note about someone, not their name: it sits BESIDE
+   the Bonehead name rather than replacing it (Tom, 2026-08-07). Quieter and
+   smaller, so the name still reads as the name. */
+.alias-tag {
+  font-family: var(--body); font-size: .72em; font-weight: 700; letter-spacing: .02em;
+  color: var(--text-3); background: var(--surface-2);
+  border-radius: 999px; padding: 1px 7px; margin-left: 5px;
+  white-space: nowrap; vertical-align: middle;
+}
+.fc-name .alias-tag, .fl-main b .alias-tag { font-size: 11px; }
+
+/* The pet you just levelled, when the Stable is opened straight from its
+   celebration: a brief gold pulse so the eye lands on it after the scroll. */
+.t3-petcard.just-levelled { animation: petFocus 1.5s ease-out 1; }
+@keyframes petFocus {
+  0%, 100% { box-shadow: none; }
+  25%, 60% { box-shadow: 0 0 0 2px rgba(var(--gold-rgb), .85), 0 0 18px rgba(var(--gold-rgb), .4); }
+}
+@media (prefers-reduced-motion: reduce) { .t3-petcard.just-levelled { animation: none; } }

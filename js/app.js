@@ -4977,6 +4977,13 @@ function friendRowAvatar(f) {
 
 // Big, collectible-feeling card for an accepted friend: their Bonehead posed on
 // a stage with their pet peeking in, name, class, and quick stat chips.
+/* A NICKNAME IS A NOTE, NOT A RENAME. Tom, 2026-08-07: "When you set a note for a
+   nickname it should just show their username then nickname smaller beside not
+   replace it fully." Their Bonehead name is who they are to everyone else and it
+   stays the headline; your private note rides alongside it. */
+function nameWithAlias(f) {
+  return esc(f.name) + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
+}
 function friendCardHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
@@ -4990,8 +4997,8 @@ function friendCardHtml(f) {
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
     <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}${ol.on ? '<span class="fc-online" title="Online now"></span>' : ''}</div>
     <div class="fc-body">
-      <div class="fc-name">${esc(f.alias || f.name)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</div>
-      <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}${f.alias ? ` · ${esc(f.name)}` : ''}</div>
+      <div class="fc-name">${nameWithAlias(f)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</div>
+      <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</div>
       <div class="fc-chips">${chips.join('') || '<span class="fc-chip">Tap to view</span>'}</div>
     </div>
     <span class="crew-chev">›</span>
@@ -5010,14 +5017,14 @@ function friendsListHtml(data) {
   if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends</div>${incoming.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
-      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
+      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
     </div>`).join('')}</div>`;
   if (friends.length) h += `<div class="fl-sect"><div class="fl-h">Your Crew · ${friends.length}</div><div class="fc-grid">${friends.map(friendCardHtml).join('')}</div></div>`;
   if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
-      <div class="fl-main"><b>${esc(f.alias || f.name)}</b><span>Waiting for them to add you back</span></div>
+      <div class="fl-main"><b>${nameWithAlias(f)}</b><span>Waiting for them to add you back</span></div>
       <button class="btn small ghost" data-remove="${esc(f.playerId)}">Cancel</button>
     </div>`).join('')}</div>`;
   return h;
@@ -5546,7 +5553,7 @@ function openFriendProfile(f, onChange, opts = {}) {
     return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
   }).join('') : '';
   const wrap = openSheet(`
-    <div class="sheet-head"><h2 id="fpTitle">${esc(f.alias || f.name)}</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head"><h2 id="fpTitle">${nameWithAlias(f)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
@@ -5554,7 +5561,7 @@ function openFriendProfile(f, onChange, opts = {}) {
         ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
-      <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
+      <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
 
       ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       ${stranger ? (opts.isCrew
@@ -5614,11 +5621,12 @@ function openFriendProfile(f, onChange, opts = {}) {
   $('#fpAliasSave', wrap)?.addEventListener('click', async () => {
     const clean = await social.setFriendAlias(f.playerId, $('#fpAlias', wrap).value);
     f.alias = clean || null;
-    $('#fpTitle', wrap).textContent = clean || f.name;
-    const real = $('#fpReal', wrap); real.hidden = !clean; real.textContent = 'Bonehead name: ' + f.name;
+    // the title carries BOTH now, so it re-renders through the same helper the
+    // list rows use rather than swapping the name out for the nickname
+    $('#fpTitle', wrap).innerHTML = nameWithAlias(f);
     $('#fpAlias', wrap).value = clean;
     popSound(S.sounds);
-    toast(clean ? `Saved. You'll see them as "${clean}".` : 'Nickname cleared.');
+    toast(clean ? `Saved. You'll see "${clean}" beside their name.` : 'Nickname cleared.');
     onChange && onChange();
   });
   $('#fpRemove', wrap)?.addEventListener('click', async () => {
@@ -7824,7 +7832,14 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
     </div>`);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
   const tb = $('#petTalentBtn', wrap);
-  if (tb) tb.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
+  /* STRAIGHT TO THE PET THAT LEVELLED. Tom, 2026-08-07: "you click it and it
+     takes you to the stable but not necessarily to the exact pet that just
+     levelled. It should." With several pets the Stable is a long list and the one
+     with a talent waiting is somewhere in it. */
+  if (tb) tb.addEventListener('click', () => {
+    history.back();
+    setTimeout(() => openStable({ focusIid: inst && inst.iid, focusSp: petId }), 260);
+  });
 }
 
 const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those pets is no longer here.', 'bad-species': 'Choose the offspring species.', cooldown: 'Walk a bit more before breeding again.', dust: 'Not enough Bone Dust.' };
@@ -7832,13 +7847,16 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 // THE STABLE: the pet hub. Every pet you own, grouped by species, each individual
 // copy showing its own level/lineage/shiny/stats with Equip / Breed / Destroy.
 // Only the equipped pet levels. Breeding + the active pet's talent tree live here.
-async function openStable() {
+async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
+  // when we arrive from a pet level-up, that pet's tree is the reason we are here
+  let focusIid = opts.focusIid || null;
+  const focusSp = opts.focusSp || null;
   // undefined = never chosen (open the active pet's tree); null = deliberately
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
-  let openIid;        // which pet's talent tree is expanded inline
+  let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
@@ -7908,7 +7926,7 @@ async function openStable() {
         // frame goes lime. Level and ACTIVE are chips, growth is a bar.
         const span = lvl >= PET_MAX_LEVEL ? 0 : (PET_LEVEL_STEPS[lvl] || 0) - (PET_LEVEL_STEPS[lvl - 1] || 0);
         const pct = lvl >= PET_MAX_LEVEL ? 100 : Math.max(0, Math.min(100, Math.round((1 - toNext / Math.max(1, span)) * 100)));
-        return `<div class="t3-petcard r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}">
+        return `<div class="t3-petcard r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}" data-sp="${x.sp}">
           <span class="portrait">${petPortraitHtml(sp, 60, x.shiny)}</span>
           <div class="tx">
             <div class="nm">
@@ -7979,6 +7997,18 @@ async function openStable() {
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
         </div>` : ''}`;
 
+    /* Bring the pet we came here for onto the screen, once. Opening its tree is
+       not enough when it is the fourth card down: the sheet still lands at the
+       top and the talent it just unlocked is off-screen. */
+    if (focusIid || focusSp) {
+      const card = $(`[data-petsel="${focusIid}"]`, body) || $$('[data-petsel]', body).find(c => c.dataset.sp === focusSp);
+      if (card) {
+        if (!openIid) { openIid = card.dataset.petsel; focusIid = openIid; render(); return; }
+        requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        card.classList.add('just-levelled');
+      }
+      focusIid = null;
+    }
     $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
       if (e.target.closest('button')) return; // don't hijack Equip/Breed/Destroy
       const iid = card.dataset.petsel;
@@ -9442,7 +9472,11 @@ async function renderBoneyard(el) {
         toast(`${s.name} has already fought you off today. Come back tomorrow.`, 3600);
         return;
       }
-      if (rival || !view.held) return openSpireSheet(s, view, rival);
+      /* A tower you already hold must never offer to be TAKEN. `rival` can be a
+         beat behind the local record right after a win, and this used to route on
+         it, which is the second half of the re-take exploit: the sheet offered the
+         fight again, and the payout branch used to pay for it. Ownership decides. */
+      if (!view.held) return openSpireSheet(s, view, rival);
       if (view.tribute.days) {
         const r = await collectTribute(s.id);
         if (!r.ok) { toast('Nothing to collect here yet.'); return; }
@@ -9732,7 +9766,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v302'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v303'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -10252,17 +10286,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="fight-hud">
         <div class="hud-side you">
           <div class="fname">You</div>
-          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
+          <div class="hp-line"><div class="bar fhp"><i id="youHp" style="width:100%"></i></div><span class="hp-num" id="youHpNum"></span></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
-          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div><span class="hp-num sm" id="petHpNum"></span></div>` : ''}
         </div>
         <div class="hud-side foe">
           <div class="fname">${esc(foe.name)}</div>
-          <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
+          <div class="hp-line"><span class="hp-num" id="foeHpNum"></span><div class="bar fhp"><i id="foeHp" style="width:100%"></i></div></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
           <div class="fstate" id="foeState" hidden></div>
-          ${add ? `<div class="hud-pet" id="hudAdd"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div></div>` : ''}
+          ${add ? `<div class="hud-pet" id="hudAdd"><span class="hp-num sm" id="addHpNum"></span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div><span class="petname">${esc(add.name)}</span></div>` : ''}
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
@@ -10339,7 +10373,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
     el('rangePill').textContent = `Turn ${fight.turn}`;
   }
 
+  /* HOW MUCH HEALTH HAS THE OTHER ONE GOT? Tom, 2026-08-07: "I also find it
+     confusing how much health the second enemy has." A bare proportional bar
+     answers "what fraction is left", never "of how much", and the add's bar is a
+     4px sliver next to the boss's full-width one, so a healthy add and a nearly
+     dead one look the same and neither can be compared to the boss. Every bar in
+     the HUD now states its own numbers. */
+  const hpNum = (id, cur, max) => {
+    const n = el(id);
+    if (n) n.textContent = `${Math.max(0, Math.round(cur))}/${Math.round(max)}`;
+  };
   function updateBars() {
+    hpNum('youHpNum', player.hp, player.d.maxHp);
+    hpNum('foeHpNum', foe.hp, foe.d.maxHp);
+    if (petBody) hpNum('petHpNum', petBody.hp, petBody.d.maxHp);
+    if (add) hpNum('addHpNum', add.hp, add.d.maxHp);
     el('youHp').style.width = (player.hp / player.d.maxHp * 100) + '%';
     el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
     el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';
@@ -11071,19 +11119,31 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // A repelled siege: the server clears it and levels the tower, and we mirror
         // that. Deliberately pays less than a takeover: keeping what you have should
         // not out-earn going and taking something new.
-        coins = 50;
-        // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
-        // count and a repeated settle can never double-count it
-        await award(`siege-${foeCfg.spire.id}-${Date.now().toString(36)}`, 'siege', 12, `Broke the siege at ${foeCfg.spire.name}`);
+        /* ASK FIRST, PAY SECOND. This paid the 50 coins and minted the ledger row
+           BEFORE asking the server, and then ignored the answer, so re-fighting a
+           siege that no longer existed paid in full every time. The award key
+           carries a timestamp, so even the ledger could not stop it. Found by the
+           NO-OP guard in tests/unit.test.js while fixing the spire re-take, which
+           is the same bug on the neighbouring branch. */
         const res = await social.defendSpireRemote(foeCfg.spire.id).catch(() => ({ ok: false, reason: 'offline' }));
-        await breakSiege(foeCfg.spire.id);
-        if (res && res.ok && res.level) await setSpireLevel(foeCfg.spire.id, res.level);
-        await cancelSiegeReminder();
-        const lv = (res && res.level) || (foeCfg.spire.level || 1) + 1;
-        extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
-          name: foeCfg.spire.name, rarity: 'epic', kind: `SIEGE BROKEN · LV ${lv}`,
-          stats: `${esc(foeCfg.name)} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
-        dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
+        const noSiege = !!(res && res.ok === false && res.reason !== 'offline');
+        if (noSiege) {
+          coins = 25;   // nothing was broken, so nothing is owed
+          toast(`${foeCfg.spire.name} is not under siege any more.`, 3600);
+        } else {
+          coins = 50;
+          // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
+          // count and a repeated settle can never double-count it
+          await award(`siege-${foeCfg.spire.id}-${Date.now().toString(36)}`, 'siege', 12, `Broke the siege at ${foeCfg.spire.name}`);
+          await breakSiege(foeCfg.spire.id);
+          if (res && res.ok && res.level) await setSpireLevel(foeCfg.spire.id, res.level);
+          await cancelSiegeReminder();
+          const lv = (res && res.level) || (foeCfg.spire.level || 1) + 1;
+          extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
+            name: foeCfg.spire.name, rarity: 'epic', kind: `SIEGE BROKEN · LV ${lv}`,
+            stats: `${esc(foeCfg.name)} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
+          dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
+        }
       }
       else if (foeCfg.mode === 'spire') {
         // Taking a tower: the claim itself is the prize, so the payout is modest
@@ -11096,8 +11156,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // rule the whole social layer is built on.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
         const refused = remote && remote.ok === false && remote.reason !== 'offline';
-        const r = refused ? { ok: false, reason: remote.reason } : await claimSpire(foeCfg.spire);
-        if (refused && remote.reason === 'shielded') {
+        /* A NO-OP IS NOT A WIN. Tom, 2026-08-07: "You can still exploit the spire
+           system just like the glutton was. After beating you can take the same
+           spire again when it's already yours."
+           The server has always been idempotent here: claiming a tower you already
+           own returns `{ ok: true, already: true }` and changes no ownership. The
+           client only ever checked `ok === false`, so `already` sailed through the
+           success branch and paid the full 80 coins and a DARK SPIRE card every
+           single time you re-fought your own tower. Same shape as the Glutton
+           re-farm: the payout was gated on "the request did not error" instead of
+           on a state transition actually happening.
+           A repeat pays the flat consolation and nothing else. See "Rewarded
+           actions" in tally/CLAUDE.md and tests/repeat-audit.mjs. */
+        const already = !!(remote && remote.ok === true && remote.already === true);
+        const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
+        if (already) {
+          coins = 25;   // it is already yours: pocket change, no re-farm
+          toast(`${foeCfg.spire.name} already flies your name. Come back to collect its tribute.`, 3800);
+        } else if (refused && remote.reason === 'shielded') {
           coins = 40;
           const mins = Math.max(1, Math.ceil(((remote.until || 0) - Date.now()) / 60000));
           toast(`That tower was just taken. Its walls hold for another ${mins} min: come back and it is yours.`, 4600);

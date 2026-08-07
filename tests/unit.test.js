@@ -1536,5 +1536,65 @@ test('every image the combat stage renders is precached', () => {
   assert.deepEqual(unwarmed, [], `not warmed by the app: ${unwarmed.join(', ')}`);
 });
 
+/* ---------------------------------------------------------------------------
+ * REWARDED ACTIONS PAY ONLY ON A REAL STATE TRANSITION.
+ *
+ * Tom, 2026-08-07: "You can still exploit the spire system just like the glutton
+ * was. After beating you can take the same spire again when it's already yours.
+ * I've already brought this up to you and you struggled multiple times fixing it
+ * for the glutton. Figure out an SOP for yourself so this doesn't keep happening
+ * on this feature or new ones."
+ *
+ * The class, both times: the payout branch was gated on "the request did not
+ * error" instead of on the state actually changing. The spire server has always
+ * been idempotent (claiming a tower you own returns `ok:true, already:true` and
+ * moves no ownership); the client only checked `ok === false`, so a re-fight of
+ * your own tower paid the full takeover every time.
+ *
+ * The SOP is in tally/CLAUDE.md under "Rewarded actions". These two checks are
+ * the teeth: the authority's no-op answer must be handled at every call site
+ * that pays, and it must be handled by NAME, not by hoping ok===false covers it.
+ *
+ * PROVE-RED (confirmed 2026-08-07): delete the `already` handling from the spire
+ * branch in js/app.js and NO-OP fails naming social.claimSpireRemote.
+ * ------------------------------------------------------------------------- */
+test('NO-OP every paying remote call branches on the answer BEFORE it pays', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const lines = app.split('\n');
+  /* Strip prose first. The first version of this check read raw source, so the
+     word "already" sitting in a COMMENT satisfied it while the guard was deleted:
+     a check that cannot fail (tally/CLAUDE.md rule 1). */
+  const code = lines.map(l => l.replace(/\/\/[^\n]*$/, ''));
+  const findings = [];
+  code.forEach((ln, i) => {
+    const m = ln.match(/const\s+(\w+)\s*=\s*await\s+social\.(\w+Remote)\s*\(/);
+    if (!m) return;
+    const [, resp, fn] = m;
+    const block = code.slice(i, i + 34);
+    const payAt = block.findIndex(l => /\bcoins\s*=\s*\d|extraCards\.push|\bxp\s*\+=|await award\(/.test(l));
+    if (payAt < 0) return;                     // this call site pays nothing
+    /* The answer has to be CONSULTED before the money moves. Both live exploits
+       were this exact shape: ask the server, ignore what it said, pay anyway. */
+    const consulted = block.slice(0, payAt).some(l => new RegExp(`\\b${resp}\\s*(&&|\\.|\\))`).test(l) && !l.includes('await social.'));
+    if (!consulted) findings.push(`js/app.js:${i + 1}  ${fn} pays at +${payAt} lines without reading ${resp} first`);
+  });
+  assert.ok(code.join('\n').includes('social.claimSpireRemote'), 'no remote grant calls found at all: an empty sample is a failure, not a pass');
+  assert.deepEqual(findings, [], '\n      ' + findings.join('\n      '));
+});
+
+test('NO-OP the spire claim treats an already-yours answer as no takeover', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const i = app.indexOf('claimSpireRemote');
+  assert.ok(i > 0, 'the spire claim call is gone: this check has nothing to guard');
+  const block = app.slice(i, i + 1800);
+  assert.ok(/already\s*=\s*!!\(remote/.test(block), 'the already flag is not read off the server answer');
+  assert.ok(/refused \|\| already/.test(block), 'the local claim still runs when the server says already');
+  // and it must not pay the takeover price for a no-op
+  const alreadyBranch = block.slice(block.indexOf('if (already)'), block.indexOf('if (already)') + 260);
+  assert.ok(/coins\s*=\s*(\d+)/.test(alreadyBranch), 'the already branch sets no payout at all');
+  const paid = Number(alreadyBranch.match(/coins\s*=\s*(\d+)/)[1]);
+  assert.ok(paid <= 25, `a repeat pays ${paid} coins, which is not pocket change`);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

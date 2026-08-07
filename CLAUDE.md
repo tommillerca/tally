@@ -105,3 +105,44 @@ so a new screen that draws a pet and is not listed FAILS), STATIC (no
 `{ id: x.C }` constructions), SHINY, DECODE, PLANE and NEAR. Undriven sites must
 state why and are printed on every run so they cannot rot into "covered". Add a
 SITES row with every new figure surface.
+
+## Rewarded actions (non-negotiable SOP, added 2026-08-07)
+
+Tom: "You can still exploit the spire system just like the glutton was. After
+beating you can take the same spire again when it's already yours. I've already
+brought this up to you and you struggled multiple times fixing it for the glutton.
+Figure out an SOP for yourself so this doesn't keep happening on this feature or
+new ones it's a waste of time do better."
+
+Both bugs were the same mistake, and fixing the Glutton did not fix the class
+because nothing generalised the lesson. **A payout gated on "the request did not
+error" is not a guard.** The spire server has always been idempotent (claiming a
+tower you own returns `ok:true, already:true` and moves no ownership) and the
+client only tested `ok === false`, so a re-fight paid the full takeover every
+time. The siege branch was worse: it paid and minted its ledger row BEFORE asking
+the server, then ignored the answer entirely.
+
+Follow this for every action that pays coins, dust, XP, gear, crates or a card.
+
+1. **Name the state transition.** Write down, in a comment, what must change for
+   this to be a reward: "an unowned/rival tower becomes mine", "a live siege
+   ends", "today's Glutton goes from alive to beaten". If nothing changes, there
+   is no reward. A payout with no transition behind it is a farm.
+2. **Ask the authority first, pay second.** Whoever owns the state decides: the
+   server for anything social, the ledger for anything local. Never write the
+   reward before the answer arrives, and never mint a ledger key that contains a
+   timestamp or a random id for a repeatable action, because that defeats the
+   ledger's whole purpose.
+3. **A no-op answer is not a success.** Handle it by NAME (`already`, `duplicate`,
+   `no-siege`, a 409) and pay the flat consolation instead. `ok === false` does
+   not cover a 200 that says nothing happened.
+4. **Close the entry point too.** The state that makes the action illegal must
+   also hide the button. Both halves, every time: the spire sheet was still
+   offering "take this tower" on a tower already held, routing on a `rival` field
+   that lags the local record by a poll.
+5. **Prove the second attempt pays nothing.** Perform the action twice in the
+   already-satisfied state and assert the second pays the consolation, not the
+   prize. `node tests/unit.test.js` carries the two NO-OP guards: one requires
+   every paying `social.*Remote` call to consult its answer BEFORE paying, the
+   other pins the spire branch specifically. Both are proven red against the real
+   exploits. Any new rewarded remote call is covered the moment it is written.
