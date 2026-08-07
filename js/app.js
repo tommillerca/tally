@@ -1517,11 +1517,16 @@ async function renderToday(el) {
     </div>
   </div>
 
-  <div class="hero-actions four">
-    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(23)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
-    <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
-    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(23)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+  <!-- FIVE DOORS, Kitchen and Garden paired at the end (option B2, Tom's call
+       2026-08-07). The Garden used to live one row deep inside the Kitchen, so
+       nothing on the home screen ever said a crop was ready. It has its own door
+       now and its own count, and the two food systems read as a pair. -->
+  <div class="hero-actions five">
+    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(21)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
+    <button class="hero-act" id="stableBtn">${ICONS.paw(21)}<span>Stable</span></button>
+    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(21)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 21)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act${cropsRipe ? ' grow' : ''}" id="gardenActBtn">${bhIcon(cropsRipe ? 'garden-sprout' : 'garden-bed', 21)}<span>Garden${cropsRipe ? ` <i class="hero-badge go">${cropsRipe}</i>` : ''}</span></button>
   </div>
 
   ${isToday && topNudge ? `
@@ -1657,6 +1662,7 @@ async function renderToday(el) {
   });
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
+  $('#gardenActBtn')?.addEventListener('click', () => openGardenSheet(() => refresh()));
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#dropToShop')?.addEventListener('click', () => openCharacter('shop'));
@@ -2951,6 +2957,7 @@ async function openKitchen() {
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
+  let view = 'doors';   // 'doors' | 'cook' — the Kitchen opens on its two doors
   async function render() {
     if (!body.isConnected) return;
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
@@ -2976,13 +2983,62 @@ async function openKitchen() {
     };
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const buyPrice = nextPotPrice(cook.potsOwned);
+    /* TWO DOORS, NOT A LIST WITH A ROW IN IT. Tom, 2026-08-07: "the garden feels
+       like an after thought that you wouldn't think to click into." It was one
+       thin row wedged between the cauldrons and the recipes, which read as an
+       accessory to cooking when it is where the ingredients come from. Built to
+       market-quality-mockups/garden-c-kitchen.html: COOK and GROW at equal
+       weight, each stating its own live state, ingredients shared between them
+       because that is what both doors are about. Cooking is one tap deeper than
+       it was; that is the trade, and Tom took it. */
+    const cookPills = [
+      cook.readyCount ? { go: true, ico: bhIcon('dish-broth', 13), txt: `${cook.readyCount} dish${cook.readyCount === 1 ? '' : 'es'} ready` } : null,
+      cook.slots.filter(x => !x.empty && !x.ready).length ? { txt: `${cook.slots.filter(x => !x.empty && !x.ready).length} on the fire` } : null,
+      (() => { const n = RECIPES.filter(r => canCook(r, inv)).length;
+        return n ? { txt: `${n} you can cook now` } : { wait: true, txt: 'Not enough ingredients yet' }; })(),
+    ].filter(Boolean);
+    const growPills = [
+      garden.readyCount ? { go: true, ico: bhIcon('garden-sprout', 13), txt: `${garden.readyCount} crop${garden.readyCount === 1 ? '' : 's'} ready` } : null,
+      garden.thirsty ? { ico: bhIcon('garden-water', 13), txt: `${garden.thirsty} need${garden.thirsty === 1 ? 's' : ''} water` } : null,
+      garden.growing ? { txt: `${garden.growing} growing` } : null,
+      seedTotal ? { wait: true, txt: `${seedTotal} seed${seedTotal === 1 ? '' : 's'} unplanted` } : null,
+    ].filter(Boolean);
+    const pillHtml = ps => ps.map(x => `<span class="kd-pill${x.go ? ' go' : x.wait ? ' wait' : ''}">${x.ico || ''}${esc(x.txt)}</span>`).join('');
+    if (view === 'doors') {
+      body.innerHTML = `
+        <div class="kd-doors">
+          <button class="kd-door cook" id="doorCook">
+            <span class="kd-art">${bhIcon('dish-stew', 86)}</span>
+            <span class="kd-eye">Turn ingredients into buffs</span>
+            <b>COOK</b>
+            <p>Stews, skewers and potions. Cook now, eat when the fight needs it.</p>
+            <span class="kd-pills">${pillHtml(cookPills)}</span>
+          </button>
+          <button class="kd-door grow" id="doorGrow">
+            <span class="kd-art">${bhIcon('garden-sprout', 86)}</span>
+            <span class="kd-eye">Where the ingredients come from</span>
+            <b>GROW</b>
+            <p>${garden.plotsOwned} bed${garden.plotsOwned === 1 ? '' : 's'} in the Bone Garden. Seeds come off your walks.</p>
+            <span class="kd-pills">${pillHtml(growPills.length ? growPills : [{ wait: true, txt: 'Nothing planted yet' }])}</span>
+          </button>
+        </div>
+        <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="compostBtn2" style="font-size:11px">Compost</button></div>
+        <div class="ingredient-grid">
+          ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id, 26)}</span><b>${inv[id] || 0}</b></div>`).join('')}
+        </div>
+        <p class="note" style="margin:10px 2px 0">GROW makes them, COOK spends them.</p>`;
+      $('#doorCook', body)?.addEventListener('click', () => { view = 'cook'; render(); });
+      $('#doorGrow', body)?.addEventListener('click', () => openGardenSheet(render));
+      $('#compostBtn2', body)?.addEventListener('click', () => openCompostSheet(render));
+      return;
+    }
     body.innerHTML = `
+      <button class="btn small ghost kd-back" id="kdBack">${ICONS.chev(14)} Kitchen</button>
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
         ${buyPrice != null ? `<button class="pot-card buy" id="buyPot"><span class="pot-ico">➕</span><b>Extra pot</b><small>${buyPrice.toLocaleString()} ${ICONS.coin(12)}</small></button>` : ''}
       </div>
-      ${gardenRowHtml(garden, seedTotal)}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
@@ -3007,7 +3063,7 @@ async function openKitchen() {
       ${RECIPES.map(recipeCard).join('')}
       <div class="sect-h">Potions · drink one mid-fight, any class</div>
       ${POTIONS.map(recipeCard).join('')}`;
-    $('#gardenRow', body)?.addEventListener('click', () => openGardenSheet(render));
+    $('#kdBack', body)?.addEventListener('click', () => { view = 'doors'; render(); });
     $$('[data-serve]', body).forEach(btn => btn.addEventListener('click', async () => {
       const dish = await collectDish(Number(btn.dataset.serve));
       if (dish) {
@@ -9766,7 +9822,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v303'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v304'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

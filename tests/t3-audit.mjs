@@ -130,10 +130,13 @@ const planted = await page.evaluate(async () => {
   const r = await g.plantSeed('graveroot');
   return r.ok === true;
 });
-await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /kitchen/i.test(x.textContent || '')); if (b) b.click(); });
-await sleep(1600);
-await page.evaluate(() => document.querySelector('#gardenRow')?.click());
-await sleep(1600);
+/* The Garden moved out from under the Kitchen on 2026-08-07 (Tom: "the garden
+   feels like an after thought that you wouldn't think to click into"), so it is
+   no longer a #gardenRow buried in the recipe list. It has its own door on Today
+   and a GROW door inside the Kitchen; this walks the Today door, which is the
+   one a player would use. tests/garden-doors.mjs owns both routes. */
+await page.evaluate(() => document.getElementById('gardenActBtn')?.click());
+await sleep(1800);
 const garden = {
   planted, beds: await count('.t3-bed'), soil: await count('.t3-bed.thirsty, .t3-bed.growing, .t3-bed.ready'),
   buy: await count('.t3-bed.buy'), pouch: await count('.t3-seed'),

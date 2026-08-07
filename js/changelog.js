@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 304, date: '2026-08-08', title: 'The Bone Garden gets its own door', items: [
+    'The Garden was a single row buried in the Kitchen, which meant nothing ever told you a crop was ready. It has <b>its own door on Today</b> now, next to the Kitchen, with a count on it when there is something to pick.',
+    'The <b>Kitchen opens on two doors</b>, COOK and GROW, each showing what it is holding: dishes ready, crops ready, beds that want water, seeds you have not planted. Your ingredients sit under both, because GROW makes them and COOK spends them. Cooking is one tap further in than it was.',
+  ] },
   { n: 303, date: '2026-08-08', title: 'Spire exploit closed, and the fight HUD reads properly', items: [
     '<b>You could re-take a Dark Spire you already owned</b> and get paid the full takeover every time, and re-fight a siege that was already broken for the same. Both are closed: the server always knew nothing had changed, the game just was not listening. A repeat now pays pocket change, and a tower you hold no longer offers to be taken.',
     'In fights, <b>every health bar states its numbers</b>, so the second enemy is no longer a mystery sliver, and a long boss name is not cut off any more.',
