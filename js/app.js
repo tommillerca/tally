@@ -163,6 +163,54 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
 // opts.shiny OVERRIDES the S.shinyPets lookup. S.shinyPets is the VIEWER's own
 // collection, so it is only correct for the viewer's own pet: rendering a
 // FRIEND's pet through it showed their shiny in base colours (Brock's lizard).
+/* A PET IS AN INSTANCE, NOT A SPECIES. Read this before drawing anyone's pet.
+ *
+ * `outfit.C` is the equipped SPECIES id and nothing else. Every time a screen has
+ * reached into it directly and built `{ id: eq.C, shiny: !!eq.shiny }`, shiny has
+ * silently become false, because an outfit has no shiny field to read: the spire
+ * keeper poster did exactly this and drew Tom's shiny pet in base colours. The
+ * lineage and level go the same way.
+ *
+ * There are only two honest sources and this is both of them:
+ *   snapshot  a profile's `pet` object (a friend, a rival, a defender). It carries
+ *             shiny, so use it verbatim.
+ *   own       your own equipped species. shiny stays UNDEFINED on purpose so
+ *             petSpriteHtml consults S.shinyPets, which is the viewer's own
+ *             collection and the only thing that knows.
+ * Never pass `!!something.shiny` from an outfit. Guarded by tests/figure-audit.mjs.
+ */
+function petFrom(snapshotPet, ownSpecies = null) {
+  if (snapshotPet && snapshotPet.id) {
+    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1 };
+  }
+  if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null };
+  return null;
+}
+/* Draw a pet BESIDE a Bonehead: same baseline, seated unless the species hovers,
+ * mass-normalised so a flat species is not half the size of a round one. Every
+ * paired figure in the app goes through this so "the pet is floating" and "the pet
+ * is the wrong size" cannot be re-invented per screen. */
+function petAsideHtml(pet, px) {
+  if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny });
+}
+/* THE THIRD PATH. On the splash, the level-up card, the map marker and the
+ * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
+ * petAsideHtml; avatarLayersHtml swaps the recolour itself, but only when told
+ * which species is shiny. Nobody told it, which is why the startup montage drew
+ * Tom's shiny pet in base colours (his words, 2026-08-07: "also on the app startup
+ * montage btw").
+ *   YOUR OWN stack  -> await ownShinyPetId(eq)
+ *   SOMEBODY ELSE'S -> their snapshot: pet && pet.shiny ? pet.id : null
+ * Never the viewer's collection for somebody else's stack. Guarded by STACK in
+ * tests/figure-audit.mjs, which fails any avatarLayersHtml call that renders the
+ * C slot without saying which of the two it is. */
+async function ownShinyPetId(eq) {
+  const sp = eq && eq.C;
+  if (!sp || sp === 'CX') return null;               // CX's amethyst art IS its look
+  return (await shinyPetIds()).includes(sp) ? sp : null;
+}
+const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : null);
 function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
@@ -402,6 +450,8 @@ async function showSplash(userEq) {
     .map(src => new Promise(res => { const i = new Image(); i.onload = i.onerror = res; i.src = src; }))));
   // Bangers is font-display:swap and the splash is the first paint, so without
   // this "EAT." renders in the fallback face and swaps a beat later.
+  // your own pet is in that final stack, and it has to be YOUR copy of it
+  const splashShiny = await ownShinyPetId(userEq);
   const font = document.fonts ? document.fonts.load('60px Bangers').catch(() => {}) : Promise.resolve();
   // Bounded: a slow network must never hold the app on a blank splash.
   await Promise.race([Promise.all([warm, font]), beat(900)]);
@@ -412,7 +462,7 @@ async function showSplash(userEq) {
     await beat(430);
   }
   if (done) return;
-  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
+  el.innerHTML = `<div class="splash-inner"><div class="splash-stage">${avatarLayersHtml(userEq || { B: 'B0-1', SK: 'SK0-1' }, { shinyPetId: splashShiny })}</div><img class="splash-mark" src="assets/brand/wordmark.png" alt="BONEHEADZ"><div class="splash-title" style="font-size:30px">GYM</div><div class="splash-sub">Feed the bones</div></div>`;
   await beat(forced ? 2600 : 950);
   finish();
 }
@@ -1430,6 +1480,7 @@ async function renderToday(el) {
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
 
+  const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
@@ -1443,8 +1494,9 @@ async function renderToday(el) {
        there is nothing bright to flash through. -->
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
+    <span class="hero-cast c-bh"></span>${heroPet ? '<span class="hero-cast c-pet"></span>' : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, 98, false, { mass: true })}</div>` : ''}
+    ${heroPet ? `<div class="hero-companion">${petAsideHtml(heroPet, 98)}</div>` : ''}
 
     <div class="hero-top">
       <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
@@ -2344,8 +2396,8 @@ async function openSpireInfoSheet(info, onAct = null) {
   /* Their pet turns up too: it is their whole character, not just the fit. Your
      own tower ships no defender snapshot, so read the pet off your equipped slot. */
   const keeperPet = held
-    ? (keeperFit && keeperFit.C ? { id: keeperFit.C } : null)
-    : (rival && rival.defender && rival.defender.pet) || null;
+    ? petFrom(null, keeperFit && keeperFit.C)                       // yours: S.shinyPets knows
+    : petFrom(rival && rival.defender && rival.defender.pet);       // theirs: the snapshot knows
   const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
   const wt = wardenTier(days);
   // The plate is a NAMEPLATE, so a tower you hold flies YOUR name, not "You hold it".
@@ -2380,7 +2432,7 @@ async function openSpireInfoSheet(info, onAct = null) {
             <div class="bh">${keeperFit
               ? avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })
               : `<img src="assets/brand/tomb.png" alt="">`}</div>
-            ${keeperPet && keeperPet.id ? `<span class="pet">${petSpriteHtml(keeperPet.id, 64, false, { shiny: !!keeperPet.shiny })}</span>` : ''}
+            ${keeperPet ? `<span class="pet">${petAsideHtml(keeperPet, 74)}</span>` : ''}
           </div>
         </div>
         <div class="spp-plate${held ? ' mine' : ''}">
@@ -2418,6 +2470,9 @@ async function openSpireInfoSheet(info, onAct = null) {
    can walk into. It takes the same `info` the map builds. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__spireSheet = info => openSpireInfoSheet(info);
+  // the other screen that draws SOMEBODY ELSE'S pet from a profile snapshot, which
+  // is the half of the figure contract that S.shinyPets cannot cover
+  window.__friendProfile = f => openFriendProfile(f, () => {});
 }
 
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
@@ -4917,7 +4972,7 @@ const CHEERS = [
 
 function friendRowAvatar(f) {
   const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
-  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
 }
 
 // Big, collectible-feeling card for an accepted friend: their Bonehead posed on
@@ -6485,12 +6540,13 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   let hero = '';
   if (levelUp) {
     const eq = await equipped();
+    const lvlShiny = await ownShinyPetId(eq);
     const line = LEVELUP_LINES[levelUp.level % LEVELUP_LINES.length];
     S.pendingLevelLine = line;
     hero = `
       <div class="lvlup-stage">
         <div class="lvl-rays"></div>
-        <div class="bh-stage lg lvlup-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>
+        <div class="bh-stage lg lvlup-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: lvlShiny })}</div>
       </div>
       <div class="lvl-stamp">LEVEL ${levelUp.level}!</div>
       <div class="cele-sub" style="font-size:16px;margin-top:2px">${esc(levelUp.name)}</div>
@@ -6642,6 +6698,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const keepScroll = opts.instant ? scroller.scrollTop : null;
   const [xp, eq, coinBal, inv, boost, dustBal] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust()]);
   const lvl = levelFor(xp);
+  const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
@@ -6664,7 +6721,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
     </div>` : `
     <div class="bh-hero mini">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true })}</div>
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -8583,9 +8640,10 @@ async function renderBoneyard(el) {
     });
 
     // player marker: mini bonehead + facing cone + the collect-radius ring
+    const mapShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
-    youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'] })}</div>`;
+    youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: mapShiny })}</div>`;
     composeAvatars(youEl);   // marker is built outside route(), so it needs its own call
     const youMarker = domMarker(maplibregl, map, { lat, lng, el: youEl });
     const youWalk = attachWalk($('.map-you-av', youEl)); // puppet walk while GPS fixes move
@@ -9674,7 +9732,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v301'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v302'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -10144,7 +10202,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       showGateIntro({
         foeName: foeCfg.name,
         venue,
-        spriteHtml: avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] }),
+        spriteHtml: avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) }),
         sounds: S.sounds,
       });
     } else {
@@ -10208,10 +10266,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
-        <div class="bh-stage fstage${foeCfg.mode === 'glutton' ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'] })}</div>`}</div>
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
-          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'] })}</div></div>
+          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>
         </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">

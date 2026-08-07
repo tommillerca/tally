@@ -56,3 +56,52 @@ The checks were the problem, not the effort. These rules are about the checks.
 10. **Report the diagnosis only after measuring it.** The gear/next-day bug was
     first "fixed" by padding the currency chips, which fixed nothing and created a
     new collision, because the cause was assumed rather than measured.
+
+## The figure contract (non-negotiable, added 2026-08-07)
+
+Tom: "shiny's arent showing up in the new spire hero spotlight and the pet is too
+far away from the bonehead. this is something that we have had multiple problems
+with across the entire app. create a framework and guard rails for yourself so
+that this STOPS HAPPENING." Then: "you need to utilize safe margins or somethign
+that have been based off tension points as a composition theory."
+
+He is right that it is a class, not an incident. Every occurrence was the same
+mistake: a new screen placed a figure by hand instead of using the contract, and
+lost one property of it. Shiny dropped, pet exiled to a corner, pet scaled off its
+canvas instead of its drawing, a friend's shiny drawn in base colours, layers laid
+out perfectly but never decoded.
+
+**1. A pet is an INSTANCE, not a species.** `outfit.C` is a species id with no
+shiny, level or lineage on it, so `!!eq.shiny` is always false. There are exactly
+two honest sources and `petFrom(snapshotPet, ownSpecies)` in js/app.js is both of
+them: a profile snapshot's `pet` object for somebody else, or your own species with
+shiny left UNDEFINED so `S.shinyPets` (the viewer's own collection) answers.
+Never read shiny off an outfit. Never pass another player's pet through
+`S.shinyPets`.
+
+**2. A pet drawn beside a Bonehead goes through `petAsideHtml(pet, px)`.** It
+seats the pet unless the species hovers, mass-normalises it so a flat species is
+not half the size of a round one, and keeps it on the character's baseline.
+
+**3. Align on INK, never on boxes.** Cam's art sits inside a 640² canvas with a
+lot of transparent air, and most stages letterbox it with `object-fit: contain` on
+top of that. Two figures can have perfectly aligned boxes and visibly different
+footing. Every measurement is taken from the source PNG's alpha bounding box mapped
+through the rendered geometry, and `object-position` is part of that mapping: a
+correct CSS fix read as "no change" once because the measurement assumed centring.
+
+**4. Composition: safe margins and tension points, not eyeballing.** Every figure
+stage declares a `--safe` gutter of about 6% that no drawing may enter, and the
+safe box is divided in thirds both ways. Figures are anchored to the centre line or
+to a tension line at BOTH edges, never nudged until they looked about right. The
+Bonehead holds the centre (Tom's standing call); the pet takes the right third,
+inner edge on the tension line, outer edge on the safe margin. Speech bubbles own
+the left column and their tail drops to the JAW, because that is where a mouth is.
+Reference build: `market-quality-mockups/today-v4.html`, `?guides` draws the grid.
+
+**5. `node tests/figure-audit.mjs` before claiming any figure work is done.** It
+enforces the above: COVERAGE (every pet call site in js/app.js must be registered,
+so a new screen that draws a pet and is not listed FAILS), STATIC (no
+`{ id: x.C }` constructions), SHINY, DECODE, PLANE and NEAR. Undriven sites must
+state why and are printed on every run so they cannot rot into "covered". Add a
+SITES row with every new figure surface.

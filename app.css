@@ -889,8 +889,10 @@ body::before {
   box-shadow: var(--sh-sm);
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
+/* LEFT COLUMN, and the tail drops to the jaw. Tom: "people's mouths arent on top
+   of their heads." It used to sit over the skull with a sideways tail. */
 .hero-bubble {
-  position: absolute; left: 10px; top: 58px; z-index: 3;
+  position: absolute; left: var(--safe); top: 52px; z-index: 3;
   --sway: rotate(-2deg);
   transform: var(--sway);
   max-width: 42%; width: max-content; text-align: left;
@@ -921,7 +923,10 @@ body::before {
 @keyframes bubblePop { from { transform: var(--sway) scale(0.7); opacity: 0; } to { transform: var(--sway) scale(1); opacity: 1; } }
 @keyframes bubbleFloat { from { translate: 0 0; } to { translate: 0 4px; } }
 @media (prefers-reduced-motion: reduce) { .hero-bubble { animation: none; } }
-.hero-meta { position: absolute; left: 14px; right: 14px; bottom: 10px; z-index: 4; }
+/* A BAND, not an overlay. It used to float over the character's legs and slice
+   the pet in half. */
+.hero-meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  padding: 11px 14px 12px; background: rgba(42, 45, 40, .88); border-top: 2px solid var(--ink); }
 .hero-level { display: grid; gap: 3px; width: 100%; text-align: left; }
 .hero-lv {
   /* GOLD, not accent. A level is something you HAVE; the accent is supposed to
@@ -1013,19 +1018,46 @@ body::before {
 .splash-mark { width: min(78%, 320px); }
 
 /* ---------- hero reframe: whole body + yard ---------- */
-.hero-scene { height: min(47vh, 400px); }
+/* THE FIGURE GRID on the home poster. Built from
+   market-quality-mockups/today-v4.html; the rules are in tally/CLAUDE.md under
+   "The figure contract".
+     --safe   gutter no drawing may enter
+     --strip  the band at the bottom that carries level + XP, so those stop
+              crossing the character's legs and cutting the pet in half
+   The scene grew by the height of the strip rather than the art shrinking by it. */
+.hero-scene { height: min(58vh, 470px); --safe: 16px; --strip: 92px; }
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
-.hero-char { position: absolute; inset: 4% 0 2% 0; z-index: 2; } /* bonehead stays the hero: full size, prominent */
+/* CENTRED and never anywhere else (Tom: "the bonehead should always be centred").
+   Full width so `contain` centres him horizontally; bottom-aligned so his feet,
+   not his box, sit on the line the pet also stands on. */
+.hero-char { position: absolute; left: 0; right: 0; top: var(--safe);
+  bottom: calc(var(--strip) + var(--safe)); z-index: 2; }
 .hero-char .bh-anim { --av-fit: contain; }
-.hero-char .bh-anim img { object-fit: contain; }
+.hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
 /* width auto so a long creature (lizard) can be scaled up for equal visual mass
    without being clipped; static pets are still pinned to 98 by the rule below. */
-.hero-companion { position: absolute; right: 7%; bottom: 7%; width: auto; height: auto; min-width: 98px; z-index: 3; filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); animation: petBob 3.2s ease-in-out infinite; }
+/* bottom tuned so the pet's INK baseline matches the Bonehead's, not so its box
+   does: the art carries transparent padding and the stage contains it, so equal
+   box offsets left the pet floating 15px high. tests/figure-audit.mjs measures it. */
+/* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
+   The exact bottom offset is tuned against the MEASURED ink baselines, not the
+   boxes: tests/figure-audit.mjs reports both and fails if they drift. */
+.hero-companion { position: absolute; right: var(--safe); bottom: calc(var(--strip) + var(--safe) + 6px);
+  width: auto; height: auto; min-width: 98px; z-index: 3;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); animation: petBob 3.2s ease-in-out infinite; }
 /* let the cropped/scaled content size itself; forcing 98 squashed flat pets */
 .hero-companion .petcrop { margin-inline: auto; }
 @keyframes petBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .hero-companion { animation: none; } }
+/* The only ground cue. A floor band was tried in the v2 mockup and Tom killed it
+   ("that floot mockup looks ugly it better not be in the final art"); two soft
+   contact shadows carry the shared plane on their own. */
+.hero-cast { position: absolute; bottom: calc(var(--strip) + var(--safe) - 8px); height: 16px; z-index: 1;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, rgba(42,45,40,.42) 0%, rgba(42,45,40,0) 70%); }
+.hero-cast.c-bh { left: 50%; width: 40%; transform: translateX(-50%); }
+.hero-cast.c-pet { right: calc(var(--safe) + 4px); width: 24%; }
 .hero-yard {
   position: absolute; left: 3%; bottom: 10%; width: clamp(64px, 21%, 104px);
   z-index: 1; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
@@ -2015,7 +2047,8 @@ body::before {
 .fp-pet { position: absolute; right: 20%; bottom: 6px; width: auto; max-width: 45%; text-align: center; z-index: 1; filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 .fp-pet .petanim, .fp-pet .petcrop, .fp-pet .pet-shiny-wrap { margin-inline: auto; }
 /* size comes from croppedPetImg now; forcing 70 square clipped long pets */
-.fp-pet-lvl { display: block; font-size: 10px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
+/* out of flow, so the caption does not lift the pet off the Bonehead's baseline */
+.fp-pet-lvl { position: absolute; left: 0; right: 0; bottom: -14px; display: block; font-size: 10px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
 .fp-lvlbadge {
   position: absolute; left: 8%; top: 10px; z-index: 2; font-family: var(--display); font-size: 18px; letter-spacing: 0.5px;
   color: #12140b; background: var(--accent); border-radius: 999px; padding: 3px 12px;
@@ -4738,15 +4771,23 @@ body::before {
 .spp .tower img { width: 100%; display: block; filter: grayscale(.3) brightness(.8); }
 .spp .keeper { position: relative; height: 250px; display: grid; place-items: end center; }
 .spp .bh { position: relative; width: 170px; height: 215px; margin-bottom: 6px; }
-.spp .bh img, .spp .bh .bh-anim { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* BOTTOM-aligned, not centred: contain letterboxes the art and centring it left
+   the keeper's feet 33px above the pet's (measured by tests/figure-audit.mjs).
+   See THE FIGURE CONTRACT in that file. */
+.spp .bh img, .spp .bh .bh-anim { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom center; }
 .spp .bh img { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .55)); }
 /* nobody holds it: the tombstone is the figure, and there is nobody to spotlight */
 .spp.empty .spot { display: none; }
 .spp.empty .tower { position: static; width: auto; opacity: 1; transform: none; }
 .spp.empty .keeper { height: 200px; }
 .spp.empty .bh img { filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .5)); }
-.spp .pet { position: absolute; right: 22px; bottom: 10px; width: 64px; }
-.spp .pet img { width: 100%; display: block; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5)); }
+/* BESIDE THE KEEPER, NOT IN THE CORNER. The figure is centred and 170 wide, so
+   the pet is anchored off the same centre line and overlaps its right edge a
+   little: it reads as standing next to them on the tower rather than as a sticker
+   in the corner of the poster. Bottom matches the figure's own 6px margin so both
+   sets of feet land on one line. */
+.spp .pet { position: absolute; left: 50%; margin-left: 52px; bottom: 6px; width: 74px; height: 74px; }
+.spp .pet .petcrop, .spp .pet .petanim { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5)); }
 /* the title you only get by HOLDING it, which is the whole brag */
 .spp .ribbon {
   position: absolute; left: 0; top: 16px; display: inline-flex; align-items: center; gap: 6px;

@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 302, date: '2026-08-08', title: 'Your Bonehead and your pet, done properly', items: [
+    'A <b>shiny pet now shows up as shiny everywhere</b>. It was being drawn in its base colours on the startup animation, the level-up card, the Bonehead tab, your map marker, the Dark Spire poster and in fights. Six screens, same mistake in each.',
+    'The <b>Today screen is rebuilt</b>. Your Bonehead is centred and nothing crosses him any more: your level and XP moved to their own band underneath instead of sitting over his legs and cutting your pet in half. Your pet stands <b>beside him on the same ground</b>, and the speech bubble comes out of his jaw rather than the top of his head.',
+    'Tapping a <b>Dark Spire</b> shows the keeper\'s pet next to them, in the right colours.',
+  ] },
   { n: 301, date: '2026-08-08', title: 'Everyone in the race counts the same week', items: [
     'The Step Race board was showing totals from before the race started. Your steps are counted <b>on your own phone</b>, so anyone who had not updated yet kept sending a number that included days the race had not begun. The board now <b>only ranks totals counted under the current rules</b>, so nobody leads with a head start. If a friend is missing from the standings, they need to open the app once to update.',
     '<b>You are always on your own board</b> now, with the count from your own phone, even in the seconds before it reaches the server. No more being told nobody has walked a step on a day you walked five thousand.',
