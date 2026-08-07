@@ -1395,8 +1395,14 @@ async function renderToday(el) {
   const protHit = t.p && tot.p >= t.p;
 
   el.innerHTML = `
-  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage">
-    ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
+  <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
+       backdrop covers it completely, and on a tab switch the card paints a frame
+       or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
+       colour behind my bonehead when switching tabs very briefly". So when a
+       backdrop IS equipped, the ground underneath it is the app's own dark, and
+       there is nothing bright to flash through. -->
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
+    ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
     ${eq.C && BH_BY_ID[eq.C] ? `<div class="hero-companion">${petSpriteHtml(eq.C, 98, false, { mass: true })}</div>` : ''}
 
@@ -5128,6 +5134,24 @@ async function renderFriends(el) {
     if (!RACE_LIVE) return;
     const myFit = await equipped();
     const wk = raceWeekKey(dateKey());
+    /* PUSH BEFORE YOU PULL. Tom, 2026-08-08: "how often is the step race
+       challenge checking? ive walked since then and dont see myself in 1st. this
+       should updating frequently."
+       The board reads weekSteps out of the profile snapshot, and that snapshot
+       only ever reached the server from autoSync at boot/resume, behind a 5
+       MINUTE throttle. Opening the board pushed nothing, so you could walk all
+       afternoon and watch a stale number. Now opening it syncs your own steps
+       first: on a phone that means pulling fresh HealthKit numbers too, since
+       walking mid-session never lands in the local store on its own.
+       Throttled at 20s so flicking between tabs is not a PUT per tap. */
+    const lastPush = (await kvGet('racePushAt', 0)) || 0;
+    if (Date.now() - lastPush > 20000) {
+      await kvSet('racePushAt', Date.now());
+      try {
+        await nativeSyncNow({ silent: true });
+        await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V);
+      } catch { /* a failed push must never cost you the board */ }
+    }
     const race = await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
     if (!card || !card.isConnected) return;
@@ -9433,7 +9457,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v292'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v293'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
