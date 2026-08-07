@@ -5405,3 +5405,32 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire { transition: none; }
 }
+
+/* A SEALED GIFT. Tom, 2026-08-08: "otherwise deliveries reads like a receipt
+   you'd get at a store." So an unopened gift is not a row: it is a closed thing
+   with the sender's name on it and one obvious verb. */
+.gift-sealed {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  background: var(--surface-2); border: 2px solid var(--gold); border-radius: var(--radius);
+  box-shadow: var(--sh-sm); padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  transition: transform .16s ease, opacity .16s ease;
+}
+.gift-sealed .wrap { flex: none; display: grid; place-items: center; animation: giftnudge 2.4s ease-in-out infinite; }
+.gift-sealed .tx { flex: 1; min-width: 0; }
+.gift-sealed .tx b { display: block; font-size: var(--fs-3); color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gift-sealed .tx small { display: block; font-size: var(--fs-1); color: var(--text-2); }
+.gift-sealed .open {
+  flex: none; font-family: var(--display); font-size: var(--fs-2); letter-spacing: .06em;
+  background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
+  border-radius: 999px; box-shadow: var(--sh-sm); padding: 3px 12px;
+}
+.gift-sealed.popping { transform: scale(1.06); opacity: 0; }
+@keyframes giftnudge {
+  0%, 88%, 100% { transform: rotate(0) scale(1); }
+  92% { transform: rotate(-7deg) scale(1.06); }
+  96% { transform: rotate(7deg) scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gift-sealed .wrap { animation: none; }
+  .gift-sealed.popping { transform: none; }
+}

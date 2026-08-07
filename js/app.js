@@ -970,7 +970,34 @@ async function deliverySeenTs() {
 }
 async function unseenDeliveryCount() {
   const seen = await deliverySeenTs();
-  return (await crewDeliveries(60)).filter(r => (r.ts || 0) > seen).length;
+  const unread = (await crewDeliveries(60)).filter(r => (r.ts || 0) > seen).length;
+  // A sealed gift is ALWAYS waiting for you, however long ago it arrived, so it
+  // keeps the badge up until you actually open it. That is the whole point.
+  return unread + (await social.giftBox()).length;
+}
+
+/* Who sent it. The server writes the sender into the grant's note ("Brock sent
+   you a gift!"), which is the only place the name exists on this device. */
+function giftSender(g) {
+  const note = (g && g.payload && g.payload.note) || '';
+  const m = note.match(/^(.+?)\s+(?:sent|gifted)\b/i);
+  return (m && m[1].trim()) || 'Someone in your Crew';
+}
+
+/* The reveal. Reuses the approved pack-reveal (t2-pack.html) rather than
+   inventing a second opening animation, and credits the sender on the card. */
+function revealGift(g) {
+  const p = (g && g.payload) || {};
+  const cards = [];
+  if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Golden Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+  if (p.gearId && GEAR_BY_ID[p.gearId]) {
+    const gear = GEAR_BY_ID[p.gearId];
+    cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
+  }
+  if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on transmog and eggs' });
+  if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
+  confettiRain(60); chimeSound(S.sounds); haptic.success();
+  openPackReveal(cards, { coins: p.coins || 0, footerNote: `From ${giftSender(g)}` });
 }
 // Test hooks (webdriver only): the inbox reads a ledger the Crew tab only
 // renders once you have an account, so the reader has to be checkable directly.
@@ -4975,9 +5002,10 @@ async function renderFriends(el) {
   // the tab IS the read receipt, which is the whole point of the inbox.
   const paintDeliveries = async () => {
     const rows = await crewDeliveries();
+    const sealed = await social.giftBox();
     const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
     if (!card || !list) return;
-    if (!rows.length) { card.hidden = true; return; }
+    if (!rows.length && !sealed.length) { card.hidden = true; return; }
     const seen = await deliverySeenTs();
     const isNew = r => (r.ts || 0) > seen;
     /* Show what is actually news, not the archive. Tom, 2026-08-08: "the
@@ -4992,9 +5020,31 @@ async function renderFriends(el) {
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
+    /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
+       fanfare or credit to the sender. otherwise deliveries reads like a receipt
+       you'd get at a store." A gift you have not opened is the only thing on
+       this card that is not history, so it sits on top, closed, with the sender's
+       name on it. */
+    const sealedHtml = sealed.slice().reverse().map(g => `
+      <button class="gift-sealed" data-gift="${esc(g.key)}">
+        <span class="wrap">${bhIcon('crate-golden', 30)}</span>
+        <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
+        <span class="open">OPEN</span>
+      </button>`).join('');
     const rest = rows.length - shown.length;
-    list.innerHTML = shown.map(rowHtml).join('')
+    list.innerHTML = sealedHtml + shown.map(rowHtml).join('')
       + (rest > 0 ? `<button class="btn small ghost" id="deliveriesMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
+    $$('[data-gift]', list).forEach(b => b.addEventListener('click', async () => {
+      if (b.dataset.busy === '1') return;
+      b.dataset.busy = '1';
+      const g = await social.openGift(b.dataset.gift);
+      if (!g) { b.remove(); return; }
+      b.classList.add('popping');
+      await new Promise(r => setTimeout(r, 260));
+      revealGift(g);
+      await paintDeliveries();
+      await refreshCrewBadge();
+    }));
     $('#deliveriesMore', list)?.addEventListener('click', () => {
       list.innerHTML = rows.map(rowHtml).join('');
     });
@@ -9479,7 +9529,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v294'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v295'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 295, date: '2026-08-08', title: 'Gifts get opened', items: [
+    'A gift from your Crew now <b>arrives sealed</b>. It waits on the Crew tab with the sender\'s name on it until you open it yourself, and opening it is a proper reveal rather than a number quietly changing.',
+    'Small fixes: your rank name is no longer clipped at the edges on iPhone, the Boneyard\'s icons all appear together instead of the spires arriving late, and tapping a Dark Spire shows the <b>Bonehead of whoever holds it</b>.',
+    'The Crew tab no longer flashes coral behind your Bonehead when you switch to it.',
+  ] },
   { n: 290, date: '2026-08-08', title: 'The Step Race starts today', items: [
     'Every Bonehead in the game is now in <b>one race</b>. Most steps in seven days wins, it starts the day you read this, and there is nothing to join: your steps are already counting.',
     'The board lives on the <b>Crew tab</b>. It is a track, not a table: everyone runs a lane, <b>your own Bonehead is your marker</b>, and it tells you exactly how far behind first place you are and roughly how long a walk that is.',

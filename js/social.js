@@ -441,9 +441,18 @@ export async function hasCloudBackup() {
 /* ---------------- grants feed down ---------------- */
 // Apply one grant payload as additive rewards. XP goes through award() with the
 // grant's key, so the ledger stays idempotent even if we re-pull.
-async function applyGrant(g) {
-  const p = g.payload || {};
-  const xp = await award(g.key, g.type || 'social', p.xp || 0, p.note || 'From the Crew');
+/* A GIFT IS NOT A RECEIPT. Tom, 2026-08-08: "make it so that you have to open
+   gifts from friends in the crew tab... theres an open animation. its boring to
+   just have it appear with no fanfare or credit to the sender. otherwise
+   deliveries reads like a receipt you'd get at a store."
+   So a gift is HELD, sealed, until you open it by hand. Everything else (step
+   race prizes, spire news, crew rewards) still applies on arrival: those are
+   outcomes, not presents, and holding them would just be friction. */
+const HELD_TYPES = new Set(['gift']);
+const GIFTBOX = 'giftbox';
+
+async function applyPayload(key, type, p) {
+  const xp = await award(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
   if (xp === 0 && p.xp > 0) return false; // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
@@ -453,17 +462,55 @@ async function applyGrant(g) {
   return true;
 }
 
+// Test hook: a grant normally arrives through pullGrants, which needs a live
+// server. This is the same applyGrant the pull uses, so a test exercises the
+// real path rather than a re-implementation of it.
+export const __testApplyGrant = g => applyGrant(g);
+
+/** Sealed gifts waiting to be opened, newest last. */
+export async function giftBox() { return (await kvGet(GIFTBOX, [])) || []; }
+
+/** Open one. Applies the reward at THIS moment, then hands back what was inside
+ *  so the caller can play the reveal and name who sent it. */
+export async function openGift(key) {
+  const box = await giftBox();
+  const g = box.find(x => x.key === key);
+  if (!g) return null;
+  await kvSet(GIFTBOX, box.filter(x => x.key !== key));   // remove first: a double tap must not pay twice
+  await applyPayload(g.key, g.type, g.payload || {});
+  return g;
+}
+
+async function applyGrant(g) {
+  const p = g.payload || {};
+  if (HELD_TYPES.has(g.type)) {
+    const box = await giftBox();
+    if (!box.some(x => x.key === g.key)) {
+      box.push({ key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() });
+      await kvSet(GIFTBOX, box.slice(-100));
+    }
+    return true;    // it landed: it is in your box, sealed
+  }
+  return applyPayload(g.key, g.type, p);
+}
+
 export async function pullGrants() {
   const since = (await kvGet('grantCursor', 0)) || 0;
   const r = await signedFetch('GET', `/grants?since=${since}`);
   if (!r.ok) return { applied: 0 };
   const data = await r.json();
-  let applied = 0;
+  let applied = 0, heldCount = 0;
   const appliedGrants = []; // the grants that actually landed (for the reveal UI)
   const seen = new Set((await kvGet('grantsSeen', [])) || []);
   for (const g of data.grants || []) {
     if (seen.has(g.key)) continue; // belt AND suspenders next to award()'s key check
-    if (await applyGrant(g)) { applied++; appliedGrants.push(g); }
+    if (await applyGrant(g)) {
+      applied++;
+      // a sealed gift is not "delivered" yet: keep it out of the boot reveal so
+      // opening it in the Crew tab is still the first time you see what it is
+      if (!HELD_TYPES.has(g.type)) appliedGrants.push(g);
+      else heldCount++;
+    }
     seen.add(g.key);
   }
   await kvSet('grantsSeen', [...seen].slice(-500));
