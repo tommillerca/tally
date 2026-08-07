@@ -4892,3 +4892,26 @@ body::before {
 .onb-plan h1 { align-self: flex-start; text-align: left; font-size: 30px; }
 .onb-plan #pfHost { width: 100%; }
 .onb-plan .btn { width: 100%; margin-top: 4px; }
+
+/* ---- Phase 4: FEEL. Exits for things that only knew how to enter. ---- */
+.sheet.closing { animation: sheetOut .2s ease-in forwards; }
+@keyframes sheetOut { to { transform: translate(-50%, 105%); } }
+.sheet-backdrop.closing { animation: fadeout .2s ease-in forwards; }
+@keyframes fadeout { to { opacity: 0; } }
+.toast.out { animation: toastOut .18s ease-in forwards; }
+@keyframes toastOut { to { opacity: 0; transform: translate(-50%, 8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .sheet.closing, .sheet-backdrop.closing, .toast.out { animation: none; }
+}
+
+/* the tab you press acknowledges the press; the active state slides in instead
+   of teleporting */
+#tabbar .tab { transition: color .18s ease, transform .12s ease; }
+#tabbar .tab:active { transform: scale(.92); }
+.fab { transition: transform .12s ease; }
+.fab:active { transform: scale(.92); }
+
+/* each route change fades its screen in rather than hard-cutting */
+.screen > .route-in { animation: routeIn .2s ease-out; }
+@keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }

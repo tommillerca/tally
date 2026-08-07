@@ -1,5 +1,6 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
 import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
@@ -337,6 +338,7 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
       return;
     }
     clearTimeout(t);
+    haptic.heavy();   // the second tap commits: every spend/destroy thumps once
     restore();
     await onConfirm();
   });
@@ -430,6 +432,8 @@ async function boot() {
   }
   requestPersistence();
   S.sounds = (await kvGet('sounds', true)) !== false;
+  S.haptics = (await kvGet('haptics', true)) !== false;
+  setHaptics(S.haptics);
   S.glow = (await kvGet('glow', true)) !== false;
   equipped().then(eq => showSplash(eq)).catch(() => {});
 
@@ -975,7 +979,12 @@ function route({ keepScroll = false } = {}) {
   el.classList.toggle('screen--map', tab === 'boneyard');
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
-  return Promise.resolve(done).catch(() => {}).then(() => composeAvatars(el));
+  return Promise.resolve(done).catch(() => {}).then(() => {
+    composeAvatars(el);
+    // Phase 4: a route lands with a 200ms fade instead of a hard cut. The class
+    // goes on the rendered child so an in-place refresh() never re-triggers it.
+    el.firstElementChild?.classList.add('route-in');
+  });
 }
 
 // In-place re-render of the current tab. Unlike navigation (hashchange -> route(),
@@ -1016,12 +1025,29 @@ function bgRefresh() {
 /* ================= shared ui ================= */
 
 let toastTimer = 0;
+const toastQ = [];
+let toastBusy = false;
 function toast(msg, ms = 2200) {
+  toastQ.push({ msg, ms });
+  if (toastQ.length > 4) toastQ.splice(0, toastQ.length - 4); // never a backlog lecture
+  if (!toastBusy) nextToast();
+}
+function nextToast() {
   const t = $('#toast');
-  t.textContent = msg;
+  const job = toastQ.shift();
+  if (!job) { toastBusy = false; return; }
+  toastBusy = true;
+  if (!t.getAttribute('aria-live')) { t.setAttribute('aria-live', 'polite'); t.setAttribute('role', 'status'); }
+  t.classList.remove('out');
+  t.textContent = job.msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  toastTimer = setTimeout(() => {
+    t.classList.add('out');
+    // exit animation, then the next message; reduced-motion gets the instant path
+    const done = () => { t.hidden = true; t.classList.remove('out'); nextToast(); };
+    if (reducedMotion) done(); else setTimeout(done, 180);
+  }, job.ms);
 }
 
 const sheetStack = [];
@@ -1046,7 +1072,17 @@ function closeTopSheet() {
   const rec = sheetStack.pop();
   if (!rec) return;
   try { rec.onClose?.(); } catch { /* noop */ }
-  rec.wrap.remove();
+  const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
+  if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
+  // slide down + backdrop fade, then remove. pointer-events off immediately so a
+  // dying sheet can never eat a tap meant for what is behind it.
+  rec.wrap.style.pointerEvents = 'none';
+  sheet.classList.add('closing');
+  back?.classList.add('closing');
+  let gone = false;
+  const bury = () => { if (!gone) { gone = true; rec.wrap.remove(); } };
+  sheet.addEventListener('animationend', bury, { once: true });
+  setTimeout(bury, 320);   // animationend can be swallowed by a display:none tab
 }
 function closeAllSheets() {
   while (sheetStack.length) closeTopSheet();
@@ -3076,6 +3112,26 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   renderQty();
   preview();
+}
+
+/* Phase 4: window.prompt in a hand-illustrated game read like a fire alarm in a
+   theatre. One small sheet replaces both fit-naming prompts; Enter submits. */
+function openTextSheet({ title, value = '', placeholder = '', cta = 'Save' }, onSave) {
+  const wrap = openSheet(`
+    <div class="sheet-head">
+      <div class="hd"><h2>${esc(title)}</h2></div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+    </div>
+    <div class="sheet-body">
+      <div class="t1-field"><input id="txIn" type="text" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off"></div>
+    </div>
+    <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: title });
+  const input = $('#txIn', wrap);
+  setTimeout(() => { input.focus(); input.select(); }, 120);
+  const go = () => { const v = input.value.trim(); history.back(); setTimeout(() => onSave(v), 180); };
+  $('#txGo', wrap).addEventListener('click', go);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+  return wrap;
 }
 
 function closeAllSheetsViaHistory() {
@@ -5224,6 +5280,10 @@ async function renderSettings(el) {
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
     <div class="settings-row">
+      <div class="lab"><b>Haptics</b><span>A little thump on collects, hits and level-ups</span></div>
+      <div class="seg" style="width:130px"><button id="hapOn" class="${S.haptics ? 'on' : ''}">On</button><button id="hapOff" class="${S.haptics ? '' : 'on'}">Off</button></div>
+    </div>
+    <div class="settings-row">
       <div class="lab"><b>Gear glow</b><span>The coloured halo on epic weapons and slimed pieces. Turn it off for a clean look; stats are unaffected.</span></div>
       <div class="seg" style="width:130px"><button id="glowOn" class="${S.glow ? 'on' : ''}">On</button><button id="glowOff" class="${S.glow ? '' : 'on'}">Off</button></div>
     </div>
@@ -5276,10 +5336,9 @@ async function renderSettings(el) {
   });
   $('#recoveryBtn', el)?.addEventListener('click', () => openRecoverySheet());
   $('#restoreAcctBtn', el)?.addEventListener('click', () => openRestoreSheet());
-  $('#vaultAdoptBtn', el)?.addEventListener('click', async () => {
+  armToConfirm($('#vaultAdoptBtn', el), 'Replace this save?', async () => {
     const other = await social.vaultOtherIdentity();
     if (!other) { toast('That other Bonehead is no longer on this phone.'); refresh(); return; }
-    if (!confirm('Switch to the other Bonehead saved on this phone? What is on this phone now will be replaced by that account’s save.')) return;
     const r = await social.adoptIdentity(other);
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
@@ -5373,6 +5432,8 @@ async function renderSettings(el) {
     toast('Saved');
   });
   $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
+  $('#hapOn')?.addEventListener('click', async () => { S.haptics = true; setHaptics(true); await kvSet('haptics', true); haptic.success(); refresh(); });
+  $('#hapOff')?.addEventListener('click', async () => { S.haptics = false; setHaptics(false); await kvSet('haptics', false); refresh(); });
   $('#sndOff').addEventListener('click', async () => { S.sounds = false; await kvSet('sounds', false); refresh(); });
   $('#glowOn')?.addEventListener('click', async () => { S.glow = true; await kvSet('glow', true); popSound(S.sounds); refresh(); });
   $('#glowOff')?.addEventListener('click', async () => { S.glow = false; await kvSet('glow', false); refresh(); });
@@ -5404,12 +5465,26 @@ async function renderSettings(el) {
       refresh();
     } catch (err) { toast('Import failed: ' + err.message, 3200); }
   });
-  $('#eraseBtn').addEventListener('click', async () => {
-    if (!confirm('Erase ALL Boneheadz Gym data on this device? This cannot be undone.')) return;
-    if (!confirm('Last check: your log, foods, and weights will be gone.')) return;
-    await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-    for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
-    location.reload();
+  $('#eraseBtn').addEventListener('click', () => {
+    const wrap = openSheet(`
+      <div class="sheet-head">
+        <div class="hd"><h2>Erase everything?</h2><div class="sub">This cannot be undone</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+      </div>
+      <div class="sheet-body">
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
+        <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
+      </div>
+      <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
+    const input = $('#erIn', wrap), go = $('#erGo', wrap);
+    input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
+    go.addEventListener('click', async () => {
+      if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
+      go.disabled = true; go.textContent = 'Erasing...';
+      await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
+      for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
+      location.reload();
+    });
   });
   // Force-fetch the latest build: drop the service worker + all caches, then
   $('#whatsNewBtn')?.addEventListener('click', openWhatsNew);
@@ -5688,6 +5763,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   if (!levelUp && !bits.length) return;
   confettiRain();
   levelSound(S.sounds);
+  haptic.reward();
   let hero = '';
   if (levelUp) {
     const eq = await equipped();
@@ -6077,10 +6153,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
         if (e.target.closest('[data-fit-del]')) return;      // the ✕ has its own handler
         if (S.fitEdit === chip.dataset.fit) {                 // in edit mode a tap renames
           const cur = (await fits()).find(f => f.id === chip.dataset.fit);
-          const name = prompt('Name this fit', cur ? cur.name : '');
-          if (name != null) await renameFit(chip.dataset.fit, name.trim() || (cur && cur.name));
-          S.fitEdit = null;
-          renderCharacter(wrap, 'wardrobe', { instant: true });
+          openTextSheet({ title: 'Name this fit', value: cur ? cur.name : '', cta: 'Rename' }, async name => {
+            if (name) await renameFit(chip.dataset.fit, name);
+            S.fitEdit = null;
+            renderCharacter(wrap, 'wardrobe', { instant: true });
+          });
           return;
         }
         const res = await applyFit(chip.dataset.fit);
@@ -6101,13 +6178,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
     $('[data-fit-save]', content)?.addEventListener('click', async () => {
-      const name = prompt('Name this fit', `Fit ${fitList.length + 1}`);
-      if (name == null) return;
-      const res = await captureFit(name.trim());
-      if (!res.ok) { toast(res.reason === 'full' ? `You can keep ${res.max} fits. Bin one first.` : 'Could not save that fit.', 2800); return; }
-      levelSound(S.sounds);
-      toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      openTextSheet({ title: 'Name this fit', value: `Fit ${fitList.length + 1}`, cta: 'Save fit' }, async name => {
+        if (!name) return;
+        const res = await captureFit(name);
+        if (!res.ok) { toast(res.reason === 'full' ? `You can keep ${res.max} fits. Bin one first.` : 'Could not save that fit.', 2800); return; }
+        levelSound(S.sounds);
+        toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+      });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
@@ -6744,9 +6822,9 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       Promise.race([hydratePackArt(stage), new Promise(r => setTimeout(r, 700))]).then(() => {
         card.classList.remove('art-wait');
         requestAnimationFrame(() => card.classList.add('in'));
-        if (tier >= 4) { confettiRain(95); levelSound(S.sounds); }            // legendary
-        else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); }
-        else sparkleSound(S.sounds);
+        if (tier >= 4) { confettiRain(95); levelSound(S.sounds); haptic.reward(); }   // legendary
+        else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); haptic.success(); }
+        else { sparkleSound(S.sounds); haptic.tap(); }
       });
 
       let sx = 0, dx = 0, pid = null;
@@ -8463,6 +8541,7 @@ async function renderBoneyard(el) {
 
     $('#mapCollect', body).addEventListener('click', async () => {
       if (tooFastToAct()) return;
+      haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
       if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
@@ -8708,7 +8787,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v277'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v278'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9435,6 +9514,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         setTimeout(() => {
           pulse(vicStage, 'hurt', fxMs + 150);
           impactBurst(vicSide, school, ev.crit);
+          haptic.heavy();
           floatNode(`-${ev.damage}`, vicSide, 'dmg ' + (school === 'phys' ? 'magic' : school));
           if (ev.crit) { floatNode('CRIT!', vicSide, 'stamp hot'); }
           hitSound(S.sounds, 'zap');
@@ -9451,6 +9531,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           pulse(vicStage, 'hurt', fxMs + 150);
           impactBurst(vicSide, 'phys', heavy);
           if (heavy) pulse(el('arena'), 'quake', fxMs + 160);
+          haptic.heavy();
           floatNode(`-${ev.damage}`, vicSide, 'dmg' + (ev.crit ? ' crit' : '') + (ev.signature ? ' sig' : ''));
           if (ev.crit) floatNode('CRIT!', vicSide, 'stamp hot');
           if (ev.glance) floatNode('glancing', vicSide, 'stamp dim');

@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 278, date: '2026-08-07', title: 'It feels like a game now', items: [
+    '<b>Haptics.</b> Collecting on the map, landing a hit in the Pit, confirming a spend, levelling up and pulling something legendary all give a little thump on phones that can. There is an on/off switch in Settings next to Sounds.',
+    '<b>Sheets close like they opened.</b> Every panel in the game used to vanish in a single frame on the way out. They slide away now, and screens fade in when you switch tabs instead of hard-cutting.',
+    '<b>No more browser popups.</b> Naming a saved fit gets a proper panel instead of the grey system box, switching to another save asks the two-tap way everything else does, and erasing all your data now requires typing the word ERASE rather than tapping OK twice on reflex.',
+    'Messages at the bottom of the screen now <b>wait their turn</b> instead of overwriting each other mid-read.',
+  ] },
   { n: 277, date: '2026-08-07', title: 'A proper welcome', items: [
     'The <b>first-run experience is new</b>. Instead of a feature list and a form, the game introduces itself: meet your Bonehead, name it (or keep rerolling until one makes you laugh), see how logging, walking and fighting feed each other, then set your plan.',
     'The name you pick carries into the <b>Crew</b> when you go online later.',

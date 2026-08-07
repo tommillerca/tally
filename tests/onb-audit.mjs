@@ -128,13 +128,22 @@ await p.evaluate(() => document.getElementById('onbGo')?.click()); await sleep(7
 await p.evaluate(() => document.getElementById('onbMe')?.click()); await sleep(700);
 const skipText = await p.evaluate(() => document.getElementById('onbSkip')?.textContent || '');
 ok('HONEST-SKIP the skip states the default body up front', /30 yr/.test(skipText) && /180 lb/.test(skipText), skipText.slice(0, 70));
+/* v278 gave the toast a QUEUE, so a single read at a fixed time now sees
+   whichever message is at the head (a boot tip fires before the welcome kit and
+   is no longer stomped). Observe the slot for the whole window instead: the
+   contract is that the welcome kit is SAID, not that it is said first. */
+await p.evaluate(() => {
+  window.__toasts = [];
+  const t = document.getElementById('toast');
+  new MutationObserver(() => { if (!t.hidden && t.textContent) window.__toasts.push(t.textContent); })
+    .observe(t, { childList: true, attributes: true, characterData: true, subtree: true });
+});
 await p.evaluate(() => document.getElementById('onbSkip')?.click());
-await sleep(2400);
+await sleep(7000);
 const skipped = await p.evaluate(async () => {
   const db = (await import('./js/db.js'));
   const s = await db.kvGet('settings', null);
-  const toast = document.getElementById('toast');
-  return { saved: !!s, h: s?.profile?.heightCm, kg: Math.round(s?.profile?.weightKg || 0), toast: toast && !toast.hidden ? toast.textContent : '' };
+  return { saved: !!s, h: s?.profile?.heightCm, kg: Math.round(s?.profile?.weightKg || 0), toast: [...new Set(window.__toasts)].join(' | ') };
 });
 ok('HONEST-SKIP saved profile IS the stated body', skipped.saved && skipped.h === 178 && skipped.kg === 82, JSON.stringify(skipped));
 /* the defaults statement lives in the skip line BEFORE the tap (asserted above);
