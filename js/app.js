@@ -6483,9 +6483,9 @@ function openHatchReveal(res, charWrap) {
       <div class="hatch-flash"></div>
       <div class="bone-egg" id="boneEgg">
         <svg class="egg-cracks" viewBox="0 0 100 130" preserveAspectRatio="none" aria-hidden="true">
-          <path class="ec" d="M50 8 L45 36 L55 58 L46 82"/>
-          <path class="ec" d="M50 8 L59 32 L49 54"/>
-          <path class="ec" d="M28 62 L46 68 L38 88 L54 100"/>
+          <path class="ec" pathLength="1" d="M50 8 L45 36 L55 58 L46 82"/>
+          <path class="ec" pathLength="1" d="M50 8 L59 32 L49 54"/>
+          <path class="ec" pathLength="1" d="M28 62 L46 68 L38 88 L54 100"/>
         </svg>
         ${shards}
       </div>
@@ -7796,7 +7796,15 @@ async function openStable() {
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
       </div>
-      ${pair ? `<div class="breed-bar${spareIsPrecious ? ' careful' : ''}">
+      ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
+      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      <!-- THE DECISION FOLLOWS YOU DOWN THE PAGE. Tom, 2026-08-08: "when you
+           select two pets to breed it's unclear that i need to scroll to the top
+           to see whats happening." It used to render ABOVE the pet list, so
+           picking your second pet put the whole explanation off-screen behind
+           you. It is the last thing in the body now and sticks to the bottom of
+           the sheet, so it appears where your thumb already is. -->
+      ${pair ? `<div class="breed-bar sticky${spareIsPrecious ? ' careful' : ''}">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
             <span class="bt-out">
@@ -7824,9 +7832,7 @@ async function openStable() {
           <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
-        </div>`
-      : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
-      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}`;
+        </div>` : ''}`;
 
     $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
       if (e.target.closest('button')) return; // don't hijack Equip/Breed/Destroy
@@ -9578,7 +9584,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v297'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v298'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

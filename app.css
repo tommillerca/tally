@@ -2121,15 +2121,20 @@ body::before {
   border: 3px solid #17140f; box-shadow: inset -8px -10px 16px rgba(120, 100, 66, 0.35), inset 6px 8px 12px rgba(255, 255, 255, 0.45), 0 8px 10px rgba(0, 0, 0, 0.35);
   animation: eggDrop 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
 }
-.bone-egg::before { /* faint bone suture seam */
-  content: ''; position: absolute; left: 50%; top: 12%; bottom: 20%; width: 2px; transform: translateX(-50%);
-  background: repeating-linear-gradient(0deg, rgba(23, 20, 15, 0.25) 0 4px, transparent 4px 8px);
-}
+/* The "faint bone suture seam" that used to live here was a repeating-linear-
+   gradient down the middle of the egg: a permanent dashed line, present before
+   anything hatched and unrelated to the cracks. Tom, 2026-08-08: "i dont like
+   the weird dotted line on the egg during the hatching animation..it should only
+   be the cracks." Removed. The cracks are the only marks on the egg now. */
 @keyframes eggDrop { 0% { transform: translateY(-40px) scale(0.7); opacity: 0 } 70% { opacity: 1 } 100% { transform: translateY(0) scale(1); opacity: 1 } }
 .bone-egg.wob { animation: eggWob 0.36s ease-in-out; }
 @keyframes eggWob { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-7deg) } 50% { transform: rotate(6deg) } 75% { transform: rotate(-3deg) } }
 .egg-cracks { position: absolute; inset: 8px 12px; width: calc(100% - 24px); height: calc(100% - 16px); overflow: visible; }
-.egg-cracks .ec { fill: none; stroke: #17140f; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 140; stroke-dashoffset: 140; }
+/* pathLength=1 on each path (set in the markup) normalises the dash to the
+   path's OWN length, so a crack always draws as one continuous stroke however
+   the egg is scaled. The old fixed 140 happened to exceed all three paths
+   (78/50/61) and so happened to work; a longer crack would have dashed. */
+.egg-cracks .ec { fill: none; stroke: #17140f; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
 .egg-cracks .ec.draw { transition: stroke-dashoffset 0.3s ease-out; stroke-dashoffset: 0; }
 .egg-shard {
   position: absolute; top: 50%; left: 50%; width: 12px; height: 16px; margin: -8px 0 0 -6px; opacity: 0; z-index: 3;
@@ -5433,4 +5438,15 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .gift-sealed .wrap { animation: none; }
   .gift-sealed.popping { transform: none; }
+}
+
+/* The breed panel is a CHECKOUT BAR: it follows you down the pet list instead of
+   sitting at the top where selecting your second pet pushed it off-screen. */
+.breed-bar.sticky {
+  position: sticky; bottom: 0; z-index: 4; margin-top: 14px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, .45), var(--sh);
+  /* capped so the panel cannot swallow the whole screen: the pets you are
+     choosing between have to stay visible above it */
+  max-height: 58vh; overflow-y: auto; overscroll-behavior: contain;
 }
