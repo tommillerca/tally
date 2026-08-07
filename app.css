@@ -1767,33 +1767,86 @@ body::before {
   padding: 8px 10px; border: 2px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
-/* THE WEEKLY STEP RACE. A standings list with a clock on it: the top three carry
-   medal colours so first place is worth wanting, and your own row is the only
-   accent on the card so you can find yourself without reading. */
-.race-rows { display: grid; gap: 4px; margin-top: 4px; }
-.race-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 9px; border: 2px solid var(--line); border-radius: var(--radius-sm);
-  background: var(--surface-2);
+/* THE STEP RACE, from market-quality-mockups/race.html + race-open.html.
+   A <details> banner in the Dark Spires / Bone Garden family, so the art has a
+   permanent home instead of appearing once in the announcement. The board is a
+   TRACK: the fill is distance relative to the leader and the marker is the
+   racer's own Bonehead, because "people want to see and show off their guy"
+   (Tom, 2026-08-08) and a rank number tells you nothing about who is ahead. */
+.race-banner > summary { position: relative; overflow: hidden; }
+.race-banner .race-ico { background: var(--coral); }
+/* the player's own Bonehead, clipped into the corner of the summary */
+.race-art {
+  position: absolute; right: -10px; bottom: -34px; width: 96px; height: 110px;
+  opacity: .42; pointer-events: none; z-index: 0;
 }
-.race-row b { flex: 1; min-width: 0; font-weight: 600; font-size: var(--fs-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.race-row .rk {
-  flex: none; width: 22px; height: 22px; display: grid; place-items: center;
-  font-family: var(--display); font-size: var(--fs-1);
-  border: 2px solid var(--ink); border-radius: 6px; background: var(--surface-3); color: var(--text-2);
+.race-art .bh-anim { position: absolute; inset: 0; }
+.race-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.race-banner .gbn-txt, .race-banner .gbn-ico, .race-banner .gbn-chev { position: relative; z-index: 1; }
+
+.race-champ {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 12px;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 8px 11px;
+  font-size: var(--fs-1); color: var(--text-2); line-height: 1.35;
 }
-.race-row.r1 .rk { background: var(--gold); color: #201500; }
-.race-row.r2 .rk { background: #cdd3da; color: #1b1f24; }
-.race-row.r3 .rk { background: #d69a6a; color: #241305; }
-.race-row .st { flex: none; font-variant-numeric: tabular-nums; font-size: var(--fs-1); color: var(--text-2); }
-.race-row.you { border-color: var(--accent); }
-.race-row.you b, .race-row.you .st { color: var(--accent); }
-.race-foot {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 11px;
-  padding-top: 10px; border-top: 2px solid var(--line);
+.race-champ b { color: var(--gold); font-weight: 800; }
+
+.race-lanes { display: grid; gap: 7px; }
+.race-lane { display: grid; grid-template-columns: 26px 1fr; gap: 9px; align-items: center; }
+.race-lane .rk {
+  width: 26px; height: 26px; display: grid; place-items: center;
+  font-family: var(--display); font-size: var(--fs-2); color: var(--ink);
+  background: var(--surface-3); border: 2px solid var(--ink); border-radius: 8px;
+  box-shadow: var(--sh-sm);
 }
-.race-foot b { font-family: var(--display); font-size: var(--fs-2); color: var(--gold); }
-.race-foot span { font-size: var(--fs-0); color: var(--text-3); }
+.race-lane.r1 .rk { background: var(--gold); }
+.race-lane.r2 .rk { background: #cdd3da; }
+.race-lane.r3 .rk { background: #d69a6a; }
+.race-lane.r4 .rk, .race-lane.r5 .rk { color: var(--text-2); }
+/* the leader's marker is centred on 100% and would be sliced by the card edge */
+.race-lane .bd { min-width: 0; padding-right: 13px; }
+.race-lane .nm { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
+.race-lane .nm b {
+  font-size: var(--fs-2); font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.race-lane .nm .st { margin-left: auto; font-size: var(--fs-1); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.race-lane .track {
+  position: relative; height: 14px; background: var(--surface-3);
+  border: 2px solid var(--ink); border-radius: 999px;
+}
+.race-lane .track > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--text-3); }
+.race-lane.r1 .track > i { background: var(--gold); }
+.race-lane.you .track > i { background: var(--accent); }
+.race-lane .run {
+  position: absolute; top: -11px; transform: translateX(-50%);
+  width: 32px; height: 32px; overflow: hidden;
+  background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: var(--sh-sm);
+}
+/* zoom to the HEAD: the source art is full-body, so a plain contain fit makes
+   every racer read as the same grey smudge at 32px */
+.race-lane .run .bh-anim { position: absolute; inset: 0; }
+.race-lane .run img { position: absolute; left: 50%; top: -24%; width: 250%; height: auto; transform: translateX(-50%); }
+.race-lane.r1 .run { border-color: var(--gold); }
+.race-lane.you .run { border-color: var(--accent); }
+.race-lane.you .nm b { color: var(--accent); }
+
+.race-gap { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); font-size: var(--fs-1); color: var(--text-2); }
+.race-gap b { color: var(--accent); font-weight: 800; }
+
+.race-purse { margin-top: 12px; padding-top: 11px; border-top: 2px solid var(--line); }
+.race-purse .lab {
+  display: block; font-size: var(--fs-0); letter-spacing: .09em; font-weight: 800;
+  text-transform: uppercase; color: var(--coral); margin-bottom: 8px;
+}
+.race-purse .rows { display: grid; gap: 6px; }
+.race-purse .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.race-purse .row .pl { width: 30px; font-family: var(--display); font-size: var(--fs-2); color: var(--text-2); }
+.race-purse .row.p1 .pl { color: var(--gold); }
+.race-purse .row.p2 .pl { color: #cdd3da; }
+.race-purse .row.p3 .pl { color: #d69a6a; }
 .lb-wait { margin-top: 10px; font-size: var(--fs-1); color: var(--text-3); }
 .lb-youare b { font-family: var(--display); font-size: var(--fs-4); color: var(--accent); }
 .lb-youare span { font-size: var(--fs-1); color: var(--text-2); min-width: 0; }
@@ -3627,6 +3680,15 @@ body::before {
 .spire-intro-art img { width: 132px; height: 132px; object-fit: contain;
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6)); }
 .spire-veil .spire-terms { text-align: left; margin: 4px 4px 14px; }
+/* The step-race poster: YOUR bonehead on a start line. One drawn line under the
+   feet reads as a race; a field of dashes behind the art just reads as noise. */
+.race-intro-art { position: relative; display: grid; place-items: center; margin: 6px 0 4px; height: 168px; }
+.race-intro-art .bh-stage { width: 150px; height: 160px; position: relative; }
+.race-intro-art .startline {
+  position: absolute; left: 8%; right: 8%; bottom: 8px; height: 4px;
+  background: var(--text); opacity: .22; border-radius: 2px;
+}
+.race-veil .spire-terms { text-align: left; margin: 4px 4px 14px; }
 .spire-banner summary .gbn-txt i { color: var(--accent); }
 .spire-ico { background: #0d0f08; }
 .spire-ico img { position: absolute; width: 118%; left: 50%; top: 52%; transform: translate(-50%, -50%); }
@@ -5015,6 +5077,7 @@ body::before {
 }
 .t3-price.dust { background: var(--violet); }
 .t3-price.free { background: var(--mint); }
+.t3-price.crate { background: var(--mint); }   /* step-race podium: a crate is not a price, it is a payout */
 .t3-price svg { display: block; }
 
 .t3-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

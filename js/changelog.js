@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 290, date: '2026-08-08', title: 'The Step Race starts today', items: [
+    'Every Bonehead in the game is now in <b>one race</b>. Most steps in seven days wins, it starts the day you read this, and there is nothing to join: your steps are already counting.',
+    'The board lives on the <b>Crew tab</b>. It is a track, not a table: everyone runs a lane, <b>your own Bonehead is your marker</b>, and it tells you exactly how far behind first place you are and roughly how long a walk that is.',
+    'The <b>top five all get paid</b>. First takes <b>5,000 coins, a Golden Crate and 200 Bone Dust</b>, down to 400 coins and a crate for fifth. Then it starts over.',
+  ] },
   { n: 288, date: '2026-08-08', title: 'Crow Lord comes back to earth', items: [
     '<b>Crow Lord was broken.</b> A full Flock pecked for free every turn, never ran out, and won essentially every fight at every difficulty. Crows now <b>leave after they feed</b>, one per peck, so a big Flock is something you keep calling back rather than something you set once. Its damage also goes through armour and wards now, like every other attack in the game.',
   ] },

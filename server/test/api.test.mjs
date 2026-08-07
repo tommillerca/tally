@@ -328,8 +328,12 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.equal(prizes.length, 1, 'last week\'s winner was paid exactly once');
   assert.ok(prizes[0].payload.coins > 0 && /step race/i.test(prizes[0].payload.note || ''), 'the prize says what it was for');
   assert.ok(/1st/.test(prizes[0].payload.note), 'the note names the place finished');
-  assert.equal(r.podium.length, 3, 'the board publishes what all three places pay');
-  assert.ok(r.podium[0].coins > r.podium[1].coins && r.podium[1].coins > r.podium[2].coins, 'places pay in order');
+  // Tom, 2026-08-08: "give 4th and 5th something but just far less than top 3."
+  assert.ok(r.podium.length >= 5, `the board publishes every paying place, got ${r.podium.length}`);
+  for (let i = 1; i < r.podium.length; i++) {
+    assert.ok(r.podium[i].coins < r.podium[i - 1].coins, `place ${i + 1} pays less than place ${i}`);
+  }
+  assert.ok(r.podium[3].coins * 2 < r.podium[2].coins, '4th is FAR less than 3rd, not a near-miss');
 
   // and asking again must not pay twice
   await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);

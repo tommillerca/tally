@@ -498,6 +498,7 @@ async function boot() {
   maybeShowDropPopup();
   maybeShowGardenPopup();
   maybeShowSpireIntro();
+  maybeShowRaceIntro();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -599,6 +600,74 @@ function openSpireIntro() {
   $('#spireIntroLater', veil).addEventListener('click', close);
   veil.addEventListener('click', e => { if (e.target === veil) close(); });
   $('#spireIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+}
+
+/* THE STEP RACE ANNOUNCEMENT (market-quality-mockups/race-announce.html).
+ * Shown once, with the same etiquette as the Dark Spires intro above: never over
+ * the splash, the wheel or an open sheet, and never twice (a kv flag).
+ *
+ * The prize numbers come from RACE_PURSE, which is the SAME literal the Crew
+ * card renders from, because Tom asked for exactly this: "make sure your popup
+ * reflects the new date and prizes we cant have mixed messaging". Hard-coding
+ * them here is how the poster and the board drift apart.
+ */
+const RACE_SEEN_KEY = 'raceIntroSeen';
+const RACE_PURSE = [
+  { place: '1st', coins: 5000, crate: 'golden', dust: 200 },
+  { place: '2nd', coins: 2500, crate: 'golden', dust: 100 },
+  { place: '3rd', coins: 1500, crate: 'golden', dust: 0 },
+  { place: '4th', coins: 600, crate: 'daily', dust: 0 },
+  { place: '5th', coins: 400, crate: 'daily', dust: 0 },
+];
+
+function openRaceIntro() {
+  const top = RACE_PURSE[0];
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil race-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">NEW</span>
+      <p class="drop-eyebrow">STARTS TODAY</p>
+      <h1 class="drop-title">The Step <em>Race</em></h1>
+      <p class="drop-sub">Every Bonehead in the game is in one race. Most steps in ${RACE_DAYS} days takes the purse.</p>
+      <div class="race-intro-art">
+        <span class="startline"></span>
+        <span class="bh-stage lg">${avatarLayersHtml(raceIntroFit, { noYard: true, skip: ['BG', 'C'] })}</span>
+      </div>
+      <ul class="spire-terms">
+        <li>Every step from <b>today</b> counts. Nothing to join, nothing to tap.</li>
+        <li>Watch the board on the <b>Crew tab</b>: who is first, who is behind you, and by how much.</li>
+        <li>The <b>top ${RACE_PURSE.length}</b> all get paid. First takes <b>${top.coins.toLocaleString()} coins</b>, a Golden Crate and <b>${top.dust} dust</b>.</li>
+      </ul>
+      <button class="drop-cta" id="raceIntroGo">SEE THE BOARD</button>
+      <button class="drop-later" id="raceIntroLater">Not now</button>
+    </div>`;
+  document.body.appendChild(veil);
+  composeAvatars(veil);
+  const close = () => veil.remove();
+  $('#raceIntroLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#raceIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
+}
+
+let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
+async function maybeShowRaceIntro() {
+  try {
+    if (!RACE_LIVE) return;
+    if ((navigator.webdriver && !window.__raceForce) || !S.settings) return;
+    if (await kvGet(RACE_SEEN_KEY, false)) return;
+    raceIntroFit = await equipped();       // it is YOUR bonehead on the start line
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(RACE_SEEN_KEY, true);
+      openRaceIntro();
+    };
+    setTimeout(tick, 3200);
+  } catch { /* never block boot */ }
 }
 
 // Pinned Today card: what you hold, what it owes you, and how close it is to
@@ -4842,10 +4911,7 @@ async function renderFriends(el) {
     <!-- THE WEEKLY RACE. Above your Crew because it is the thing with a clock on
          it: a standing you can still change this week beats a list that will look
          the same tomorrow. -->
-    <div class="card race-card" id="raceCard" hidden>
-      <div class="card-title">THIS WEEK'S STEP RACE</div>
-      <div id="raceBody"></div>
-    </div>
+    <details class="glutton-banner race-banner" id="raceCard" hidden></details>
 
     <div class="card">
       <div class="card-title">YOUR CREW</div>
@@ -5042,39 +5108,76 @@ async function renderFriends(el) {
   /* THE WEEKLY STEP RACE. One row per racer, ordered, with YOUR row marked, and
      a countdown, because a race with no clock is just a list. Opening this tab
      is also what settles last week and pays its winner (see /steps/week). */
+  /* THE STEP RACE, built to market-quality-mockups/race.html + race-open.html
+     (Tom: "art is approved"). A <details> banner, the same pattern the Dark
+     Spires and the Bone Garden already use, because the announcement fires once
+     and the art needs a permanent home. The SUMMARY carries the only two facts
+     that change behaviour: where you stand and how long is left.
+     The board is a TRACK, not a table: the fill is each racer's distance
+     relative to the leader and their own Bonehead is the marker, so the GAP is
+     what you read and you can see whose head is in front of yours. */
   const hydrateRace = async () => {
-    // OFF until Tom approves the art. Shipped live once without that approval on
-    // 2026-08-08; his call, and the standing rule is that the mockup comes first.
     if (!RACE_LIVE) return;
+    const myFit = await equipped();
     const wk = raceWeekKey(dateKey());
     const race = await social.fetchStepRace(wk);
-    const card = $('#raceCard', el), body = $('#raceBody', el);
-    if (!card || !body || !card.isConnected || !race) return;
-    const ends = new Date(Date.parse(wk + 'T00:00:00') + 7 * 86400000);
-    const daysLeft = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
+    const card = $('#raceCard', el);
+    if (!card || !card.isConnected || !race) return;
+    const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
+    const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
+    const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
     const rows = race.players || [];
-    if (!rows.length) {
-      body.innerHTML = `<p class="note" style="margin:0">Nobody has logged a step this week. Take a walk and the top of this board is yours.</p>
-        <div class="race-foot"><b>${race.prize.coins.toLocaleString()} coins + a Golden Crate</b><span>to whoever walks the most by Sunday</span></div>`;
-      card.hidden = false;
-      return;
-    }
-    body.innerHTML = `
-      ${race.champion ? `<p class="note" style="margin:0 0 10px"><b>${esc(race.champion.name)}</b> took last week with ${race.champion.steps.toLocaleString()} steps. Beat that.</p>` : ''}
-      <div class="race-rows">
-        ${rows.map(p => `
-          <div class="race-row${p.you ? ' you' : ''} r${p.rank}">
-            <span class="rk">${p.rank}</span>
-            <b>${esc(p.name)}</b>
-            <span class="st">${p.steps.toLocaleString()}</span>
-          </div>`).join('')}
-      </div>
-      ${race.yourRank ? '' : '<p class="note" style="margin:10px 0 0">You are not on the board yet this week.</p>'}
-      <div class="race-foot">
-        <b>${race.prize.coins.toLocaleString()} coins + a Golden Crate</b>
-        <span>${daysLeft === 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`} · ${race.racers} racing</span>
+    const lead = rows.length ? rows[0].steps : 0;
+    const mine = rows.find(p => p.you) || null;
+    const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
+
+    // the one line the collapsed banner exists to show
+    const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
+      : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
+      : behind ? `You are ${ordinal(race.yourRank)}, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
+      : 'You are in front. Keep it that way.';
+
+    const podium = race.podium || [];
+    card.innerHTML = `
+      <summary>
+        <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
+        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-txt"><i>The Step Race · ${clock}</i><b>${standing}</b></span>
+        <span class="gbn-chev">›</span>
+      </summary>
+      <div class="gbn-body">
+        ${race.champion ? `<div class="race-champ">${bhIcon('badge-trophy', 22)}
+          <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
+        ${rows.length ? `<div class="race-lanes">
+          ${rows.map(p => {
+            const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
+            return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
+              <span class="rk">${p.rank}</span>
+              <div class="bd">
+                <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
+                <div class="track"><i style="width:${pct}%"></i>
+                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
+        ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
+        ${podium.length ? `<div class="race-purse">
+          <span class="lab">When it settles, the top ${podium.length} take</span>
+          <div class="rows">
+            ${podium.map((z, i) => `<div class="row p${i + 1}">
+              <span class="pl">${esc(z.place)}</span>
+              <span class="t3-price">${ICONS.coin(13)} ${z.coins.toLocaleString()}</span>
+              ${z.crate ? `<span class="t3-price crate">${crateIcon(z.crate, 15)} ${z.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+              ${z.dust ? `<span class="t3-price dust">${ICONS.dust(12)} ${z.dust}</span>` : ''}
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
+        <p class="note" style="margin:10px 2px 0">Everyone playing is in it. Steps count from the day the race starts.</p>
       </div>`;
     card.hidden = false;
+    composeAvatars(card);
   };
   hydrateRace();
 
@@ -9307,7 +9410,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v289'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v290'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9398,7 +9501,7 @@ async function refreshNotifSchedules() {
    means announcing it on a Thursday hands whoever already walked Mon-Wed a lead
    nobody else agreed to race for. Day one is day one. */
 const RACE_EPOCH = '2026-08-08';
-const RACE_LIVE = false;   // flip ON with Tom's approval of the art, same day the announcement goes out
+const RACE_LIVE = true;    // art approved by Tom 2026-08-08; the race starts the day this ships
 const RACE_DAYS = 7;
 
 function raceWeekKey(date = dateKey()) {
@@ -9406,6 +9509,15 @@ function raceWeekKey(date = dateKey()) {
   if (!(ms >= 0)) return RACE_EPOCH;                     // before launch: everything is period one
   const period = Math.floor(ms / (RACE_DAYS * 86400000));
   return dateKey(new Date(Date.parse(RACE_EPOCH + 'T00:00:00') + period * RACE_DAYS * 86400000));
+}
+// Test hook (webdriver only): the race period boundary is the one rule a player
+// cannot see, so it has to be measurable without waiting a week.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__raceWeek = d => raceWeekKey(d);
+// "2nd", not "2": the banner reads as a sentence, not a stat line
+function ordinal(n) {
+  if (!(n > 0)) return '';
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 function raceWeekDates(weekKey) {
   const t0 = Date.parse(weekKey + 'T00:00:00');

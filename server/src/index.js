@@ -109,10 +109,20 @@ async function verifySigned(request, env, bodyText) {
 /* Tom's call 2026-08-08: "top three should all get a prize of some sort." A
    winner-takes-all board stops mattering to everyone who cannot catch first by
    Wednesday; three places keeps the middle of the pack racing each other. */
+/* Sized against the actual economy, not vibes. Tom, 2026-08-08: "the prizes seem
+   weak, for a week long contest that's all you get? bump it up. and give 4th and
+   5th something but just far less than top 3."
+   Reference points: a Golden Crate is 400 coins in the shop, the top cosmetics
+   are 1,500 to 3,000, a den win pays 120 to 250, and an egg is 60 dust. The old
+   750-coin first prize was worth about three den wins for SEVEN DAYS of walking.
+   First now buys a top-tier cosmetic outright. Total weekly injection across all
+   five places is 10,000 coins, which is a few days of one active player. */
 const STEP_RACE_PODIUM = [
-  { coins: 750, crate: 'golden', place: '1st' },
-  { coins: 400, crate: 'daily', place: '2nd' },
-  { coins: 200, crate: null, place: '3rd' },
+  { coins: 5000, crate: 'golden', dust: 200, place: '1st' },
+  { coins: 2500, crate: 'golden', dust: 100, place: '2nd' },
+  { coins: 1500, crate: 'golden', dust: 0, place: '3rd' },
+  { coins: 600, crate: 'daily', dust: 0, place: '4th' },
+  { coins: 400, crate: 'daily', dust: 0, place: '5th' },
 ];
 const STEP_RACE_PRIZE_COINS = STEP_RACE_PODIUM[0].coins;
 const SPIRE_DORMANT_MS = 7 * 86400000;
@@ -676,12 +686,13 @@ export default {
             // `already` check above still sees the week as settled after one row,
             // and OR IGNORE keeps a re-run from paying anyone twice; the key is
             // unique per (player, key), so three players can each hold one.
-            for (let i = 0; i < Math.min(3, last.length); i++) {
+            for (let i = 0; i < Math.min(STEP_RACE_PODIUM.length, last.length); i++) {
               const p = last[i], prize = STEP_RACE_PODIUM[i];
               await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(p.id, settledKey, 'social', JSON.stringify({
                   coins: prize.coins,
                   ...(prize.crate ? { crate: prize.crate } : {}),
+                  ...(prize.dust ? { dust: prize.dust } : {}),
                   note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
                 }), Date.now()).run();
             }

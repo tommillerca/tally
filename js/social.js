@@ -23,7 +23,7 @@
 
 import { kvGet, kvSet, exportAll, importAll } from './db.js';
 import { award } from './game.js';
-import { coinsAdd, grantCrate, grantConsumable, grantGear } from './loot.js';
+import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd } from './loot.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
 // hidden while unset. Overridable for tests/dev via ?api= or kv 'apiBase'.
@@ -446,6 +446,7 @@ async function applyGrant(g) {
   const xp = await award(g.key, g.type || 'social', p.xp || 0, p.note || 'From the Crew');
   if (xp === 0 && p.xp > 0) return false; // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
+  if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
   if (p.crate) await grantCrate(p.crate, 'social');
   if (p.consumable) await grantConsumable(p.consumable, 'social');
   if (p.gearId) await grantGear(p.gearId, 'social');

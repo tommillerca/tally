@@ -55,6 +55,10 @@ const APPROVED = [
   { screen: 'Pet hatch',     mock: 't2-hatch.html',   built: true, markers: ['reveal-take cool'] },
   { screen: 'Pack reveal',   mock: 't2-pack.html',    built: true, markers: ['pack-pips'] },
   { screen: 'Breed result',  mock: 't2-breed.html',   built: true, markers: ['fused-note', 'breed-trade'] },
+  // The step race, approved 2026-08-08 ("art is approved")
+  { screen: 'Step race banner',  mock: 'race.html',          built: true, markers: ['race-banner', 'race-art'] },
+  { screen: 'Step race board',   mock: 'race-open.html',     built: true, markers: ['race-lanes', 'race-purse', 'race-gap'] },
+  { screen: 'Step race intro',   mock: 'race-announce.html', built: true, markers: ['race-veil', 'race-intro-art', 'raceIntroGo'] },
   // Tier 3, approved 2026-08-07 ("Approved, build all six")
   { screen: 'Shop',       mock: 't3-shop.html',     built: true, markers: ['t3-drop', 't3-dropsect', 't3-price', 't3-forage'] },
   { screen: 'Backpack',   mock: 't3-backpack.html', built: true, markers: ['t3-qty', 't3-egg', 't3-cells'] },
