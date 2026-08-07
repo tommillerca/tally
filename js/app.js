@@ -259,6 +259,19 @@ ICONS.bed = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 
 ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z" fill="#b6a8e8" stroke="#2a2340" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16.5" cy="7.5" r="0.9" fill="#f0ecff"/></svg>`;
 ICONS.trend = (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15l4.6-4.6 3 3L20 6.5"/><path d="M14.5 6.5H20v5.5"/></svg>`;
 
+/* What a find is FOR. The bottom bar used to name the spawn and its distance and
+   never say what it paid, so "Herb patch 105m away" told you nothing worth
+   walking for (Tom, 2026-08-08). Derived from SPAWN_TYPES so a new spawn cannot
+   ship without an answer. */
+function spawnPays(type) {
+  const def = SPAWN_TYPES[type] || {};
+  if (def.crate === 'egg') return 'A Step Egg: walk it out and it hatches a pet';
+  if (def.seeds) return `${def.seeds} garden seeds, plus a cooking ingredient`;
+  if (def.crate) return 'A crate of loot, plus a cooking ingredient';
+  if (def.coins) return `${def.coins} coins, plus a cooking ingredient`;
+  return `${def.xp || 15} XP, plus a cooking ingredient`;
+}
+
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
@@ -8512,9 +8525,24 @@ async function renderBoneyard(el) {
        on its own slow clock, because the spawn refresh runs every 5s and reading
        IndexedDB that often to render one line would be silly. */
     let eggStrip = null, eggStripAt = 0;
+    let mapRace = null;   // the step-race standing, shown on the map's top strip
     async function refreshEggStrip() {
       if (Date.now() - eggStripAt < 25000) return;
       eggStripAt = Date.now();
+      // where you stand in the race, for the top strip
+      try {
+        if (RACE_LIVE) {
+          const wk = raceWeekKey(dateKey());
+          const race = await social.fetchStepRace(wk);
+          const rows = (race && race.players) || [];
+          const mine = rows.find(p => p.you);
+          const lead = rows.length ? rows[0].steps : 0;
+          mapRace = !mine ? null
+            : lead > mine.steps
+              ? `<b>${ordinal(race.yourRank)}</b> · ${(lead - mine.steps).toLocaleString()} behind ${esc(rows[0].name)}`
+              : `<b>1st</b> in the step race · hold it`;
+        }
+      } catch { mapRace = null; }
       try {
         const [inv, steps] = await Promise.all([inventory(), lifetimeStepsSum()]);
         const eggs = inv.filter(r => r.kind === 'egg').map(r => eggProgress(r, steps)).filter(p => !p.ready);
@@ -9132,9 +9160,16 @@ async function renderBoneyard(el) {
       const cnt = $('#mapCount', body);
       if (cnt) {
         const near = live.filter(s => !s.far).length;
-        cnt.innerHTML = eggStrip
-          ? `<b>${eggStrip.left.toLocaleString()}</b> steps to hatch`
-          : `<b>${near || 'Nothing'}</b> ${near === 1 ? 'spawn nearby' : near ? 'nearby' : 'nearby yet'}`;
+        /* THE STANDING LEADS. Tom, 2026-08-08, on replacing the floating bar:
+           "do the combo of 1 plus 3." This is a walking screen, so the line that
+           changes what you do out here is where you sit in the step race. The
+           egg counter is still the fallback when you are not on the board, and
+           the spawn count behind that. */
+        cnt.innerHTML = mapRace
+          ? mapRace
+          : eggStrip
+            ? `<b>${eggStrip.left.toLocaleString()}</b> steps to hatch`
+            : `<b>${near || 'Nothing'}</b> ${near === 1 ? 'spawn nearby' : near ? 'nearby' : 'nearby yet'}`;
       }
       for (const s of live) {
         let rec = spawnMarkers.get(s.id);
@@ -9162,18 +9197,23 @@ async function renderBoneyard(el) {
         // already shows where the thing is, and a second, worse copy of the map
         // in words is what Tom called out. When nothing is at your feet, this
         // card carries PURPOSE instead: the egg your steps are actually feeding.
+        /* THE BAR IS FOR THINGS AT YOUR FEET. Tom, 2026-08-08: "clicking the
+           bottom thing that says herb patch 105m away doesnt tell me what the
+           herb patch is? im unsure we even need this bottom bar floating feature".
+           He is right: a distance readout is a worse copy of the map, and it
+           named the find without ever saying what it was for. It now appears
+           ONLY when something is in reach (or you are moving too fast to loot),
+           and it says what the thing PAYS. The rest of the time the map gets the
+           space back, and the standing line at the top carries the purpose. */
         ro.innerHTML = tooFast
           ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
-          : inRange
-            ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>At your feet</small></span>`
-            : eggStrip
-              ? `<span class="ic">${crateIcon('egg', 20)}</span><span class="tx"><b>${eggStrip.left.toLocaleString()} steps to hatch</b><small>${eggStrip.n > 1 ? `${eggStrip.n} eggs incubating · ` : ''}every step out here counts</small></span>`
-              : nearest
-                ? `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${fmtDist(nearest.dist)} away</small></span>`
-                : `<span class="tx"><b>Cleared nearby</b><small>Keep walking, spawns keep surfacing.</small></span>`;
+          : `${icon}<span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
       }
       const card = $('#mapAct', body);
-      if (card) card.classList.toggle('live', !!inRange && !tooFast);
+      if (card) {
+        card.hidden = !(inRange || tooFast);
+        card.classList.toggle('live', !!inRange && !tooFast);
+      }
       const btn = $('#mapCollect', body);
       if (btn) {
         btn.hidden = !inRange;
@@ -9529,7 +9569,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v295'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v296'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9619,19 +9659,28 @@ async function refreshNotifSchedules() {
    posting it today why the fuck would we do it monday". A Monday-anchored week
    means announcing it on a Thursday hands whoever already walked Mon-Wed a lead
    nobody else agreed to race for. Day one is day one. */
-const RACE_EPOCH = '2026-08-08';
+const RACE_EPOCH = '2026-08-07';
 const RACE_LIVE = true;    // art approved by Tom 2026-08-08; the race starts the day this ships
 const RACE_DAYS = 7;
 
 function raceWeekKey(date = dateKey()) {
   const ms = Date.parse(date + 'T00:00:00') - Date.parse(RACE_EPOCH + 'T00:00:00');
+  /* A DAY BEFORE THE EPOCH STILL COUNTS. Shipped 2026-08-07 with the epoch dated
+     2026-08-08, so raceWeekDates() covered the 8th to the 14th, TODAY was not in
+     it, and every player's weekSteps summed to zero: the board was empty half an
+     hour after launch and nobody could take the lead. The period key was right,
+     the day window was not. Clamping here means an epoch that is off by a day
+     (or a phone whose clock is behind) counts today instead of discarding it. */
   if (!(ms >= 0)) return RACE_EPOCH;                     // before launch: everything is period one
   const period = Math.floor(ms / (RACE_DAYS * 86400000));
   return dateKey(new Date(Date.parse(RACE_EPOCH + 'T00:00:00') + period * RACE_DAYS * 86400000));
 }
 // Test hook (webdriver only): the race period boundary is the one rule a player
 // cannot see, so it has to be measurable without waiting a week.
-if (typeof window !== 'undefined' && navigator.webdriver) window.__raceWeek = d => raceWeekKey(d);
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__raceWeek = d => raceWeekKey(d);
+  window.__raceDays = wk => raceWeekDates(wk);   // the day window is where the launch bug actually lived
+}
 // "2nd", not "2": the banner reads as a sentence, not a stat line
 function ordinal(n) {
   if (!(n > 0)) return '';
@@ -9640,7 +9689,11 @@ function ordinal(n) {
 }
 function raceWeekDates(weekKey) {
   const t0 = Date.parse(weekKey + 'T00:00:00');
-  return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+  const days = Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+  // period one also owns everything before the epoch, so a launch-day steps
+  // total is never thrown away because the clock disagreed by a few hours
+  if (weekKey === RACE_EPOCH) days.push(dateKey(new Date(t0 - 86400000)), dateKey(new Date(t0 - 2 * 86400000)));
+  return days;
 }
 
 async function weekStepsNow(date = dateKey()) {

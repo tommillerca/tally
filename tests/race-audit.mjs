@@ -74,6 +74,22 @@ await seed(page, { level: 14 });
 const epoch = (APP.match(/RACE_EPOCH = '([\d-]+)'/) || [])[1];
 ok('START the race declares an epoch', !!epoch, String(epoch));
 
+/* THE EPOCH MUST NOT BE IN THE FUTURE, and TODAY must be inside period one.
+   Shipped 2026-08-07 with the epoch dated the 8th: the period key was correct but
+   raceWeekDates() covered the 8th to the 14th, so today's steps were summed
+   against a window that had not started and EVERY player scored zero. The board
+   sat empty half an hour after launch.
+   PROVE-RED: set RACE_EPOCH one day ahead of the machine's date and TODAY fails. */
+const todayIn = await page.evaluate(() => {
+  const d = new Date();
+  const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { today: k, week: window.__raceWeek ? window.__raceWeek(k) : null, days: window.__raceDays ? window.__raceDays(window.__raceWeek(k)) : null };
+});
+ok('TODAY the current day falls inside its own race period',
+  !!(todayIn.days && todayIn.days.includes(todayIn.today)),
+  JSON.stringify({ today: todayIn.today, week: todayIn.week, inWindow: todayIn.days ? todayIn.days.includes(todayIn.today) : null }));
+ok('TODAY the epoch is not dated in the future', epoch <= todayIn.today, `epoch ${epoch} vs today ${todayIn.today}`);
+
 const periods = await page.evaluate(async ep => {
   const w = window.__raceWeek;
   if (!w) return null;
