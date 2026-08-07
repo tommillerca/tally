@@ -142,7 +142,7 @@ export const TALENT_TREES = [
       { id: 'judgement', tier: 3, name: 'Judgement', desc: 'Smites hit 50% harder on STAGGERED or SUNDERED enemies.' },
       { id: 'hallowed', tier: 3, name: 'Hallowed Marrow', desc: 'All healing you receive is 20% stronger.' },
       { id: 'mercy', tier: 3, ranks: 3, name: 'Mercy', desc: 'Mend Marrow heals +3% max HP per rank.' },
-      { id: 'lastlight', tier: 4, name: 'Last Light', desc: 'CHEAT DEATH: once per fight, a killing blow leaves you at 1 HP and restores 20% HP.' },
+      { id: 'lastlight', tier: 4, name: 'Last Light', desc: 'CHEAT DEATH: once per fight, a killing blow leaves you at 1 HP instead. The wound never closes: all healing on you is halved for the rest of the fight.' },
     ],
   },
   {
@@ -472,7 +472,7 @@ export function applyPetAction(fight, actionId) {
         let dmg = Math.round(fx.damage * (1 + (body.petDamagePct || 0)));
         if (fx.critAlways || (fx.crit && fight.rng() < 0.25)) dmg *= 2;
         dealDamage(fight, foeWho, dmg, events);
-        if (fx.lifesteal) me.hp = Math.min(me.d.maxHp, me.hp + Math.round(dmg * fx.lifesteal));
+        if (fx.lifesteal) healUp(me, Math.round(dmg * fx.lifesteal));
         events.push({ t: 'pethit', who: 'p', damage: dmg, name: pet.name });
       }
       if (foe.hp > 0 && fx.poison) {
@@ -482,12 +482,12 @@ export function applyPetAction(fight, actionId) {
       }
     } else if (fx.kind === 'petshield') {
       me.ward = Math.max(me.ward, 0) + fx.shield;
-      if (fx.heal) me.hp = Math.min(me.d.maxHp, me.hp + fx.heal);
+      const petHeal = fx.heal ? healUp(me, fx.heal) : 0;
       if (fx.stamina) me.wind = Math.min(me.d.maxWind, me.wind + fx.stamina);
       if (fx.cleanse) { me.bleed = null; me.burn = null; me.poison = null; }
       if (pet.picks.has('w-laststand') || fx.armLastStand) pet.lastStandArmed = true;
       if (fx.lastStandHeal) pet.lastStandHealFrac = fx.lastStandHeal; // C2 signature: heal big on the save
-      events.push({ t: 'petshield', who: 'p', shield: fx.shield, heal: fx.heal, name: pet.name });
+      events.push({ t: 'petshield', who: 'p', shield: fx.shield, heal: petHeal, name: pet.name });
     } else if (fx.kind === 'petdebuff') {
       if (foe.hp > 0) {
         if (!foe.weaken || foe.weaken.pct < fx.weakenPct) foe.weaken = { pct: fx.weakenPct, turns: fx.turns };
@@ -503,8 +503,7 @@ export function applyPetAction(fight, actionId) {
     const lvl = pet.level;
     // basics are light filler (the pet acts every round now): the SPECIAL is the payoff
     if (pet.family === 'warden') {
-      const heal = Math.round(me.d.maxHp * 0.025);
-      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      const heal = healUp(me, Math.round(me.d.maxHp * 0.025));
       events.push({ t: 'petshield', who: 'p', shield: 0, heal, name: pet.name });
     } else {
       const dmg = Math.round((0.5 + lvl * 0.15) * me.d.powerMult * (1 + (body.petDamagePct || 0)));
@@ -513,8 +512,7 @@ export function applyPetAction(fight, actionId) {
       if (pet.family === 'imp') gainHype(me, 2);
     }
   } else { // guard
-    const heal = Math.round(body.d.maxHp * 0.15);
-    body.hp = Math.min(body.d.maxHp, body.hp + heal);
+    healUp(body, Math.round(body.d.maxHp * 0.15));
     events.push({ t: 'petguard', who: 'p', name: pet.name });
   }
   checkOver(fight);
@@ -730,6 +728,20 @@ function mulberry32(seed) {
 
 function healMult(f) { return f.talents.has('hallowed') ? 1.2 : 1; }
 
+// Last Light leaves a wound that never closes: healing is halved for the rest
+// of the fight. EVERY heal routes through healUp so the clause cannot be
+// dodged by a heal that skips healMult (pet heals and Bone Broth used to).
+// Measured 2026-08-08: cheat-death + sustain won 99% at even stats and 95%
+// against a foe 20% stronger, i.e. the fight could not be lost. Now 63/41.
+export const LASTLIGHT_HEAL_MULT = 0.5;
+function healUp(f, amount) {
+  if (!(amount > 0)) return 0;
+  const amt = Math.round(amount * (f.lastlightUsed ? LASTLIGHT_HEAL_MULT : 1));
+  const before = f.hp;
+  f.hp = Math.min(f.d.maxHp, f.hp + amt);
+  return f.hp - before;
+}
+
 export function dealDamage(fight, victimWho, amount, events) {
   const v = fighterOf(fight, victimWho);
   if (v.ward > 0 && amount > 0) {
@@ -739,7 +751,7 @@ export function dealDamage(fight, victimWho, amount, events) {
   }
   if (amount >= v.hp && v.talents.has('lastlight') && !v.lastlightUsed && !v.secondWindUsed) {
     v.lastlightUsed = true;
-    v.hp = 1 + Math.round(v.d.maxHp * 0.20 * healMult(v));
+    v.hp = 1;   // a flicker, not a second wind: the 20% top-up made this unloseable
     events.push({ t: 'lastlight', who: victimWho });
     return;
   }
@@ -753,8 +765,7 @@ export function dealDamage(fight, victimWho, amount, events) {
   v.hp = Math.max(0, v.hp - amount);
   if (v.hp > 0 && v.hp <= v.d.maxHp * 0.25 && v.talents.has('secondwind') && !v.secondWindUsed && !v.lastlightUsed) {
     v.secondWindUsed = true;
-    const heal = Math.round(v.d.maxHp * 0.15 * healMult(v));
-    v.hp = Math.min(v.d.maxHp, v.hp + heal);
+    const heal = healUp(v, Math.round(v.d.maxHp * 0.15 * healMult(v)));
     v.wind = Math.min(v.d.maxWind, v.wind + 30);
     events.push({ t: 'secondwind', who: victimWho, heal });
   }
@@ -891,8 +902,7 @@ export function applyAction(fight, actionId) {
         gainHype(me, a.hype || 0);
         gainHype(them, HIT_TAKEN_HYPE);
         if (me.talents.has('marrowlust')) {
-          const heal = Math.round(r.damage * 0.25 * healMult(me));
-          me.hp = Math.min(me.d.maxHp, me.hp + heal);
+          const heal = healUp(me, Math.round(r.damage * 0.25 * healMult(me)));
           events.push({ t: 'heal', who: fight.active, amount: heal });
         }
       }
@@ -919,8 +929,7 @@ export function applyAction(fight, actionId) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         if (me.talents.has('soulsiphon')) {
-          const heal = Math.round(r.damage * 0.30 * healMult(me));
-          me.hp = Math.min(me.d.maxHp, me.hp + heal);
+          const heal = healUp(me, Math.round(r.damage * 0.30 * healMult(me)));
           events.push({ t: 'heal', who: fight.active, amount: heal });
         }
         if (me.talents.has('gravechill')) {
@@ -933,8 +942,7 @@ export function applyAction(fight, actionId) {
     }
     case 'mend': {
       me.mendUses -= 1;
-      const heal = Math.round((me.d.maxHp * (0.12 + rkOf(me, 'mercy') * 0.03) + 8 * me.d.magicMult) * healMult(me));
-      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      const heal = healUp(me, Math.round((me.d.maxHp * (0.12 + rkOf(me, 'mercy') * 0.03) + 8 * me.d.magicMult) * healMult(me)));
       events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.mendUses });
       break;
     }
@@ -950,8 +958,7 @@ export function applyAction(fight, actionId) {
         gainHype(me, a.hype || 0);
         gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
         if (me.talents.has('radiance')) {
-          const heal = Math.round(r.damage * 0.20 * healMult(me));
-          me.hp = Math.min(me.d.maxHp, me.hp + heal);
+          const heal = healUp(me, Math.round(r.damage * 0.20 * healMult(me)));
           events.push({ t: 'heal', who: fight.active, amount: heal });
         }
       }
@@ -1049,8 +1056,7 @@ export function applyAction(fight, actionId) {
     }
     case 'swallow': {
       me.swallowUses -= 1;
-      const heal = Math.round(me.d.maxHp * 0.12 * healMult(me));
-      me.hp = Math.min(me.d.maxHp, me.hp + heal);
+      const heal = healUp(me, Math.round(me.d.maxHp * 0.12 * healMult(me)));
       addToxicity(me, 10);
       events.push({ t: 'heal', who: fight.active, amount: heal, mend: true, usesLeft: me.swallowUses, toxicity: me.toxicity });
       break;
@@ -1144,8 +1150,7 @@ export function applyAction(fight, actionId) {
           gainHype(me, a.hype || 0);
           gainHype(them, them.talents.has('ovation') ? Math.round(HIT_TAKEN_HYPE * 1.5) : HIT_TAKEN_HYPE);
           if (move === 'haymaker' && me.talents.has('marrowlust')) {
-            const heal = Math.round(r.damage * 0.25 * healMult(me));
-            me.hp = Math.min(me.d.maxHp, me.hp + heal);
+            const heal = healUp(me, Math.round(r.damage * 0.25 * healMult(me)));
             events.push({ t: 'heal', who: fight.active, amount: heal });
           }
           if (move === 'haymaker' && me.talents.has('bonebreaker')) {
@@ -1213,8 +1218,7 @@ export function endTurn(fight) {
   const ticks = [];
   // Bone Broth: heal a little at the start of your turn
   if (me.foodRegenPct && me.hp > 0) {
-    const h = Math.round(me.d.maxHp * me.foodRegenPct);
-    me.hp = Math.min(me.d.maxHp, me.hp + h);
+    const h = healUp(me, Math.round(me.d.maxHp * me.foodRegenPct));
     ticks.push({ t: 'heal', who: next, amount: h, food: true });
   }
   tickDots(me, next, ticks);
@@ -1234,7 +1238,7 @@ export function endTurn(fight) {
       foe.hp = Math.max(0, foe.hp - dmg);
       ticks.push({ t: 'crowpeck', who: foeWho, damage: dmg, crows: me.flock });
       if (rkOf(me, 'scavenge')) foe.wind = Math.max(0, foe.wind - me.flock * rkOf(me, 'scavenge'));
-      if (me.talents.has('carrion')) { const h = Math.round(dmg * 0.3 * healMult(me)); me.hp = Math.min(me.d.maxHp, me.hp + h); ticks.push({ t: 'heal', who: next, amount: h }); }
+      if (me.talents.has('carrion')) { const h = healUp(me, Math.round(dmg * 0.3 * healMult(me))); ticks.push({ t: 'heal', who: next, amount: h }); }
       if (me.talents.has('omen') && me.flock >= 4 && (!foe.weaken || foe.weaken.pct < 0.15)) foe.weaken = { pct: 0.15, turns: 2 };
     }
   }

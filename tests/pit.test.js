@@ -5,6 +5,7 @@ import {
   createFight, actionsFor, applyAction, endTurn, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
+  LASTLIGHT_HEAL_MULT,
 } from '../js/pit.js';
 import { escalateDen } from '../js/poi.js';
 import { petBattleStats } from '../js/pets.js';
@@ -566,11 +567,35 @@ test('Last Light cheats death once per fight', () => {
   fight.active = 'f'; fight.ap = 3; fight.rng = () => 0.99;
   const evs = applyAction(fight, 'swing');
   assert.ok(evs.find(e => e.t === 'lastlight'), 'cheat death fired');
-  assert.ok(P.hp >= 1 + Math.round(P.d.maxHp * 0.20), 'left standing with the promised marrow');
+  // A FLICKER, not a second wind. It used to hand back 20% max HP, and any build
+  // with healing simply topped back up: measured 99% win at even stats and 95%
+  // against a stronger foe, i.e. unloseable (v285).
+  assert.equal(P.hp, 1, 'left at exactly 1 HP');
   assert.ok(!fight.over, 'fight continues');
   P.hp = 5;
   const evs2 = applyAction(fight, 'jab');
   assert.ok(!evs2.find(e => e.t === 'lastlight'), 'only once per fight');
+});
+
+test('Last Light halves every heal for the rest of the fight', () => {
+  const stats = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
+  // same heal, same fighter, measured either side of the wound
+  const heals = P => {
+    const F = makeFighter({ name: 'F', stats });
+    const fight = createFight({ player: P, foe: F, seed: 5 });
+    fight.rng = () => 0.99;
+    P.hp = Math.round(P.d.maxHp * 0.4);
+    const before = P.hp;
+    applyAction(fight, 'mend');
+    return P.hp - before;
+  };
+  const healthy = makeFighter({ name: 'P', stats, talents: ['mend', 'lastlight'] });
+  const wounded = makeFighter({ name: 'P', stats, talents: ['mend', 'lastlight'] });
+  wounded.lastlightUsed = true;
+  const full = heals(healthy), half = heals(wounded);
+  assert.ok(full > 0, 'the control heal actually healed');
+  assert.ok(half > 0 && half < full, `wounded heal ${half} must be smaller than ${full}`);
+  assert.ok(Math.abs(half - full * LASTLIGHT_HEAL_MULT) <= 1, `halved, got ${half} vs ${full}`);
 });
 
 test('fire bolt burns; wildfire burns hotter and longer; burn ticks at their turn start', () => {

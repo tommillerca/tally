@@ -551,7 +551,9 @@ test('hunt: spawns are deterministic per date+cell and differ across cells/days'
   const d = huntMod.spawnsForCell('2026-07-03', 9857, -24625);
   assert.notDeepEqual(a.map(s => [s.lat, s.lng]), d.map(s => [s.lat, s.lng]));
   assert.ok(a.length >= 2 && a.length <= 3); // SLOTS=2 base + an occasional rare
-  for (const s of a) assert.ok(['bones', 'coins', 'crate', 'rare'].includes(s.type));
+  // derived, not hard-coded: this list went stale the moment a new spawn type
+  // (the Herb patch) was added, and the failure said nothing about what was wrong
+  for (const s of a) assert.ok(Object.keys(huntMod.SPAWN_TYPES).includes(s.type), `unknown spawn type ${s.type}`);
 });
 test('hunt: distance and bearing math', () => {
   // 0.001 deg latitude ~ 111 m

@@ -43,7 +43,7 @@ await page.evaluate(async () => {
 await openKitchen();
 const kitchenFirst = await page.evaluate(() => ({
   firstSection: document.querySelector('#kitchenBody .sect-h')?.textContent.trim().split('\n')[0].trim(),
-  bedsInKitchen: document.querySelectorAll('#kitchenBody .plot-card').length,
+  bedsInKitchen: document.querySelectorAll('#kitchenBody .t3-bed:not(.buy)').length,
   row: !!document.getElementById('gardenRow'),
 }));
 console.log('kitchen:', JSON.stringify(kitchenFirst));
@@ -54,9 +54,9 @@ await page.evaluate(() => document.getElementById('gardenRow').click());
 await sleep(1600);
 const first = await page.evaluate(() => ({
   hasGarden: /BONE GARDEN|Bone Garden/.test(document.body.textContent),
-  beds: document.querySelectorAll('.plot-card').length,
+  beds: document.querySelectorAll('.t3-bed:not(.buy)').length,
   buyBed: !!document.getElementById('buyBed'),
-  empty: document.querySelectorAll('.plot-card.locked').length,
+  empty: document.querySelectorAll('.t3-bed.empty').length,
   compostBtn: document.getElementById('compostBtn')?.textContent.trim(),
   cauldronsStillThere: /Cauldrons/.test(document.body.textContent),
   shopIntact: document.querySelectorAll('[data-cook]').length,
@@ -107,7 +107,7 @@ check('the heap closes for the day at the cap', capped.left === 0 && capped.disa
 
 // plant via the bed, water, then harvest after fast-forwarding the readyAt
 await openGarden();
-await page.evaluate(() => document.querySelector('.plot-card.locked[data-plant]').click());
+await page.evaluate(() => document.querySelector('.t3-bed.empty[data-plant]').click());
 await sleep(1200);
 const sow = await page.evaluate(() => ({ options: document.querySelectorAll('#plantBody [data-sow]').length, label: document.querySelector('#plantBody .recipe-need')?.textContent.trim() }));
 console.log('plant sheet:', JSON.stringify(sow));
@@ -117,10 +117,10 @@ await page.evaluate(() => document.querySelector('[data-sow]').click());
 await sleep(1600);
 
 const planted = await page.evaluate(() => ({
-  growing: document.querySelectorAll('.plot-card.thirsty, .plot-card.growing').length,
+  growing: document.querySelectorAll('.t3-bed.thirsty, .t3-bed.growing').length,
   thirstyFlag: !!document.querySelector('.plot-flag'),
   waterBtn: !!document.querySelector('[data-water]'),
-  empty: document.querySelectorAll('.plot-card.locked').length,
+  empty: document.querySelectorAll('.t3-bed.empty').length,
 }));
 console.log('planted:', JSON.stringify(planted));
 check('the bed is now growing and asking for water', planted.growing === 1 && planted.waterBtn && planted.empty === 2);
@@ -145,14 +145,14 @@ await page.evaluate(async () => {
 await openGarden();
 const ripe = await page.evaluate(() => ({
   sheet: [...document.querySelectorAll('#sheets .sheet h2')].slice(-1)[0]?.textContent.trim() || 'none',
-  cards: document.querySelectorAll('.plot-card').length,
-  ready: document.querySelectorAll('.plot-card.ready').length,
-  flag: document.querySelector('.plot-flag.crop')?.textContent.trim(),
+  cards: document.querySelectorAll('.t3-bed:not(.buy)').length,
+  ready: document.querySelectorAll('.t3-bed.ready').length,
+  flag: document.querySelector('.t3-bed.ready small')?.textContent.trim(),
   harvestBtn: !!document.querySelector('[data-harvest]'),
 }));
 console.log('ripe:', JSON.stringify(ripe));
 check('the garden is actually open (an empty sample is not a pass)', ripe.sheet === 'The Bone Garden' && ripe.cards > 0, `${ripe.sheet} / ${ripe.cards} cards`);
-check('the bed reads as ready', ripe.ready === 1 && ripe.flag === 'READY' && ripe.harvestBtn);
+check('the bed reads as ready', ripe.ready === 1 && /yield|unwatered/.test(ripe.flag || '') && ripe.harvestBtn, `${ripe.ready} ready / "${ripe.flag}"`);
 if (!ripe.harvestBtn) { console.log('cannot harvest what is not ready; stopping here'); await browser.close(); process.exit(1); }
 
 const ingBefore = await page.evaluate(async () => (await (await import('./js/cooking.js')).ingredients()).graveroot || 0);

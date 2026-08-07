@@ -73,9 +73,14 @@ export const SPAWN_TYPES = {
   coins: { label: 'Coin pile', coins: 60, weight: 2 },
   crate: { label: 'Buried crate', crate: 'daily', weight: 1 },
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
+  // The garden's presence on the map. Every spawn already drops an ingredient
+  // and rolls a 30% seed, but nothing out there was ABOUT growing: Tom asked for
+  // more to interact with in the Boneyard, and this is the one that feeds a loop
+  // the map did not previously touch. Guaranteed seeds is the whole identity.
+  herbs: { label: 'Herb patch', xp: 25, seeds: 2, weight: 1 },
 };
 
-const SPAWN_WEIGHTS = ['bones', 'bones', 'coins', 'crate']; // lighter on piles; combat (minis/dens) carries the map
+const SPAWN_WEIGHTS = ['bones', 'bones', 'coins', 'crate', 'herbs']; // lighter on piles; combat (minis/dens) carries the map
 
 // Spawns for one cell at time `mins`. Each slot re-rolls its type + position on
 // its own instance, and a rare occasionally surfaces on its own slow instance.
@@ -160,7 +165,7 @@ export async function collectSpawn(spawn, date = dateKey()) {
   const def = SPAWN_TYPES[spawn.type];
   const xp = await award(spawnKey(date, spawn), 'spawn', def.xp || 15, `Boneyard: ${def.label}`, date);
   if (xp === 0) return null; // already collected
-  const out = { xp, coins: 0, crate: null, type: spawn.type, label: def.label };
+  const out = { xp, coins: 0, crate: null, type: spawn.type, label: def.label, seeds: def.seeds || 0 };
   if (def.coins) { await coinsAdd(def.coins); out.coins = def.coins; }
   if (def.crate) { await grantCrate(def.crate, 'boneyard'); out.crate = def.crate; }
   return out;

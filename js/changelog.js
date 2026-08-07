@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 285, date: '2026-08-08', title: 'Cheating death costs something now', items: [
+    '<b>Last Light</b> was making fights unloseable: it revived you with a fifth of your health back, and anything with healing simply topped straight back up. It now leaves you at <b>1 HP</b>, and the wound does not close: <b>all healing on you is halved</b> for the rest of that fight. It is still the strongest capstone in the game, but the fight can be lost again.',
+    'Your <b>Deliveries</b> list no longer treats your whole gift history as unread, and it shows what is actually new instead of burying the Crew tab. The rest is one tap away.',
+    '<b>New Boneheadz</b> shows the newest players you have not added yet, instead of only ever the last seven days (which on most weeks meant nobody).',
+    '<b>Herb patches</b> now grow out on the Boneyard: a new find that always pays seeds for the Bone Garden.',
+    'The level badge on Today is a proper gold plate again, the way it was designed.',
+  ] },
   { n: 284, date: '2026-08-08', title: 'For the days you cannot get out', items: [
     'A <b>Remote Den</b>: one boss a day, free, no walking and no location needed. It is the same boss for everyone that day, and beating it counts as a den win, which is what used to keep the Gauntlet locked for anyone who could not get to a real den on the map.',
     '<b>Workouts feed your eggs and pets now.</b> Recorded exercise minutes count toward hatching, so an hour on the bike or in the gym moves the meter that used to only move by walking.',

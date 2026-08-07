@@ -927,10 +927,15 @@ body::before {
   /* GOLD, not accent. A level is something you HAVE; the accent is supposed to
      mark the one thing to DO next, and there were nine accent moments competing
      in the first viewport. Gold is already this system's prestige colour and it
-     matches the XP bar directly beneath it. */
-  font-family: var(--display); font-size: 40px; line-height: 0.95; color: var(--gold); letter-spacing: 1px;
-  -webkit-text-stroke: 5px #17151d; paint-order: stroke fill;
-  text-shadow: 3px 4px 0 rgba(0, 0, 0, 0.3);
+     matches the XP bar directly beneath it.
+     A PLATE, not stroked text: this is what the approved today.html mockup shows
+     (`.lv .num`, gold fill + 2px ink + hard shadow, the deck's sticker recipe).
+     The stroked-text version shipped instead and Tom read the screen as not
+     built, 2026-08-08. */
+  font-family: var(--display); font-size: 26px; line-height: 1; letter-spacing: .03em;
+  color: var(--ink); background: var(--gold);
+  border: 2px solid var(--ink); border-radius: 11px; box-shadow: var(--sh-sm);
+  padding: 3px 10px; white-space: nowrap;
 }
 .hero-title {
   font-family: var(--display); font-size: 17px; color: var(--text); letter-spacing: 1px;
@@ -1777,6 +1782,10 @@ body::before {
 .lb-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
 .lb-row:last-child { border-bottom: 0; }
+/* a row you can open has to look like one */
+.lb-row[data-lbview] { cursor: pointer; }
+.lb-row[data-lbview]:active { background: rgba(255, 255, 255, 0.05); }
+.lb-row[data-lbview] .lb-who b::after { content: ' ›'; color: var(--text-2); font-weight: 400; }
 .lb-row.me { background: rgba(165, 232, 71, 0.07); border-radius: 10px; padding-left: 8px; padding-right: 8px; }
 .lb-rank { flex: 0 0 30px; text-align: center; font-family: var(--display); font-size: 17px; color: var(--text-3); }
 .lb-rank.r1 { color: #ffd75e; font-size: 20px; }
@@ -4707,8 +4716,7 @@ body::before {
 
 /* Today hero: the level plate from the approved mockup. A gold Bangers badge with
    the rank name beside it, both readable on the coral poster. */
-.hero-lvrow { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.hero-meta .hero-lv { font-size: 34px; }   /* room for the rank name beside it */
+.hero-lvrow { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .hero-meta .hero-title {
   font-family: var(--display); font-weight: 400; font-size: var(--fs-4); letter-spacing: .05em;
   color: var(--text); text-shadow: 2px 2px 0 rgba(42, 45, 40, .95); text-transform: uppercase;

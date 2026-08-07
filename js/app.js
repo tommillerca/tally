@@ -263,6 +263,7 @@ function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
   if (type === 'rare') return crateIcon('egg', s); // Mystery Egg spawn
+  if (type === 'herbs') return bhIcon('garden-seed', s);
   return ICONS.bone(s);
 }
 
@@ -281,6 +282,7 @@ function mapLegendHtml() {
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
     [spawn('crate'), 'Buried crate', 'A common crate of loot'],
+    [spawn('herbs'), 'Herb patch', 'Seeds for the Bone Garden'],
     [spawn('rare', ' rare'), 'Mystery egg', 'Rare: walk to hatch a pet'],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
     [den(), 'Boss den', 'A landmark boss: rare gear'],
@@ -875,8 +877,22 @@ async function crewDeliveries(limit = 40) {
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
     .slice(0, limit);
 }
+/* The read watermark. It used to default to 0, which meant that the first time
+   anyone opened the inbox EVERY gift they had ever received counted as new:
+   Tom, 2026-08-08, "showing new gifts for past gifts from whenever you started
+   playing it's way too much". History is not news. So on the very first read we
+   stamp the watermark at the newest delivery already in the ledger: nothing that
+   pre-dates the inbox is ever "new", and anything that lands after it is. */
+async function deliverySeenTs() {
+  const seen = await kvGet('crewSeenTs', null);
+  if (seen !== null && seen !== undefined) return seen;
+  const rows = await crewDeliveries(1);
+  const ts = rows.length ? (rows[0].ts || 0) : 0;
+  await kvSet('crewSeenTs', ts);
+  return ts;
+}
 async function unseenDeliveryCount() {
-  const seen = (await kvGet('crewSeenTs', 0)) || 0;
+  const seen = await deliverySeenTs();
   return (await crewDeliveries(60)).filter(r => (r.ts || 0) > seen).length;
 }
 // Test hooks (webdriver only): the inbox reads a ledger the Crew tab only
@@ -4748,13 +4764,13 @@ async function renderFriends(el) {
 
     <div class="card" id="deliveriesCard" hidden>
       <div class="card-title">DELIVERIES</div>
-      <p class="note" style="margin:0 0 10px">Everything your Crew has sent you. Miss the popup and it still lands here.</p>
+      <p class="note" style="margin:0 0 10px">Miss the popup and the gift still lands here. Nothing to claim: it is already yours.</p>
       <div id="deliveriesList"></div>
     </div>
 
     <div class="card" id="newcomersCard" hidden>
       <div class="card-title">NEW BONEHEADZ</div>
-      <p class="note" style="margin:0 0 10px">Joined this week. Add one and you both get a Crew to send things to.</p>
+      <p class="note" style="margin:0 0 10px">The newest Boneheadz. Add one and you both get a Crew to send things to.</p>
       <div id="newcomersList"></div>
     </div>
 
@@ -4782,13 +4798,26 @@ async function renderFriends(el) {
     const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
     if (!card || !list) return;
     if (!rows.length) { card.hidden = true; return; }
-    const seen = (await kvGet('crewSeenTs', 0)) || 0;
-    list.innerHTML = rows.map(r => `
-      <div class="t3-row${(r.ts || 0) > seen ? ' unread' : ''}">
+    const seen = await deliverySeenTs();
+    const isNew = r => (r.ts || 0) > seen;
+    /* Show what is actually news, not the archive. Tom, 2026-08-08: "the
+       deliveries history of your gifts just spams the top of the crew tab it
+       shouldn't be taking over the whole page it defeats the tab itself." So:
+       anything unread, else the last few, and the rest behind one tap. */
+    const fresh = rows.filter(isNew);
+    const shown = fresh.length ? fresh : rows.slice(0, 3);
+    const rowHtml = r => `
+      <div class="t3-row${isNew(r) ? ' unread' : ''}">
         <span class="t3-med">${r.type === 'spire' ? bhIcon('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
-        ${(r.ts || 0) > seen ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
-      </div>`).join('');
+        ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
+      </div>`;
+    const rest = rows.length - shown.length;
+    list.innerHTML = shown.map(rowHtml).join('')
+      + (rest > 0 ? `<button class="btn small ghost" id="deliveriesMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
+    $('#deliveriesMore', list)?.addEventListener('click', () => {
+      list.innerHTML = rows.map(rowHtml).join('');
+    });
     card.hidden = false;
     await kvSet('crewSeenTs', Date.now());
   };
@@ -4871,13 +4900,29 @@ async function renderFriends(el) {
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
         const ol = onlineLabel(p.lastSeen);
-        return `<div class="lb-row ${p.you ? 'me' : ''}">
+        return `<div class="lb-row ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-rank r${i + 1}">${i + 1}</span>
           ${lbAvatar(p)}
           <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
+    /* Tapping a row opens their profile. The leaderboard payload already carries
+       everything the profile sheet renders from (outfit, pet, level, badges), so
+       this is a reader, not a new request. Friend-only actions are hidden for
+       anyone who is not Crew; see openFriendProfile's `stranger` mode. */
+    body.addEventListener('click', e => {
+      if (e.target.closest('[data-lbadd]')) return;   // the Add button is its own action
+      const row = e.target.closest('[data-lbview]');
+      if (!row) return;
+      const p = players.find(x => x.playerId === row.dataset.lbview);
+      if (!p) return;
+      openFriendProfile(
+        { name: p.name, playerId: p.playerId, friendCode: p.friendCode, lastSeen: p.lastSeen,
+          profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName, badges: p.badges } },
+        null,
+        { stranger: true, isCrew: friendIds.has(p.playerId), sent: outIds.has(p.playerId) });
+    });
     $$('[data-lbadd]', body).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; b.textContent = '...';
       const r = await social.friendRequest(b.dataset.lbadd);
@@ -4899,10 +4944,14 @@ async function renderFriends(el) {
     const players = await fetchLb();
     const card = $('#newcomersCard', el), list = $('#newcomersList', el);
     if (!card || !list || !card.isConnected || !players) return;
-    const WEEK = 7 * 86400000;
     const known = new Set([...(data.friends || []), ...(data.outgoing || [])].map(f => f.playerId));
+    /* NEWEST, not "joined this week". A 7-day window meant the card was hidden
+       almost always (Tom, 2026-08-08: "not seeing where the new players thing is
+       in crew?") because on a pre-launch community nobody joins most weeks. The
+       point of the card is that there is always somebody to add, so it shows the
+       newest players you do not already know, however long ago they arrived. */
     const fresh = players
-      .filter(p => !p.you && p.joinedAt && Date.now() - p.joinedAt < WEEK && !known.has(p.playerId))
+      .filter(p => !p.you && p.joinedAt && !known.has(p.playerId))
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
       .slice(0, 5);
     if (!fresh.length) { card.hidden = true; return; }
@@ -4953,8 +5002,15 @@ async function renderFriends(el) {
 // Test hook (webdriver only), same pattern as __strikeFx / __bhFight. A friend
 // profile needs a real friend on the server, so the pet-clipping bug in this
 // sheet was only ever reproducible by hand on Tom's phone. Now it is measurable.
-if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = f => openFriendProfile(f, () => {});
-function openFriendProfile(f, onChange) {
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = (f, opts) => openFriendProfile(f, () => {}, opts || {});
+/* opts.stranger: opened from the LEADERBOARD, where the player is not (yet) your
+   Crew. Tom, 2026-08-08: "in the crew tab when i go into the leaderboard why
+   cant i then click who's on it and see more about their profile". Same sheet,
+   minus every action that needs a friendship (gift and cheer are friends-only on
+   the server and would 403; nicknames and Remove are meaningless), plus the one
+   action that IS available: adding them. */
+function openFriendProfile(f, onChange, opts = {}) {
+  const stranger = !!opts.stranger;
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   const petName = p.pet ? ((BH_BY_ID[p.pet.id] || {}).name || 'Pet') : null;
@@ -4974,10 +5030,15 @@ function openFriendProfile(f, onChange) {
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal"${f.alias ? '' : ' hidden'}>Bonehead name: ${esc(f.name)}</div></div>
 
       ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
-      <div class="fp-actions">
+      ${stranger ? (opts.isCrew
+        ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
+        : opts.sent
+          ? `<p class="note" style="text-align:center;margin:6px 0 0">Request sent. They accept by adding you back.</p>`
+          : `<button class="btn" id="fpAdd">+ Add to my Crew</button>`)
+      : `<div class="fp-actions">
         <button class="btn ghost fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
         <button class="btn ghost fp-cheer" id="fpCheer">📣 Cheer</button>
-      </div>
+      </div>`}
 
       <div class="fp-facts">
         <div class="fp-fact"><b>${p.badges ?? 0}</b><span>Badges</span></div>
@@ -4987,19 +5048,28 @@ function openFriendProfile(f, onChange) {
 
       ${statBars ? `<div class="fp-stats-h">Stats</div><div class="fp-statbars">${statBars}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
 
-      <div class="fp-alias">
+      ${stranger ? '' : `<div class="fp-alias">
         <div class="nb-lab">Your nickname for them <span class="fp-alias-hint">only you see this</span></div>
         <div class="fp-alias-row">
           <input id="fpAlias" type="text" maxlength="24" placeholder="e.g. Coach Mike" value="${esc(f.alias || '')}">
           <button class="btn small" id="fpAliasSave">Save</button>
         </div>
-      </div>
+      </div>`}
       <p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>
-      <button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>
+      ${stranger ? '' : '<button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>'}
     </div>
   `, { cls: 'sheet-fp' });
-  $('#fpGift', wrap).addEventListener('click', () => openGiftSheet(f));
-  $('#fpCheer', wrap).addEventListener('click', () => openCheerSheet(f));
+  $('#fpGift', wrap)?.addEventListener('click', () => openGiftSheet(f));
+  $('#fpCheer', wrap)?.addEventListener('click', () => openCheerSheet(f));
+  $('#fpAdd', wrap)?.addEventListener('click', async e => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Sending...';
+    const r = await social.friendRequest(f.friendCode);
+    if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast('Could not send that request. Try again.', 2600); return; }
+    if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
+    else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+    b.outerHTML = `<p class="note" style="text-align:center;margin:6px 0 0">${r.status === 'accepted' ? 'Already in your Crew.' : 'Request sent.'}</p>`;
+    onChange && onChange();
+  });
   $('#fpBattle', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
     openFight(wrap, fighter, {
@@ -5014,7 +5084,7 @@ function openFriendProfile(f, onChange) {
       aiLevel: Math.max(1, Math.min(6, 1 + Math.floor((p.level || 1) / 4))),
     });
   });
-  $('#fpAliasSave', wrap).addEventListener('click', async () => {
+  $('#fpAliasSave', wrap)?.addEventListener('click', async () => {
     const clean = await social.setFriendAlias(f.playerId, $('#fpAlias', wrap).value);
     f.alias = clean || null;
     $('#fpTitle', wrap).textContent = clean || f.name;
@@ -5024,7 +5094,7 @@ function openFriendProfile(f, onChange) {
     toast(clean ? `Saved. You'll see them as "${clean}".` : 'Nickname cleared.');
     onChange && onChange();
   });
-  $('#fpRemove', wrap).addEventListener('click', async () => {
+  $('#fpRemove', wrap)?.addEventListener('click', async () => {
     if (await social.removeFriend(f.playerId)) { toast('Removed.'); onChange && onChange(); history.back(); }
   });
 }
@@ -8215,7 +8285,7 @@ async function renderBoneyard(el) {
       for (const r of miniMarkers.values()) if (r.el === el) { const m = r.mini; return { name: m.name || 'Mini-boss', reward: 'A quick fight for coins + XP', distM: m.dist }; }
       for (const r of spawnMarkers.values()) if (r.el === el) {
         const s = r.spawn, def = SPAWN_TYPES[s.type] || {};
-        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
+        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.seeds ? `${def.seeds} seeds for the garden` : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
         return { name: def.label || 'Cache', reward: rw, distM: s.dist };
       }
       return null;
@@ -8825,12 +8895,14 @@ async function renderBoneyard(el) {
       if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
       // and sometimes a seed of the same thing. This is deliberately the best seed
       // source in the game: the garden is meant to reward walking, not replace it.
-      const gotSeed = rollSpawnSeed();
-      if (gotSeed) await grantSeed(ingId, 1);
+      // an Herb patch always pays seeds (that is what it IS); everything else rolls
+      const seedN = res.seeds || (rollSpawnSeed() ? 1 : 0);
+      const gotSeed = seedN > 0;
+      if (gotSeed) await grantSeed(ingId, seedN);
       // reveal the item(s) earned as pack cards (ingredient always; crate if any)
       const ing = INGREDIENTS[ingId];
       const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
-      if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: `${seedName(ingId)} seed`, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
+      if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: `${seedName(ingId)} seed${seedN > 1 ? ` x${seedN}` : ''}`, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
       if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
       openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
       const badges = await evaluateBadges();
@@ -9068,7 +9140,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v284'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v285'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

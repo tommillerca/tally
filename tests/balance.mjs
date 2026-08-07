@@ -52,6 +52,41 @@ const hiBase = measure({ ...BUILDS[0], stats: MAXED }, { seeds: SEEDS });
 const hiRatio = hi.dpt / hiBase.dpt;
 ok('SCALING the Alchemist does not grow past the band at max stats', hiRatio <= MAX_RATIO, `${hiRatio.toFixed(2)}x at stat 150`);
 
+/* CHEAT DEATH must not make a fight unloseable.
+ *
+ * Tom, 2026-08-08: "it cannot be a 100% winrate that's broken."
+ *
+ * Last Light used to revive you at 20% HP, and a sustain build then simply
+ * healed back to full: measured 99% win at even stats and 95% against a foe 20%
+ * STRONGER than you, i.e. the fight could not be lost. It now leaves you at 1 HP
+ * and halves all healing on you for the rest of the fight: 63% / 41%.
+ *
+ * Note this metric only sees builds the sim's greedy policy actually plays (a
+ * ramp kit like the Alchemist's never gets cast, so its win rate reads as the
+ * baseline). It is trustworthy for sustain and passive builds, which is what
+ * cheat death is.
+ *
+ * PROVE-RED (confirmed 2026-08-08): restore `v.hp = 1 + Math.round(v.d.maxHp *
+ * 0.20 * healMult(v))` in dealDamage, or make healUp ignore lastlightUsed, and
+ * the ceilings below fail.
+ */
+const SUSTAIN = ['mend', 'mercy', 'mercy', 'mercy', 'hallowed', 'soulsiphon', 'marrowlust'];
+const cheatBuild = { name: 'sustain + last light', stats: BUILDS[0].stats, weaponId: 'starter', talents: [...SUSTAIN, 'lastlight'] };
+const sustainOnly = { name: 'sustain alone', stats: BUILDS[0].stats, weaponId: 'starter', talents: SUSTAIN };
+const cheatEven = measure(cheatBuild, { foeMult: 1.0, seeds: SEEDS });
+const cheatHard = measure(cheatBuild, { foeMult: 1.2, seeds: SEEDS });
+const sustEven = measure(sustainOnly, { foeMult: 1.0, seeds: SEEDS });
+ok('CHEATDEATH a fight against your equal is still loseable', cheatEven.winRate <= 0.75, `${(cheatEven.winRate * 100).toFixed(0)}% at even stats`);
+ok('CHEATDEATH a fight against your better is still usually lost', cheatHard.winRate <= 0.55, `${(cheatHard.winRate * 100).toFixed(0)}% vs a foe 20% stronger`);
+// ...and the other way: a tier-4 capstone that changes nothing is a dead talent.
+ok('CHEATDEATH it is still worth taking', cheatEven.winRate >= sustEven.winRate + 0.03,
+  `${(cheatEven.winRate * 100).toFixed(0)}% with vs ${(sustEven.winRate * 100).toFixed(0)}% without`);
+ok('CHEATDEATH the wound clause is wired to the shared heal path',
+  /function healUp\(f, amount\)/.test(readFileSync(new URL('../js/pit.js', import.meta.url), 'utf8'))
+  && !/hp = Math\.min\([a-z]+\.d\.maxHp, [a-z]+\.hp \+ /.test(
+    readFileSync(new URL('../js/pit.js', import.meta.url), 'utf8').replace(/function healUp[\s\S]*?\n}/, '')),
+  'no heal site bypasses healUp');
+
 /* Action economy must be PAID FOR. A gear affix or a 4-piece set handing out a
    +1 AP talent was worth +45% damage on an engine build and cost nothing. */
 import { readFileSync } from 'node:fs';

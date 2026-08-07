@@ -70,14 +70,28 @@ ok('the ledger already holds every missed delivery', before.rows.length === 3,
   `${before.rows.length} rows: ${JSON.stringify(before.rows)}`);
 ok('senders survive: the note names who sent it',
   before.rows.some(l => /Brock/.test(l)) && before.rows.some(l => /Vile Nightmare/.test(l)), JSON.stringify(before.rows));
-ok('BADGE unread deliveries are counted before you open the tab', before.unseen === 3, `unseen=${before.unseen}`);
-// and the count has to reach the actual pixel on the tab bar, not just the reader
+
+/* HISTORY IS NOT NEWS. v285. The watermark used to start at 0, so the first
+   time anyone opened the inbox their entire gift history counted as unread and
+   the tab badge screamed 9+. Tom, 2026-08-08: "showing new gifts for past gifts
+   from whenever you started playing it's way too much."
+   PROVE-RED: default crewSeenTs back to 0 in deliverySeenTs() and this fails. */
+ok('BADGE your whole gift history does not count as unread', before.unseen === 0, `unseen=${before.unseen}`);
+
+// ...but a gift that lands AFTER that watermark is genuinely new, and has to
+// reach the actual pixel on the tab bar, not just the reader.
+await page.evaluate(async () => {
+  const { db } = await import('./js/db.js');
+  await db.put('xp', { key: 'gift-new', type: 'gift', xp: 20, label: 'Brock sent you a NEW gift!', ts: Date.now() });
+});
+const arrived = await readInbox();
+ok('BADGE a delivery that lands after you last looked IS unread', arrived.unseen === 1, `unseen=${arrived.unseen}`);
 const badge = await page.evaluate(async () => {
   await window.__refreshCrewBadge();
   const el = document.querySelector('#crewBadge');
   return { hidden: el?.hidden, text: el?.textContent };
 });
-ok('BADGE the Crew tab actually shows the number', badge.hidden === false && badge.text === '3', JSON.stringify(badge));
+ok('BADGE the Crew tab actually shows the number', badge.hidden === false && badge.text === '1', JSON.stringify(badge));
 
 // Opening the Crew tab is the read receipt.
 await page.evaluate(() => { location.hash = '#/friends'; });
@@ -90,6 +104,7 @@ const shown = await page.evaluate(() => {
     rows: rows.length,
     unreadMarked: rows.filter(r => r.classList.contains('unread')).length,
     firstLabel: rows[0]?.querySelector('b')?.textContent || null,
+    more: !!document.querySelector('#deliveriesMore'),
   };
 });
 // offline (no account) the Crew tab shows the Go Online prompt, so the inbox
@@ -99,9 +114,22 @@ if (!shown.visible) {
   ok('INBOX the deliveries card renders in the Crew tab', false,
     'card not rendered (Crew tab is in its offline state; the inbox needs an account)');
 } else {
-  ok('INBOX the deliveries card renders in the Crew tab', shown.rows === 3, JSON.stringify(shown));
-  ok('INBOX unread deliveries are flagged NEW', shown.unreadMarked === 3, `${shown.unreadMarked} marked`);
-  ok('INBOX newest first', /cheered you on/.test(shown.firstLabel || ''), String(shown.firstLabel));
+  /* The card leads with what is NEW and keeps the archive behind one tap. Tom,
+     2026-08-08: "the deliveries history of your gifts just spams the top of the
+     crew tab it shouldn't be taking over the whole page it defeats the tab
+     itself." One unread here, so exactly one row plus a Show all button.
+     PROVE-RED: render `rows` instead of `shown` in paintDeliveries and the row
+     count becomes 4. */
+  ok('INBOX the card shows what is new, not the whole archive', shown.rows === 1, JSON.stringify(shown));
+  ok('INBOX the rest is still reachable', shown.more === true, `show-all button present: ${shown.more}`);
+  ok('INBOX unread deliveries are flagged NEW', shown.unreadMarked === 1, `${shown.unreadMarked} marked`);
+  ok('INBOX newest first', /NEW gift/.test(shown.firstLabel || ''), String(shown.firstLabel));
+  const all = await page.evaluate(async () => {
+    document.querySelector('#deliveriesMore')?.click();
+    await new Promise(r => setTimeout(r, 200));
+    return document.querySelectorAll('#deliveriesList .t3-row').length;
+  });
+  ok('INBOX tapping Show all reveals the full history', all === 4, `${all} rows after expanding`);
   const after = await readInbox();
   ok('BADGE opening the tab clears the unread count', after.unseen === 0, `unseen=${after.unseen}`);
 }
