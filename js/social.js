@@ -347,6 +347,18 @@ export async function claimSpireRemote(spire) {
 /** Every tower I hold, and the only route that can START a siege (the server
  *  creates one lazily here, so the 48h window always begins while I am looking).
  *  Returns null when offline, so callers keep the last known state. */
+/* This week's step race. The server settles the previous week's prize on the
+   first request of a new one, so simply opening the Crew tab is what pays the
+   winner: no cron, and nothing to remember to run. */
+export async function fetchStepRace(weekKey) {
+  try {
+    if (!(await isOnline())) return null;
+    const r = await signedFetch('GET', `/steps/week?week=${encodeURIComponent(weekKey)}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
 export async function fetchMySpires() {
   try {
     if (!(await isOnline())) return null;

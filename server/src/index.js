@@ -103,6 +103,10 @@ async function verifySigned(request, env, bodyText) {
 
 /* ---------------- routes ---------------- */
 // A spire untended this long is dormant and stops counting against the cap.
+// The weekly step race prize. Coins and a crate: a reward for walking, never
+// power, so winning the race cannot make you win fights (see the cosmetic-only
+// monetization line: the game must never sell or gift an advantage).
+const STEP_RACE_PRIZE_COINS = 750;
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -617,6 +621,79 @@ export default {
           you: r.id === auth.playerId,
         }));
         return json({ players });
+      }
+
+      /* THE WEEKLY STEP RACE.
+       *
+       * Tom, 2026-08-08: "there should be weekly events that show which player
+       * has the most steps and then a prize that they win for having the most.
+       * the event should show who is currently in first, 2nd 3rd, in a fun way
+       * that creates rivalry and gets people moving."
+       *
+       * No new table. The client stamps `weekSteps` and the `weekKey` they belong
+       * to into the profile snapshot it already syncs, so a stale client can
+       * never have last week's total counted into this week's race.
+       *
+       * Settlement is LAZY: the first request in a new week pays out the previous
+       * week's winner through the normal grants channel. No cron, and the
+       * INSERT OR IGNORE on a `stepweek-<weekKey>` key makes it idempotent no
+       * matter how many clients race to be first through the door.
+       */
+      if (path === '/steps/week' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const wk = String(url.searchParams.get('week') || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return json({ error: 'bad week' }, 400);
+
+        const board = async weekKey => (await env.DB.prepare(
+          `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
+                  CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps
+             FROM players
+            WHERE profile IS NOT NULL
+              AND json_extract(profile,'$.weekKey') = ?
+              AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0
+            ORDER BY steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
+
+        // Settle the week just gone, once, before answering for this one.
+        const prev = new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
+        const settledKey = `stepweek-${prev}`;
+        const already = await env.DB.prepare('SELECT 1 FROM grants WHERE key = ? LIMIT 1').bind(settledKey).first();
+        let champion = null;
+        if (!already) {
+          const last = await board(prev);
+          if (last.length) {
+            const w = last[0];
+            champion = { name: w.name || w.handle, steps: w.steps, week: prev };
+            await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+              .bind(w.id, settledKey, 'social', JSON.stringify({
+                coins: STEP_RACE_PRIZE_COINS,
+                crate: 'golden',
+                note: `You won last week's step race with ${w.steps.toLocaleString()} steps!`,
+              }), Date.now()).run();
+          }
+          // If nobody raced last week there is nothing to settle and nothing to
+          // record: a marker row would be pulled down as a grant and show up in
+          // somebody's Deliveries as an empty gift. Re-checking an empty week is
+          // one indexed query.
+        }
+
+        const rows = await board(wk);
+        const meIdx = rows.findIndex(r => r.id === auth.playerId);
+        return json({
+          week: wk,
+          prize: { coins: STEP_RACE_PRIZE_COINS, crate: 'golden' },
+          champion,                       // last week's winner, for the "who to beat" line
+          yourRank: meIdx >= 0 ? meIdx + 1 : null,
+          racers: rows.length,
+          players: rows.slice(0, 10).map((r, i) => ({
+            rank: i + 1,
+            playerId: r.id,
+            name: r.name || r.handle,
+            steps: r.steps,
+            outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(),
+            you: r.id === auth.playerId,
+          })),
+        });
       }
 
       // Signed: send a gift to an accepted friend. mode 'free' = one server-rolled

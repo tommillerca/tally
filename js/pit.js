@@ -183,7 +183,7 @@ export const TALENT_TREES = [
     id: 'crowlord', name: 'The Crow Lord', tag: 'The Murder', color: '#6f86c9',
     flavor: 'Command a murder of crows. Call them to your Flock and they peck the enemy every turn — then unleash the whole Murder at once.',
     nodes: [
-      { id: 'callcrows', tier: 1, name: 'Call the Murder', move: true, desc: 'NEW MOVE: summon 2 crows to your Flock (any range). Your Flock pecks the enemy at the start of each of your turns.' },
+      { id: 'callcrows', tier: 1, name: 'Call the Murder', move: true, desc: 'NEW MOVE: summon 2 crows to your Flock (any range). Your Flock pecks the enemy at the start of each of your turns, and one crow leaves after it feeds. Keep calling them back.' },
       { id: 'sharpbeaks', tier: 1, ranks: 5, name: 'Sharp Beaks', desc: 'Each crow pecks +1 damage per rank.' },
       { id: 'peckeyes', tier: 2, name: 'Peck the Eyes', move: true, desc: 'NEW MOVE: the flock dives — damage, BLIND the enemy for 2 turns, and add a crow to your Flock.' },
       { id: 'carrion', tier: 2, name: 'Carrion Feast', desc: 'Your crows heal you for 30% of their peck damage.' },
@@ -1235,8 +1235,19 @@ export function endTurn(fight) {
     if (foe && foe.hp > 0) {
       const perCrow = Math.max(2, 2 + rkOf(me, 'sharpbeaks') + Math.floor((me.d.magicMult - 1) * 4));
       const dmg = me.flock * perCrow;
-      foe.hp = Math.max(0, foe.hp - dmg);
+      // dealDamage, not a raw hp write: the peck used to bypass wards, armour and
+      // every cheat-death check, because it was the only damage in the game that
+      // did not go through the shared path.
+      dealDamage(fight, foeWho, dmg, ticks);
       ticks.push({ t: 'crowpeck', who: foeWho, damage: dmg, crows: me.flock });
+      /* THE FLOCK THINS AS IT FEEDS. Measured 2026-08-08: a maxed flock was 7
+         crows x ~7 damage every single turn, costing no AP and never expiring,
+         which doubled your damage for free and won 100% of fights at EVERY
+         difficulty the game serves (vs 79/35/15 for no talents at 0.8/1.0/1.2x).
+         Losing a crow per peck turns set-and-forget into an engine you have to
+         keep paying actions into: 100/96/64/9, which is where the melee stack
+         already sits. Tom's call 2026-08-08: "if a build is broken fix it". */
+      me.flock = Math.max(0, me.flock - 1);
       if (rkOf(me, 'scavenge')) foe.wind = Math.max(0, foe.wind - me.flock * rkOf(me, 'scavenge'));
       if (me.talents.has('carrion')) { const h = healUp(me, Math.round(dmg * 0.3 * healMult(me))); ticks.push({ t: 'heal', who: next, amount: h }); }
       if (me.talents.has('omen') && me.flock >= 4 && (!foe.weaken || foe.weaken.pct < 0.15)) foe.weaken = { pct: 0.15, turns: 2 };

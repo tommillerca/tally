@@ -87,6 +87,34 @@ ok('CHEATDEATH the wound clause is wired to the shared heal path',
     readFileSync(new URL('../js/pit.js', import.meta.url), 'utf8').replace(/function healUp[\s\S]*?\n}/, '')),
   'no heal site bypasses healUp');
 
+/* NO BUILD MAY BEAT A HARDER FOE ON AUTOPILOT.
+ *
+ * The offense band above is measured against a DUMMY, so it only sees raw
+ * damage. It never caught the Crow Lord, whose flock was 1.27x on damage but
+ * won 100% of fights at EVERY difficulty the game serves, because the damage
+ * was free: no AP, no expiry, and it bypassed wards entirely. Tom, 2026-08-08:
+ * "crow lord should not be winning 100% at every difficulty... if a build is
+ * broken fix it."
+ *
+ * So this guards OUTCOMES against a foe stronger than you, where a broken build
+ * shows up and a merely strong one does not. Measured 2026-08-08 after the fix,
+ * win rate at x1.2 / x1.5: melee stack 72/7, Crow Lord 64/9, sustain 41/8,
+ * stamina engine 25/3, no talents 15/2. Before the fix the Crow Lord was 96/42.
+ *
+ * PROVE-RED (confirmed 2026-08-08): delete the `me.flock -= 1` thinning line in
+ * js/pit.js and HARDFOE names the Crow Lord at both tiers.
+ */
+const HARD_CEIL = 0.82;   // at a foe 20% stronger. Strongest legit build sits at 72%.
+const BRUTAL_CEIL = 0.30; // at a foe 50% stronger. Strongest legit build sits at 9%.
+for (const b of BUILDS.slice(1)) {
+  const hard = measure(b, { foeMult: 1.2, seeds: SEEDS });
+  ok(`HARDFOE ${b.name} can still lose to a foe 20% stronger`, hard.winRate <= HARD_CEIL, `${(hard.winRate * 100).toFixed(0)}%`);
+}
+for (const b of BUILDS.slice(1)) {
+  const brutal = measure(b, { foeMult: 1.5, seeds: SEEDS });
+  ok(`HARDFOE ${b.name} does not walk over a foe 50% stronger`, brutal.winRate <= BRUTAL_CEIL, `${(brutal.winRate * 100).toFixed(0)}%`);
+}
+
 /* Action economy must be PAID FOR. A gear affix or a 4-piece set handing out a
    +1 AP talent was worth +45% damage on an engine build and cost nothing. */
 import { readFileSync } from 'node:fs';

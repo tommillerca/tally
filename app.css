@@ -1767,6 +1767,33 @@ body::before {
   padding: 8px 10px; border: 2px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+/* THE WEEKLY STEP RACE. A standings list with a clock on it: the top three carry
+   medal colours so first place is worth wanting, and your own row is the only
+   accent on the card so you can find yourself without reading. */
+.race-rows { display: grid; gap: 4px; margin-top: 4px; }
+.race-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 9px; border: 2px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.race-row b { flex: 1; min-width: 0; font-weight: 600; font-size: var(--fs-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-row .rk {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+  font-family: var(--display); font-size: var(--fs-1);
+  border: 2px solid var(--ink); border-radius: 6px; background: var(--surface-3); color: var(--text-2);
+}
+.race-row.r1 .rk { background: var(--gold); color: #201500; }
+.race-row.r2 .rk { background: #cdd3da; color: #1b1f24; }
+.race-row.r3 .rk { background: #d69a6a; color: #241305; }
+.race-row .st { flex: none; font-variant-numeric: tabular-nums; font-size: var(--fs-1); color: var(--text-2); }
+.race-row.you { border-color: var(--accent); }
+.race-row.you b, .race-row.you .st { color: var(--accent); }
+.race-foot {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 11px;
+  padding-top: 10px; border-top: 2px solid var(--line);
+}
+.race-foot b { font-family: var(--display); font-size: var(--fs-2); color: var(--gold); }
+.race-foot span { font-size: var(--fs-0); color: var(--text-3); }
 .lb-wait { margin-top: 10px; font-size: var(--fs-1); color: var(--text-3); }
 .lb-youare b { font-family: var(--display); font-size: var(--fs-4); color: var(--accent); }
 .lb-youare span { font-size: var(--fs-1); color: var(--text-2); min-width: 0; }

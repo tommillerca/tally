@@ -287,5 +287,52 @@ await test('leaderboard: hides never-synced players, carries pet.shiny', async (
   assert.ok(!board.players.some(x => x.playerId === gp.playerId), 'never-synced registration is hidden');
 });
 
+/* THE WEEKLY STEP RACE. Tom, 2026-08-08: a weekly most-steps event with a prize
+   and a visible 1st/2nd/3rd. Ranks come from the profile snapshot the client
+   already syncs, stamped with the week they belong to, and the previous week is
+   settled lazily on the first request of a new one.
+   PROVE-RED: drop the `json_extract(profile,'$.weekKey') = ?` clause and the
+   stale-week assert fails; remove the INSERT OR IGNORE and the pay-once assert
+   fails with two grants. */
+await test('step race: ranks this week only, and pays last week exactly once', async () => {
+  // A FRESH week per run. The local dev DB persists between runs, so a fixed week
+  // meant the second run found last week already settled and the pay-once assert
+  // failed for a reason that had nothing to do with the code. Both keys are
+  // derived from a known Monday so they are always real week starts.
+  const MON = Date.parse('2030-01-07T00:00:00Z');   // a Monday
+  const wk = new Date(MON + (Date.now() % 400) * 7 * 86400000).toISOString().slice(0, 10);
+  const prev = new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
+  const mk = async (level, weekKey, steps) => {
+    const k = await makeKeys();
+    const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps }, appV: 'test' });
+    assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
+    return { k, p };
+  };
+  const walker = await mk(5, wk, 42000);
+  const slower = await mk(5, wk, 9000);
+  const stale = await mk(5, prev, 999999);       // last week's total, must NOT rank now
+
+  const r = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
+  const ids = r.players.map(x => x.playerId);
+  assert.ok(ids.includes(walker.p.playerId) && ids.includes(slower.p.playerId), 'this week\'s racers are on the board');
+  assert.ok(!ids.includes(stale.p.playerId), 'a stale sync from last week does not rank in this one');
+  const wi = ids.indexOf(walker.p.playerId), si = ids.indexOf(slower.p.playerId);
+  assert.ok(wi < si, 'ordered by steps, most first');
+  assert.equal(r.players[wi].rank, wi + 1, 'rank is 1-based and matches position');
+  assert.ok(r.prize && r.prize.coins > 0, 'the race states its prize');
+
+  // last week had a racer (`stale`), so the FIRST request above settles it
+  const g1 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
+  const prizes = (g1.grants || []).filter(x => x.key === `stepweek-${prev}`);
+  assert.equal(prizes.length, 1, 'last week\'s winner was paid exactly once');
+  assert.ok(prizes[0].payload.coins > 0 && /step race/i.test(prizes[0].payload.note || ''), 'the prize says what it was for');
+
+  // and asking again must not pay twice
+  await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);
+  const g2 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
+  assert.equal((g2.grants || []).filter(x => x.key === `stepweek-${prev}`).length, 1, 'settling is idempotent');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

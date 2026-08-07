@@ -40,7 +40,12 @@ function playerTurn(fight) {
     let pick = null;
     // stay alive first: a dead build measures nothing
     if (fight.p.hp < fight.p.d.maxHp * 0.3 && (has('mend') || has('guard'))) pick = has('mend') ? 'mend' : 'guard';
-    if (!pick) for (const id of SETUP_FIRST) if (has(id)) { pick = id; break; }
+    // The flock thins as it feeds (v288), so Call the Murder is a move you come
+    // BACK to, not a one-off. Re-summon when the flock has actually thinned;
+    // without the threshold the greedy policy re-casts every single turn and the
+    // build measures as far worse than a person would ever play it.
+    if (!pick && has('callcrows') && (fight.p.flock || 0) < 3) pick = 'callcrows';
+    if (!pick) for (const id of SETUP_FIRST) if (id !== 'callcrows' && has(id)) { pick = id; break; }
     if (!pick && has('signature')) pick = 'signature';
     if (!pick) {
       // otherwise the best damage per AP available right now

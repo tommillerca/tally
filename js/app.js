@@ -20,7 +20,7 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   DROP, buyDropItem, refundStreakFreezes,
 } from './loot.js';
-import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
+import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf, weekKeyOf, weekDates } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
@@ -4839,6 +4839,14 @@ async function renderFriends(el) {
       <span class="ul-chev">›</span>
     </button>
 
+    <!-- THE WEEKLY RACE. Above your Crew because it is the thing with a clock on
+         it: a standing you can still change this week beats a list that will look
+         the same tomorrow. -->
+    <div class="card race-card" id="raceCard" hidden>
+      <div class="card-title">THIS WEEK'S STEP RACE</div>
+      <div id="raceBody"></div>
+    </div>
+
     <div class="card">
       <div class="card-title">YOUR CREW</div>
       <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
@@ -5030,6 +5038,42 @@ async function renderFriends(el) {
   };
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
+
+  /* THE WEEKLY STEP RACE. One row per racer, ordered, with YOUR row marked, and
+     a countdown, because a race with no clock is just a list. Opening this tab
+     is also what settles last week and pays its winner (see /steps/week). */
+  const hydrateRace = async () => {
+    const wk = weekKeyOf(dateKey());
+    const race = await social.fetchStepRace(wk);
+    const card = $('#raceCard', el), body = $('#raceBody', el);
+    if (!card || !body || !card.isConnected || !race) return;
+    const ends = new Date(Date.parse(wk + 'T00:00:00') + 7 * 86400000);
+    const daysLeft = Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
+    const rows = race.players || [];
+    if (!rows.length) {
+      body.innerHTML = `<p class="note" style="margin:0">Nobody has logged a step this week. Take a walk and the top of this board is yours.</p>
+        <div class="race-foot"><b>${race.prize.coins.toLocaleString()} coins + a Golden Crate</b><span>to whoever walks the most by Sunday</span></div>`;
+      card.hidden = false;
+      return;
+    }
+    body.innerHTML = `
+      ${race.champion ? `<p class="note" style="margin:0 0 10px"><b>${esc(race.champion.name)}</b> took last week with ${race.champion.steps.toLocaleString()} steps. Beat that.</p>` : ''}
+      <div class="race-rows">
+        ${rows.map(p => `
+          <div class="race-row${p.you ? ' you' : ''} r${p.rank}">
+            <span class="rk">${p.rank}</span>
+            <b>${esc(p.name)}</b>
+            <span class="st">${p.steps.toLocaleString()}</span>
+          </div>`).join('')}
+      </div>
+      ${race.yourRank ? '' : '<p class="note" style="margin:10px 0 0">You are not on the board yet this week.</p>'}
+      <div class="race-foot">
+        <b>${race.prize.coins.toLocaleString()} coins + a Golden Crate</b>
+        <span>${daysLeft === 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`} · ${race.racers} racing</span>
+      </div>`;
+    card.hidden = false;
+  };
+  hydrateRace();
 
   /* NEW BONEHEADZ. A public launch's first problem is that a new player opens
      the Crew tab and it is empty. This surfaces the people who joined this week
@@ -9260,7 +9304,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v287'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v288'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9339,10 +9383,25 @@ async function refreshNotifSchedules() {
   } catch { /* fails silent */ }
 }
 
+/* THE WEEKLY RACE. Tom, 2026-08-08: "there should be weekly events that show
+   which player has the most steps and then a prize that they win for having the
+   most... creates rivalry and gets people moving."
+   Steps already live in the local `health` store per day; this is the only new
+   thing the profile has to carry, and it is stamped with the week it belongs to
+   so a stale sync can never be counted into the wrong week. */
+async function weekStepsNow(date = dateKey()) {
+  const wk = weekKeyOf(date);
+  const days = new Set(weekDates(wk));
+  const rows = await db.all('health');
+  return { weekKey: wk, steps: rows.reduce((a, r) => a + (days.has(r.date) ? (r.steps || 0) : 0), 0) };
+}
+
 async function socialSnapshot() {
-  const [fighter, eq, xp, gOwned, earned] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds()]);
+  const [fighter, eq, xp, gOwned, earned, wk] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds(), weekStepsNow()]);
   const lvl = levelFor(xp);
   return {
+    weekKey: wk.weekKey,
+    weekSteps: wk.steps,
     level: lvl.level,
     levelName: lvl.name,
     stats: fighter.stats,
