@@ -327,6 +327,9 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   const prizes = (g1.grants || []).filter(x => x.key === `stepweek-${prev}`);
   assert.equal(prizes.length, 1, 'last week\'s winner was paid exactly once');
   assert.ok(prizes[0].payload.coins > 0 && /step race/i.test(prizes[0].payload.note || ''), 'the prize says what it was for');
+  assert.ok(/1st/.test(prizes[0].payload.note), 'the note names the place finished');
+  assert.equal(r.podium.length, 3, 'the board publishes what all three places pay');
+  assert.ok(r.podium[0].coins > r.podium[1].coins && r.podium[1].coins > r.podium[2].coins, 'places pay in order');
 
   // and asking again must not pay twice
   await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);

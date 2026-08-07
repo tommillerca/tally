@@ -3,8 +3,7 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 288, date: '2026-08-08', title: 'The weekly step race', items: [
-    'A <b>weekly step race</b> runs on the Crew tab. Everyone who walks is on one board, ordered, with your own row marked and the clock showing how long is left. Whoever walks the most by Sunday takes <b>750 coins and a Golden Crate</b>, and last week\'s winner is named at the top so you know who to beat.',
+  { n: 288, date: '2026-08-08', title: 'Crow Lord comes back to earth', items: [
     '<b>Crow Lord was broken.</b> A full Flock pecked for free every turn, never ran out, and won essentially every fight at every difficulty. Crows now <b>leave after they feed</b>, one per peck, so a big Flock is something you keep calling back rather than something you set once. Its damage also goes through armour and wards now, like every other attack in the game.',
   ] },
   { n: 287, date: '2026-08-08', title: 'Android gets its face back', needsBuild: true, items: [

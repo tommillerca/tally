@@ -20,7 +20,7 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   DROP, buyDropItem, refundStreakFreezes,
 } from './loot.js';
-import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf, weekKeyOf, weekDates } from './quests.js';
+import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
@@ -5043,7 +5043,10 @@ async function renderFriends(el) {
      a countdown, because a race with no clock is just a list. Opening this tab
      is also what settles last week and pays its winner (see /steps/week). */
   const hydrateRace = async () => {
-    const wk = weekKeyOf(dateKey());
+    // OFF until Tom approves the art. Shipped live once without that approval on
+    // 2026-08-08; his call, and the standing rule is that the mockup comes first.
+    if (!RACE_LIVE) return;
+    const wk = raceWeekKey(dateKey());
     const race = await social.fetchStepRace(wk);
     const card = $('#raceCard', el), body = $('#raceBody', el);
     if (!card || !body || !card.isConnected || !race) return;
@@ -9304,7 +9307,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v288'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v289'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9389,9 +9392,29 @@ async function refreshNotifSchedules() {
    Steps already live in the local `health` store per day; this is the only new
    thing the profile has to carry, and it is stamped with the week it belongs to
    so a stale sync can never be counted into the wrong week. */
+/* The race runs in 7-day periods anchored to the day it LAUNCHES, not to the
+   calendar Monday. Tom, 2026-08-08: "the step race should start today if we're
+   posting it today why the fuck would we do it monday". A Monday-anchored week
+   means announcing it on a Thursday hands whoever already walked Mon-Wed a lead
+   nobody else agreed to race for. Day one is day one. */
+const RACE_EPOCH = '2026-08-08';
+const RACE_LIVE = false;   // flip ON with Tom's approval of the art, same day the announcement goes out
+const RACE_DAYS = 7;
+
+function raceWeekKey(date = dateKey()) {
+  const ms = Date.parse(date + 'T00:00:00') - Date.parse(RACE_EPOCH + 'T00:00:00');
+  if (!(ms >= 0)) return RACE_EPOCH;                     // before launch: everything is period one
+  const period = Math.floor(ms / (RACE_DAYS * 86400000));
+  return dateKey(new Date(Date.parse(RACE_EPOCH + 'T00:00:00') + period * RACE_DAYS * 86400000));
+}
+function raceWeekDates(weekKey) {
+  const t0 = Date.parse(weekKey + 'T00:00:00');
+  return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+}
+
 async function weekStepsNow(date = dateKey()) {
-  const wk = weekKeyOf(date);
-  const days = new Set(weekDates(wk));
+  const wk = raceWeekKey(date);
+  const days = new Set(raceWeekDates(wk));
   const rows = await db.all('health');
   return { weekKey: wk, steps: rows.reduce((a, r) => a + (days.has(r.date) ? (r.steps || 0) : 0), 0) };
 }

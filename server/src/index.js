@@ -106,7 +106,15 @@ async function verifySigned(request, env, bodyText) {
 // The weekly step race prize. Coins and a crate: a reward for walking, never
 // power, so winning the race cannot make you win fights (see the cosmetic-only
 // monetization line: the game must never sell or gift an advantage).
-const STEP_RACE_PRIZE_COINS = 750;
+/* Tom's call 2026-08-08: "top three should all get a prize of some sort." A
+   winner-takes-all board stops mattering to everyone who cannot catch first by
+   Wednesday; three places keeps the middle of the pack racing each other. */
+const STEP_RACE_PODIUM = [
+  { coins: 750, crate: 'golden', place: '1st' },
+  { coins: 400, crate: 'daily', place: '2nd' },
+  { coins: 200, crate: null, place: '3rd' },
+];
+const STEP_RACE_PRIZE_COINS = STEP_RACE_PODIUM[0].coins;
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -664,12 +672,19 @@ export default {
           if (last.length) {
             const w = last[0];
             champion = { name: w.name || w.handle, steps: w.steps, week: prev };
-            await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-              .bind(w.id, settledKey, 'social', JSON.stringify({
-                coins: STEP_RACE_PRIZE_COINS,
-                crate: 'golden',
-                note: `You won last week's step race with ${w.steps.toLocaleString()} steps!`,
-              }), Date.now()).run();
+            // Pay the whole podium. Every grant carries the SAME settledKey so the
+            // `already` check above still sees the week as settled after one row,
+            // and OR IGNORE keeps a re-run from paying anyone twice; the key is
+            // unique per (player, key), so three players can each hold one.
+            for (let i = 0; i < Math.min(3, last.length); i++) {
+              const p = last[i], prize = STEP_RACE_PODIUM[i];
+              await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+                .bind(p.id, settledKey, 'social', JSON.stringify({
+                  coins: prize.coins,
+                  ...(prize.crate ? { crate: prize.crate } : {}),
+                  note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
+                }), Date.now()).run();
+            }
           }
           // If nobody raced last week there is nothing to settle and nothing to
           // record: a marker row would be pulled down as a grant and show up in
@@ -682,6 +697,7 @@ export default {
         return json({
           week: wk,
           prize: { coins: STEP_RACE_PRIZE_COINS, crate: 'golden' },
+          podium: STEP_RACE_PODIUM,       // so the card can show what 2nd and 3rd pay too
           champion,                       // last week's winner, for the "who to beat" line
           yourRank: meIdx >= 0 ? meIdx + 1 : null,
           racers: rows.length,
