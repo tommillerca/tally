@@ -1381,7 +1381,7 @@ async function renderToday(el) {
             <div class="q-desc">${esc(q.desc)}</div>
             <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
-          ${st.claimed ? '<span class="q-done">${ICONS.check(13)}</span>'
+          ${st.claimed ? `<span class="q-done">${ICONS.check(13)}</span>`
             : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
             : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
         </div>`;
@@ -1892,7 +1892,7 @@ function healthCardHtml(hk, isToday) {
   const goal = 10000;
   const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
   return `<div class="card">
-    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? '<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>' : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
+    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? `<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>` : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
     ${hk ? `
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
@@ -2196,6 +2196,76 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__openGlutton =
    already computed: the weekly theme and boss, the tier, `den.reward`, and the
    gear odds straight off the roll's own weights.
    `onFight` is passed in so this sheet never has to know how a fight is built. */
+/* THE SPIRE SHEET. Tapping a tower on the Boneyard tells you whose it is.
+ *
+ * Tom, 2026-08-08: "why cant i click a Spire on the map in boneyard and see
+ * somethign cool like who has it right now etc. it should be like pokemon go
+ * where youre proud to rep your gym and flex on other players." Spires were not
+ * in the map's click selector at all, so a tap did nothing.
+ *
+ * Every fact here already arrives on the /spires poll (owner name, level,
+ * claimed_at, siege): this is a reader, no new request and no server change.
+ * The flex is the point, so the holder's name and their earned warden title are
+ * the loudest things on the sheet, and the tower's level is its history: every
+ * takeover and every repelled siege adds one.
+ */
+function openSpireInfoSheet(info, onAct = null) {
+  const { s, view, held, rival, dormant, besieged, siegeUntil, siegeName, lvl, heldSince } = info;
+  const days = heldSince ? Math.floor((Date.now() - heldSince) / 86400000) : 0;
+  const wt = wardenTier(days);
+  const holder = held ? 'You hold it' : rival ? esc(rival.ownerName || 'A rival') : dormant ? 'Gone dormant' : 'Nobody';
+  const standing = heldSince
+    ? (days >= 1 ? `Standing ${days} day${days === 1 ? '' : 's'}` : 'Taken today')
+    : 'Never been taken';
+  const inRange = s.dist != null && s.dist <= SPIRE_RADIUS_M;
+  const facts = [
+    { ico: bhIcon('tombstone', 20), big: `LV ${lvl}`, lab: 'TOWER' },
+    heldSince ? { ico: ICONS.star(20), big: String(days), lab: days === 1 ? 'DAY HELD' : 'DAYS HELD' } : null,
+    held && view.tribute && view.tribute.coins ? { ico: ICONS.coin(20), big: String(view.tribute.coins), lab: 'TRIBUTE' } : null,
+  ].filter(Boolean);
+
+  openSheet(`
+    <div class="sheet-head">
+      <div class="hd">
+        <h2>${esc(s.name || 'Dark Spire')}</h2>
+        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : rival ? 'Rival territory' : 'Unclaimed'}</div>
+      </div>
+      <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
+    </div>
+    <div class="sheet-body">
+      <div class="den-hero sp-hero${held ? ' mine' : rival ? ' rival' : ''}">
+        <span class="art"><img src="assets/brand/tomb.png" alt=""></span>
+        <div class="who">
+          <b>${holder}</b>
+          <small>${esc(standing)}</small>
+          ${wt.tier ? `<span class="tier warden t${wt.tier}">${esc(wt.name.toUpperCase())}</span>` : `<span class="tier">LV ${lvl} TOWER</span>`}
+        </div>
+      </div>
+      ${besieged ? `<div class="sp-siege">${esc(siegeName || 'Someone')} is laying siege. It falls in ${esc(fmtCookTime(Math.max(0, siegeUntil - Date.now())))} unless you break it.</div>` : ''}
+      ${t1Sect('The tower')}
+      <div class="den-pays">
+        ${facts.map(f => `<div class="p"><span>${f.ico}</span><b>${esc(f.big)}</b><small>${f.lab}</small></div>`).join('')}
+      </div>
+      <p class="note" style="margin:10px 2px 0">${held
+        ? 'Every day it stands it pays you tribute, and holding towers lifts every quest payout you claim.'
+        : rival
+          ? 'Beat their warden and the tower flies your name instead. It keeps its level, and its level is how hard it has been fought over.'
+          : 'Take it and it flies your name on the map for everyone who walks past.'}</p>
+      <div class="den-walk">
+        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <div><div class="d">${s.dist != null ? esc(fmtDist(s.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough' : `Get within ${SPIRE_RADIUS_M} m to act`}</small></div>
+      </div>
+    </div>
+    ${inRange && onAct ? `<div class="t1-foot"><button class="btn" id="spireAct">${besieged && held ? 'Break the siege'
+      : rival ? `Take it from ${esc(rival.ownerName || 'them')}`
+      : !held ? 'Take this tower'
+      : view.tribute && view.tribute.days ? 'Collect the tribute'
+      : 'Tend it'}</button></div>` : ''}`, { cls: 't1', name: 'spire-sheet' });
+  // delegate to the existing in-range button rather than restating the rules of
+  // taking, tending and sieges: that flow already owns energy, shields and adds
+  if (inRange && onAct) $('#spireAct')?.addEventListener('click', () => { history.back(); setTimeout(onAct, 220); });
+}
+
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
   const odds = denGearOdds(den.tier || 0);
   const r = den.reward || {};
@@ -4750,15 +4820,27 @@ async function renderFriends(el) {
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
 
-    ${whatsNewCard}
+    <!-- ORDER MATTERS HERE. Tom, 2026-08-08: "the crew tab is still fucked up as
+         a hierarchy. you go there and all you see is a code and text... you need
+         to rejig it so when you go there youre immediately greeted with the
+         leader board. the tab feels like homework right now."
+         So: the standings first (the reason to come here), then your Crew, then
+         what arrived, then people to add. Your own friend code is REFERENCE, not
+         a greeting, so it moves to the bottom where you go looking for it. -->
+    <button class="card lb-open" id="crewLeaderboard">
+      <div class="card-title">LEADERBOARD</div>
+      <div class="lb-podium" id="lbPodium" hidden></div>
+      <div class="lb-youare" id="lbYouAre" hidden></div>
+      <p class="note" style="margin:8px 0 0">Every Bonehead ranked by level. Tap anyone to see their fit, gear and badges.</p>
+      <span class="ul-chev">›</span>
+    </button>
 
     <div class="card">
-      <div class="card-title">YOUR FRIEND CODE</div>
-      <p class="note" style="margin:0 0 12px">Share this with a friend. When they type it in, you're Crew, and you'll see each other's Bonehead, gear and badges below.</p>
-      <div class="crew-code-big" id="crewCodeBig">${esc(me.friendCode)}</div>
-      <div class="crew-code-btns">
-        <button class="btn small" id="crewShare">Share my code</button>
-        <button class="btn small ghost" id="crewCopy">Copy</button>
+      <div class="card-title">YOUR CREW</div>
+      <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
+      <div class="friends-add" style="margin-top:12px">
+        <input id="friendCode" type="text" placeholder="Enter a friend's code" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <button class="btn small" id="friendAddBtn">Add</button>
       </div>
     </div>
 
@@ -4769,26 +4851,21 @@ async function renderFriends(el) {
     </div>
 
     <div class="card" id="newcomersCard" hidden>
-      <div class="card-title">NEW BONEHEADZ</div>
-      <p class="note" style="margin:0 0 10px">The newest Boneheadz. Add one and you both get a Crew to send things to.</p>
+      <div class="card-title">WORTH ADDING</div>
+      <p class="note" style="margin:0 0 10px">Boneheadz who are actually playing and are not in your Crew yet.</p>
       <div id="newcomersList"></div>
     </div>
 
-    <button class="card lb-open" id="crewLeaderboard">
-      <div class="card-title">🏆 LEADERBOARD</div>
-      <div class="lb-podium" id="lbPodium" hidden></div>
-      <p class="note" style="margin:8px 0 0">Every Bonehead ranked by level. Tap to see where you stand, and add anyone as a friend.</p>
-      <span class="ul-chev">›</span>
-    </button>
+    ${whatsNewCard}
 
     <div class="card">
-      <div class="card-title">ADD A FRIEND</div>
-      <p class="note" style="margin:0 0 10px">Got a friend's code? Enter it here to send them a request.</p>
-      <div class="friends-add">
-        <input id="friendCode" type="text" placeholder="Enter their code" autocapitalize="characters" autocomplete="off" spellcheck="false">
-        <button class="btn small" id="friendAddBtn">Add</button>
+      <div class="card-title">YOUR FRIEND CODE</div>
+      <p class="note" style="margin:0 0 12px">Share this with a friend. When they type it in, you're Crew, and you'll see each other's Bonehead, gear and badges.</p>
+      <div class="crew-code-big" id="crewCodeBig">${esc(me.friendCode)}</div>
+      <div class="crew-code-btns">
+        <button class="btn small" id="crewShare">Share my code</button>
+        <button class="btn small ghost" id="crewCopy">Copy</button>
       </div>
-      <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
     </div>`;
 
   // Deliveries: read the ledger, mark them seen, then drop the badge. Opening
@@ -4879,6 +4956,15 @@ async function renderFriends(el) {
       </div>`;
     }).join('');
     pod.hidden = false;
+    // WHERE YOU STAND. A podium of three strangers is somebody else's business;
+    // your own rank is the reason to care about it.
+    const meIdx = players.findIndex(p => p.you);
+    const you = $('#lbYouAre', el);
+    if (you && meIdx >= 0) {
+      const ahead = meIdx > 0 ? players[meIdx - 1] : null;
+      you.innerHTML = `<b>#${meIdx + 1}</b><span>of ${players.length}${ahead ? ` · ${esc(ahead.name)} is one rung up at Lv ${ahead.level}` : ' · nobody above you'}</span>`;
+      you.hidden = false;
+    }
   };
   const openLeaderboard = async () => {
     openSheet(`
@@ -4945,20 +5031,28 @@ async function renderFriends(el) {
     const card = $('#newcomersCard', el), list = $('#newcomersList', el);
     if (!card || !list || !card.isConnected || !players) return;
     const known = new Set([...(data.friends || []), ...(data.outgoing || [])].map(f => f.playerId));
-    /* NEWEST, not "joined this week". A 7-day window meant the card was hidden
-       almost always (Tom, 2026-08-08: "not seeing where the new players thing is
-       in crew?") because on a pre-launch community nobody joins most weeks. The
-       point of the card is that there is always somebody to add, so it shows the
-       newest players you do not already know, however long ago they arrived. */
+    /* WORTH ADDING, not merely NEW.
+       v281 showed "joined this week", which on a pre-launch community meant the
+       card was hidden almost every week. v285 dropped the window entirely, and
+       that surfaced the opposite problem: Tom, 2026-08-08, "the new player
+       feature needs work and im pretty sure youre still adding ghost accounts
+       because it's just showing bot lvl 1s in there."
+       Registration has been gated to onboarding-completion since v279, so these
+       are not phantom rows: they are real accounts that finished onboarding and
+       never came back. Adding one gets you a Crew member who will never play.
+       So the bar is EVIDENCE OF PLAY: past level 1, or seen in the last fortnight.
+       Newest first among those who qualify. */
+    const FORTNIGHT = 14 * 86400000;
+    const playing = p => (p.level || 1) > 1 || (p.lastSeen && Date.now() - p.lastSeen < FORTNIGHT);
     const fresh = players
-      .filter(p => !p.you && p.joinedAt && !known.has(p.playerId))
+      .filter(p => !p.you && !known.has(p.playerId) && playing(p))
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
       .slice(0, 5);
     if (!fresh.length) { card.hidden = true; return; }
     list.innerHTML = fresh.map(p => `
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
-        <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level} · joined ${esc(onlineLabel(p.joinedAt).text || 'just now')}</small></div>
+        <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text || 'online now')}</small></div>
         <button class="btn ghost" data-lbadd="${esc(p.friendCode)}">+ ADD</button>
       </div>`).join('');
     $$('[data-lbadd]', list).forEach(b => b.addEventListener('click', async () => {
@@ -8303,8 +8397,21 @@ async function renderBoneyard(el) {
     }
     mapEl.addEventListener('click', ev => {
       if (reportOpen) return;
-      const el = ev.target && ev.target.closest && ev.target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
+      const el = ev.target && ev.target.closest && ev.target.closest('.map-den-mark, .map-mini-mark, .map-spawn, .map-spire');
       if (el) {
+        /* A SPIRE IS SOMEBODY'S TURF. Tom, 2026-08-08: "why cant i click a Spire
+           on the map in boneyard and see somethign cool like who has it right
+           now etc. it should be like pokemon go where youre proud to rep your
+           gym and flex on other players." It was not even in this selector, so
+           tapping one did nothing at all. Every fact below already arrives with
+           the /spires poll; nothing new is fetched. */
+        const spireRec = [...spireMarkers.values()].find(r => r.el === el);
+        if (spireRec && spireRec.info) {
+          hidePoiTip();
+          openSpireInfoSheet(spireRec.info, () => $('#mapSpire', body)?.click());
+          ev.stopPropagation();
+          return;
+        }
         // A boss den gets the full sheet: it is the only marker where "is this
         // worth the walk" is a real question (tier, payout, gear odds). A bone
         // pile or a mini keeps the light tooltip; a sheet for a coin pile would
@@ -8599,6 +8706,9 @@ async function renderBoneyard(el) {
           : held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
+        // everything the tap sheet needs, captured at paint time so the sheet
+        // never has to re-derive ownership (the server is the authority here)
+        rec.info = { s, view, held, rival, dormant, besieged, siegeUntil, siegeName, lvl, heldSince };
         if (s.dist <= SPIRE_RADIUS_M && !spireInRange) {
           spireInRange = { s, view: { ...view, held }, rival, siege: besieged ? { until: siegeUntil, name: siegeName } : null };
         }
@@ -9140,7 +9250,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v285'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v286'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 286, date: '2026-08-08', title: 'The Crew tab, rebuilt around the standings', items: [
+    'The <b>Crew tab now opens on the leaderboard</b>, with the top three and <b>where you stand</b> right there. Your Crew is next, then what has arrived for you. Your own friend code moved to the bottom, where you go looking for it rather than being greeted by it.',
+    '<b>Tap any Dark Spire on the Boneyard</b> to see whose it is: who holds it, the title they have earned for holding it that long, how many days it has stood, and what the tower is worth. If you are close enough, you can take it from there.',
+    '<b>Worth Adding</b> replaces New Boneheadz. It only suggests players who are actually playing, instead of accounts that signed up once and never came back.',
+    'Fixed some <b>code showing up as text</b> on the Activity and Quests cards. Same bug as the protein row last week, in three more places.',
+  ] },
   { n: 285, date: '2026-08-08', title: 'Cheating death costs something now', items: [
     '<b>Last Light</b> was making fights unloseable: it revived you with a fifth of your health back, and anything with healing simply topped straight back up. It now leaves you at <b>1 HP</b>, and the wound does not close: <b>all healing on you is halved</b> for the rest of that fight. It is still the strongest capstone in the game, but the fight can be lost again.',
     'Your <b>Deliveries</b> list no longer treats your whole gift history as unread, and it shows what is actually new instead of burying the Crew tab. The rest is one tap away.',

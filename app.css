@@ -1761,6 +1761,14 @@ body::before {
 .lb-open .ul-chev { position: absolute; right: 16px; top: 14px; color: var(--text-3); font-size: 22px; }
 /* top-3 podium tile on the Crew tab: show off the Boneheadz, gold in the middle */
 .lb-podium { display: flex; align-items: flex-end; gap: 10px; margin-top: 10px; }
+/* where YOU stand, under the podium: the reason the standings matter to you */
+.lb-youare {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 12px;
+  padding: 8px 10px; border: 2px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.lb-youare b { font-family: var(--display); font-size: var(--fs-4); color: var(--accent); }
+.lb-youare span { font-size: var(--fs-1); color: var(--text-2); min-width: 0; }
 .lb-pod {
   flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 6px 8px;
@@ -4581,6 +4589,20 @@ body::before {
   display: inline-block; margin-top: 7px;
   font-size: var(--fs-0); font-weight: 800; letter-spacing: .07em;
   background: var(--gold); color: #201500; border: 2px solid var(--ink); border-radius: 7px; padding: 1px 7px;
+}
+/* A spire is somebody's turf, so the sheet says whose at a glance: your own
+   tower reads in the accent, a rival's in coral, and an earned warden title
+   outranks the plain level chip. */
+.sp-hero.mine { border-color: var(--accent); }
+.sp-hero.mine .who b { color: var(--accent); }
+.sp-hero.rival { border-color: var(--coral); }
+.sp-hero.rival .who b { color: var(--coral); }
+.den-hero .who .tier.warden { background: var(--violet); color: #17131f; }
+.den-hero .who .tier.warden.t3 { background: var(--coral); color: #2a0d08; }
+.sp-siege {
+  margin: 0 0 13px; padding: 9px 11px; font-size: var(--fs-1);
+  background: var(--surface-2); color: var(--text-2);
+  border: 2px solid var(--coral); border-radius: var(--radius-sm);
 }
 .den-pays { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
 .den-pays .p {
