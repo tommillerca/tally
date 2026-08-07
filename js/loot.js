@@ -220,9 +220,28 @@ export async function buyWithDust(id) {
 
 export const EGG_GOAL_STEPS = 8000;
 
+/* THE INCUBATION METER.
+ *
+ * Tom, 2026-08-06: "Is there ways to include working out as a potential
+ * experience gain" for people who cannot get out for walks.
+ *
+ * Eggs and pets were fuelled by STEPS ALONE, which meant an hour on a rowing
+ * machine or a full gym session moved nothing: a housebound player could never
+ * hatch a pet. Recorded exercise minutes now count toward incubation at
+ * STEPS_PER_ACTIVE_MIN each, capped per day so a mis-recorded eight-hour
+ * "workout" cannot hatch a shelf of eggs at once.
+ *
+ * Deliberately NOT applied to step milestones or step XP: those already pay
+ * separately for workouts (onHealthSync), and paying twice for one session is
+ * how a currency stops meaning anything. This meter is for eggs and pets only.
+ */
+export const STEPS_PER_ACTIVE_MIN = 250;
+export const ACTIVE_MIN_DAILY_CAP = 60;
 export async function lifetimeStepsSum() {
   const rows = await db.all('health');
-  return rows.reduce((a, r) => a + (r.steps || 0), 0);
+  return rows.reduce((a, r) => a
+    + (r.steps || 0)
+    + Math.min(r.exerciseMin || 0, ACTIVE_MIN_DAILY_CAP) * STEPS_PER_ACTIVE_MIN, 0);
 }
 
 // Eggs incubate: they hatch into PETS after you walk EGG_GOAL_STEPS.

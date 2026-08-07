@@ -21,7 +21,7 @@ import {
   DROP, buyDropItem, refundStreakFreezes,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
-import { getWellness, addWater, markBed, markSleep, WATER_GOAL } from './wellness.js';
+import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
@@ -39,7 +39,7 @@ import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.j
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
+import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -1244,6 +1244,8 @@ async function renderToday(el) {
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
+  const routines = wellness ? await getRoutines() : [];
+  const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false) };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
@@ -1406,7 +1408,7 @@ async function renderToday(el) {
     </div>
   </div>
 
-  ${isToday ? wellnessCardHtml(wellness) : ''}
+  ${isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : ''}
   ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) : ''}
   ${healthCardHtml(hk, isToday)}
 
@@ -1491,6 +1493,25 @@ async function renderToday(el) {
   $('#wBed')?.addEventListener('click', async () => {
     const { xp } = await markBed(); chimeSound(S.sounds);
     toast(xp > 0 ? `Bed made. +${xp} XP banked.` : 'Already made today.', 2200); refresh();
+  });
+  $$('[data-routine]').forEach(b => b.addEventListener('click', async () => {
+    const r = await markRoutine(b.dataset.routine);
+    if (!r.ok) return;
+    chimeSound(S.sounds); haptic.success();
+    toast(r.xp > 0 ? `Done. +${r.xp} XP banked.`
+      : r.already ? 'Already done today.'
+      : `Done. (${ROUTINE_XP_CAP} routines a day pay XP; the rest are for you.)`, 2600);
+    refresh();
+  }));
+  $$('[data-routinedel]').forEach(b => armToConfirm(b, 'Remove?', async () => {
+    await removeRoutine(b.dataset.routinedel); toast('Routine removed.', 2000); refresh();
+  }));
+  $('#addRoutine')?.addEventListener('click', () => {
+    openTextSheet({ title: 'New routine', placeholder: 'e.g. Stretch for ten minutes', cta: 'Add it' }, async name => {
+      const r = await addRoutine(name);
+      if (!r.ok) { toast(r.reason === 'full' ? `That is the lot (${r.max} routines).` : 'Give it a name first.', 2600); return; }
+      popSound(S.sounds); refresh();
+    });
   });
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
     const hours = Number(b.dataset.sleep);
@@ -1901,7 +1922,7 @@ function potionShort(p) {
 
 // a Today alert card, ONLY when a dish is ready to collect (access lives in the
 // shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
-function wellnessCardHtml(w) {
+function wellnessCardHtml(w, routines = [], done = new Set()) {
   if (!w) return '';
   const waterDone = w.water >= WATER_GOAL;
   const row = (cls, ico, title, doneLbl, todoLbl, done, btnId, btnLabel, extra = '') => `
@@ -1916,6 +1937,20 @@ function wellnessCardHtml(w) {
     ${row('', ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
     ${row('ghost', ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
     ${sleepRowHtml(w)}
+    ${/* YOUR OWN routines, under the three the game has opinions about. Same row
+         language, same ledger, so they count toward the wellness quest too. */''}
+    <div class="sect-h" style="margin:14px 0 4px">Your routines</div>
+    ${routines.length ? routines.map(r => `
+      <div class="well-row ${done.has(r.id) ? 'done' : ''}">
+        <span class="well-ico">${ICONS.check(20)}</span>
+        <div class="well-body"><b>${esc(r.name)}</b><small>${done.has(r.id) ? 'Done today' : 'Tap when it is done'}</small></div>
+        ${done.has(r.id)
+          ? `<span class="well-check">${ICONS.check(14)}</span>`
+          : `<button class="btn small ghost" data-routine="${r.id}">Mark done</button>`}
+        <button class="link routine-x" data-routinedel="${r.id}" aria-label="Remove ${esc(r.name)}">Remove</button>
+      </div>`).join('')
+      : '<p class="note" style="margin:2px 2px 8px">Anything you want to hold yourself to: stretch, meds, walk the dog, ten minutes of guitar.</p>'}
+    <button class="btn ghost small" id="addRoutine" style="margin-top:6px">Add a routine</button>
   </div>`;
 }
 
@@ -9033,7 +9068,7 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v283'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v284'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -9187,6 +9222,7 @@ async function openPit() {
 async function renderPit(wrap) {
   const body = $('#pitBody', wrap);
   if (!body) return;
+  const date = dateKey();
   const fighter = await buildFighter();
   const xpRows = await db.all('xp');
   const beaten = pitBeatKeys(xpRows);
@@ -9237,6 +9273,22 @@ async function renderPit(wrap) {
         ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
+  /* THE REMOTE DEN. Tom, 2026-08-06: "People that can't get out for walks feel
+     like there's no point to log on." One boss a day, no location needed, free.
+     It counts as a den win, which is the actual thing walking used to gate: the
+     Gauntlet's ceiling. Modest on purpose so walking to a real den still pays
+     better. Lives at the TOP of the Pit because for a housebound player it is
+     the day's event. */
+  const rDen = remoteDen(date);
+  const rDone = beaten.has(denKey(date, rDen));
+  const remoteSect = `
+    <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
+    <div class="t3-row${rDone ? ' done' : ''}">
+      <span class="t3-med">${bhIcon('badge-skull', 20)}</span>
+      <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone ? 'cleared today · back tomorrow' : `${denRewardLabel(rDen)} · free`}</small></div>
+      ${rDone ? '<span class="t3-lock">TOMORROW</span>' : '<button class="btn" id="remoteDenBtn">FIGHT</button>'}
+    </div>`;
+
   const champSect = `
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
@@ -9269,8 +9321,8 @@ async function renderPit(wrap) {
     </div>`}`;
   // beaten the Champion → your live endless fight leads, spent content tucks below.
   const pitSections = (champBeaten
-    ? [endlessSect, ladderSect, champSect, sparringSect]
-    : [ladderSect, champSect, sparringSect, endlessSect]).join('');
+    ? [remoteSect, endlessSect, ladderSect, champSect, sparringSect]
+    : [remoteSect, ladderSect, champSect, sparringSect, endlessSect]).join('');
 
   // The mockup's hero sat on a raster capture of the arena. The app already
   // draws that arena in CSS, live and lighter than shipping a screenshot as
@@ -9304,6 +9356,14 @@ async function renderPit(wrap) {
     ${pitSections}`;
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
+  // the remote den spends NO energy: being unable to walk is the whole reason
+  // it exists, so charging for it would re-create the wall it removes
+  $('#remoteDenBtn', body)?.addEventListener('click', () => {
+    openFight(wrap, fighter, {
+      mode: 'boss', name: rDen.boss, mult: rDen.mult, aiLevel: rDen.aiLevel,
+      talents: rDen.talents || [], venue: rDen.name, den: rDen, add: null, bossMult: null,
+    });
+  });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {

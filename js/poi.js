@@ -160,7 +160,46 @@ export function densNear(week, lat, lng, date = null) {
   return out.sort((a, b) => a.dist - b.dist);
 }
 
-export function denKey(week, den) { return den.roaming ? `roamboss-${den.day}-${den.id}` : `boss-${week}-${den.id}`; }
+export function denKey(week, den) {
+  if (den.remote) return `remoteboss-${den.day}`;
+  return den.roaming ? `roamboss-${den.day}-${den.id}` : `boss-${week}-${den.id}`;
+}
+
+/* THE REMOTE DEN (2026-08-08).
+ *
+ * Tom, 2026-08-06: "People that can't get out for walks feel like there's no
+ * point to log on. Should we do a remote pass boss fight free daily or
+ * something?"
+ *
+ * The Pit's energy was never the blocker (three free fights a day, plus Vigor
+ * you earn by LOGGING, plus unlimited sparring). The real walls were the map:
+ * boss dens need GPS, and the Gauntlet's ceiling only rises when you beat one.
+ * So a housebound player was permanently capped at endless rank 5 no matter how
+ * well they ate.
+ *
+ * This is one boss a day that needs no location at all. It is deliberately
+ * MODEST: tier is capped below the nastiest landmark dens, there is no gear
+ * chooser, and it is once per day, so walking out to a real den is still the
+ * better deal. What it does do is count as a den win, which unblocks the
+ * Gauntlet for people who cannot walk to one.
+ *
+ * Deterministic from the date, so everyone in the Crew faces the same boss
+ * today and can talk about it.
+ */
+const REMOTE_MAX_TIER = 4;   // below the 2-on-1 monsters that gate on tier >= 5
+export function remoteDen(day = dateKey()) {
+  const rng = mulberry32(hashStr(`remote:${day}`));
+  const theme = DEN_THEMES[Math.floor(rng() * DEN_THEMES.length)];
+  const tier = Math.floor(rng() * (REMOTE_MAX_TIER + 1));
+  const t = DEN_TIERS[tier];
+  return {
+    id: `remote-${day}`, day, remote: true, tier, theme,
+    name: theme.name, boss: theme.boss,
+    ...t,
+    // lighter than a landmark den: no gear chooser, and the crate drops a tier
+    reward: { xp: t.reward.xp, coins: Math.round((t.reward.coins || 80) * 0.6), crate: t.reward.crate === 'golden' ? 'daily' : t.reward.crate },
+  };
+}
 
 // How many world-boss dens you have ever beaten (drives the endless-Pit gate).
 export async function denWinsCount() {
@@ -285,6 +324,16 @@ export async function claimDenWin(den, day = dateKey()) {
     const xp = await award(denKey(day, den), 'roamboss', r.xp || 50, `Roaming boss: ${den.name}`);
     if (xp === 0) return null;
     if (r.crate) await grantCrate(r.crate, 'roam-boss');
+    return { xp, ...r, gearChoices: null };
+  }
+  // remote: one a day, no gear chooser, but it DOES count as a den win so the
+  // Gauntlet ceiling can rise for someone who cannot walk to a real den
+  if (den.remote) {
+    const xp = await award(denKey(day, den), 'bossday', r.xp || 50, `Remote den: ${den.name}`);
+    if (xp === 0) return null;
+    await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Remote clear: ${den.name}`);
+    if (r.crate) await grantCrate(r.crate, 'remote-den');
+    if (r.coins) await coinsAdd(r.coins);
     return { xp, ...r, gearChoices: null };
   }
   // landmark: once per day for loot/coins/xp, logged non-gating

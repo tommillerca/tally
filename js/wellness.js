@@ -53,3 +53,68 @@ export async function markSleep(hours, date = dateKey()) {
   if (first) xp = await award(`sleep-${date}`, 'wellness', 10, `Slept ${hours}h`, date);
   return { w, xp, hours, first };
 }
+
+/* USER ROUTINES.
+ *
+ * Tom, 2026-08-06: "it would be cool to have a part of the app where could set
+ * routines or personal tasks you need to accomplish."
+ *
+ * The three habits above are hard-coded because they are the ones the game has
+ * opinions about. A routine is whatever YOU decide it is: stretch, meds, walk
+ * the dog, ten minutes of guitar. Definitions live in kv 'routines'; completions
+ * write the SAME idempotent ledger rows the built-in habits use, so a routine
+ * counts toward the wellness quest and the streak for free, with no new store.
+ *
+ * XP IS CAPPED ON PURPOSE. A task you write yourself is an XP faucet you control,
+ * so only the first ROUTINE_XP_CAP completions each day pay. Beyond that a
+ * routine still ticks, still counts, just does not print money. The built-in
+ * habits are safe from this because there are exactly three of them.
+ */
+export const ROUTINE_XP = 5;
+export const ROUTINE_XP_CAP = 3;   // XP-earning completions per day
+export const ROUTINE_MAX = 12;     // a to-do list, not a second app
+
+export async function getRoutines() {
+  const list = await kvGet('routines', null);
+  return Array.isArray(list) ? list : [];
+}
+export async function addRoutine(name) {
+  const clean = String(name || '').trim().slice(0, 60);
+  if (!clean) return { ok: false, reason: 'empty' };
+  const list = await getRoutines();
+  if (list.length >= ROUTINE_MAX) return { ok: false, reason: 'full', max: ROUTINE_MAX };
+  // ids are minted from the clock, never from the name: renaming or repeating a
+  // name must not collide with an existing routine's ledger history
+  list.push({ id: `r${Date.now().toString(36)}${list.length}`, name: clean });
+  await kvSet('routines', list);
+  return { ok: true, list };
+}
+export async function removeRoutine(id) {
+  const list = (await getRoutines()).filter(r => r.id !== id);
+  await kvSet('routines', list);
+  return list;
+}
+
+// Which routines are done today. Read from the LEDGER, not a separate flag, so
+// it cannot drift out of step with what was actually awarded.
+export async function routinesDone(date = dateKey()) {
+  const rows = await db.all('xp');
+  const done = new Set();
+  for (const r of rows) {
+    if (r.type === 'wellness' && r.date === date && r.key.startsWith('routine-')) {
+      done.add(r.key.slice('routine-'.length, r.key.length - date.length - 1));
+    }
+  }
+  return done;
+}
+
+export async function markRoutine(id, date = dateKey()) {
+  const list = await getRoutines();
+  const item = list.find(r => r.id === id);
+  if (!item) return { ok: false };
+  const done = await routinesDone(date);
+  if (done.has(id)) return { ok: true, xp: 0, already: true };
+  const xp = done.size < ROUTINE_XP_CAP ? ROUTINE_XP : 0;
+  await award(`routine-${id}-${date}`, 'wellness', xp, `Routine: ${item.name}`, date);
+  return { ok: true, xp, capped: xp === 0 };
+}

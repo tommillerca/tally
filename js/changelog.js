@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 284, date: '2026-08-08', title: 'For the days you cannot get out', items: [
+    'A <b>Remote Den</b>: one boss a day, free, no walking and no location needed. It is the same boss for everyone that day, and beating it counts as a den win, which is what used to keep the Gauntlet locked for anyone who could not get to a real den on the map.',
+    '<b>Workouts feed your eggs and pets now.</b> Recorded exercise minutes count toward hatching, so an hour on the bike or in the gym moves the meter that used to only move by walking.',
+    '<b>Your own routines.</b> Add whatever you want to hold yourself to (stretch, meds, walk the dog) under Daily Wellness on Today, and tick them off. The first three a day pay XP.',
+  ] },
   { n: 283, date: '2026-08-08', title: 'Balance pass', items: [
     'Two builds were doing far more damage than anything else in the game, and one of them got further ahead the higher your level went. Both are reined in: the <b>Alchemist\'s Catalyst</b> now has a ceiling on how much your Toxicity can multiply a hit, and there is a cap on how far any stack of buffs can multiply a single attack.',
     '<b>Gear can no longer hand you a free extra action</b> each turn. Set bonuses still grant moves and damage, but an extra action has to be paid for with a talent point like everyone else pays.',
