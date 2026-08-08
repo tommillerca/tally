@@ -37,6 +37,18 @@ if (!base) {
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
+/* ONE ARRIVAL. Tom, 2026-08-08: "the boneyard is still loading in POIs at
+   different times ... it looks cheap when everything staggers in." v294 made the
+   reveal wait for the first refreshWorld pass and he was STILL right: measured
+   2026-08-07, everything landed at ~2.8s, the map was revealed at 2.9s, and a
+   fourth den then appeared at 3.7s. 800ms after the picture was on screen.
+   Placement cannot finish until the tiles are loaded (the water/walkability snap
+   reads queryRenderedFeatures, empty until `idle`), so the first pass places what
+   it can and the idle pass places the rest.
+   This records the marker count on a timer from before navigation and fails if
+   ANY count changes after .markers-in is added, with no user action.
+   PROVE-RED (confirmed 2026-08-07): reveal on worldPassDone alone and ARRIVAL
+   fails naming den 3 -> 4 at ~800ms after the reveal. */
 const { browser, page } = await boot(base, {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
@@ -44,6 +56,21 @@ const origin = new URL(base).origin;
 await browser.defaultBrowserContext().overridePermissions(origin, ['geolocation']);
 await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await page.evaluateOnNewDocument(() => {
+  window.__arr = { t0: performance.now(), reveal: null, tl: [] };
+  const KINDS = { '.map-spawn': 'spawn', '.map-den-mark': 'den', '.map-mini-mark': 'mini',
+    '.map-spire': 'spire', '.map-glutton-mark': 'glutton' };
+  setInterval(() => {
+    const a = window.__arr;
+    const snap = { t: Math.round(performance.now() - a.t0) };
+    for (const [sel, k] of Object.entries(KINDS)) snap[k] = document.querySelectorAll(sel).length;
+    const last = a.tl[a.tl.length - 1];
+    if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) a.tl.push(snap);
+    const st = document.querySelector('#mapStage');
+    if (st && st.classList.contains('markers-in') && a.reveal == null) a.reveal = snap.t;
+  }, 40);
+});
+
 await seed(page, { level: 18, coins: 500 });
 
 await page.evaluate(() => { location.hash = '#/boneyard'; });
@@ -86,6 +113,19 @@ ok('BAR with nothing in reach the action card is not on screen',
 ok('STALE the loading placeholder is not left on screen',
   !/reading the bones/i.test(state.screenText),
   state.screenText);
+
+/* nothing may arrive after the map is shown */
+const arr = await page.evaluate(() => window.__arr);
+ok('ARRIVAL the reveal happened at all (never revealing is a FAILURE)',
+  arr.reveal != null, `reveal at ${arr.reveal}ms`);
+ok('ARRIVAL markers were actually counted (an empty timeline is a FAILURE)',
+  arr.tl.length >= 2, `${arr.tl.length} count changes recorded`);
+const after = arr.tl.filter(r => arr.reveal != null && r.t > arr.reveal + 60);
+ok('ARRIVAL nothing pops in after the map is on screen',
+  after.length === 0,
+  after.length
+    ? after.map(r => `+${r.t - arr.reveal}ms spawn=${r.spawn} den=${r.den} mini=${r.mini} spire=${r.spire} glutton=${r.glutton}`).join(' | ')
+    : `revealed at ${arr.reveal}ms with everything already placed`);
 
 await browser.close();
 if (srv) srv.kill();

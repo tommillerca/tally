@@ -8731,6 +8731,28 @@ async function renderBoneyard(el) {
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
     let worldReady = false;   // flipped once every marker layer's state exists
+    /* THE SECOND WAVE. Tom, 2026-08-08: "the boneyard is still loading in POIs at
+       different times ... it looks cheap when everything staggers in", and it was
+       still true after v294 made the reveal wait for the first refreshWorld pass.
+       Measured: everything lands together at ~2.8s and the map is revealed at
+       2.9s, then a FOURTH den appears at 3.7s. 800ms after the picture is on
+       screen, with no user action.
+       The cause is that placement cannot finish until the map tiles are loaded:
+       the water/walkability snap reads queryRenderedFeatures, which is empty
+       until `idle` fires. So the first pass places what it can and the idle pass
+       places the rest, and the reveal was sitting between them.
+       The reveal now waits for BOTH the first world pass and the first
+       tile-informed placement, with a hard cap so a slow tile server can never
+       leave the map blank (anti-regression rule 8: degrade to ugly, not gone). */
+    let placedOnce = false;
+    let worldPassDone = false;
+    const revealMarkers = () => {
+      const stage = $('#mapStage', body);
+      if (!stage || stage.classList.contains('markers-in')) return;
+      requestAnimationFrame(() => stage.classList.add('markers-in'));
+    };
+    const tryReveal = () => { if (placedOnce && worldPassDone) revealMarkers(); };
+    setTimeout(revealMarkers, 4000);   // the cap: never blank for longer than this
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
@@ -8746,6 +8768,8 @@ async function renderBoneyard(el) {
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
       if (typeof refreshGlutton === 'function') refreshGlutton();
+      placedOnce = true;
+      tryReveal();
     };
     map.on('moveend', rerunPlacement);
     map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
@@ -9366,10 +9390,8 @@ async function renderBoneyard(el) {
          on a network round trip, so they always landed last. The marker layer
          starts hidden and is revealed once, after the FIRST complete pass, so the
          map arrives as one picture. Later passes update in place. */
-      const stage = $('#mapStage', body);
-      if (stage && !stage.classList.contains('markers-in')) {
-        requestAnimationFrame(() => stage.classList.add('markers-in'));
-      }
+      worldPassDone = true;
+      tryReveal();
     }
 
     const raresCued = new Set(); // rares we've already announced this session
@@ -9856,7 +9878,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v308'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v309'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

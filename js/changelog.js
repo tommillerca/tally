@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 309, date: '2026-08-08', title: 'The Boneyard arrives all at once', items: [
+    'Finds on the map were still <b>trickling in after the map appeared</b>. The last one landed almost a second late, with nothing you did to cause it. The map now waits until everything has found its spot, then shows you the whole picture at once.',
+  ] },
   { n: 308, date: '2026-08-08', title: 'The Today card, composed properly', items: [
     'Your Bonehead is <b>centred on the card</b> and standing on the ground rather than buried behind the level bar. His feet clear it by design now, not by luck.',
     'Some pets were <b>getting their beaks and tails clipped</b> by the edge of the card. Wide creatures like the duck and the lizards are scaled up so they read at the same size as the round ones, and that extra width was running off the frame. Every pet fits now, and a new one always will.',
