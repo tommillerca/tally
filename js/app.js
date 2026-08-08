@@ -6967,6 +6967,10 @@ function queueCelebration(game) {
     const prev = S.celebration || {};
     S.celebration = {
       levelUp: game.levelUp || prev.levelUp,
+      /* fromLevel has to travel WITH its own levelUp. This funnel merges queued
+         celebrations, so taking it independently could pair a new level with a
+         stale "from" and misreport the size of the jump. */
+      fromLevel: game.levelUp ? game.fromLevel : prev.fromLevel,
       levelRewards: game.levelRewards || prev.levelRewards,
       streakMilestone: game.streakMilestone || prev.streakMilestone,
       newBadges: [...(prev.newBadges || []), ...(game.newBadges || [])],
@@ -6976,7 +6980,7 @@ function queueCelebration(game) {
 
 // any XP source (steps, quests, pit, road) can level you up
 addEventListener('bh-levelup', e => {
-  queueCelebration({ levelUp: e.detail.levelUp, levelRewards: e.detail.rewards });
+  queueCelebration({ levelUp: e.detail.levelUp, fromLevel: e.detail.from, levelRewards: e.detail.rewards });
   maybeCelebrate();
 });
 
@@ -6985,7 +6989,7 @@ const LEVELUP_LINES = [
   'New level, same beautiful skull.',
   'We grind, we rattle, we rise.',
   'Somewhere, the Marrow King just shivered.',
-  'Level up! The bones are our money and business is BOOMING.',
+  'The bones are our money and business is BOOMING.',
   'Stronger bones, bigger drip. The system works.',
   'They said I had no guts. Look at me now. Still no guts.',
   'That XP went straight to my spine.',
@@ -6998,52 +7002,146 @@ function maybeCelebrate() {
   setTimeout(() => openCelebration(c), 380);
 }
 
-async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null }) {
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
   if (!levelUp && !bits.length) return;
-  confettiRain();
+  // Confetti stays for badges and streaks. The level-up moment has its own
+  // sparkles and a lime burst behind the figure; confetti fought both.
+  if (!levelUp) confettiRain();
   levelSound(S.sounds);
   haptic.reward();
   // a milestone level gets a stamp of its own, so 25 does not feel like 24
   const ms = levelRewards && levelRewards.milestone;
-  let hero = '';
-  if (levelUp) {
-    const eq = await equipped();
-    const lvlShiny = await ownShinyPetId(eq);
-    const line = LEVELUP_LINES[levelUp.level % LEVELUP_LINES.length];
-    S.pendingLevelLine = line;
-    hero = `
-      <div class="lvlup-stage">
-        <div class="lvl-rays"></div>
-        <div class="bh-stage lg lvlup-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: lvlShiny })}</div>
-      </div>
-      <div class="lvl-stamp">LEVEL ${levelUp.level}!</div>
-      <div class="cele-sub" style="font-size:16px;margin-top:2px">${esc(levelUp.name)}</div>
-      ${ms ? `<div class="lvl-milestone t-${ms.tier}">${ms.label}</div>` : ''}
-      <div class="cele-bubble">${esc(line)}</div>
-      ${levelRewards ? `<div class="lvl-rewards">
-        <span class="bh-pill">${ICONS.coin(15)} +${levelRewards.coins}</span>
-        <span class="bh-pill">${crateIcon('golden', 15)} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
-        ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(14)} +${levelRewards.dust}</span>` : ''}
-        ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
-      </div>` : ''}`;
-  }
+  if (levelUp) return openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras: bits });
   const wrap = openSheet(`
-    <div class="reveal-take${levelUp ? ' warm' : ''}">
+    <div class="reveal-take">
       <div class="grainy"></div>
-      <div class="reveal-eyebrow">${levelUp ? 'Level up' : streakMilestone ? 'Streak milestone' : 'Badge earned'}</div>
+      <div class="reveal-eyebrow">${streakMilestone ? 'Streak milestone' : 'Badge earned'}</div>
       <div class="reveal-body">
-        ${hero || `<div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>`}
+        <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>
         ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
       </div>
       <div class="reveal-foot">
-        <button class="btn" id="celeOk">${levelUp ? 'RATTLE ON' : 'Keep it going'}</button>
+        <button class="btn" id="celeOk">Keep it going</button>
       </div>
     </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
   setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
+}
+
+
+/* The level-up MOMENT. A breathing lime glow bursts behind the player's own
+   Bonehead — never a stock figure, this surface is under the figure contract and
+   carries the pet and its shiny — the character pops in, the chips step, and the
+   XP bar speed-ramps to full, builds a glow, releases it in a flash and is
+   revealed at the carry-over for the NEW level. It is never shown draining: the
+   snap to the real remainder happens under the full flash. Beats live in
+   app.css as the lu* keyframes. */
+async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras = [] }) {
+  const eq = await equipped();
+  const lvlShiny = await ownShinyPetId(eq);
+  const line = LEVELUP_LINES[levelUp.level % LEVELUP_LINES.length];   // cycles, so back-to-back levels never repeat
+  S.pendingLevelLine = line;
+  /* Every producer supplies fromLevel now (onFoodLogged and the bh-levelup
+     event). The fallback is right for a single-level gain, which is the norm,
+     but it would understate a multi-level jump -- so it is a backstop, not a
+     design. One award() really can cross several levels at once. */
+  const was = fromLevel != null ? fromLevel : levelUp.level - 1;
+  /* The bar lands on what you ACTUALLY carried in.
+
+     levelUp is a SNAPSHOT taken inside award() at the instant the threshold was
+     crossed, but one food log awards several chunks (log, first-of-day, protein,
+     all-meals) and the ones after the crossing are not in it -- so the snapshot
+     can read 0/310 while the player really holds 15. Re-read the live total and
+     use it whenever it still describes this same level; fall back to the
+     snapshot if more XP has since carried them further, so the numbers can never
+     belong to a different level than the one on the chips. */
+  let into = levelUp.into, need = levelUp.need;
+  try {
+    const live = levelFor(await totalXp());
+    if (live.level === levelUp.level) { into = live.into; need = live.need; }
+  } catch { /* the snapshot is still honest, just less current */ }
+  const pct = Math.max(0, Math.min(100, Math.round((into / need) * 100)));
+  let stopGlow = () => {};
+  const wrap = openSheet(`
+    <div class="reveal-take lu-take${ms ? ' has-ms' : ''}" style="--lu-end:${pct}%">
+      <div class="lu-glow" id="luGlow"></div>
+      <div class="grainy"></div>
+      <div class="lu-body">
+        <div class="lu-head">
+          <div class="lu-title">Level up!</div>
+          <div class="lu-quip">${esc(line)}</div>
+        </div>
+        <div class="lu-stage">
+          ${[1, 2, 3, 4, 5].map(k => `<span class="lu-spark k${k}">${sparkIco(16, '#d9f79e')}</span>`).join('')}
+          <div class="lu-figure"><div class="bh-stage lu-avatar">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: lvlShiny })}</div></div>
+        </div>
+        <div class="lu-chips">
+          <span class="lu-chip was">Lv ${was}</span>
+          <span class="lu-arrow">&#10148;</span>
+          <span class="lu-chip now">Lv ${levelUp.level}</span>
+        </div>
+        <div class="lu-name">${esc(levelUp.name)}</div>
+        ${ms ? `<div class="lvl-milestone t-${ms.tier}">${ms.label}</div>` : ''}
+        <div class="lu-xp">
+          <div class="lu-xp-lab"><span>XP</span><span>${into.toLocaleString()} / ${need.toLocaleString()}</span></div>
+          <div class="lu-track">
+            <div class="lu-clip"><div class="lu-smear"></div><div class="lu-fill"></div></div>
+            <div class="lu-flash"></div>
+          </div>
+        </div>
+        ${levelRewards ? `<div class="lu-rewards">
+          <span class="bh-pill">${ICONS.coin(15)} +${levelRewards.coins}</span>
+          <span class="bh-pill">${crateIcon('golden', 15)} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+          ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(14)} +${levelRewards.dust}</span>` : ''}
+          ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
+        </div>` : ''}
+        ${extras.length ? `<div class="lu-extras">${extras.join('<div style="height:12px"></div>')}</div>` : ''}
+        <button class="btn lu-cta" id="celeOk">Keep grinding</button>
+      </div>
+    </div>`, { cls: 'takeover', name: 'levelup', onClose: () => { stopGlow(); setFxLayer(); } });
+  setFxLayer(305);
+  stopGlow = startLevelGlow($('#luGlow', wrap));
+  $('#celeOk', wrap).addEventListener('click', () => history.back());
+}
+
+/* One rAF writes three stacked radial-gradients onto the glow layer per frame.
+   `heat` is 1 at the burst and decays to a resting simmer over 4.5s. The lime
+   layers are built from NINE cosine-eased stops, not three: alpha steps this
+   small band into visible rings on a near-black ground. Returns its own stop. */
+function startLevelGlow(el) {
+  if (!el) return () => {};
+  const lime = a => `rgba(165,232,71,${Math.max(0, a).toFixed(4)})`;
+  const ramp = (peak, from, to, atPct) => {
+    const stops = [];
+    for (let i = 0; i <= 8; i++) {
+      const p = i / 8;
+      const a = peak * (0.5 - 0.5 * Math.cos(Math.PI * (1 - Math.abs(p - atPct) / Math.max(atPct, 1 - atPct))));
+      stops.push(`${lime(a)} ${(from + (to - from) * p).toFixed(1)}%`);
+    }
+    return stops.join(', ');
+  };
+  const t0 = performance.now();
+  const paint = h => {
+    const t = (performance.now() - t0) / 1000;
+    const w = 118 + Math.sin(t * (1.2 + h * 2.2)) * (3 + h * 7);
+    el.style.background = [
+      `radial-gradient(${(30 + h * 26).toFixed(1)}% ${(24 + h * 20).toFixed(1)}% at 50% 38%, ${ramp(0.05 + h * 0.30, 0, 70, 0)})`,
+      `radial-gradient(${w.toFixed(1)}% ${(w * 0.82).toFixed(1)}% at 50% 34%, ${ramp(0.02 + h * 0.20, 0, 68, 0.44)})`,
+      `radial-gradient(90% 60% at 50% 0%, rgba(96,74,150,${(0.22 * (1 - h * 0.7)).toFixed(3)}), rgba(96,74,150,0) 60%)`,
+    ].join(', ');
+  };
+  /* Automation gets the resting simmer so screenshots stay deterministic — but a
+     motion effect that can ONLY run outside automation is one no test can ever
+     see, which makes every future change to it a guess. window.__motionForce
+     turns it back on, same idiom as __spireForce / __raceForce / __gardenForce. */
+  if (reducedMotion || (navigator.webdriver && !window.__motionForce)) { paint(0.16); return () => {}; }
+  let raf = 0;
+  const loop = () => { raf = requestAnimationFrame(loop); paint(Math.max(0.16, 1 - (performance.now() - t0) / 4500)); };
+  loop();
+  return () => cancelAnimationFrame(raf);
 }
 
 function badgesGridHtml(earned, newIds = new Set()) {

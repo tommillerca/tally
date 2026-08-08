@@ -62,7 +62,7 @@ export async function award(key, type, xp, label, date) {
     if (lvA.level > lvB.level) {
       const rewards = await grantLevelRewards(lvB.level, lvA.level);
       if (typeof dispatchEvent === 'function') {
-        dispatchEvent(new CustomEvent('bh-levelup', { detail: { levelUp: lvA, rewards } }));
+        dispatchEvent(new CustomEvent('bh-levelup', { detail: { levelUp: lvA, from: lvB.level, rewards } }));
       }
     }
   }
@@ -318,6 +318,9 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
     xp: gained,
     total: after,
     levelUp,
+    // the level you came FROM: a multi-level jump must not be assumed to be one
+    // step, and this is the path food logging takes
+    fromLevel: lvBefore.level,
     levelRewards,
     newBadges,
     streakMilestone: sa.milestone,

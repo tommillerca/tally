@@ -2403,6 +2403,153 @@ body::before {
 }
 .lvl-rewards { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
 .lvl-rewards .bh-pill { font-size: 13.5px; padding: 6px 13px; }
+
+/* ===== level-up MOMENT (added 2026-08-08, replaces the .lvlup-stage hero for
+   the Bonehead's own level-up; the pet level-up still uses .lvl-rays/.lvlHero).
+
+   A breathing lime glow bursts behind the figure, the character pops in, the
+   level chips step 12 -> 13, and the XP bar speed-ramps to full, builds a glow,
+   releases it in a flash and is revealed at the carry-over for the new level.
+   The bar is NEVER shown draining: the snap happens under the flash at 72%.
+
+   Beats: title .15s / figure .05s (lands ~1.1s) / rows .3s-.56s /
+   XP 1.45s from .3s, flash peaks ~1.35s.
+   ===== */
+.reveal-take.lu-take { padding: calc(var(--sat) + 14px) 0 calc(var(--sab) + 18px); }
+.reveal-take.lu-take::before { background: var(--bg); }
+/* the rAF layer. Sits UNDER everything: .reveal-take > * would otherwise lift it. */
+.reveal-take .lu-glow { position: absolute; inset: -40px; z-index: 0; pointer-events: none; filter: blur(26px); }
+/* Centres when it fits, scrolls cleanly from the top when it does not.
+   justify-content:center on an overflowing scroller clips BOTH ends — on a 667pt
+   phone that put the headline 17px above the top and the CTA below the fold. */
+.lu-body {
+  flex: 1; min-height: 0; width: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  text-align: center; padding: 0 30px;
+}
+.lu-body > :first-child { margin-top: auto; }
+.lu-body > :last-child { margin-bottom: auto; }
+.lu-head { animation: luTitle .8s cubic-bezier(0.34, 1.56, 0.64, 1) .15s both; }
+.lu-title {
+  font-family: var(--display); font-weight: 400; font-size: 56px; letter-spacing: 2px;
+  line-height: 1; color: var(--accent); text-shadow: 0 3px 0 rgba(0, 0, 0, .5);
+}
+.lu-quip { margin-top: 10px; font-size: 14px; color: var(--text-2); line-height: 1.45; max-width: 280px; }
+
+/* the figure is the point of the screen: everything else is sized off it.
+   350/290 = 1.207, the design's stage ratio, with the drawing square inside it. */
+.lu-stage { --lu-fig: min(290px, 76vw, 40vh); position: relative; flex: none; margin-top: 18px;
+  width: var(--lu-fig); height: calc(var(--lu-fig) * 1.207); display: grid; place-items: center; }
+.lu-figure { animation: luPop 1.05s cubic-bezier(0.22, 1, 0.36, 1) .05s both; will-change: transform; }
+/* the figure floats free here: .bh-stage's panel surface, keyline and radius are
+   for inline avatars, and a card edge around the character kills the burst */
+.lu-stage .lu-avatar { width: var(--lu-fig); height: var(--lu-fig); margin: 0;
+  background: none; border: 0; border-radius: 0; overflow: visible;
+  filter: drop-shadow(0 14px 16px rgba(0, 0, 0, .5)); animation: luBob 3.4s ease-in-out 1.15s infinite; }
+/* contain, not cover: the drawing is square inside a 640 canvas and cover would
+   crop it against the stage's taller box (the figure contract, rule 3) */
+.lu-stage .lu-avatar img { object-fit: contain; }
+/* short phones: the figure yields first, because it is the only element with
+   slack. Measured, not guessed — at 32vh a 375x667 fits with room to spare. */
+@media (max-height: 760px) {
+  /* the tallest this screen gets is a marquee milestone reached by a multi-level
+     jump: stamp + four reward pills. Measured against that case, not the base one. */
+  .lu-stage { --lu-fig: min(290px, 76vw, 30vh); margin-top: 6px; }
+  /* a milestone adds a stamp and up to four reward pills. Only that case needs
+     the figure cut this hard -- tuning every short phone to the worst case left
+     the ordinary level-up with a 167px character and 61px of unused room. */
+  .lu-take.has-ms .lu-stage { --lu-fig: min(290px, 76vw, 25vh); }
+  .lu-title { font-size: 44px; }
+  .lu-quip { margin-top: 7px; font-size: 13px; }
+  .lu-name { margin-top: 6px; font-size: 15px; }
+  .lu-body .lvl-milestone { margin-top: 6px; }
+  .lu-xp { margin-top: 14px; }
+  .lu-rewards { margin-top: 12px; gap: 6px; }
+  .lu-rewards .bh-pill { font-size: 12px; padding: 5px 10px; }
+  .lu-cta { margin-top: 16px; padding: 10px 28px; font-size: 20px; }
+}
+.lu-spark { position: absolute; line-height: 0; pointer-events: none; z-index: 3; opacity: 0; }
+.lu-spark.k1 { top: 4%; left: 8%; animation: luTwinkle 1.5s ease .5s 3 both; }
+.lu-spark.k2 { top: 12%; left: 84%; animation: luTwinkle 1.7s ease .9s 3 both; }
+.lu-spark.k3 { top: 58%; left: 2%; animation: luTwinkle 1.4s ease 1.3s 3 both; }
+.lu-spark.k4 { top: 72%; left: 90%; animation: luTwinkle 1.6s ease .7s 3 both; }
+.lu-spark.k5 { top: 30%; left: 94%; animation: luTwinkle 1.3s ease 1.7s 2 both; }
+
+.lu-chips { display: flex; align-items: center; gap: 12px; margin-top: 6px;
+  animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .3s both; }
+.lu-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .32); }
+.lu-chip.was { padding: 6px 14px; background: #1b1a22; border: 2px solid var(--ink);
+  font-size: 13px; font-weight: 800; color: var(--text-3); letter-spacing: .04em; }
+.lu-chip.now { padding: 8px 18px; background: rgba(165, 232, 71, .14); border: 2px solid var(--accent);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .32), 0 0 18px rgba(165, 232, 71, .28);
+  font-family: var(--display); font-weight: 400; font-size: 20px; letter-spacing: 1px; color: var(--accent); }
+.lu-arrow { color: var(--accent); font-family: var(--display); font-size: 22px; }
+.lu-name { margin-top: 9px; font-family: var(--display); font-weight: 400; font-size: 17px;
+  letter-spacing: .06em; color: var(--text); animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .36s both; }
+.lu-body .lvl-milestone { margin-top: 10px; animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .4s both; }
+
+.lu-xp { width: 100%; max-width: 280px; margin-top: 22px;
+  animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .42s both; }
+.lu-xp-lab { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800;
+  letter-spacing: .08em; color: var(--text-3); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.lu-track { height: 12px; border-radius: 999px; background: #1b1a22; border: 2px solid var(--ink);
+  position: relative; animation: luXpBurst 1.45s ease-in-out .3s both; }
+.lu-clip { position: absolute; inset: 0; border-radius: 999px; overflow: hidden; }
+/* leading-edge smear runs ~35ms AHEAD of the fill, which is what sells the speed */
+.lu-smear { position: absolute; top: 0; bottom: 0; left: 0; width: 2%; border-radius: 999px; opacity: 0;
+  background: linear-gradient(90deg, rgba(194, 240, 125, 0) 30%, rgba(220, 255, 170, .95)); filter: blur(4px);
+  animation: luXp 1.45s linear .265s both, luSmear 1.45s linear .3s both; }
+.lu-fill { height: 100%; width: 2%; border-radius: 999px; position: relative;
+  background: linear-gradient(180deg, #c2f07d, var(--accent));
+  animation: luXp 1.45s linear .3s both, luXpGlowFill 1.45s linear .3s both; }
+.lu-flash { position: absolute; inset: -4px; border-radius: 999px; pointer-events: none; opacity: 0;
+  background: radial-gradient(120% 200% at 50% 50%, #e9ffc0, var(--accent) 72%, rgba(165, 232, 71, 0) 100%);
+  filter: blur(1px); animation: luXpFlash 1.45s ease-in-out .3s both; }
+
+.lu-rewards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px;
+  animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .5s both; }
+.lu-rewards .bh-pill { font-size: 13.5px; padding: 6px 13px; }
+.lu-extras { margin-top: 16px; animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .54s both; }
+.lu-cta { width: auto; margin-top: 24px; padding: 12px 34px; border-radius: 14px;
+  font-size: 22px; letter-spacing: 1px; color: #141a08;
+  background: linear-gradient(180deg, #c2f07d, var(--accent)); border: 2.5px solid #10130a;
+  box-shadow: 0 4px 0 #10130a, inset 0 2px 0 rgba(255, 255, 255, .35);
+  animation: luRow .8s cubic-bezier(0.22, 1, 0.36, 1) .56s both; }
+.lu-cta:active { transform: translateY(2px); box-shadow: 0 2px 0 #10130a, inset 0 2px 0 rgba(255, 255, 255, .35); }
+
+@keyframes luPop { 0% { transform: translateY(56px) scale(.6); opacity: 0; } 26% { opacity: 1; }
+  66% { transform: translateY(-4px) scale(1.012); } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes luTitle { 0% { transform: scale(.3) rotate(-5deg); opacity: 0; }
+  52% { transform: scale(1.14) rotate(1.6deg); opacity: 1; } 74% { transform: scale(.96) rotate(-.6deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes luRow { 0% { transform: translateY(16px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes luBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes luTwinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); }
+  45% { opacity: .95; transform: scale(1.1) rotate(24deg); } }
+/* --lu-end is the REAL carry-over for the new level, set per-open in JS. The bar
+   never drains: 71.9% -> 72% is a hard cut that happens under the full flash. */
+@keyframes luXp { 0% { width: 2%; } 10% { width: 6%; } 18% { width: 14%; } 26% { width: 30%; }
+  32% { width: 55%; } 38% { width: 100%; } 71.9% { width: 100%; }
+  72% { width: var(--lu-end, 0%); } 100% { width: var(--lu-end, 0%); } }
+@keyframes luSmear { 0%, 4% { opacity: 0; } 8% { opacity: .85; } 36% { opacity: .85; } 44% { opacity: 0; } 100% { opacity: 0; } }
+@keyframes luXpBurst {
+  0%, 40% { box-shadow: none; transform: scale(1); border-color: var(--ink); }
+  58% { box-shadow: 0 0 10px rgba(165, 232, 71, .3); transform: scale(1.01, 1.08); border-color: #3d4a2a; }
+  70% { box-shadow: 0 0 22px rgba(165, 232, 71, .65), 0 0 3px rgba(165, 232, 71, .9); transform: scale(1.03, 1.3); border-color: rgba(194, 240, 125, .85); }
+  72% { box-shadow: 0 0 46px rgba(190, 245, 120, 1), 0 0 8px rgba(220, 255, 170, 1); transform: scale(1.05, 1.55); border-color: #e9ffc0; }
+  86% { box-shadow: 0 0 14px rgba(165, 232, 71, .3); transform: scale(1.01, 1.1); border-color: #33402a; }
+  100% { box-shadow: none; transform: scale(1); border-color: var(--ink); } }
+@keyframes luXpGlowFill { 0%, 40% { filter: brightness(1); } 72% { filter: brightness(2) saturate(1.4); } 73%, 100% { filter: brightness(1); } }
+@keyframes luXpFlash { 0%, 62% { opacity: 0; } 70% { opacity: .55; } 72% { opacity: 1; } 88% { opacity: 0; } 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* removed, not frozen: every element sits at its settled value */
+  .lu-head, .lu-figure, .lu-stage .lu-avatar, .lu-chips, .lu-name, .lu-body .lvl-milestone,
+  .lu-xp, .lu-track, .lu-fill, .lu-smear, .lu-flash, .lu-rewards, .lu-cta, .lu-spark { animation: none; }
+  .lu-fill { width: var(--lu-end, 0%); }
+  .lu-smear, .lu-flash, .lu-spark { opacity: 0; }
+}
 /* pet level-up: the avatar reuses the hero rays/pop; stat gains spell out the reward */
 .petlvl-avatar { position: relative; z-index: 1; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; animation: lvlHero 0.6s cubic-bezier(0.34, 1.6, 0.64, 1) both; }
 .pet-gains { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
