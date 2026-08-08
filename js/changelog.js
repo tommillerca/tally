@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 321, date: '2026-08-08', title: 'Swiping the Stable feels right now', items: [
+    '<b>Tap a pet</b> to either side to bring it forward, or swipe. Tapping did nothing before.',
+    'A <b>hard flick travels further</b> than a gentle push, instead of always moving exactly one pet however hard you threw it.',
+    'Swiping sideways no longer <b>scrolls the page at the same time</b>. A gesture is now either a spin or a scroll, decided once.',
+    'The blur while cards move is <b>directional and much lighter</b>, and only on the cards that are actually moving. The pet you are looking at stays sharp.',
+    '<b>Equipping a pet</b> closes the talents panel and puts you back on your pet, big, with its stats.',
+  ] },
   { n: 320, date: '2026-08-08', title: 'The Stable moves properly now', items: [
     'The carousel <b>eases in and out</b> instead of lurching off the mark and creeping into place. Spinning to a pet a few places away takes a little longer than nudging to the one next door, the way it should.',
     'Cards pick up a touch of <b>motion blur</b> while they move, more on the outer ones because they travel further, and none at all once things settle. Turned off entirely if you have reduced motion switched on.',

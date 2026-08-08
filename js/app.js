@@ -8183,6 +8183,18 @@ async function openStable(opts = {}) {
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
+          <!-- DIRECTIONAL blur. Tom, 2026-08-08: "you're just kinda blurring the
+               non moving part ... what you have right now is more of just like a
+               heavy handed lens blur, we want the elements that are moving having
+               the blur based on the amount of movement."
+               CSS filter: blur() is isotropic, so it can only ever be a lens blur.
+               Real motion blur is a smear ALONG the axis of travel, which needs an
+               SVG feGaussianBlur with a two-value stdDeviation (x only, y zero).
+               One filter per card so each carries its own magnitude; the region is
+               widened on x so the smear is not clipped at the card edge. -->
+          <svg class="cf-mb" aria-hidden="true" focusable="false" width="0" height="0">
+            <defs>${roster.map((_, i) => `<filter id="cfmb${i}" x="-30%" y="-2%" width="160%" height="104%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="0 0"/></filter>`).join('')}</defs>
+          </svg>
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
@@ -8259,20 +8271,17 @@ async function openStable(opts = {}) {
          outright: blur is exactly the kind of effect that makes motion sickness
          worse, so it is not a decoration we impose. */
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      let lastPos = pos, lastT = performance.now(), panelBlur = 0;
+      /* Per-card screen X from the previous frame. THIS is what drives the blur:
+         how far this particular card actually travelled, not how fast the ring is
+         turning. A card parked in the centre has dx = 0 and stays sharp even while
+         the ring resizes around it, which is exactly the "blurring the non moving
+         part" complaint. */
+      const prevX = new Array(N).fill(null);
+      const mbNodes = [...body.querySelectorAll('.cf-mb feGaussianBlur')];
       const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
         const PITCH = cardPx() * (1 + GAP);
-        /* Speed in cards-per-second, measured between frames. Two sources feed the
-           blur: spinning the ring, and the panel resize (where nothing moves along
-           the ring but every card changes size, so velocity has to come from the
-           transition clock instead). */
-        const now = performance.now();
-        const dt = Math.max(8, now - lastT);
-        const speed = Math.abs(pos - lastPos) / dt * 1000;
-        lastPos = pos; lastT = now;
-        const spin = reduced ? 0 : Math.min(3.4, speed * 0.6);
         cards.forEach((card, i) => {
           let off = i - pos;
           off = ((off % N) + N) % N;
@@ -8280,19 +8289,34 @@ async function openStable(opts = {}) {
           const dist = Math.abs(off);
           const ramp = Math.pow(dist, FALLOFF);
           const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
-          card.style.transform = `translateX(calc(-50% + ${off * PITCH}px)) translateZ(${-DEPTH * cardPx() * ramp}px) rotateY(${-tilt}deg)`;
+          const x = off * PITCH;
+          card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * cardPx() * ramp}px) rotateY(${-tilt}deg)`;
           // a card teleports across the ring at half a turn out, so it must be
           // invisible by then or the jump is visible
           const edge = Math.min(1, Math.max(0, N / 2 - dist));
           card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
           card.style.zIndex = String(100 - Math.round(dist));
-          /* Outer cards travel further across the screen for the same rotation of
-             the ring, so they smear more. Below a threshold the filter is removed
-             entirely rather than set to blur(0), so a parked ring has no filter to
-             composite at all. */
-          const b = spin * (0.6 + dist * 0.32) + panelBlur;
-          if (b > 0.12) card.style.filter = `blur(${b.toFixed(2)}px)`;
-          else if (card.style.filter) card.style.filter = '';
+          /* How far THIS card moved since the last frame, in screen pixels. That
+             distance IS the smear length a real shutter would record, so sigma is
+             about half of it. Nothing else feeds in: a card that did not move gets
+             no blur, however fast the rest of the ring is turning.
+             Cards that teleport across the ring (the half-turn wrap) are excluded,
+             or the jump would register as enormous velocity and flash. */
+          const prev = prevX[i];
+          const jumped = prev != null && Math.abs(x - prev) > PITCH * 1.5;
+          const dx = (prev == null || jumped) ? 0 : Math.abs(x - prev);
+          prevX[i] = x;
+          const sigma = reduced ? 0 : Math.min(9, dx * 0.5);
+          const fx = mbNodes[i];
+          if (fx) {
+            if (sigma > 0.25) {
+              fx.setAttribute('stdDeviation', `${sigma.toFixed(2)} 0`);
+              if (card.style.filter !== `url(#cfmb${i})`) card.style.filter = `url(#cfmb${i})`;
+            } else if (card.style.filter) {
+              card.style.filter = '';       // parked: composite no filter at all
+              fx.setAttribute('stdDeviation', '0 0');
+            }
+          }
         });
         const idx = indexAt(pos);
         if (idx !== shown) {
@@ -8328,30 +8352,76 @@ async function openStable(opts = {}) {
         raf = requestAnimationFrame(step);
       };
       let drag = null;
+      /* TAP OR SWIPE, both. Tom, 2026-08-08: "you should be able to tap on the
+         next pet or choose to swipe."
+         Pointer capture is deliberately NOT taken on pointerdown: capturing
+         retargets the eventual `click` to the frame, so every tap on a neighbouring
+         card was being swallowed and only dragging worked. Capture is taken on the
+         first real movement instead, which is the point at which the gesture has
+         actually declared itself a drag. */
+      const DRAG_SLOP = 5;
       cfFrame.addEventListener('pointerdown', e => {
         if (raf) { cancelAnimationFrame(raf); raf = null; }
-        cfFrame.setPointerCapture(e.pointerId);
         target = pos;
-        drag = { id: e.pointerId, x: e.clientX, pos, v: 0, t: performance.now(), moved: false };
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY, pos, moved: false, dead: false, samples: [] };
       });
       cfFrame.addEventListener('pointermove', e => {
-        if (!drag || drag.id !== e.pointerId) return;
-        const dx = e.clientX - drag.x;
-        if (Math.abs(dx) > 4) drag.moved = true;
-        const now = performance.now(), prev = pos;
+        if (!drag || drag.id !== e.pointerId || drag.dead) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        /* AXIS LOCK. Tom, 2026-08-08: "sometimes i accidentally scroll up or down
+           while swiping." touch-action is pan-y, so the browser will happily
+           scroll the sheet at the same time as we turn the ring, and a slightly
+           diagonal swipe did both. The gesture now has to commit: past the slop
+           it is EITHER a horizontal spin or a vertical scroll, decided once and
+           never revisited. A vertical verdict kills the drag outright so the page
+           scrolls cleanly instead of half-turning the ring on the way. */
+        if (!drag.moved) {
+          if (Math.abs(dx) <= DRAG_SLOP && Math.abs(dy) <= DRAG_SLOP) return;
+          if (Math.abs(dx) < Math.abs(dy) * 1.15) { drag.dead = true; return; }
+          drag.moved = true;
+          try { cfFrame.setPointerCapture(e.pointerId); } catch { /* mouse: fine without */ }
+        }
         pos = drag.pos - dx / (cardPx() * (1 + GAP));
-        const dt = Math.max(1, now - drag.t);
-        drag.v = (pos - prev) / dt;
-        drag.t = now;
+        /* VELOCITY OVER A WINDOW, not one frame. Tom: "the velocity when i swipe
+           isnt super accurate it feels clunky." A single frame delta is noisy, and
+           the very last frame of a flick is usually the SLOWEST as the finger
+           lifts, so the reading taken at release was routinely near zero and a
+           genuine flick registered as a nudge. Sampled over ~90ms instead. */
+        const now = performance.now();
+        drag.samples.push({ t: now, p: pos });
+        while (drag.samples.length > 2 && now - drag.samples[0].t > 90) drag.samples.shift();
         paint();
       });
       const endDrag = e => {
         if (!drag || drag.id !== e.pointerId) return;
-        const flick = Math.abs(drag.v) > 0.002 ? Math.sign(drag.v) : 0;
-        const wasMoved = drag.moved;
+        const wasMoved = drag.moved, dead = drag.dead, s = drag.samples;
         drag = null;
-        settle(Math.round(pos) + flick);
-        if (!wasMoved) return;         // a tap is handled by the card's own click
+        if (dead) return;                       // that gesture was a page scroll
+        if (wasMoved) {
+          /* Momentum proportional to the measured speed, so a hard flick travels
+             several pets and a gentle push moves one. It used to add exactly +/-1
+             however hard you threw it, which is most of what read as clunky.
+             Capped at 3 so the ring cannot spin off somewhere you did not aim. */
+          let v = 0;
+          if (s.length >= 2) {
+            const a = s[0], b = s[s.length - 1];
+            const dt = Math.max(16, b.t - a.t);
+            v = (b.p - a.p) / dt * 1000;        // cards per second
+          }
+          const carry = Math.max(-3, Math.min(3, v * 0.32));
+          settle(Math.round(pos + carry));
+          return;
+        }
+        /* A TAP, resolved by WHERE in the frame it landed rather than by which
+           element was hit. The cards are rotated ~46 degrees in 3D, so a card is
+           painted as a narrow parallelogram while its bounding rect stays full
+           width: measured, a tap at the visual centre of the right-hand neighbour
+           hit .cf-track, not the card, so per-card click handlers were dead for
+           exactly the taps that matter. Side of centre is unambiguous and works
+           however the ring is posed. */
+        const r = cfFrame.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2);
+        if (Math.abs(dx) > cardPx() * 0.28) settle(Math.round(pos) + Math.sign(dx));
       };
       cfFrame.addEventListener('pointerup', endDrag);
       cfFrame.addEventListener('pointercancel', endDrag);
@@ -8367,15 +8437,8 @@ async function openStable(opts = {}) {
         if (delta < -N / 2) delta += N;
         settle(Math.round(pos) + delta);
       }));
-      // tapping an off-centre card brings it to the front rather than selecting it
-      cards.forEach((card, i) => card.addEventListener('click', e => {
-        if (indexAt(pos) === i) return;
-        e.stopPropagation();
-        let delta = i - indexAt(pos);
-        if (delta > N / 2) delta -= N;
-        if (delta < -N / 2) delta += N;
-        settle(Math.round(pos) + delta);
-      }));
+      // (no per-card click handler: see endDrag, the 3D rake makes card hit
+      //  testing unreliable and the frame resolves taps by side instead)
       paint();
 
       /* Born at the old size, then transitioned to the new one on the next frame.
@@ -8396,10 +8459,14 @@ async function openStable(opts = {}) {
                frame position velocity is zero and the spin blur sees nothing.
                This is the resize's own blur: a half-sine, peaking mid-flight where
                the easing is fastest and back to nothing at both ends. */
-            panelBlur = reduced ? 0 : Math.sin(Math.PI * t) * 1.6;
+            /* No separate blur source here any more. The resize moves the OUTER
+               cards (their pitch changes), and paint() already measures that as
+               real displacement, so they smear on their own. The centre card does
+               not translate at all, only scales, so it stays sharp: blurring it
+               was the "blurring the non moving part" fault. */
             paint();
             if (t < 1) requestAnimationFrame(follow);
-            else { panelBlur = 0; paint(); }
+            else paint();
           };
           requestAnimationFrame(follow);
         });
@@ -8451,6 +8518,12 @@ async function openStable(opts = {}) {
     }));
     $$('[data-eq]', body).forEach(btn => btn.addEventListener('click', async () => {
       await setEquippedPet(btn.dataset.eq);
+      /* Tom, 2026-08-08: "when you equip your pet should close the talents tab and
+         go back to showing your pet big with his stats." Equipping is a decision
+         that ENDS the errand you opened the panel for, so the screen should return
+         to the thing you just chose rather than leaving you in a sub-view. */
+      openIid = null;
+      cfIid = btn.dataset.eq;
       popSound(S.sounds); pushProfileSoon();
       render();
     }));
@@ -10282,7 +10355,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v320'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v321'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
