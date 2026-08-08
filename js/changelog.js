@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 330, date: '2026-08-08', title: 'Levelling up is a moment now', items: [
+    'Hitting a new level takes over the screen: a lime burst blooms behind <b>your</b> bonehead, the level steps up, and the XP bar races to full, flashes, and lands on what you carried into the new level.',
+    'It shows the level you <b>actually came from</b>, including when one meal jumps you several levels at once.',
+  ] },
   { n: 329, date: '2026-08-08', title: 'Crates crack open', items: [
     'Opening a crate is a <b>proper moment</b> now: the crate lands, the lid blows off, light climbs out of it and your card rises out of the box. A crate deals a hand, so tap or drag each card away to see the next.',
     'The <b>daily crate</b> was being cut in the wrong place, so its lid sliced through the box. Fixed by measuring the artwork.',
