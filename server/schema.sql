@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS players (
   app_v TEXT,                        -- app version of last snapshot
   created_at INTEGER NOT NULL,
   last_seen INTEGER NOT NULL,
-  siege_last INTEGER                 -- weekly siege limiter: one per player per 7 days
+  siege_last INTEGER,                -- weekly siege limiter: one per player per 7 days
+  rename_of TEXT                     -- a name we owe them a change from (dup-name repair, 2026-08-08)
 );
 
 CREATE TABLE IF NOT EXISTS friendships (

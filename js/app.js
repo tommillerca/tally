@@ -634,8 +634,11 @@ const SPIRE_SEEN_KEY = 'spiresIntroSeen';
 async function maybeShowRenameNotice() {
   try {
     if ((navigator.webdriver && !window.__renameForce) || !S.settings) return;
-    const owed = await kvGet('renameRequired', null);
+    // the server is the authority (players.rename_of); the kv copy is only a
+    // cache so an offline open still shows it once the server has said so
+    const owed = (await social.renameOwed()) || (await kvGet('renameRequired', null));
     if (!owed) return;
+    await kvSet('renameRequired', String(owed));
     const me = await social.socialMe();
     // already renamed (by them, or the flag arrived late): nothing to ask for
     if (!me || !me.name || me.name.toLowerCase() !== String(owed).toLowerCase()) {
@@ -10236,7 +10239,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v318'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v319'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

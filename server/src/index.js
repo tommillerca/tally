@@ -407,7 +407,8 @@ export default {
           for (let i = 1; i <= 999; i++) if (!used.has(i)) { free = i; break; }
           return json({ ok: false, reason: 'taken', name, suggestNum: free }, 409);
         }
-        await env.DB.prepare('UPDATE players SET name = ?, last_seen = ? WHERE id = ?').bind(name, Date.now(), auth.playerId).run();
+        await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
+          .bind(name, Date.now(), auth.playerId).run();
         return json({ ok: true, name });
       }
 
@@ -850,8 +851,16 @@ export default {
       if (path === '/me' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
-        const row = await env.DB.prepare('SELECT handle, friend_code, name, created_at FROM players WHERE id = ?').bind(auth.playerId).first();
-        return json({ handle: row.handle, friendCode: row.friend_code, name: row.name || null, createdAt: row.created_at });
+        const row = await env.DB.prepare('SELECT handle, friend_code, name, created_at, rename_of FROM players WHERE id = ?').bind(auth.playerId).first();
+        /* `renameOf` is a rename WE owe this player: they hold a name somebody
+           older already had, because /name shipped without a uniqueness check.
+           Deliberately NOT delivered as a grant. A grant is consumed once, and
+           this player's client is on an old build that would swallow it without
+           understanding the payload, losing the flag forever. A column on the row
+           is durable: an old client ignores an unknown field, and the moment they
+           update, it is still here. Cleared by /name when they actually rename. */
+        return json({ handle: row.handle, friendCode: row.friend_code, name: row.name || null, createdAt: row.created_at,
+          renameOf: row.rename_of || null });
       }
 
       // Anonymous analytics ingest. Unsigned (events carry only a random device

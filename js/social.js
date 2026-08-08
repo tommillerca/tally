@@ -211,6 +211,21 @@ async function signedFetch(method, path, bodyObj = null) {
 export async function isOnline() { return !!(await apiBase()) && !!(await kvGet('social', null)); }
 export async function socialMe() { return kvGet('social', null); }
 
+/* Is the server asking this player to rename? Returns the name we owe a change
+   from, or null. Deliberately a live /me read rather than a grant: a grant is
+   consumed exactly once, and the player this exists for is on an old build that
+   would swallow the payload without understanding it and lose the flag forever.
+   A field on their row survives that, and survives a reinstall. Fails soft: no
+   network means no nag, which is the right way round for an apology. */
+export async function renameOwed() {
+  try {
+    const r = await signedFetch('GET', '/me', null);
+    if (!r || !r.ok) return null;
+    const d = await r.json().catch(() => ({}));
+    return d.renameOf || null;
+  } catch { return null; }
+}
+
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
 export async function goOnline() {
