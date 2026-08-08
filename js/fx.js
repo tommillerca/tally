@@ -97,7 +97,16 @@ export function confettiBurst(x, y, count = 18) {
   try { spawn(x, y, count, 0.85); } catch { /* no fx */ }
 }
 
+/* RETIRED 2026-08-08. Tom: "ya remove the confetti it's kinda lame."
+   Neutered here rather than deleted from its seventeen call sites. Those calls
+   mark the moments the game considers worth celebrating, which is real design
+   information, and gutting them would scatter the change across levelling,
+   crates, breeding, friend accepts, the wheel and boss loot for no gain.
+   Reinstating is deleting the `return` below. The old body is kept beneath it so
+   the effect itself is not lost, only silenced. */
 export function confettiRain(count = 110) {
+  return;                       // eslint-disable-line no-unreachable
+  /* eslint-disable no-unreachable */
   if (reducedMotion) return;
   try {
     for (let i = 0; i < 5; i++) {

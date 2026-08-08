@@ -8277,11 +8277,17 @@ async function openStable(opts = {}) {
          the ring resizes around it, which is exactly the "blurring the non moving
          part" complaint. */
       const prevX = new Array(N).fill(null);
+      const lastSigma = new Array(N).fill(-1);
       const mbNodes = [...body.querySelectorAll('.cf-mb feGaussianBlur')];
       const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
-        const PITCH = cardPx() * (1 + GAP);
+        /* MEASURE ONCE. cardPx() is a getBoundingClientRect, and it was being
+           called again INSIDE this loop, immediately after writing a transform:
+           six forced synchronous layouts per frame, each invalidated by the write
+           before it. That is the drag lag. Read once, write many. */
+        const CW = cardPx();
+        const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
           let off = i - pos;
           off = ((off % N) + N) % N;
@@ -8290,7 +8296,7 @@ async function openStable(opts = {}) {
           const ramp = Math.pow(dist, FALLOFF);
           const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
           const x = off * PITCH;
-          card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * cardPx() * ramp}px) rotateY(${-tilt}deg)`;
+          card.style.transform = `translateX(calc(-50% + ${x}px)) translateZ(${-DEPTH * CW * ramp}px) rotateY(${-tilt}deg)`;
           // a card teleports across the ring at half a turn out, so it must be
           // invisible by then or the jump is visible
           const edge = Math.min(1, Math.max(0, N / 2 - dist));
@@ -8302,17 +8308,29 @@ async function openStable(opts = {}) {
              no blur, however fast the rest of the ring is turning.
              Cards that teleport across the ring (the half-turn wrap) are excluded,
              or the jump would register as enormous velocity and flash. */
+          /* Tom, 2026-08-08: "the blur looks a bit too intense like the movement
+             is going faster than it actually is." Cut hard (0.5 -> 0.15 of the frame
+             displacement) and capped at 2.2px, and the floor raised so ordinary
+             settling carries none at all: blur should read as a hint of speed, not
+             announce it.
+             QUANTISED to 0.4px steps and only written when the step changes. An
+             SVG filter re-renders whenever stdDeviation is touched, so setting it
+             every frame on every card was re-rasterising six filters at 60Hz for
+             sub-pixel differences nobody can see. Offscreen cards skip it. */
           const prev = prevX[i];
           const jumped = prev != null && Math.abs(x - prev) > PITCH * 1.5;
           const dx = (prev == null || jumped) ? 0 : Math.abs(x - prev);
           prevX[i] = x;
-          const sigma = reduced ? 0 : Math.min(9, dx * 0.5);
+          const vis = Math.max(0, 1 - FADE * dist) * edge;
+          const raw = (reduced || vis < 0.2) ? 0 : Math.min(2.2, dx * 0.15);
+          const sigma = raw < 0.6 ? 0 : +(Math.round(raw / 0.4) * 0.4).toFixed(1);
           const fx = mbNodes[i];
-          if (fx) {
-            if (sigma > 0.25) {
-              fx.setAttribute('stdDeviation', `${sigma.toFixed(2)} 0`);
+          if (fx && sigma !== lastSigma[i]) {
+            lastSigma[i] = sigma;
+            if (sigma > 0) {
+              fx.setAttribute('stdDeviation', `${sigma} 0`);
               if (card.style.filter !== `url(#cfmb${i})`) card.style.filter = `url(#cfmb${i})`;
-            } else if (card.style.filter) {
+            } else {
               card.style.filter = '';       // parked: composite no filter at all
               fx.setAttribute('stdDeviation', '0 0');
             }
@@ -8340,7 +8358,7 @@ async function openStable(opts = {}) {
         target = to;
         const span = Math.abs(target - from);
         if (span < 0.0005) { pos = target; paint(); raf = null; return; }
-        const dur = reduced ? 0 : Math.min(720, 300 + span * 130);
+        const dur = reduced ? 0 : Math.min(540, 240 + span * 95);
         const t0 = performance.now();
         const step = () => {
           const t = dur ? Math.min(1, (performance.now() - t0) / dur) : 1;
@@ -10355,7 +10373,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v321'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v322'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 322, date: '2026-08-08', title: 'Smoother Stable, and the confetti is gone', items: [
+    'Swiping and flicking the Stable <b>stopped lagging</b>. The carousel was re-measuring a card on every single card, every frame, which forces the browser to redo its layout each time.',
+    'The motion blur is <b>much lighter</b>. It was overstating how fast things were actually moving.',
+    'The <b>dot</b> showing which pet you are on is round again instead of a clipped lozenge.',
+    '<b>Confetti has been retired</b> across the whole game: levelling, crates, breeding, friend accepts, the wheel and boss loot.',
+  ] },
   { n: 321, date: '2026-08-08', title: 'Swiping the Stable feels right now', items: [
     '<b>Tap a pet</b> to either side to bring it forward, or swipe. Tapping did nothing before.',
     'A <b>hard flick travels further</b> than a gentle push, instead of always moving exactly one pet however hard you threw it.',

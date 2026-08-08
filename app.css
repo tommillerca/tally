@@ -5858,9 +5858,21 @@ body::before {
 .cf-meta .row:first-child { border-top: 0; }
 .cf-meta dt { font-size: var(--fs-1); color: var(--text-2); }
 .cf-meta dd { font-size: var(--fs-1); font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; margin: 0; }
-.cf-dots { display: flex; justify-content: center; gap: 7px; margin-top: 14px; flex-wrap: wrap; }
+/* Tom, 2026-08-08: "the highlighted one looks kinda weird and cut off like a
+   rectangle oval hybrid instead of a dot."
+   It was being CLIPPED, not mis-shaped. The collapse animation needs
+   `overflow: hidden` on this row, and the row is exactly one dot tall, so the
+   active dot's scale(1.25) grew straight into the clip on both axes and came out
+   a squared-off lozenge. Padding gives the scaled dot room to exist. `flex: none`
+   stops a dot being squeezed narrower than it is tall, which would have produced
+   the same shape by a different route once a crew gets large. */
+.cf-dots {
+  display: flex; justify-content: center; align-items: center; gap: 7px;
+  margin-top: 14px; flex-wrap: wrap; padding: 4px 0;
+}
 .cf-dots i {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); opacity: .3;
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-2); opacity: .3;
   transition: opacity .2s, transform .2s; cursor: pointer;
 }
 .cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
@@ -5889,12 +5901,13 @@ body::before {
    them; now they collapse with the ring rather than disappearing ahead of it. */
 .cf-meta, .cf-dots {
   overflow: hidden;
-  transition: opacity .3s ease-in-out, max-height .52s cubic-bezier(.76, 0, .24, 1), margin-top .52s cubic-bezier(.76, 0, .24, 1);
+  transition: opacity .3s ease-in-out, max-height .52s cubic-bezier(.76, 0, .24, 1),
+    margin-top .52s cubic-bezier(.76, 0, .24, 1), padding .52s cubic-bezier(.76, 0, .24, 1);
   max-height: 260px; opacity: 1;
 }
 .cf.panelled { --card: 104px; }
 .cf.panelled .cf-frame { padding: 10px 0 6px; }
-.cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; }
+.cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }
 /* the panel arrives rather than appearing */
 .pet-tree-inline, .breed-bar.sticky { animation: cfPanelIn .46s cubic-bezier(.76, 0, .24, 1) both; }
