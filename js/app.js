@@ -1499,7 +1499,6 @@ async function renderToday(el) {
   <div class="hero-card">
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
-    <div class="hero-ground"></div>
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
     ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 108)}</button>` : ''}
@@ -4972,6 +4971,44 @@ function parseDisplayName(name) {
   const num = parts[2] && parts[2][0] === '#' ? parseInt(parts[2].slice(1), 10) : null;
   return { adj, noun, num: Number.isInteger(num) ? num : null };
 }
+
+/* THE RENAME NOTICE (v315, pending Tom's approval).
+ *
+ * Tom, 2026-08-08: "You should send a clear pop up with explanation about your
+ * fuck up only two the second massive coccyx and let him pick a new name."
+ *
+ * Shown to ONE player: the later claimant of a name somebody else already holds.
+ * Three rules it has to obey, because this is an apology, not a warning:
+ *   1. Own the mistake in the first sentence. The player did nothing wrong and
+ *      must never be made to feel like they broke a rule or cheated.
+ *   2. Say what is NOT changing. Being told to change your name reads like an
+ *      account action, and the first fear is losing progress.
+ *   3. Give them the fix in one tap, not a link to go and find a setting.
+ * No dismiss control: the name has to change, and a "later" button on a
+ * one-player notice just means it gets shown again tomorrow. It is one tap.
+ */
+async function openRenameNotice({ oldName, coins: giftCoins = 250, dust: giftDust = 50 } = {}) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>We have to ask you to rename</h2></div>
+    <div class="sheet-body">
+      <p style="margin:0 0 10px">This one is on us, not you.</p>
+      <p class="note" style="margin:0 0 12px">Boneheadz names were meant to be one-of-a-kind, and a bug on our end let two people claim <b>${esc(oldName || 'the same name')}</b>. You were the second, so we are asking you to pick a new one. The bug is fixed, so it cannot happen again.</p>
+      <p class="note" style="margin:0 0 14px"><b>Nothing else changes.</b> Your level, gear, pets, crew, streak and everything you have collected stay exactly where they are. It is only the name.</p>
+      <div class="rn-gift">
+        <span>${ICONS.coin(15)}<b>${giftCoins}</b></span>
+        <span>${ICONS.dust(15)}<b>${giftDust}</b></span>
+        <small>Sorry for the hassle, this is on your account already.</small>
+      </div>
+      <button class="btn primary" id="rnPick" style="width:100%;margin-top:14px">Pick my new name</button>
+    </div>
+  `, { cls: 'sheet-rename', name: 'rename_notice' });
+  $('#rnPick', wrap)?.addEventListener('click', () => {
+    history.back();                       // close the notice, then straight into the builder
+    setTimeout(() => openNameBuilder(null), 260);
+  });
+  return wrap;
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__renameNotice = openRenameNotice;
 
 async function openNameBuilder(after) {
   const me = await social.socialMe();
@@ -9969,7 +10006,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v314'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v315'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -8,7 +8,7 @@ export const CHANGES = [
     'Boss dens and the Glutton were handing <b>everyone the same drop</b>. The roll was seeded by the boss and the day with nothing about you in it, so two players who beat the same den got the identical two pieces. Drops are yours now.',
     'A <b>Battle Charm</b> can no longer be used while one is already running. It used to quietly eat a second charm and stack the timer, which never made the bonus bigger. The button now reads ACTIVE and your spare stays in your bag.',
     'Map pickups gave <b>the same few ingredients</b> forever. Each kind of pile could only ever drop two of the six, so four were simply unreachable from it. Coin piles still lean salt and peppers, bone piles still lean marrow and sinew, but anything can turn up now.',
-    'The Today card gives your bonehead <b>something to stand on</b>. He was posed on a flat field of colour with the caption band starting right at his feet, so he read as floating. There is a floor now, and his shadow sits under his shoes instead of behind his ankles.',
+    'Your bonehead\'s <b>shadow sits under his shoes</b> now. It was drawn 8px below his soles and 5% to the right of them, because it was being centred on the card instead of on him, which made him look like he was hovering just above his own shadow.',
   ] },
   { n: 313, date: '2026-08-08', title: 'The dens move, and the map keeps going', items: [
     'Boss dens now <b>relocate every week</b>. They used to sit on the same spot forever and only swap which boss was home, so the weekly refresh was invisible unless you read the name. New week, new places to walk to. They have already moved for this week.',
