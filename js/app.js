@@ -5602,20 +5602,41 @@ async function renderFriends(el) {
     const wrap = $('#cfanWrap', el), deck = $('#cfanDeck', el);
     let sx = null, dx = 0, dragged = false;
     wrap.addEventListener('dragstart', e => e.preventDefault());
+    /* AXIS LOCK ON THE FAN. Tom, 2026-08-08: "i cant easily scroll my friends
+       cards with a finger drag it moves too much of the screen."
+       The deck translated on ANY pointer movement with no check on direction, and
+       touch-action is pan-y, so a mostly-vertical gesture scrolled the page
+       natively AND slid the fan: two things moving for one finger, which is what
+       "moves too much of the screen" describes. Measured before the fix: a steeply
+       vertical drag still slid the deck 4.2px.
+       Past the slop the gesture commits once to horizontal or vertical, and a
+       vertical verdict kills the drag so the page scrolls cleanly. Same fix and
+       same reason as the Stable carousel.
+       Capture is deferred to the horizontal commit: taking it on pointerdown
+       retargets the eventual click away from the card. */
+    let sy = null, axis = null;
     wrap.addEventListener('pointerdown', e => {
-      sx = e.clientX; dx = 0; dragged = false;
+      sx = e.clientX; sy = e.clientY; dx = 0; dragged = false; axis = null;
       deck.style.transition = 'none';
-      try { wrap.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
     });
     wrap.addEventListener('pointermove', e => {
-      if (sx === null) return;
-      dx = e.clientX - sx;
+      if (sx === null || axis === 'y') return;
+      const mx = e.clientX - sx, my = e.clientY - sy;
+      if (!axis) {
+        if (Math.abs(mx) <= 6 && Math.abs(my) <= 6) return;   // undecided
+        if (Math.abs(mx) < Math.abs(my) * 1.15) { axis = 'y'; deck.style.transition = ''; return; }
+        axis = 'x';
+        try { wrap.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
+      }
+      dx = mx;
       if (Math.abs(dx) > 8) dragged = true;
       deck.style.transform = `translateX(${dx * 0.35}px)`;
     });
     const release = () => {
       if (sx === null) return;
-      sx = null;
+      const wasX = axis === 'x';
+      sx = null; sy = null; axis = null;
+      if (!wasX) { deck.style.transition = ''; deck.style.transform = 'translateX(0)'; return; }
       deck.style.transition = '';
       deck.style.transform = 'translateX(0)';
       if (Math.abs(dx) > 45) cfanCycle(dx < 0 ? 1 : -1);
@@ -10698,7 +10719,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v326'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v327'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

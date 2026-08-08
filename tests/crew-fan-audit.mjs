@@ -312,6 +312,93 @@ ok('OFFSCREEN cards rotated off the fan are skipped, not drawn at opacity 0',
 ok('ONEPET only the featured crew member animates (no lockstep, no wasted frames)',
   perf.runningElsewhere === 0, `${perf.runningOnFeat} running on the featured card, ${perf.runningElsewhere} elsewhere`);
 
+
+/* ---- NO SIDEWAYS PAGE SCROLL, AND ONE GESTURE MOVES ONE THING ---------------
+   Both shipped in v326 and Tom found them within minutes, which means neither had
+   a guard. They do now.
+   Tom: "im able to scroll the whole app left to right on that tab it's not
+   constrained to the width of the phone" and "i cant easily scroll my friends
+   cards with a finger drag it moves too much of the screen".
+   PROVE-RED: remove `overflow-x: clip` from .cfan-wrap and WIDTH fails; remove the
+   axis lock from the pointermove handler and VERTICAL fails. */
+await seedCrew(FRIENDS);
+await sleep(900);
+
+/* Seed a crew big enough that cards are actually flung off the fan: with 7 or
+   fewer nothing translates far enough to overflow, so a 7-friend check is a check
+   that cannot fail. Also NAME the widest offender, or a red result tells you
+   nothing about what to fix. */
+await seedCrew([...FRIENDS, ...FRIENDS].map((f, i) => ({ ...f, playerId: `w-${i}`, name: `${f.name} ${i}` })));
+await sleep(1000);
+const width = await page.evaluate(() => {
+  const view = window.innerWidth;
+  let worst = null;
+  for (const el of document.querySelectorAll('#screen *')) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) continue;
+    const over = Math.max(r.right - view, -r.left);
+    if (over <= 1) continue;
+    /* An overhang is only a BUG if nothing clips it. getBoundingClientRect
+       reports UNCLIPPED geometry, so measuring the box alone can never tell the
+       fixed state from the broken one -- it reported the same 83px overhang
+       before and after `overflow-x: clip` landed. What actually decides whether
+       the page scrolls sideways is whether some ancestor contains the overflow. */
+    let clipped = false;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const ox = getComputedStyle(a).overflowX;
+      /* Only `hidden` and `clip` CONTAIN the overflow. `auto` and `scroll` make it
+         reachable by scrolling, which is precisely the reported bug ("i'm able to
+         scroll the whole app left to right"), so they must not count as a fix. */
+      if (ox === 'hidden' || ox === 'clip') { clipped = true; break; }
+      if (ox === 'auto' || ox === 'scroll') break;   // scrollable: the overhang stands
+    }
+    if (clipped) continue;
+    if (!worst || over > worst.over) {
+      worst = { over: Math.round(over), cls: (el.className || el.tagName).toString().slice(0, 40),
+        left: Math.round(r.left), right: Math.round(r.right) };
+    }
+  }
+  return { doc: document.documentElement.scrollWidth, view, body: document.body.scrollWidth, worst };
+});
+/* Assert that NO ELEMENT extends past the viewport, not that scrollWidth is
+   clean. Headless Chrome reported scrollWidth 393 while a card sat at right: 476,
+   so the scrollWidth form was a check that could not fail -- it passed against the
+   exact bug Tom was looking at on his phone. WKWebView turns that overhang into a
+   real sideways scroll; the overhang itself is the device-independent fact. */
+ok('WIDTH nothing on the crew tab extends past the phone (sideways scroll)',
+  !width.worst, JSON.stringify(width));
+
+/* A mostly-VERTICAL drag must leave the fan alone. It used to translate the deck
+   on any movement at all, so the page scrolled and the fan slid at the same time. */
+const vertical = await page.evaluate(async () => {
+  const wrap = document.querySelector('#cfanWrap'), deck = document.querySelector('#cfanDeck');
+  const r = wrap.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const pd = (t, x, y) => wrap.dispatchEvent(new PointerEvent(t, { pointerId: 1, clientX: x, clientY: y, bubbles: true }));
+  pd('pointerdown', cx, cy);
+  for (let i = 1; i <= 6; i++) pd('pointermove', cx + i * 2, cy + i * 18);   // steeply vertical
+  const moved = deck.style.transform;
+  pd('pointerup', cx + 12, cy + 108);
+  return { transform: moved || 'none' };
+});
+ok('VERTICAL a vertical drag does not slide the fan (one gesture moves one thing)',
+  !/translateX\(-?[1-9]/.test(vertical.transform), JSON.stringify(vertical));
+
+/* and a horizontal one still does */
+const horizontal = await page.evaluate(async () => {
+  const wrap = document.querySelector('#cfanWrap'), deck = document.querySelector('#cfanDeck');
+  const r = wrap.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const pd = (t, x, y) => wrap.dispatchEvent(new PointerEvent(t, { pointerId: 2, clientX: x, clientY: y, bubbles: true }));
+  pd('pointerdown', cx, cy);
+  for (let i = 1; i <= 6; i++) pd('pointermove', cx - i * 18, cy + i * 2);
+  const moved = deck.style.transform;
+  pd('pointerup', cx - 108, cy + 12);
+  return { transform: moved || 'none' };
+});
+ok('HORIZONTAL a sideways drag still moves the fan (the lock did not break it)',
+  /translateX\(-[1-9]/.test(horizontal.transform), JSON.stringify(horizontal));
+
 await browser.close();
 if (srv) srv.kill();
 console.log(fails ? '\nCREW FAN AUDIT FAILED' : '\nCREW FAN VERIFIED');

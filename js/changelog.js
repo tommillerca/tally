@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 327, date: '2026-08-08', title: 'Crew tab fixes', items: [
+    'The Crew tab <b>no longer scrolls sideways</b>. Friend cards flung out to the edges of the fan were hanging off the screen and dragging the whole app with them.',
+    'Dragging the fan up or down now <b>just scrolls the page</b> instead of sliding your friends sideways at the same time.',
+  ] },
   { n: 326, date: '2026-08-08', title: 'Your Crew is a hand of cards now', items: [
     'The Crew tab now greets you with your friends as a <b>fan of trading cards</b>: their fit, their backdrop, their pet, their level. Swipe the fan or tap a card to flip through them; tap the middle card to open their profile.',
     '<b>Star your favourites</b> and they sort to the front of the fan, get a gold star on their card, and live as one-tap skull chips above the deck so they are always easy to find.',

@@ -2095,7 +2095,19 @@ body::before {
 
 /* the fan: full-bleed stage; a drag must move the DECK, never lift a gear layer
    off a Bonehead (see the pointer handlers in renderFriends) */
-.cfan-wrap { position: relative; height: 348px; margin: 0 calc(-1 * var(--pad)); touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+/* Tom, 2026-08-08: "im able to scroll the whole app left to right on that tab
+   it's not constrained to the width of the phone."
+   Cards are absolutely positioned and flung sideways out of the wrap, and nothing
+   clipped them: measured, a card sat at right: 476 in a 393px viewport. WKWebView
+   turns that overhang into a real sideways scroll of the whole app.
+   `clip`, not `hidden`: hidden makes this a scroll container and would swallow the
+   fan's own gestures, and clip is the one overflow value that lets the other axis
+   stay visible, which the fan's upward arc needs. */
+.cfan-wrap {
+  position: relative; height: 348px; margin: 0 calc(-1 * var(--pad));
+  overflow-x: clip; overflow-y: visible;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
 .cfan-deck { position: absolute; inset: 0; transition: transform 0.35s cubic-bezier(0.3, 1.25, 0.55, 1); }
 .cfan-card {
   position: absolute; left: 50%; top: 10px; width: 194px; height: 270px; margin-left: -97px;
