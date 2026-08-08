@@ -5796,7 +5796,7 @@ body::before {
    The art inside a card comes from petPortraitHtml(..., {mass:true}), so it is
    content-cropped by PET_CROP and mass-normalised: a flat lizard and the round
    cloud read as the same size animal in the same square tile. */
-.cf { --card: 150px; width: 100%; }
+.cf { --card: 176px; width: 100%; }
 .cf-frame {
   position: relative; overflow: hidden; padding: 22px 0 14px;
   cursor: grab; touch-action: pan-y; outline: none;
@@ -5892,7 +5892,7 @@ body::before {
    it a type, so it interpolates. The ring's spacing is computed from the measured
    card width, so js re-paints on rAF for the length of this transition, or the
    cards would keep their old pitch while the cards themselves shrank. */
-@property --card { syntax: '<length>'; inherits: true; initial-value: 150px; }
+@property --card { syntax: '<length>'; inherits: true; initial-value: 176px; }
 .cf { transition: --card .52s cubic-bezier(.76, 0, .24, 1); }
 .cf-frame { transition: padding .52s cubic-bezier(.76, 0, .24, 1); }
 .cf-cap b { transition: font-size .52s cubic-bezier(.76, 0, .24, 1); }
@@ -5905,7 +5905,7 @@ body::before {
     margin-top .52s cubic-bezier(.76, 0, .24, 1), padding .52s cubic-bezier(.76, 0, .24, 1);
   max-height: 260px; opacity: 1;
 }
-.cf.panelled { --card: 104px; }
+.cf.panelled { --card: 118px; }
 .cf.panelled .cf-frame { padding: 10px 0 6px; }
 .cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }

@@ -8132,7 +8132,7 @@ async function openStable(opts = {}) {
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         <span class="cf-lv">LV ${lvl}</span>
-        <span class="cf-art">${petPortraitHtml(x.sp, 96, x.shiny, { mass: true })}</span>
+        <span class="cf-art">${petPortraitHtml(x.sp, 124, x.shiny, { mass: true })}</span>
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
@@ -8264,7 +8264,13 @@ async function openStable(opts = {}) {
     if (cfFrame && cfTrack && roster.length) {
       const cards = [...cfTrack.children];
       const N = cards.length;
-      const GAP = 0.30, ROTATE = 46, DEPTH = 0.34, FADE = 0.30, FALLOFF = 0.62;
+      /* Tom, 2026-08-08: "the pets need to be bigger they're the heart of the
+         stable page and the current tiles seem too far apart we can stack them
+         closer." GAP is the gap BETWEEN cards as a fraction of card width, so 0.30
+         was most of a third of a card of dead air on each side. At 0.10 the
+         neighbours tuck in behind the featured pet and the ring reads as a deck
+         rather than three separate tiles. */
+      const GAP = 0.10, ROTATE = 46, DEPTH = 0.34, FADE = 0.26, FALLOFF = 0.62;
       let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
       /* Motion blur, driven by measured velocity rather than a fixed keyframe, so
          a slow drag blurs barely at all and a flick smears. `reduced` disables it
@@ -8344,27 +8350,37 @@ async function openStable(opts = {}) {
           repaintFocus();
         }
       };
-      /* EASE IN AND OUT. Tom, 2026-08-08: "we need ease in ease out type
-         movements". This was `pos += left * 0.16`, exponential decay: it starts at
-         maximum speed and only ever slows down, so a tap to spin the ring lurched
-         off the mark and crept in. Now a real easeInOutCubic over a fixed
-         duration, so it accelerates away and decelerates in. Duration scales a
-         little with distance, because dot-jumping three pets should not take the
-         same time as nudging one. */
-      const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-      const settle = to => {
+      /* ONE SPRING, NOT TWO CURVES. Tom, 2026-08-08: "it kinda hiccups mid
+         swipe when you let it rip."
+         That hiccup was easeInOutCubic doing exactly what it says: ease-IN starts
+         at ZERO velocity. So the ring was travelling at the speed of your finger,
+         you let go, and it braked to a standstill before accelerating again into
+         the settle. Ease-in-out is right for a tap (which starts from rest) and
+         wrong for a release (which does not).
+         A critically damped spring covers both without a mode switch: hand it the
+         release velocity and it CONTINUES that motion and decays into place; hand
+         it zero, and it accelerates from rest and decelerates in, which is what
+         ease-in-out was approximating anyway. Nothing discontinuous at the
+         boundary, because the boundary is just an initial condition. */
+      let vel = 0;
+      const K = 118, C = 2 * Math.sqrt(K);      // critically damped: no overshoot
+      const settle = (to, v0 = 0) => {
         if (raf) cancelAnimationFrame(raf);
-        const from = pos;
         target = to;
-        const span = Math.abs(target - from);
-        if (span < 0.0005) { pos = target; paint(); raf = null; return; }
-        const dur = reduced ? 0 : Math.min(540, 240 + span * 95);
-        const t0 = performance.now();
+        if (reduced) { pos = target; vel = 0; paint(); raf = null; return; }
+        vel = v0;
+        let last = performance.now();
         const step = () => {
-          const t = dur ? Math.min(1, (performance.now() - t0) / dur) : 1;
-          pos = from + (target - from) * easeInOut(t);
+          const now = performance.now();
+          // clamp dt so a dropped frame cannot fling the spring across the ring
+          const dt = Math.min(0.034, Math.max(0.001, (now - last) / 1000));
+          last = now;
+          vel += (-K * (pos - target) - C * vel) * dt;
+          pos += vel * dt;
           paint();
-          if (t >= 1) { pos = target; paint(); raf = null; return; }
+          if (Math.abs(pos - target) < 0.0015 && Math.abs(vel) < 0.02) {
+            pos = target; vel = 0; paint(); raf = null; return;
+          }
           raf = requestAnimationFrame(step);
         };
         raf = requestAnimationFrame(step);
@@ -8426,8 +8442,8 @@ async function openStable(opts = {}) {
             const dt = Math.max(16, b.t - a.t);
             v = (b.p - a.p) / dt * 1000;        // cards per second
           }
-          const carry = Math.max(-3, Math.min(3, v * 0.32));
-          settle(Math.round(pos + carry));
+          const carry = Math.max(-3, Math.min(3, v * 0.26));
+          settle(Math.round(pos + carry), v);   // v0: the ring keeps your speed
           return;
         }
         /* A TAP, resolved by WHERE in the frame it landed rather than by which
@@ -10373,7 +10389,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v322'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v323'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
