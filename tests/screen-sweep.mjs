@@ -123,6 +123,38 @@ if (shots) await page.screenshot({ path: path.join(shots, 'sweep-legacy-sheet.pn
 
 ok('NO page or console errors', errors.length === 0, errors.slice(0, 4).join(' | '));
 
+
+/* ---- ARRIVAL: every screen becomes visible, and does so WHOLE ---------------
+   Tom, 2026-08-08: "I want these tabs fully loaded before anyone is interacting."
+   Screens are now hidden until their art has decoded (revealWhenReady in the
+   router and in openSheet). That is a pattern with one catastrophic failure mode:
+   if the reveal never fires, the tab is BLANK and the app looks broken. This is
+   anti-regression rule 8 in a test -- anything that hides content pending an
+   async result must own un-hiding it.
+   PROVE-RED: delete the revealWhenReady call in route() and every tab below
+   fails at opacity 0 with content present. */
+for (const t of ['today', 'boneyard', 'friends', 'bonehead', 'progress']) {
+  await page.evaluate(tab => { location.hash = '#/' + tab; }, t);
+  await sleep(2200);
+  const arrival = await page.evaluate(() => {
+    const child = document.querySelector('#screen > *');
+    if (!child) return { err: 'nothing rendered' };
+    const cs = getComputedStyle(child);
+    return {
+      revealed: cs.opacity !== '0',
+      hasRouteIn: child.classList.contains('route-in'),
+      // the WHOLE screen, not just the first child: some screens render a thin
+      // wrapper first and the content beside it, so a first-child-only count
+      // reports 0 on a perfectly full page
+      textLen: (document.querySelector('#screen')?.textContent || '').trim().length,
+    };
+  });
+  ok(`ARRIVAL #/${t} becomes visible (a hidden screen is worse than an ugly one)`,
+    !arrival.err && arrival.revealed && arrival.hasRouteIn, `${t}: ${JSON.stringify(arrival)}`);
+  ok(`ARRIVAL #/${t} actually has content (an empty screen must not pass as revealed)`,
+    !arrival.err && arrival.textLen > 20, `${t}: ${arrival.textLen} chars`);
+}
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass);

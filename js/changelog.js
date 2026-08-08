@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 332, date: '2026-08-08', title: 'Every screen arrives in one piece', items: [
+    'Tabs no longer <b>assemble themselves in front of you</b>. Every screen and every sheet now waits until its artwork has finished loading, then appears all at once.',
+    'This applies <b>everywhere</b>, including screens added later, rather than being fixed one page at a time.',
+  ] },
   { n: 331, date: '2026-08-08', title: 'Crates open quicker, and close properly', items: [
     'The crate <b>gets on with it</b>. It used to sit closed for over two seconds before the lid moved; the card now arrives in about half the time.',
     'Swiping the <b>last card</b> away no longer makes the screen vanish under your thumb. It flies off like every other card, then closes.',

@@ -1239,9 +1239,13 @@ function route({ keepScroll = false } = {}) {
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
     composeAvatars(el);
-    // Phase 4: a route lands with a 200ms fade instead of a hard cut. The class
-    // goes on the rendered child so an in-place refresh() never re-triggers it.
-    el.firstElementChild?.classList.add('route-in');
+    /* A route lands as ONE picture. The class goes on the rendered child so an
+       in-place refresh() never re-triggers it, and it is now applied only once
+       the child's art has DECODED: adding it the instant the DOM existed faded in
+       markup whose images had not arrived, which is why tabs assembled themselves
+       in front of you. revealWhenReady always applies it, cap included, so this
+       can never leave a screen blank. */
+    return revealWhenReady(el.firstElementChild, { cls: 'route-in', cap: 650 });
   });
 }
 
@@ -1313,6 +1317,13 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog"><div class="sheet-grab"></div>${html}</div>`;
   $('#sheets').appendChild(wrap);
+  /* Sheets are the app's other surface, and the heaviest ones (the Stable's ring,
+     the Wardrobe, a pack reveal) are exactly the ones that used to assemble
+     themselves in front of you. Same rule as the router, applied once here so no
+     individual sheet has to remember it. Not awaited: a sheet must open now, and
+     revealWhenReady owns un-hiding the body either way. */
+  const sBody = wrap.querySelector('.sheet-body');
+  if (sBody) revealWhenReady(sBody, { cls: 'sheet-in', cap: 650 });
   // analytics: which feature-sheets get opened + how long they're held (dwell).
   // Auto-labels from the sheet's <h2> title unless an explicit name is passed.
   const feat = (name || (html.match(/<h2[^>]*>([^<]{1,40})<\/h2>/) || [])[1] || 'sheet').trim();
@@ -2111,6 +2122,38 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
    one finished character instead of assembling on screen. Cheap after the first
    paint: decoded images come straight from cache, so this is a no-op on
    re-renders. Called after any render that can contain a .bh-anim stack. */
+/* ONE ARRIVAL, NOT A TRICKLE. Tom, 2026-08-08: "I want these tabs fully loaded
+   before anyone is interacting so the UX is smoooooth and polished."
+   The Boneyard already works this way and it is the reason that screen arrives as
+   one picture: its markers stay hidden until every one is placed, then reveal
+   together. The Stable and the Crew fan did the opposite, building their DOM,
+   compositing layered avatars and running the sheet's own entrance on the same
+   frames, so the content assembled itself in front of you.
+   Two rules this must obey, both learned here already:
+     - A HARD CAP. Anything that hides content pending an async result must own
+       un-hiding it, or one broken image leaves a blank screen forever
+       (anti-regression rule 8: degrade to ugly, never to invisible).
+     - decode() can REJECT on a broken or cancelled image, and one rejection must
+       not hold the whole screen hostage, so every promise swallows its own error. */
+async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
+  if (!root) return;
+  let shown = false;
+  const show = () => {
+    if (shown || !root.isConnected) return;
+    shown = true;
+    requestAnimationFrame(() => root.classList.add(cls));
+  };
+  const guard = setTimeout(show, cap);
+  const imgs = [...root.querySelectorAll('img')];
+  await Promise.all(imgs.map(im => {
+    if (im.decode) return im.decode().catch(() => {});
+    if (im.complete) return Promise.resolve();
+    return new Promise(r => { im.addEventListener('load', r, { once: true }); im.addEventListener('error', r, { once: true }); });
+  }));
+  clearTimeout(guard);
+  show();
+}
+
 function composeAvatars(root = document) {
   const scope = root && root.querySelectorAll ? root : document;
   for (const stack of scope.querySelectorAll('.bh-anim:not([data-composed])')) {
@@ -5552,6 +5595,7 @@ async function renderFriends(el) {
     if (searchRow) searchRow.hidden = data.friends.length < 5 && !fanQuery;
     deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
     composeAvatars(deck);   // decode the layered art; never fan out blank cards
+
     /* A search that matches nobody must SAY so. Hiding the deck and leaving the
        space blank would read as the crew having vanished, which is the same
        failure as an empty fan on a filter. */
@@ -9110,6 +9154,7 @@ async function openStable(opts = {}) {
       // (no per-card click handler: see endDrag, the 3D rake makes card hit
       //  testing unreliable and the frame resolves taps by side instead)
       paint();
+      // hold the ring until its art is decoded, then arrive in one frame
 
       /* Born at the old size, then transitioned to the new one on the next frame.
          The ring's spacing comes from the MEASURED card width, so a plain CSS
@@ -11025,7 +11070,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v331'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v332'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

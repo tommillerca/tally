@@ -5711,9 +5711,28 @@ body::before {
 .fab:active { transform: scale(.92); }
 
 /* each route change fades its screen in rather than hard-cutting */
-.screen > .route-in { animation: routeIn .2s ease-out; }
+/* EVERY SCREEN ARRIVES WHOLE. Tom, 2026-08-08: "make this an across app thing,
+   all new and existing pages should have this rule ... I want these tabs fully
+   loaded before anyone is interacting so the UX is smoooooth and polished."
+   `route-in` used to be added the instant the DOM existed, so it faded in markup
+   whose art had not decoded and the screen assembled itself in front of you.
+   The rendered child is now HIDDEN until revealWhenReady() has waited for every
+   image to decode, and that function ALWAYS applies the class, cap included, so a
+   broken or slow image degrades to ugly and never to a blank tab.
+   This sits on the router, so it covers every screen that exists and every screen
+   anyone adds later without them having to know about it. */
+.screen > :first-child { opacity: 0; }
+.screen > .route-in { opacity: 1; animation: routeIn .2s ease-out; }
 @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }
+/* Sheets are the app's other surface and get the same treatment. SCOPED TO
+   #sheets deliberately: the Boneyard reuses `.sheet-body` as a screen class, so an
+   unscoped rule matched it, tied on specificity with `.screen > .route-in` and won
+   on source order, leaving the map blank. Caught by the ARRIVAL guard in
+   tests/screen-sweep.mjs, which is exactly what that guard is for. */
+#sheets .sheet-body:not(.sheet-in) { opacity: 0; }
+#sheets .sheet-body.sheet-in { opacity: 1; transition: opacity .16s ease-out; }
+@media (prefers-reduced-motion: reduce) { #sheets .sheet-body.sheet-in { transition: none; } }
 
 /* ============================================================================
    TIER 3: THE DEPTH SCREENS. Shop, Backpack, Build, Pit entry, Garden, Stable,
@@ -6410,3 +6429,10 @@ body::before {
 .cfan-card.off { visibility: hidden; }
 .cfan-card * { animation-play-state: paused !important; }
 .cfan-card.feat * { animation-play-state: running !important; }
+
+/* ONE ARRIVAL for the Stable ring and the Crew fan (see revealWhenReady).
+   They are held until their art has decoded, then fade in over one short beat,
+   so neither screen assembles itself in front of you. The `.ready` class is
+   applied by JS and ALWAYS applied, cap included, so a broken image degrades to
+   ugly rather than to a blank tab. */
+/* (the Stable ring and Crew fan are covered by the router/sheet rule above) */

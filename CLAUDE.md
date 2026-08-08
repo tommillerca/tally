@@ -176,3 +176,34 @@ part of the design, and two specific mistakes make it disappear:
 Verify it the same way as any other visual claim: sample the animated value over
 time and assert it takes intermediate values. Two distinct values across the
 window means it snapped.
+
+## Screens arrive whole (non-negotiable, added 2026-08-08)
+
+Tom: "I want these tabs fully loaded before anyone is interacting so the UX is
+smoooooth and polished." And, when it was fixed for two screens: "make this an
+across app thing, all new and existing pages should have this rule."
+
+This is enforced in ONE place so no screen has to remember it:
+
+- `route()` hides the rendered child and applies `route-in` only after
+  `revealWhenReady()` has waited for every image in it to decode.
+- `openSheet()` does the same for `.sheet-body` via `sheet-in`.
+
+**You do not need to do anything for a new screen.** Do not add a per-screen
+reveal; it is already covered, and a second one only adds a second thing that can
+fail.
+
+Three rules if you touch this machinery:
+
+1. **Whatever hides content must own un-hiding it.** `revealWhenReady()` always
+   applies its class, cap included, and `decode()` rejections are swallowed
+   individually. One broken image must degrade the screen to ugly, never to blank
+   (anti-regression rule 8).
+2. **Scope reveal CSS to the surface it means.** The first version of the sheet
+   rule was `.sheet-body:not(.sheet-in)`, and the Boneyard reuses `.sheet-body` as
+   a SCREEN class, so it tied on specificity with `.screen > .route-in`, won on
+   source order, and left the map blank. It is `#sheets .sheet-body` now.
+3. **The guard is ARRIVAL in `tests/screen-sweep.mjs`.** It walks every tab and
+   asserts the screen is both VISIBLE and has content, because "revealed" and
+   "revealed with something on it" are different failures and an empty screen
+   that faded in correctly is still broken. It caught the blank Boneyard above.
