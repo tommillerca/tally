@@ -382,8 +382,54 @@ with transforms/opacity/filter.
 ## 5. Files / where things live
 - Working examples: `scratchpad/cloud-anim/` (cloud) and `scratchpad/lizard-anim/`
   (bearded dragon) — each has `*.html`, layer PNGs, `capture.js`, and the encoded
-  mp4/gif.
+  mp4/gif. UPDATE 2026-08-08: those scratchpad dirs are GONE (session scratchpads
+  do not survive). Everything reusable now lives IN THE REPO: the generic capture
+  harness is `scripts/capture-petanim.mjs` + `scripts/petanim-stage.html` (works for
+  every animated pet id), and each species has its idempotent build script
+  (`scripts/build-catfish.py` is the reference). Commit the tooling with the
+  animation, never leave it in a scratchpad.
 - Recolor sheets + baked variants: `scratchpad/colorways-pets*`, `scratchpad/recolors`.
 - To wire into the app: colorway recipe (base art id + palette targets + assigned
   rarity) in the catalog; runtime canvas recolor pass; animated pet card uses the same
   layer+CSS approach; shinies get glow + sparkle tag.
+
+---
+
+## 6. Catfish addendum (2026-08-08): lessons the cloud/lizard didn't teach
+
+- **The disjoint-components shortcut.** When Cam draws the moving parts already
+  separated from the body (airborne drops, a cast shadow under a jumping pose),
+  `scipy.ndimage.label` on `alpha > 8` gives the whole layer split for free: no
+  reconstruction, REST composite == original by construction. Check components
+  FIRST; the whole §1 reconstruction machinery is only for parts that touch.
+  Assign the faint `alpha 1-8` stray pixels to their nearest solid component
+  (`distance_transform_edt(return_indices=True)`) or they orphan (1133 px of REST
+  diff), and take the layer frame from the `alpha > 0` bbox, not the solid bbox.
+- **Compare premultiplied, always.** Cam's PNGs carry invisible RGB residue under
+  alpha-0 pixels, and near-invisible sprites (rain at opacity .001 = alpha 2) swing
+  raw channels by 255 while rendering identically. Every pixel-diff gate in this
+  pipeline compares `RGB * alpha`, with a small visible threshold.
+- **The seamless-loop gate must sample L minus 1ms.** WAAPI wraps `currentTime = L`
+  on an infinite animation back to t=0, so `frame(0) == frame(L)` is a check that
+  CANNOT fail (it silently passed a deliberately broken home keyframe). 1ms before
+  the wrap, a broken track shows its full mismatch and a correct one is
+  sub-visible. Also delete stale `f*.png` from the capture dir before every run:
+  a leftover frame from a previous capture once masked exactly this failure.
+- **Ground contact is measured from the visible BELLY, not the ink bbox.** Whisker
+  tips put the catfish's bbox 2px off the shadow while the fish visibly levitated.
+  Contact amplitude = (shadow line) minus (lowest row whose ink RUN is wide, e.g.
+  >= 12px, which excludes hair-thin strokes). And this is precisely the class of
+  bug the numeric gates pass and only the §3 eyeball pass on rendered key frames
+  catches: keep both.
+- **A part drawn ATTACHED to the body stays in the body.** The third sweat drop is
+  fused with the back outline. Leaving it baked (a bead sitting on the fish) is
+  the restraint-first answer; extracting it would buy one more flying drop at the
+  cost of outline reconstruction. Decide per part, from the anatomy pass.
+- **Transparent captures: kill the app chrome.** `body::before` in app.css is a
+  fixed grain overlay that composites ~alpha-100 noise over an otherwise
+  transparent stage; the harness page disables it (and all body backgrounds)
+  explicitly.
+- **The v325 Stable focus gate is free.** `.cf-card * { animation-play-state:
+  paused !important }` + `.focus` running is selector-generic: any new `.pa-*`
+  animation obeys it with zero wiring. Verify by operating the real Stable
+  (focused card runs N/N, neighbours 0/N), not by reading the CSS.
