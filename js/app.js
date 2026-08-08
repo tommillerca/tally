@@ -2,6 +2,7 @@
 import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
+import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, evaluateBadges, earnedBadgeIds,
@@ -7617,13 +7618,32 @@ function openProgressSheet() { return openCharacter('progress'); }
 
 // what each gear-granted talent actually DOES (so loot can be compared, not just named)
 const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
+/* The player-facing three-letter stat codes. Mirrors the KEY table inside
+   gearLabel() in js/gear.js, which is the only other place they exist —
+   STAT_META carries the long names and prose labels, not these. If a third
+   caller ever needs them, export one table from gear.js and drop this. */
+const STAT_CODE = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hype: 'HYP' };
 
 // Turn a gear def into a pack card (same format as the loot reveal).
+// Stats go across as structured pairs rather than gearLabel()'s string: the card
+// draws them as per-stat chips, and re-parsing a rendered label to get the
+// numbers back would be a lie waiting to happen.
 function gearToCard(g) {
+  /* Two things about g.stats worth knowing before you touch this. Its keys are
+     the long internal names (power/marrow/wind/reflex/hype), not the three-letter
+     codes players read — gearLabel() maps them, and STAT_CODE mirrors that table.
+     And GEAR_BUDGET has no `common` entry, so statSplit() hands a common back
+     {power: NaN}: commons are plain armour with no stats by design, so filter on
+     the values rather than trusting the map to be empty. */
+  const st = Object.entries(g.stats || {})
+    .filter(([, v]) => Number.isFinite(v) && v > 0)
+    .map(([k, v]) => [STAT_CODE[k] || k.toUpperCase(), v]);
   return {
     id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
-    kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot]}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}`,
-    stats: `${gearLabel(g)}${g.talent ? `<div class="pc-perk">${ICONS.boltIco(13)} ${esc(g.talentName)}</div><div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : ''}`,
+    kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot] || g.slot}`,
+    lvl: g.minLevel > 1 ? `Lv ${g.minLevel}` : '',
+    statList: st, talent: g.talent ? g.talentName : '', plain: !st.length,
+    stats: g.talent ? `<div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : '',
   };
 }
 function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
@@ -7737,7 +7757,8 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
   });
 }
 
-// Shared pack-card markup. card: {imgSrc?|iconHtml?, name, rarity, kind, stats, id?}.
+// Shared pack-card markup.
+// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, id?}
 // Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
@@ -7746,27 +7767,71 @@ function packCardHtml(c, { selectable = false } = {}) {
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
-  /* name + rarity + stats sit on a bottom PLATE. The rarity is a chip tinted by
-     the card's own .r-<rarity> class, not inline-coloured text, so the frame and
+  /* The BAND under the plate is where a drop says what it does: real stat chips
+     when it rolled some, the talent affix on top of them, and an explicit
+     "no stats" line for pure cosmetics — an empty shelf under a legendary's
+     nameplate reads as a bug, not as "this one is looks-only". `stats` stays the
+     free-form HTML slot every older call site already fills. */
+  const chips = (c.statList || []).map(([k, v]) =>
+    `<span class="pcs" data-k="${esc(k)}"><b>+${esc(v)}</b><small>${esc(k)}</small></span>`).join('');
+  const bandBits = (chips ? `<div class="pc-chips">${chips}</div>` : '')
+    + (c.talent ? `<div class="pc-talent"><i></i>${esc(c.talent)}</div>` : '')
+    + (c.stats ? `<div class="pc-stats">${c.stats}</div>` : '')
+    + (!chips && !c.talent && c.plain ? '<div class="pc-plain">Plain cosmetic · no stats</div>' : '');
+  /* name + rarity sit on a bottom PLATE. The rarity is a chip tinted by the
+     card's own .r-<rarity> class, not inline-coloured text, so the frame and
      the label can never disagree about what you just pulled. */
   const inner = `<div class="pc-foil"></div><div class="pc-glare"></div>${sparks}`
-    + `<div class="pc-kind">${esc(c.kind || '')}</div>`
+    + `<div class="pc-head"><span class="pc-kind">${esc(c.kind || '')}</span>${c.lvl ? `<span class="pc-lvl">${esc(c.lvl)}</span>` : ''}</div>`
     + `<div class="pc-art">${art}</div>`
     + `<div class="pc-plate"><div class="pc-name">${esc(c.name)}</div>`
-    + `<div class="pc-rar">${rar.label}</div>`
-    + `${c.stats ? `<div class="pc-stats">${c.stats}</div>` : ''}</div>`;
+    + `<div class="pc-rar">${rar.label}</div></div>`
+    + (bandBits ? `<div class="pc-band">${bandBits}</div>` : '');
   return selectable
     ? `<button class="pack-card selectable r-${c.rarity}${holo}" data-gear="${esc(c.id || '')}" aria-pressed="false">${inner}</button>`
     : `<div class="pack-card r-${c.rarity}${holo}">${inner}</div>`;
 }
+
+/* How much of the crate icon is LID, per crate kind, as a percentage of its own
+   box. The lid and the box are two clipped copies of the same SVG; the box clip
+   starts 5% above the cut so the halves overlap. They used to abut exactly and
+   left a hairline seam across the closed crate. */
+const CRATE_LID = { golden: 38, daily: 42, egg: 44 };
+function crateOpenHtml(kind) {
+  const cut = CRATE_LID[kind] ?? 38;
+  const ico = crateIcon(kind, 148);
+  return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
+    + '<span class="co-shadow"></span>'
+    + `<span class="co-box" style="clip-path:inset(${cut - 5}% 0 0 0)">${ico}</span>`
+    + `<span class="co-lid" style="clip-path:inset(0 0 ${100 - cut}% 0)">${ico}</span>`
+    + '</div></div></div>';
+}
+
+/* What the light does per tier. The ladder is deliberately WIDE: a common gets
+   haze and nothing else, a legendary gets the full fan — the two must not look
+   alike. `light` is the burst tint, which is warmer than the frame colour on a
+   common (a cream fan on a cream card disappears). */
+const BURST = {
+  common:    { light: '#b9ac97', amp: 0,   haze: .045 },
+  uncommon:  { light: '#a2e0a6', amp: .08, haze: .048 },
+  rare:      { light: '#7cc4ff', amp: .16, haze: .05 },
+  epic:      { light: '#9b92e8', amp: .3,  haze: .06 },
+  legendary: { light: '#ffc961', amp: .55, haze: .07 },
+};
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   return Promise.all($$(sel, scope)
     .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
 }
 
-// Pokemon-pack-crack reveal: cards you flip through one at a time, big centered
-// art, rarity foil (holo for rare+), name + stats. Tap or swipe to advance; the
-// last card dismisses. cards: [{imgSrc?|iconHtml?, name, rarity, kind, stats}].
+/* Crate crack: the crate LANDS, strains, the lid blows off on an arc, light
+   climbs out of the mouth, and the card rises out of the box as it sinks away.
+   Beats live in app.css as --b-* on .pack-reveal, so the timing table is in one
+   readable place instead of scattered across setTimeouts here; the only thing
+   scheduled in JS is audio.
+
+   A crate deals a HAND, not a card: the rest of the pack stacks behind the one
+   you are looking at, and you tap or drag the top one away to get to the next.
+   cards: [{imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, stats?}]. */
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
   // Warm every card's art up front so flicking through a multi-card pack never
@@ -7776,67 +7841,138 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     if (src) { const im = new Image(); im.src = src; }
   }
   return new Promise(resolve => {
-    /* a TAKEOVER, not a sheet over a live screen: this is the payoff. The count
-       is pips you can read at a glance instead of a grey "1 / 3". */
+    const reduced = reducedMotion || navigator.webdriver;
+    /* The full sequence only plays when there is a crate to crack. A gift claim
+       or a quest payout has no box to come out of, so its cards just present. */
+    const opening = !!crate && !reduced;
+    let burst = null, burstTried = false;
+    const timers = [];
+    const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+    /* a TAKEOVER, not a sheet over a live screen: this is the payoff. */
     const wrap = openSheet(`
       <div class="reveal-take">
         <div class="grainy"></div>
-        <div class="pack-reveal" id="packReveal">
-          ${cards.length > 1 ? `<div class="pack-pips" id="packCount">${cards.map(() => '<i></i>').join('')}</div>` : ''}
-          <div class="pack-stage" id="packStage"></div>
-          <div class="pack-foot" id="packFoot">${cards.length ? '<span class="pack-hint">tap or swipe</span>' : ''}${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}</div>
+        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}" id="packReveal">
+          <div class="pack-head">
+            <div class="pack-count" id="packCount"></div>
+            ${crate ? '<div class="pack-title">Dug up something good.</div>' : ''}
+          </div>
+          <div class="pack-stage" id="packStage">
+            <div class="pack-scene">
+              <div class="pack-burst" id="packBurst"></div>
+              <div class="pack-deck" id="packDeck"></div>
+              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom"></span>` : ''}
+            </div>
+          </div>
+          <div class="pack-foot" id="packFoot">
+            ${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}
+            ${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}
+            ${cards.length ? '<span class="pack-hint" id="packHint"></span>' : ''}
+            <div class="pack-dots" id="packDots"></div>
+          </div>
         </div>
-      </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
-    setFxLayer(305);   // particles burst BEHIND the card, never across its name
-    const stage = $('#packStage', wrap), countEl = $('#packCount', wrap);
+      </div>`, { cls: 'takeover', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
+    setFxLayer(305);
+    const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
+    const countEl = $('#packCount', wrap), dotsEl = $('#packDots', wrap), hintEl = $('#packHint', wrap);
     let i = 0;
     const done = () => { history.back(); setTimeout(resolve, 150); };
     const advance = () => { i++; if (i >= cards.length) return done(); renderCard(); };
-    function renderCard() {
-      const c = cards[i];
-      if (countEl) $$('i', countEl).forEach((p, n) => {
-        p.classList.toggle('done', n < i);
-        p.classList.toggle('on', n === i);
-      });
-      const tier = RAR_ORDER.indexOf(c.rarity);
-      const reduced = reducedMotion || navigator.webdriver;
-      // god-rays behind rare+, a bloom flash for epic+, then the tiltable card
-      stage.innerHTML =
-        (tier >= 2 ? `<div class="pack-rays r-${c.rarity}"></div>` : '') +
-        (tier >= 3 ? '<div class="pack-flash"></div>' : '') +
-        `<div class="pack-tilt${reduced ? '' : ' swaying'}">${packCardHtml(c)}</div>`;
-      const tilt = $('.pack-tilt', stage), card = $('.pack-card', stage), glare = $('.pc-glare', stage);
-      // Art first, THEN the entrance. The card used to fly in with an empty art
-      // panel and fill itself a moment later, which robbed the payoff. Capped so
-      // a slow asset delays the reveal rather than blocking it forever.
-      card.classList.add('art-wait');
-      Promise.race([hydratePackArt(stage), new Promise(r => setTimeout(r, 700))]).then(() => {
-        card.classList.remove('art-wait');
-        requestAnimationFrame(() => card.classList.add('in'));
-        if (tier >= 4) { confettiRain(95); levelSound(S.sounds); haptic.reward(); }   // legendary
-        else if (tier >= 2) { confettiBurst(innerWidth / 2, innerHeight * 0.42, tier >= 3 ? 26 : 18); levelSound(S.sounds); haptic.success(); }
-        else { sparkleSound(S.sounds); haptic.tap(); }
-      });
+    // No confetti in here any more: it popped over the burst and fought it for
+    // the same pixels. The light IS the fanfare now.
+    const landed = tier => {
+      if (tier >= 2) { levelSound(S.sounds); tier >= 4 ? haptic.reward() : haptic.success(); }
+      else { sparkleSound(S.sounds); haptic.tap(); }
+    };
 
-      let sx = 0, dx = 0, pid = null;
-      const settle = () => { tilt.style.transform = ''; if (!reduced) tilt.classList.add('swaying'); if (glare) glare.style.opacity = 0; };
-      tilt.addEventListener('pointerdown', e => { pid = e.pointerId; sx = e.clientX; dx = 0; try { tilt.setPointerCapture(pid); } catch {} tilt.classList.remove('swaying'); tilt.style.transition = 'none'; });
+    function renderCard() {
+      const c = cards[i], tier = RAR_ORDER.indexOf(c.rarity);
+      const b = BURST[c.rarity] || BURST.common;
+      const first = i === 0 && opening;
+      // .opening runs the crate beats; .browsing collapses every delay to one
+      // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}`;
+      if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
+      if (hintEl) hintEl.textContent = i >= cards.length - 1
+        ? (crate ? 'Tap to close the crate' : 'Tap to close')
+        : 'Tap or drag the card away';
+      if (dotsEl) dotsEl.innerHTML = cards.length > 1 ? cards.map((_, n) => `<i class="${n === i ? 'on' : ''}"></i>`).join('') : '';
+
+      // the rest of the hand behind the live card; two deep reads as "more"
+      const ghosts = cards.slice(i + 1, i + 3).map((_, n) => `<div class="pc-ghost g${n + 1}"></div>`).reverse().join('');
+      deck.classList.remove('go');
+      deck.innerHTML = ghosts
+        + `<div class="pack-tilt"><div class="pc-rise"><div class="pc-sway">${packCardHtml(c)}</div></div></div>`;
+      const tilt = $('.pack-tilt', deck), sway = $('.pc-sway', deck), glare = $('.pc-glare', deck);
+
+      if (!burstTried) {
+        burstTried = true;
+        // null when WebGL is unavailable; .pack-burst:empty then paints a still haze
+        if (!reduced) burst = mountCrateBurst(burstEl, { color: b.light, amp: b.amp, haze: b.haze, delay: opening ? 2.4 : 0 });
+      } else if (burst) {
+        burst.tune({ color: b.light, amp: b.amp, haze: b.haze });   // the light re-tunes to this card's tier
+        burst.restart(0);
+      }
+
+      // Two frames, so tearing .go off and putting it back really does restart
+      // the entrance instead of being coalesced into no change at all.
+      const go = () => requestAnimationFrame(() => requestAnimationFrame(() => deck.classList.add('go')));
+      if (first) {
+        // the card is behind the crate for 2.6s, so a slow decode has all the
+        // runway it needs and must not hold the sequence up
+        hydratePackArt(deck);
+        go();
+        at(850, () => { dropSound(S.sounds); haptic.tap(); });    // it lands
+        at(2300, () => sparkleSound(S.sounds));                   // the lid goes
+        at(2750, () => landed(tier));                             // the card is up
+      } else {
+        // Art first, THEN the entrance. The card used to fly in with an empty art
+        // panel and fill itself a moment later, which robbed the payoff. Capped so
+        // a slow asset delays the reveal rather than blocking it forever.
+        Promise.race([hydratePackArt(deck), new Promise(r => setTimeout(r, 700))]).then(() => { go(); landed(tier); });
+      }
+
+      let sx = 0, dx = 0, pid = null, flung = false;
+      const settle = () => {
+        tilt.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1)';
+        tilt.style.transform = '';
+        sway.style.animation = ''; sway.style.transition = ''; sway.style.transform = '';
+        if (glare) glare.style.opacity = 0;
+      };
+      /* The card FLIES OFF in the direction you threw it and the next one rises
+         from the stack behind. It used to snap back to centre and let the next
+         one pop in, which read as the swipe not working at all. */
+      const fling = dir => {
+        if (flung) return;
+        flung = true;
+        if (i >= cards.length - 1) return done();
+        tilt.style.transition = 'transform .34s cubic-bezier(.3,.9,.4,1), opacity .34s ease-out';
+        tilt.style.transform = `translateX(${Math.round(dir * innerWidth * 1.2)}px) rotate(${dir * 15}deg)`;
+        tilt.style.opacity = '0';
+        at(330, advance);
+      };
+      tilt.addEventListener('pointerdown', e => {
+        pid = e.pointerId; sx = e.clientX; dx = 0;
+        try { tilt.setPointerCapture(pid); } catch { /* noop */ }
+        tilt.style.transition = 'none';
+      });
       tilt.addEventListener('pointermove', e => {
         if (pid != null) { // dragging → fling
-          dx = e.clientX - sx; tilt.style.transform = `translateX(${dx}px) rotate(${(dx * 0.05).toFixed(2)}deg)`; return;
+          dx = e.clientX - sx; tilt.style.transform = `translateX(${dx}px) rotate(${(dx * 0.045).toFixed(2)}deg)`; return;
         }
         if (reduced) return; // hover → 3D tilt + moving glare (desktop/pointer)
         const r = tilt.getBoundingClientRect();
         const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-        tilt.classList.remove('swaying');
-        tilt.style.transition = 'transform .08s ease-out';
-        tilt.style.transform = `rotateX(${((0.5 - py) * 16).toFixed(1)}deg) rotateY(${((px - 0.5) * 18).toFixed(1)}deg)`;
+        // the idle sway has to yield the transform slot while the pointer owns it
+        sway.style.animation = 'none';
+        sway.style.transition = 'transform .08s ease-out';
+        sway.style.transform = `rotateX(${((0.5 - py) * 16).toFixed(1)}deg) rotateY(${((px - 0.5) * 18).toFixed(1)}deg)`;
         if (glare) { glare.style.setProperty('--mx', (px * 100).toFixed(0) + '%'); glare.style.setProperty('--my', (py * 100).toFixed(0) + '%'); glare.style.opacity = 1; }
       });
       const end = () => {
-        if (pid == null) return; pid = null; tilt.style.transition = '';
-        if (Math.abs(dx) > 80) { tilt.style.transform = `translateX(${dx > 0 ? 680 : -680}px) rotate(${dx > 0 ? 20 : -20}deg)`; tilt.style.opacity = '0'; setTimeout(advance, 170); }
-        else settle();
+        if (pid == null) return;
+        pid = null;
+        if (Math.abs(dx) > 60) fling(dx < 0 ? -1 : 1); else settle();
       };
       tilt.addEventListener('pointerup', end);
       tilt.addEventListener('pointercancel', end);
@@ -7846,14 +7982,10 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       // capture element, so a click bound to the card (a child) never fired: the
       // footer said "tap or swipe" while only swiping worked. Measured with an
       // event probe, not guessed.
-      tilt.addEventListener('click', () => { if (Math.abs(dx) < 6) advance(); });
+      tilt.addEventListener('click', () => { if (Math.abs(dx) < 6) fling(-1); });
     }
-    const start = () => { if (cards.length) renderCard(); else setTimeout(done, 700); };
-    if (crate) {
-      stage.innerHTML = `<div class="crate-shake pack-crate">${crateIcon(crate, 120)}</div>`;
-      sparkleSound(S.sounds);
-      setTimeout(() => { confettiBurst(innerWidth / 2, innerHeight * 0.42, 22); start(); }, 850);
-    } else start();
+    // a coins-only payout still gets its crate: play it out, then close
+    if (cards.length) renderCard(); else at(opening ? 3400 : 700, done);
   });
 }
 
@@ -7863,8 +7995,10 @@ function crateResultToCard(r) {
   if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
-    return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: dup ? 'GEAR · DUPE' : 'GEAR',
-      stats: dup ? `Duplicate → +${r.coins} ${ICONS.coin(11)}` : `${gearLabel(g)}${g.minLevel > 1 ? ` · Lv ${g.minLevel}` : ''}${g.talent ? `<br>${ICONS.boltIco(12)} ${esc(g.talentName)}` : ''}` };
+    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+    // the slot, the level gate, the stat line and the talent affix as separate
+    // fields: the card lays them out itself instead of reading one packed string
+    return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
   if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
