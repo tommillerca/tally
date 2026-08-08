@@ -851,15 +851,27 @@ body::before {
 }
 
 /* ---------- pogo-style hero scene ---------- */
+/* THE TRADING CARD (design_handoff_today_home, option 1d). The cream frame is
+   the card; the plate inside is the art. The frame carries the border and the
+   hard shadow, and the 20px chin at the bottom is what makes it read as a
+   printed card rather than a panel with a picture in it. */
+.hero-card {
+  position: relative; margin: 0 0 12px;
+  background: #f2e9d7; border-radius: 22px;
+  padding: 7px 7px 20px; box-shadow: 5px 6px 0 rgba(0, 0, 0, .55);
+}
 .hero-scene {
   position: relative; overflow: hidden; cursor: pointer;
-  /* a framed poster, inset, not a full-bleed band */
-  margin: 0 0 16px;
-  height: min(54vh, 440px);
+  margin: 0;
+  height: min(62vh, 520px);
   background: var(--coral);
-  border: 2px solid var(--ink); border-radius: var(--radius);
-  box-shadow: var(--sh);
+  border: 2.5px solid #17151d; border-radius: 16px;
   text-align: left;
+}
+/* a warm centre light, so the figure is lit rather than pasted onto a flat field */
+.hero-scene::before {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(66% 44% at 50% 46%, rgba(255, 236, 180, .2), transparent 68%);
 }
 /* the deck's grain over the coral, pointer-transparent */
 .hero-scene::after {
@@ -925,8 +937,11 @@ body::before {
 @media (prefers-reduced-motion: reduce) { .hero-bubble { animation: none; } }
 /* A BAND, not an overlay. It used to float over the character's legs and slice
    the pet in half. */
-.hero-meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-  padding: 11px 14px 12px; background: rgba(42, 45, 40, .88); border-top: 2px solid var(--ink); }
+/* A FADE, not a shelf. The opaque band was 92px of the plate that the art could
+   never use; this is 96px of gradient that the figure stands in front of. */
+.hero-meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; height: 96px;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
+  padding: 0 14px 14px; background: linear-gradient(180deg, rgba(23, 21, 29, 0), rgba(23, 21, 29, .88) 46%); }
 .hero-level { display: grid; gap: 3px; width: 100%; text-align: left; }
 .hero-lv {
   /* GOLD, not accent. A level is something you HAVE; the accent is supposed to
@@ -1037,8 +1052,18 @@ body::before {
 /* CENTRED and never anywhere else (Tom: "the bonehead should always be centred").
    Full width so `contain` centres him horizontally; bottom-aligned so his feet,
    not his box, sit on the line the pet also stands on. */
-.hero-char { position: absolute; left: 0; right: 0; top: var(--safe);
-  bottom: calc(var(--strip) + var(--safe)); z-index: 2; }
+/* 352px of figure, bottom-aligned and centred, breathing on the same 4s clock as
+   the pet. Shared phase on purpose: staggered timings read as drift, not life. */
+/* The box is WIDER than the plate on purpose. avatarLayersHtml composes square
+   640px canvases and object-fit: contain scales by that square, not by the ink,
+   so a box narrower than it is tall makes the WIDTH the limit and the figure
+   comes out short. Overflowing sideways lets the height rule, which is what gets
+   the handoff's 352px of drawing; the plate clips the empty canvas either side. */
+.hero-char { position: absolute; left: -25px; right: -25px; top: 18px; bottom: 100px;
+  z-index: 2; display: flex; align-items: flex-end; justify-content: center;
+  animation: bhIdle 4s ease-in-out infinite;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
+@keyframes bhIdle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 .hero-char .bh-anim { --av-fit: contain; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
@@ -1050,9 +1075,13 @@ body::before {
 /* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
    The exact bottom offset is tuned against the MEASURED ink baselines, not the
    boxes: tests/figure-audit.mjs reports both and fails if they drift. */
-.hero-companion { position: absolute; right: var(--safe); bottom: calc(var(--strip) + var(--safe) + 6px);
-  width: auto; height: auto; min-width: 98px; z-index: 3;
-  filter: drop-shadow(0 3px 5px rgba(0,0,0,.45)); animation: petBob 3.2s ease-in-out infinite; }
+.hero-companion { position: absolute; right: 6px; bottom: 74px;
+  width: 124px; height: auto; z-index: 3; padding: 0; background: none; border: 0;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
+  animation: bhIdle 4s ease-in-out infinite; }
+.hero-companion.pop { animation: bhIdle 4s ease-in-out infinite, petPop .5s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes petPop { 0% { scale: 1; rotate: 0deg; } 30% { scale: 1.09; rotate: -4deg; }
+  60% { scale: 1.03; rotate: 3deg; } 100% { scale: 1; rotate: 0deg; } }
 /* let the cropped/scaled content size itself; forcing 98 squashed flat pets */
 .hero-companion .petcrop { margin-inline: auto; }
 @keyframes petBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
@@ -1060,11 +1089,11 @@ body::before {
 /* The only ground cue. A floor band was tried in the v2 mockup and Tom killed it
    ("that floot mockup looks ugly it better not be in the final art"); two soft
    contact shadows carry the shared plane on their own. */
-.hero-cast { position: absolute; bottom: calc(var(--strip) + var(--safe) - 8px); height: 16px; z-index: 1;
-  border-radius: 50%; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 50%, rgba(42,45,40,.42) 0%, rgba(42,45,40,0) 70%); }
-.hero-cast.c-bh { left: 50%; width: 40%; transform: translateX(-50%); }
-.hero-cast.c-pet { right: calc(var(--safe) + 4px); width: 24%; }
+.hero-cast { position: absolute; border-radius: 50%; pointer-events: none; }
+.hero-cast.c-bh { left: 50%; transform: translateX(-50%); bottom: 88px; width: 46%; height: 18px; z-index: 1;
+  background: radial-gradient(ellipse at 50% 50%, rgba(30, 33, 26, .55) 0%, rgba(30, 33, 26, 0) 70%); }
+.hero-cast.c-pet { right: 24px; bottom: 80px; width: 30%; height: 16px; z-index: 2;
+  background: radial-gradient(ellipse at 50% 50%, rgba(30, 33, 26, .5) 0%, rgba(30, 33, 26, 0) 70%); }
 .hero-yard {
   position: absolute; left: 3%; bottom: 10%; width: clamp(64px, 21%, 104px);
   z-index: 1; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
@@ -5653,3 +5682,44 @@ body::before {
 /* the chevron is the app's forward chevron, turned around: this is a way BACK */
 .kd-back { margin-bottom: 10px; }
 .kd-back .ico { transform: rotate(180deg); }
+
+/* ---- Today hero, option 1d chrome (design_handoff_today_home) ---------------
+   Four chips competing over the art became one wallet pill and an icon-only
+   Trends dot. Nothing new was introduced: same icons, same handlers. */
+.trend-dot {
+  width: 32px; height: 32px; display: grid; place-items: center; flex: none;
+  border-radius: 999px; background: rgba(13, 12, 18, .45);
+  border: 1.5px solid rgba(242, 233, 215, .2); color: var(--text);
+}
+.wallet-pill {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(13, 12, 18, .42);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  font-size: 11.5px; font-weight: 700; color: var(--text); white-space: nowrap;
+}
+.wallet-pill .wp {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: 0; padding: 0; color: inherit;
+  font-size: inherit; font-weight: inherit;
+}
+.wallet-pill .wp.dust { color: var(--violet); }
+.wallet-pill .wp.gold { color: var(--gold); }
+.wallet-pill .wp b { font-weight: 700; }
+
+/* the XP row: 20 pips instead of a 13px bar, ceil(pct/5) lit */
+.hero-xprow { display: flex; align-items: center; gap: 3px; width: 62%; }
+.hero-xpn {
+  font-size: 10px; font-weight: 700; color: var(--text-2);
+  margin-right: 6px; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.hero-xprow i { display: block; height: 6px; border-radius: 2px; flex: 1; background: rgba(242, 233, 215, .16); }
+.hero-xprow i.on { background: var(--gold); }
+/* the level plate keeps its sticker recipe, one size down for the caption */
+.hero-meta .hero-lv { font-size: 22px; padding: 3px 9px; border-radius: 9px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .5); }
+.hero-meta .hero-title { font-size: 16px; letter-spacing: .8px; -webkit-text-stroke: 0; }
+/* the bubble replays when you poke the pet */
+.hero-bubble.again { animation: bubblePop .45s cubic-bezier(0.34, 1.6, 0.64, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-char, .hero-companion, .hero-companion.pop { animation: none; }
+}

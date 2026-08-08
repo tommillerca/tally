@@ -64,39 +64,32 @@ await page.evaluate(async () => {
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(2200);
 
-/* ---------------------------------------------------------------- B2: the row */
+/* ------------------------------------------------- the row stays at FOUR doors
+   A fifth Garden tile shipped in v304 and came straight back out the same day.
+   Tom: "we dont need the garden icon on Today because if you click kitchen it's
+   gonna basically take you there." So the invariant is the opposite of what it
+   was for a few hours: the row is four, and the Kitchen's dot has to speak for
+   the Garden too, or a ripe crop goes unannounced anywhere a player looks. */
 const row = await page.evaluate(() => {
   const tiles = [...document.querySelectorAll('.hero-actions .hero-act')];
-  const g = document.querySelector('#gardenActBtn');
+  const k = document.querySelector('#kitchenActBtn');
   return {
     n: tiles.length,
     labels: tiles.map(t => t.innerText.replace(/\s+/g, ' ').trim()),
-    widths: tiles.map(t => Math.round(t.getBoundingClientRect().width)),
-    gardenLast: tiles.length ? tiles[tiles.length - 1].id === 'gardenActBtn' : false,
-    kitchenBeforeGarden: tiles.findIndex(t => t.id === 'kitchenActBtn') === tiles.findIndex(t => t.id === 'gardenActBtn') - 1,
-    gardenVisible: !!g && g.getBoundingClientRect().width > 20,
+    gardenTile: !!document.querySelector('#gardenActBtn'),
+    kitchenBadge: !!(k && k.querySelector('.hero-badge')),
   };
 });
-ok('TILE Today carries five doors, not four', row.n === 5, `${row.n}: ${row.labels.join(' | ')}`);
-ok('TILE one of them is the Garden, and it is on screen', row.gardenVisible, JSON.stringify({ widths: row.widths }));
-ok('TILE Kitchen and Garden sit together at the end (option B2)',
-  row.gardenLast && row.kitchenBeforeGarden, row.labels.join(' | '));
-/* A tile nobody can read is not a door. The five-tile row shrank each one from
-   81px to ~67px, so the labels must still fit on one line. */
+ok('TILE the row is four doors, not five', row.n === 4, `${row.n}: ${row.labels.join(' | ')}`);
+ok('TILE there is no separate Garden tile', row.gardenTile === false, `#gardenActBtn present: ${row.gardenTile}`);
+/* The seed above leaves one crop ready and nothing cooking, so the ONLY reason
+   this dot can be lit is the Garden. That is the whole point of folding it in.
+   PROVE-RED: drop `|| cropsRipe` from the Kitchen tile and this fails. */
+ok('TILE a ripe crop lights the Kitchen door, since nothing else will',
+  row.kitchenBadge === true, `badge on Kitchen: ${row.kitchenBadge}`);
 const clipped = await page.evaluate(() => [...document.querySelectorAll('.hero-actions .hero-act span')]
   .filter(s => s.scrollWidth > s.clientWidth + 1).map(s => s.textContent.trim()));
-ok('TILE no label is clipped at five across', clipped.length === 0, clipped.join(', ') || 'all five fit');
-
-/* the Garden's door opens the Garden, not the Kitchen */
-await page.evaluate(() => document.getElementById('gardenActBtn')?.click());
-await sleep(1500);
-const viaTile = await page.evaluate(() => {
-  const h = document.querySelector('.sheet-head h2');
-  return h ? h.textContent.trim() : null;
-});
-ok('TILE the Garden tile opens the Garden in one tap', /bone garden/i.test(viaTile || ''), String(viaTile));
-await page.evaluate(() => history.back());
-await sleep(700);
+ok('TILE no label is clipped', clipped.length === 0, clipped.join(', ') || 'all four fit');
 
 /* ------------------------------------------------------------- C: the Kitchen */
 await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());

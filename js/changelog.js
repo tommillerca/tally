@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 306, date: '2026-08-08', title: 'Today is a trading card now', items: [
+    'The home screen is <b>your Bonehead on a card</b>: a cream frame, a bigger stage, and nothing sitting on top of the art. Your level and XP fade into the bottom of the picture instead of taking a solid strip out of it, and the XP bar is a row of pips.',
+    'The four chips across the top became <b>one wallet</b> and a small Trends button, so the card is mostly card.',
+    'Your <b>pet is in the scene</b> now, standing on the same ground with its own shadow. <b>Tap it</b> and it will tell you what it thinks.',
+    'The Garden does not need its own button on Today: the <b>Kitchen door lights up</b> when a crop is ready, and GROW is one tap inside.',
+  ] },
   { n: 305, date: '2026-08-08', title: 'The Bone Garden gets its own door', items: [
     'The Garden was a single row buried in the Kitchen, which meant nothing ever told you a crop was ready. It has <b>its own door on Today</b> now, next to the Kitchen, with a count on it when there is something to pick.',
     'The <b>Kitchen opens on two doors</b>, COOK and GROW, each showing what it is holding: dishes ready, crops ready, beds that want water, seeds you have not planted. Your ingredients sit under both, because GROW makes them and COOK spends them. Cooking is one tap further in than it was.',

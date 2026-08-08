@@ -90,6 +90,13 @@ const SITES = [
   {
     key: 'today-hero', claim: 'hero-companion', paired: true,
     bh: '#bhStage .hero-char', pet: '#bhStage .hero-companion',
+    /* The Today card STAGES the pet forward, nearer the viewer, with its own
+       contact shadow lower on the ground than the Bonehead's (88px vs 80px in
+       design_handoff_today_home, option 1d). That is depth, and it is the
+       approved design, so the tolerance here is the staging depth rather than
+       the flat 14px the sheets use. The failure this still catches is the one
+       that actually happened: a pet FLOATING above the feet. */
+    planeTol: 40,
     drive: async page => { await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1800); },
   },
   {
@@ -431,9 +438,16 @@ for (const site of SITES.filter(s => s.drive)) {
       ok(`${site.key} PLANE measurable at all (an unreadable figure is a FAILURE)`, false,
         JSON.stringify({ bhInk: m.bhInk, petInk: m.petInk }));
     } else {
-      const drop = Math.abs(m.petInk.b - m.bhInk.b);
-      ok(`${site.key} PLANE the pet stands on the same line as the Bonehead`,
-        drop <= 14, `ink baselines ${m.bhInk.b} vs ${m.petInk.b} (${drop}px apart)`);
+      /* Two different failures, and only one of them is symmetrical. A pet ABOVE
+         the Bonehead's feet is floating, which is always wrong and is what shipped
+         on this very screen (15px) and on the friend profile (18px). A pet BELOW
+         them may be staged forward on purpose, so that side gets the site's own
+         tolerance. */
+      const drop = m.petInk.b - m.bhInk.b;          // + = pet is lower/nearer
+      const tol = site.planeTol || 14;
+      ok(`${site.key} PLANE the pet stands on the same ground as the Bonehead`,
+        drop >= -6 && drop <= tol,
+        `ink baselines ${m.bhInk.b} vs ${m.petInk.b} (${drop > 0 ? '+' : ''}${drop}px, allowed -6..${tol})`);
       const gap = Math.max(0, Math.max(m.petInk.l - m.bhInk.r, m.bhInk.l - m.petInk.r));
       ok(`${site.key} NEAR the pet is beside the Bonehead, not in a corner`,
         gap < 40, `${gap}px of daylight between the drawings`);

@@ -1492,41 +1492,56 @@ async function renderToday(el) {
        colour behind my bonehead when switching tabs very briefly". So when a
        backdrop IS equipped, the ground underneath it is the app's own dark, and
        there is nothing bright to flash through. -->
+  <!-- THE TRADING CARD (design_handoff_today_home, option 1d). A cream frame
+       with a 20px chin around the art plate, so the hero reads as a collectible
+       card rather than a panel. The frame carries the border and shadow; the
+       plate inside carries the scene. -->
+  <div class="hero-card">
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>${heroPet ? '<span class="hero-cast c-pet"></span>' : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<div class="hero-companion">${petAsideHtml(heroPet, 98)}</div>` : ''}
+    ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 124)}</button>` : ''}
 
+    <!-- Four separate chips became one wallet pill and an icon-only Trends dot:
+         the top of the card was four competing plates over the art. -->
     <div class="hero-top">
-      <button class="streak-chip trend-chip" id="streakChip" aria-label="Open your trends and progress"><span class="tico">${ICONS.trend(15)}</span> <b>Trends</b></button>
-      <div class="hero-top-right">
-        <button class="bh-coin" id="coinBtn">${ICONS.coin(14)} <b>${coinBal.toLocaleString()}</b></button>
-        <button class="bh-coin" id="dustBtn" title="Bone Dust"><span class="dust-ico">${ICONS.dust(13)}</span> <b>${dustBal.toLocaleString()}</b></button>
-        <button class="bh-coin" id="vigorBtn" title="Pit fights ready">${ICONS.boltIco(13)} <b>${pitEnergy.ready}</b></button>
-        ${crates.length ? `<button class="bh-crates" id="cratesBtn">${crateIcon(crates[0].crate, 14)} ${crates.length}</button>` : ''}
+      <button class="trend-dot" id="streakChip" aria-label="Open your trends and progress">${ICONS.trend(15)}</button>
+      <div class="wallet-pill">
+        <button class="wp" id="coinBtn" aria-label="Coins">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b></button>
+        <button class="wp dust" id="dustBtn" aria-label="Bone Dust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b></button>
+        <button class="wp gold" id="vigorBtn" aria-label="Pit fights ready">${ICONS.boltIco(13)}<b>${pitEnergy.ready}</b></button>
+        ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
     <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }))}</div>
+    <!-- A GRADIENT CAPTION, not an opaque band. The 92px plate used to eat the
+         bottom of the art; this fades into it instead. The 13px XP bar becomes
+         20 pips, and the "Lv N unlocks a Golden Crate" sentence moves to
+         Progress: at this size it was the third line of text on a poster. -->
     <div class="hero-meta">
       <button class="hero-level" id="lvlChip">
         <span class="hero-lvrow"><span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span></span>
-        <span class="hero-xpbar"><i style="width:${lvl.pct}%"></i></span>
-        <span class="hero-xpnum">${lvl.into.toLocaleString()} / ${lvl.need.toLocaleString()} XP · Lv ${lvl.level + 1} unlocks a Golden Crate</span>
+        <span class="hero-xprow">
+          <span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>
+          ${Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('')}
+        </span>
       </button>
     </div>
   </div>
+  </div>
 
-  <!-- FIVE DOORS, Kitchen and Garden paired at the end (option B2, Tom's call
-       2026-08-07). The Garden used to live one row deep inside the Kitchen, so
-       nothing on the home screen ever said a crop was ready. It has its own door
-       now and its own count, and the two food systems read as a pair. -->
-  <div class="hero-actions five">
-    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(21)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
-    <button class="hero-act" id="stableBtn">${ICONS.paw(21)}<span>Stable</span></button>
-    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(21)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 21)}<span>Kitchen${cook && cook.ready ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act${cropsRipe ? ' grow' : ''}" id="gardenActBtn">${bhIcon(cropsRipe ? 'garden-sprout' : 'garden-bed', 21)}<span>Garden${cropsRipe ? ` <i class="hero-badge go">${cropsRipe}</i>` : ''}</span></button>
+  <!-- FOUR DOORS. A fifth Garden tile shipped in v304 and came straight back out
+       (Tom, 2026-08-07): "we dont need the garden icon on Today because if you
+       click kitchen it's gonna basically take you there." He is right, the GROW
+       door is one tap in and carries the same count, so a second entrance was
+       paying for itself twice. The Kitchen's badge covers BOTH systems now: a
+       dish ready or a crop ready lights the same dot. -->
+  <div class="hero-actions four">
+    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(23)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
+    <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
+    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(23)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
   ${isToday && topNudge ? `
@@ -1634,6 +1649,19 @@ async function renderToday(el) {
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
+  /* TAP THE PET. From the handoff: it is the one thing on the card that is alive
+     and had nothing to say. Routed through the same bubble the Bonehead uses, so
+     there is one speech component rather than two. */
+  $('#heroPetBtn')?.addEventListener('click', e => {
+    e.stopPropagation();                       // the plate itself opens the Wardrobe
+    const el = e.currentTarget;
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    popSound(S.sounds);
+    const b = $('.hero-bubble');
+    if (!b) return;
+    b.textContent = PET_LINES[(Math.random() * PET_LINES.length) | 0];
+    b.classList.remove('again'); void b.offsetWidth; b.classList.add('again');
+  });
   // Tapping the scene opens the Wardrobe, but the Trends chip and the
   // coin/dust/vigor/crate chips live INSIDE it, so their clicks bubbled here and
   // this handler ran too. It always did; it used to be masked because
@@ -1662,7 +1690,6 @@ async function renderToday(el) {
   });
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
-  $('#gardenActBtn')?.addEventListener('click', () => openGardenSheet(() => refresh()));
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#dropToShop')?.addEventListener('click', () => openCharacter('shop'));
@@ -9822,7 +9849,12 @@ async function fireUnlockToasts(unlocks) {
 // ids (art renders locally on friends' devices), gear, badges. Deliberately
 // NEVER: food logs, weights, location, health data.
 const APP_SOCIAL_V = 'v68';
-const APP_BUILD = 'v305'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+/* The XP row is 20 pips, not a bar (design_handoff_today_home, option 1d):
+   ceil(pct / 5) of them are lit. */
+const XP_PIPS = 20;
+// what your pet has to say when you poke it (handoff: option 1d)
+const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
+const APP_BUILD = 'v306'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
