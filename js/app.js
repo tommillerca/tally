@@ -8254,10 +8254,25 @@ async function openStable(opts = {}) {
       const N = cards.length;
       const GAP = 0.30, ROTATE = 46, DEPTH = 0.34, FADE = 0.30, FALLOFF = 0.62;
       let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
+      /* Motion blur, driven by measured velocity rather than a fixed keyframe, so
+         a slow drag blurs barely at all and a flick smears. `reduced` disables it
+         outright: blur is exactly the kind of effect that makes motion sickness
+         worse, so it is not a decoration we impose. */
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let lastPos = pos, lastT = performance.now(), panelBlur = 0;
       const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
         const PITCH = cardPx() * (1 + GAP);
+        /* Speed in cards-per-second, measured between frames. Two sources feed the
+           blur: spinning the ring, and the panel resize (where nothing moves along
+           the ring but every card changes size, so velocity has to come from the
+           transition clock instead). */
+        const now = performance.now();
+        const dt = Math.max(8, now - lastT);
+        const speed = Math.abs(pos - lastPos) / dt * 1000;
+        lastPos = pos; lastT = now;
+        const spin = reduced ? 0 : Math.min(3.4, speed * 0.6);
         cards.forEach((card, i) => {
           let off = i - pos;
           off = ((off % N) + N) % N;
@@ -8271,6 +8286,13 @@ async function openStable(opts = {}) {
           const edge = Math.min(1, Math.max(0, N / 2 - dist));
           card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
           card.style.zIndex = String(100 - Math.round(dist));
+          /* Outer cards travel further across the screen for the same rotation of
+             the ring, so they smear more. Below a threshold the filter is removed
+             entirely rather than set to blur(0), so a parked ring has no filter to
+             composite at all. */
+          const b = spin * (0.6 + dist * 0.32) + panelBlur;
+          if (b > 0.12) card.style.filter = `blur(${b.toFixed(2)}px)`;
+          else if (card.style.filter) card.style.filter = '';
         });
         const idx = indexAt(pos);
         if (idx !== shown) {
@@ -8280,14 +8302,27 @@ async function openStable(opts = {}) {
           repaintFocus();
         }
       };
+      /* EASE IN AND OUT. Tom, 2026-08-08: "we need ease in ease out type
+         movements". This was `pos += left * 0.16`, exponential decay: it starts at
+         maximum speed and only ever slows down, so a tap to spin the ring lurched
+         off the mark and crept in. Now a real easeInOutCubic over a fixed
+         duration, so it accelerates away and decelerates in. Duration scales a
+         little with distance, because dot-jumping three pets should not take the
+         same time as nudging one. */
+      const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
       const settle = to => {
         if (raf) cancelAnimationFrame(raf);
+        const from = pos;
         target = to;
+        const span = Math.abs(target - from);
+        if (span < 0.0005) { pos = target; paint(); raf = null; return; }
+        const dur = reduced ? 0 : Math.min(720, 300 + span * 130);
+        const t0 = performance.now();
         const step = () => {
-          const left = target - pos;
-          if (Math.abs(left) < 0.0004) { pos = target; paint(); raf = null; return; }
-          pos += left * 0.16;
+          const t = dur ? Math.min(1, (performance.now() - t0) / dur) : 1;
+          pos = from + (target - from) * easeInOut(t);
           paint();
+          if (t >= 1) { pos = target; paint(); raf = null; return; }
           raf = requestAnimationFrame(step);
         };
         raf = requestAnimationFrame(step);
@@ -8353,10 +8388,18 @@ async function openStable(opts = {}) {
       if (cfEl && want !== cfWasPanelled) {
         requestAnimationFrame(() => {
           cfEl.classList.toggle('panelled', want);
+          const DUR = 520;                       // matches the --card transition
           const t0 = performance.now();
           const follow = () => {
+            const t = Math.min(1, (performance.now() - t0) / DUR);
+            /* The resize moves every card without moving the ring, so frame-to-
+               frame position velocity is zero and the spin blur sees nothing.
+               This is the resize's own blur: a half-sine, peaking mid-flight where
+               the easing is fastest and back to nothing at both ends. */
+            panelBlur = reduced ? 0 : Math.sin(Math.PI * t) * 1.6;
             paint();
-            if (performance.now() - t0 < 480) requestAnimationFrame(follow);
+            if (t < 1) requestAnimationFrame(follow);
+            else { panelBlur = 0; paint(); }
           };
           requestAnimationFrame(follow);
         });
@@ -10239,7 +10282,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v319'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v320'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

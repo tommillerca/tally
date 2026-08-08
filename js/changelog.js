@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 320, date: '2026-08-08', title: 'The Stable moves properly now', items: [
+    'The carousel <b>eases in and out</b> instead of lurching off the mark and creeping into place. Spinning to a pet a few places away takes a little longer than nudging to the one next door, the way it should.',
+    'Cards pick up a touch of <b>motion blur</b> while they move, more on the outer ones because they travel further, and none at all once things settle. Turned off entirely if you have reduced motion switched on.',
+  ] },
   { n: 318, date: '2026-08-08', title: 'Ectoplasm is worth something now', items: [
     'Two new <b>Ectoplasm potions</b>, and they are the strongest things you can drink. <b>Revenant\'s Draught</b> restores 60% HP and puts up a 50-point shield in one action. <b>Spectral Fury</b> is +50% damage for 4 turns plus a full Stamina refill.',
     'The four everyday potions are <b>unchanged</b> and still cost commons, so nothing you already brew got harder.',

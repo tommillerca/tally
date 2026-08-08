@@ -5806,6 +5806,13 @@ body::before {
 }
 .cf-frame:active { cursor: grabbing; }
 .cf-track { position: relative; height: var(--card); transform-style: preserve-3d; user-select: none; }
+/* MOTION BLUR. Tom, 2026-08-08: "there should be a little bit of motion blur
+   to make it feel real and classy." Driven from JS, not a keyframe, because the
+   amount has to follow ACTUAL velocity: a fixed blur on a slow drag looks like a
+   rendering fault, and none on a fast flick looks cheap. Set on the CARD rather
+   than the track: a filter on the track would flatten `transform-style:
+   preserve-3d` and collapse the whole rake. Cleared to '' when still, so a parked
+   ring costs nothing. */
 .cf-card {
   position: absolute; left: 50%; top: 0; width: var(--card); aspect-ratio: 1;
   border: 2.5px solid #17151d; border-radius: 18px; overflow: hidden;
@@ -5874,15 +5881,15 @@ body::before {
    card width, so js re-paints on rAF for the length of this transition, or the
    cards would keep their old pitch while the cards themselves shrank. */
 @property --card { syntax: '<length>'; inherits: true; initial-value: 150px; }
-.cf { transition: --card .42s cubic-bezier(.22, .61, .36, 1); }
-.cf-frame { transition: padding .42s cubic-bezier(.22, .61, .36, 1); }
-.cf-cap b { transition: font-size .42s cubic-bezier(.22, .61, .36, 1); }
+.cf { transition: --card .52s cubic-bezier(.76, 0, .24, 1); }
+.cf-frame { transition: padding .52s cubic-bezier(.76, 0, .24, 1); }
+.cf-cap b { transition: font-size .52s cubic-bezier(.76, 0, .24, 1); }
 /* Height and opacity, not display:none. `display` cannot be transitioned, so the
    stat table and dots used to vanish on the first frame and take the eye with
    them; now they collapse with the ring rather than disappearing ahead of it. */
 .cf-meta, .cf-dots {
   overflow: hidden;
-  transition: opacity .26s ease, max-height .42s cubic-bezier(.22, .61, .36, 1), margin-top .42s ease;
+  transition: opacity .3s ease-in-out, max-height .52s cubic-bezier(.76, 0, .24, 1), margin-top .52s cubic-bezier(.76, 0, .24, 1);
   max-height: 260px; opacity: 1;
 }
 .cf.panelled { --card: 104px; }
@@ -5890,7 +5897,7 @@ body::before {
 .cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }
 /* the panel arrives rather than appearing */
-.pet-tree-inline, .breed-bar.sticky { animation: cfPanelIn .38s cubic-bezier(.22, .61, .36, 1) both; }
+.pet-tree-inline, .breed-bar.sticky { animation: cfPanelIn .46s cubic-bezier(.76, 0, .24, 1) both; }
 @keyframes cfPanelIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
