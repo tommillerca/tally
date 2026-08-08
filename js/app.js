@@ -8389,11 +8389,18 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const fling = dir => {
         if (flung) return;
         flung = true;
-        if (i >= cards.length - 1) return done();
+        /* THE LAST CARD LEAVES LIKE THE OTHERS. Tom, 2026-08-08: "the swiping and
+           closing of the crate when it's finished feels buggy."
+           It was: every card but the final one flew off the screen, and the last
+           one hit `return done()` before any animation, so the whole takeover
+           blinked out from under your thumb mid-swipe. The gesture looked like it
+           had failed and dismissed the screen by accident. Same flight either
+           way; only what happens at the end of it differs. */
+        const last = i >= cards.length - 1;
         tilt.style.transition = 'transform .34s cubic-bezier(.3,.9,.4,1), opacity .34s ease-out';
         tilt.style.transform = `translateX(${Math.round(dir * innerWidth * 1.2)}px) rotate(${dir * 15}deg)`;
         tilt.style.opacity = '0';
-        at(330, advance);
+        at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
         pid = e.pointerId; sx = e.clientX; dx = 0;
@@ -11018,7 +11025,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v330'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v331'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -149,6 +149,56 @@ ok('TIERS the legendary tier renders (RNG never produced one for the author)',
 ok('TIERS every rendered card has its art decoded (a CSS box over a blank frame passes a position check)',
   seen.length > 0 && seen.every(([, v]) => v.decoded), JSON.stringify(seen.map(([k, v]) => [k, v.decoded])));
 
+
+/* ---- PACING + THE LAST CARD ------------------------------------------------
+   Tom, 2026-08-08: "the swiping and closing of the crate when it's finished feels
+   buggy" and "the initial open needs to happen a bit faster".
+   PACE pins the time-to-card so a future retiming cannot quietly drift back to
+   staring at a closed box for two and a half seconds.
+   LASTCARD is the bug: every card but the final one flew off screen, and the last
+   one hit `return done()` before any animation, so the takeover blinked out
+   mid-swipe and read as an accidental dismissal.
+   PROVE-RED: restore `if (i >= cards.length - 1) return done();` at the top of
+   fling() and LASTCARD fails with the card never having moved. */
+/* The beats live on .pack-reveal, so one has to be OPEN to read them. Reading
+   them off documentElement returns null and the check silently passes on nothing. */
+const pace = await page.evaluate(async () => {
+  window.__crateForce = 1;
+  window.__packReveal([{ name: 'Pace', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' }], { coins: 0, crate: 'golden' });
+  await new Promise(r => setTimeout(r, 260));
+  const el = document.querySelector('.pack-reveal');
+  if (!el) return { err: 'no reveal open' };
+  const v = n => parseFloat(getComputedStyle(el).getPropertyValue(n));
+  const out = { settle: v('--b-settle'), lid: v('--b-lid'), card: v('--b-card') };
+  const b = document.querySelector('.pack-reveal .sheet-close');
+  if (b) b.click(); else history.back();
+  await new Promise(r => setTimeout(r, 500));
+  return out;
+});
+ok('PACE the card arrives inside 1.6s (it took 2.6s, most of it a closed box)',
+  Number.isFinite(pace.card) && pace.card <= 1.6, JSON.stringify(pace));
+ok('PACE the lid moves inside 1.3s', Number.isFinite(pace.lid) && pace.lid <= 1.3, JSON.stringify(pace));
+
+const lastCard = await page.evaluate(async () => {
+  window.__crateForce = 1;
+  window.__packReveal([{ name: 'Only card', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' }], { coins: 0 });
+  await new Promise(r => setTimeout(r, 1900));
+  const tilt = document.querySelector('.pack-tilt');
+  if (!tilt) return { err: 'no card' };
+  const before = tilt.style.transform || 'none';
+  const r = tilt.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const pd = (t, x) => tilt.dispatchEvent(new PointerEvent(t, { pointerId: 5, clientX: x, clientY: cy, bubbles: true }));
+  pd('pointerdown', cx);
+  for (let i = 1; i <= 6; i++) pd('pointermove', cx - i * 22);
+  pd('pointerup', cx - 132);
+  await new Promise(r2 => setTimeout(r2, 120));
+  const during = (document.querySelector('.pack-tilt') || {}).style?.transform || 'gone';
+  return { before, during, moved: /translateX\(-?[1-9]/.test(during) };
+});
+ok('LASTCARD the final card flies away like the others before the sheet closes',
+  !lastCard.err && lastCard.moved, JSON.stringify(lastCard));
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
