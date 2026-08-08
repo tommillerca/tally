@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 308, date: '2026-08-08', title: 'The Today card, composed properly', items: [
+    'Your Bonehead is <b>centred on the card</b> and standing on the ground rather than buried behind the level bar. His feet clear it by design now, not by luck.',
+    'Some pets were <b>getting their beaks and tails clipped</b> by the edge of the card. Wide creatures like the duck and the lizards are scaled up so they read at the same size as the round ones, and that extra width was running off the frame. Every pet fits now, and a new one always will.',
+    'Your pet sits in from the border, and the speech bubble is no longer flush against the frame.',
+  ] },
   { n: 307, date: '2026-08-08', title: 'Fight HUD, and the daily boss stays beaten', items: [
     'The <b>daily Remote Den</b> could be fought again after you had already beaten it. It paid almost nothing the second time, but the FIGHT button was still sitting there, which is its own kind of lie. It locks to TOMORROW the moment you win now.',
     'In fights, <b>both health bars are the same length</b> again. Your pet\'s and the second enemy\'s bars are sized against the fighter above them, so a small health pool looks small without a single number on screen.',

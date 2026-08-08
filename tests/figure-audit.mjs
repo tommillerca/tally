@@ -457,6 +457,53 @@ for (const site of SITES.filter(s => s.drive)) {
   await sleep(500);
 }
 
+/* EVERY SPECIES, NOT THE ONE YOU HAPPENED TO HAVE EQUIPPED.
+ * Tom, 2026-08-07: "also check that all pets arent cut off for instance currently
+ * the duck and lizard are cut off that cant be happening."
+ * They were. `mass: true` scales a wide species UP so a flat creature reads at the
+ * same visual weight as a round one, and the Today card's pet slot had a FIXED
+ * width, so the widened box grew RIGHTWARD: the duck went 108 -> 154px and ran
+ * 14px past the plate, which clips. Only the pet you own shows the bug, which is
+ * why it shipped.
+ * The species list is read from the item table, so a pet Cam draws next month is
+ * covered the day it lands rather than the day somebody remembers this check.
+ * PROVE-RED (confirmed 2026-08-07): put `width: 108px` back on .hero-companion
+ * and CUTOFF fails naming C2 at 14px and both lizards at 3px. */
+const species = await page.evaluate(async () => {
+  const m = await import('./data/boneheadz.js').catch(() => null);
+  const items = (m && (m.BH_ITEMS || m.default)) || window.__bhItems || null;
+  if (items) return items.filter(i => i.slot === 'C').map(i => i.id);
+  return null;
+});
+ok('CUTOFF the pet roster could be read at all (an empty list is a FAILURE)',
+  Array.isArray(species) && species.length >= 3, JSON.stringify(species));
+const cut = [];
+for (const sp of species || []) {
+  await page.evaluate(async s => {
+    const { kvGet, kvSet, db } = await import('./js/db.js');
+    await db.put('inv', { id: 'cos-' + s, kind: 'cos', itemId: s });
+    await kvSet('petInst', [{ iid: 'p-' + s, sp: s, lineage: 0, shiny: false, hatchedAtSteps: 0 }]);
+    const eq = (await kvGet('equipped', {})) || {};
+    await kvSet('equipped', { ...eq, C: s });
+  }, sp);
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(1500);
+  const over = await page.evaluate(() => {
+    const host = document.querySelector('.hero-companion');
+    if (!host) return null;
+    const crop = host.querySelector('.petcrop, .petanim') || host;
+    const p = document.querySelector('#bhStage').getBoundingClientRect();
+    const c = crop.getBoundingClientRect();
+    return { right: Math.round(c.right - p.right), left: Math.round(p.left - c.left),
+      top: Math.round(p.top - c.top), w: Math.round(c.width) };
+  });
+  if (!over) { cut.push(`${sp}: no pet slot rendered`); continue; }
+  const worst = Math.max(over.right, over.left, over.top);
+  if (worst > 1) cut.push(`${sp} (${over.w}px wide) escapes by ${JSON.stringify(over)}`);
+}
+ok('CUTOFF no pet is clipped by the card, at any width',
+  cut.length === 0, cut.length ? '\n      ' + cut.join('\n      ') : `${(species || []).length} species all inside the plate`);
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;

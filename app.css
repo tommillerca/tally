@@ -904,7 +904,11 @@ body::before {
 /* LEFT COLUMN, and the tail drops to the jaw. Tom: "people's mouths arent on top
    of their heads." It used to sit over the skull with a sideways tail. */
 .hero-bubble {
-  position: absolute; left: var(--safe); top: 52px; z-index: 3;
+  /* an explicit inset, not var(--safe): that variable was declared on the rule
+     that also set the plate height, and when the duplicate height rule was
+     removed the variable went with it, so `left` computed to nothing and the
+     bubble sat flush against the card frame. */
+  position: absolute; left: 14px; top: 52px; z-index: 3;
   --sway: rotate(-2deg);
   transform: var(--sway);
   max-width: 42%; width: max-content; text-align: left;
@@ -1056,7 +1060,14 @@ body::before {
    so a box narrower than it is tall makes the WIDTH the limit and the figure
    comes out short. Overflowing sideways lets the height rule, which is what gets
    the handoff's 352px of drawing; the plate clips the empty canvas either side. */
-.hero-char { position: absolute; left: -25px; right: -25px; top: 18px; bottom: 0;
+/* MEASURED, not eyeballed (tests/figure-audit.mjs reports all of these):
+   bottom:0 buried 69px of him behind the caption and put his ink centre 104px
+   below the art area's centre, which is what Tom saw as "look how low the
+   bonehead is in the frame". His feet clear the caption's top edge by 10px now.
+   The asymmetric left/right is not a typo: the ink inside the 640 canvas is NOT
+   centred in it (bbox 94..509, centre 301 not 320), so a symmetric box hangs the
+   drawing 17px to the left. This puts it on the card's centre line. */
+.hero-char { position: absolute; left: -16px; right: -34px; top: 18px; bottom: 79px;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
@@ -1072,8 +1083,17 @@ body::before {
 /* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
    The exact bottom offset is tuned against the MEASURED ink baselines, not the
    boxes: tests/figure-audit.mjs reports both and fails if they drift. */
-.hero-companion { position: absolute; right: 16px; bottom: 64px;
-  width: 124px; height: auto; z-index: 3; padding: 0; background: none; border: 0;
+/* Off the border. 28px from the plate edge read as "slight too close the card
+   border" once the frame is counted, so it comes in to ~44 and sits just behind
+   his ground line rather than beside his knees. */
+.hero-companion { position: absolute; right: 30px; bottom: 92px;
+  /* WIDTH AUTO, anchored by its right edge. A fixed width made the box grow
+     RIGHTWARD when mass scaling widened a species (the duck goes 108 -> 154px),
+     so it ran 14px past the plate and got clipped: Tom, 2026-08-07, "the duck and
+     lizard are cut off that cant be happening". Shrink-wrapped, a wide pet grows
+     LEFT into the frame instead of off the edge. */
+  width: auto; height: auto; z-index: 3; padding: 0; background: none; border: 0;
+  display: flex; justify-content: flex-end;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
   animation: bhIdle 4s ease-in-out infinite; }
 .hero-companion.pop { animation: bhIdle 4s ease-in-out infinite, petPop .5s cubic-bezier(.34, 1.56, .64, 1); }

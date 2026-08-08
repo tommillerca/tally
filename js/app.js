@@ -1501,7 +1501,7 @@ async function renderToday(el) {
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>${heroPet ? '<span class="hero-cast c-pet"></span>' : ''}
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 124)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 108)}</button>` : ''}
 
     <!-- Four separate chips became one wallet pill and an icon-only Trends dot:
          the top of the card was four competing plates over the art. -->
@@ -9856,7 +9856,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v307'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v308'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
