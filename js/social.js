@@ -238,6 +238,13 @@ export async function displayName() {
 // Set the curated display name from word-list indices (no free text uploaded).
 export async function setName(adj, noun, num) {
   const r = await signedFetch('POST', '/name', { adj, noun, num });
+  // A 409 is a NAMED outcome (somebody already has this name), not a failure to
+  // reach the server. Pass it through with the free number the server suggested
+  // so the sheet can offer it, instead of a generic "could not save".
+  if (r.status === 409) {
+    const d = await r.json().catch(() => ({}));
+    return { ok: false, reason: 'taken', name: d.name, suggestNum: d.suggestNum ?? null };
+  }
   if (!r.ok) return { ok: false };
   const data = await r.json();
   const me = (await kvGet('social', null)) || {};

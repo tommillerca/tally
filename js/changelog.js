@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 314, date: '2026-08-08', title: 'Your name, your loot, your ground', items: [
+    'Two players could take the <b>same name</b>. There was no uniqueness check at all, and it was never bad luck: everyone reaches for the same joke, so the funniest combination is the one that collides. Names are now first-come, and if yours is taken the app offers you the next free number.',
+    'Boss dens and the Glutton were handing <b>everyone the same drop</b>. The roll was seeded by the boss and the day with nothing about you in it, so two players who beat the same den got the identical two pieces. Drops are yours now.',
+    'A <b>Battle Charm</b> can no longer be used while one is already running. It used to quietly eat a second charm and stack the timer, which never made the bonus bigger. The button now reads ACTIVE and your spare stays in your bag.',
+    'Map pickups gave <b>the same few ingredients</b> forever. Each kind of pile could only ever drop two of the six, so four were simply unreachable from it. Coin piles still lean salt and peppers, bone piles still lean marrow and sinew, but anything can turn up now.',
+    'The Today card gives your bonehead <b>something to stand on</b>. He was posed on a flat field of colour with the caption band starting right at his feet, so he read as floating. There is a floor now, and his shadow sits under his shoes instead of behind his ankles.',
+  ] },
   { n: 313, date: '2026-08-08', title: 'The dens move, and the map keeps going', items: [
     'Boss dens now <b>relocate every week</b>. They used to sit on the same spot forever and only swap which boss was home, so the weekly refresh was invisible unless you read the name. New week, new places to walk to. They have already moved for this week.',
     'The Boneyard <b>keeps loading as you look around</b>. Dens, spires, minis and secrets used to only ever exist in a small bubble around your own feet, so dragging the map showed you empty ground no matter how far you went. Now the world fills in wherever you are looking.',

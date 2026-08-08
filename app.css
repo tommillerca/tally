@@ -1067,7 +1067,7 @@ body::before {
    The asymmetric left/right is not a typo: the ink inside the 640 canvas is NOT
    centred in it (bbox 94..509, centre 301 not 320), so a symmetric box hangs the
    drawing 17px to the left. This puts it on the card's centre line. */
-.hero-char { position: absolute; left: -16px; right: -34px; top: 18px; bottom: 79px;
+.hero-char { position: absolute; left: -16px; right: -34px; top: 18px; bottom: 118px;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
@@ -1086,7 +1086,7 @@ body::before {
 /* Off the border. 28px from the plate edge read as "slight too close the card
    border" once the frame is counted, so it comes in to ~44 and sits just behind
    his ground line rather than beside his knees. */
-.hero-companion { position: absolute; right: 30px; bottom: 92px;
+.hero-companion { position: absolute; right: 30px; bottom: 131px;
   /* WIDTH AUTO, anchored by its right edge. A fixed width made the box grow
      RIGHTWARD when mass scaling widened a species (the duck goes 108 -> 154px),
      so it ran 14px past the plate and got clipped: Tom, 2026-08-07, "the duck and
@@ -1106,11 +1106,36 @@ body::before {
 /* The only ground cue. A floor band was tried in the v2 mockup and Tom killed it
    ("that floot mockup looks ugly it better not be in the final art"); two soft
    contact shadows carry the shared plane on their own. */
+/* SOMETHING TO STAND ON. Tom, 2026-08-08: "the today page still makes the
+   bonehead look like he's floating instead of standing on solid ground."
+   His feet and the contact shadow already met, so the fault was never the
+   figure's position: the plate had NO ground plane (one flat field of colour),
+   and the caption band started 2px below his soles, so he stood on the lip of a
+   dark shelf with a void beneath it. This is the floor: a lit surface, a soft
+   horizon where it meets the back wall, and it sits behind every figure. */
+.hero-ground {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 34%; z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 236, 180, .11) 0 2px, rgba(0, 0, 0, 0) 2px),
+    radial-gradient(70% 90% at 50% 100%, rgba(255, 236, 180, .10), transparent 70%),
+    linear-gradient(180deg, #5d6b38 0%, #4a5530 55%, #3c4529 100%);
+}
 .hero-cast { position: absolute; border-radius: 50%; pointer-events: none; }
-.hero-cast.c-bh { left: 50%; transform: translateX(-50%); bottom: 88px; width: 46%; height: 18px; z-index: 1;
-  background: radial-gradient(ellipse at 50% 50%, rgba(30, 33, 26, .55) 0%, rgba(30, 33, 26, 0) 70%); }
-.hero-cast.c-pet { right: 24px; bottom: 80px; width: 30%; height: 16px; z-index: 2;
-  background: radial-gradient(ellipse at 50% 50%, rgba(30, 33, 26, .5) 0%, rgba(30, 33, 26, 0) 70%); }
+/* MEASURED, NOT EYEBALLED (figure contract rule 3: align on INK, not boxes).
+   This was `left: 50%`, centred on the SCENE, but the figure is not: the char box
+   is asymmetric and Cam's ink is off-centre inside its own 640 canvas, so the
+   shadow sat 15px to the right of the shoes. It was also 22.5px too low, which
+   put the whole ellipse ABOVE the sole line so the shoes hung below their own
+   shadow. Both values come from diffing rendered frames (character-only vs
+   shadow-only against an empty plate) with the drop-shadow filter disabled, so
+   the blur could not be mistaken for ink. Verified: shadow centre within 1px of
+   the soles vertically and 0.5px horizontally. */
+.hero-cast.c-bh { left: 45.5%; transform: translateX(-50%); bottom: 135px; width: 48%; height: 15px; z-index: 1;
+  background: radial-gradient(ellipse at 50% 50%, rgba(20, 24, 14, .7) 0%, rgba(20, 24, 14, .3) 46%, transparent 74%); }
+/* No c-pet rule: Tom, 2026-08-08 "cloud pet already has its own shadow in the OG
+   art". Cam drew one, so adding a second stacked two shadows under one pet.
+   The element is no longer emitted at all (see renderToday). */
 .hero-yard {
   position: absolute; left: 3%; bottom: 10%; width: clamp(64px, 21%, 104px);
   z-index: 1; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));

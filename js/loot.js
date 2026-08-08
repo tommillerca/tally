@@ -1130,15 +1130,25 @@ export async function equipGear(slot, gearId) {
 /* ---------- Battle Charm (formerly XP Boost) ----------
    Charges live in kv buffs.xp2 (key kept so old charges convert 1:1). A charge
    is spent on a Pit WIN and adds BATTLE_CHARM_BONUS to that win's coins. */
+/* ONE AT A TIME. Tom, 2026-08-08: "You shouldn't be able to use multiple battle
+   charms if one is already active."
+   This was a blind `+= 5`, so tapping USE with charges still on the clock ate a
+   second charm and stacked to 10 wins. Nothing about that read as a choice: the
+   bonus does not get bigger, you just spend an item early for duration you were
+   already going to get. Refused while any charge remains, and the item stays in
+   your bag. State transition (rewarded-actions SOP rule 1): "no charm running"
+   becomes "charm running". If one is already running, there is no transition, so
+   there is nothing to spend an item on. */
 export async function activateBattleCharm() {
+  const buffs = await kvGet('buffs', {});
+  if ((buffs.xp2 || 0) > 0) return { ok: false, reason: 'active', charges: buffs.xp2 };
   const inv = await inventory();
   const row = inv.find(r => r.kind === 'xp2');
-  if (!row) return false;
+  if (!row) return { ok: false, reason: 'none' };
   await db.del('inv', row.id);
-  const buffs = await kvGet('buffs', {});
-  buffs.xp2 = (buffs.xp2 || 0) + 5;
+  buffs.xp2 = 5;
   await kvSet('buffs', buffs);
-  return true;
+  return { ok: true, charges: 5 };
 }
 
 export async function battleCharmCharges() {

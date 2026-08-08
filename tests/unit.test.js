@@ -526,6 +526,74 @@ test('boneheadz: yard decor is retired (no YD slot)', () => {
   assert.equal(BH_ITEMS.filter(i => i.slot === 'YD').length, 0, 'yard slot scrapped in v220');
 });
 
+/* BATTLE CHARM: ONE AT A TIME. Tom, 2026-08-08: "You shouldn't be able to use
+   multiple battle charms if one is already active."
+   activateBattleCharm needs IndexedDB, so this is a source guard like the other
+   NO-OP guards in this file. Comments and strings are stripped FIRST: an earlier
+   guard here passed because the word it looked for appeared in a COMMENT while
+   the real check had been deleted.
+   Both halves of the SOP are pinned: the action refuses, AND the button stops
+   being offered.
+   PROVE-RED: restore `buffs.xp2 = (buffs.xp2 || 0) + 5` with no early return and
+   the first assertion fails. */
+test('battle charm: cannot stack a second charm over a running one', () => {
+  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const fn = loot.slice(loot.indexOf('export async function activateBattleCharm'));
+  const body = fn.slice(0, fn.indexOf('\nexport '));
+  const bare = body
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
+  const guard = bare.search(/if\s*\(\s*\(?\s*buffs\.xp2[^)]*\)?[^)]*\)\s*return/);
+  const spend = bare.indexOf('db.del');
+  assert.ok(guard >= 0, 'activateBattleCharm must refuse while charges remain (guard missing)');
+  assert.ok(spend >= 0, 'activateBattleCharm should still consume the item when it DOES activate');
+  assert.ok(guard < spend, 'the refusal must come BEFORE the item is consumed, or the charm is eaten anyway');
+  // and it must set, not accumulate
+  assert.ok(!/buffs\.xp2\s*=\s*\(?\s*buffs\.xp2/.test(bare), 'charges must be set, not added to an existing stack');
+});
+
+test('battle charm: the USE button is not offered while a charm is running', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const i = app.indexOf('id="useBoost"');
+  assert.ok(i > 0, 'the charm USE button should exist');
+  const row = app.slice(Math.max(0, i - 400), i + 200).replace(/<!--[\s\S]*?-->/g, ' ');
+  assert.ok(/boost\s*\?/.test(row), 'the button must branch on whether a charm is already active');
+  assert.ok(/disabled/.test(row), 'the active state must render a disabled control, not a live one');
+});
+
+/* INGREDIENT VARIETY. Tom, 2026-08-08: "all coins and stuff end up giving the
+   same food ingredients."
+   Each spawn type had a pool of exactly two, so four of the six commons were
+   unreachable from any given type, and the picker was a char-code sum mod 2.
+   Two assertions because either alone is a bad guard: EVERY common must be
+   reachable from EVERY type (or the pantry stays impossible to stock), and the
+   theme must still dominate (or bone piles stop feeling like bone piles and the
+   flavour is gone).
+   PROVE-RED: set THEME_ODDS to 1 and the reachability assertion fails. */
+test('spawn ingredients: every common is reachable from every spawn type, theme still leads', async () => {
+  const cook = await import('../js/cooking.js');
+  for (const type of ['bones', 'coins', 'crate']) {
+    const tally = {};
+    for (let cx = 0; cx < 30; cx++) for (let cy = 0; cy < 30; cy++) for (let k = 0; k < 3; k++) {
+      const r = cook.spawnIngredient({ type, id: `${cx}_${cy}_s${k}_i0` });
+      tally[r.id] = (tally[r.id] || 0) + 1;
+    }
+    const total = Object.values(tally).reduce((a, b) => a + b, 0);
+    assert.ok(total > 0, 'an empty sample is a failure');
+    for (const id of cook.COMMON_INGREDIENT_IDS) {
+      assert.ok(tally[id] > 0, `${type} spawns can never yield ${id}`);
+    }
+    const themed = cook.SPAWN_INGREDIENTS[type].reduce((a, id) => a + (tally[id] || 0), 0);
+    const share = themed / total;
+    assert.ok(share > 0.6 && share < 0.95, `${type} theme share ${share.toFixed(2)} should lead without caging the pool`);
+  }
+  // the map promises a specific drop, so the same spawn must always give the same thing
+  const a = cook.spawnIngredient({ type: 'coins', id: '12_34_s1_i0' });
+  const b = cook.spawnIngredient({ type: 'coins', id: '12_34_s1_i0' });
+  assert.equal(a.id, b.id, 'a spawn must keep showing the same ingredient it advertises');
+});
+
 // ---- boss dens (the bone road, reimagined) ----
 const poi = await import('../js/poi.js');
 /* Dens RELOCATE weekly (Tom, 2026-08-08). This test used to assert the exact
@@ -852,6 +920,25 @@ test('den loot: two-piece gamble rolls distinct, deterministic choices; legendar
     const again = poi.rollDenLoot(den, wk, new Set());
     assert.deepEqual(pair.map(g => g.id), again.map(g => g.id));
   }
+  /* PER-PLAYER DROPS. Tom, 2026-08-08: "players are all getting the same loot
+     from boss dens and the glutton this should be random."
+     The seed had no player in it. Two assertions, because either one alone lets
+     a bug through: same salt must stay STABLE (a pending chooser must not reroll
+     under the player) and different salts must actually DIVERGE.
+     PROVE-RED: drop `salt` from the seed string in rollDenLoot and the second
+     assertion fails with every player on the same drop. */
+  const den0 = dens[0];
+  const mine = poi.rollDenLoot(den0, wk, new Set(), 999, null, 'salt-aaaa');
+  const mineAgain = poi.rollDenLoot(den0, wk, new Set(), 999, null, 'salt-aaaa');
+  assert.deepEqual(mine.map(g => g.id), mineAgain.map(g => g.id), 'same player, same den, same day = same offer');
+  let diverged = 0;
+  for (const d of dens) {
+    const a = poi.rollDenLoot(d, wk, new Set(), 999, null, 'salt-aaaa');
+    const b = poi.rollDenLoot(d, wk, new Set(), 999, null, 'salt-bbbb');
+    if (a && b && a.map(g => g.id).join() !== b.map(g => g.id).join()) diverged++;
+  }
+  assert.ok(diverged >= Math.ceil(dens.length * 0.6),
+    `two players should get different offers at most dens (diverged ${diverged}/${dens.length})`);
   // pacing: across all dens/weeks, legendary drops are the exception, not the rule
   const RANK = { uncommon: 0, rare: 1, legendary: 2 };
   let n = 0, leg = 0;

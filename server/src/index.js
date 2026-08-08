@@ -379,6 +379,34 @@ export default {
         const b = JSON.parse(bodyText || '{}');
         const name = buildName(b.adj, b.noun, b.num);
         if (!name) return json({ error: 'bad name indices' }, 400);
+        /* NAMES ARE UNIQUE. Tom, 2026-08-08: "How did you allow two people to
+           pick the same name Massive coc? That was the whole point of usernames?"
+           There was no check here and no UNIQUE on players.name, so /name was a
+           blind UPDATE. Worth being precise about why it happened: this is not
+           unlucky collision. The name is picked from chips, so players are not
+           sampling 6400 combinations uniformly, they are all reaching for the
+           same joke. The funniest combination is the one that collides first.
+           Case-insensitive, because "Massive Coccyx" and "massive coccyx" are the
+           same name to everyone reading a leaderboard. First claimant keeps it.
+           `taken` is a named outcome, not an error string the client sniffs. */
+        const clash = await env.DB.prepare(
+          'SELECT id FROM players WHERE name IS NOT NULL AND lower(name) = lower(?) AND id <> ?')
+          .bind(name, auth.playerId).first();
+        if (clash) {
+          // Offer the lowest free #N for this adj+noun so the client can propose
+          // one instead of making the player guess their way through the space.
+          const base = buildName(b.adj, b.noun, null);
+          const rows = await env.DB.prepare(
+            "SELECT name FROM players WHERE name IS NOT NULL AND lower(name) LIKE lower(?) || ' #%'")
+            .bind(base).all().catch(() => ({ results: [] }));
+          const used = new Set((rows.results || []).map(r => {
+            const m = /#(\d{1,3})$/.exec(r.name || '');
+            return m ? Number(m[1]) : -1;
+          }));
+          let free = null;
+          for (let i = 1; i <= 999; i++) if (!used.has(i)) { free = i; break; }
+          return json({ ok: false, reason: 'taken', name, suggestNum: free }, 409);
+        }
         await env.DB.prepare('UPDATE players SET name = ?, last_seen = ? WHERE id = ?').bind(name, Date.now(), auth.playerId).run();
         return json({ ok: true, name });
       }

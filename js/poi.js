@@ -87,6 +87,20 @@ function mulberry32(seed) {
   };
 }
 
+/* A stable per-install random, folded into every loot seed so two players who
+   beat the same boss on the same day do not get the same drop. Created once and
+   kept in kv, so it survives across sessions and a cloud restore: a salt that
+   changed on every open would reroll a pending boss chooser under the player,
+   which is worse than sharing a drop. Never leaves the device. */
+export async function lootSalt() {
+  let s = await kvGet('lootSalt', null);
+  if (!s) {
+    s = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('');
+    await kvSet('lootSalt', s);
+  }
+  return s;
+}
+
 // ISO week key, e.g. "2026-W27": the weekly refresh clock for every den.
 export function isoWeekKey(d = new Date()) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -320,8 +334,18 @@ function pickDenGear(rng, rIdx, { preferArch = null, avoidArch = null, exclude, 
   }
   return null;
 }
-export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = null) {
-  const rng = mulberry32(hashStr(`dengear:${week}:${den.id}`));
+/* YOUR DROP, NOT EVERYONE'S. Tom, 2026-08-08: "players are all getting the same
+   loot from boss dens and the glutton this should be random."
+   The seed was `dengear:<day>:<den>` with no player in it, so the roll was a
+   property of the DEN, not of the kill: two people who beat the same den on the
+   same day were offered the identical two pieces. It looked player-specific only
+   because owned gear and level cap filter the pool afterwards, which hides it
+   until two players have similar collections, which is exactly Tom and Cam.
+   `salt` is a per-install random (see lootSalt) folded into the seed. Still
+   deterministic per player + den + day, so re-opening a pending chooser shows
+   the same two pieces rather than rerolling until you like them. */
+export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = null, salt = '') {
+  const rng = mulberry32(hashStr(`dengear:${salt}:${week}:${den.id}`));
   const exclude = new Set();
   const first = pickDenGear(rng, rollRarityIdx(rng, den.tier), { preferArch, exclude, maxLevel, ownedSet });
   if (!first) return null;
@@ -364,7 +388,7 @@ export async function claimDenWin(den, day = dateKey()) {
   // every boss drops two pieces: keep ONE (chooser persists in kv until picked)
   const owned = await ownedGearIds();
   const lvl = levelFor(await totalXp()).level;
-  const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch());
+  const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch(), await lootSalt());
   if (choices) {
     const pending = (await kvGet('denloot', [])) || [];
     if (!pending.some(p => p.key === denKey(day, den))) {
@@ -544,7 +568,9 @@ export async function claimGluttonWin(day = dateKey(), slot = 0) {
   await coinsAdd(140);
   const owned = await ownedGearIds();
   const lvl = levelFor(await totalXp()).level;
-  const rng = mulberry32(hashStr(`glutgear:${day}:${slot}`));
+  // per-player, same reason as rollDenLoot: this seed had no player in it, so the
+  // piece AND the slimed roll below were identical for everyone that window.
+  const rng = mulberry32(hashStr(`glutgear:${await lootSalt()}:${day}:${slot}`));
   const pick = pickDenGear(rng, rollRarityIdx(rng, 4), { exclude: new Set(), maxLevel: lvl + 3, ownedSet: owned });
   let gear = null;
   if (pick) {

@@ -152,13 +152,18 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
 });
 
 // ---- curated display name ----
+/* RUN-UNIQUE NUMBERS. Names became unique server-side on 2026-08-08, and the
+   local D1 persists between runs, so a hardcoded name is claimed by the PREVIOUS
+   run's player and every later run 409s. That is the feature working, not a
+   regression, so the tests carry a per-run suffix instead of fixed strings. */
+const RUNSUF = 100 + Math.floor(Math.random() * 800);
 await test('name: set curated display name by indices, /me reflects it', async () => {
-  const r = await signedFetch(kp, player.playerId, 'POST', '/name', JSON.stringify({ adj: 1, noun: 0, num: 7 }));
+  const r = await signedFetch(kp, player.playerId, 'POST', '/name', JSON.stringify({ adj: 1, noun: 0, num: RUNSUF }));
   assert.equal(r.status, 200);
   const d = await r.json();
-  assert.equal(d.name, 'Grim Rex #7', JSON.stringify(d));
+  assert.equal(d.name, `Grim Rex #${RUNSUF}`, JSON.stringify(d));
   const me = await (await signedFetch(kp, player.playerId, 'GET', '/me')).json();
-  assert.equal(me.name, 'Grim Rex #7');
+  assert.equal(me.name, `Grim Rex #${RUNSUF}`);
 });
 
 await test('name: no number is allowed', async () => {
@@ -189,11 +194,11 @@ await test('friends: request by code is pending, reciprocation auto-accepts', as
 });
 
 await test('friends: name + public profile surface in the list', async () => {
-  await signedFetch(p2keys.kp, p2.playerId, 'POST', '/name', JSON.stringify({ adj: 2, noun: 2 })); // Dusty Knuckles
+  await signedFetch(p2keys.kp, p2.playerId, 'POST', '/name', JSON.stringify({ adj: 2, noun: 2, num: RUNSUF })); // Dusty Knuckles #N
   await signedFetch(p2keys.kp, p2.playerId, 'PUT', '/profile', JSON.stringify({ snapshot: { level: 12, levelName: 'Bruiser', outfit: { SK: 'SK0-1' } }, appV: 'v100' }));
   const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
   const b = aList.friends.find(x => x.playerId === p2.playerId);
-  assert.equal(b.name, 'Dusty Knuckles');
+  assert.equal(b.name, `Dusty Knuckles #${RUNSUF}`);
   assert.equal(b.profile.level, 12);
   assert.equal(b.friendCode, p2.friendCode);
 });
@@ -339,6 +344,54 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);
   const g2 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
   assert.equal((g2.grants || []).filter(x => x.key === `stepweek-${prev}`).length, 1, 'settling is idempotent');
+});
+
+/* NAMES ARE UNIQUE. Tom, 2026-08-08: "How did you allow two people to pick the
+   same name Massive coc? That was the whole point of usernames?"
+   /name was a blind UPDATE with no check and players.name has no UNIQUE, so the
+   second claimant simply overwrote nothing and kept the same string.
+   PROVE-RED: delete the `clash` lookup in src/index.js and the second claim
+   returns 200 instead of 409, failing the first assertion below. */
+await test('names are unique: second claimant is refused and offered a free number', async () => {
+  const mk = async () => {
+    const k = await makeKeys();
+    const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+    return { k, p };
+  };
+  const a = await mk(), b = await mk();
+  // 57 = 'Chiseled', 15 = 'Coccyx' — indices, not free text (same wire format as
+  // the app. Persistent local D1: find a suffix no earlier run has claimed.
+  let pick = null, r1 = null;
+  for (let i = 0; i < 8 && !pick; i++) {
+    const cand = { adj: 57, noun: 15, num: 100 + Math.floor(Math.random() * 800) };
+    const res = await signedFetch(a.k.kp, a.p.playerId, 'POST', '/name', JSON.stringify(cand));
+    if (res.status === 200) { pick = cand; r1 = res; }
+  }
+  assert.ok(pick, 'could not find an unclaimed name to test with');
+  assert.equal(r1.status, 200, 'first claimant gets the name');
+  const taken = (await r1.json()).name;
+
+  const r2 = await signedFetch(b.k.kp, b.p.playerId, 'POST', '/name', JSON.stringify(pick));
+  assert.equal(r2.status, 409, 'second claimant is refused');
+  const d2 = await r2.json();
+  assert.equal(d2.reason, 'taken', 'refusal is a NAMED outcome, not a bare error');
+  assert.equal(d2.name, taken);
+  assert.ok(Number.isInteger(d2.suggestNum) && d2.suggestNum >= 1, 'a free number is offered: ' + JSON.stringify(d2));
+
+  // the offered number must actually work
+  const r3 = await signedFetch(b.k.kp, b.p.playerId, 'POST', '/name', JSON.stringify({ ...pick, num: d2.suggestNum }));
+  assert.equal(r3.status, 200, 'the suggested number is genuinely free');
+  assert.notEqual((await r3.json()).name, taken);
+});
+
+await test('names are unique: case-insensitive, and re-saving your OWN name still works', async () => {
+  const k = await makeKeys();
+  const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+  const pick = { adj: 58, noun: 62, num: 100 + Math.floor(Math.random() * 800) };
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify(pick))).status, 200);
+  // re-saving the identical name must NOT trip the guard (id <> self)
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify(pick))).status, 200,
+    'a player re-saving their own name must not be told it is taken');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

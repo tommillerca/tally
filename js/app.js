@@ -1499,7 +1499,8 @@ async function renderToday(el) {
   <div class="hero-card">
   <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
-    <span class="hero-cast c-bh"></span>${heroPet ? '<span class="hero-cast c-pet"></span>' : ''}
+    <div class="hero-ground"></div>
+    <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
     ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 108)}</button>` : ''}
 
@@ -5026,6 +5027,18 @@ async function openNameBuilder(after) {
   $('#nbSave', wrap).addEventListener('click', async () => {
     const btn = $('#nbSave', wrap); btn.disabled = true; btn.textContent = 'Saving...';
     const r = await social.setName(sel.adj, sel.noun, sel.num);
+    // Taken is not an error: say who it belongs to in plain terms and put the
+    // free number straight into the field so one more tap saves it.
+    if (r.reason === 'taken') {
+      btn.disabled = false; btn.textContent = 'Save name';
+      if (r.suggestNum != null) {
+        sel.num = r.suggestNum;
+        const f = $('#nbNumVal', wrap); if (f) f.value = String(r.suggestNum);
+        $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+        toast(`${r.name} is taken. Try ${buildDisplayName(sel.adj, sel.noun, sel.num)}.`, 3400);
+      } else toast(`${r.name} is taken. Pick another.`, 3000);
+      return;
+    }
     if (!r.ok) { btn.disabled = false; btn.textContent = 'Save name'; toast('Could not save your name. Try again in a bit.'); return; }
     social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
     confettiRain(40); chimeSound(S.sounds);
@@ -7286,7 +7299,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <span class="t3-med">${consumableIcon('xp2', 20)}</span>
         <div class="t3-tx"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         <span class="t3-lock">x${boosts}</span>
-        ${boosts ? '<button class="btn" id="useBoost">USE</button>' : ''}
+        <!-- The state that makes the action illegal must also hide the button
+             (rewarded-actions SOP rule 4): while a charm is running, USE becomes
+             a disabled "ACTIVE" chip instead of a live control that refuses. -->
+        ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : ''}
       </div>
       <div class="t3-row">
         <span class="t3-med">${consumableIcon('vigor', 20)}</span>
@@ -7363,7 +7379,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
-      if (await activateBattleCharm()) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
+      const r = await activateBattleCharm();
+      if (r.ok) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
+      // refusing to stack is the point, so say why rather than failing silently
+      else if (r.reason === 'active') toast(`A charm is already running: ${r.charges} Pit win${r.charges === 1 ? '' : 's'} left. Save this one.`, 3200);
       renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
@@ -9950,7 +9969,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v313'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v314'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

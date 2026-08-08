@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS devices (
   region TEXT,
   city TEXT,
   first_seen INTEGER,
-  last_seen INTEGER
+  last_seen INTEGER,
+  plat TEXT              -- ios / android / mac-web / ios-pwa ... (v311)
 );
 
 -- player-submitted map feedback: den nominations ("this landmark should be a

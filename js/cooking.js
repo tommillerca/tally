@@ -27,13 +27,39 @@ export const SPAWN_INGREDIENTS = {
   coins: ['salt', 'ember'],
   crate: ['graveroot', 'bog'],
 };
-// Deterministic per spawn: same spot always yields the same drop, so the map can
-// show it and you can route to the ingredient you need.
+// local copies, same as hunt.js/poi.js/spires.js: cooking.js is imported BY
+// loot.js, so importing poi.js here would close an import cycle.
+function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Deterministic per spawn: the same spot always yields the same drop, so the map
+   can show it and you can route to the ingredient you need. That property is
+   deliberate and is kept.
+   Tom, 2026-08-08: "all coins and stuff end up giving the same food ingredients."
+   Two faults, and the pools were the bigger one. Each spawn TYPE mapped to a pool
+   of exactly TWO ingredients, so a coin pile could only ever be Grave Salt or
+   Ember Pepper no matter how many you collected: four of the six commons were
+   unreachable from that spawn type. On top of that the picker was
+   `sum-of-char-codes % 2`, and neighbouring spawn ids differ by one character, so
+   the sum walked in step with the id and the choice alternated in a visible
+   pattern rather than looking random.
+   Now: a real hash, and the themed pool is a BIAS rather than a cage. A bone pile
+   still usually gives marrow or sinew, but any common can turn up, so walking a
+   route actually stocks a varied pantry. */
+export const THEME_ODDS = 0.7;   // chance the drop comes from the spawn type's own pool
 export function spawnIngredient(spawn) {
   if (spawn.type === 'rare') return { id: RARE_INGREDIENT, n: 1 };
-  const pool = SPAWN_INGREDIENTS[spawn.type] || COMMON_INGREDIENT_IDS;
-  const h = [...spawn.id].reduce((a, c) => a + c.charCodeAt(0), 0);
-  return { id: pool[h % pool.length], n: 1 };
+  const rng = mulberry32(hashStr(`ingr:${spawn.id}`));
+  const themed = SPAWN_INGREDIENTS[spawn.type];
+  const pool = (themed && rng() < THEME_ODDS) ? themed : COMMON_INGREDIENT_IDS;
+  return { id: pool[Math.floor(rng() * pool.length)], n: 1 };
 }
 
 // buff kinds:
