@@ -5864,7 +5864,38 @@ body::before {
    in front) and wrong for breeding (it needs two). So neither becomes a separate
    screen: the ring SHRINKS and stays on top, and the panel takes the space the
    stat table had, so you never lose track of which pet you are editing. */
+/* THE IN-BETWEEN MOMENT. Tom, 2026-08-08: "this transition should be smooth
+   scaling with elegance not just a jarring 2 keyframe scale. we need to start
+   thinking about the flow of things and the in between moments."
+   --card drives every card's width, so it has to be REGISTERED to be animatable:
+   an unregistered custom property is a string to the engine and flips between
+   values with nothing in between, which is exactly what he saw. @property gives
+   it a type, so it interpolates. The ring's spacing is computed from the measured
+   card width, so js re-paints on rAF for the length of this transition, or the
+   cards would keep their old pitch while the cards themselves shrank. */
+@property --card { syntax: '<length>'; inherits: true; initial-value: 150px; }
+.cf { transition: --card .42s cubic-bezier(.22, .61, .36, 1); }
+.cf-frame { transition: padding .42s cubic-bezier(.22, .61, .36, 1); }
+.cf-cap b { transition: font-size .42s cubic-bezier(.22, .61, .36, 1); }
+/* Height and opacity, not display:none. `display` cannot be transitioned, so the
+   stat table and dots used to vanish on the first frame and take the eye with
+   them; now they collapse with the ring rather than disappearing ahead of it. */
+.cf-meta, .cf-dots {
+  overflow: hidden;
+  transition: opacity .26s ease, max-height .42s cubic-bezier(.22, .61, .36, 1), margin-top .42s ease;
+  max-height: 260px; opacity: 1;
+}
 .cf.panelled { --card: 104px; }
 .cf.panelled .cf-frame { padding: 10px 0 6px; }
-.cf.panelled .cf-meta, .cf.panelled .cf-dots { display: none; }
+.cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }
+/* the panel arrives rather than appearing */
+.pet-tree-inline, .breed-bar.sticky { animation: cfPanelIn .38s cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes cfPanelIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf, .cf-frame, .cf-cap b, .cf-meta, .cf-dots { transition: none; }
+  .pet-tree-inline, .breed-bar.sticky { animation: none; }
+}

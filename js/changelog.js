@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 318, date: '2026-08-08', title: 'Ectoplasm is worth something now', items: [
+    'Two new <b>Ectoplasm potions</b>, and they are the strongest things you can drink. <b>Revenant\'s Draught</b> restores 60% HP and puts up a 50-point shield in one action. <b>Spectral Fury</b> is +50% damage for 4 turns plus a full Stamina refill.',
+    'The four everyday potions are <b>unchanged</b> and still cost commons, so nothing you already brew got harder.',
+    'The <b>Necromancer\'s Feast</b> was a trap: it cost more and cooked four times longer than simply making two ordinary dishes, and gave you less. It is now +25% damage, +35 Hype and lasts 4 fights, and cooks in 2 hours instead of 3.',
+    'The Stable\'s talents panel now <b>eases open</b> instead of snapping.',
+  ] },
   { n: 317, date: '2026-08-08', title: 'The Stable is a carousel now', items: [
     'Your pets sit on a <b>turning ring</b> instead of a long list. One pet is in front with its stats and its buttons underneath, and you flick or tap to bring another forward. No more scrolling past six pets to reach the one you were thinking about.',
     '<b>Talents and breeding</b> open underneath without leaving the ring: it shrinks and stays on top, so you never lose track of which pet you are editing.',

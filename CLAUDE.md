@@ -146,3 +146,33 @@ Follow this for every action that pays coins, dust, XP, gear, crates or a card.
    every paying `social.*Remote` call to consult its answer BEFORE paying, the
    other pins the spire branch specifically. Both are proven red against the real
    exploits. Any new rewarded remote call is covered the moment it is written.
+
+## Transitions and in-between moments (added 2026-08-08)
+
+Tom, on the Stable's talents panel: "this transition should be smooth scaling
+with elegance not just a jarring 2 keyframe scale. we need to start thinking
+about the flow of things and the in between moments."
+
+A state change is not done when both states look right. The path between them is
+part of the design, and two specific mistakes make it disappear:
+
+1. **A full re-render leaves nothing to transition.** Screens here rebuild
+   `innerHTML` wholesale, so the new DOM is born at its final size and CSS has no
+   previous value to interpolate from. Remember the previous state, render the new
+   markup in the OLD state, then flip it on the next frame so the transition
+   actually runs. `cfWasPanelled` in `openStable` is the reference.
+2. **An unregistered custom property cannot animate.** `--card` is a string to the
+   engine unless declared with `@property { syntax: '<length>' }`, so it jumps.
+   Anything that drives layout through a variable needs the registration before a
+   `transition` on it means anything.
+3. **`display: none` is not a transition.** It removes the element on frame one and
+   pulls the eye with it. Collapse `max-height` + `opacity` so a panel leaves at
+   the same pace as the thing replacing it.
+4. **If JS derives geometry from measured sizes, it must repaint during the
+   transition.** The carousel computes card pitch from the live card width, so a
+   CSS-only shrink left the spacing at the old value mid-animation. Drive `paint()`
+   on rAF for the transition's duration.
+
+Verify it the same way as any other visual claim: sample the animated value over
+time and assert it takes intermediate values. Two distinct values across the
+window means it snapped.

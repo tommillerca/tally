@@ -249,6 +249,8 @@ export async function setName(adj, noun, num) {
   const data = await r.json();
   const me = (await kvGet('social', null)) || {};
   me.name = data.name; await kvSet('social', me);
+  // a rename we asked for is now satisfied; never ask again
+  await kvSet('renameRequired', null);
   return { ok: true, name: data.name };
 }
 export async function friendRequest(code) {
@@ -468,6 +470,12 @@ async function applyPayload(key, type, p) {
   // `egg: 'ready'` hands over one that can be cracked immediately (goal 0)
   if (p.egg) await grantEgg('social', p.egg === 'ready' ? 0 : undefined);
   if (p.gearId) await grantGear(p.gearId, 'social');
+  /* A rename we owe the player (2026-08-08). Two people held one name because
+     /name had no uniqueness check. The later claimant by account age is asked to
+     pick again, and the apology gift rides the same payload so it lands whether
+     or not they read the notice. Stores the OLD name so the notice can say which
+     name it is about, and so the check can no-op once they have changed it. */
+  if (p.rename) await kvSet('renameRequired', String(p.rename));
   return true;
 }
 

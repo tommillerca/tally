@@ -561,6 +561,7 @@ async function boot() {
   maybeShowDropPopup();
   maybeShowGardenPopup();
   maybeShowSpireIntro();
+  maybeShowRenameNotice();
   maybeShowRaceIntro();
   maybePromptRecovery();
   maybePromptName();
@@ -622,6 +623,36 @@ async function maybeShowWhatsNew() {
 // Shown once (kv flag), then the Today banner carries it, same etiquette as the
 // drop: never over the splash, the wheel, or an open sheet.
 const SPIRE_SEEN_KEY = 'spiresIntroSeen';
+
+/* The rename we owe one player (2026-08-08, approved by Tom). Fires only when the
+   server has flagged this device via a `rename` grant AND the name it complains
+   about is STILL the one on the account: if they have already changed it, the
+   flag is stale and gets cleared silently rather than nagging. Same etiquette as
+   every other one-time sheet here: never over the splash, the wheel, or an open
+   sheet. Not gated on `seen`, because unlike an intro this one has a job to
+   finish, and it clears itself the moment the name actually changes. */
+async function maybeShowRenameNotice() {
+  try {
+    if ((navigator.webdriver && !window.__renameForce) || !S.settings) return;
+    const owed = await kvGet('renameRequired', null);
+    if (!owed) return;
+    const me = await social.socialMe();
+    // already renamed (by them, or the flag arrived late): nothing to ask for
+    if (!me || !me.name || me.name.toLowerCase() !== String(owed).toLowerCase()) {
+      await kvSet('renameRequired', null);
+      return;
+    }
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      openRenameNotice({ oldName: me.name });
+    };
+    setTimeout(tick, 1200);
+  } catch { /* never block boot on an apology */ }
+}
 
 async function maybeShowSpireIntro() {
   try {
@@ -8003,6 +8034,12 @@ async function openStable(opts = {}) {
   // which pet the carousel is parked on. Held by IID, not index, so it survives a
   // re-render that adds or removes a pet (breeding destroys one mid-session).
   let cfIid = opts.focusIid || null;
+  /* The panel state the LAST render left on screen. render() rebuilds the whole
+     sheet body, so a CSS transition has nothing to run between: the new DOM is
+     simply born at its final size. Remembering the previous state lets the new
+     markup be born at the OLD size and then transition, which is the only way to
+     animate across a rebuild without rewriting the screen to patch in place. */
+  let cfWasPanelled = false;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -8142,7 +8179,7 @@ async function openStable(opts = {}) {
       </div>
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${roster.length ? `
-        <div class="cf${openIid || pair ? ' panelled' : ''}">
+        <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
@@ -8302,6 +8339,26 @@ async function openStable(opts = {}) {
         settle(Math.round(pos) + delta);
       }));
       paint();
+
+      /* Born at the old size, then transitioned to the new one on the next frame.
+         The ring's spacing comes from the MEASURED card width, so a plain CSS
+         transition would shrink the cards while leaving their pitch at the old
+         value and they would drift apart mid-animation. So paint() runs every
+         frame for the length of the transition, reading the live width. */
+      const cfEl = $('.cf', body);
+      const want = cfEl && cfEl.dataset.want === 'panelled';
+      if (cfEl && want !== cfWasPanelled) {
+        requestAnimationFrame(() => {
+          cfEl.classList.toggle('panelled', want);
+          const t0 = performance.now();
+          const follow = () => {
+            paint();
+            if (performance.now() - t0 < 480) requestAnimationFrame(follow);
+          };
+          requestAnimationFrame(follow);
+        });
+      }
+      cfWasPanelled = want;
     }
 
     /* Refresh ONLY the caption + action row for the pet now in front. Spinning
@@ -10179,7 +10236,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v317'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v318'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

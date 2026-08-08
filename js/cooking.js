@@ -76,8 +76,17 @@ export const RECIPES = [
     buff: { kind: 'combat', petFree: true, fights: 2 }, desc: "Pet's special has no cooldown, next 2 fights" },
   { id: 'zombie-fajita', iconId: 'dish-fajita', name: 'Zombie Fajita', icon: '🌯', needs: { ember: 1, sinew: 1, bog: 1 }, cookMin: 120,
     buff: { kind: 'coins', pct: 0.25, hours: 2 }, desc: '+25% coins from the world, 2 hours' },
-  { id: 'necro-feast', iconId: 'dish-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 180,
-    buff: { kind: 'combat', damagePct: 0.15, hype: 20, fights: 3 }, desc: '+15% damage AND +20 Hype start, next 3 fights (needs rare Ectoplasm)' },
+  /* RE-COSTED 2026-08-08. The Feast was the ONLY sink for Ectoplasm and it lost to
+     not using it. Measured against the alternative: Marrow Stew + Hearty Hash costs
+     6 commons and 75 minutes and stacks to +10% damage AND +25 hype for 3 fights,
+     while the Feast cost 9 commons-equivalent (6 through the transmute, plus 3 in
+     the recipe), a 20-hour transmute cooldown and a 3-hour cook, to deliver +15%
+     damage and FIVE LESS hype. It was strictly dominated, so the correct play was
+     always to ignore it, which is why the rare ingredient piled up.
+     It now clearly beats stacking two commons dishes, which is what a recipe
+     gated behind the rarest ingredient in the game has to do. */
+  { id: 'necro-feast', iconId: 'dish-feast', name: "Necromancer's Feast", icon: '🍖', needs: { ectoplasm: 1, marrow: 2, graveroot: 1 }, cookMin: 120,
+    buff: { kind: 'combat', damagePct: 0.25, hype: 35, fights: 4 }, desc: '+25% damage AND +35 Hype start, next 4 fights (needs rare Ectoplasm)' },
   { id: 'bonemeal-kibble', iconId: 'dish-kibble', name: 'Bonemeal Kibble', icon: '🦴', needs: { marrow: 1, sinew: 1, bog: 1 }, cookMin: 60,
     buff: { kind: 'combat', petHpPct: 0.30, petDamagePct: 0.25, fights: 3 }, desc: 'Feeds your pet: +30% pet HP and +25% pet damage, next 3 fights' },
 ];
@@ -90,6 +99,22 @@ export const POTIONS = [
   { id: 'fury-flask',   name: 'Fury Flask',       icon: '⚗️', potion: true, needs: { ember: 2, sinew: 1 },     cookMin: 30, effect: { dmgPct: 0.25, turns: 3 }, desc: 'Drink in a fight: +25% damage for 3 turns.' },
   { id: 'stoneskin',    name: 'Stoneskin Draught', icon: '🧴', potion: true, needs: { marrow: 1, salt: 1 },     cookMin: 25, effect: { shield: 35 }, desc: 'Drink in a fight: a 35-point shield.' },
   { id: 'second-wind',  name: 'Second-Wind Brew', icon: '🍵', potion: true, needs: { graveroot: 1, ember: 1 }, cookMin: 25, effect: { stamina: true, heal: 0.10 }, desc: 'Drink in a fight: refill Stamina + 10% HP.' },
+  /* ECTOPLASM GETS A PURPOSE (2026-08-08).
+     Tom: "make ectoplasm required for potions since theyre the most powerful in
+     the game im guessing?" Two corrections went into this shape. Potions were NOT
+     the strongest thing in the game (the dishes were), and gating EVERY potion on
+     Ectoplasm would have deleted potions: supply is 1-2 per landmark boss, the odd
+     rare spawn, and one per 20h from transmuting, against four recipes people brew
+     freely today. So the four commons potions stay exactly as they were, and these
+     two are added ABOVE them. Now Ectoplasm buys the best thing you can drink,
+     which is the "I have been saving this" feeling it never had, instead of being
+     a rare material with one mediocre sink.
+     Both reuse the existing effect keys (heal / shield / dmgPct+turns / stamina),
+     so drinkPotion needs no new combat code. */
+  { id: 'revenant-draught', name: "Revenant's Draught", icon: '🫗', potion: true, rare: true, needs: { ectoplasm: 1, marrow: 2 }, cookMin: 60,
+    effect: { heal: 0.60, shield: 50 }, desc: 'Drink in a fight: restore 60% HP AND a 50-point shield. Needs Ectoplasm.' },
+  { id: 'spectral-fury', name: 'Spectral Fury', icon: '🧫', potion: true, rare: true, needs: { ectoplasm: 1, ember: 2 }, cookMin: 60,
+    effect: { dmgPct: 0.50, turns: 4, stamina: true }, desc: 'Drink in a fight: +50% damage for 4 turns and refill Stamina. Needs Ectoplasm.' },
 ];
 export const POTION_BY_ID = Object.fromEntries(POTIONS.map(p => [p.id, p]));
 
