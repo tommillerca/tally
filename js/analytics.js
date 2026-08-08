@@ -5,6 +5,7 @@
 // (the same Cloudflare Worker as social) only when an API base is configured.
 import { kvGet, kvSet } from './db.js';
 import { apiBase, socialMe } from './social.js';
+import { platformTag } from './native.js';
 
 let appV = '';
 const QCAP = 300;
@@ -69,7 +70,7 @@ export async function flush() {
     const label = me ? (me.name || me.handle || null) : null;
     while (q.length) {
       const batch = q.slice(0, 50);
-      const r = await fetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, label, events: batch }) });
+      const r = await fetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, plat: platformTag(), label, events: batch }) });
       if (!r || !r.ok) break; // keep the queue; retry next flush
       q = q.slice(batch.length);
       await kvSet('evq', q);

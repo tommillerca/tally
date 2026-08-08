@@ -1634,5 +1634,44 @@ test('EGG STALL an anchor above lifetime unsticks instead of freezing forever', 
   assert.equal(q.walked, 2000, 'a re-anchored egg must accumulate');
 });
 
+/* ---------------------------------------------------------------------------
+ * WHICH SHELL IS THE PLAYER ON?
+ *
+ * Tom, 2026-08-08: "What are you talking about android has had steps for a
+ * while no??" It has, via a full Health Connect bridge in
+ * native/android/.../HealthPlugin.kt, and I told him twice it did not, because I
+ * reasoned from a comment at the top of js/native.js instead of looking at the
+ * platform. The reason a guess was even POSSIBLE is that nothing recorded the
+ * platform anywhere: not the events, not the devices row, not the profile
+ * snapshot. "Is this player on Android" had no answer, so I invented one.
+ *
+ * So it is recorded in both places now, and both are pinned here:
+ *   profile  -> answers it for ONE player (the support question)
+ *   devices  -> answers it in aggregate (how many testers are on each)
+ *
+ * PROVE-RED (confirmed 2026-08-08): drop `plat` from socialSnapshot and PROFILE
+ * fails; drop it from the /events envelope or the devices upsert and DEVICE
+ * fails naming which half is missing.
+ * ------------------------------------------------------------------------- */
+test('PLAT the app can tell which shell it is running in', () => {
+  const nat = readFileSync(join(here, '..', 'js', 'native.js'), 'utf8');
+  assert.ok(/export function platformTag\(/.test(nat), 'platformTag is gone');
+  // it must distinguish the NATIVE shell from a browser: on iOS that is the
+  // difference between "Health just works" and "you need the Shortcut"
+  assert.ok(/isNative\(\)/.test(nat.slice(nat.indexOf('platformTag'))),
+    'platformTag does not consult isNative, so it cannot tell app from web');
+});
+test('PLAT PROFILE a player snapshot carries the platform', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/plat:\s*platformTag\(\)/.test(app), 'socialSnapshot no longer sends plat');
+});
+test('PLAT DEVICE analytics send it and the server stores it', () => {
+  const an = readFileSync(join(here, '..', 'js', 'analytics.js'), 'utf8');
+  const srv = readFileSync(join(here, '..', 'server', 'src', 'index.js'), 'utf8');
+  assert.ok(/plat:\s*platformTag\(\)/.test(an), 'the events envelope no longer carries plat');
+  assert.ok(/INSERT INTO devices \([^)]*\bplat\b/.test(srv), 'the devices upsert dropped the plat column');
+  assert.ok(/plat = COALESCE\(excluded\.plat/.test(srv), 'a returning device never updates its plat');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

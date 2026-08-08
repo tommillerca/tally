@@ -8,6 +8,28 @@ export function isNative() {
   } catch { return false; }
 }
 
+/* WHICH SHELL IS THIS? Tom, 2026-08-08, after I told him twice that Android had
+   no step support: it has had a full Health Connect bridge all along, and I
+   reasoned from a comment in this file instead of looking in native/android/.
+   The reason that guess was even possible is that NOTHING recorded the platform,
+   anywhere: not the events, not the devices table, not the profile. So "is this
+   player on Android" was unanswerable and I filled the gap with a guess.
+   Coarse on purpose: the shell and the OS family, nothing fingerprintable. */
+export function platformTag() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  const os = /iPhone|iPad|iPod/i.test(ua) ? 'ios'
+    : /Android/i.test(ua) ? 'android'
+      : /Macintosh/i.test(ua) ? 'mac'
+        : /Windows/i.test(ua) ? 'win'
+          : 'other';
+  if (isNative()) return os === 'other' ? 'native' : os;
+  // a home-screen PWA behaves differently from a browser tab, and on iOS it is
+  // the difference between "Health just works" and "you need the shortcut"
+  const standalone = (typeof navigator !== 'undefined' && navigator.standalone === true)
+    || (typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches);
+  return `${os}-${standalone ? 'pwa' : 'web'}`;
+}
+
 function health() {
   return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Health) || null;
 }

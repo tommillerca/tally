@@ -58,7 +58,7 @@ import {
   SEED_IDS, seedName, isRareSeed, growMinutes, PLOTS_MAX, SEED_ODDS,
   HARVEST_BASE, HARVEST_BASE_RARE,
 } from './garden.js';
-import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume } from './native.js';
+import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
   deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
@@ -9887,7 +9887,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v310'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v311'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -10042,6 +10042,7 @@ async function socialSnapshot() {
     weekKey: wk.weekKey,
     weekSteps: wk.steps,
     raceV: RACE_RULES,   // which rules counted it; the server ranks only current ones
+    plat: platformTag(), // which shell they are on, so support is a lookup not a guess
 
     level: lvl.level,
     levelName: lvl.name,

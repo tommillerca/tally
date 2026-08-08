@@ -151,12 +151,13 @@
 
   <div class="card">
     <h2><span class="num">2</span> Work out which version you have</h2>
-    <p>There are two ways people are running Boneheadz, and the fix is different for each.</p>
+    <p>There are three ways people are running Boneheadz, and the fix is different for each.</p>
     <ol class="steps">
-      <li>If you installed it from <b>TestFlight</b> or the <b>Play Store</b>, you have the <b>app</b>. Go to step 3.</li>
-      <li>If you opened it in <b>Safari</b> and tapped <b>Add to Home Screen</b>, you have the <b>web version</b>. Go to step 4.</li>
+      <li><b>iPhone, installed from TestFlight</b> → go to step 3.</li>
+      <li><b>iPhone, added to your Home Screen from Safari</b> → go to step 4.</li>
+      <li><b>Android, installed from the Play Store</b> → go to step 5.</li>
     </ol>
-    <p class="muted">Not sure? Open it and pull down on the screen. If the page refreshes like a website, you're on the web version.</p>
+    <p class="muted">On iPhone and not sure which? Open Boneheadz and pull down on the screen. If it refreshes like a website, you added it from Safari.</p>
   </div>
 
   <div class="card">
@@ -184,11 +185,22 @@
   </div>
 
   <div class="card">
-    <h2><span class="num">5</span> If none of that works</h2>
-    <p>Two things worth checking before you give up:</p>
+    <h2><span class="num">5</span> Android: allow it in Health Connect</h2>
+    <p>Boneheadz reads your steps through <b>Health Connect</b>, which is Android's own health hub. It's built in on Android 14 and newer; on older phones it's a free app from the Play Store.</p>
     <ol class="steps">
-      <li><b>Does your phone have any steps to give?</b> Open the Health app, tap <b>Browse</b>, then <b>Activity</b>, then <b>Steps</b>. If today is blank there too, the problem is your phone's motion tracking, not Boneheadz: <span class="path">iPhone Settings → Privacy &amp; Security → Motion &amp; Fitness</span> and make sure <b>Fitness Tracking</b> is on.</li>
-      <li><b>On Android?</b> Say so, because the Android build doesn't read step data at all yet. That's on us, not you, and it means the egg genuinely can't fill.</li>
+      <li>Open <b>Health Connect</b> (search your apps for it, or <span class="path">Settings → Security &amp; privacy → More privacy settings → Health Connect</span>).</li>
+      <li>Go to <b>App permissions</b>, find <b>Boneheadz Gym</b>, and turn on <b>Steps</b>. Turn on <b>Active calories</b> too while you're there.</li>
+      <li>Check Health Connect actually has steps in it. Under <b>Data and access → Activity → Steps</b>, you should see today's count. If it's empty, whatever tracks your steps (Google Fit, Samsung Health, your watch) isn't writing to Health Connect yet, so turn that on in <i>that</i> app.</li>
+      <li>Back in Boneheadz, tap the <b>gear icon</b>, then <span class="path">Health → Connect</span>, and allow it.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">6</span> If none of that works</h2>
+    <p>Check your phone has any steps to give in the first place.</p>
+    <ol class="steps">
+      <li><b>iPhone:</b> open the Health app → <b>Browse</b> → <b>Activity</b> → <b>Steps</b>. If today is blank there too, the problem is your phone, not Boneheadz: <span class="path">Settings → Privacy &amp; Security → Motion &amp; Fitness</span>, and make sure <b>Fitness Tracking</b> is on.</li>
+      <li><b>Android:</b> open Health Connect → <b>Data and access</b> → <b>Activity</b> → <b>Steps</b>. If today is blank, nothing is writing steps into it yet.</li>
     </ol>
   </div>
 

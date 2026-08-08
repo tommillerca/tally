@@ -631,6 +631,14 @@ export default {
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
                   json_extract(profile,'$.outfit') outfit,
                   json_extract(profile,'$.pet') pet,
+                  json_extract(profile,'$.stats') stats,
+                  /* the COUNT, not the array. Tom, 2026-08-07: "when you click a
+                     friend on the leaderboard on the crew tab it shows their gear
+                     at 0 no matter who they are." It did, because this row never
+                     carried gear at all and the sheet renders p.gear.length.
+                     Sending the array would be up to 400 ids x 100 players; the
+                     sheet only ever shows the number. */
+                  json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
                   last_seen, created_at,
                   (SELECT COUNT(*) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) spires,
                   (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
@@ -645,6 +653,8 @@ export default {
           levelName: r.lvlName || null,
           badges: r.badges || 0,
           outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(), // cosmetic ids only; art renders client-side
+          stats: (() => { try { return r.stats ? JSON.parse(r.stats) : null; } catch { return null; } })(),
+          gearCount: r.gearCount || 0,
           pet: (() => { try { return r.pet ? JSON.parse(r.pet) : null; } catch { return null; } })(), // {id, level, shiny, lineage}: the board must show a shiny as its shiny
           friendCode: r.friend_code,
           lastSeen: r.last_seen,
@@ -839,16 +849,20 @@ export default {
         // from Cloudflare (country/region/city off the request IP; no device GPS).
         const cf = request.cf || {};
         const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
+        // `plat` is the shell + OS family, nothing fingerprintable. Without it,
+        // "is this player on Android" was unanswerable and support was guesswork.
+        const plat = (typeof body.plat === 'string' && body.plat) ? body.plat.slice(0, 16) : null;
         await env.DB.prepare(
-          `INSERT INTO devices (device, label, country, region, city, first_seen, last_seen)
-           VALUES (?,?,?,?,?,?,?)
+          `INSERT INTO devices (device, label, plat, country, region, city, first_seen, last_seen)
+           VALUES (?,?,?,?,?,?,?,?)
            ON CONFLICT(device) DO UPDATE SET
              label = COALESCE(excluded.label, devices.label),
+             plat = COALESCE(excluded.plat, devices.plat),
              country = COALESCE(excluded.country, devices.country),
              region = COALESCE(excluded.region, devices.region),
              city = COALESCE(excluded.city, devices.city),
              last_seen = excluded.last_seen`
-        ).bind(device, label, cf.country || null, cf.region || cf.regionCode || null, cf.city || null, now, now).run();
+        ).bind(device, label, plat, cf.country || null, cf.region || cf.regionCode || null, cf.city || null, now, now).run();
         return json({ ok: true, accepted: ops.length });
       }
 
