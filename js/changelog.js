@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 329, date: '2026-08-08', title: 'Crates crack open', items: [
+    'Opening a crate is a <b>proper moment</b> now: the crate lands, the lid blows off, light climbs out of it and your card rises out of the box. A crate deals a hand, so tap or drag each card away to see the next.',
+    'The <b>daily crate</b> was being cut in the wrong place, so its lid sliced through the box. Fixed by measuring the artwork.',
+    'Swiping between friends in the Crew tab is <b>less twitchy</b>.',
+  ] },
   { n: 328, date: '2026-08-08', title: 'Drag through your Crew properly', items: [
     'Dragging the fan sideways now <b>moves you through your friends</b> as you go, and a longer drag travels further. It used to slide the whole deck as one block, spring back, and move you exactly one friend however far you dragged.',
   ] },
