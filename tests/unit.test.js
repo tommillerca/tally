@@ -594,6 +594,48 @@ test('spawn ingredients: every common is reachable from every spawn type, theme 
   assert.equal(a.id, b.id, 'a spawn must keep showing the same ingredient it advertises');
 });
 
+/* NEVER ANIMATE TRANSFORM ON A MAPLIBRE MARKER ROOT.
+   A MapLibre DOM marker is positioned by a transform on the element you hand it,
+   so any keyframe that animates `transform` on that same element wipes out the
+   translate and parks the marker at the map container's origin. It has now cost
+   two bugs: the spire markers in v161, and every in-range POI icon on 2026-08-08
+   ("the mini boss icon disappears and swaps for the bottom button").
+   This is a static scan because the failure is invisible in a DOM check: the
+   element is still present, still visible, still opacity 1 — it is just in the
+   wrong corner. Root classes are the ones passed to domMarker(); inner elements
+   like .den-fx and .spire-fx are the CORRECT place to animate transforms, so
+   selectors ending in a descendant are ignored.
+   PROVE-RED: point .map-mini-mark.inrange back at spawnReady and this fails. */
+test('map markers: no transform animation on a MapLibre marker root', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  // which keyframes animate transform?
+  const movers = new Set();
+  for (const m of css.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n\}/g)) {
+    if (/[^-]transform\s*:/.test(m[2])) movers.add(m[1]);
+  }
+  assert.ok(movers.size > 0, 'expected to find transform keyframes (an empty scan is a failure)');
+  const ROOTS = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-you', 'map-glutton-mark'];
+  const bad = [];
+  for (const m of css.matchAll(/([^{}\n][^{}]*)\{([^{}]*)\}/g)) {
+    const sel = m[1].trim(), body = m[2];
+    const anim = /animation(?:-name)?\s*:\s*([^;]+)/.exec(body);
+    if (!anim) continue;
+    for (const root of ROOTS) {
+      if (!sel.includes('.' + root)) continue;
+      // only flag when the ANIMATED element is the root itself, not a descendant
+      const last = sel.split(',').map(x => x.trim()).filter(x => x.includes('.' + root));
+      for (const one of last) {
+        const tail = one.split(/\s+/).pop();
+        if (!tail.includes('.' + root)) continue;              // animates a child: fine
+        for (const kf of movers) {
+          if (new RegExp('\\b' + kf + '\\b').test(anim[1])) bad.push(`${one} -> ${kf}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(bad, [], 'these animate transform on a marker root and will teleport the marker:\n  ' + bad.join('\n  '));
+});
+
 // ---- boss dens (the bone road, reimagined) ----
 const poi = await import('../js/poi.js');
 /* Dens RELOCATE weekly (Tom, 2026-08-08). This test used to assert the exact

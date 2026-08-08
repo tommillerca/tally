@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 316, date: '2026-08-08', title: 'The icon stops vanishing when you get close', items: [
+    'Walking into range of a <b>mini-boss, boss den or bone pile</b> made its icon disappear off the map, leaving only the button at the bottom. It was not hidden: the glow animation was fighting the map for control of where the marker sits, and the map lost, so the icon was flung into the top-left corner behind the header.',
+    'Now the icon <b>stays where it belongs and pulses</b> when you are close enough to act on it, and the button is still there too. Both, so you can see what you are walking up to.',
+  ] },
   { n: 314, date: '2026-08-08', title: 'Your name, your loot, your ground', items: [
     'Two players could take the <b>same name</b>. There was no uniqueness check at all, and it was never bad luck: everyone reaches for the same joke, so the funniest combination is the one that collides. Names are now first-come, and if yours is taken the app offers you the next free number.',
     'Boss dens and the Glutton were handing <b>everyone the same drop</b>. The roll was seeded by the boss and the day with nothing about you in it, so two players who beat the same den got the identical two pieces. Drops are yours now.',

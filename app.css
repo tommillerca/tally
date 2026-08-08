@@ -4751,7 +4751,25 @@ body::before {
   width: 26px; height: 6px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
 }
 .map-spawn.rare { border-color: var(--violet); box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5); animation: none; }
-.map-spawn.inrange { border-color: var(--accent); border-width: 4px; animation: spawnReady 1.4s ease-in-out infinite; }
+
+/* IN-RANGE PULSE, TRANSFORM-FREE.
+   Tom, 2026-08-08: "the mini boss icon disappears and swaps for the bottom
+   button ... the icon should pulse or glow when you're near it".
+   The icon was not hidden, it was THROWN OFF THE MAP. `spawnReady` animates
+   `transform: scale()` and was applied to the marker ROOT, and a MapLibre DOM
+   marker is positioned by a transform on that same element, so the keyframe
+   overwrote the translate and parked every in-range marker at the map's
+   top-left corner, behind the topbar. Measured 2026-08-08: player marker
+   matrix(1,0,0,1,173.5,370.5), in-range mini matrix(1.066,0,0,1.066,0,0).
+   This is the same trap that bit the spire markers in v161, which is why
+   .map-den-mark documents "the marker root carries ONLY size/position".
+   So the pulse is filter-only: it reads as a glow, and it physically cannot
+   move a marker. tests/unit.test.js pins the rule so it cannot come back. */
+@keyframes poiReady {
+  0%, 100% { filter: drop-shadow(0 0 1px rgba(165, 232, 71, .35)); }
+  50% { filter: drop-shadow(0 0 11px var(--accent)) drop-shadow(0 0 3px var(--accent)); }
+}
+.map-spawn.inrange { border-color: var(--accent); border-width: 4px; animation: poiReady 1.4s ease-in-out infinite; }
 @keyframes spawnReady { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 .map-spawn.far { width: 30px; height: 30px; border-width: 2.5px; opacity: 0.66; }
 .map-spawn.far::after { width: 18px; height: 5px; bottom: -7px; }
@@ -4764,7 +4782,7 @@ body::before {
   content: ''; position: absolute; left: 50%; bottom: 1px; transform: translateX(-50%);
   width: 34px; height: 9px; border-radius: 50%; background: rgba(0, 0, 0, 0.5); z-index: -1;
 }
-.map-den-mark.inrange { animation: spawnReady 1.4s ease-in-out infinite; }
+.map-den-mark.inrange { animation: poiReady 1.4s ease-in-out infinite; }
 
 /* the player: same die-cut treatment, no glow */
 .map-you-av {
@@ -4792,7 +4810,7 @@ body::before {
   width: 22px; height: 5px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
 }
 .map-mini-mark.t2 { border-color: var(--gold); background: var(--surface); filter: none; }
-.map-mini-mark.inrange { border-width: 4px; animation: spawnReady 1.4s ease-in-out infinite; }
+.map-mini-mark.inrange { border-width: 4px; animation: poiReady 1.4s ease-in-out infinite; }
 .map-mini-mark svg { width: 17px; height: 17px; }
 
 /* the in-range action buttons join the sticker family: same offset shadow as the
