@@ -5819,6 +5819,37 @@ body::before {
   background: var(--surface-2);
   will-change: transform; box-shadow: 0 10px 18px rgba(0, 0, 0, .45);
 }
+/* THE PLATE EARNS ITS COLOUR. Tom, 2026-08-08: "should the pets also be in front
+   of the dark background? or does it look better with a different brand colour"
+   A flat brand wash was the wrong answer twice over: coral is the deck's hero
+   accent and spending it on a background dilutes it, and a single colour behind
+   every pet says nothing. So the tint is the pet's RARITY, which is the mockup's
+   own spec and the one piece of information the plate can carry for free.
+   Kept low (0x33 alpha over near-black) for a measured reason: a LIGHT plate was
+   tried and the pale species disappear into it. The cloud is white-blue, so it
+   read as a smudge on bone, while the orange lizard popped. A dark ground is the
+   only one that treats every species fairly. */
+.cf-card.r-common { background: radial-gradient(120% 90% at 50% 18%, rgba(143, 133, 120, .2), #1a1820 68%); }
+.cf-card.r-uncommon { background: radial-gradient(120% 90% at 50% 18%, rgba(165, 232, 71, .2), #1a1820 68%); }
+.cf-card.r-rare { background: radial-gradient(120% 90% at 50% 18%, rgba(124, 196, 255, .2), #1a1820 68%); }
+.cf-card.r-epic { background: radial-gradient(120% 90% at 50% 18%, rgba(155, 146, 232, .2), #1a1820 68%); }
+.cf-card.r-legendary { background: radial-gradient(120% 90% at 50% 18%, rgba(255, 201, 97, .2), #1a1820 68%); }
+/* THE PLATE EARNS ITS COLOUR. Tom, 2026-08-08: "should the pets also be in front
+   of the dark background? or does it look better with a different brand colour"
+   -> he picked the rarity tint over a flat brand wash.
+   Which is the right call twice over: coral is the deck's hero accent and spending
+   it on a background dilutes it, and one flat colour behind every pet says
+   nothing. The tint is the pet's RARITY, so the plate carries information for
+   free. This is also the original mockup's spec, which I had dropped.
+   Kept low (.2 alpha over near-black) for a MEASURED reason: a light plate was
+   rendered and the pale species disappear into it. The cloud is white-blue, so on
+   bone it read as a smudge while the orange lizard popped. A dark ground is the
+   only one that treats every species fairly. */
+.cf-card.r-common { background: radial-gradient(120% 90% at 50% 18%, rgba(143, 133, 120, .2), #1a1820 68%); }
+.cf-card.r-uncommon { background: radial-gradient(120% 90% at 50% 18%, rgba(165, 232, 71, .2), #1a1820 68%); }
+.cf-card.r-rare { background: radial-gradient(120% 90% at 50% 18%, rgba(124, 196, 255, .2), #1a1820 68%); }
+.cf-card.r-epic { background: radial-gradient(120% 90% at 50% 18%, rgba(155, 146, 232, .2), #1a1820 68%); }
+.cf-card.r-legendary { background: radial-gradient(120% 90% at 50% 18%, rgba(255, 201, 97, .2), #1a1820 68%); }
 .cf-card.active { border-color: var(--accent); }
 .cf-card.picked { border-color: var(--violet); }
 .cf-art { position: absolute; inset: 0; display: grid; place-items: center; }

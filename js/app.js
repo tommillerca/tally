@@ -8132,7 +8132,16 @@ async function openStable(opts = {}) {
           data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         <span class="cf-lv">LV ${lvl}</span>
-        <span class="cf-art">${petPortraitHtml(x.sp, 124, x.shiny, { mass: true })}</span>
+        <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
+             have animations for. that is the cloud, the orange liz and the purple
+             liz." That is ANIMATED_PETS = C1, C4, CX exactly.
+             petSpriteHtml rather than petPortraitHtml: it prefers the animated
+             build where one exists and falls back to the cropped still otherwise,
+             and it already resolves the one case that would break the figure
+             contract -- there are no animated SHINY variants, so a shiny pet
+             (except CX, whose amethyst art IS its special look) renders its
+             recoloured still instead of quietly losing the shiny. -->
+        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny })}</span>
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
@@ -10389,7 +10398,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v323'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v324'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
