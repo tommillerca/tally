@@ -101,9 +101,19 @@ function denCellOf(lat, lng) {
   return { cx: Math.round(lat / DEN_CELL_DEG), cy: Math.round(lng / DEN_CELL_DEG) };
 }
 
-// One den per den-cell, at a PERMANENT position (seeded by cell alone).
+/* One den per den-cell. Its POSITION is week-seeded, so a landmark den moves
+   within its cell every Monday alongside its theme and tier.
+   Tom, 2026-08-08: "let's make it so boss dens change their location every week."
+   Previously the position was seeded by cell ALONE (permanent) while only the
+   theme and tier rerolled, so the same three pins sat on the same three corners
+   forever and the weekly refresh was invisible unless you read the boss name.
+   Adding `week` to the position seed is also what moves them TODAY: this week's
+   seed differs from the old cell-only one, so the first load after this ships
+   relocates every den, then they move again at each ISO week boundary.
+   The claim key is `boss-<week>-<id>` and the id stays cell-based, so a move
+   cannot resurrect a den you already beat this week. */
 function denForCell(week, cx, cy) {
-  const posRng = mulberry32(hashStr(`den:${cx}:${cy}`));
+  const posRng = mulberry32(hashStr(`den:${week}:pos:${cx}:${cy}`));
   const lat = (cx + (posRng() - 0.5) * 0.86) * DEN_CELL_DEG;
   const lng = (cy + (posRng() - 0.5) * 0.86) * DEN_CELL_DEG;
   // weekly identity: theme, boss tier

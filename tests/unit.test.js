@@ -528,22 +528,60 @@ test('boneheadz: yard decor is retired (no YD slot)', () => {
 
 // ---- boss dens (the bone road, reimagined) ----
 const poi = await import('../js/poi.js');
-test('dens: permanent positions, weekly identity, deterministic', () => {
+/* Dens RELOCATE weekly (Tom, 2026-08-08). This test used to assert the exact
+   opposite ("landmarks never move"), so it is the proven-red guard for the
+   change: it fails against the old cell-only position seed.
+   Two halves, and both matter. Stable WITHIN a week, or the den you are walking
+   to teleports mid-journey. Moved BETWEEN weeks, or the relocation silently
+   stops working and nobody notices, because a den in the wrong place looks
+   exactly like a den in the right place. */
+test('dens: weekly relocation, stable within a week, deterministic', () => {
   const wk = '2026-W27';
   const a = poi.densNear(wk, 49.2827, -123.1207);
   const b = poi.densNear(wk, 49.2827, -123.1207);
   assert.equal(a.length, 9);
   assert.deepEqual(a.map(d => d.id), b.map(d => d.id), 'same cells, same dens');
-  assert.deepEqual([a[0].lat, a[0].lng], [b[0].lat, b[0].lng], 'positions stable');
-  // positions do NOT change across weeks; identity (tier/theme) may
+  assert.deepEqual([a[0].lat, a[0].lng], [b[0].lat, b[0].lng], 'positions stable within the week');
   const c = poi.densNear('2026-W28', 49.2827, -123.1207);
-  assert.deepEqual(a.map(d => [d.id, d.lat, d.lng]), c.map(d => [d.id, d.lat, d.lng]), 'landmarks never move');
+  // ids are cell-based and must NOT change (the weekly claim key depends on it)
+  assert.deepEqual(a.map(d => d.id).sort(), c.map(d => d.id).sort(), 'cell identity survives the move');
+  // every den must land somewhere new next week
+  const posByIdA = new Map(a.map(d => [d.id, `${d.lat},${d.lng}`]));
+  const moved = c.filter(d => posByIdA.get(d.id) !== `${d.lat},${d.lng}`);
+  assert.equal(moved.length, c.length, 'every landmark den relocates across weeks');
+  // and it stays inside its own cell, so "a few dens within any walk" still holds
+  for (const d of c) {
+    const [cx, cy] = d.id.split('_').map(Number);
+    assert.ok(Math.abs(d.lat / poi.DEN_CELL_DEG - cx) <= 0.5, 'moved den stays in its cell (lat)');
+    assert.ok(Math.abs(d.lng / poi.DEN_CELL_DEG - cy) <= 0.5, 'moved den stays in its cell (lng)');
+  }
   for (const d of a) {
     assert.ok(d.tier >= 0 && d.tier < poi.DEN_TIERS.length);
     assert.ok(d.mult >= 0.7 && d.mult <= 1.32, 'boss scale within audited pit range');
     assert.ok(d.name && d.boss);
     assert.ok(d.reward.xp > 0);
   }
+});
+/* SCOUTING, at the generator level. js/app.js now passes scoutLat/scoutLng (the
+   map centre) into these instead of the GPS fix, so "keep looking and more of
+   the world resolves" only works if the generators are genuinely anchor-driven.
+   tests/scout-audit.mjs proves the end-to-end pan for DENS in a real browser;
+   spires are covered here because the walkability snap suppresses every spire at
+   the audit's test coordinates, so the browser pass never exercises that layer
+   and must not be read as evidence that it works. */
+test('scouting: den + spire generators follow their anchor, not the player', async () => {
+  const spires = await import('../js/spires.js');
+  const wk = '2026-W27';
+  const here = poi.densNear(wk, 49.2827, -123.1207);
+  const away = poi.densNear(wk, 49.2827, -123.0607);   // ~4.4km east: clears the 3x3 window
+  const hereIds = new Set(here.map(d => d.id));
+  assert.ok(away.some(d => !hereIds.has(d.id)), 'a den window moved with the anchor');
+
+  const sHere = spires.spiresNear(49.2827, -123.1207);
+  const sAway = spires.spiresNear(49.2827, -123.0007);  // ~8.8km east: clears the spire window
+  assert.ok(sHere.length > 0 && sAway.length > 0, 'both anchors produce spires (empty sample is a failure)');
+  const sHereIds = new Set(sHere.map(s => s.id));
+  assert.ok(sAway.some(s => !sHereIds.has(s.id)), 'a spire window moved with the anchor');
 });
 test('dens: weekly claim keys + reward labels', () => {
   const wk = poi.isoWeekKey(new Date('2026-07-04T12:00:00Z'));

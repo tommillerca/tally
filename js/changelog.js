@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 313, date: '2026-08-08', title: 'The dens move, and the map keeps going', items: [
+    'Boss dens now <b>relocate every week</b>. They used to sit on the same spot forever and only swap which boss was home, so the weekly refresh was invisible unless you read the name. New week, new places to walk to. They have already moved for this week.',
+    'The Boneyard <b>keeps loading as you look around</b>. Dens, spires, minis and secrets used to only ever exist in a small bubble around your own feet, so dragging the map showed you empty ground no matter how far you went. Now the world fills in wherever you are looking.',
+    'Nothing you only <b>looked</b> at counts as reached. Range is still measured from where you are actually standing.',
+  ] },
   { n: 312, date: '2026-08-08', title: 'Boss dens got the bigger radius too', items: [
     'The roomier <b>75m reach</b> only ever applied to finds on the ground. Boss dens, Dark Spires, the Glutton and roaming minis were all left on their old, tighter range, which meant the things you make a special trip for were <b>harder to stand on than a random pickup</b>. Dens, spires and the Glutton are 80m now, and minis match finds at 75m.',
     'Secret dens are deliberately left tight. Having to be almost on top of one is the point of them.',

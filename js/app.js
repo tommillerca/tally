@@ -8676,6 +8676,40 @@ async function renderBoneyard(el) {
     }
 
     let lat = boot.coords.latitude, lng = boot.coords.longitude;
+
+    /* SCOUTING: POIs follow where you LOOK, not only where you stand.
+     *
+     * Tom, 2026-08-08: "right now when I look through the boneyard I can't see
+     * spires outside a certain location or other POIs. The map should continue
+     * to load other POIs if you keep looking. Just make sure that this feature
+     * doesn't make the app load slower."
+     *
+     * Every generator (densNear, minisNear, spiresNear, secretsNear) builds a
+     * fixed 3x3 grid of cells around a point, and that point was always your GPS
+     * fix. So the world was a disc a few km wide welded to your body: panning
+     * moved the camera over an empty map and nothing new could ever resolve.
+     *
+     * `scoutLat/scoutLng` is that generation anchor, and it now tracks the map
+     * centre. Follow mode keeps the centre on you, so standing still behaves
+     * exactly as before.
+     *
+     * WHY THIS CANNOT COST FRAME TIME (his actual constraint):
+     *  - The grid stays 3x3. We MOVE the window, never widen it, so the marker
+     *    count and the number of placeWalkable calls per pass are unchanged.
+     *    More of the world is reachable; none of it is resolved at once.
+     *  - Generation is pure seeded arithmetic (mulberry32 + a hash). The cost
+     *    that matters is DOM markers and the walkability snap, and both are
+     *    bounded by the same 3x3 window as before.
+     *  - The anchor only moves once the view has travelled SCOUT_STEP_M, so a
+     *    pan produces a handful of regenerations instead of one per frame.
+     *    moveend already debounces to camera-settled; this debounces distance.
+     *  - Distance and bearing are still measured from YOUR position, so "in
+     *    range", the Enter button and the collect ring are untouched. Looking at
+     *    a den 3 km away can never make it enterable.
+     */
+    const SCOUT_STEP_M = 400;
+    let scoutLat = lat, scoutLng = lng;
+
     // remember where we are (used by the map, not by notifications any more);
     // scheduleRares now only clears rare pushes already queued on the device.
     kvSet('lastLoc', { lat, lng, at: Date.now() }).then(() => scheduleRares()).catch(() => {});
@@ -8710,6 +8744,25 @@ async function renderBoneyard(el) {
     $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
 
     let loaded = false, follow = true;
+
+    /* Move the scouting anchor (see SCOUT_STEP_M above). Declared here, below
+       `follow`, deliberately: this file has already shipped a bug where a hoisted
+       function read a `let` still in the temporal dead zone and placement
+       silently stopped running. Returns true when the anchor actually moved.
+       While following, the anchor is pinned to your exact fix, so walking around
+       behaves identically to before scouting existed; the distance debounce only
+       applies once you have dragged the map away. */
+    function retargetScout() {
+      if (follow || !map || typeof map.getCenter !== 'function') {
+        if (scoutLat === lat && scoutLng === lng) return false;
+        scoutLat = lat; scoutLng = lng;
+        return true;
+      }
+      const c = map.getCenter();
+      if (distanceM(scoutLat, scoutLng, c.lat, c.lng) < SCOUT_STEP_M) return false;
+      scoutLat = c.lat; scoutLng = c.lng;
+      return true;
+    }
     try {
       map = createBoneyardMap(maplibregl, $('#mapCanvas', body), { lat, lng });
     } catch (e) {
@@ -8773,10 +8826,19 @@ async function renderBoneyard(el) {
       // "Cannot access 'collected' before initialization" and placement silently
       // did not run. Wait until the setup below has actually completed.
       if (!worldReady) return;
+      const scouted = retargetScout();
       if (typeof refreshSpawns === 'function') refreshSpawns();
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
       if (typeof refreshGlutton === 'function') refreshGlutton();
+      /* You have looked somewhere genuinely new: resolve the layers that are not
+         part of the ordinary settle pass. Gated on `scouted` because spires cost
+         a network round trip; on every moveend that would be a request per pan.
+         Secrets are local but pointless to recompute when the anchor has not moved. */
+      if (scouted) {
+        if (typeof refreshSecrets === 'function') refreshSecrets();
+        if (typeof refreshSpires === 'function') refreshSpires();
+      }
       placedOnce = true;
       tryReveal();
     };
@@ -9077,7 +9139,7 @@ async function renderBoneyard(el) {
     }
 
     function refreshDens() {
-      const dens = densNear(week, lat, lng, date);
+      const dens = densNear(week, scoutLat, scoutLng, date);
       // snap each den onto reachable ground; drop ones with nowhere reachable
       // (open water). Distance is recomputed from the placed spot so "in range"
       // and the Enter button match the marker you actually see.
@@ -9125,7 +9187,7 @@ async function renderBoneyard(el) {
     }
 
     function refreshMinis() {
-      const minis = minisNear(date, lat, lng);
+      const minis = minisNear(date, scoutLat, scoutLng);
       // snap onto reachable ground; suppress ones with nowhere reachable (water)
       const shown = [];
       for (const m of minis) {
@@ -9236,7 +9298,7 @@ async function renderBoneyard(el) {
       // Spires were the one POI family that skipped the walkability snap, so
       // they alone could stand in lakes and backyards. Same rule as dens now:
       // snap to reachable ground or stay hidden; distance from the placed spot.
-      const near = spiresNear(lat, lng).slice(0, 4).filter(s => {
+      const near = spiresNear(scoutLat, scoutLng).slice(0, 4).filter(s => {
         const placed = placeWalkable({ lat: s.lat, lng: s.lng }, spireSnap, s.id);
         if (placed === null) return false;
         s.lat = placed.lat; s.lng = placed.lng;
@@ -9343,7 +9405,7 @@ async function renderBoneyard(el) {
     // No marker, readout or button exists beyond SECRET_REVEAL_M — the whole
     // point is that these spread by rumor, not by map-reading.
     function refreshSecrets() {
-      const secrets = secretsNear(lat, lng);
+      const secrets = secretsNear(scoutLat, scoutLng);
       const liveKeys = new Set();
       let inRange = null;
       for (const s of secrets) {
@@ -9379,6 +9441,7 @@ async function renderBoneyard(el) {
     }
 
     async function refreshWorld() {
+      retargetScout();           // while following, keeps the anchor on your fix as you walk
       await refreshEggStrip();   // self-throttled to ~25s; drives the map's purpose line
       const rows = await db.all('xp');
       claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
@@ -9554,7 +9617,7 @@ async function renderBoneyard(el) {
     $('#mapSecret', body).addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const key = $('#mapSecret', body).dataset.secretKey;
-      const s = secretsNear(lat, lng).find(x => x.key === key);
+      const s = secretsNear(scoutLat, scoutLng).find(x => x.key === key);
       if (!s || s.dist > SECRET_RADIUS_M) return;
       const fighter = await buildFighter();
       openFight(wrap, fighter, {
@@ -9887,7 +9950,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v312'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v313'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
