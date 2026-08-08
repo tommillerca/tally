@@ -5074,7 +5074,8 @@ function friendCardHtml(f) {
   const chips = [];
   if (p.level) chips.push(`<span class="fc-chip lvl">Lv ${p.level}</span>`);
   if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
-  if (p.gear && p.gear.length) chips.push(`<span class="fc-chip">${p.gear.length} gear</span>`);
+  const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
+  if (gearN) chips.push(`<span class="fc-chip">${gearN} gear</span>`);
   if (p.pet) chips.push(`<span class="fc-chip">${bhIcon('egg', 12)} Lv ${p.pet.level}</span>`);
   const ol = onlineLabel(f.lastSeen);
   return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
@@ -5392,7 +5393,8 @@ async function renderFriends(el) {
       if (!p) return;
       openFriendProfile(
         { name: p.name, playerId: p.playerId, friendCode: p.friendCode, lastSeen: p.lastSeen,
-          profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName, badges: p.badges } },
+          profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
+            badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
         null,
         { stranger: true, isCrew: friendIds.has(p.playerId), sent: outIds.has(p.playerId) });
     });
@@ -5659,7 +5661,7 @@ function openFriendProfile(f, onChange, opts = {}) {
 
       <div class="fp-facts">
         <div class="fp-fact"><b>${p.badges ?? 0}</b><span>Badges</span></div>
-        <div class="fp-fact"><b>${p.gear ? p.gear.length : 0}</b><span>Gear</span></div>
+        <div class="fp-fact"><b>${p.gearCount ?? (p.gear ? p.gear.length : 0)}</b><span>Gear</span></div>
         <div class="fp-fact"><b>${petName ? 'Lv ' + p.pet.level : '-'}</b><span>${petName ? esc(petName) : 'No pet'}</span></div>
       </div>
 
@@ -9854,7 +9856,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v306'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v307'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -10356,7 +10358,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
-    { cls: 'full', onClose: () => { stopGluttonFoeAnim(); if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.'); } });
+    { cls: 'full', onClose: () => {
+      stopGluttonFoeAnim();
+      if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
+      /* CLOSE THE DOOR BEHIND A WIN. Tom, 2026-08-07: "i think you can spam beat
+         the one a day raid boss right now?? ... it should just be gone after the
+         one beat or greyed out till the next day."
+         The payout was already gated (claimDenWin returns null the second time,
+         so a repeat pays the base win and nothing else) and the row ALREADY
+         renders as TOMORROW once beaten. What was missing is rule 4 of the
+         rewarded-actions SOP in tally/CLAUDE.md: close the entry point too. The
+         Pit sheet was never re-rendered when the fight closed, so the FIGHT
+         button you had just used was still sitting there. */
+      if (pitWrap && pitWrap.isConnected && $('.pit-sect', pitWrap)) renderPit(pitWrap);
+    } });
 
   const body = $('#fightBody', wrap);
   let stopGluttonFoeAnim = () => {};
@@ -10374,17 +10389,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="fight-hud">
         <div class="hud-side you">
           <div class="fname">You</div>
-          <div class="hp-line"><div class="bar fhp"><i id="youHp" style="width:100%"></i></div><span class="hp-num" id="youHpNum"></span></div>
+          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
-          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini"><i id="petHp" style="width:100%"></i></div><span class="hp-num sm" id="petHpNum"></span></div>` : ''}
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
         </div>
         <div class="hud-side foe">
           <div class="fname">${esc(foe.name)}</div>
-          <div class="hp-line"><span class="hp-num" id="foeHpNum"></span><div class="bar fhp"><i id="foeHp" style="width:100%"></i></div></div>
+          <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
           <div class="fstate" id="foeState" hidden></div>
-          ${add ? `<div class="hud-pet" id="hudAdd"><span class="hp-num sm" id="addHpNum"></span><div class="bar fhp mini"><i id="addHp" style="width:100%"></i></div><span class="petname">${esc(add.name)}</span></div>` : ''}
+          ${add ? `<div class="hud-pet" id="hudAdd"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(add.d.maxHp / Math.max(1, foe.d.maxHp) * 100))}%"><i id="addHp" style="width:100%"></i></div></div>` : ''}
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
@@ -10461,21 +10476,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     el('rangePill').textContent = `Turn ${fight.turn}`;
   }
 
-  /* HOW MUCH HEALTH HAS THE OTHER ONE GOT? Tom, 2026-08-07: "I also find it
-     confusing how much health the second enemy has." A bare proportional bar
-     answers "what fraction is left", never "of how much", and the add's bar is a
-     4px sliver next to the boss's full-width one, so a healthy add and a nearly
-     dead one look the same and neither can be compared to the boss. Every bar in
-     the HUD now states its own numbers. */
-  const hpNum = (id, cur, max) => {
-    const n = el(id);
-    if (n) n.textContent = `${Math.max(0, Math.round(cur))}/${Math.round(max)}`;
-  };
+  /* HOW MUCH HEALTH HAS THE OTHER ONE GOT? Tom asked for that on 2026-08-07 ("I
+     also find it confusing how much health the second enemy has"), I answered
+     with numbers on every bar, and he ruled against them the same day: "that
+     isnt necessary at all remove it." So the answer is the bar's own LENGTH
+     instead. A side's mini bar is now sized against the fighter above it: a pet
+     with a fifth of your health is a fifth as long as your bar, and an add with
+     half the boss's pool is half as long as the boss's. It reads at a glance
+     without a single digit on screen, which is the version he wanted. */
   function updateBars() {
-    hpNum('youHpNum', player.hp, player.d.maxHp);
-    hpNum('foeHpNum', foe.hp, foe.d.maxHp);
-    if (petBody) hpNum('petHpNum', petBody.hp, petBody.d.maxHp);
-    if (add) hpNum('addHpNum', add.hp, add.d.maxHp);
     el('youHp').style.width = (player.hp / player.d.maxHp * 100) + '%';
     el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
     el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';

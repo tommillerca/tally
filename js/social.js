@@ -23,7 +23,7 @@
 
 import { kvGet, kvSet, exportAll, importAll } from './db.js';
 import { award } from './game.js';
-import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd } from './loot.js';
+import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
 // hidden while unset. Overridable for tests/dev via ?api= or kv 'apiBase'.
@@ -458,6 +458,8 @@ async function applyPayload(key, type, p) {
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
   if (p.crate) await grantCrate(p.crate, 'social');
   if (p.consumable) await grantConsumable(p.consumable, 'social');
+  // `egg: 'ready'` hands over one that can be cracked immediately (goal 0)
+  if (p.egg) await grantEgg('social', p.egg === 'ready' ? 0 : undefined);
   if (p.gearId) await grantGear(p.gearId, 'social');
   return true;
 }

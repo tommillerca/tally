@@ -11,7 +11,8 @@
  *   - samples === 0       → an empty sample set is a FAILURE, never a pass.
  */
 import { boot, sleep } from './godmode.js';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,7 +20,23 @@ import path from 'node:path';
 // ~200 screenshots in this run. The default 30s CDP timeout is fine against the
 // CDN but not against a local server sharing the machine with another session,
 // where captureScreenshot has stalled past it mid-sweep.
-const { browser, page } = await boot(process.env.URL, { protocolTimeout: 180000 });
+/* DEFAULT TO WHAT YOU ARE ABOUT TO SHIP. This booted `process.env.URL` with no
+   fallback, so an unset URL sent boot() to ITS default, which is the live site.
+   Every local run was therefore grading github.io instead of the working tree,
+   which is how a misregistered mask stayed green here for thirty builds while it
+   was visibly broken on Tom's phone. Local by default now, URL=... for live,
+   the same convention as the rest of the suite. */
+// fileURLToPath, not .pathname: this repo lives under a path with a space in it
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+let srv = null;
+let base = process.env.URL;
+if (!base) {
+  srv = spawn('python3', ['-m', 'http.server', '8219', '--bind', '127.0.0.1'],
+    { cwd: path.resolve(HERE, '..'), stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 900));
+  base = 'http://127.0.0.1:8219/';
+}
+const { browser, page } = await boot(base, { protocolTimeout: 180000 });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -37,7 +54,8 @@ const equipped = await page.evaluate(async () => {
   return { id: w.id, rarity: w.rarity };
 });
 check('an epic+ main-hand is equipped', !!equipped, equipped ? `${equipped.id} (${equipped.rarity})` : 'NONE FOUND');
-if (!equipped) { await browser.close(); process.exit(1); }
+if (!equipped) { await browser.close();
+if (srv) srv.kill(); process.exit(1); }
 
 await page.evaluate(() => { location.hash = '#/bonehead'; }); await sleep(2000);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click());
@@ -66,13 +84,22 @@ const el = await page.evaluate(async () => {
     maskSize: cs.maskSize || cs.webkitMaskSize,
     anim: after.animationName, dur: after.animationDuration,
     blend: after.mixBlendMode,
+    artFit: (() => { const i = s.parentElement?.querySelector('img'); return i ? getComputedStyle(i).objectFit : null; })(),
+    artPos: (() => { const i = s.parentElement?.querySelector('img'); return i ? getComputedStyle(i).objectPosition : null; })(),
+    maskPos: cs.maskPosition || cs.webkitMaskPosition,
     rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
   };
 });
 check('the sheen element renders in the Wardrobe', !!el);
 if (!el) { await browser.close(); process.exit(1); }
 check('its mask is the weapon art, and it DECODED', el.maskDecoded, `${el.maskUrl} ${el.dims}`);
-check('mask-size is cover (matches object-fit: cover)', el.maskSize === 'cover', el.maskSize);
+/* NOT a hard-coded 'cover'. This asserted the literal value the Wardrobe used
+   when the check was written, and the Wardrobe moved to `contain` in v276, so the
+   check went red for the CORRECT value and would have gone green for a mask that
+   no longer matched. Assert the relationship, which is the thing that matters:
+   the mask is scaled and placed exactly like the art it is masking. */
+check('mask-size matches the art\'s object-fit', el.maskSize === el.artFit, `mask ${el.maskSize} vs art ${el.artFit}`);
+check('mask-position matches the art\'s object-position', el.maskPos === el.artPos, `mask ${el.maskPos} vs art ${el.artPos}`);
 check('the charge is animating', el.anim === 'wpnCharge', `${el.anim} ${el.dur}`);
 check('it modulates rather than paints (overlay)', el.blend === 'overlay', el.blend);
 
@@ -206,10 +233,15 @@ const probe = label => page.evaluate(l => {
     const fit = getComputedStyle(art).objectFit;
     const r = stack.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;             // not laid out / hidden
+    const cs = sheen ? getComputedStyle(sheen) : null;
     out.push({
       sheen: !!sheen,
       fit,
-      mask: sheen ? (getComputedStyle(sheen).maskSize || getComputedStyle(sheen).webkitMaskSize) : null,
+      pos: getComputedStyle(art).objectPosition,
+      maskPos: cs ? (cs.maskPosition || cs.webkitMaskPosition) : null,
+      avFit: cs ? cs.getPropertyValue('--av-fit').trim() : null,
+      avPos: cs ? cs.getPropertyValue('--av-pos').trim() : null,
+      mask: cs ? (cs.maskSize || cs.webkitMaskSize) : null,
       anim: sheen ? getComputedStyle(sheen, '::after').animationName : null,
       size: `${Math.round(r.width)}x${Math.round(r.height)}`,
     });
@@ -217,6 +249,12 @@ const probe = label => page.evaluate(l => {
   return { surface: l, stacks: out };
 }, label);
 
+const cssState = await page.evaluate(async () => {
+  const txt = await fetch('app.css', { cache: 'no-store' }).then(r => r.text()).catch(() => '');
+  const live = [...document.styleSheets].some(ss => { try { return [...ss.cssRules].some(r => r.selectorText && /\.pd-center \.bh-stage\.lg \.bh-anim$/.test(r.selectorText) && r.style.getPropertyValue('--av-fit')); } catch { return false; } });
+  return { fetchedHasRule: /--av-pos: 50% 72%/.test(txt), liveSheetHasRule: live, sw: !!navigator.serviceWorker?.controller };
+});
+console.log('CSS STATE', JSON.stringify(cssState));
 const surfaces = [];
 await page.evaluate(() => { location.hash = '#/today'; }); await sleep(2300);
 await page.evaluate(() => document.querySelector('.dw')?.remove());
@@ -248,8 +286,14 @@ for (const s of surfaces) {
   checkedStacks += s.stacks.length;
   sawSheen += mine.length;
   console.log(`\n${s.surface}: ${s.stacks.length} stack(s), ${mine.length} carrying the charge`);
-  for (const x of s.stacks) console.log(`   ${x.size.padEnd(9)} fit=${x.fit.padEnd(8)} mask=${x.mask || '-'}  ${x.anim || ''}`);
+  for (const x of s.stacks) console.log(`   ${x.size.padEnd(9)} fit=${x.fit.padEnd(8)} mask=${String(x.mask || '-').padEnd(8)} pos=${String(x.pos).padEnd(10)} maskPos=${String(x.maskPos || '-').padEnd(10)} ${x.anim || ''}`);
   for (const x of mine) {
+    /* SIZE AND PLACE. Only the size was ever compared, so a surface that moves
+       the art with object-position (the Wardrobe's `50% 72%`, shipping since
+       v276) kept a mask pinned to centre and the charge floated beside the sword
+       instead of sitting on it. Tom photographed exactly that on 2026-08-07. */
+    check(`${s.surface}: mask sits where the art sits`, x.maskPos === x.pos,
+      `mask-position ${x.maskPos} vs object-position ${x.pos}`);
     check(`${s.surface}: mask is in register with the art`, x.mask === x.fit,
       `mask-size ${x.mask} vs object-fit ${x.fit}`);
     check(`${s.surface}: the charge is running`, x.anim === 'wpnCharge', String(x.anim));

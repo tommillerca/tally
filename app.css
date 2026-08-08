@@ -1040,14 +1040,11 @@ body::before {
 .splash-mark { width: min(78%, 320px); }
 
 /* ---------- hero reframe: whole body + yard ---------- */
-/* THE FIGURE GRID on the home poster. Built from
-   market-quality-mockups/today-v4.html; the rules are in tally/CLAUDE.md under
-   "The figure contract".
-     --safe   gutter no drawing may enter
-     --strip  the band at the bottom that carries level + XP, so those stop
-              crossing the character's legs and cutting the pet in half
-   The scene grew by the height of the strip rather than the art shrinking by it. */
-.hero-scene { height: min(58vh, 470px); --safe: 16px; --strip: 92px; }
+/* The plate's height is declared ONCE, up with the card. A second declaration
+   lived here and won by source order, capping the plate at 470 while the card
+   said 520, and every number derived from the plate came out short with it: the
+   figure ended up 125px above the caption instead of 20, which is what Tom saw
+   as "the bonehead is floating". */
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
 /* CENTRED and never anywhere else (Tom: "the bonehead should always be centred").
    Full width so `contain` centres him horizontally; bottom-aligned so his feet,
@@ -1059,12 +1056,12 @@ body::before {
    so a box narrower than it is tall makes the WIDTH the limit and the figure
    comes out short. Overflowing sideways lets the height rule, which is what gets
    the handoff's 352px of drawing; the plate clips the empty canvas either side. */
-.hero-char { position: absolute; left: -25px; right: -25px; top: 18px; bottom: 100px;
+.hero-char { position: absolute; left: -25px; right: -25px; top: 18px; bottom: 0;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
 @keyframes bhIdle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-.hero-char .bh-anim { --av-fit: contain; }
+.hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
 /* width auto so a long creature (lizard) can be scaled up for equal visual mass
@@ -1075,7 +1072,7 @@ body::before {
 /* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
    The exact bottom offset is tuned against the MEASURED ink baselines, not the
    boxes: tests/figure-audit.mjs reports both and fails if they drift. */
-.hero-companion { position: absolute; right: 6px; bottom: 74px;
+.hero-companion { position: absolute; right: 16px; bottom: 64px;
   width: 124px; height: auto; z-index: 3; padding: 0; background: none; border: 0;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
   animation: bhIdle 4s ease-in-out infinite; }
@@ -1192,14 +1189,14 @@ body::before {
 }
 /* min-width:0 is load-bearing: without it a long foe name sets the flex floor,
    both sides sum past 100% and the arena's overflow:hidden eats the right HUD */
-/* The two sides are NOT symmetrical and pretending they are truncated every boss.
-   Your side's name is the word "You", four characters, and it was holding 46% of
-   the bar; a den boss got the same 46% and lost its tail to an ellipsis at 151px.
-   Tom, 2026-08-07: "the combat page had the right side of the enemies name cut
-   off." Measured: "Grave Warden of the Old Bones" needs 192px and now has 207. */
-.hud-side { flex: 1; min-width: 0; display: grid; gap: 4px; }
-.hud-side.you { max-width: 38%; }
-.hud-side.foe { max-width: 58%; }
+/* EQUAL SIDES. Widening the foe's whole column to 58% fixed the truncated name
+   and broke something more important: Tom, 2026-08-07, "why is the health bar of
+   the enemy so much bigger when fighting in the pit". Two health bars of
+   different lengths read as two different amounts of health, which is a lie the
+   HUD should never tell. So the columns are level again and only the NAME plate
+   is allowed extra room: it is right-aligned, so a wider max-width lets it reach
+   LEFT into the centre gap without moving a single bar. */
+.hud-side { flex: 1; min-width: 0; max-width: 46%; display: grid; gap: 4px; }
 /* fixed-height single line so BOTH HP bars sit on the same guide regardless of
    name length (a long foe name like "Loose Bones" used to wrap taller and drop
    its bar below yours) */
@@ -1210,6 +1207,9 @@ body::before {
   padding: 1px 8px; display: inline-block; justify-self: start;
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* the plate may overhang its column into the dead centre of the bar; the bars
+   underneath it do not move, so the two sides still read as equal */
+.hud-side.foe .fname { max-width: 148%; }
 .hud-side.foe .fname { justify-self: end; }
 .hud-side.foe .fname { text-align: right; }
 .hud-side .bar.fhp { height: 11px; border: 2px solid var(--ink); border-radius: 999px; }
@@ -2582,6 +2582,7 @@ body::before {
   background: transparent; border: 0; border-radius: 0;
 }
 .pd-center .bh-stage.lg .bh-anim { inset: 0 -14%; }
+.pd-center .bh-stage.lg .bh-anim { --av-fit: contain; --av-pos: 50% 72%; }
 .pd-center .bh-stage.lg .bh-anim img { object-fit: contain; object-position: 50% 72%; }
 .pd-center .bh-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 /* slot = art on top (as big as fits), label as its own strip below — never overlap */
@@ -4032,7 +4033,13 @@ body::before {
   -webkit-mask-image: var(--wpn); mask-image: var(--wpn);
   -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-position: center; mask-position: center;
+  /* POSITION TOO, not just size. --av-fit kept the mask's SCALE in register and
+     nothing kept its PLACEMENT there, so any surface that moved the art off
+     centre with object-position left the charge hanging in mid-air beside the
+     sword. That is what Tom photographed on 2026-08-07 in the Wardrobe, where
+     `object-position: 50% 72%` has been shipping since v276 with a mask still
+     pinned to centre. Declare --av-pos beside every object-position. */
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
 }
 /* The charge. Colours are sampled from the artwork: cyan #92F5FF from the hilt
    wrap and the charm's iris, cream #FFF5D6 from the blade's lit edge. The band is
@@ -4828,6 +4835,7 @@ body::before {
 /* BOTTOM-aligned, not centred: contain letterboxes the art and centring it left
    the keeper's feet 33px above the pet's (measured by tests/figure-audit.mjs).
    See THE FIGURE CONTRACT in that file. */
+.spp .bh .bh-anim { --av-fit: contain; --av-pos: bottom center; }
 .spp .bh img, .spp .bh .bh-anim { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom center; }
 .spp .bh img { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .55)); }
 /* nobody holds it: the tombstone is the figure, and there is nobody to spotlight */
@@ -5619,14 +5627,11 @@ body::before {
    never how much that is, which is why the second enemy's health was unreadable
    (Tom, 2026-08-07). The number sits on the outside edge of each side so the bars
    still line up across the arena. */
-.hp-line { display: flex; align-items: center; gap: 6px; }
-.hp-line .bar { flex: 1; min-width: 0; }
-.hp-num {
-  flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
-  font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap;
-}
-.hp-num.sm { font-size: 9.5px; color: var(--text-3); }
-.hud-pet.down .hp-num { opacity: .45; }
+/* A mini bar is as long as its fighter's POOL is big, relative to the fighter
+   above it (--pool, set per fight). A pet or an add with half the health gets
+   half the bar, so "how much has the second enemy got" is answered by the shape
+   rather than by a number Tom did not want on screen. */
+.hud-pet .bar.fhp.mini { flex: none; width: var(--pool, 100%); min-width: 18px; }
 
 /* A nickname is your private note about someone, not their name: it sits BESIDE
    the Bonehead name rather than replacing it (Tom, 2026-08-07). Quieter and

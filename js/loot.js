@@ -244,10 +244,13 @@ export async function lifetimeStepsSum() {
     + Math.min(r.exerciseMin || 0, ACTIVE_MIN_DAILY_CAP) * STEPS_PER_ACTIVE_MIN, 0);
 }
 
-// Eggs incubate: they hatch into PETS after you walk EGG_GOAL_STEPS.
-export async function grantEgg(source) {
+/* Eggs incubate: they hatch into PETS after you walk EGG_GOAL_STEPS.
+   `goal: 0` is a READY egg, which is how the Crew channel can hand a new player
+   one they can crack straight away. eggProgress compares walked >= goal, so zero
+   is ready on arrival with no special case anywhere else. */
+export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
   const stepsAtStart = await lifetimeStepsSum();
-  const row = { id: newId(), kind: 'egg', stepsAtStart, goal: EGG_GOAL_STEPS, source, ts: Date.now() };
+  const row = { id: newId(), kind: 'egg', stepsAtStart, goal, source, ts: Date.now() };
   await db.put('inv', row);
   return row;
 }

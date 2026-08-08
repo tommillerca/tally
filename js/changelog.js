@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 307, date: '2026-08-08', title: 'Fight HUD, and the daily boss stays beaten', items: [
+    'The <b>daily Remote Den</b> could be fought again after you had already beaten it. It paid almost nothing the second time, but the FIGHT button was still sitting there, which is its own kind of lie. It locks to TOMORROW the moment you win now.',
+    'In fights, <b>both health bars are the same length</b> again. Your pet\'s and the second enemy\'s bars are sized against the fighter above them, so a small health pool looks small without a single number on screen.',
+    'A long boss name is no longer cut off.',
+    'Tapping someone on the <b>leaderboard</b> showed their gear as 0 no matter who they were. It shows the real count now, and their stats.',
+    'The <b>glow on a rare weapon</b> was floating beside the sword instead of on it in the Wardrobe. It has been doing that since the Wardrobe was rebuilt; it is fixed on every screen.',
+    'The Bonehead on the Today card was floating above the ground. He stands on it now.',
+  ] },
   { n: 306, date: '2026-08-08', title: 'Today is a trading card now', items: [
     'The home screen is <b>your Bonehead on a card</b>: a cream frame, a bigger stage, and nothing sitting on top of the art. Your level and XP fade into the bottom of the picture instead of taking a solid strip out of it, and the XP bar is a row of pips.',
     'The four chips across the top became <b>one wallet</b> and a small Trends button, so the card is mostly card.',
