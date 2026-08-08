@@ -26,7 +26,16 @@ async function dominantArch() {
 }
 
 export const DEN_CELL_DEG = 0.01;        // ~1.1 km cells: a few dens within any walk
-export const DEN_RADIUS_M = 60;          // enter range (a touch roomier than spawns)
+/* A DESTINATION SHOULD NOT BE HARDER TO REACH THAN A PICKUP.
+   This said "a touch roomier than spawns" and it was, when spawns were 45. They
+   went 45 -> 55 -> 75 and these never moved, so a boss den you make a special
+   trip for ended up 15m TIGHTER than something you brush past on the pavement.
+   Tom noticed from feel alone, 2026-08-08: "does the new 75m radius include boss
+   dens because it feels like it doesn't". It did not.
+   Destinations sit above the spawn radius now, and tests/unit.test.js pins the
+   ORDERING rather than the numbers, so the next spawn bump cannot invert it
+   again. */
+export const DEN_RADIUS_M = 80;          // enter range (roomier than spawns, as intended)
 
 // Reward ladder carried over from the old ROAD_STOPS table (same economy),
 // low tiers common, top tiers rare: ~2-4 reachable dens/week matches old pacing.
@@ -375,7 +384,7 @@ export async function claimDenLoot(key, gearId) {
    a fresh sparse set appears every day. Free to fight (you walked there); the
    ledger key `mini-<date>-<id>` (type 'mini') makes each beatable once a day. */
 export const MINI_CELL_DEG = 0.008;   // ~0.9 km cells: minis a bit denser than dens
-export const MINI_RADIUS_M = 55;
+export const MINI_RADIUS_M = 75;   // a roaming mini is still a fight you walk to: match spawns
 
 export const MINI_TIERS = [
   { mult: 0.6, aiLevel: 1, reward: { coins: 30, xp: 20, crate: 'daily' } },
@@ -483,7 +492,7 @@ export function secretsNear(lat, lng) {
 // identity). Placed at a fixed bearing/distance from wherever the player is
 // when the map loads — always nearby, always reachable, recomputed fresh each
 // time (no persisted position; a one-time encounter doesn't need one).
-export const GLUTTON_RADIUS_M = 60;
+export const GLUTTON_RADIUS_M = 80;  // a world boss is the destination of the day
 // The dead-ground radius. Spawns sit on a ~550 m grid at 2 per cell, so 400 m
 // (~50 ha) strangles roughly 3 loot spawns: a swath you can actually feel. The
 // old 140 m ate ~0.4 spawns, i.e. usually nothing at all.

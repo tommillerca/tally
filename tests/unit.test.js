@@ -45,9 +45,22 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
 
 let passed = 0, failed = 0;
-function test(name, fn) {
-  try { fn(); passed++; }
-  catch (e) { failed++; console.error(`FAIL ${name}\n  ${e.message}`); }
+/* AWAIT THE TEST. This used to be `try { fn(); passed++; }`, which never awaited,
+   so every `async` case in this file passed UNCONDITIONALLY: a rejected promise
+   from an async body cannot reach a synchronous catch, and passed++ ran no matter
+   what the test asserted. Found 2026-08-08 when a brand-new async check stayed
+   green with the bug it guards reintroduced. That is rule 1 of the project's own
+   anti-regression list ("a check that cannot fail is not a check") broken inside
+   the file that enforces the others.
+   Cases are queued and run in order at the end so the summary counts all of
+   them, sync and async alike. */
+const QUEUE = [];
+function test(name, fn) { QUEUE.push([name, fn]); }
+async function runAll() {
+  for (const [name, fn] of QUEUE) {
+    try { await fn(); passed++; }
+    catch (e) { failed++; console.error(`FAIL ${name}\n  ${e.message}`); }
+  }
 }
 const approx = (a, b, tol = 0.02) => {
   assert.ok(Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 0.01), `${a} !~ ${b}`);
@@ -1673,5 +1686,47 @@ test('PLAT DEVICE analytics send it and the server stores it', () => {
   assert.ok(/plat = COALESCE\(excluded\.plat/.test(srv), 'a returning device never updates its plat');
 });
 
+/* ---------------------------------------------------------------------------
+ * A DESTINATION MUST NOT BE HARDER TO REACH THAN A PICKUP.
+ *
+ * Tom, 2026-08-08, from feel alone: "does the new 75m radius include boss dens
+ * because it feels like it doesn't". It did not. COLLECT_RADIUS_M went 45 -> 55
+ * -> 75 across three separate requests and every other radius stayed where it
+ * was, so a boss den you make a special trip for became 15m TIGHTER than
+ * something you brush past on the pavement. DEN_RADIUS_M even still carried the
+ * comment "a touch roomier than spawns", which had quietly become false.
+ *
+ * This pins the ORDERING, not the numbers, so the next spawn bump cannot invert
+ * it again by omission. Tune the values freely; just keep destinations >= spawns.
+ * PROVE-RED (confirmed 2026-08-08): set DEN_RADIUS_M back to 60 and it fails
+ * naming the den at 60 against a spawn radius of 75.
+ * ------------------------------------------------------------------------- */
+test('REACH a den, spire or world boss is never tighter than a spawn', async () => {
+  const hunt = await import('../js/hunt.js');
+  const poi = await import('../js/poi.js');
+  const spires = await import('../js/spires.js');
+  const spawn = hunt.COLLECT_RADIUS_M;
+  assert.ok(spawn > 0, 'no spawn radius to compare against: an empty check is a failure');
+  const destinations = [
+    ['boss den', poi.DEN_RADIUS_M],
+    ['roaming mini', poi.MINI_RADIUS_M],
+    ['world boss', poi.GLUTTON_RADIUS_M],
+    ['dark spire', spires.SPIRE_RADIUS_M],
+  ];
+  const tighter = destinations.filter(([, r]) => r < spawn).map(([n, r]) => `${n} ${r}m < spawn ${spawn}m`);
+  assert.deepEqual(tighter, [], tighter.join('; '));
+});
+/* The hidden ones are the deliberate exception: a secret den is MEANT to need you
+   nearly on top of it, which is the whole mechanic (whisper at 400, reveal at
+   150, enter at 45). Asserted so nobody "fixes" it to match the others. */
+test('REACH a secret den stays deliberately tight', async () => {
+  const poi = await import('../js/poi.js');
+  const hunt = await import('../js/hunt.js');
+  assert.ok(poi.SECRET_RADIUS_M < hunt.COLLECT_RADIUS_M,
+    'a secret den is supposed to be harder to stand on than a spawn');
+  assert.ok(poi.SECRET_WHISPER_M > poi.SECRET_RADIUS_M, 'the whisper must reach further than the door');
+});
+
+await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

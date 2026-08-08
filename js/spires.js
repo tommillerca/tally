@@ -19,7 +19,7 @@ import { kvGet, kvSet } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const SPIRE_CELL_DEG = 0.02;      // ~2.2 km cells: a couple within a good walk
-export const SPIRE_RADIUS_M = 60;        // enter range, same reach as a den
+export const SPIRE_RADIUS_M = 80;        // enter range, same reach as a den
 export const SPIRE_CAP = 3;              // hold at most three: forces a real choice
 export const TRIBUTE_PER_DAY = 60;       // coins accrued per held spire per day
 export const TRIBUTE_DUST_PER_DAY = 8;

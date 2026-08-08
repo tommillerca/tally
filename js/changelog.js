@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 312, date: '2026-08-08', title: 'Boss dens got the bigger radius too', items: [
+    'The roomier <b>75m reach</b> only ever applied to finds on the ground. Boss dens, Dark Spires, the Glutton and roaming minis were all left on their old, tighter range, which meant the things you make a special trip for were <b>harder to stand on than a random pickup</b>. Dens, spires and the Glutton are 80m now, and minis match finds at 75m.',
+    'Secret dens are deliberately left tight. Having to be almost on top of one is the point of them.',
+  ] },
   { n: 310, date: '2026-08-08', title: 'Eggs that would not hatch', items: [
     'An egg could get <b>permanently stuck</b>: if your step history ever came back smaller than it was (a restore, or a reinstall), the egg was measuring against a number your phone no longer had, so its bar sat still no matter how far you walked. Those eggs re-anchor and start counting again the next time you open your Backpack.',
     'An egg that is not moving because your <b>steps are not reaching the app</b> now says so, instead of showing a bar that never fills.',

@@ -97,6 +97,9 @@ const state = await page.evaluate(() => {
     actHiddenAttr: act ? act.hidden : null,
     actVisible: vis(act),
     actText: act ? act.innerText.trim().replace(/\s+/g, ' ') : null,
+    // is anything ACTUALLY in reach? the card's rule is a biconditional, and
+    // asserting one half of it only works while the fixture happens to hold
+    inReach: !!document.querySelector('.map-spawn.inrange'),
     screenText: (document.querySelector('#screen')?.innerText || '').replace(/\s+/g, ' ').slice(0, 160),
   };
 });
@@ -104,18 +107,111 @@ const state = await page.evaluate(() => {
 ok('LOADS the Boneyard renders its map stage', state.stage, JSON.stringify({ stage: state.stage }));
 ok('LOADS the marker layer gets revealed (not stuck invisible)', state.markersIn,
   `markers-in=${state.markersIn}`);
-/* Nothing is within collect range from a fixed test coordinate, so the action
-   card must be genuinely gone. `hidden` alone is not proof: the whole bug was an
-   element carrying hidden=true while still painting. */
-ok('BAR with nothing in reach the action card is not on screen',
-  state.actExists && state.actHiddenAttr === true && state.actVisible === false,
-  JSON.stringify({ hiddenAttr: state.actHiddenAttr, stillVisible: state.actVisible, text: state.actText }));
+/* THE CARD IS ABOUT SPAWNS, so only spawns count here. Dens, spires and the
+   Glutton each have their own button and their own reach, and since v312 a den
+   reaches 80m against a spawn's 75, so a den can be legitimately in range while
+   the card stays silent. Counting them made this check compare two different
+   rules and fail on correct behaviour.
+   SETTLE FIRST, THEN ASSERT. The `.inrange` class is toggled by the placement
+   pass and the card is written by the position-update pass, so for a moment they
+   can legitimately disagree and a single sample catches the app mid-stride: this
+   check failed intermittently reporting inReach true against a card still saying
+   "Reading the bones". Poll for agreement and only fail if it never arrives,
+   which tests the rule rather than the timing. */
+const settled = await (async () => {
+  let last = null;
+  for (let i = 0; i < 20; i++) {
+    last = await page.evaluate(() => {
+      const act = document.querySelector('#mapAct');
+      const vis = el => {
+        if (!el) return false;
+        const cs = getComputedStyle(el);
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && el.getBoundingClientRect().height > 0;
+      };
+      const text = act ? act.innerText.replace(/\s+/g, ' ').trim() : null;
+      return {
+        inReach: !!document.querySelector('.map-spawn.inrange'),
+        exists: !!act, hiddenAttr: act ? act.hidden : null, visible: vis(act), text,
+        tooFast: /too fast/i.test(text || ''),
+      };
+    });
+    // the rule: the card shows exactly when something is in reach OR you are moving too fast
+    if (last.exists && last.visible === (last.inReach || last.tooFast)) return last;
+    await sleep(500);
+  }
+  return last;
+})();
+
+/* THE CARD IS ON SCREEN IF AND ONLY IF SOMETHING IS IN REACH.
+   This used to assert only the empty half, on the assumption that a fixed test
+   coordinate has nothing in range. That assumption expired the moment the reach
+   radii went up in v312 (spawns 75m, dens 80m): a Bone cache came into range and
+   the check failed for the app behaving correctly. Asserting the biconditional
+   tests the actual rule and cannot go stale when the numbers are tuned again.
+   `hidden` alone is never proof either way: the original bug was an element
+   carrying hidden=true while still painting. */
+ok('BAR the action card is on screen exactly when something is in reach',
+  settled.exists && settled.visible === (settled.inReach || settled.tooFast)
+    && settled.hiddenAttr === !(settled.inReach || settled.tooFast),
+  JSON.stringify(settled));
+/* AND THE OTHER HALF. The fixture above stands next to a Bone cache, so it only
+   ever exercises the visible branch; the bug this file was written for lives in
+   the HIDDEN branch (.map-act sets display:flex, which beats the UA stylesheet's
+   [hidden]{display:none}, so the card carried hidden=true while still painting).
+   Walk out to open ocean, where placeWalkable rejects every candidate and nothing
+   can be in reach, and check the card is genuinely gone.
+   PROVE-RED (confirmed 2026-08-08): set `.map-act[hidden] { display: flex }` and
+   EMPTY fails with stillVisible true. */
+/* The arrival timeline belongs to the FIRST load, so read it before the reload
+   below replaces the page (and with it window.__arr). Asserted further down. */
+const arr = await page.evaluate(() => window.__arr);
+
+/* AND THE OTHER HALF, on a FRESH LOAD. The fixture above stands next to a Bone
+   cache, so it only exercises the visible branch; the bug this file exists for
+   lives in the HIDDEN branch (.map-act sets display:flex, which beats the UA
+   stylesheet's [hidden]{display:none}, so the card carried hidden=true while
+   still painting).
+   It has to be a fresh load rather than a walk: the card's real rule is
+   `(inReach || tooFast)`, and ANY jump big enough to clear every POI is by
+   definition too fast to loot, so the app correctly keeps the card up saying so.
+   Starting cold at sea means no previous fix, no speed, and nothing placeable
+   (placeWalkable rejects water), which is the only way to reach the empty state.
+   PROVE-RED (confirmed 2026-08-08): set `.map-act[hidden] { display: flex }` and
+   EMPTY fails with stillVisible true. */
+await page.setGeolocation({ latitude: 48.0, longitude: -140.0 });
+await page.reload({ waitUntil: 'networkidle2' });
+await sleep(2200);
+await page.evaluate(() => { location.hash = '#/boneyard'; });
+await sleep(2500);
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
+  if (b) b.click();
+});
+await sleep(9000);
+const empty = await page.evaluate(() => {
+  const act = document.querySelector('#mapAct');
+  const vis = el => {
+    if (!el) return false;
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && el.getBoundingClientRect().height > 0;
+  };
+  return {
+    inReach: !!document.querySelector('.map-spawn.inrange'),
+    hiddenAttr: act ? act.hidden : null,
+    stillVisible: vis(act),
+    text: act ? act.innerText.replace(/\s+/g, ' ').trim() : null,
+  };
+});
+ok('EMPTY starting cold at sea, nothing in reach, so the card is genuinely gone',
+  empty.inReach === false && !/too fast/i.test(empty.text || '')
+    && empty.hiddenAttr === true && empty.stillVisible === false,
+  JSON.stringify(empty));
+
 ok('STALE the loading placeholder is not left on screen',
   !/reading the bones/i.test(state.screenText),
   state.screenText);
 
 /* nothing may arrive after the map is shown */
-const arr = await page.evaluate(() => window.__arr);
 ok('ARRIVAL the reveal happened at all (never revealing is a FAILURE)',
   arr.reveal != null, `reveal at ${arr.reveal}ms`);
 ok('ARRIVAL markers were actually counted (an empty timeline is a FAILURE)',
