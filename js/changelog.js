@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 328, date: '2026-08-08', title: 'Drag through your Crew properly', items: [
+    'Dragging the fan sideways now <b>moves you through your friends</b> as you go, and a longer drag travels further. It used to slide the whole deck as one block, spring back, and move you exactly one friend however far you dragged.',
+  ] },
   { n: 327, date: '2026-08-08', title: 'Crew tab fixes', items: [
     'The Crew tab <b>no longer scrolls sideways</b>. Friend cards flung out to the edges of the fan were hanging off the screen and dragging the whole app with them.',
     'Dragging the fan up or down now <b>just scrolls the page</b> instead of sliding your friends sideways at the same time.',

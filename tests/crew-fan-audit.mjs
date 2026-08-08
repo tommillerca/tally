@@ -384,20 +384,36 @@ const vertical = await page.evaluate(async () => {
 ok('VERTICAL a vertical drag does not slide the fan (one gesture moves one thing)',
   !/translateX\(-?[1-9]/.test(vertical.transform), JSON.stringify(vertical));
 
-/* and a horizontal one still does */
-const horizontal = await page.evaluate(async () => {
-  const wrap = document.querySelector('#cfanWrap'), deck = document.querySelector('#cfanDeck');
+/* A horizontal drag must move you THROUGH the deck, not slide it as a block.
+   Tom, 2026-08-08: "dragging left to right doesnt scroll it moves the whole thing
+   left to right." The old behaviour translated the whole deck and advanced by
+   exactly one on release, so a long drag and a short one did the same thing.
+   Asserting the DISTANCE TRAVELLED, not that a transform appeared: the deck now
+   only carries the sub-step remainder, so a transform check would pass on the
+   broken design and fail on the fixed one (it did). */
+const travel = async px => page.evaluate(async dist => {
+  const wrap = document.querySelector('#cfanWrap');
+  const dots = () => [...document.querySelectorAll('.cfan-dots i')].findIndex(d => d.classList.contains('on'));
   const r = wrap.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  const pd = (t, x, y) => wrap.dispatchEvent(new PointerEvent(t, { pointerId: 2, clientX: x, clientY: y, bubbles: true }));
+  const pd = (t, x, y) => wrap.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: x, clientY: y, bubbles: true }));
+  const from = dots();
   pd('pointerdown', cx, cy);
-  for (let i = 1; i <= 6; i++) pd('pointermove', cx - i * 18, cy + i * 2);
-  const moved = deck.style.transform;
-  pd('pointerup', cx - 108, cy + 12);
-  return { transform: moved || 'none' };
-});
-ok('HORIZONTAL a sideways drag still moves the fan (the lock did not break it)',
-  /translateX\(-[1-9]/.test(horizontal.transform), JSON.stringify(horizontal));
+  const n = 12;
+  for (let i = 1; i <= n; i++) { pd('pointermove', cx - (dist * i) / n, cy + 1); await new Promise(r2 => setTimeout(r2, 12)); }
+  pd('pointerup', cx - dist, cy + 1);
+  await new Promise(r2 => setTimeout(r2, 700));
+  const to = dots(), N = document.querySelectorAll('.cfan-dots i').length;
+  let d = to - from; if (d < -N / 2) d += N; if (d > N / 2) d -= N;
+  return { from, to, moved: d };
+}, px);
+
+const shortDrag = await travel(70);
+ok('HORIZONTAL a short drag moves you one friend along', shortDrag.moved >= 1, JSON.stringify(shortDrag));
+
+const longDrag = await travel(230);
+ok('HORIZONTAL a long drag travels FURTHER than a short one (a scroll, not a snap)',
+  longDrag.moved > shortDrag.moved, `short ${shortDrag.moved}, long ${longDrag.moved}`);
 
 await browser.close();
 if (srv) srv.kill();

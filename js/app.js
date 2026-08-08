@@ -5602,21 +5602,27 @@ async function renderFriends(el) {
     const wrap = $('#cfanWrap', el), deck = $('#cfanDeck', el);
     let sx = null, dx = 0, dragged = false;
     wrap.addEventListener('dragstart', e => e.preventDefault());
-    /* AXIS LOCK ON THE FAN. Tom, 2026-08-08: "i cant easily scroll my friends
-       cards with a finger drag it moves too much of the screen."
-       The deck translated on ANY pointer movement with no check on direction, and
-       touch-action is pan-y, so a mostly-vertical gesture scrolled the page
-       natively AND slid the fan: two things moving for one finger, which is what
-       "moves too much of the screen" describes. Measured before the fix: a steeply
-       vertical drag still slid the deck 4.2px.
-       Past the slop the gesture commits once to horizontal or vertical, and a
-       vertical verdict kills the drag so the page scrolls cleanly. Same fix and
-       same reason as the Stable carousel.
-       Capture is deferred to the horizontal commit: taking it on pointerdown
-       retargets the eventual click away from the card. */
-    let sy = null, axis = null;
+    /* DRAG THROUGH THE DECK, DO NOT SLIDE IT. Tom, 2026-08-08: "dragging left to
+       right doesnt scroll it moves the whole thing left to right."
+       Measured: the deck translated as one rigid block to -56px, sprang back to 0
+       and advanced by exactly one friend. That is a rubber band, not a scroll. The
+       cards never move through their seats, so a long drag and a short one do the
+       same thing and the deck never feels like something you can move through.
+       It CYCLES now. Every STEP pixels of travel re-seats the fan by one, so
+       friends pass under your finger as you drag, and only the leftover sub-step
+       distance translates -- just enough to feel attached to the finger. Release
+       carries momentum, so a flick travels several.
+
+       AXIS LOCK, same as the Stable: the deck used to translate on ANY pointer
+       movement with no direction check, and touch-action is pan-y, so a
+       mostly-vertical gesture scrolled the page natively AND slid the fan. Past
+       the slop the gesture commits once; a vertical verdict kills the drag.
+       Capture is deferred to the horizontal commit, or it retargets the click. */
+    const STEP = 62;
+    let sy = null, axis = null, steps = 0, lastT = 0, vel = 0;
     wrap.addEventListener('pointerdown', e => {
-      sx = e.clientX; sy = e.clientY; dx = 0; dragged = false; axis = null;
+      sx = e.clientX; sy = e.clientY; dx = 0; dragged = false; axis = null; steps = 0;
+      lastT = performance.now(); vel = 0;
       deck.style.transition = 'none';
     });
     wrap.addEventListener('pointermove', e => {
@@ -5628,18 +5634,27 @@ async function renderFriends(el) {
         axis = 'x';
         try { wrap.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
       }
+      const now = performance.now();
+      const dt = Math.max(8, now - lastT);
+      vel = (mx - dx) / dt * 1000;      // px/sec, for the release
+      lastT = now;
       dx = mx;
       if (Math.abs(dx) > 8) dragged = true;
-      deck.style.transform = `translateX(${dx * 0.35}px)`;
+      const want = -Math.round(dx / STEP);          // whole steps CYCLE the fan
+      if (want !== steps) { cfanCycle(want - steps); steps = want; }
+      deck.style.transform = `translateX(${(dx + steps * STEP) * 0.35}px)`;
     });
     const release = () => {
       if (sx === null) return;
-      const wasX = axis === 'x';
+      const wasX = axis === 'x', v = vel;
       sx = null; sy = null; axis = null;
-      if (!wasX) { deck.style.transition = ''; deck.style.transform = 'translateX(0)'; return; }
       deck.style.transition = '';
       deck.style.transform = 'translateX(0)';
-      if (Math.abs(dx) > 45) cfanCycle(dx < 0 ? 1 : -1);
+      if (!wasX) return;
+      /* Momentum on top of whatever already cycled during the drag, capped so a
+         hard flick cannot spin the deck somewhere you did not aim. */
+      const carry = Math.max(-3, Math.min(3, Math.round(-v / 900)));
+      if (carry) cfanCycle(carry);
     };
     wrap.addEventListener('pointerup', release);
     wrap.addEventListener('pointercancel', release);
@@ -10719,7 +10734,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v327'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v328'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
