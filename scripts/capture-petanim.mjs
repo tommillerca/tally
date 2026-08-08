@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PET = process.argv[2] || 'C3';
 const OUT = path.resolve(process.argv[3] || path.join(ROOT, `..`, `petanim-capture-${PET}`));
-const LOOP_MS = 6000, STEP_MS = 100;
+const STEP_MS = 100; // loop length is read from the page (longest animation period)
 const PUPPETEER = path.join(ROOT, '..', 'overlay-render-kit', 'node_modules', 'puppeteer');
 
 const { default: puppeteer } = await import(path.join(PUPPETEER, 'lib/cjs/puppeteer/puppeteer.js'))
@@ -37,6 +37,7 @@ const srv = spawn('python3', ['-m', 'http.server', '8179', '--bind', '127.0.0.1'
 await new Promise(r => setTimeout(r, 900));
 
 const browser = await puppeteer.launch({ headless: 'new' });
+let LOOP_MS;
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 640, height: 480, deviceScaleFactor: 2 });
@@ -49,6 +50,11 @@ try {
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   });
   await page.evaluate(() => document.getAnimations().forEach(a => a.pause()));
+  // The stage's loop length = its longest animation period (every shorter track
+  // divides it, per the playbook's loop math). 6s cloud/lizard, 4.8s catfish.
+  LOOP_MS = await page.evaluate(() =>
+    Math.max(...document.getAnimations().map(a => Number(a.effect.getTiming().duration) || 0)));
+  if (!(LOOP_MS > 0)) throw new Error('no animation periods found on the stage');
 
   const times = [];
   for (let t = 0; t < LOOP_MS; t += STEP_MS) times.push(t);

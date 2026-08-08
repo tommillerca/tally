@@ -8,7 +8,8 @@
 //   C3  catfish — beached; one flop per loop, sweat flies, the shadow answers the hop
 //   C4  lizard  — fly loops above the head, blinks, tongue slurps into a closed mouth
 //
-// Keyframes + layer geometry live in app.css (.pa-* classes). Loop = 6s, seamless.
+// Keyframes + layer geometry live in app.css (.pa-* classes). Seamless loops:
+// 6s for cloud/lizard, 4.8s for the catfish (each stage is its own loop clock).
 
 const CLOUD_W = 222, CLOUD_H = 219;
 const LIZ_W = 273, LIZ_H = 218;
