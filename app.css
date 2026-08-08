@@ -6002,3 +6002,19 @@ body::before {
   border: 0; border-radius: 50%; background: rgba(242, 233, 215, .12); color: var(--text-2); cursor: pointer;
 }
 .cfan-nohit { text-align: center; margin: 10px 2px 4px; }
+
+/* THE FAN LEARNS FROM THE STABLE (2026-08-08).
+   Seven layered Bonehead stacks is more compositing than six pet cards, so the
+   same two rules apply, for the same reasons:
+   1. Cards rotated off the fan are skipped entirely rather than drawn at opacity
+      0. Invisible is not the same as free.
+   2. Only the FEATURED crew member's pet animates. Off-centre idle loops are
+      motion nobody is looking at, and two of the same species side by side would
+      run in lockstep exactly as the Stable's lizards did.
+   !important on both sides deliberately: the pet sprites declare their loops with
+   the `animation` shorthand, which resets animation-play-state to running, and
+   those selectors outrank a bare descendant selector. That silently defeated the
+   pause in the Stable until it was measured. */
+.cfan-card.off { visibility: hidden; }
+.cfan-card * { animation-play-state: paused !important; }
+.cfan-card.feat * { animation-play-state: running !important; }

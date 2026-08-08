@@ -274,6 +274,44 @@ const cleared = await page.evaluate(async () => {
 });
 ok('SEARCH clearing restores the whole crew', cleared === FRIENDS.length, `${cleared} cards back`);
 
+
+/* ---- PERF, learned from the Stable -----------------------------------------
+   Tom, 2026-08-08: "make sure you're learning your lesson from the stable because
+   the crew fan is basically the same thing that could lag too."
+   The fan is HEAVIER than the Stable, not lighter: seven layered Bonehead stacks
+   of ~7 images each plus pets, versus six single-pet cards. Two guards, both
+   measuring what actually costs frames rather than what looks right.
+   PROVE-RED: delete `.cfan-card.off { visibility: hidden }` and OFFSCREEN fails;
+   delete the animation-play-state pair and ONEPET fails. */
+/* TEN friends, not seven. The fan seats at most 7, so with exactly 7 nothing is
+   ever rotated off and the OFFSCREEN check below would pass having examined
+   nothing (rule 3: an empty sample is a failure, never a pass). */
+await seedCrew([...FRIENDS, ...FRIENDS.slice(0, 3)].map((f, i) => ({
+  ...f, playerId: `perf-${i}`, name: `${f.name} ${i}`, alias: null, lastSeen: Date.now() - 86400000,
+})));
+await sleep(1000);
+
+const perf = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('.cfan-card')];
+  const hiddenOff = cards.filter(c => c.classList.contains('off'))
+    .every(c => getComputedStyle(c).visibility === 'hidden');
+  const anyOff = cards.some(c => c.classList.contains('off'));
+  const running = cards.map(c => ({
+    feat: c.classList.contains('feat'),
+    n: [...c.querySelectorAll('*')].filter(el => {
+      const cs = getComputedStyle(el);
+      return cs.animationName !== 'none' && cs.animationPlayState === 'running';
+    }).length,
+  }));
+  return { cards: cards.length, anyOff, hiddenOff,
+    runningOnFeat: running.filter(r => r.feat).reduce((a, r) => a + r.n, 0),
+    runningElsewhere: running.filter(r => !r.feat).reduce((a, r) => a + r.n, 0) };
+});
+ok('OFFSCREEN cards rotated off the fan are skipped, not drawn at opacity 0',
+  perf.anyOff && perf.hiddenOff, JSON.stringify(perf));   // anyOff required: no sample = failure
+ok('ONEPET only the featured crew member animates (no lockstep, no wasted frames)',
+  perf.runningElsewhere === 0, `${perf.runningOnFeat} running on the featured card, ${perf.runningElsewhere} elsewhere`);
+
 await browser.close();
 if (srv) srv.kill();
 console.log(fails ? '\nCREW FAN AUDIT FAILED' : '\nCREW FAN VERIFIED');

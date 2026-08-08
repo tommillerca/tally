@@ -5463,6 +5463,15 @@ async function renderFriends(el) {
       card.style.transform = `translate(${p.x}px,${p.y}px) rotate(${p.rot}deg) scale(${off ? 0.5 : p.s})`;
       card.style.opacity = off ? '0' : '1';
       card.style.zIndex = off ? 0 : p.z;
+      /* LESSON FROM THE STABLE (Tom, 2026-08-08: "the crew fan is basically the
+         same thing that could lag too"). It is a heavier screen than the Stable,
+         not a lighter one: seven LAYERED Bonehead stacks of about seven images
+         each, plus pets, versus six single-pet cards.
+         `off` cards were opacity 0, which still composites every one of those
+         layers on every frame of a glide. `.off` makes them visibility:hidden so
+         the compositor skips them outright. They are already invisible; this just
+         stops paying for them. */
+      card.classList.toggle('off', off);
       card.classList.toggle('feat', card.dataset.fan === centerId);
       const star = $('.cfan-fstar', card);
       if (star) star.hidden = !favs.has(card.dataset.fan);
