@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  // BRANCH catfish-anim: renumber n to the next free version at merge time
+  { n: 326, date: '2026-08-08', title: 'The catfish lives', items: [
+    'The <b>catfish</b> joins the cloud and the lizard as a living pet: it lies beached, breaks into a sweat, and throws one hopeful flop.',
+    'Its shadow answers every hop, exactly the way the drawing always promised.',
+  ] },
   { n: 325, date: '2026-08-08', title: 'The Stable stops stuttering', items: [
     'Only the pet you are <b>currently looking at</b> animates. Two of the same species side by side were running the identical loop in perfect lockstep, which looked cheap, and the Stable was paying to animate six of them at once.',
     'Everything <b>holds still while the ring is moving</b>, and the motion blur switches itself off if your phone is struggling. Smooth movement matters more than the effect decorating it.',

@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v325';
+const VERSION = 'tally-v326'; // BRANCH catfish-anim: renumber to the next free version at merge time
 const PRECACHE = [
   './',
   './index.html',
