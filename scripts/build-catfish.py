@@ -6,9 +6,15 @@ assets/bh/C/C3.png in -> assets/bh/anim/catfish/{body,shadow,drop}.png out,
 QC gates printed every run. Exits non-zero if any gate fails.
 
 Cam drew the catfish mid-flop: body airborne over a separated ground shadow,
-two sweat drops flying off its back. All four ink regions are disjoint
-connected components, so the split is lossless: no background reconstruction,
-REST composite == original by construction (still asserted, never assumed).
+two sweat drops flying off its back and a third BEAD still attached to the
+back. The free drops + shadow are disjoint connected components (lossless
+split, no reconstruction). The bead is fused with the body: its tail crosses
+the black back stroke into the body fill, so it is extracted by color and the
+footprint is repaired row-wise (nearest unmasked pixels left/right per row),
+which reconnects the stroke and the cream highlight in one pass. Bead pixels
+that sat over ink ship OPAQUE with their original blended color (mask-exact-
+and-fill, playbook rule) so the rest composite stays exact; pixels feathering
+into transparency keep their original alpha.
 
 Layer frame = the full ink bbox (alpha > 0) of the 640 canvas. body.png is
 full-frame; shadow.png and drop.png are tight crops positioned by CSS
@@ -85,9 +91,86 @@ OUT.mkdir(parents=True, exist_ok=True)
 body_png = layer_full([body["id"]])
 shadow_png = layer_tight(shadow)
 drop_png = layer_tight(drops[-1])  # the bigger drop; CSS reuses it at both spots
+
+# --- the attached bead: extract by color from the body, repair row-wise -------
+# Cyan like the free drops (G,B high / R lower), confined to the upper-back
+# region so no other art can match.
+fr = body_png.astype(int)
+cyan = ((fr[..., 3] > 0) & (fr[..., 1] > 180) & (fr[..., 2] > 180)
+        & (fr[..., 0] < 200) & (fr[..., 1] - fr[..., 0] > 30))
+region = np.zeros_like(cyan)
+region[0:55, 50:95] = True
+bead_mask = cyan & region
+lab_b, n_b = ndimage.label(bead_mask)
+if n_b > 1:  # keep the largest blob, drop specks
+    sizes = ndimage.sum(bead_mask, lab_b, range(1, n_b + 1))
+    bead_mask = lab_b == (int(np.argmax(sizes)) + 1)
+gate("attached bead found on the body", int(bead_mask.sum()) > 60, f"{int(bead_mask.sum())} px")
+
+bead_png = np.zeros_like(body_png)
+bead_png[bead_mask] = body_png[bead_mask]
+# mask-exact rule: bead pixels that were fully opaque in the source ship opaque
+# (their RGB already holds Cam's blend against whatever was behind); soft outer
+# AA against transparency keeps its original alpha, so both states render true.
+# The REPAIR footprint is wider than the sprite (the bead trails an alpha 1-4
+# cyan halo the color mask can't own) but NEVER touches the dark back stroke:
+# fixed anatomy keeps Cam's original pixels (lizard lesson), and where the tail
+# visibly crossed the stroke the row interpolation runs dark-to-dark and
+# rebuilds it.
+stroke_dark = (fr[..., 3] > 128) & (fr[..., :3].max(axis=-1) < 80)
+repair_mask = ndimage.binary_dilation(bead_mask, iterations=2) & ~stroke_dark
+bys, bxs = np.where(repair_mask)
+bead_box = (bys.min(), bys.max(), bxs.min(), bxs.max())
+bead_png = bead_png[bead_box[0]:bead_box[1] + 1, bead_box[2]:bead_box[3] + 1]
+
+# Row-wise repair of the bead footprint in the body: each masked run fills by
+# linear interpolation between the nearest unmasked pixels on its row (RGBA),
+# but ONLY when both endpoints carry ink. A run with a transparent endpoint is
+# outside the body silhouette (above the back), and its correct "behind" is
+# nothing: interpolating transparent-to-stroke there painted a grey smear wing
+# left of the tail that only showed in the bead-GONE state.
+repaired = body_png.astype(float)
+for y in range(bead_box[0], bead_box[1] + 1):
+    row = repair_mask[y]
+    if not row.any():
+        continue
+    xs_m = np.where(row)[0]
+    for run_start, run_end in [(g[0], g[-1]) for g in np.split(xs_m, np.where(np.diff(xs_m) > 1)[0] + 1)]:
+        lx, rx = run_start - 1, run_end + 1
+        l = repaired[y, lx] if lx >= 0 else np.zeros(4)
+        r = repaired[y, rx] if rx < repaired.shape[1] else np.zeros(4)
+        if l[3] < 8 or r[3] < 8:
+            repaired[y, run_start:run_end + 1] = 0
+            continue
+        n = run_end - run_start + 2
+        for i, x in enumerate(range(run_start, run_end + 1), 1):
+            repaired[y, x] = l + (r - l) * (i / n)
+body_png = repaired.round().clip(0, 255).astype(np.uint8)
+
+# GATE: the back stroke is continuous through the repair. In every column the
+# bead touched (padded 3px), if the original had dark stroke ink in the band,
+# the repaired body must too.
+band = slice(max(0, bead_box[0]), min(body_png.shape[0], bead_box[1] + 14))
+orig_body = layer_full([body["id"]])
+gaps = []
+for x in range(max(0, bead_box[2] - 3), min(body_png.shape[1], bead_box[3] + 4)):
+    def has_stroke(img):
+        col = img[band, x]
+        return bool(((col[:, 3] > 128) & (col[:, :3].max(axis=1) < 80)).any())
+    if has_stroke(orig_body) and not has_stroke(body_png):
+        gaps.append(x)
+gate("back stroke continuous where the bead was lifted", not gaps, f"gap columns {gaps}" if gaps else "")
+
+# GATE: no cyan residue where the bead was.
+res = body_png[bead_box[0]:bead_box[1] + 1, bead_box[2]:bead_box[3] + 1].astype(int)
+res_cyan = ((res[..., 3] > 0) & (res[..., 1] > 180) & (res[..., 2] > 180)
+            & (res[..., 0] < 200) & (res[..., 1] - res[..., 0] > 30))
+gate("body clean of the bead (0 cyan residue)", int(res_cyan.sum()) == 0, f"{int(res_cyan.sum())} px")
+
 Image.fromarray(body_png).save(OUT / "body.png")
 Image.fromarray(shadow_png).save(OUT / "shadow.png")
 Image.fromarray(drop_png).save(OUT / "drop.png")
+Image.fromarray(bead_png).save(OUT / "bead.png")
 
 # GATE: partition. Every ink pixel belongs to exactly one shipped layer
 # (drops ship as one sprite reused twice, so the smaller drop's pixels are
@@ -96,26 +179,61 @@ assigned = sum(c["px"] for c in comps)
 gate("ink partition is complete", assigned == int(alpha.sum()),
      f"{assigned} vs {int(alpha.sum())}")
 
-# GATE: REST composite == original. Reassemble the layers at their offsets and
-# pixel-diff against the source crop. The smaller drop is not shipped as its
-# own file, so composite it from the source for the diff (its CSS instance
-# reuses drop.png; the rest gate proves the split, sprite reuse is a render
-# decision verified in the capture harness).
-rest = np.zeros_like(body_png)
-rest[:] = body_png
-for c in (shadow, drops[0], drops[1]):
-    t = layer_tight(c)
-    ys, xs = c["y0"] - Y0, c["x0"] - X0
-    region = rest[ys:ys + t.shape[0], xs:xs + t.shape[1]]
-    keep = t[..., 3] > 0
-    region[keep] = t[keep]
-# Compare what renders: premultiply by alpha so invisible RGB residue under
-# fully transparent pixels (present in Cam's source) doesn't count as a diff.
+# GATE: REST composite == original. Reassemble the layers the way the BROWSER
+# does (alpha compositing, back to front) and pixel-diff against the source
+# crop. The smaller drop is not shipped as its own file, so composite it from
+# the source for the diff (its CSS instance reuses drop.png; the rest gate
+# proves the split, sprite reuse is a render decision verified in the capture
+# harness).
+def blend_over(dst, src, y, x):
+    h, w = src.shape[:2]
+    reg = dst[y:y + h, x:x + w].astype(float)
+    s = src.astype(float)
+    sa = s[..., 3:4] / 255.0
+    da = reg[..., 3:4] / 255.0
+    oa = sa + da * (1 - sa)
+    rgb = np.where(oa > 0, (s[..., :3] * sa + reg[..., :3] * da * (1 - sa)) / np.maximum(oa, 1e-9), 0)
+    dst[y:y + h, x:x + w] = np.dstack([rgb, oa * 255]).round().clip(0, 255).astype(np.uint8)
+
+def build_rest():
+    rest = np.zeros_like(body_png)
+    rest[:] = body_png
+    blend_over(rest, bead_png, bead_box[0], bead_box[2])
+    for c in (shadow, drops[0], drops[1]):
+        t = layer_tight(c)
+        blend_over(rest, t, c["y0"] - Y0, c["x0"] - X0)
+    return rest
+
+# Auto-repair loop (playbook): any pixel where the rest composite visibly
+# misses the original gets its ORIGINAL pixel reassigned to the bead sprite
+# (these are the tail-base rim blends: too dark for the cyan mask, too light
+# for the stroke mask). Semi-transparent ones also clear the body behind so
+# the composite reproduces the source exactly. Loops to zero, max 5 passes.
+orig_frame = a[Y0:Y1 + 1, X0:X1 + 1]
+pmf = lambda img: img[..., :3].astype(float) * img[..., 3:4].astype(float) / 255.0
+for _ in range(5):
+    bad = np.abs(pmf(orig_frame) - pmf(build_rest())).max(axis=-1) > 8
+    bad[:bead_box[0], :] = False; bad[bead_box[1] + 1:, :] = False
+    bad[:, :bead_box[2]] = False; bad[:, bead_box[3] + 1:] = False
+    if not bad.any():
+        break
+    ys_b, xs_b = np.where(bad)
+    for y, x in zip(ys_b, xs_b):
+        bead_png[y - bead_box[0], x - bead_box[2]] = orig_frame[y, x]
+        if orig_frame[y, x, 3] < 255:
+            body_png[y, x] = 0
+Image.fromarray(bead_png).save(OUT / "bead.png")  # re-save with the rim pixels
+Image.fromarray(body_png).save(OUT / "body.png")
+
+rest = build_rest()
+# Compare what renders: premultiplied, with the harness's visibility threshold
+# (>8 of 255). Invisible RGB residue under transparent pixels and the alpha 1-4
+# halo the repair intentionally rewrites both fall below it; a real seam or
+# misplaced layer is hundreds of fully visible pixels (proven red at 1133).
 orig = a[Y0:Y1 + 1, X0:X1 + 1]
-pm = lambda img: img[..., :3].astype(int) * img[..., 3:4].astype(int)
-diff = int(((np.abs(pm(orig) - pm(rest)).sum(axis=-1) > 0)
-            | (orig[..., 3] != rest[..., 3])).sum())
-gate("REST composite == original (0 px visible diff)", diff == 0, f"{diff} px differ")
+pm = lambda img: img[..., :3].astype(float) * img[..., 3:4].astype(float) / 255.0
+diff = int((np.abs(pm(orig) - pm(rest)).max(axis=-1) > 8).sum())
+gate("REST composite == original (0 visibly differing px)", diff == 0, f"{diff} px differ")
 
 # GATE: no pixel of any removed part survives in the body layer (mask-based;
 # the parts' faint-AA bboxes legitimately overlap body ink, so no bbox checks).
@@ -131,6 +249,8 @@ print(f"  shadow: left {shadow['x0'] - X0}px top {shadow['y0'] - Y0}px "
 for tag, c in (("drop small", drops[0]), ("drop big", drops[1])):
     print(f"  {tag}: left {c['x0'] - X0}px top {c['y0'] - Y0}px "
           f"({c['x1'] - c['x0'] + 1}x{c['y1'] - c['y0'] + 1})")
+print(f"  bead (attached, rides .pa-flop): left {bead_box[2]}px top {bead_box[0]}px "
+      f"({bead_box[3] - bead_box[2] + 1}x{bead_box[1] - bead_box[0] + 1})")
 print(f"  body ink bottom y {body['y1'] - Y0}px, shadow top y {shadow['y0'] - Y0}px "
       f"(grounding excursion = the gap)")
 

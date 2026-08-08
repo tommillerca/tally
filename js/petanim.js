@@ -59,13 +59,19 @@ function lizard(px, skin = 'lizard') {
 
 // Layers from scripts/build-catfish.py. The shadow stays on the ground; only the
 // body flops (whiskers and fins are part of the body drawing, so they ride along).
+// The bead is the sweat drop Cam drew still attached to the back: it sits INSIDE
+// .pa-flop so it rides the body, gets flicked off at the hop, and re-beads
+// during the dwell.
 function catfish(px) {
   const s = px / CAT_W;
   return `<div class="petanim" style="width:${px}px;height:${(px * CAT_H / CAT_W).toFixed(1)}px">
     <div class="pa-stage pa-catfish" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <img class="pa-fshadow" src="${A}/catfish/shadow.png" alt="">
-        <div class="pa-flop"><img class="pa-fbody" src="${A}/catfish/body.png" alt=""></div>
+        <div class="pa-flop">
+          <img class="pa-fbody" src="${A}/catfish/body.png" alt="">
+          <img class="pa-bead" src="${A}/catfish/bead.png" alt="">
+        </div>
         <img class="pa-sweat pa-s1" src="${A}/catfish/drop.png" alt="">
         <img class="pa-sweat pa-s2" src="${A}/catfish/drop.png" alt="">
       </div>
