@@ -256,8 +256,31 @@ export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
 }
 
 export function eggProgress(row, lifetime) {
-  const walked = Math.max(0, lifetime - (row.stepsAtStart || 0));
-  return { walked: Math.min(walked, row.goal || EGG_GOAL_STEPS), goal: row.goal || EGG_GOAL_STEPS, ready: walked >= (row.goal || EGG_GOAL_STEPS) };
+  /* `row.goal ?? EGG_GOAL_STEPS`, NOT `||`. A ready egg carries goal 0 and `0 ||
+     8000` is 8000, so the one thing the goal parameter exists to express was the
+     one thing it could not express: the ready egg handed to a new player still
+     asked for 8,000 steps. Mine, shipped in v307. */
+  const goal = row.goal ?? EGG_GOAL_STEPS;
+  /* AN EGG THAT CAN NEVER MOVE. stepsAtStart is a snapshot of lifetime steps at
+     the moment the egg was granted, and lifetime can go DOWN: a restore that
+     brings back fewer health rows than the device had, or a wiped container (see
+     lessons_native_install_wipes_container). When it does, `lifetime -
+     stepsAtStart` is negative, max(0, ...) pins it at zero, and the egg is
+     stalled forever with a dead progress bar and no explanation. Treat an anchor
+     in the future as an anchor of now: the egg starts counting from here rather
+     than never. `stalled` is reported so the UI can say so. */
+  const stalled = (row.stepsAtStart || 0) > lifetime;
+  const anchor = stalled ? lifetime : (row.stepsAtStart || 0);
+  const walked = Math.max(0, lifetime - anchor);
+  return { walked: Math.min(walked, goal), goal, ready: walked >= goal, stalled };
+}
+/* Repair the anchors on disk, so a stalled egg starts counting from the next step
+   rather than being re-diagnosed on every render. Returns how many it fixed. */
+export async function repairEggAnchors() {
+  const lifetime = await lifetimeStepsSum();
+  const eggs = (await inventory()).filter(r => r.kind === 'egg' && (r.stepsAtStart || 0) > lifetime);
+  for (const e of eggs) await db.put('inv', { ...e, stepsAtStart: lifetime, reanchoredAt: Date.now() });
+  return eggs.length;
 }
 
 // Odds a hatch comes out SHINY (an ultra-rare recolored variant). Stays

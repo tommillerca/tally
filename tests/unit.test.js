@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
+/* eggProgress is PURE (no db, no DOM), so it unit-tests directly. */
+import { eggProgress } from '../js/loot.js';
 
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
@@ -1594,6 +1596,42 @@ test('NO-OP the spire claim treats an already-yours answer as no takeover', () =
   assert.ok(/coins\s*=\s*(\d+)/.test(alreadyBranch), 'the already branch sets no payout at all');
   const paid = Number(alreadyBranch.match(/coins\s*=\s*(\d+)/)[1]);
   assert.ok(paid <= 25, `a repeat pays ${paid} coins, which is not pocket change`);
+});
+
+/* ---------------------------------------------------------------------------
+ * AN EGG THAT CANNOT HATCH.
+ * Tom, 2026-08-08: "Chiseled [Patella]'s eggs aren't incubating can you see why".
+ * Two ways an egg stops moving, both silent:
+ *   1. goal 0 fell back to 8,000 through `row.goal || EGG_GOAL_STEPS`, so the
+ *      READY egg the Crew channel hands a new player asked for a full walk. Mine,
+ *      shipped in v307, and the one thing the goal parameter existed to express.
+ *   2. stepsAtStart above the current lifetime. Lifetime CAN go down (a restore
+ *      with fewer health rows, or a wiped container), and max(0, ...) then pins
+ *      progress at zero forever behind a dead bar.
+ * PROVE-RED: put `||` back and READY fails; drop the stalled branch and STALL
+ * fails with walked 0 of 8000.
+ * ------------------------------------------------------------------------- */
+test('EGG a goal of 0 means ready now, not a full walk', () => {
+  const p = eggProgress({ stepsAtStart: 5000, goal: 0 }, 5000);
+  assert.equal(p.goal, 0, 'goal 0 was replaced by the default');
+  assert.equal(p.ready, true, 'a zero-goal egg is not ready');
+});
+test('EGG a normal egg still needs its full goal', () => {
+  const a = eggProgress({ stepsAtStart: 1000 }, 1000);
+  assert.equal(a.goal, 8000);
+  assert.equal(a.ready, false);
+  assert.equal(a.walked, 0);
+  const b = eggProgress({ stepsAtStart: 1000 }, 9000);
+  assert.equal(b.ready, true, '8000 walked should hatch it');
+});
+test('EGG STALL an anchor above lifetime unsticks instead of freezing forever', () => {
+  // the device has 4,000 lifetime steps but the egg was anchored at 12,000
+  const p = eggProgress({ stepsAtStart: 12000, goal: 8000 }, 4000);
+  assert.equal(p.stalled, true, 'the stall was not detected');
+  assert.equal(p.walked, 0, 'it should start from here, not go negative');
+  // and once they walk, it MOVES, which is the thing that was broken
+  const q = eggProgress({ stepsAtStart: 4000, goal: 8000 }, 6000);
+  assert.equal(q.walked, 2000, 'a re-anchored egg must accumulate');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

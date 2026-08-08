@@ -11,7 +11,7 @@ import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
-  migrateLegacyEggs, eggProgress, hatchEgg, lifetimeStepsSum,
+  migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
@@ -7228,7 +7228,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'crates') {
     await migrateLegacyEggs();
+    /* Repair before reading. An egg whose anchor sits above the current lifetime
+       can never progress (a restore or a wiped container leaves fewer health rows
+       than the device had when the egg was granted), and it presents as a dead
+       progress bar with no explanation. Re-anchoring to now costs the player
+       nothing they had and unsticks it. */
+    await repairEggAnchors();
     const [invAll, lifeSteps, pendingLoot, ingInv, foodActive, cook, dust, pCounts, gearLoNow] = await Promise.all([inventory(), lifetimeStepsSum(), kvGet('denloot', []), ingredients(), activeFoodBuffs(), cookState(), boneDust(), petCounts(), gearLoadout()]);
+    // an egg that is not moving because STEPS are not arriving says so instead of
+    // showing a bar that never fills
+    const eggStale = !!(await hkStaleInfo());
     const eggs = invAll.filter(r => r.kind === 'egg').sort((a, b) => a.ts - b.ts);
     const ownedPets = invAll.filter(r => r.kind === 'cos' && BH_BY_ID[r.itemId] && BH_BY_ID[r.itemId].slot === 'C').map(r => BH_BY_ID[r.itemId]);
     const pCountTotal = Object.values(pCounts).reduce((a, n) => a + n, 0);
@@ -7261,13 +7270,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
-        const pct = Math.min(100, Math.round(p.walked / p.goal * 100));
+        const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
         return `<div class="t3-egg" style="margin-bottom:9px">
           <span class="art">${crateIcon('egg', 46)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
-            <small>${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}</small>
+            <small>${eggStale ? 'Your steps are not reaching the app, so this is not moving. Tap the banner on Today to reconnect.' : `${p.walked.toLocaleString()} / ${p.goal.toLocaleString()} steps${p.ready ? ' · a pet is inside' : ` · ${(p.goal - p.walked).toLocaleString()} to go`}`}</small>
           </div>
           ${p.ready ? `<button class="btn" style="width:auto;padding:9px 16px;font-size:16px;box-shadow:var(--sh-sm)" data-hatch="${e.id}">HATCH</button>` : ''}
         </div>`;
@@ -9878,7 +9887,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v309'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v310'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -130,12 +130,16 @@ const planted = await page.evaluate(async () => {
   const r = await g.plantSeed('graveroot');
   return r.ok === true;
 });
-/* The Garden moved out from under the Kitchen on 2026-08-07 (Tom: "the garden
-   feels like an after thought that you wouldn't think to click into"), so it is
-   no longer a #gardenRow buried in the recipe list. It has its own door on Today
-   and a GROW door inside the Kitchen; this walks the Today door, which is the
-   one a player would use. tests/garden-doors.mjs owns both routes. */
-await page.evaluate(() => document.getElementById('gardenActBtn')?.click());
+/* THE ROUTE HAS MOVED TWICE IN ONE DAY, so it is worth writing down. The Garden
+   used to be a #gardenRow buried in the Kitchen's recipe list; v304 gave it a
+   tile on Today; v306 took that tile straight back out again (Tom: "we dont need
+   the garden icon on Today because if you click kitchen it's gonna basically take
+   you there"). The only route now is Kitchen -> GROW, and this test kept walking
+   the tile that no longer exists, so both Garden checks have been failing since.
+   tests/garden-doors.mjs owns the routing itself; this one just needs to arrive. */
+await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
+await sleep(1800);
+await page.evaluate(() => document.getElementById('doorGrow')?.click());
 await sleep(1800);
 const garden = {
   planted, beds: await count('.t3-bed'), soil: await count('.t3-bed.thirsty, .t3-bed.growing, .t3-bed.ready'),

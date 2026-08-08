@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 310, date: '2026-08-08', title: 'Eggs that would not hatch', items: [
+    'An egg could get <b>permanently stuck</b>: if your step history ever came back smaller than it was (a restore, or a reinstall), the egg was measuring against a number your phone no longer had, so its bar sat still no matter how far you walked. Those eggs re-anchor and start counting again the next time you open your Backpack.',
+    'An egg that is not moving because your <b>steps are not reaching the app</b> now says so, instead of showing a bar that never fills.',
+    'The welcome egg handed to new players is <b>actually ready</b> to crack.',
+  ] },
   { n: 309, date: '2026-08-08', title: 'The Boneyard arrives all at once', items: [
     'Finds on the map were still <b>trickling in after the map appeared</b>. The last one landed almost a second late, with nothing you did to cause it. The map now waits until everything has found its spot, then shows you the whole picture at once.',
   ] },
