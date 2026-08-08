@@ -5142,8 +5142,6 @@ function friendRowAvatar(f) {
   return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
 }
 
-// Big, collectible-feeling card for an accepted friend: their Bonehead posed on
-// a stage with their pet peeking in, name, class, and quick stat chips.
 /* A NICKNAME IS A NOTE, NOT A RENAME. Tom, 2026-08-07: "When you set a note for a
    nickname it should just show their username then nickname smaller beside not
    replace it fully." Their Bonehead name is who they are to everyone else and it
@@ -5151,36 +5149,28 @@ function friendRowAvatar(f) {
 function nameWithAlias(f) {
   return esc(f.name) + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
 }
-function friendCardHtml(f) {
+/* THE CREW FAN (v323). One trading card per friend, fanned like a hand of cards.
+   Approved mockup: market-quality-mockups/crew-fan.html; spec + acceptance:
+   market-quality-mockups/crew-fan-HANDOFF.md. Backdrop is their equipped BG, the
+   Bonehead holds the centre (figure contract), the pet sits on the plate's top
+   edge at the right tension line. cfan-pet is a registered figure-audit site. */
+function crewCardHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="fc-pet">${petPortraitHtml(p.pet.id, 40, !!p.pet.shiny, { mass: true })}</div>` : '';
-  const chips = [];
-  if (p.level) chips.push(`<span class="fc-chip lvl">Lv ${p.level}</span>`);
-  if (p.badges) chips.push(`<span class="fc-chip">${bhIcon('badge-trophy', 13)} ${p.badges}</span>`);
-  const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
-  if (gearN) chips.push(`<span class="fc-chip">${gearN} gear</span>`);
-  if (p.pet) chips.push(`<span class="fc-chip">${bhIcon('egg', 12)} Lv ${p.pet.level}</span>`);
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true })}</div>` : '';
   const ol = onlineLabel(f.lastSeen);
-  return `<button class="fc-card tap" data-view="${esc(f.playerId)}">
-    <div class="fc-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fc-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}${ol.on ? '<span class="fc-online" title="Online now"></span>' : ''}</div>
-    <div class="fc-body">
-      <div class="fc-name">${nameWithAlias(f)}${ol.text ? ` <span class="fc-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</div>
-      <div class="fc-class">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</div>
-      <div class="fc-chips">${chips.join('') || '<span class="fc-chip">Tap to view</span>'}</div>
-    </div>
-    <span class="crew-chev">›</span>
+  return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
+    <div class="cfan-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}</div>
+    ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
+    <span class="cfan-fstar" hidden>★</span>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small>${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}<span class="lv">LV ${p.level || 1}</span></small></div>
   </button>`;
 }
 
-function friendsListHtml(data) {
-  const { friends, incoming, outgoing } = data;
-  if (!friends.length && !incoming.length && !outgoing.length) {
-    return `<div class="friends-empty">
-      <p class="fe-title">No Crew yet</p>
-      <p class="note">Send a friend your code, or type theirs in above. Once you've added each other you'll see their Bonehead, gear and badges right here, and you can send gifts and cheers.</p>
-    </div>`;
-  }
+// Requests only: the Crew itself lives in the fan now. Incoming first (it has
+// the action on it), pending after.
+function requestRowsHtml(data) {
+  const { incoming, outgoing } = data;
   let h = '';
   if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends</div>${incoming.map(f => `
     <div class="fl-row">
@@ -5188,7 +5178,6 @@ function friendsListHtml(data) {
       <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
     </div>`).join('')}</div>`;
-  if (friends.length) h += `<div class="fl-sect"><div class="fl-h">Your Crew · ${friends.length}</div><div class="fc-grid">${friends.map(friendCardHtml).join('')}</div></div>`;
   if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
@@ -5202,7 +5191,11 @@ function friendsListHtml(data) {
 // your friend code up top (share + copy), an add-a-friend field, and your list.
 async function renderFriends(el) {
   const apiConfigured = !!(await social.apiBase());
-  const me = apiConfigured ? await social.socialMe() : null;
+  // __testMe / __testFriends: webdriver-gated fixture hooks (same pattern as
+  // __openFriendProfile). The fan needs real friends on the server, so the
+  // audits seed these instead of a live account.
+  const me = (apiConfigured ? await social.socialMe() : null)
+    || (navigator.webdriver && window.__testMe) || null;
   const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
   const whatsNewCard = `
     <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
@@ -5238,18 +5231,43 @@ async function renderFriends(el) {
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
 
-    <!-- ORDER MATTERS HERE. Tom, 2026-08-08: "the crew tab is still fucked up as
-         a hierarchy. you go there and all you see is a code and text... you need
-         to rejig it so when you go there youre immediately greeted with the
-         leader board. the tab feels like homework right now."
-         So: the standings first (the reason to come here), then your Crew, then
-         what arrived, then people to add. Your own friend code is REFERENCE, not
-         a greeting, so it moves to the bottom where you go looking for it. -->
+    <!-- ORDER MATTERS HERE. Tom, 2026-08-08 (supersedes the same-day "greet with
+         the leaderboard" call): "the fan should be at the very top when you open
+         it and then the rest of the features can fall below." So: YOUR CREW as a
+         fan of cards first, the standings and the race under it, then what
+         arrived, then people to add. Your own friend code is REFERENCE, not a
+         greeting, so it stays at the bottom where you go looking for it. -->
+    <div class="cfan-block">
+      <div class="cfan-head"><span>YOUR CREW<b id="cfanCount"></b></span><i></i><small>SWIPE OR TAP</small></div>
+      <div class="cfan-faves" id="cfanFaves" hidden></div>
+      <!-- Search sits ABOVE the deck and below the faves: it filters what the fan
+           shows, so it has to read as belonging to the fan rather than to the
+           leaderboard underneath. Hidden entirely for small crews, where scanning
+           four cards is faster than typing. -->
+      <div class="cfan-search" id="cfanSearchRow" hidden>
+        <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"
+               placeholder="Search your Crew by name or nickname" aria-label="Search your Crew">
+        <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : '&times;'}</button>
+      </div>
+      <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
+      <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
+      <div class="cfan-pager" id="cfanPager" hidden>
+        <button class="cfan-arrow prev" id="cfanPrev" aria-label="Previous friend">${ICONS.chev(16)}</button>
+        <span class="cfan-dots" id="cfanDots"></span>
+        <button class="cfan-arrow" id="cfanNext" aria-label="Next friend">${ICONS.chev(16)}</button>
+      </div>
+      <div class="cfan-sel" id="cfanSel" hidden></div>
+      <div class="friends-empty" id="cfanEmpty" hidden>
+        <p class="fe-title">No Crew yet</p>
+        <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
+      </div>
+      <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
+    </div>
+
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
-      <!-- never greet the tab with an empty box: this card is the FIRST thing on
-           the screen now, so it says something before the fetch lands and says
-           something honest if the fetch never does -->
+      <!-- never greet the card with an empty box: it says something before the
+           fetch lands and says something honest if the fetch never does -->
       <div class="lb-podium" id="lbPodium" hidden></div>
       <div class="lb-youare" id="lbYouAre" hidden></div>
       <div class="lb-wait" id="lbWait">Counting the Boneheadz... <span class="spin"></span></div>
@@ -5257,14 +5275,13 @@ async function renderFriends(el) {
       <span class="ul-chev">›</span>
     </button>
 
-    <!-- THE WEEKLY RACE. Above your Crew because it is the thing with a clock on
-         it: a standing you can still change this week beats a list that will look
-         the same tomorrow. -->
+    <!-- THE WEEKLY RACE: the thing with a clock on it stays above the archive
+         half of the tab. -->
     <details class="glutton-banner race-banner" id="raceCard" hidden></details>
 
     <div class="card">
-      <div class="card-title">YOUR CREW</div>
-      <div id="friendsList"><div class="friends-loading">Loading your Crew...</div></div>
+      <div class="card-title">ADD A FRIEND</div>
+      <div id="friendsList"></div>
       <div class="friends-add" style="margin-top:12px">
         <input id="friendCode" type="text" placeholder="Enter a friend's code" autocapitalize="characters" autocomplete="off" spellcheck="false">
         <button class="btn small" id="friendAddBtn">Add</button>
@@ -5371,10 +5388,255 @@ async function renderFriends(el) {
   paintDeliveries();
 
   let data = { friends: [], incoming: [], outgoing: [] };
+
+  /* ---- THE CREW FAN (v323) ------------------------------------------------
+     Approved mockup market-quality-mockups/crew-fan.html; acceptance contract
+     in crew-fan-HANDOFF.md and tests/crew-fan-audit.mjs. Geometry: 7 visible
+     slots (rot -21..21deg, scale falloff, arc y-offset) in px tuned for a
+     ~375pt screen; crews under 7 spread the same curve over what they have;
+     crews over 7 wrap, with off-hand cards faded out behind the deck. */
+  const CFAN_SLOTS = [
+    { rot: -21, s: 0.7756, x: -134, y: 70, z: 1 },
+    { rot: -14, s: 0.8498, x: -98,  y: 38, z: 2 },
+    { rot: -7,  s: 0.9346, x: -49,  y: 12, z: 3 },
+    { rot: 0,   s: 1,      x: 0,    y: 0,  z: 10 },
+    { rot: 7,   s: 0.9346, x: 49,   y: 12, z: 3 },
+    { rot: 14,  s: 0.8498, x: 98,   y: 38, z: 2 },
+    { rot: 21,  s: 0.7756, x: 134,  y: 70, z: 1 },
+  ];
+  const cfanSlot = (n, rel) => {
+    if (n >= 7) return CFAN_SLOTS[rel + 3];
+    const c = n >> 1, d = c ? rel / c : 0, a = Math.abs(d);
+    return { rot: d * 21, s: 1 - 0.2244 * a * a, x: d * 134, y: a * a * 70, z: 10 - Math.abs(rel) };
+  };
+
+  let favs = new Set((await kvGet('crewFaves', [])) || []);
+  let centerId = null;
+  let fanOrder = [];   // playerIds: starred, then online, then the rest (stable)
+  let fanQuery = '';   // crew search box, matches name OR nickname
+
+  const fanFriend = id => (data.friends || []).find(f => f.playerId === id);
+  /* THREE TIERS, ONE STABLE SORT: starred, then online, then everyone else.
+     Tom, 2026-08-08: "i think it should bias players that are currently online or
+     filter for it like the favourite feature?"
+     A BIAS, not a filter. Filtering hides people, and a crew where nobody happens
+     to be online right now would open on an empty fan, which is the worst greeting
+     the tab could give. Sorting keeps every friend reachable and still puts the
+     ones you can act on first. Within each tier the original list order is
+     preserved (Array.sort is stable), so the deck does not reshuffle under you
+     every time someone's `lastSeen` ticks over. */
+  const fanRank = id => {
+    if (favs.has(id)) return 0;
+    const f = fanFriend(id);
+    return (f && onlineLabel(f.lastSeen).on) ? 1 : 2;
+  };
+  /* Search matches the Boneheadz name OR the nickname you gave them. Tom:
+     "you should probably be able to search for your friends name in the crew tab
+     or by nickname." Nickname matters more than it looks: you can rename people,
+     so a name-only search fails exactly for the friends you cared enough to
+     rename. Accent- and case-insensitive, substring rather than prefix, because
+     "wrecker" should find "Bony Wrecker". */
+  const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const fanMatches = (f, q) => {
+    if (!q) return true;
+    const n = norm(q);
+    return norm(f.name).includes(n) || norm(f.alias).includes(n);
+  };
+  const resortFan = () => {
+    const q = fanQuery.trim();
+    const pool = (data.friends || []).filter(f => fanMatches(f, q));
+    fanOrder = pool.map(f => f.playerId).sort((a, b) => fanRank(a) - fanRank(b));
+    if (!centerId || !fanOrder.includes(centerId)) centerId = fanOrder[0] || null;
+  };
+
+  /* Seats every card WITHOUT rebuilding DOM: a re-sort or a new centre must
+     GLIDE (the transform transition needs a previous value to interpolate
+     from; an innerHTML rebuild is born in place and snaps). */
+  const applyFan = () => {
+    const n = fanOrder.length;
+    const cpos = fanOrder.indexOf(centerId);
+    $$('#cfanDeck .cfan-card', el).forEach(card => {
+      let rel = fanOrder.indexOf(card.dataset.fan) - cpos;
+      if (n >= 7) { rel = ((rel % n) + n) % n; if (rel > n / 2) rel -= n; } // shortest way round the wrap
+      const off = Math.abs(rel) > 3;
+      const p = cfanSlot(Math.min(n, 7), Math.max(-3, Math.min(3, rel)));
+      card.style.transform = `translate(${p.x}px,${p.y}px) rotate(${p.rot}deg) scale(${off ? 0.5 : p.s})`;
+      card.style.opacity = off ? '0' : '1';
+      card.style.zIndex = off ? 0 : p.z;
+      /* LESSON FROM THE STABLE (Tom, 2026-08-08: "the crew fan is basically the
+         same thing that could lag too"). It is a heavier screen than the Stable,
+         not a lighter one: seven LAYERED Bonehead stacks of about seven images
+         each, plus pets, versus six single-pet cards.
+         `off` cards were opacity 0, which still composites every one of those
+         layers on every frame of a glide. `.off` makes them visibility:hidden so
+         the compositor skips them outright. They are already invisible; this just
+         stops paying for them. */
+      card.classList.toggle('off', off);
+      card.classList.toggle('feat', card.dataset.fan === centerId);
+      const star = $('.cfan-fstar', card);
+      if (star) star.hidden = !favs.has(card.dataset.fan);
+    });
+    const dots = $('#cfanDots', el);   // dots follow the DECK order, so they track the sort
+    if (dots) dots.innerHTML = fanOrder.map(id => `<i${id === centerId ? ' class="on"' : ''}></i>`).join('');
+    paintFanSel();
+  };
+
+  // The action strip for whoever holds the centre: star, profile, cheer, gift.
+  const paintFanSel = () => {
+    const box = $('#cfanSel', el);
+    const f = fanFriend(centerId);
+    if (!box) return;
+    if (!f) { box.hidden = true; return; }
+    const p = f.profile || {};
+    const ol = onlineLabel(f.lastSeen);
+    const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
+    box.innerHTML = `
+      <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">★</button>
+      <div class="cfan-sel-tx">
+        <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${ol.on ? '<i class="live-dot"></i> online' : esc(ol.text)}</em>` : ''}</button>
+        <div class="cfan-chips">
+          <span class="cfan-chip lvl">LV ${p.level || 1}</span>
+          ${p.badges ? `<span class="cfan-chip">${p.badges} badges</span>` : ''}
+          ${gearN ? `<span class="cfan-chip">${gearN} gear</span>` : ''}
+          ${p.pet ? `<span class="cfan-chip pet">Pet LV ${p.pet.level || 1}</span>` : ''}
+        </div>
+      </div>
+      <div class="cfan-acts">
+        <button class="btn small" id="cfanCheer">Cheer</button>
+        <button class="btn small gift" id="cfanGift">Gift</button>
+      </div>`;
+    $('#cfanStar', box).addEventListener('click', async () => {
+      favs.has(f.playerId) ? favs.delete(f.playerId) : favs.add(f.playerId);
+      await kvSet('crewFaves', [...favs]);
+      toast(favs.has(f.playerId) ? `${esc(f.alias || f.name)} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
+      resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
+    });
+    $('#cfanView', box).addEventListener('click', () => openFriendProfile(f, paint));
+    $('#cfanCheer', box).addEventListener('click', () => openCheerSheet(f));
+    $('#cfanGift', box).addEventListener('click', () => openGiftSheet(f));
+    box.hidden = false;
+  };
+
+  // Starred friends as skull chips above the fan: one tap jumps the fan to them.
+  const paintFaves = () => {
+    const row = $('#cfanFaves', el);
+    if (!row) return;
+    const ids = fanOrder.filter(id => favs.has(id));
+    if (!ids.length) { row.hidden = true; return; }
+    row.innerHTML = ids.map(id => {
+      const f = fanFriend(id);
+      const eq = (f.profile && f.profile.outfit) || {};
+      const sk = BH_BY_ID[eq.SK] || BH_BY_ID['SK0-1'];
+      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><img src="${bhAsset(sk)}" alt="${esc(f.name)}"></button>`;
+    }).join('') + '<small>FAVES</small>';
+    $$('[data-jump]', row).forEach(b => b.addEventListener('click', () => { centerId = b.dataset.jump; applyFan(); }));
+    row.hidden = false;
+  };
+
+  const paintFan = () => {
+    const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
+    $('#cfanLoading', el)?.remove();
+    $('#cfanCount', el).textContent = ` · ${data.friends.length}`;
+    if (!data.friends.length) {
+      wrap.hidden = pager.hidden = true;
+      $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
+      $('#cfanEmpty', el).hidden = false;
+      return;
+    }
+    $('#cfanEmpty', el).hidden = true;
+    favs = new Set([...favs].filter(id => data.friends.some(f => f.playerId === id)));
+    resortFan();
+    // searching a crew of four is slower than looking at it
+    const searchRow = $('#cfanSearchRow', el);
+    if (searchRow) searchRow.hidden = data.friends.length < 5 && !fanQuery;
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
+    composeAvatars(deck);   // decode the layered art; never fan out blank cards
+    /* A search that matches nobody must SAY so. Hiding the deck and leaving the
+       space blank would read as the crew having vanished, which is the same
+       failure as an empty fan on a filter. */
+    const noHit = $('#cfanNoHit', el);
+    const empty = fanOrder.length === 0;
+    if (noHit) {
+      noHit.hidden = !empty;
+      noHit.textContent = empty ? `Nobody in your Crew matches "${fanQuery}".` : '';
+    }
+    wrap.hidden = empty;
+    pager.hidden = empty || fanOrder.length < 2;
+    $('#cfanSel', el).hidden = empty;
+    paintFaves();
+    if (!empty) applyFan();
+  };
+
+  const cfanCycle = d => {
+    const n = fanOrder.length; if (n < 2) return;
+    centerId = fanOrder[((fanOrder.indexOf(centerId) + d) % n + n) % n];
+    applyFan();
+  };
+  /* Search input. Debounced lightly so typing does not rebuild the deck on every
+     keystroke (each rebuild re-decodes every card's layered art), but short
+     enough that it still feels live. */
+  let searchT = null;
+  $('#cfanSearch', el)?.addEventListener('input', e => {
+    fanQuery = e.target.value || '';
+    const clear = $('#cfanClear', el);
+    if (clear) clear.hidden = !fanQuery;
+    clearTimeout(searchT);
+    searchT = setTimeout(() => { centerId = null; paintFan(); }, 140);
+  });
+  $('#cfanClear', el)?.addEventListener('click', () => {
+    fanQuery = '';
+    const f = $('#cfanSearch', el); if (f) { f.value = ''; f.focus(); }
+    $('#cfanClear', el).hidden = true;
+    centerId = null; paintFan();
+  });
+  $('#cfanPrev', el)?.addEventListener('click', () => cfanCycle(-1));
+  $('#cfanNext', el)?.addEventListener('click', () => cfanCycle(1));
+
+  /* Two ways to advance: TAP a card (a side card centres it, the centre card
+     opens their profile), or DRAG the fan: it follows the finger, settles home,
+     and advances past the threshold. dragstart MUST die or the browser lifts a
+     single gear PNG off the Bonehead as a ghost image (Tom hit this on the
+     mockup); the click suppressor is ONE-SHOT so only the click born from this
+     drag's release is eaten, never the next legitimate tap. */
+  {
+    const wrap = $('#cfanWrap', el), deck = $('#cfanDeck', el);
+    let sx = null, dx = 0, dragged = false;
+    wrap.addEventListener('dragstart', e => e.preventDefault());
+    wrap.addEventListener('pointerdown', e => {
+      sx = e.clientX; dx = 0; dragged = false;
+      deck.style.transition = 'none';
+      try { wrap.setPointerCapture(e.pointerId); } catch { /* synthetic pointers have no capture */ }
+    });
+    wrap.addEventListener('pointermove', e => {
+      if (sx === null) return;
+      dx = e.clientX - sx;
+      if (Math.abs(dx) > 8) dragged = true;
+      deck.style.transform = `translateX(${dx * 0.35}px)`;
+    });
+    const release = () => {
+      if (sx === null) return;
+      sx = null;
+      deck.style.transition = '';
+      deck.style.transform = 'translateX(0)';
+      if (Math.abs(dx) > 45) cfanCycle(dx < 0 ? 1 : -1);
+    };
+    wrap.addEventListener('pointerup', release);
+    wrap.addEventListener('pointercancel', release);
+    wrap.addEventListener('click', e => { if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; } }, true);
+    deck.addEventListener('click', e => {
+      const card = e.target.closest('[data-fan]');
+      if (!card) return;
+      if (card.dataset.fan === centerId) { const f = fanFriend(centerId); if (f) openFriendProfile(f, paint); }
+      else { centerId = card.dataset.fan; applyFan(); }
+    });
+  }
+
   const paint = async () => {
-    data = await social.listFriends();
+    // webdriver-gated fixture hook: see __testMe above
+    data = (navigator.webdriver && window.__testFriends) || await social.listFriends();
+    paintFan();
     const list = $('#friendsList', el);
-    if (list) list.innerHTML = friendsListHtml(data);
+    if (list) list.innerHTML = requestRowsHtml(data);
     await setCrewBadgeFrom((data.incoming || []).length); // in sync after accept/decline/add
     // seeing the tab means these requests are no longer "new" for notifications
     await kvSet('knownIncoming', (data.incoming || []).map(f => f.playerId));
@@ -5684,7 +5946,6 @@ async function renderFriends(el) {
   $('#friendsList', el).addEventListener('click', async e => {
     const acc = e.target.closest('[data-accept]');
     const rem = e.target.closest('[data-remove]');
-    const view = e.target.closest('[data-view]');
     if (acc) {
       acc.disabled = true;
       const ok = await social.acceptFriend(acc.dataset.accept);
@@ -5692,9 +5953,6 @@ async function renderFriends(el) {
       await paint();
     } else if (rem) {
       if (await social.removeFriend(rem.dataset.remove)) { toast('Removed.'); await paint(); }
-    } else if (view) {
-      const f = [...data.friends, ...data.incoming, ...data.outgoing].find(x => x.playerId === view.dataset.view);
-      if (f) openFriendProfile(f, paint);
     }
   });
 
@@ -10440,7 +10698,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v325'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v326'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

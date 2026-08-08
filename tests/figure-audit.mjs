@@ -136,9 +136,27 @@ const SITES = [
     },
   },
   {
-    key: 'friend-card', claim: 'fc-pet', paired: false, undriven:
-      'the Crew list needs a reachable server AND an accepted friendship; it draws '
-      + 'from the same profile snapshot as friend-profile, which IS driven',
+    key: 'crew-fan', claim: 'cfan-pet', paired: true,
+    bh: '.cfan-card.feat .bh-anim', pet: '.cfan-card.feat .cfan-pet',
+    /* v323: the Crew list became the fan; unlike the old grid it IS drivable now,
+       via the webdriver-gated __testMe/__testFriends fixtures in renderFriends.
+       The card letterboxes a 640-canvas Bonehead above the plate and seats the
+       pet on the plate's top edge, staged nearer the viewer, so the pet's ink may
+       sit lower than the Bonehead's feet: the tolerance is the staging depth. */
+    planeTol: 40,
+    drive: async page => {
+      await page.evaluate(sp => {
+        window.__testMe = { name: 'Fig Audit', handle: 'fig', friendCode: 'BONE-0000' };
+        window.__testFriends = { incoming: [], outgoing: [], friends: [{
+          playerId: 'fig-audit-fan', name: 'Bony Wrecker', alias: null, lastSeen: Date.now(),
+          profile: { level: 16, levelName: 'Gainz Engineer',
+            outfit: { B: 'B6-3', SK: 'SK3-1', IL: 'IL8-2', H: 'H6-2', FW: 'FW8-3', IR: 'IR7-3', P: 'P6-1', BG: 'BG4-1' },
+            pet: { id: sp, level: 10, shiny: true } },
+        }] };
+        location.hash = '#/friends';
+      }, SP);
+      await sleep(1800);
+    },
   },
   {
     key: 'fight-arena', claim: 'petStage', paired: false, undriven:
@@ -486,6 +504,10 @@ for (const sp of species || []) {
     await kvSet('petInst', [{ iid: 'p-' + s, sp: s, lineage: 0, shiny: false, hatchedAtSteps: 0 }]);
     const eq = (await kvGet('equipped', {})) || {};
     await kvSet('equipped', { ...eq, C: s });
+    /* CUTOFF measures the Today hero, but the hash is whatever the LAST driven
+       site left it on (crew-fan leaves #/friends), and reload keeps it: pin the
+       route or every species reads "no pet slot rendered". */
+    location.hash = '#/today';
   }, sp);
   await page.reload({ waitUntil: 'networkidle2' });
   await sleep(1500);

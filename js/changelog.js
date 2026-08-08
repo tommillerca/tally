@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 326, date: '2026-08-08', title: 'Your Crew is a hand of cards now', items: [
+    'The Crew tab now greets you with your friends as a <b>fan of trading cards</b>: their fit, their backdrop, their pet, their level. Swipe the fan or tap a card to flip through them; tap the middle card to open their profile.',
+    '<b>Star your favourites</b> and they sort to the front of the fan, get a gold star on their card, and live as one-tap skull chips above the deck so they are always easy to find.',
+    'Cheering and gifting whoever is front and centre is now <b>one tap</b>, right under the fan.',
+    'The leaderboard, the Step Race, requests and your friend code all still live on the tab, right below the fan.',
+  ] },
   { n: 325, date: '2026-08-08', title: 'The Stable stops stuttering', items: [
     'Only the pet you are <b>currently looking at</b> animates. Two of the same species side by side were running the identical loop in perfect lockstep, which looked cheap, and the Stable was paying to animate six of them at once.',
     'Everything <b>holds still while the ring is moving</b>, and the motion blur switches itself off if your phone is struggling. Smooth movement matters more than the effect decorating it.',
