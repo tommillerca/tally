@@ -5789,3 +5789,82 @@ body::before {
 }
 .sheet-rename .rn-gift span { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .sheet-rename .rn-gift small { flex: 1 1 100%; color: var(--text-3); font-size: 11.5px; }
+
+/* ---------- The Stable coverflow (v317) --------------------------------------
+   Spec: market-quality-mockups/stable-coverflow.html. A flat ring of pets with
+   one in front, replacing the species-grouped list you had to scroll past.
+   The art inside a card comes from petPortraitHtml(..., {mass:true}), so it is
+   content-cropped by PET_CROP and mass-normalised: a flat lizard and the round
+   cloud read as the same size animal in the same square tile. */
+.cf { --card: 150px; width: 100%; }
+.cf-frame {
+  position: relative; overflow: hidden; padding: 22px 0 14px;
+  cursor: grab; touch-action: pan-y; outline: none;
+  /* a shorter viewer distance = a wider lens = a stronger rake. At 3x the
+     neighbours read as merely offset rather than turned. */
+  perspective: calc(var(--card) * 2.1);
+}
+.cf-frame:active { cursor: grabbing; }
+.cf-track { position: relative; height: var(--card); transform-style: preserve-3d; user-select: none; }
+.cf-card {
+  position: absolute; left: 50%; top: 0; width: var(--card); aspect-ratio: 1;
+  border: 2.5px solid #17151d; border-radius: 18px; overflow: hidden;
+  background: var(--surface-2);
+  will-change: transform; box-shadow: 0 10px 18px rgba(0, 0, 0, .45);
+}
+.cf-card.active { border-color: var(--accent); }
+.cf-card.picked { border-color: var(--violet); }
+.cf-art { position: absolute; inset: 0; display: grid; place-items: center; }
+.cf-chip {
+  position: absolute; left: 8px; top: 8px; z-index: 2;
+  font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  background: var(--ink); color: var(--text); border: 2px solid rgba(0, 0, 0, .35);
+  border-radius: 999px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 3px;
+}
+.cf-lv {
+  position: absolute; right: 8px; top: 8px; z-index: 2;
+  font-family: var(--display); font-size: 15px; letter-spacing: .04em; color: var(--ink);
+  background: var(--gold); border: 2px solid #17151d; border-radius: 8px; padding: 0 7px 1px;
+}
+.cf-eq {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; text-align: center;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--accent); color: var(--ink); border-top: 2px solid #17151d; padding: 3px 0 2px;
+}
+.cf-eq.sel { background: var(--violet); color: var(--text); }
+.cf-cap { padding: 4px 4px 0; text-align: center; }
+.cf-cap b {
+  display: block; font-family: var(--display); font-weight: 400; font-size: 27px;
+  letter-spacing: .03em; color: var(--text); line-height: 1.05;
+}
+.cf-cap .role {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
+  font-size: var(--fs-1); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2);
+}
+.cf-cap .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid #17151d; background: var(--text-3); }
+.cf-cap .dot.r-uncommon { background: var(--accent); }
+.cf-cap .dot.r-rare { background: #7cc4ff; }
+.cf-cap .dot.r-epic { background: var(--violet); }
+.cf-cap .dot.r-legendary { background: var(--gold); }
+.cf-meta { margin: 12px auto 0; max-width: 240px; }
+.cf-meta .row { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid rgba(242, 233, 215, .1); }
+.cf-meta .row:first-child { border-top: 0; }
+.cf-meta dt { font-size: var(--fs-1); color: var(--text-2); }
+.cf-meta dd { font-size: var(--fs-1); font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; margin: 0; }
+.cf-dots { display: flex; justify-content: center; gap: 7px; margin-top: 14px; flex-wrap: wrap; }
+.cf-dots i {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); opacity: .3;
+  transition: opacity .2s, transform .2s; cursor: pointer;
+}
+.cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
+.cf-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 0 0; }
+.cf-acts .btn { width: 100%; }
+.cf-acts .btn.on { background: var(--violet); color: var(--text); }
+/* A coverflow shows ONE thing, which is right for talents (they belong to the pet
+   in front) and wrong for breeding (it needs two). So neither becomes a separate
+   screen: the ring SHRINKS and stays on top, and the panel takes the space the
+   stat table had, so you never lose track of which pet you are editing. */
+.cf.panelled { --card: 104px; }
+.cf.panelled .cf-frame { padding: 10px 0 6px; }
+.cf.panelled .cf-meta, .cf.panelled .cf-dots { display: none; }
+.cf.panelled .cf-cap b { font-size: 21px; }

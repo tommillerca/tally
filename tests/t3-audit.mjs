@@ -164,8 +164,25 @@ await sleep(700);
 await hubTab('backpack');
 await page.evaluate(() => document.querySelector('#openStableFromBp')?.click());
 await sleep(1800);
-const stable = { cards: await count('.t3-petcard'), steps: await count('.t3-steps'), acts: await count('.t3-ghosty') };
-ok('Stable renders trading-card pets', stable.cards >= 1 && stable.steps >= 1 && stable.acts >= 3, JSON.stringify(stable));
+/* The Stable became a coverflow ring in v317 (was a .t3-petcard grid). This now
+   checks the ring itself: cards exist, ONE of them is the focused card carrying a
+   real transform (a ring that never painted leaves every card stacked at the same
+   spot), the caption names a pet, and the four actions are there. */
+const stable = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('.cf-card')];
+  return {
+    cards: cards.length,
+    painted: cards.filter(c => /translateX/.test(c.style.transform)).length,
+    spread: new Set(cards.map(c => c.style.transform)).size,
+    caption: (document.querySelector('.cf-cap b') || {}).textContent || '',
+    acts: document.querySelectorAll('.cf-acts .btn').length,
+    dots: document.querySelectorAll('.cf-dots i').length,
+  };
+});
+ok('Stable renders the pet carousel', stable.cards >= 1 && stable.painted === stable.cards
+  && stable.caption.length > 0 && stable.acts >= 4 && stable.dots === stable.cards, JSON.stringify(stable));
+ok('Stable carousel actually spread its cards (all stacked = the ring never painted)',
+  stable.cards < 2 || stable.spread >= 2, `${stable.spread} distinct transforms across ${stable.cards} cards`);
 const tree = await page.evaluate(async () => {
   const before = document.querySelectorAll('.pet-tree-inline').length;
   const btn = document.querySelector('[data-pettree]');

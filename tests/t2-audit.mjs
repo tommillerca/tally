@@ -240,13 +240,25 @@ await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1700);
 await page.evaluate(() => document.getElementById('stableBtn')?.click());
 await sleep(2300);
+/* v317: the Stable is a coverflow, so there is exactly ONE breed button at a
+   time (the pet in front). Flagging two pets means what a player actually does:
+   flag the pet you are looking at, spin the ring, flag the next one. Driving it
+   the old way (click two buttons that both exist) would silently test nothing,
+   because only one such button is ever in the DOM now. */
 const flagged = await page.evaluate(async () => {
-  const b = [...document.querySelectorAll('[data-breedsel]')];
-  if (b.length < 2) return 0;
-  b[0].click(); await new Promise(r => setTimeout(r, 700));
-  const again = [...document.querySelectorAll('[data-breedsel]')];
-  (again[1] || b[1]).click(); await new Promise(r => setTimeout(r, 1000));
-  return document.querySelectorAll('.t3-petcard.breedsel').length;   // Tier 3 renamed the card (v280)
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const flag = () => document.querySelector('[data-breedsel]')?.click();
+  const spin = () => {
+    const dots = [...document.querySelectorAll('.cf-dots i')];
+    const on = dots.findIndex(d => d.classList.contains('on'));
+    const next = dots[(on + 1) % Math.max(1, dots.length)];
+    if (next) next.click();
+  };
+  if (document.querySelectorAll('.cf-card').length < 2) return 0;
+  flag(); await wait(800);
+  spin(); await wait(900);
+  flag(); await wait(1100);
+  return document.querySelectorAll('.cf-card.picked').length;
 });
 ok('BREED two pets can be flagged', flagged === 2, `${flagged} flagged, ready=${bset.ready}`);
 

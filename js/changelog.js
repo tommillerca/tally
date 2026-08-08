@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 317, date: '2026-08-08', title: 'The Stable is a carousel now', items: [
+    'Your pets sit on a <b>turning ring</b> instead of a long list. One pet is in front with its stats and its buttons underneath, and you flick or tap to bring another forward. No more scrolling past six pets to reach the one you were thinking about.',
+    '<b>Talents and breeding</b> open underneath without leaving the ring: it shrinks and stays on top, so you never lose track of which pet you are editing.',
+    'Every pet is drawn at the <b>same visual size</b>. A flat pet used to come out noticeably smaller than a round one in the same tile.',
+  ] },
   { n: 316, date: '2026-08-08', title: 'The icon stops vanishing when you get close', items: [
     'Walking into range of a <b>mini-boss, boss den or bone pile</b> made its icon disappear off the map, leaving only the button at the bottom. It was not hidden: the glow animation was fighting the map for control of where the marker sits, and the map lost, so the icon was flung into the top-left corner behind the header.',
     'Now the icon <b>stays where it belongs and pulses</b> when you are close enough to act on it, and the button is still there too. Both, so you can see what you are walking up to.',

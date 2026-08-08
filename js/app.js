@@ -8000,6 +8000,9 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
+  // which pet the carousel is parked on. Held by IID, not index, so it survives a
+  // re-render that adds or removes a pet (breeding destroys one mid-session).
+  let cfIid = opts.focusIid || null;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -8016,7 +8019,13 @@ async function openStable(opts = {}) {
     const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     // expanded talent tree: default to the active pet so it's visible right away
-    if (openIid === undefined || (openIid !== null && !insts.some(x => x.iid === openIid))) openIid = eqIid;
+    /* Default CLOSED (v317). The list layout opened the active pet's tree on
+       arrival so it was "visible right away", but on the carousel an open panel
+       shrinks the ring and hides the stat table, so the Stable opened on its own
+       sub-screen before you had looked at a single pet. Arriving from a level-up
+       still opens that pet's tree, via focusIid above. */
+    if (openIid === undefined) openIid = null;
+    if (openIid !== null && !insts.some(x => x.iid === openIid)) openIid = null;
     const openInst = insts.find(x => x.iid === openIid) || null;
     const openPicks = openInst ? await petPicks(openInst.sp) : [];
     // inline talent tree for one pet, rendered directly under its card
@@ -8061,44 +8070,66 @@ async function openStable(opts = {}) {
     const afford = st.dust >= cost;
     const canBreedNow = pair && st.ready && afford;
 
-    const sections = order.map(sp => {
-      const it = BH_BY_ID[sp] || {};
-      const cards = bySp[sp].map(x => {
-        const lvl = petLevel(bank[x.iid] || 0);
-        const toNext = petStepsToNext(bank[x.iid] || 0);
-        const bs = petBattleStats(sp, lvl, x.shiny, x.lineage || 0);
-        const isEq = x.iid === eqIid;
-        const inSel = sel.includes(x.iid);
-        const isOpen = x.iid === openIid;
-        const dustVal = petDustValue(it) + (x.shiny ? 15 : 0) + (x.lineage || 0) * 8;
-        // Tier 3 (mockup t3-stable.html, approved 2026-08-07): the pet card joins
-        // the Tier 2 trading-card language. Rarity IS the frame; the active pet's
-        // frame goes lime. Level and ACTIVE are chips, growth is a bar.
-        const span = lvl >= PET_MAX_LEVEL ? 0 : (PET_LEVEL_STEPS[lvl] || 0) - (PET_LEVEL_STEPS[lvl - 1] || 0);
-        const pct = lvl >= PET_MAX_LEVEL ? 100 : Math.max(0, Math.min(100, Math.round((1 - toNext / Math.max(1, span)) * 100)));
-        return `<div class="t3-petcard r-${it.rarity || 'common'} lin-${Math.min(x.lineage || 0, 6)}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' breedsel' : ''}${isOpen ? ' talk-open' : ''}" data-petsel="${x.iid}" data-sp="${x.sp}">
-          <span class="portrait">${petPortraitHtml(sp, 60, x.shiny)}</span>
-          <div class="tx">
-            <div class="nm">
-              <b>${esc(it.name || sp).toUpperCase()}</b>
-              <span class="lv">LV ${lvl}</span>
-              ${isEq ? '<span class="on">ACTIVE</span>' : ''}
-              ${x.lineage ? `<span class="lin-tag">${ICONS.star(11)}${x.lineage}</span>` : ''}
-              ${x.shiny ? `<span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''}
-            </div>
-            <div class="st">${bs.power} PWR · ${bs.hp} HP · ${bs.reflex} REF${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</div>
-            <div class="bar t3-steps"><i style="width:${pct}%"></i></div>
-            <div class="acts">
-              ${isEq ? '' : `<button class="btn" data-eq="${x.iid}">EQUIP</button>`}
-              <button class="t3-ghosty" data-pettree="${x.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
-              <button class="t3-ghosty${inSel ? ' on' : ''}" data-breedsel="${x.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
-              <button class="t3-ghosty danger" data-destroy="${x.iid}" data-dust="${dustVal}">DESTROY ${dustVal}</button>
-            </div>
-          </div>
-        </div>${isOpen ? petTalentTree(x, lvl, openPicks) : ''}`;
-      }).join('');
-      return `<div class="t3-sect"><b>${esc(it.name || sp)} · ${(RARITIES[it.rarity] || {}).label || ''}</b><i></i><span class="r chip" style="font-size:11px">${bySp[sp].length}</span></div>${cards}`;
+    /* THE COVERFLOW ROSTER (v317). Tom sent the shadcn coverflow component and
+       asked how it would look in the app, then "build the stable cover flow".
+       Mockup + spec: market-quality-mockups/stable-coverflow.html.
+       One flat ring instead of the old species-grouped list. The list made you
+       scroll past pets you were not thinking about to reach the one you were;
+       the ring puts exactly one pet in front of you and its actions under it.
+       The card art goes through the app's own mass-normalised portrait helper,
+       NOT a hand-rolled crop: PET_CROP + croppedPetImg already exist, and mass
+       normalisation is why a flat lizard is not drawn a third shorter than the
+       round cloud in the same square (figure contract rule 2). */
+    const roster = order.flatMap(sp => bySp[sp]);
+    const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
+    const focused = roster[focusIdx] || roster[0] || null;
+    const cfCards = roster.map((x, i) => {
+      const it = BH_BY_ID[x.sp] || {};
+      const lvl = petLevel(bank[x.iid] || 0);
+      const isEq = x.iid === eqIid;
+      const inSel = sel.includes(x.iid);
+      return `<div class="cf-card r-${it.rarity || 'common'}${x.shiny ? ' is-shiny' : ''}${isEq ? ' active' : ''}${inSel ? ' picked' : ''}"
+          data-cfi="${i}" data-petsel="${x.iid}" data-sp="${x.sp}">
+        <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
+        <span class="cf-lv">LV ${lvl}</span>
+        <span class="cf-art">${petPortraitHtml(x.sp, 96, x.shiny, { mass: true })}</span>
+        ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
+        ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
+      </div>`;
     }).join('');
+    const cfDots = roster.map((x, i) => `<i class="${i === focusIdx ? 'on' : ''}" data-cfdot="${i}"></i>`).join('');
+    const cfCaption = (() => {
+      if (!focused) return '';
+      const it = BH_BY_ID[focused.sp] || {};
+      const lvl = petLevel(bank[focused.iid] || 0);
+      const toNext = petStepsToNext(bank[focused.iid] || 0);
+      const bs = petBattleStats(focused.sp, lvl, focused.shiny, focused.lineage || 0);
+      const fam = familyOf(focused.sp);
+      const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
+      if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+      if (focused.lineage) rows.push(['Lineage', `${focused.lineage} · +${Math.round(focused.lineage * 5)}% stats`]);
+      return `<div class="cf-cap">
+          <b>${esc(it.name || focused.sp)}${focused.shiny ? ' ✦' : ''}</b>
+          <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
+          <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+        </div>
+        <div class="cf-dots">${cfDots}</div>`;
+    })();
+    const cfActs = (() => {
+      if (!focused) return '';
+      const it = BH_BY_ID[focused.sp] || {};
+      const isEq = focused.iid === eqIid;
+      const inSel = sel.includes(focused.iid);
+      const isOpen = focused.iid === openIid;
+      const dustVal = petDustValue(it) + (focused.shiny ? 15 : 0) + (focused.lineage || 0) * 8;
+      return `<div class="cf-acts">
+          <button class="btn${isEq ? ' ghost' : ''}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'OUT WITH YOU' : 'EQUIP'}</button>
+          <button class="btn ghost" data-pettree="${focused.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
+          <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
+          <button class="btn ghost danger" data-destroy="${focused.iid}" data-dust="${dustVal}">DESTROY ${dustVal}</button>
+        </div>`;
+    })();
+
 
 
     const spChips = pair ? [a, b]
@@ -8110,7 +8141,16 @@ async function openStable(opts = {}) {
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
       </div>
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
-      ${sections || '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
+      ${roster.length ? `
+        <div class="cf${openIid || pair ? ' panelled' : ''}">
+          <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
+            <div class="cf-track" id="cfTrack">${cfCards}</div>
+          </div>
+          ${cfCaption}
+          ${cfActs}
+        </div>
+        ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
+      ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
       <!-- THE DECISION FOLLOWS YOU DOWN THE PAGE. Tom, 2026-08-08: "when you
            select two pets to breed it's unclear that i need to scroll to the top
            to see whats happening." It used to render ABOVE the pet list, so
@@ -8150,21 +8190,154 @@ async function openStable(opts = {}) {
     /* Bring the pet we came here for onto the screen, once. Opening its tree is
        not enough when it is the fourth card down: the sheet still lands at the
        top and the talent it just unlocked is off-screen. */
+    /* Arriving from a pet level-up. The carousel already parks on cfIid, so this
+       no longer has to scroll anything into view: it just makes sure the ring is
+       pointed at the pet that caused the visit, and opens its tree once. */
     if (focusIid || focusSp) {
-      const card = $(`[data-petsel="${focusIid}"]`, body) || $$('[data-petsel]', body).find(c => c.dataset.sp === focusSp);
-      if (card) {
-        if (!openIid) { openIid = card.dataset.petsel; focusIid = openIid; render(); return; }
-        requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-        card.classList.add('just-levelled');
+      const hit = roster.find(x => x.iid === focusIid) || roster.find(x => x.sp === focusSp);
+      if (hit) {
+        if (!openIid) { openIid = hit.iid; cfIid = hit.iid; focusIid = hit.iid; render(); return; }
+        const card = $(`[data-petsel="${hit.iid}"]`, body);
+        if (card) card.classList.add('just-levelled');
       }
       focusIid = null;
     }
-    $$('[data-petsel]', body).forEach(card => card.addEventListener('click', (e) => {
-      if (e.target.closest('button')) return; // don't hijack Equip/Breed/Destroy
-      const iid = card.dataset.petsel;
-      openIid = (openIid === iid) ? null : iid;
-      render();
-    }));
+    /* The ring. Painted straight to the DOM because sixty transform updates a
+       second is not a job for a re-render: render() rebuilds this whole body, so
+       running it per frame would fight the drag. Only the CAPTION is refreshed
+       while you spin; a full render happens when you actually act on a pet.
+       Position is folded into the shorter way round the ring, so it loops with no
+       cloned nodes. Same maths as the mockup. */
+    const cfFrame = $('#cfFrame', body), cfTrack = $('#cfTrack', body);
+    if (cfFrame && cfTrack && roster.length) {
+      const cards = [...cfTrack.children];
+      const N = cards.length;
+      const GAP = 0.30, ROTATE = 46, DEPTH = 0.34, FADE = 0.30, FALLOFF = 0.62;
+      let pos = focusIdx, target = focusIdx, raf = null, shown = -1;
+      const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
+      const indexAt = p => ((Math.round(p) % N) + N) % N;
+      const paint = () => {
+        const PITCH = cardPx() * (1 + GAP);
+        cards.forEach((card, i) => {
+          let off = i - pos;
+          off = ((off % N) + N) % N;
+          if (off > N / 2) off -= N;
+          const dist = Math.abs(off);
+          const ramp = Math.pow(dist, FALLOFF);
+          const tilt = Math.min(ROTATE * ramp, 82) * Math.sign(off);
+          card.style.transform = `translateX(calc(-50% + ${off * PITCH}px)) translateZ(${-DEPTH * cardPx() * ramp}px) rotateY(${-tilt}deg)`;
+          // a card teleports across the ring at half a turn out, so it must be
+          // invisible by then or the jump is visible
+          const edge = Math.min(1, Math.max(0, N / 2 - dist));
+          card.style.opacity = String(Math.max(0, 1 - FADE * dist) * edge);
+          card.style.zIndex = String(100 - Math.round(dist));
+        });
+        const idx = indexAt(pos);
+        if (idx !== shown) {
+          shown = idx;
+          cfIid = roster[idx] ? roster[idx].iid : cfIid;
+          $$('[data-cfdot]', body).forEach((d, i) => d.classList.toggle('on', i === idx));
+          repaintFocus();
+        }
+      };
+      const settle = to => {
+        if (raf) cancelAnimationFrame(raf);
+        target = to;
+        const step = () => {
+          const left = target - pos;
+          if (Math.abs(left) < 0.0004) { pos = target; paint(); raf = null; return; }
+          pos += left * 0.16;
+          paint();
+          raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+      };
+      let drag = null;
+      cfFrame.addEventListener('pointerdown', e => {
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+        cfFrame.setPointerCapture(e.pointerId);
+        target = pos;
+        drag = { id: e.pointerId, x: e.clientX, pos, v: 0, t: performance.now(), moved: false };
+      });
+      cfFrame.addEventListener('pointermove', e => {
+        if (!drag || drag.id !== e.pointerId) return;
+        const dx = e.clientX - drag.x;
+        if (Math.abs(dx) > 4) drag.moved = true;
+        const now = performance.now(), prev = pos;
+        pos = drag.pos - dx / (cardPx() * (1 + GAP));
+        const dt = Math.max(1, now - drag.t);
+        drag.v = (pos - prev) / dt;
+        drag.t = now;
+        paint();
+      });
+      const endDrag = e => {
+        if (!drag || drag.id !== e.pointerId) return;
+        const flick = Math.abs(drag.v) > 0.002 ? Math.sign(drag.v) : 0;
+        const wasMoved = drag.moved;
+        drag = null;
+        settle(Math.round(pos) + flick);
+        if (!wasMoved) return;         // a tap is handled by the card's own click
+      };
+      cfFrame.addEventListener('pointerup', endDrag);
+      cfFrame.addEventListener('pointercancel', endDrag);
+      cfFrame.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); settle(Math.round(pos) - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); settle(Math.round(pos) + 1); }
+      });
+      $$('[data-cfdot]', body).forEach(d => d.addEventListener('click', () => {
+        // travel the SHORT way round, or the ring unwinds the long way to index 0
+        const to = +d.dataset.cfdot;
+        let delta = to - indexAt(pos);
+        if (delta > N / 2) delta -= N;
+        if (delta < -N / 2) delta += N;
+        settle(Math.round(pos) + delta);
+      }));
+      // tapping an off-centre card brings it to the front rather than selecting it
+      cards.forEach((card, i) => card.addEventListener('click', e => {
+        if (indexAt(pos) === i) return;
+        e.stopPropagation();
+        let delta = i - indexAt(pos);
+        if (delta > N / 2) delta -= N;
+        if (delta < -N / 2) delta += N;
+        settle(Math.round(pos) + delta);
+      }));
+      paint();
+    }
+
+    /* Refresh ONLY the caption + action row for the pet now in front. Spinning
+       the ring must not re-run render(): that rebuilds the body and would drop
+       the carousel mid-drag. */
+    function repaintFocus() {
+      const inst = roster.find(x => x.iid === cfIid);
+      if (!inst) return;
+      const it = BH_BY_ID[inst.sp] || {};
+      const lvl = petLevel(bank[inst.iid] || 0);
+      const toNext = petStepsToNext(bank[inst.iid] || 0);
+      const bs = petBattleStats(inst.sp, lvl, inst.shiny, inst.lineage || 0);
+      const fam = familyOf(inst.sp);
+      const cap = $('.cf-cap', body);
+      if (cap) {
+        const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
+        if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
+        if (inst.lineage) rows.push(['Lineage', `${inst.lineage} · +${Math.round(inst.lineage * 5)}% stats`]);
+        $('b', cap).innerHTML = `${esc(it.name || inst.sp)}${inst.shiny ? ' ✦' : ''}`;
+        const role = $('.role', cap);
+        if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
+        const meta = $('.cf-meta', cap);
+        if (meta) meta.innerHTML = rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+      }
+      const isEq = inst.iid === eqIid, inSel = sel.includes(inst.iid), isOpen = inst.iid === openIid;
+      const dustVal = petDustValue(it) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
+      const eqB = $('[data-eq]', body), trB = $('[data-pettree]', body), brB = $('[data-breedsel]', body), dsB = $('[data-destroy]', body);
+      if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
+      if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
+      if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
+      if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+    }
+
+    // No card-click-to-open-talents any more: on a carousel a tap means "bring
+    // this one to the front" (handled by the ring above), and the talent tree has
+    // its own named TALENTS button under the caption.
     // the card is still tappable, but the mockup gives the talent tree its own
     // named control: "tap the card somewhere that isn't a button" is not an
     // affordance anyone finds
@@ -10006,7 +10179,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v316'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v317'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -160,9 +160,10 @@ const SITES = [
       + 'step threshold to be crossed inside the run',
   },
   {
-    key: 'stable-roster', claim: 't3-petcard', paired: false, undriven:
-      'the Stable roster is a portrait grid with no Bonehead beside it; it passes '
-      + 'x.shiny off the instance row, which is the contract',
+    key: 'stable-roster', claim: 'cf-art', paired: false, undriven:
+      'the Stable roster is now a coverflow ring with no Bonehead beside it (v317, '
+      + 'was the t3-petcard grid); it passes x.shiny off the instance row and draws '
+      + 'through petPortraitHtml(..., {mass:true}), which is the contract',
   },
   {
     key: 'breed-trade', claim: 'bt-pet', paired: false, undriven:
