@@ -60,7 +60,7 @@
 </main>
 <script>
   const $ = s => document.querySelector(s);
-  $('#api').value = localStorage.bhApi || '';
+  $('#api').value = localStorage.bhApi || 'https://bonez-api.boneheadz.workers.dev';
   $('#token').value = localStorage.bhTok || '';
   const bar = (k, v, max) => `<div class="bar-row"><span class="k">${k}</span><span class="bar"><i style="width:${max ? Math.round(v / max * 100) : 0}%"></i></span><span class="v">${v}</span></div>`;
   const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
