@@ -5986,3 +5986,19 @@ body::before {
   .cf, .cf-frame, .cf-cap b, .cf-meta, .cf-dots { transition: none; }
   .pet-tree-inline, .breed-bar.sticky { animation: none; }
 }
+
+/* Crew search: filters the fan, so it sits with the fan rather than reading as
+   part of the leaderboard below it. */
+.cfan-search { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; position: relative; }
+.cfan-search input {
+  flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--text);
+  background: var(--surface-2); border: 2px solid #17151d; border-radius: 999px;
+  padding: 9px 14px; box-shadow: var(--sh-sm); -webkit-appearance: none; appearance: none;
+}
+.cfan-search input::placeholder { color: var(--text-3); }
+.cfan-search input:focus { outline: none; border-color: var(--accent); }
+.cfan-clear {
+  position: absolute; right: 8px; width: 26px; height: 26px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: rgba(242, 233, 215, .12); color: var(--text-2); cursor: pointer;
+}
+.cfan-nohit { text-align: center; margin: 10px 2px 4px; }

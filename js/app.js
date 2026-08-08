@@ -5240,6 +5240,16 @@ async function renderFriends(el) {
     <div class="cfan-block">
       <div class="cfan-head"><span>YOUR CREW<b id="cfanCount"></b></span><i></i><small>SWIPE OR TAP</small></div>
       <div class="cfan-faves" id="cfanFaves" hidden></div>
+      <!-- Search sits ABOVE the deck and below the faves: it filters what the fan
+           shows, so it has to read as belonging to the fan rather than to the
+           leaderboard underneath. Hidden entirely for small crews, where scanning
+           four cards is faster than typing. -->
+      <div class="cfan-search" id="cfanSearchRow" hidden>
+        <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"
+               placeholder="Search your Crew by name or nickname" aria-label="Search your Crew">
+        <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : '&times;'}</button>
+      </div>
+      <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
       <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
       <div class="cfan-pager" id="cfanPager" hidden>
         <button class="cfan-arrow prev" id="cfanPrev" aria-label="Previous friend">${ICONS.chev(16)}</button>
@@ -5402,12 +5412,40 @@ async function renderFriends(el) {
 
   let favs = new Set((await kvGet('crewFaves', [])) || []);
   let centerId = null;
-  let fanOrder = [];   // playerIds, starred first (stable): starring IS sorting
+  let fanOrder = [];   // playerIds: starred, then online, then the rest (stable)
+  let fanQuery = '';   // crew search box, matches name OR nickname
 
   const fanFriend = id => (data.friends || []).find(f => f.playerId === id);
+  /* THREE TIERS, ONE STABLE SORT: starred, then online, then everyone else.
+     Tom, 2026-08-08: "i think it should bias players that are currently online or
+     filter for it like the favourite feature?"
+     A BIAS, not a filter. Filtering hides people, and a crew where nobody happens
+     to be online right now would open on an empty fan, which is the worst greeting
+     the tab could give. Sorting keeps every friend reachable and still puts the
+     ones you can act on first. Within each tier the original list order is
+     preserved (Array.sort is stable), so the deck does not reshuffle under you
+     every time someone's `lastSeen` ticks over. */
+  const fanRank = id => {
+    if (favs.has(id)) return 0;
+    const f = fanFriend(id);
+    return (f && onlineLabel(f.lastSeen).on) ? 1 : 2;
+  };
+  /* Search matches the Boneheadz name OR the nickname you gave them. Tom:
+     "you should probably be able to search for your friends name in the crew tab
+     or by nickname." Nickname matters more than it looks: you can rename people,
+     so a name-only search fails exactly for the friends you cared enough to
+     rename. Accent- and case-insensitive, substring rather than prefix, because
+     "wrecker" should find "Bony Wrecker". */
+  const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const fanMatches = (f, q) => {
+    if (!q) return true;
+    const n = norm(q);
+    return norm(f.name).includes(n) || norm(f.alias).includes(n);
+  };
   const resortFan = () => {
-    fanOrder = data.friends.map(f => f.playerId)
-      .sort((a, b) => (favs.has(b) ? 1 : 0) - (favs.has(a) ? 1 : 0));
+    const q = fanQuery.trim();
+    const pool = (data.friends || []).filter(f => fanMatches(f, q));
+    fanOrder = pool.map(f => f.playerId).sort((a, b) => fanRank(a) - fanRank(b));
     if (!centerId || !fanOrder.includes(centerId)) centerId = fanOrder[0] || null;
   };
 
@@ -5499,12 +5537,25 @@ async function renderFriends(el) {
     $('#cfanEmpty', el).hidden = true;
     favs = new Set([...favs].filter(id => data.friends.some(f => f.playerId === id)));
     resortFan();
+    // searching a crew of four is slower than looking at it
+    const searchRow = $('#cfanSearchRow', el);
+    if (searchRow) searchRow.hidden = data.friends.length < 5 && !fanQuery;
     deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
     composeAvatars(deck);   // decode the layered art; never fan out blank cards
-    wrap.hidden = false;
-    pager.hidden = data.friends.length < 2;
+    /* A search that matches nobody must SAY so. Hiding the deck and leaving the
+       space blank would read as the crew having vanished, which is the same
+       failure as an empty fan on a filter. */
+    const noHit = $('#cfanNoHit', el);
+    const empty = fanOrder.length === 0;
+    if (noHit) {
+      noHit.hidden = !empty;
+      noHit.textContent = empty ? `Nobody in your Crew matches "${fanQuery}".` : '';
+    }
+    wrap.hidden = empty;
+    pager.hidden = empty || fanOrder.length < 2;
+    $('#cfanSel', el).hidden = empty;
     paintFaves();
-    applyFan();
+    if (!empty) applyFan();
   };
 
   const cfanCycle = d => {
@@ -5512,6 +5563,23 @@ async function renderFriends(el) {
     centerId = fanOrder[((fanOrder.indexOf(centerId) + d) % n + n) % n];
     applyFan();
   };
+  /* Search input. Debounced lightly so typing does not rebuild the deck on every
+     keystroke (each rebuild re-decodes every card's layered art), but short
+     enough that it still feels live. */
+  let searchT = null;
+  $('#cfanSearch', el)?.addEventListener('input', e => {
+    fanQuery = e.target.value || '';
+    const clear = $('#cfanClear', el);
+    if (clear) clear.hidden = !fanQuery;
+    clearTimeout(searchT);
+    searchT = setTimeout(() => { centerId = null; paintFan(); }, 140);
+  });
+  $('#cfanClear', el)?.addEventListener('click', () => {
+    fanQuery = '';
+    const f = $('#cfanSearch', el); if (f) { f.value = ''; f.focus(); }
+    $('#cfanClear', el).hidden = true;
+    centerId = null; paintFan();
+  });
   $('#cfanPrev', el)?.addEventListener('click', () => cfanCycle(-1));
   $('#cfanNext', el)?.addEventListener('click', () => cfanCycle(1));
 

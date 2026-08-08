@@ -192,6 +192,88 @@ const empty = await page.evaluate(() => ({
 }));
 ok('an empty crew shows the empty state, not a blank fan', empty.emptyShown && empty.deckHidden && empty.addField, JSON.stringify(empty));
 
+
+/* ---- ONLINE BIAS + SEARCH (added 2026-08-08) ------------------------------
+   Tom asked for both: "it should bias players that are currently online or filter
+   for it like the favourite feature" and "you should be able to search for your
+   friends name in the crew tab or by nickname".
+   What these guard is the distinction between a BIAS and a FILTER. Sorting
+   online-first keeps everyone reachable; filtering would open the tab on an empty
+   fan whenever nobody happened to be around, which is the worst greeting the
+   screen can give.
+   Named, not indexed: an earlier version hard-coded fixture positions and failed
+   while the feature was working correctly, which is the worst kind of guard.
+   PROVE-RED: drop the online tier from fanRank and ONLINE fails; make fanMatches
+   test only f.name and NICKNAME fails. */
+const ONLINE_NAME = 'RIB TICKLER', NICK_NAME = 'GRIM WICH', NICK = 'Rocket';
+
+// the star test above left a favourite in kv and in memory, and starred correctly
+// outranks online, so clear it or this measures the wrong tier
+await page.evaluate(async () => { const db = await import('/js/db.js?cf=1'); await db.kvSet('crewFaves', []); });
+await page.evaluate(() => { location.hash = '#/today'; });
+await sleep(400);
+await seedCrew(FRIENDS.map(f => ({
+  ...f,
+  alias: f.name === NICK_NAME ? NICK : null,
+  lastSeen: f.name === ONLINE_NAME ? Date.now() : Date.now() - 86400000,
+})));
+await sleep(900);
+
+/* Assert the TIER, not the top card. A star may still be set from the star test
+   above, and starred outranking online is correct, so "is it card zero" would be
+   testing the wrong thing. What matters is that among the UNSTARRED friends, the
+   online one comes first. */
+const online = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('.cfan-card')];
+  const rows = cards.map(c => ({
+    text: (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30),
+    starred: !!c.querySelector('.cfan-fstar:not([hidden])'),
+    live: !!c.querySelector('.cfan-live'),
+  }));
+  const unstarred = rows.filter(r => !r.starred);
+  return { n: cards.length, firstUnstarred: unstarred[0]?.text || '',
+    liveCount: rows.filter(r => r.live).length, hasSearch: !!document.querySelector('#cfanSearch') };
+});
+ok('ONLINE the online friend leads the unstarred pack (bias, not filter)',
+  new RegExp(ONLINE_NAME, 'i').test(online.firstUnstarred) && online.n === FRIENDS.length,
+  JSON.stringify(online));
+ok('ONLINE nobody is hidden by the bias (a filter would drop the rest)',
+  online.n === FRIENDS.length, `${online.n} of ${FRIENDS.length} still in the deck`);
+
+const search = async q => page.evaluate(async term => {
+  const f = document.querySelector('#cfanSearch');
+  if (!f) return { err: 'no search box' };
+  f.value = term; f.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 520));
+  return { cards: document.querySelectorAll('.cfan-card').length,
+    first: (document.querySelector('.cfan-card')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) };
+}, q);
+
+const byName = await search('phantom');
+ok('SEARCH matches the Boneheadz name', byName.cards === 1 && /PHANTOM/i.test(byName.first), JSON.stringify(byName));
+
+const byNick = await search('rocke');
+ok('SEARCH matches a NICKNAME you gave them, not just their name',
+  byNick.cards === 1 && new RegExp(`${NICK_NAME}|${NICK}`, 'i').test(byNick.first), JSON.stringify(byNick));
+
+const noHit = await page.evaluate(async () => {
+  const f = document.querySelector('#cfanSearch');
+  f.value = 'zzzznobody'; f.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 520));
+  const n = document.querySelector('#cfanNoHit');
+  return { said: !!(n && !n.hidden && n.getBoundingClientRect().height > 0),
+    deckHidden: !!document.querySelector('#cfanWrap')?.hidden };
+});
+ok('SEARCH a search matching nobody SAYS so (a blank fan reads as a lost crew)',
+  noHit.said && noHit.deckHidden, JSON.stringify(noHit));
+
+const cleared = await page.evaluate(async () => {
+  document.querySelector('#cfanClear').click();
+  await new Promise(r => setTimeout(r, 520));
+  return document.querySelectorAll('.cfan-card').length;
+});
+ok('SEARCH clearing restores the whole crew', cleared === FRIENDS.length, `${cleared} cards back`);
+
 await browser.close();
 if (srv) srv.kill();
 console.log(fails ? '\nCREW FAN AUDIT FAILED' : '\nCREW FAN VERIFIED');
