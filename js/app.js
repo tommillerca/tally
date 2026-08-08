@@ -8293,6 +8293,25 @@ async function openStable(opts = {}) {
          part" complaint. */
       const prevX = new Array(N).fill(null);
       const lastSigma = new Array(N).fill(-1);
+      /* THE BLUR IS THE LUXURY, THE FRAME RATE IS THE REQUIREMENT.
+         Tom, 2026-08-08: "it's still lagging quite heavily during movement we
+         cant have that." Six SVG filters re-rasterising over six animated sprite
+         stacks, each on its own 3D plane, is simply more than a phone will do at
+         60fps. So the ring MEASURES itself: if frames run long, the blur switches
+         off for the rest of the session and never comes back. An effect that
+         costs the thing it is decorating is not worth having, and this is a
+         judgement the device makes, not one guessed on a desktop. */
+      let blurOK = !reduced, slowFrames = 0, lastFrameT = 0;
+      /* And the pets themselves stop animating while the ring is in motion.
+         Nobody can appreciate an idle bob on a card flying past, so it costs
+         nothing to look at and buys back the compositing. */
+      let movingCls = false;
+      const setMoving = on => {
+        if (movingCls === on) return;
+        movingCls = on;
+        const cf = $('.cf', body);
+        if (cf) cf.classList.toggle('moving', on);
+      };
       const mbNodes = [...body.querySelectorAll('.cf-mb feGaussianBlur')];
       const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
@@ -8301,6 +8320,18 @@ async function openStable(opts = {}) {
            called again INSIDE this loop, immediately after writing a transform:
            six forced synchronous layouts per frame, each invalidated by the write
            before it. That is the drag lag. Read once, write many. */
+        const nowT = performance.now();
+        if (lastFrameT) {
+          const ft = nowT - lastFrameT;
+          // only judge frames that are part of a real animation run
+          if (ft > 26 && ft < 400) slowFrames++;
+          else if (ft < 20) slowFrames = Math.max(0, slowFrames - 1);
+          if (blurOK && slowFrames >= 8) {
+            blurOK = false;
+            cards.forEach((c, i) => { c.style.filter = ''; if (mbNodes[i]) mbNodes[i].setAttribute('stdDeviation', '0 0'); });
+          }
+        }
+        lastFrameT = nowT;
         const CW = cardPx();
         const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
@@ -8337,7 +8368,7 @@ async function openStable(opts = {}) {
           const dx = (prev == null || jumped) ? 0 : Math.abs(x - prev);
           prevX[i] = x;
           const vis = Math.max(0, 1 - FADE * dist) * edge;
-          const raw = (reduced || vis < 0.2) ? 0 : Math.min(2.2, dx * 0.15);
+          const raw = (!blurOK || vis < 0.2) ? 0 : Math.min(2.2, dx * 0.15);
           const sigma = raw < 0.6 ? 0 : +(Math.round(raw / 0.4) * 0.4).toFixed(1);
           const fx = mbNodes[i];
           if (fx && sigma !== lastSigma[i]) {
@@ -8355,6 +8386,15 @@ async function openStable(opts = {}) {
         if (idx !== shown) {
           shown = idx;
           cfIid = roster[idx] ? roster[idx].iid : cfIid;
+          /* ONLY THE PET YOU ARE ON MOVES. Tom, 2026-08-08: "the only pet
+             animating is the one you're currently on otherwise it's just static."
+             His call and the better one: two of the same species side by side ran
+             the identical loop in lockstep and read as cheap, and staggering their
+             phase would have fixed the look while still paying to animate six
+             sprite stacks at once. This fixes both at once -- nothing can fall into
+             sync when only one thing is moving, and it is one animated pet on
+             screen instead of six. */
+          cards.forEach((c, i) => c.classList.toggle('focus', i === idx));
           $$('[data-cfdot]', body).forEach((d, i) => d.classList.toggle('on', i === idx));
           repaintFocus();
         }
@@ -8377,6 +8417,7 @@ async function openStable(opts = {}) {
         if (raf) cancelAnimationFrame(raf);
         target = to;
         if (reduced) { pos = target; vel = 0; paint(); raf = null; return; }
+        setMoving(true);
         vel = v0;
         let last = performance.now();
         const step = () => {
@@ -8388,7 +8429,7 @@ async function openStable(opts = {}) {
           pos += vel * dt;
           paint();
           if (Math.abs(pos - target) < 0.0015 && Math.abs(vel) < 0.02) {
-            pos = target; vel = 0; paint(); raf = null; return;
+            pos = target; vel = 0; setMoving(false); lastFrameT = 0; paint(); raf = null; return;
           }
           raf = requestAnimationFrame(step);
         };
@@ -8422,6 +8463,7 @@ async function openStable(opts = {}) {
           if (Math.abs(dx) <= DRAG_SLOP && Math.abs(dy) <= DRAG_SLOP) return;
           if (Math.abs(dx) < Math.abs(dy) * 1.15) { drag.dead = true; return; }
           drag.moved = true;
+          setMoving(true);
           try { cfFrame.setPointerCapture(e.pointerId); } catch { /* mouse: fine without */ }
         }
         pos = drag.pos - dx / (cardPx() * (1 + GAP));
@@ -10398,7 +10440,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v324'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v325'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

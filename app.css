@@ -5950,3 +5950,18 @@ body::before {
   .cf, .cf-frame, .cf-cap b, .cf-meta, .cf-dots { transition: none; }
   .pet-tree-inline, .breed-bar.sticky { animation: none; }
 }
+
+/* ONE PET MOVES: the one you are looking at. Tom's call, 2026-08-08. It stops two
+   of the same species running the identical loop in lockstep beside each other,
+   and it is one animated sprite stack on screen instead of six, which is most of
+   the frame cost the ring was paying during a spin.
+   And while the ring is actually in motion, even that one holds still: an idle bob
+   is invisible on a card flying past. */
+/* !important on BOTH sides deliberately: the pet sprites declare their loops with
+   the `animation` SHORTHAND, which resets animation-play-state to `running`, and
+   those selectors are more specific than `.cf-card *`. Without it the pause
+   silently did nothing on three of six cards (measured). Specificity still orders
+   these three correctly: moving > focus > default. */
+.cf-card * { animation-play-state: paused !important; }
+.cf-card.focus * { animation-play-state: running !important; }
+.cf.moving .cf-card * { animation-play-state: paused !important; }

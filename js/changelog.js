@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 325, date: '2026-08-08', title: 'The Stable stops stuttering', items: [
+    'Only the pet you are <b>currently looking at</b> animates. Two of the same species side by side were running the identical loop in perfect lockstep, which looked cheap, and the Stable was paying to animate six of them at once.',
+    'Everything <b>holds still while the ring is moving</b>, and the motion blur switches itself off if your phone is struggling. Smooth movement matters more than the effect decorating it.',
+  ] },
   { n: 324, date: '2026-08-08', title: 'Pets move in the Stable', items: [
     'The <b>cloud and both lizards</b> use their animated art in the Stable instead of a still. Shiny pets keep their recoloured art, since there are no animated shinies.',
     'Each card is <b>tinted by rarity</b>, so you can read how rare a pet is off the card itself.',
