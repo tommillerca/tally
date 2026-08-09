@@ -6602,11 +6602,20 @@ body::before {
   font-size: 40px; color: var(--text-3); min-width: 42px; text-align: left;
   letter-spacing: .02em; flex: none;
 }
-.lb-row.top .lb-num { font-size: 62px; min-width: 56px; }
+/* every row is the same size: rank is communicated by COLOUR and a medal, not by
+   an unexplained size jump (Tom: "it's not clear enough why they're bigger") */
 .lb-row.t1 .lb-num { color: var(--gold); }
 .lb-row.t2 .lb-num { color: #cfd6dd; }
 .lb-row.t3 .lb-num { color: #d09a63; }
 .lb-row.top .lb-head { border-width: 3px; border-color: var(--gold); }
+.lb-medal {
+  margin-left: 7px; font-family: var(--display); font-weight: 400; font-size: 12px;
+  letter-spacing: .06em; padding: 1px 7px; border-radius: 999px; color: var(--ink);
+  border: 2px solid #17151d; vertical-align: 2px;
+}
+.lb-medal.m1 { background: var(--gold); }
+.lb-medal.m2 { background: #cfd6dd; }
+.lb-medal.m3 { background: #d09a63; }
 .lb-row.t2 .lb-head { border-color: #cfd6dd; }
 .lb-row.t3 .lb-head { border-color: #d09a63; }
 .lb-row.me .lb-head { border-color: var(--accent); }

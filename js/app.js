@@ -580,13 +580,24 @@ async function boot() {
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
-  maybeShowWhatsNew();
-  maybeShowDropPopup();
-  maybeShowGardenPopup();
-  maybeShowSpireIntro();
-  maybeShowCosmeticTeaser();
-  maybeShowRenameNotice();
-  maybeShowRaceIntro();
+  /* ONE AT A TIME. Tom, 2026-08-08: "the popup is glitching the app and popping
+     up briefly over and over before finally bringing up patch notes."
+     These were fired together and each polled every 500ms for a clear screen, so
+     they RACED: two could pass the "is anything open?" check in the same window
+     and stack, and because they each close with history.back(), unwinding one
+     could pop another off with it. That is the flicker.
+     They queue now, in priority order, and the next one does not begin until the
+     previous has actually closed. Same functions, same rules about when each
+     declines to show; only the scheduling changed. */
+  runBootPopups([
+    maybeShowRenameNotice,     // we owe this player something: goes first
+    maybeShowCosmeticTeaser,   // the drop
+    maybeShowWhatsNew,
+    maybeShowDropPopup,
+    maybeShowGardenPopup,
+    maybeShowSpireIntro,
+    maybeShowRaceIntro,
+  ]);
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -706,7 +717,16 @@ const TZ_BEATS = [
   { cls: 'tz-s-solo', ms: 3600 },
   { cls: 'tz-s-quad', ms: 5600 },
 ];
+/* Opened at most ONCE per app session, and never twice concurrently.
+   Tom, 2026-08-08: "the popup is glitching the app and popping up briefly over and
+   over before finally bringing up patch notes." I could not reproduce the repeat
+   in the harness, so rather than guess at the trigger this closes the whole class:
+   whatever asks for a second one gets the sheet that is already on screen, and
+   once a session has shown it, asking again does nothing. A teaser that opens
+   twice is never correct, for any reason, so there is nothing to lose here. */
+let teaserOpen = null;
 function openCosmeticTeaser() {
+  if (teaserOpen?.isConnected) return teaserOpen;
   const all = dropCosmetics();
   const bySlot = c => all.filter(i => i.slot === c).length;
   const wrap = openSheet(`
@@ -760,8 +780,33 @@ function openCosmeticTeaser() {
     };
     step();
   }
+  teaserOpen = wrap;
   return wrap;
 }
+/* The boot-popup queue. Each entry is one of the maybeShow* functions: it decides
+   for itself whether it has anything to say, and opens a sheet if so. The runner
+   only guarantees ORDER and EXCLUSIVITY.
+   Waits for the screen to be genuinely idle before starting the next one, and
+   gives up on a stuck entry rather than blocking the rest of the queue forever. */
+const bootPopupIdle = () => !sheetStack.length
+  && !document.querySelector('.dw')
+  && !document.getElementById('splash')
+  && !document.querySelector('.drop-veil');
+async function runBootPopups(list) {
+  for (const fn of list) {
+    // wait for a clear screen (cap: a stuck sheet must not eat the whole queue)
+    for (let i = 0; i < 40 && !bootPopupIdle(); i++) await new Promise(r => setTimeout(r, 400));
+    const before = sheetStack.length;
+    try { await fn(); } catch { /* one popup must never take the rest down */ }
+    // if it opened something, wait for the player to dismiss it before the next
+    for (let i = 0; i < 900; i++) {
+      if (sheetStack.length <= before) break;
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+}
+
+let teaserFired = false;
 async function maybeShowCosmeticTeaser() {
   try {
     if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
@@ -779,6 +824,8 @@ async function maybeShowCosmeticTeaser() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;    // a busy boot must not consume a showing
       }
+      if (teaserFired) return;      // one showing per app session, no matter who asks
+      teaserFired = true;
       await kvSet(TEASER_SEEN_KEY, seen + 1);
       openCosmeticTeaser();
     };
@@ -1239,7 +1286,7 @@ function cosmeticTeaserBannerHtml() {
   return `<details class="glutton-banner teaser-banner">
     <summary>
       <span class="gbn-ico teaser-ico">${bhIcon('badge-crown', 26)}</span>
-      <span class="gbn-txt"><i>Coming soon</i><b>${all.length} new cosmetics</b></span>
+      <span class="gbn-txt"><i>Live now</i><b>${all.length} new cosmetics</b></span>
       <span class="gbn-chev">›</span>
     </summary>
     <div class="gbn-body">
@@ -1248,7 +1295,7 @@ function cosmeticTeaserBannerHtml() {
         <span><b>${bySlot('H')}</b> lids</span><span><b>${bySlot('E')}</b> eyes</span>
         <span><b>${bySlot('M')}</b> mouths</span><span><b>${bySlot('G')}</b> grillz</span>
       </div>
-      <p class="glutton-mech"><b>The biggest drop this game has had.</b> Not out yet. Soon.</p>
+      <p class="glutton-mech"><b>The biggest drop this game has had.</b> Every crate can drop them, starting today.</p>
       <p class="glutton-mech tz-more">And we are nowhere near done.</p>
     </div>
   </details>`;
@@ -2415,7 +2462,11 @@ const lbAvatar = (p, cls = 'lb-av') =>
    Everyone stays in ONE list, his call: a separate podium makes the top three a
    different species from everybody else and buries the person reading it. */
 function lbHeadHtml(p, px) {
-  const scale = px / (SKULL_BOX.h * 1.34);
+  /* Tom, 2026-08-08: "they're too zoomed in on the skull." 1.34 framed the skull
+     edge to edge, which crops a tall hat and reads as a mugshot. 2.05 pulls back
+     to head and shoulders, so the Bonehead reads as a character and headwear has
+     somewhere to go. */
+  const scale = px / (SKULL_BOX.h * 2.05);
   const ox = px / 2 - SKULL_BOX.cx * scale;
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
@@ -6119,11 +6170,19 @@ async function renderFriends(el) {
         /* Top three get a bigger numeral and bigger art. The numeral is always
            LARGER than the head it sits behind, and the head overlaps it, so the
            rank reads first and the Bonehead is the thing you look at. */
+        /* Tom: "the 1 2 3 is a cool idea but the execution is kinda weird, it's not
+           clear enough WHY they're bigger."
+           He is right: a size jump with nothing attached to it just looks like a
+           rendering fault. Every row is the same size now, and the top three are
+           marked by something that SAYS what it means -- gold, silver and bronze
+           numerals with a medal beside the name -- instead of by being mysteriously
+           larger than their neighbours. */
         const top3 = rank <= 3 ? ` top t${rank}` : '';
+        const medal = rank <= 3 ? `<span class="lb-medal m${rank}">${['1st', '2nd', '3rd'][rank - 1]}</span>` : '';
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
-          ${lbHeadHtml(p, rank <= 3 ? 58 : 46)}
-          <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
+          ${lbHeadHtml(p, 52)}
+          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -11413,7 +11472,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v335'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v336'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
