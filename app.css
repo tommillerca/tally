@@ -6181,6 +6181,31 @@ body::before {
    rather than by a number Tom did not want on screen. */
 .hud-pet .bar.fhp.mini { flex: none; width: var(--pool, 100%); min-width: 18px; }
 
+/* THE SECOND ENEMY GETS A REAL HEALTH BAR.
+   Tom, 2026-08-08: "fighting a boss den with two enemy targets doesn't have a
+   clear health bar for the second target at all. I've brought this up like 3
+   times. You think you've fixed it but you haven't."
+   Measured before this: the captain's bar was 155x11 with a 151x7 fill, and the
+   second target's was a 67x4 track whose fill computed to height ZERO. Not small,
+   not unclear: absent. `.bar i` is height:100%, and 100% of a 4px track with
+   1.5px borders leaves nothing to see.
+   It also wore `.hud-pet`, the same styling as YOUR pet on the other side, so
+   even at the right size it read as an ally rather than a second thing trying to
+   kill you.
+   It is now its own bar in the foe column: full width, its own name above it,
+   sized just under the captain's so the hierarchy is still obvious. Explicit
+   heights on BOTH track and fill, because inheriting a percentage is exactly how
+   this vanished. */
+.hud-add { display: grid; gap: 2px; margin-top: 5px; width: 100%; }
+.hud-add .aname {
+  justify-self: end; font-size: var(--fs-0); font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-2); max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hud-add .bar.fhp.add { height: 9px; border: 2px solid var(--ink); border-radius: 999px; width: 100%; }
+.hud-add .bar.fhp.add > i { height: 100%; min-height: 5px; display: block; }
+.hud-add.down { opacity: .38; filter: grayscale(1); }
+
 /* A nickname is your private note about someone, not their name: it sits BESIDE
    the Bonehead name rather than replacing it (Tom, 2026-08-07). Quieter and
    smaller, so the name still reads as the name. */

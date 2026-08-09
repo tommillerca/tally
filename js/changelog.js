@@ -3,7 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 335, date: '2026-08-08', title: '63 new cosmetics, live now', items: [
+  { n: 341, date: '2026-08-08', title: '63 new cosmetics, live now', items: [
+    'The new cosmetics have <b>real names</b> now, so you can tell a Gold Halo from a Party Cone in your wardrobe.',
+    'Boss dens with <b>two enemies</b> show a proper health bar for the second one. It was rendering at zero height, so there was nothing to see.',
+    'Opening a crate: <b>tap actually works</b> now. A tap that drifted a few pixels used to do nothing at all.',
     '<b>63 new cosmetics</b> just landed: 24 lids, 23 pairs of eyes, 13 mouths and 3 grillz. Every crate can drop them.',
     'The <b>leaderboard</b> shows your Bonehead properly now, with the rank up front, and everyone sits in one list.',
     '<b>The Glutton</b> has come to the Gauntlet. He turns up every 10 rungs as a proper gear check, and losing to him costs nothing more than any other loss.',

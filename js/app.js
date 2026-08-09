@@ -8689,6 +8689,21 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
    see those states, and it never exists for a player. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__packReveal = (cards, opts) => openPackReveal(cards, opts || {});
+  /* A den fight with TWO targets, the case Tom has reported three times ("fighting
+     a boss den with two enemy targets doesn't have a clear health bar for the
+     second target at all"). It needs 5 den wins AND standing inside a den's
+     radius, which no audit can arrange, so it went untested and I kept saying it
+     was fixed. Same idiom as __crateForce / __spireForce: nothing changes unless a
+     test opts in. pitWrap is only used to re-render the Pit on close, so null is
+     safe here. */
+  window.__denFight = async (mult = 1.6, addMult = 0.5) => {
+    const fighter = await buildFighter();
+    return openFight(null, fighter, {
+      mode: 'boss', name: 'Test Captain', mult, bossMult: +(mult * 0.9).toFixed(3), aiLevel: 2,
+      talents: [], venue: 'Test Den',
+      add: { name: 'Test Beast', beast: true, mult: addMult, talents: [] },
+    });
+  };
 }
 
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
@@ -11495,7 +11510,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v340'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v341'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12044,7 +12059,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
           <div class="fstate" id="foeState" hidden></div>
-          ${add ? `<div class="hud-pet" id="hudAdd"><span class="petname">${esc(add.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(add.d.maxHp / Math.max(1, foe.d.maxHp) * 100))}%"><i id="addHp" style="width:100%"></i></div></div>` : ''}
+          ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">

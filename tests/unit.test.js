@@ -1960,6 +1960,32 @@ test('REACH a secret den stays deliberately tight', async () => {
   assert.ok(poi.SECRET_WHISPER_M > poi.SECRET_RADIUS_M, 'the whisper must reach further than the door');
 });
 
+/* NO PLACEHOLDER NAMES IN THE CATALOGUE.
+   Tom, 2026-08-08: "we should rename the solana items so they're not just called
+   'sol xxxx'." 63 cosmetics shipped as "Sol Lid #1" through "Sol Shades #23",
+   which is an internal batch label wearing a product name. This fails on any item
+   named after its source batch or numbered like a spreadsheet row, so the next
+   drop cannot repeat it. */
+test('NAMES the drop ships no placeholder or batch names', async () => {
+  const { BH_ITEMS_WITH_UNRELEASED } = await import('../data/boneheadz.js');
+  /* Scoped to the 63-piece drop on purpose. Writing this guard turned up 258
+     numbered names across the WHOLE catalogue ("Tidy Backdrop #1", and 21 more
+     backdrops like it), which is a real pre-existing problem but a different and
+     much larger job than the one asked for, and one that needs a decision about
+     tone before 258 items get rewritten. Flagged to Tom rather than folded in
+     silently. Widen this filter the day those are named. */
+  const drop = BH_ITEMS_WITH_UNRELEASED.filter(i => /^(H|E|M|G)S\d+$/.test(i.id));
+  assert.equal(drop.length, 63, 'an empty or short sample is a failure, not a pass');
+  const bad = drop.filter(i => /^sol\b/i.test(i.name) || /#\d+\s*$/.test(i.name));
+  assert.deepEqual(bad.map(i => `${i.id}="${i.name}"`), [], 'placeholder names reached the drop');
+});
+test('NAMES no two cosmetics share a name', async () => {
+  const { BH_ITEMS_WITH_UNRELEASED } = await import('../data/boneheadz.js');
+  const names = BH_ITEMS_WITH_UNRELEASED.map(i => i.name);
+  const dupes = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
+  assert.deepEqual(dupes, [], 'two cosmetics with one name are indistinguishable in the wardrobe');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
