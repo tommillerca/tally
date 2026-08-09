@@ -9,7 +9,56 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 👹 Themed Pit bosses from existing art (DECISION, investigated 2026-08-09, awaiting Tom's call)
+## 👹 The Bestiary: 56 themed bosses (BUILT 2026-08-09, branch `pit-bosses`, awaiting merge)
+
+**Approved and built.** Tom, 2026-08-09: "ok you cooked with these bosses theyre
+super cool", then "add them to the pit ladder and elsewhere in the game for
+fighting". Branch `origin/pit-bosses` (tip `6697e67`) claims **v345, RENUMBER AT
+MERGE** across `js/app.js` APP_BUILD, `sw.js` VERSION and `js/changelog.js` n.
+The aggregator merges and pushes; this chat does not.
+
+**What shipped on the branch**
+- `js/bosses.js` (new): 56 looks. `LOOKS` is the fixed cast (Pit ladder,
+  Champion, the 8 Gauntlet names); `FAMILIES` + `THEME_POOL` + `themedLook()`
+  feed every world encounter; `bossLook()` re-dresses repeat Gauntlet cycles.
+- `js/app.js`: `foeOutfitFor()` consults the fixed cast first; the map den, the
+  remote den and the spire warden call sites pass `foeOutfit` from the seed the
+  encounter already rolled. Plus the Bestiary announcement (a wall of 16 real
+  monsters) and the "Out hunting today" row on Today.
+- `data/boneheadz.js` + `scripts/build-cosmetics.py`: the off-hand fix (below).
+- `tests/bestiary-audit.mjs` (new, 18 checks) + two `tests/unit.test.js` guards.
+
+**The off-hand bug Tom caught, fixed at the root.** He asked whether the shovel
+over a boss's face was a hierarchy mistake or a mislabelled slot. Neither: `IL`
+(120) and `IR` (130) shipped as the TOP two layers, so any held item drawn raised
+painted over the player's own face. Measured against the zone where eyes, teeth
+and grillz land: `IL9` (a raised banner) covered **81%** of the face, the two
+left-hand spades **10.8%**. The arms are drawn clear of the head (only 1.3% of
+the skull has body ink under it, all at the neck), so an item crossing the face
+was never the intent. Hands now sit at **65/66**: under the skull, over the top,
+right hand still over left. Blast radius measured across all 62 held items: 19
+left-hand items move behind the head (every one an improvement, all eyeballed),
+19 pixel-identical, and **all 24 right-hand items pixel-identical**, so `IR`
+moves only to stop this reaching future right-hand art. This was live for players
+and is now fixed for them, not just avoided in the roster.
+
+**Verification.** `tests/bestiary-audit.mjs` serves ITS OWN checkout on a private
+port. That matters: the shared `:8765` is another session's tree, and the first
+run against it passed green while proving nothing about this branch. 18 checks
+cover the ladder wearing its designed kit, marsh pools staying in-family and
+varying, the daily boss rotating, the renderer painting hands before the skull,
+the banner and popup drawing real decoded pixels, and a driven rung-1 fight
+showing the right skull **on the foe stage**. Proven red by disconnecting the
+roster, which also exposed that the first version of the fight check was reading
+the PLAYER's skull and could not fail. `unit.test.js` (142), `screen-sweep`
+(25/25), `figure-audit` (32/32) and `out-there-audit` all green.
+
+**Catalogue artifact** `3cb8cdc1-aa25-4f7e-ae2c-4a9eabf891a5` and the generators
+at `market-quality-mockups/pit-bosses/` stay the source of truth for the roster.
+
+---
+
+## 👹 Themed Pit bosses from existing art (design notes, investigated 2026-08-09)
 
 **Tom's ask.** "Currently when you fight enemies in the world of the pit they are
 just random skeletons. I want this to change. There is currently so much artwork

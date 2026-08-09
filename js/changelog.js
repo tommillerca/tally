@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 346, date: '2026-08-09', title: 'Thirteen things called the wrong thing', items: [
+    "Those knit hats were never braids. <b>Ash, Moss and Ember Beanie</b> now say what they are, along with ten others that were named off a thumbnail instead of the drawing.",
+  ] },
   { n: 345, date: '2026-08-09', title: 'The Pit uses your whole screen', items: [
     'The <b>arena is more than twice as tall</b>. It was a letterbox with 388px of dead screen under the buttons; now it takes the room, and bosses have somewhere to stand.',
     '<b>Boneheadz are bigger</b> in a fight, so a normal-sized foe no longer leaves the frame feeling empty.',
