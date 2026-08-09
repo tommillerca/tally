@@ -1,4 +1,4 @@
-/* THE BOSS ROSTER — 56 themed monsters, all assembled from cosmetics that
+/* THE BOSS ROSTER: 56 themed monsters, all assembled from cosmetics that
  * already ship. Tom, 2026-08-09: "when you fight enemies in the world of the pit
  * they are just random skeletons. I want this to change... make sure these are
  * randoming in the world as bosses and encounters not just the pit."
