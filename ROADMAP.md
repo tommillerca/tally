@@ -1001,6 +1001,35 @@ boss dens (where Rise and the two-target HUD earn their keep).
 `tests/fight-sim.mjs` before it ships; my theories about this game's balance have
 been disproved by that sim before.
 
+### The spells, and how they look
+
+Cast colour is **cold violet-white** (`#fff` core, `#9b92e8` bloom, `#785ADC` haze),
+deliberately not the Glutton's sickly green and not the player's coral, so a Wraith
+cast is unmistakable at a glance. All additive (`mix-blend-mode: screen`).
+
+| Spell | The visual |
+|---|---|
+| **Hollow Bolt** | a flare builds in the open palm, then a lance fires along the hand-to-player line: 3px white core inside a 10px violet beam, 26px bloom, and a 150px impact bloom on the player |
+| **Wail** | three concentric rings expand from inside the hood while the arena dims 55%. The rings are wide ellipses, so they read as sound rather than a shockwave |
+| **Rise** | two glowing sigils burn onto the floor between the fighters, ticks around the rim, and figures rise out of them as light before resolving into the adds |
+| **Reap** | a hard white orb charges in the palm and the whole creature takes a violet rim light, then a scythe-arc of light sweeps the arena. The charge frame IS the telegraph |
+| **Amulet shatter** | a white flash at the amulet and ten shards thrown outward. Fires on the crit that breaks it |
+
+Built as `js/wraith-fx.js` in the same shape as `js/crate-fx.js`: self-contained,
+injects its own styles, touches no app CSS. Anchors come from the ART, not from
+guessed coordinates: casting hand (26%, 50%), hood void (58%, 27%), amulet
+(62%, 62%) of the sprite box, measured off the drawing with a grid overlay.
+
+### Two things found by roughing it in
+
+1. **Do NOT mirror this creature.** Every foe stage wraps its art in
+   `.mirror-wrap` (`transform: scaleX(-1)`) because Boneheadz are drawn facing
+   right. The Wraith already reaches LEFT, toward where the player stands, so the
+   mirror points its casting hand off the back of the screen. It needs to opt out.
+2. **The final art must ship without a baked ground shadow.** The concept has its
+   own shadow ellipse drawn in. The arena casts one, so a baked shadow doubles up
+   and it cannot move when the creature floats or lunges.
+
 **Blocked on:** the final art. The concept
 (`~/Documents/Cam (Claude)/boneyard-creatures/hooded-wraith.jpg`) has a baked
 background and is a red line sketch, so it is a stand-in only. Needs the same
