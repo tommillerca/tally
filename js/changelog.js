@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 343, date: '2026-08-09', title: '32 new things to hold and wear', items: [
+    '<b>25 new hands</b>: katanas, daggers, hockey sticks, shovels, banners, bouquets, a fishing rod, a flail, and a couple of things you should probably not be holding.',
+    'Blades now come in <b>both hands</b>. Katanas in the raised hand, daggers in the low one.',
+    '<b>7 new headbands</b>, including two in the team colours.',
+    'Every one of them has a real name, not a number.',
+  ] },
   { n: 342, date: '2026-08-09', title: 'Out there today, tidied', items: [
     'The <b>new cosmetics</b> are back on Today. A ripe crop in the Bone Garden used to take their place, so if you were growing anything you never saw the drop at all.',
     'The <b>Puffer Pack</b> and <b>Glutton</b> banners are gone from Today. The Glutton is out on the map where you find him, not on a card advertising himself every morning.',

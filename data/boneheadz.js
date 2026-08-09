@@ -95,6 +95,198 @@ export const BH_SLOTS = [
 
 const BH_ITEMS_ALL = [
  {
+  "id": "IL10-1",
+  "slot": "IL",
+  "rarity": "common",
+  "name": "Mint Brush"
+ },
+ {
+  "id": "IL10-2",
+  "slot": "IL",
+  "rarity": "common",
+  "name": "Cherry Brush"
+ },
+ {
+  "id": "IL11-1",
+  "slot": "IL",
+  "rarity": "epic",
+  "name": "Chrome Katana"
+ },
+ {
+  "id": "IL11-2",
+  "slot": "IL",
+  "rarity": "epic",
+  "name": "Gilded Katana"
+ },
+ {
+  "id": "IL11-3",
+  "slot": "IL",
+  "rarity": "legendary",
+  "name": "Nightfall Katana"
+ },
+ {
+  "id": "IL12-1",
+  "slot": "IL",
+  "rarity": "rare",
+  "name": "Sunny Side Up"
+ },
+ {
+  "id": "IL12-2",
+  "slot": "IL",
+  "rarity": "legendary",
+  "name": "Bad Egg"
+ },
+ {
+  "id": "IL13",
+  "slot": "IL",
+  "rarity": "rare",
+  "name": "Cursed Maki"
+ },
+ {
+  "id": "IL14",
+  "slot": "IL",
+  "rarity": "legendary",
+  "name": "Bolt Flail"
+ },
+ {
+  "id": "IL15",
+  "slot": "IL",
+  "rarity": "uncommon",
+  "name": "Bobber Rod"
+ },
+ {
+  "id": "IL16-1",
+  "slot": "IL",
+  "rarity": "common",
+  "name": "Red Banner"
+ },
+ {
+  "id": "IL16-2",
+  "slot": "IL",
+  "rarity": "common",
+  "name": "Frost Banner"
+ },
+ {
+  "id": "IL16-3",
+  "slot": "IL",
+  "rarity": "uncommon",
+  "name": "Grin Banner"
+ },
+ {
+  "id": "IL17-1",
+  "slot": "IL",
+  "rarity": "rare",
+  "name": "Gilded Spade"
+ },
+ {
+  "id": "IL17-2",
+  "slot": "IL",
+  "rarity": "uncommon",
+  "name": "Grave Spade"
+ },
+ {
+  "id": "IL18-1",
+  "slot": "IL",
+  "rarity": "uncommon",
+  "name": "Grape Slapshot"
+ },
+ {
+  "id": "IL18-2",
+  "slot": "IL",
+  "rarity": "common",
+  "name": "Coal Slapshot"
+ },
+ {
+  "id": "IL18-3",
+  "slot": "IL",
+  "rarity": "rare",
+  "name": "Gold Slapshot"
+ },
+ {
+  "id": "IR10-1",
+  "slot": "IR",
+  "rarity": "rare",
+  "name": "Silver Dagger"
+ },
+ {
+  "id": "IR10-2",
+  "slot": "IR",
+  "rarity": "epic",
+  "name": "Gilded Dagger"
+ },
+ {
+  "id": "IR10-3",
+  "slot": "IR",
+  "rarity": "legendary",
+  "name": "Onyx Dagger"
+ },
+ {
+  "id": "IR11-1",
+  "slot": "IR",
+  "rarity": "uncommon",
+  "name": "Full Bouquet"
+ },
+ {
+  "id": "IR11-2",
+  "slot": "IR",
+  "rarity": "common",
+  "name": "Cream Bouquet"
+ },
+ {
+  "id": "IR11-3",
+  "slot": "IR",
+  "rarity": "common",
+  "name": "Blue Bouquet"
+ },
+ {
+  "id": "IR11-4",
+  "slot": "IR",
+  "rarity": "uncommon",
+  "name": "Blush Bouquet"
+ },
+ {
+  "id": "H10-1",
+  "slot": "H",
+  "rarity": "common",
+  "name": "Bone Headband"
+ },
+ {
+  "id": "H10-2",
+  "slot": "H",
+  "rarity": "uncommon",
+  "name": "Rising Sun Band"
+ },
+ {
+  "id": "H10-3",
+  "slot": "H",
+  "rarity": "common",
+  "name": "Happy Band"
+ },
+ {
+  "id": "H10-4",
+  "slot": "H",
+  "rarity": "rare",
+  "name": "Skull Band"
+ },
+ {
+  "id": "H10-5",
+  "slot": "H",
+  "rarity": "common",
+  "name": "Red Headband"
+ },
+ {
+  "id": "H10-6",
+  "slot": "H",
+  "rarity": "epic",
+  "name": "Home Colours"
+ },
+ {
+  "id": "H10-7",
+  "slot": "H",
+  "rarity": "epic",
+  "name": "Away Colours"
+ },
+ {
   "id": "BG1",
   "slot": "BG",
   "rarity": "uncommon",
