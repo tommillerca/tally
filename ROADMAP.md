@@ -1229,3 +1229,36 @@ mockup has to decide, all at once rather than one CSS value at a time:
 
 Everything above is reverted; `app.css` and `js/app.js` are back at v344.
 
+
+## 2026-08-09 player notes: melt, transmog, stable, garden (NOT started)
+
+Tom, playing v348. Logged, none investigated yet beyond what is written here.
+
+1. **Melting gear is too hidden, and commons do not seem meltable.** Two claims in
+   one line and they need separating before any fix: *discoverability* (where the
+   melt action lives) and a possible *rule* (are commons actually excluded, or do
+   they just look excluded?). Check `js/loot.js` for the dust path and whether a
+   rarity floor exists. If commons genuinely cannot be melted, that is a design
+   question for Tom; if they can, it is a UI bug.
+
+2. **Cosmetic transmog is too confusing.** The system is per-slot and free
+   (`TRANSMOG_HIDE`, the looks picker), but the Wardrobe mixes equipped GEAR
+   (stats) with collected LOOKS (style) in one panel. Already flagged once in the
+   Aug 6 plan as "Wardrobe gear vs looks confusion" with a proposed two-chip
+   toggle and a one-line explainer. This is the second report, so it should stop
+   being a proposal.
+
+3. **The Stable is glitchy while breeding, and the switching-pets menu stays
+   open.** A stuck menu after an action is a state bug, not a taste one. Likely
+   the same shape as the News defect just fixed: an action closes or re-renders
+   one layer while another is still mounted. Needs a reproduction with the real
+   controls (breed, then switch) before any change.
+
+4. **The Garden gives no feedback that you picked anything.** Harvest just says
+   "back to the garden". Picking a crop is the payoff of the whole loop and it
+   currently has no moment: no float, no count, no sound, no sight of what you
+   got. The app already has the vocabulary for this (floatNode, the crate reveal,
+   haptic.success) so this is assembly rather than invention.
+
+Ordering suggestion: 3 first (it is a bug), then 4 (cheap, high feel), then 1
+(needs a decision), then 2 (wants a mockup, and has one proposed already).
