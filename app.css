@@ -6784,3 +6784,21 @@ body::before {
 @media (prefers-reduced-motion: reduce) { .boss-cell { animation: none; } }
 .boss-veil .drop-sub { margin-bottom: 4px; }
 
+/* THE DAY'S MONSTER HAS TO BE VISIBLE. Tom, 2026-08-09: "the bestiary banner
+   doesn't have any of the art it's just text". The art was there, correctly
+   clipped, at 30px next to a 16px title on a full-width row: technically present
+   and effectively invisible. The whole point of the row is the monster, so the
+   portrait gets real size, and opening it shows the thing at 132px. */
+/* GROW THE BOX, NOT THE HEADSHOT. `.gbn-ico .tz-head` (added with the Bestiary)
+   forces any portrait to fill its icon box with !important, and
+   `.out-there .gbn-ico` pins that box at 32px. So passing a bigger px to
+   headshotHtml() only moved the crop transform while the window stayed 32, and
+   the portrait came out zoomed into a jaw. Measured, after two wrong guesses:
+   head box 32x32 with an inline width of 52px and an inner transform built for
+   52. The box and the px have to agree, so the box moves. */
+.out-there .bestiary-banner .gbn-ico { width: 52px; height: 52px; border-radius: 12px; }
+.bestiary-hero { display: flex; justify-content: center; margin: 4px 0 10px; }
+.bestiary-hero .tz-head { border-radius: 18px; border-width: 3px; }
+/* News rows: the garden bed art needs a box to sit in, same as the other thumbs */
+.nw-thumb .nw-garden { transform: scale(.30); transform-origin: center; display: block; }
+.nw-thumb .tz-head { border: none; border-radius: 11px; }

@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 349, date: '2026-08-09', title: 'Fixes', items: [
+    "The <b>News</b> list no longer breaks when you open something from it. Tapping an announcement used to leave the list stranded underneath, and everything after it did nothing.",
+    'Every News row shows the <b>right artwork</b> now. Two of them were rendering as empty boxes.',
+    "<b>Today's monster</b> is actually visible on the hunting row instead of a 30px speck.",
+  ] },
   { n: 348, date: '2026-08-09', title: 'Everything out there has a face now', items: [
     'The things you fight are not nameless skeletons any more. <b>56 monsters</b> across eight bloodlines: bog, cinder, crypt, demon, flesh, deep, iron and worse.',
     'Every <b>den, tower and Pit rung</b> now shows a real monster, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones.',

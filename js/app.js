@@ -2750,11 +2750,12 @@ function bestiaryBannerHtml() {
   const eq = themedLook(den.theme && den.theme.key, den.id);
   return `<details class="glutton-banner bestiary-banner">
     <summary>
-      <span class="gbn-ico bestiary-ico">${headshotHtml(eq || {}, 32)}</span>
+      <span class="gbn-ico bestiary-ico">${headshotHtml(eq || {}, 52)}</span>
       <span class="gbn-txt"><i>Out hunting today</i><b>${esc(den.boss)} at ${esc(den.name)}</b></span>
       <span class="gbn-chev">›</span>
     </summary>
     <div class="gbn-body">
+      <div class="bestiary-hero">${headshotHtml(eq || {}, 132)}</div>
       <p class="glutton-mech">Every den, tower and Pit rung now has a face, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones. They rotate daily, and your whole Crew meets the same one you do.</p>
       <button class="btn ghost" id="bestiaryToMap" style="width:100%">Find it on the Boneyard</button>
     </div>
@@ -6888,15 +6889,22 @@ function richLine(str) {
 const NEWS = [
   { id: 'drop', date: 'Aug 8', title: 'The Puffer Pack',
     blurb: 'Ten legendary colourways. Puffer on puffer.',
-    thumb: () => `<span class="nw-fit">${dropFitHtml('T9-6', 'H13-3')}</span>`,
+    /* headshotHtml, not dropFitHtml. The fit helper returns a <span>, and a span
+       is display:inline where width and height are simply ignored, so both of
+       these rows rendered as empty boxes while every check I wrote said they had
+       content. Same trap the .tz-head-in comment already warns about. */
+    thumb: () => headshotHtml({ B: 'B0-1', SK: 'SK0-1', T: 'T9-6', H: 'H13-3' }, 52),
     open: () => openDropPopup() },
   { id: 'teaser', date: 'Aug 8', title: '63 new cosmetics',
     blurb: 'Lids, eyes, mouths and grillz. Every crate can drop them.',
-    thumb: () => `<span class="nw-wall">${teaserWallHtml(4, 44)}</span>`,
+    thumb: () => headshotHtml({ B: 'B0-1', SK: 'SK0-1', H: 'HS13', E: 'ES13', G: 'GS1' }, 52),
     open: () => openCosmeticTeaser() },
   { id: 'race', date: 'Aug 7', title: 'The weekly step race',
     blurb: 'Every Bonehead on one track. The purse pays the top three.',
-    thumb: () => `<span class="nw-ico">${ICONS.star(26)}</span>`,
+    /* the race art IS your own Bonehead on the track, so the row shows that,
+       not a generic star (Tom: "doesn't have the right art in some of the drop
+       downs") */
+    thumb: eq => headshotHtml(eq, 52),
     open: () => openRaceIntro() },
   { id: 'spire', date: 'Aug 6', title: 'Dark Spires',
     blurb: 'Take a tower and it pays you tribute for visiting.',
@@ -6904,14 +6912,17 @@ const NEWS = [
     open: () => openSpireIntro() },
   { id: 'garden', date: 'Aug 5', title: 'The Bone Garden',
     blurb: 'Three beds in the Kitchen. Grow your own ingredients.',
-    thumb: () => `<span class="nw-ico">${bhIcon('garden-sprout', 26)}</span>`,
+    /* the garden's art IS icon art (the popup's bed stages are icons), so this
+       row shows the sprout at a legible size rather than the three-stage strip
+       squeezed to 30% and rendered as unreadable labels */
+    thumb: () => `<span class="nw-ico">${bhIcon('garden-sprout', 34)}</span>`,
     open: () => openGardenPopup() },
 ];
 
-function newsHtml() {
+function newsHtml(eq) {
   return NEWS.map(n => `
     <button class="nw-row" data-news="${esc(n.id)}">
-      <span class="nw-thumb">${n.thumb()}</span>
+      <span class="nw-thumb">${n.thumb(eq)}</span>
       <span class="nw-txt"><b>${esc(n.title)}</b><small>${esc(n.blurb)}</small></span>
       <span class="nw-date">${esc(n.date)}</span>
       <span class="nw-chev">&rsaquo;</span>
@@ -6951,7 +6962,7 @@ async function openWhatsNew() {
       </div>
       <div class="wn-pane" id="wnNews" hidden>
         <p class="note" style="margin:2px 2px 14px">Every announcement the game has shown, in case you swiped one away. Tap to see it again.</p>
-        ${newsHtml()}
+        ${newsHtml(await equipped())}
       </div>
     </div>`, { cls: 'full' });
   $$('.wn-tab', wrap).forEach(t => t.addEventListener('click', () => {
@@ -6963,11 +6974,21 @@ async function openWhatsNew() {
     $('#wnUpdates', wrap).hidden = which !== 'updates';
     $('#wnNews', wrap).hidden = which !== 'news';
   }));
-  /* Open the REAL popup, not a copy of it. The sheet stays open underneath so
-     dismissing the announcement puts them back in the list they came from. */
+  /* Open the REAL popup, not a copy of it.
+     CLOSE THIS SHEET FIRST. Tom, 2026-08-09: "the news app is glitchy and
+     crashing shit when you open it." Reproduced exactly: the announcements end
+     with a CTA that runs closeAllSheetsViaHistory(), which tore down the What's
+     New sheet UNDERNEATH them. Measured after dismissing one: sheets 0, the news
+     list gone, and every later tap did nothing because its container no longer
+     existed. My audit passed only because it checked while the popup was still
+     open, before anything was dismissed.
+     So the sheet steps out of the way first and the announcement owns the screen,
+     which is also how the player met it the first time. */
   $$('[data-news]', wrap).forEach(b => b.addEventListener('click', () => {
     const n = NEWS.find(x => x.id === b.dataset.news);
-    if (n) n.open();
+    if (!n) return;
+    closeAllSheetsViaHistory();
+    setTimeout(() => n.open(), 220);   // let the sheet finish leaving
   }));
   await kvSet('changelogSeen', changelogLatest());
 }
@@ -11668,7 +11689,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v348'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v349'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

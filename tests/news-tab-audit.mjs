@@ -42,14 +42,26 @@ const n = await page.evaluate(async () => {
     updatesHidden: document.getElementById('wnUpdates').hidden,
     rows: rows.length,
     titles: rows.map(r => r.querySelector('b').textContent),
-    thumbsWithContent: rows.filter(r => r.querySelector('.nw-thumb').childElementCount > 0).length,
+    /* Drawn means DRAWN, whether the art is a bitmap or an icon: a decoded <img>
+       with a real box, or an <svg> with a real box. The first version demanded an
+       <img> and failed the garden row, whose art is legitimately icon art. */
+    thumbsDrawn: rows.filter(r => {
+      const t = r.querySelector('.nw-thumb');
+      const big = e => { const b = e.getBoundingClientRect(); return b.width > 4 && b.height > 4; };
+      const img = [...t.querySelectorAll('img')].some(i => i.naturalWidth > 0 && big(i));
+      const svg = [...t.querySelectorAll('svg')].some(big);
+      return img || svg;
+    }).length,
     imgs: imgs.length, decoded: imgs.filter(i => i.naturalWidth > 0).length,
   };
 });
 ok('tapping News swaps the pane', n.updatesHidden);
 // an empty sample is a failure, not a pass
 ok('every announcement is listed', n.rows >= 5, `${n.rows}: ${n.titles.join(', ')}`);
-ok('every row carries its own artwork', n.thumbsWithContent === n.rows, `${n.thumbsWithContent}/${n.rows}`);
+/* "has a child element" was another check that could not fail: two rows held a
+   <span> that rendered at zero size and it counted them as art. Measure PIXELS:
+   a decoded image inside a box with real width and height. */
+ok('every row draws real pixels', n.thumbsDrawn === n.rows, `${n.thumbsDrawn}/${n.rows} drew`);
 ok('the art in it decodes', n.imgs === 0 || n.decoded === n.imgs, `${n.decoded}/${n.imgs}`);
 
 // the row must open the REAL popup, not a rebuilt copy
@@ -60,10 +72,48 @@ const opened = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 700));
   const veil = document.querySelector('.drop-veil');
   return { veil: !!veil, cards: document.querySelectorAll('.drop-veil .drop-card').length,
-           sheetStillOpen: !!document.getElementById('wnNews') };
+           sheetsUnder: document.querySelectorAll('#sheets .sheet').length };
 });
 ok('a row opens the real announcement', opened.veil && opened.cards > 0, JSON.stringify(opened));
-ok('the What\'s New sheet survives underneath', opened.sheetStillOpen);
+/* THE ASSERTION THAT ACTUALLY CATCHES IT, and I had it backwards. v348 left the
+   What's New sheet OPEN under the announcement, and the announcement's CTA then
+   closed every sheet, which is what tore the news list out from under the player.
+   My first guard asserted the sheet SHOULD survive underneath, so it passed on
+   the broken build. Nothing may be buried under an announcement. */
+ok('nothing is left stacked under the announcement', opened.sheetsUnder === 0,
+  `${opened.sheetsUnder} sheet(s) under the overlay`);
+
+/* THE CHECK I SHOULD HAVE WRITTEN. The first version asserted the sheet survived
+   UNDERNEATH the popup and passed, because it looked before anything was
+   dismissed. The announcements end on a CTA that closes every sheet, so one
+   dismissal tore down the news list and every later tap did nothing. What
+   matters is the state AFTER a dismissal, and that a second announcement still
+   opens. */
+const after = await page.evaluate(async () => {
+  const veil = document.querySelector('.drop-veil');
+  const cta = veil?.querySelector('.drop-cta, button, .btn');
+  if (cta) cta.click(); else veil?.remove();
+  await new Promise(r => setTimeout(r, 900));
+  const stray = document.querySelectorAll('.drop-veil').length;
+  /* Some announcements END on a navigation (Dark Spires sends you to the
+     Boneyard) and that is the CTA doing its job, so returning to Crew is the
+     player's move, not the app's. Go there the way they would. */
+  location.hash = '#/friends';
+  await new Promise(r => setTimeout(r, 1600));
+  document.getElementById('crewWhatsNew')?.click();
+  await new Promise(r => setTimeout(r, 1300));
+  document.querySelector('[data-wntab="news"]')?.click();
+  await new Promise(r => setTimeout(r, 400));
+  const rows = document.querySelectorAll('.nw-row').length;
+  document.querySelector('[data-news="garden"]')?.click();
+  await new Promise(r => setTimeout(r, 900));
+  return { stray, rowsOnReturn: rows, secondOpened: !!document.querySelector('.drop-veil'),
+           veilsStacked: document.querySelectorAll('.drop-veil').length };
+});
+ok('dismissing leaves no stray overlay', after.stray === 0, JSON.stringify(after));
+ok('the news list is reachable again afterwards', after.rowsOnReturn >= 5, `${after.rowsOnReturn} rows`);
+ok('a SECOND announcement still opens', after.secondOpened, JSON.stringify(after));
+ok('overlays never stack', after.veilsStacked <= 1, `${after.veilsStacked} veils`);
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
