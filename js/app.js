@@ -5634,6 +5634,14 @@ async function renderFriends(el) {
         <input id="cfanSearch" type="search" inputmode="search" autocomplete="off"
                placeholder="Search your Crew by name or nickname" aria-label="Search your Crew">
         <button class="cfan-clear" id="cfanClear" hidden aria-label="Clear search">${ICONS.close ? ICONS.close(14) : '&times;'}</button>
+        <!-- Tom, 2026-08-08: "the player could filter it themself once they get to
+             the tab, not as a default open." So the deck still OPENS on the bias
+             sort (starred, then online, then everyone), and this is a control the
+             player reaches for. Off every time the tab opens: a filter that
+             remembers itself would eventually hide most of someone's crew with no
+             obvious reason why. -->
+        <button class="cfan-online" id="cfanOnline" aria-pressed="false"
+                aria-label="Show only friends who are online"><i class="live-dot"></i>Online</button>
       </div>
       <p class="cfan-nohit note" id="cfanNoHit" hidden></p>
       <div class="cfan-wrap" id="cfanWrap" hidden><div class="cfan-deck" id="cfanDeck"></div></div>
@@ -5799,6 +5807,7 @@ async function renderFriends(el) {
   let favs = new Set((await kvGet('crewFaves', [])) || []);
   let centerId = null;
   let fanOrder = [];   // playerIds: starred, then online, then the rest (stable)
+  let fanOnlineOnly = false;   // player-operated, never sticky (see the chip's comment)
   let fanQuery = '';   // crew search box, matches name OR nickname
 
   const fanFriend = id => (data.friends || []).find(f => f.playerId === id);
@@ -5830,7 +5839,9 @@ async function renderFriends(el) {
   };
   const resortFan = () => {
     const q = fanQuery.trim();
-    const pool = (data.friends || []).filter(f => fanMatches(f, q));
+    const pool = (data.friends || [])
+      .filter(f => fanMatches(f, q))
+      .filter(f => !fanOnlineOnly || onlineLabel(f.lastSeen).on);
     fanOrder = pool.map(f => f.playerId).sort((a, b) => fanRank(a) - fanRank(b));
     if (!centerId || !fanOrder.includes(centerId)) centerId = fanOrder[0] || null;
   };
@@ -5933,8 +5944,20 @@ async function renderFriends(el) {
     favs = new Set([...favs].filter(id => data.friends.some(f => f.playerId === id)));
     resortFan();
     // searching a crew of four is slower than looking at it
+    /* The row carries two controls with different thresholds. Searching a crew of
+       four is slower than looking at it, but filtering to who is online is useful
+       the moment you have anyone, so the row shows for 2+ and the INPUT is what
+       hides on a small crew. */
     const searchRow = $('#cfanSearchRow', el);
-    if (searchRow) searchRow.hidden = data.friends.length < 5 && !fanQuery;
+    if (searchRow) {
+      searchRow.hidden = data.friends.length < 2;
+      searchRow.classList.toggle('no-search', data.friends.length < 5 && !fanQuery);
+    }
+    const onBtn = $('#cfanOnline', el);
+    if (onBtn) {
+      onBtn.classList.toggle('on', fanOnlineOnly);
+      onBtn.setAttribute('aria-pressed', String(fanOnlineOnly));
+    }
     deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
     composeAvatars(deck);   // decode the layered art; never fan out blank cards
 
@@ -5945,7 +5968,13 @@ async function renderFriends(el) {
     const empty = fanOrder.length === 0;
     if (noHit) {
       noHit.hidden = !empty;
-      noHit.textContent = empty ? `Nobody in your Crew matches "${fanQuery}".` : '';
+      /* An empty deck must say WHICH control emptied it, or it reads as the crew
+         having vanished. Filtering to online and finding nobody is the common
+         case (people are asleep), so that message also says how to undo it. */
+      noHit.textContent = !empty ? ''
+        : fanQuery.trim() ? `Nobody in your Crew matches "${fanQuery}".`
+        : fanOnlineOnly ? 'Nobody in your Crew is online right now. Tap Online again to see everyone.'
+        : 'Nobody in your Crew yet.';
     }
     wrap.hidden = empty;
     pager.hidden = empty || fanOrder.length < 2;
@@ -5969,6 +5998,12 @@ async function renderFriends(el) {
     if (clear) clear.hidden = !fanQuery;
     clearTimeout(searchT);
     searchT = setTimeout(() => { centerId = null; paintFan(); }, 140);
+  });
+  $('#cfanOnline', el)?.addEventListener('click', () => {
+    fanOnlineOnly = !fanOnlineOnly;
+    centerId = null;          // the old centre may not survive the filter
+    popSound(S.sounds);
+    paintFan();
   });
   $('#cfanClear', el)?.addEventListener('click', () => {
     fanQuery = '';
@@ -11450,7 +11485,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v337'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v338'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

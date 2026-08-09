@@ -415,6 +415,61 @@ const longDrag = await travel(230);
 ok('HORIZONTAL a long drag travels FURTHER than a short one (a scroll, not a snap)',
   longDrag.moved > shortDrag.moved, `short ${shortDrag.moved}, long ${longDrag.moved}`);
 
+/* ---- the ONLINE filter (Tom, 2026-08-08) -------------------------------------
+   "I don't see the online filter with friends in the fan part of the crew, just
+   favs" ... "the player could filter it themself once they get to the tab, not as
+   a default open."
+   So the guards are: the control EXISTS and is reachable, it is OFF on arrival,
+   operating it actually removes offline friends (not just repaints a chip), and
+   turning it off brings everyone back. The fixture alternates lastSeen, so half
+   the crew is online and half is a day stale: a filter that did nothing would
+   leave the count unchanged and fail here. */
+await seedCrew(FRIENDS);
+const onBtnSel = '#cfanOnline';
+const fanState = () => page.evaluate(() => ({
+  exists: !!document.querySelector('#cfanOnline'),
+  reachable: !!document.querySelector('#cfanOnline')?.offsetParent,
+  pressed: document.querySelector('#cfanOnline')?.getAttribute('aria-pressed'),
+  cards: document.querySelectorAll('#cfanDeck .cfan-card').length,
+  ids: [...document.querySelectorAll('#cfanDeck .cfan-card')].map(c => c.dataset.fan),
+}));
+const onlineIds = FRIENDS.filter(f => Date.now() - f.lastSeen < 6 * 60000).map(f => f.playerId);
+
+const fanBefore = await fanState();
+ok('ONLINE the filter control exists in the fan', fanBefore.exists);
+ok('ONLINE it is reachable (not hidden behind the small-crew search rule)', fanBefore.reachable);
+ok('ONLINE it is OFF when the tab opens (a filter must not be the default)',
+  fanBefore.pressed === 'false', `pressed=${fanBefore.pressed}`);
+ok('ONLINE the unfiltered fan is not empty (an empty sample proves nothing)',
+  fanBefore.cards > 0, `${fanBefore.cards} cards`);
+
+await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
+await sleep(1200);
+const fanOn = await fanState();
+ok('ONLINE operating it actually drops the offline friends',
+  fanOn.cards < fanBefore.cards && fanOn.cards > 0,
+  `${fanBefore.cards} -> ${fanOn.cards} (online fixtures: ${onlineIds.length})`);
+ok('ONLINE every card left on screen is genuinely online',
+  fanOn.ids.every(id => onlineIds.includes(id)), JSON.stringify(fanOn.ids));
+
+await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
+await sleep(1200);
+const fanOff = await fanState();
+ok('ONLINE turning it off brings the whole crew back',
+  fanOff.cards === fanBefore.cards, `${fanOff.cards} vs ${fanBefore.cards}`);
+
+/* Nobody online at all: the deck must SAY why it is empty rather than just going
+   blank, which reads as the crew having vanished. */
+await seedCrew(FRIENDS.map(f => ({ ...f, lastSeen: Date.now() - 86400000 })));
+await page.evaluate(sel => document.querySelector(sel)?.click(), onBtnSel);
+await sleep(1200);
+const noneMsg = await page.evaluate(() => {
+  const n = document.querySelector('#cfanNoHit');
+  return n && !n.hidden ? n.textContent.trim() : '';
+});
+ok('ONLINE an empty result explains itself and says how to undo it',
+  /online right now/i.test(noneMsg) && /tap online/i.test(noneMsg), noneMsg || '(nothing shown)');
+
 await browser.close();
 if (srv) srv.kill();
 console.log(fails ? '\nCREW FAN AUDIT FAILED' : '\nCREW FAN VERIFIED');

@@ -6463,6 +6463,20 @@ body::before {
   padding: 9px 14px; box-shadow: var(--sh-sm); -webkit-appearance: none; appearance: none;
 }
 .cfan-search input::placeholder { color: var(--text-3); }
+/* When the crew is too small for search to be worth typing, the input steps out
+   and the Online chip keeps the row. */
+.cfan-search.no-search input, .cfan-search.no-search .cfan-clear { display: none; }
+.cfan-search.no-search { justify-content: flex-start; }
+.cfan-online {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--display); font-weight: 400; font-size: 13px; letter-spacing: .04em;
+  color: var(--text-2); background: var(--surface-2); border: 2px solid #17151d;
+  border-radius: 999px; padding: 8px 13px; box-shadow: var(--sh-sm); cursor: pointer;
+  transition: background .16s ease, color .16s ease;
+}
+.cfan-online .live-dot { opacity: .45; transition: opacity .16s ease; }
+.cfan-online.on { background: var(--accent); color: var(--ink); }
+.cfan-online.on .live-dot { opacity: 1; }
 .cfan-search input:focus { outline: none; border-color: var(--accent); }
 .cfan-clear {
   position: absolute; right: 8px; width: 26px; height: 26px; display: grid; place-items: center;
