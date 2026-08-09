@@ -6074,9 +6074,32 @@ async function renderFriends(el) {
       return;
     }
     if (wait) wait.hidden = true;
-    /* No separate podium. Tom, 2026-08-08: "I just want it to include all players
-       in the main list." A podium lifted three people out of the board and made
-       everyone else a footnote; the list carries rank 1-3 itself now, bigger. */
+    /* THE PODIUM IS THE TILE, NOT THE LIST. Two notes from Tom that read as
+       opposites but are not:
+         2026-08-08 "I just want it to include all players in the main list" —
+           about the SHEET, where a podium pulled three people out of the ranking
+           and made everyone else a footnote. The sheet is still one flat list.
+         2026-08-09 "I don't like that the leaderboard is fully collapsed now and
+           we lost the podium art. You should still see that and then also click
+           to open and see the full list." — about the CREW TAB, where removing
+           the podium left a card with a sentence on it and nothing to look at.
+       So: podium art here as the preview, single list in the sheet. The whole
+       card is already a button, so the tap-through he asked for already works;
+       it just had nothing worth tapping. Full bodies, not the head crop: the
+       podium is where the fit gets shown off. */
+    const top = players.slice(0, 3);
+    if (pod && top.length) {
+      const slot = (p, place) => !p ? '' : `
+        <div class="lb-pod p${place}">
+          <div class="pod-fig">${lbAvatar(p, 'pod-av')}</div>
+          <div class="pod-name">${esc(p.name)}</div>
+          <div class="pod-lvl">Lv ${p.level}</div>
+          <div class="pod-plinth"><span>${place}</span></div>
+        </div>`;
+      // 2nd, 1st, 3rd: the winner stands in the middle and higher
+      pod.innerHTML = slot(top[1], 2) + slot(top[0], 1) + slot(top[2], 3);
+      pod.hidden = false;
+    }
 
     // WHERE YOU STAND. A podium of three strangers is somebody else's business;
     // your own rank is the reason to care about it.
@@ -11439,7 +11462,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v343'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v344'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 344, date: '2026-08-09', title: 'The podium is back', items: [
+    'The <b>top three</b> are on the Crew tab again, full bodies on a podium, biggest in the middle. Tap the card for the full list.',
+  ] },
   { n: 343, date: '2026-08-09', title: '32 new things to hold and wear', items: [
     '<b>25 new hands</b>: katanas, daggers, hockey sticks, shovels, banners, bouquets, a fishing rod, a flail, and a couple of things you should probably not be holding.',
     'Blades now come in <b>both hands</b>. Katanas in the raised hand, daggers in the low one.',
