@@ -827,3 +827,118 @@ The missing half was the glow toggle, now in Settings > App as "Gear glow", gati
 both the epic/legendary weapon halo and the slimed-gear glow. Cosmetic only, proven:
 gear stats are byte-identical with it on and off, and hiding a slot changes no stats
 either.
+
+## 2026-08-09 meeting notes: analysis + new items
+
+Tom's notes from the team meeting, analysed against the code rather than logged
+verbatim. Organised by what the answer actually is, not by the order raised.
+
+### A. Already done. Close these.
+
+1. **Diminishing returns on steps past 10-15k.** Shipped. `STEP_MILESTONES`
+   (`js/game.js:341`) caps the real reward at 10,000 and `STEP_OVER` pays a
+   decaying tail at 12.5k / 15k / 17.5k / 20k for 12 / 10 / 8 / 6 coins. Nothing
+   to build.
+2. **The Pokemon GO remote-raid trap** (removing remote play hurt rural and
+   disabled players). Already avoided: the **Remote Den** gives one boss fight a
+   day with no GPS and no energy cost, precisely because being unable to walk is
+   the reason it exists (`js/app.js:11875`).
+3. **Crew shots / shareable studio / AR.** Planned in full, with mockups:
+   `docs/PLAN-the-studio.md`. Buddy, squad and versus cards included.
+4. **Gentleness contract framing in the intro.** Planned:
+   `docs/PLAN-the-raising.md` §4d, with an audit of whether each claim is true.
+
+### B. Diagnosed. Cheap, do next.
+
+5. **Haptics on iOS are not "a settings change in the dev build". The plugin is
+   not installed.** `native/package.json` has app, core, cli, ios, android and
+   local-notifications, and **no `@capacitor/haptics`**. So
+   `window.Capacitor.Plugins.Haptics` is undefined, `js/haptics.js` falls through
+   to `navigator.vibrate`, and **WKWebView on iOS has no vibrate API at all**.
+   Net effect today: Android feels everything, iOS feels nothing, and the Settings
+   toggle appears to do nothing on the platform Tom tests on. Fix is
+   `npm i @capacitor/haptics`, `npx cap sync`, rebuild. Verify by firing a real
+   control on a device, not by reading the toggle.
+6. **Three boss creatures are already drawn and unused.** `~/Documents/Cam
+   (Claude)/boneyard-creatures/` holds **Chest Mimic**, **Hooded Wraith** and
+   **Lantern Brute** at 1500x2000 masters plus cleaned cutouts, alongside the
+   Glutton. Only the Glutton was ever brought into the app. That is the answer to
+   "we need distinct boss types": the art exists, it needs wiring, a stat block
+   and a name.
+   **Correction to the note:** there are **no thematic cosmetic sets** to draft as
+   bosses. The catalogue's families (Everyday, Basic, Street, Corner-store...) are
+   the placeholder naming scheme, not costumes. Boss compositions have to be
+   curated from the art by eye, which I can do, but it is a design pass and not a
+   lookup.
+
+### C. New, and worth building
+
+7. **Bone density meter instead of binary streaks.** Strongly agree, and it
+   solves a bug at the same time: `deriveStats` currently feeds **Marrow** from the
+   *current* streak, so one missed day silently removes up to ~45 points of a stat
+   (see `docs/PLAN-the-raising.md`). A decaying density meter plus a return bonus
+   is the same idea done kindly. Note it must be built on the player-assigned stat
+   system, not on top of the current one. `streakFrom` is a five-line function.
+8. **Rotating cosmetic shop (Finch model).** This is also **the coin sink the
+   weapons removal needs** (`docs/PLAN-remove-weapons.md` §6): retiring weapons
+   leaves coins with nothing to buy, and Tom's own direction was that coins should
+   point at visible cosmetics. Same build, two problems solved. Direct-buy answers
+   the "some players want to choose, not gamble" observation, which is the single
+   most actionable line in the notes.
+9. **Accountability pairing** (one partner a week, both hit a challenge). Fits the
+   existing non-verbal social model. Needs a no-shame failure state: a missed week
+   ends the pairing quietly, it never reports you to your partner.
+10. **Home mini-game.** Of the two candidates the **left/right dungeon roguelite**
+    is far cheaper: `js/pit.js` is already pure and headless, so a run is a loop
+    over existing fight logic with a risk/reward ladder on top, and
+    `tests/fight-sim.mjs` can balance it before it ships. The farming loop is the
+    bigger build and half of it already exists (garden plots, kitchen timers).
+11. **Boss presentation:** fill the right side, shrink the player for drama,
+    special moves. Sits on the fight HUD, which was just rebuilt for two-target
+    dens.
+12. **Trophy room / boss head mount**, **monthly treasure map**, **Bone Bizarre
+    player-run shelf**. Logged, none started. The treasure map is the most
+    interesting of the three because it reuses the Boneyard and gives walking a
+    month-long arc.
+
+### D. Flagged. I would not build these as stated.
+
+13. **Forest-style "keep the app open and something grows".** This rewards
+    foreground screen time, which contradicts the whole positioning of a health app
+    and is an odd thing to defend in an App Store review. The app already has the
+    good half: garden growth and kitchen cooking run on **wall-clock timers that
+    do not need the app open**. If the appeal is watching it happen, make it a
+    short optional moment, never a reward for staring.
+14. **Community raffle (buy cosmetic packs into a raffle pool).** This runs into
+    the standing monetization decision: *never sell crates or loot boxes for money,
+    for regulatory and trust reasons*. A paid-entry raffle is closer to gambling
+    than a loot box, not further from it, and it is the kind of thing that draws
+    real legal attention in several markets. If the goal is community energy, make
+    entry **free** and fund the pool from the studio.
+15. **100-day streak = 45% off cosmetics.** Two problems. It makes the streak
+    **load-bearing for money**, which fights both the gentleness contract and the
+    density-meter direction in item 7. And 45% is steep enough to distort pricing.
+    If a loyalty reward is wanted, tie it to **cumulative days logged** (which only
+    ever goes up) rather than an unbroken run.
+
+### E. The name change is bigger than SEO
+
+16. **Renaming (Deadlifts / Skelly / Good Bones)** is worth researching, but the
+    cost depends entirely on one distinction nobody raised:
+    - **Display name only** (App Store name, in-app wordmark, site title): cheap.
+      A rename, a new wordmark from Cam, a copy sweep.
+    - **Bundle id** (`com.boneheadz.gym`): changing it creates a **brand new app**.
+      New App Store record, TestFlight testers re-invited, existing installs
+      orphaned, reviews and rankings reset to zero. Almost never worth it.
+    Also in scope either way: the live URL (`tommillerca.github.io/tally`), the
+    Worker and D1 names, `assets/brand/wordmark.png`, the brand deck, and every
+    occurrence in copy. **Boneyard stays the map name and Crypt Pass stays the
+    battle pass regardless**, which limits the blast radius.
+
+### F. Standing constraints from the legal note (record, do not re-litigate)
+
+17. **No health claims.** Never state or imply the app treats ADHD, depression or
+    any condition. Safe framing: "encourages daily movement", "builds consistency".
+    Applies to store copy, the site, onboarding and any share card.
+18. **No disease names on monsters or items.** Applies to the whole catalogue and
+    to any future boss naming pass.
