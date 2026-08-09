@@ -18,12 +18,15 @@ right. For instance, I know there is like a swamp monster bonehead we could make
 I want you to come up with all the viable options that fit the horror monster
 style theme for enemies we could face that are already out there."
 
-**Catalogue: 28 boss builds, artifact `3cb8cdc1-aa25-4f7e-ae2c-4a9eabf891a5`.**
+**Catalogue: 56 boss builds, artifact `3cb8cdc1-aa25-4f7e-ae2c-4a9eabf891a5`.**
 Everything preserved at `market-quality-mockups/pit-bosses/`: the contact sheet,
 the 86px readability strip, the offline copy of the artifact, the build list
-(`final2.json`) and the generators that rebuild all of it. Families: Swamp & Rot (5), Fire &
-Storm (3), Spirit & Crypt (4), Demon (3), Flesh (2), Deep & Frost (2), Iron &
-Blade (3), Blowfish Brood (2), Oddities (4).
+(`final56.json`) and the generators that rebuild all of it. Families:
+Swamp & Rot (8), Fire & Storm (7), Spirit & Crypt (7), Demon (6), Flesh (5),
+Deep & Frost (6), Iron & Blade (6), Blowfish Brood (6), Oddities (5).
+56 against 28 named enemies is deliberate (Tom, 2026-08-09: "give me twice as
+many options"): the gauntlet cycles its eight names forever, so the second half
+re-dresses cycle 2 and rank 40 stops looking like rank 8.
 
 **Finding 1: the parts are already themed sets, not loose pieces.** All 276
 cosmetics across 15 slots were rendered and reviewed. Cam drew matched
@@ -61,13 +64,34 @@ hats, tops and pants read, and eyes/fangs/mouth pieces do not, so a
 builds carry no skull and no eyes at all: `H13-x` replaces the whole head, and
 adding an eyes layer puts a second pair on the chest.
 
+**Finding 4 (Tom, 2026-08-09): "you have a shovel weapon covering the face of
+some of them."** Not a z-order mistake and not a mislabelled slot. Held items sit
+at the TOP of the app's slot order (`IL` 120, `IR` 130, above `SK` 70 and `E` 80)
+and that is correct, a weapon must read in front of the torso. The library has
+two spades: a LEFT-hand one drawn raised at the shoulder (`IL17-1/2`) and a
+RIGHT-hand one drawn low and horizontal (`IR8-1/2`). The raised one was equipped,
+and because hands draw last its blade landed across the skull. Measured against
+the zone where eyes/teeth/grillz actually land, the raised spades cover **10.8%**
+of the face. Both bosses now use `IR8-2`, which covers none of it.
+
+New guard: `market-quality-mockups/pit-bosses/facegate.py` fails the roster build
+if any HELD item covers more than 2% of the face zone. Headwear is exempt on
+purpose (a fox mask or visor is meant to be on the face). **Proven red** against
+the version Tom flagged (it caught exactly The Bog Wraith and The Gravedigger),
+green on all 56 now.
+
+**A real app bug fell out of it:** `IL9` (a raised banner, "Everyday Off-hand
+#20") covers **81%** of the face zone. Any player who equips it loses their head
+behind it, in the live app, today. It is in no boss build. Next worst are the two
+toothbrushes at 1.6%, so `IL9` is alone in being this bad. Needs its own decision:
+nudge the art down, or retire the item.
+
 **Open for Tom:**
-- Approve the roster, or cut/rename any of the 28 before a build plan is written.
-- Casting: accept the proposed table, or reassign.
-- The gauntlet cycles its 8 names forever (Hollow King II, III...). Same face on
-  repeats, or re-dress by cycle so rank 40 does not look like rank 8?
+- Approve the roster, or cut/rename any of the 56 before a build plan is written.
+- Casting: accept the proposed table (covers cycle 1), or reassign.
 - The Blowfish Brood read as a different species. Use them as the second fighter
   (`foeCfg.add`, already supported) rather than as captains?
+- `IL9`: fix the art or retire it? Separate from this roster either way.
 
 **Not started.** Per the notes process this waits for Tom's word before any code.
 
