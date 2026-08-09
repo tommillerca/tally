@@ -76,13 +76,13 @@ export const BH_SLOTS = [
  {
   "code": "IL",
   "label": "Left hand",
-  "z": 120,
+  "z": 65,
   "default": null
  },
  {
   "code": "IR",
   "label": "Right hand",
-  "z": 130,
+  "z": 66,
   "default": null
  },
  {
