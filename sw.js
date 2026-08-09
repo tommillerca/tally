@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v344';
+const VERSION = 'tally-v345';   // RENUMBER AT MERGE alongside APP_BUILD + changelog n
 const PRECACHE = [
   './',
   './index.html',

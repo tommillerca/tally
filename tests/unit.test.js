@@ -1986,6 +1986,42 @@ test('NAMES no two cosmetics share a name', async () => {
   assert.deepEqual(dupes, [], 'two cosmetics with one name are indistinguishable in the wardrobe');
 });
 
+/* THE HANDS DRAW UNDER THE HEAD (2026-08-09, Tom: "we need those to be correct
+   in the BH hierarchy they're going to be live for players").
+
+   The bug this pins: IL/IR shipped as the TOP two layers, so any held item drawn
+   raised painted over the player's own face. IL9 covered 81% of the face zone,
+   the two spades 10.8%. Flip either z back above the skull's and this goes red,
+   which is the only reason to trust it. */
+test('FIGURE held items never draw over the face', async () => {
+  const { BH_SLOTS } = await import('../data/boneheadz.js');
+  const z = Object.fromEntries(BH_SLOTS.map(s => [s.code, s.z]));
+  assert.ok(z.SK != null && z.IL != null && z.IR != null, 'an empty sample is a failure, not a pass');
+  for (const hand of ['IL', 'IR']) {
+    assert.ok(z[hand] < z.SK, `${hand} (z ${z[hand]}) must draw under the skull (z ${z.SK})`);
+    assert.ok(z[hand] < z.E, `${hand} (z ${z[hand]}) must draw under the eyes (z ${z.E})`);
+    assert.ok(z[hand] < z.H, `${hand} (z ${z[hand]}) must draw under headwear (z ${z.H})`);
+    assert.ok(z[hand] > z.T, `${hand} (z ${z[hand]}) must still draw over the top (z ${z.T})`);
+  }
+  assert.ok(z.IR > z.IL, 'the near hand (IR) still wins over the far hand (IL)');
+});
+
+/* Every boss look is buildable: a typo in an item id renders a missing layer,
+   which degrades to a half-dressed monster rather than an error, so nothing
+   would ever tell us. */
+test('BOSSES every look uses real catalogue ids', async () => {
+  const { BH_BY_ID } = await import('../data/boneheadz.js');
+  const { LOOKS, FAMILIES } = await import('../js/bosses.js');
+  const all = [...Object.values(LOOKS), ...Object.values(FAMILIES).flat()];
+  assert.ok(all.length >= 56, 'an empty or short roster is a failure, not a pass');
+  const bad = [];
+  for (const eq of all) for (const [slot, id] of Object.entries(eq)) {
+    if (!BH_BY_ID[id]) bad.push(`${slot}:${id}`);
+    else if (BH_BY_ID[id].slot !== slot) bad.push(`${id} is a ${BH_BY_ID[id].slot}, worn as ${slot}`);
+  }
+  assert.deepEqual([...new Set(bad)], [], 'a boss references art that does not exist');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

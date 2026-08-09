@@ -36,6 +36,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
+import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
@@ -592,6 +593,7 @@ async function boot() {
   maybeShowDropPopup();
   maybeShowGardenPopup();
   maybeShowSpireIntro();
+  maybeShowBossIntro();
   maybeShowRaceIntro();
   maybePromptRecovery();
   maybePromptName();
@@ -853,6 +855,84 @@ function openSpireIntro() {
   veil.addEventListener('click', e => { if (e.target === veil) close(); });
   $('#spireIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
 }
+
+/* THE BESTIARY ANNOUNCEMENT (2026-08-09).
+ *
+ * Tom: "create a cool hype popup and out there today banner for the new bosses
+ * you can fight on the map make it seem like a fun new evolution to the game
+ * that deepens the lore and immersion for players!"
+ *
+ * The pitch has to be the monsters themselves, so the card shows three real ones
+ * built the same way the fight builds them (avatarLayersHtml over a boss outfit,
+ * then composeAvatars). A screenshot of the actual thing beats any adjective,
+ * and it can never drift from what you meet, because it IS what you meet.
+ *
+ * Same etiquette as Dark Spires and the Step Race: once, via a kv flag, never
+ * over the splash, the wheel or an open sheet. */
+const BOSS_SEEN_KEY = 'bossesIntroSeen';
+async function maybeShowBossIntro() {
+  try {
+    if ((navigator.webdriver && !window.__bossForce) || !S.settings) return;
+    if (await kvGet(BOSS_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(BOSS_SEEN_KEY, true);
+      openBossIntro();
+    };
+    setTimeout(tick, 3000);
+  } catch { /* never block boot */ }
+}
+
+/* THE WALL. Tom, 2026-08-09: "the popup isn't showing enough monsters it's
+   boring and text heavy let the art speak."
+
+   So the poster IS the roster: sixteen real monsters, two from each of the eight
+   bloodlines, drawn through the same avatar stack the fight uses. Two from each
+   rather than sixteen of the best, because the point being made is RANGE, and a
+   wall of the prettiest ones would all be the same prettiness. Copy is down to a
+   headline, one line and the CTA. */
+function bossIntroWall() {
+  const fams = ['swamp', 'crypt', 'demon', 'fire', 'flesh', 'deep', 'iron', 'odd'];
+  /* TWO PASSES, not two-from-each-in-a-row. Neighbours within a family are
+     deliberately close (Bog Wraith and Gatormaw are the same green bones), so
+     taking them adjacent filled the grid with twins and the wall read as eight
+     monsters, not sixteen. First and last of each family, interleaved, puts
+     eight different bloodlines in the top half and their opposites below. */
+  const pick = (f, i) => (BOSS_FAMILIES[f] || [])[i];
+  return [
+    ...fams.map(f => pick(f, 0)),
+    ...fams.map(f => pick(f, (BOSS_FAMILIES[f] || []).length - 1)),
+  ].filter(Boolean);
+}
+
+function openBossIntro() {
+  const wall = bossIntroWall();
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil boss-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">NEW</span>
+      <p class="drop-eyebrow">MEET THE LOCALS</p>
+      <h1 class="drop-title">The <em>Bestiary</em></h1>
+      <div class="boss-wall">
+        ${wall.map((eq, i) => `<span class="bh-stage boss-cell" style="--d:${(i % 4) * 40 + Math.floor(i / 4) * 70}ms">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>`).join('')}
+      </div>
+      <p class="drop-sub">Fifty-six of them are out there. What you meet depends on where you dig, and it is never the same one twice.</p>
+      <button class="drop-cta" id="bossIntroGo">GO HUNTING</button>
+      <button class="drop-later" id="bossIntroLater">Not now</button>
+    </div>`;
+  document.body.appendChild(veil);
+  composeAvatars(veil);
+  const close = () => veil.remove();
+  $('#bossIntroLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#bossIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__bossIntro = openBossIntro;
 
 /* THE STEP RACE ANNOUNCEMENT (market-quality-mockups/race-announce.html).
  * Shown once, with the same etiquette as the Dark Spires intro above: never over
@@ -2031,6 +2111,13 @@ async function renderToday(el) {
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#bestiaryToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  /* The row's monster is a layered stack like any other Bonehead, so it needs
+     composing. Unlike the teaser strip this is ONE figure and it is the whole
+     reason the row is interesting, so it composes on render rather than on open
+     (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
+  const bestIco = $('.bestiary-banner .gbn-ico');
+  if (bestIco) composeAvatars(bestIco);
   /* The teaser strip lives inside a <details>. Its heads are only composed when
      the section is opened: compositing 18 layered stacks on every Today render,
      for a row most people never expand, is work nobody sees. */
@@ -2636,6 +2723,26 @@ function gluttonLoreHtml() {
  * is a world boss you find on the map, so a permanent card advertising him on
  * Today was a standing offer pretending to be news, and the Puffer Pack stopped
  * being the current drop some time ago. */
+/* THE BESTIARY ROW. Names today's boss and SHOWS it, because "a boss is out
+   there" is a sentence and the monster is a reason to walk. The art is the real
+   fight outfit through the real avatar stack, so this card cannot describe a
+   monster the map does not have. Expanded, it explains the rotation once. */
+function bestiaryBannerHtml() {
+  const den = remoteDen(dateKey());
+  const eq = themedLook(den.theme && den.theme.key, den.id);
+  return `<details class="glutton-banner bestiary-banner">
+    <summary>
+      <span class="gbn-ico bestiary-ico"><span class="bh-stage">${avatarLayersHtml(eq || {}, { noYard: true, skip: ['BG', 'C'] })}</span></span>
+      <span class="gbn-txt"><i>Out hunting today</i><b>${esc(den.boss)} at ${esc(den.name)}</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      <p class="glutton-mech">Every den, tower and Pit rung now has a face, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones. They rotate daily, and your whole Crew meets the same one you do.</p>
+      <button class="btn ghost" id="bestiaryToMap" style="width:100%">Find it on the Boneyard</button>
+    </div>
+  </details>`;
+}
+
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
   const sieged = held.filter(s => s.siege).length;
   const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
@@ -2653,6 +2760,10 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
        drop on Today (2026-08-09). With the Puffer Pack row gone there is room
        for both, and the newest cosmetics are the thing worth pointing at. */
     { pri: 25, html: cosmeticTeaserBannerHtml() },
+    /* WHAT IS OUT THERE TODAY, literally. The remote den is deterministic from
+       the date and needs no GPS, so it is the one boss we can always name on
+       Today, and it is the same one every player in the Crew is looking at. */
+    { pri: 28, html: bestiaryBannerHtml() },
   ].sort((a, b) => a.pri - b.pri);
   return `<div class="card out-there">
     <div class="sect-h ot-head">Out there today</div>
@@ -2963,7 +3074,10 @@ function openSpireSheet(s, view, rival = null) {
     }
     const w = wardenFor(s, levelFor(await totalXp()).level);
     openFight(wrap, fighter, { mode: 'spire', name: w.name, mult: w.mult, aiLevel: w.aiLevel,
-      venue: w.venue, spire: s });
+      venue: w.venue, spire: s,
+      // seeded off the TOWER, not the warden name: five names across every spire
+      // in town would otherwise be five faces forever
+      foeOutfit: themedLook('spire', s.id) });
   });
 }
 
@@ -11123,6 +11237,12 @@ async function renderBoneyard(el) {
       openFight(wrap, fighter, {
         mode: 'boss', name: den.boss, mult: esc.mult, aiLevel: esc.aiLevel,
         talents: den.talents || [], venue: den.name, den, week, add: esc.add, bossMult: esc.bossMult,
+        /* THE WORLD ROLLS ITS OWN MONSTERS. The den already picked its theme from
+           a seed (landmark per week, roaming per cell per day), so the look rides
+           that same roll instead of a second one: The Sour Marsh hands you
+           Gatormaw one day and Sporeback the next, and everyone in your Crew sees
+           the same one, which is the whole point of it being worth mentioning. */
+        foeOutfit: themedLook(den.theme && den.theme.key, den.id),
       });
     });
 
@@ -11462,7 +11582,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v344'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v345'; // RENUMBER AT MERGE to the next free build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -11830,6 +11950,9 @@ async function renderPit(wrap) {
     openFight(wrap, fighter, {
       mode: 'boss', name: rDen.boss, mult: rDen.mult, aiLevel: rDen.aiLevel,
       talents: rDen.talents || [], venue: rDen.name, den: rDen, add: null, bossMult: null,
+      // same roll as a walked-to den: the remote boss is a real den, just one you
+      // did not have to reach, so it gets a real face too
+      foeOutfit: themedLook(rDen.theme && rDen.theme.key, rDen.id),
     });
   });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
@@ -11858,6 +11981,16 @@ async function renderPit(wrap) {
 }
 
 function foeOutfitFor(name) {
+  /* A NAMED enemy wears its designed face. The Pit ladder, the Champion and the
+     Gauntlet's eight names are a fixed cast (js/bosses.js): rung 4 is The
+     Gravedigger every time, because a ladder you climb should have faces you
+     learn. Repeat Gauntlet cycles ("The Hollow King II") re-dress themselves so
+     rank 40 does not look like rank 8.
+
+     Everything else still falls through to the coin-flip below, which is what
+     sparring partners and any unnamed foe get. */
+  const look = bossLook(name);
+  if (look) return look;
   // deterministic outfit per opponent name
   const seedRand = (() => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; let a = h || 7; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
   const eq = { B: 'B0-1', SK: 'SK0-1' };

@@ -33,8 +33,25 @@ SLOTS = {
     'G':  ('Grillz', 90, None),
     'M':  ('Mouth', 100, None),
     'H':  ('Hat', 110, None),
-    'IL': ('Left hand', 120, None),
-    'IR': ('Right hand', 130, None),
+    # HANDS SIT UNDER THE HEAD (2026-08-09, Tom: "fix the underlying behaviour of
+    # the off hand weapons"). They used to be the top two layers, which is fine
+    # for a weapon held across the torso and wrong for anything drawn raised: a
+    # spade, a toothbrush, a banner all landed across the face because the hand
+    # painted last. Measured against the zone where eyes/teeth/grillz land, IL9
+    # covered 81% of a player's face, the two spades 10.8%.
+    #
+    # Below the skull is where they belong: the arms themselves are drawn clear
+    # of the head (only 1.3% of the skull has body ink under it, all of it at the
+    # neck), so a thing held in the hand passing IN FRONT of the face was never
+    # what the art meant. Above T (60) so a weapon still reads in front of the
+    # shirt; IR above IL so the near hand still wins.
+    #
+    # Blast radius, measured on all 62 held items: 19 left-hand items move behind
+    # the head (every one an improvement), 19 are pixel-identical, and all 24
+    # right-hand items are pixel-identical, so IR moves purely to stop the same
+    # bug reaching future right-hand art. tests/unit.test.js pins the invariant.
+    'IL': ('Left hand', 65, None),
+    'IR': ('Right hand', 66, None),
     'C':  ('Pet', 5, None),  # companion sits BEHIND the character (just above BG)
     # YD ('Yard') was retired: app.js treats noYard as a legacy no-op and the shipped
     # manifest carries no YD slot. Rebuilding with it resurrected a Yard tab and put

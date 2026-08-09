@@ -6683,3 +6683,41 @@ body::before {
 .lb-row.t2 .lb-head { border-color: #cfd6dd; }
 .lb-row.t3 .lb-head { border-color: #d09a63; }
 .lb-row.me .lb-head { border-color: var(--accent); }
+
+/* ---------- THE BESTIARY (2026-08-09) ----------
+   Tom: "create a cool hype popup and out there today banner for the new bosses
+   you can fight on the map make it seem like a fun new evolution to the game."
+
+   Both surfaces draw a REAL boss through the real avatar stack, so the only new
+   work here is fitting a 640-square figure into two very different boxes. */
+
+/* The Today row's monster. `.bh-stage img` is `object-fit: cover` everywhere
+   else, which is right for a portrait tile and wrong at 32px: it crops the head
+   off. Contain plus a nudge up keeps the skull, which is the part that says
+   which monster this is. */
+.bestiary-ico { background: #0d0f08; border-color: rgba(253, 104, 87, .4); }
+.bestiary-ico .bh-stage {
+  position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0;
+  border: 0; border-radius: 0; background: none;
+}
+.bestiary-ico .bh-stage img { object-fit: contain; object-position: 50% 34%; transform: scale(1.5); }
+.bestiary-banner summary .gbn-txt i { color: var(--coral); }
+
+/* The announcement is a WALL of monsters, not a paragraph about monsters. Four
+   across so a phone still shows a whole face per cell, and each cell pops in on
+   a stagger so the grid assembles itself rather than appearing as a slab. */
+.boss-wall {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+  margin: 12px 0 10px;
+}
+.boss-cell {
+  width: 100%; aspect-ratio: 1; height: auto; min-height: 0; margin: 0;
+  border-radius: 11px; background: rgba(0, 0, 0, .3);
+  border: 1px solid rgba(242, 236, 220, .12);
+  animation: bossPop .42s cubic-bezier(.34, 1.4, .64, 1) both; animation-delay: var(--d, 0ms);
+}
+.boss-cell img { object-fit: contain; object-position: 50% 44%; transform: scale(1.18); }
+@keyframes bossPop { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .boss-cell { animation: none; } }
+.boss-veil .drop-sub { margin-bottom: 4px; }
+
