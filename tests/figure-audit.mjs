@@ -67,9 +67,10 @@
  *
  * Usage: node tests/figure-audit.mjs        (URL=... for live)
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import zlib from 'node:zlib';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, serveTree} from './godmode.js';
 
@@ -281,6 +282,92 @@ ok('COVERAGE every undriven site states why it cannot be driven',
   undriven.every(s => s.undriven.length > 20), undriven.map(s => s.key).join(', '));
 undriven.forEach(s => console.log(`      NOT DRIVEN  ${s.key}: ${s.undriven}`));
 
+/* ------------------------------------------------------------------ SETUP GATE --
+ * A BROKEN MACHINE MUST NOT BE REPORTABLE AS A BROKEN FIGURE.
+ *
+ * Aggregator, 2026-08-08: "their audit is currently blind to real PLANE
+ * regressions. Right now it can't tell a broken figure from a broken setup."
+ * Exactly right, and it had already happened: four sites printed PLANE failures
+ * caused by a missing Pillow, the natural response was "that's environmental,
+ * ignore it", and ignoring it also ignored the eight real assertions that never
+ * ran behind them.
+ *
+ * So the ink pipeline proves itself before it is allowed to judge anything, and
+ * a failure here is NOT a finding — it exits 2, a code no figure bug can produce,
+ * before a single PLANE line exists to be misread. exit 1 still means findings.
+ *
+ * Two halves, because they fail for different reasons: a synthetic image with a
+ * bbox known by construction (proves the decoder's filter maths and its scan —
+ * a decoder that quietly mis-decodes is a new way to be blind), and a real asset
+ * off disk (proves ROOT resolves and the files are actually there). CRCs are not
+ * written because the parser does not read them; pretending otherwise would test
+ * nothing. */
+function synthPng(w, h, px, filters) {
+  const ch = 4, stride = w * ch, rows = [];
+  for (let y = 0; y < h; y++) {
+    const ft = filters[y % filters.length], row = Buffer.alloc(stride + 1);
+    row[0] = ft;
+    for (let i = 0; i < stride; i++) {
+      const cur = px[y * stride + i];
+      const a = i >= ch ? px[y * stride + i - ch] : 0;
+      const b = y ? px[(y - 1) * stride + i] : 0;
+      const c = y && i >= ch ? px[(y - 1) * stride + i - ch] : 0;
+      let pred = 0;
+      if (ft === 1) pred = a;
+      else if (ft === 2) pred = b;
+      else if (ft === 3) pred = (a + b) >> 1;
+      else if (ft === 4) {
+        const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+        pred = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      row[i + 1] = (cur - pred) & 255;
+    }
+    rows.push(row);
+  }
+  const chunk = (type, body) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(body.length);
+    return Buffer.concat([len, Buffer.from(type, 'latin1'), body, Buffer.alloc(4)]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const GATE_ASSET = 'assets/bh/B/B0-1.png';
+try {
+  const W = 6, H = 5, px = Buffer.alloc(W * H * 4);
+  for (const [x, y] of [[1, 1], [4, 3]]) {              // bbox by construction: 1,1 -> 5,4
+    px[(y * W + x) * 4 + 0] = 200; px[(y * W + x) * 4 + 3] = 255;
+  }
+  const tmp = path.join(ROOT, 'tests', '.figure-audit-gate.png');
+  writeFileSync(tmp, synthPng(W, H, px, [0, 1, 2, 3, 4]));
+  let got;
+  try { got = pngAlphaBox(tmp); } finally { unlinkSync(tmp); }
+  const want = { w: W, h: H, x0: 1, y0: 1, x1: 5, y1: 4 };
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    throw new Error(`decoder is wrong: ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`);
+  }
+  const real = pngAlphaBox(path.join(ROOT, GATE_ASSET));
+  if (!real || real.x1 <= real.x0 || real.y1 <= real.y0) {
+    throw new Error(`no ink read from ${GATE_ASSET}: ${JSON.stringify(real)}`);
+  }
+  ok('SETUP ink measurement works on this machine', true,
+    `decoder exact on a synthetic bbox; ${GATE_ASSET} ${JSON.stringify(real)}`);
+} catch (e) {
+  console.log('FAIL  SETUP ink measurement is broken — this is the HARNESS, not the app');
+  console.log(`      ${e.message}`);
+  console.log('      PLANE and NEAR cannot be measured, so they are not being run and');
+  console.log('      not being reported as figure failures either. Fix this first: until');
+  console.log('      it is fixed this audit cannot see a real alignment regression.');
+  process.exit(2);
+}
+
 /* ------------------------------------------------------------- driven checks -- */
 let srv = null, srvHandle = null;
 let base = process.env.URL;
@@ -320,23 +407,91 @@ await sleep(2400);
  * The bbox comes from the asset on disk (identical to the one live serves), read
  * once per src and cached. */
 const bboxCache = new Map();
+
+/* WHY THIS DECODES THE PNG ITSELF INSTEAD OF SHELLING OUT TO PILLOW.
+ *
+ * It used to run `python3 -c "from PIL import Image ..."` and treat any failure
+ * as a null bbox. On a machine without Pillow that is EVERY asset, so every
+ * paired site printed
+ *     FAIL  <site> PLANE measurable at all  {"bhInk":null,"petInk":null}
+ * which looks exactly like a figure bug and is not one. Worse than the noise: a
+ * null bbox short-circuits the branch, so PLANE and NEAR never ran at all. Four
+ * paired sites, two checks each — eight assertions silently not executed, and
+ * the run still called itself 24/28. The audit could not tell a broken figure
+ * from a broken machine, and neither could anybody reading it.
+ *
+ * So the only real dependency the ink half had is gone. zlib is in Node. Every
+ * PNG in assets/ is 8-bit RGBA, non-interlaced (checked: 320/320); colour type 4
+ * is handled because it is two lines; anything else THROWS with the file named,
+ * because a format this cannot read honestly is a fact about the harness and
+ * must never be laundered into a null.
+ *
+ * Returns PIL's getbbox() semantics exactly — exclusive right/bottom — so the
+ * geometry in inkEdges is unchanged. null means genuinely no ink, which is a
+ * finding about the asset, not a failure to measure. */
+function pngAlphaBox(file) {
+  const buf = readFileSync(file);                       // ENOENT throws, by design
+  if (buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) throw new Error(`not a PNG: ${file}`);
+  const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+  const depth = buf[24], colour = buf[25], interlace = buf[28];
+  if (depth !== 8 || (colour !== 6 && colour !== 4) || interlace !== 0) {
+    throw new Error(`unsupported PNG (depth ${depth}, colour type ${colour}, interlace ${interlace}): ${file}`);
+  }
+  const ch = colour === 6 ? 4 : 2, stride = w * ch;
+  const idat = [];
+  for (let p = 8; p + 8 <= buf.length;) {
+    const len = buf.readUInt32BE(p), type = buf.toString('latin1', p + 4, p + 8);
+    if (type === 'IDAT') idat.push(buf.subarray(p + 8, p + 8 + len));
+    if (type === 'IEND') break;
+    p += 12 + len;
+  }
+  if (!idat.length) throw new Error(`no IDAT: ${file}`);
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  if (raw.length < (stride + 1) * h) throw new Error(`truncated image data: ${file}`);
+  // undo the per-scanline filters; only the previous line is ever needed
+  const out = Buffer.alloc(stride * h);
+  for (let y = 0, off = 0; y < h; y++) {
+    const ft = raw[off++];
+    const cur = out.subarray(y * stride, (y + 1) * stride);
+    raw.copy(cur, 0, off, off + stride); off += stride;
+    if (ft === 0) continue;
+    const prev = y ? out.subarray((y - 1) * stride, y * stride) : null;
+    for (let i = 0; i < stride; i++) {
+      const a = i >= ch ? cur[i - ch] : 0;
+      const b = prev ? prev[i] : 0;
+      const c = prev && i >= ch ? prev[i - ch] : 0;
+      if (ft === 1) cur[i] = (cur[i] + a) & 255;
+      else if (ft === 2) cur[i] = (cur[i] + b) & 255;
+      else if (ft === 3) cur[i] = (cur[i] + ((a + b) >> 1)) & 255;
+      else if (ft === 4) {
+        const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+        cur[i] = (cur[i] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      } else throw new Error(`unknown PNG filter ${ft} on row ${y}: ${file}`);
+    }
+  }
+  let x0 = w, y0 = h, x1 = 0, y1 = 0, any = false;
+  for (let y = 0; y < h; y++) {
+    const row = y * stride;
+    for (let x = 0; x < w; x++) {
+      if (!out[row + x * ch + ch - 1]) continue;
+      any = true;
+      if (x < x0) x0 = x;
+      if (x >= x1) x1 = x + 1;
+      if (y < y0) y0 = y;
+      y1 = y + 1;
+    }
+  }
+  return any ? { w, h, x0, y0, x1, y1 } : null;
+}
+
 function alphaBox(src) {
   // src is an absolute URL from the page; take its path and strip the app root,
   // which is "/" served locally and "/tally/" on GitHub Pages
   let rel;
   try { rel = new URL(String(src)).pathname; } catch { rel = String(src); }
   rel = rel.replace(/^\/tally\//, '').replace(/^\//, '').split('?')[0];
-  if (bboxCache.has(rel)) return bboxCache.get(rel);
-  let out = null;
-  try {
-    const r = spawnSync('python3', ['-c',
-      'import sys;from PIL import Image;im=Image.open(sys.argv[1]).convert("RGBA");b=im.getchannel("A").getbbox();print(im.size[0],im.size[1],*(b or (0,0,0,0)))',
-      path.join(ROOT, rel)], { encoding: 'utf8' });
-    const n = (r.stdout || '').trim().split(/\s+/).map(Number);
-    if (n.length === 6 && n[5] > 0) out = { w: n[0], h: n[1], x0: n[2], y0: n[3], x1: n[4], y1: n[5] };
-  } catch { /* an unreadable asset is reported as a null bbox, not silently skipped */ }
-  bboxCache.set(rel, out);
-  return out;
+  if (!bboxCache.has(rel)) bboxCache.set(rel, pngAlphaBox(path.join(ROOT, rel)));
+  return bboxCache.get(rel);
 }
 /* Map an element's rendered geometry + its source bbox to the ink's screen edges. */
 function inkEdges(layers) {
@@ -407,8 +562,12 @@ const measure = async (bhSel, petSel) => {
     };
   }, [bhSel, petSel]);
   if (!raw.found) return raw;
-  raw.bhInk = inkEdges(raw.bhLayersRaw);
-  raw.petInk = inkEdges(raw.petLayersRaw);
+  /* Past the SETUP gate the decoder is known good, so a throw here is about one
+     named asset — report which, instead of an anonymous null. */
+  try {
+    raw.bhInk = inkEdges(raw.bhLayersRaw);
+    raw.petInk = inkEdges(raw.petLayersRaw);
+  } catch (e) { raw.inkError = e.message; }
   return raw;
 };
 
@@ -488,7 +647,7 @@ for (const site of SITES.filter(s => s.drive)) {
   if (site.paired) {
     if (!m.bhInk || !m.petInk) {
       ok(`${site.key} PLANE measurable at all (an unreadable figure is a FAILURE)`, false,
-        JSON.stringify({ bhInk: m.bhInk, petInk: m.petInk }));
+        JSON.stringify({ bhInk: m.bhInk, petInk: m.petInk, asset: m.inkError || null }));
     } else {
       /* Two different failures, and only one of them is symmetrical. A pet ABOVE
          the Bonehead's feet is floating, which is always wrong and is what shipped

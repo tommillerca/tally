@@ -20,17 +20,41 @@
  *   await seed(page, { level: 12, coins: 900, beatRungs: [1, 2, 3] });
  *   await openPit(page);
  */
+import fs from 'node:fs';
 import path from 'node:path';
 
 const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* A browser that is present but not where puppeteer looks is the same outage as
+   no browser at all, and it reads as one: "Could not find Chrome". Take an
+   explicit CHROME_PATH, else the browsers a CI image usually already ships, else
+   nothing — and nothing means puppeteer resolves it exactly as it does today, so
+   a machine with its own Chrome downloaded is untouched by this. */
+const chromePath = () => {
+  const tries = [process.env.CHROME_PATH, ...(process.env.PLAYWRIGHT_BROWSERS_PATH
+    ? fs.existsSync(process.env.PLAYWRIGHT_BROWSERS_PATH)
+      ? fs.readdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH)
+        .filter(d => /^chromium-/.test(d))
+        .map(d => path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, d, 'chrome-linux/chrome'))
+      : [] : []),
+  '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome'];
+  return tries.find(p => p && fs.existsSync(p)) || undefined;
+};
+
 export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
   const puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default;
+  /* Chrome refuses to start its sandbox as uid 0, so on a root container every
+     check here dies at launch and reads as "the browser is broken". No-op on a
+     normal machine: the flag is only added when we are already root, which is
+     the only case where the sandbox was never going to come up anyway. */
+  const rootArgs = process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
   const browser = await puppeteer.launch({
     headless: 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    executablePath: chromePath(),
     ...opts,
+    args: [...rootArgs, ...(opts.args || [])],
   });
   const page = await browser.newPage();
   /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
