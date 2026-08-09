@@ -109,7 +109,7 @@ about this game's balance have been disproved by that sim before.
 |---|---|---|---|
 | 1 | `derived()` reads 4 weapon fields | `js/pit.js:237-250` | default them to zero; keep the parameter so foes can still carry a stat block |
 | 2 | Enemy Bonecrusher | `js/pit.js:1426, 1474, 1488` | **fold into foe stats, re-baseline with the sim** |
-| 3 | Champion prize | `js/app.js:12907` writes a `kind:'weapon'` inventory row | needs a replacement prize (see §6) |
+| 3 | Champion prize (first ladder) | `js/app.js:12907` writes a `kind:'weapon'` inventory row | **remove the weapon grant (Tom's call).** Replacement prize, see §6 |
 | 4 | Shop merchant UI | `js/app.js:4445-4480` | delete the merchant block |
 | 5 | Buy flow | `buyWeapon`, `WEAPON_COST`, `weaponCoinCost`, `weaponDustCost` in `js/loot.js:844-870` | delete |
 | 6 | Equip flow | `kvSet('loadout', ...)` at `js/app.js:4557` | delete |
@@ -162,14 +162,28 @@ own direction answers this: coins should buy **visible gear and cosmetics**. Tha
 is the same sink, moved to things the player can see on their character, which is
 exactly the simplification you are asking for.
 
-**A Champion prize.** Beating The Marrow King currently grants Bonecrusher. It
-needs to still feel like a trophy. Best fit, in order:
+**A Champion prize.** Beating The Marrow King (finishing the first Pit ladder)
+currently grants Bonecrusher, written as a `kind:'weapon'` inventory row at
+`js/app.js:12907`.
+
+> **Tom's call, 2026-08-08:** "finishing the first ladder of fights in the pit
+> will no longer grant a weapon." Decided, not an open question.
+
+So that grant goes. It still has to feel like a trophy, or the ladder loses its
+payoff. Best fit, in order:
+
 1. An exclusive **cosmetic** plus a title on the nameplate. Visible, brag-worthy,
    no power, consistent with cosmetic-only.
 2. A legendary **gear** piece (visible, has stats, follows the existing gear
    rules).
 
-I would go with the cosmetic and the title.
+I would go with the cosmetic and the title: it is the only option that makes the
+Champion's reward something other players can actually SEE on you, which is the
+whole point of the change.
+
+Note this is separate from the enemy-side Bonecrusher in §3. The Champion also
+*fights* holding it, and that power has to be folded into their stat block or the
+final fight gets easier at the same moment its prize changes.
 
 ---
 
@@ -211,6 +225,7 @@ Roughly one focused session. Steps 1 and 2 are the ones that carry the risk;
 1. **Scope**: Bone Merchant only, or the entire Shop tab? (I recommend merchant
    only, §1.)
 2. **Refund**: full coins and dust back, as recommended? Or something else?
-3. **Champion prize**: exclusive cosmetic plus a title, or a legendary gear piece?
+3. **Champion prize**: the weapon grant is going (your call). What replaces it:
+   exclusive cosmetic plus a title, or a legendary gear piece?
 4. **Coin sink**: happy for coins to point at visible gear and cosmetics, or do
    you want to decide that separately later?
