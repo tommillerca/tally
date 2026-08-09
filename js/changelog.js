@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 345, date: '2026-08-09', title: 'The Pit uses your whole screen', items: [
+    'The <b>arena is more than twice as tall</b>. It was a letterbox with 388px of dead screen under the buttons; now it takes the room, and bosses have somewhere to stand.',
+    '<b>Boneheadz are bigger</b> in a fight, so a normal-sized foe no longer leaves the frame feeling empty.',
+    'Drinking a potion mid-fight takes <b>two taps</b>. One arms it, the second drinks it, so a stray thumb no longer costs you a brew and an action point.',
+    "Your <b>pet's health bar</b> was rendering at zero pixels tall, which is why it always looked empty. It was never empty.",
+  ] },
   { n: 344, date: '2026-08-09', title: 'The podium is back', items: [
     'The <b>top three</b> are on the Crew tab again, full bodies on a podium, biggest in the middle. Tap the card for the full list.',
   ] },

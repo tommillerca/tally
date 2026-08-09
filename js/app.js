@@ -11462,7 +11462,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v344'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v345'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -11969,7 +11969,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret' || foeCfg.mode === 'glutton';
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
-    <div class="sheet-body" id="fightBody" style="padding-bottom:10px"></div>`,
+    <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
     { cls: 'full', onClose: () => {
       stopGluttonFoeAnim();
       if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
@@ -12624,7 +12624,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
     html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
     factions.innerHTML = html;
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
-    $$('[data-potion]', factions).forEach(b => b.addEventListener('click', () => drinkPotion(b.dataset.potion)));
+    /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
+       hit it by accident." A potion is a one-shot consumable sitting in the same
+       grid as the attack buttons, so a mis-tap costs a brewed item AND an AP.
+       Same armToConfirm every spend and destroy in the app already uses: first
+       tap arms and relabels, 3.2s cooloff, second tap commits with a heavy
+       haptic. renderActions() rebuilds this grid every refresh, which disarms
+       anything left armed, exactly as it should. */
+    $$('[data-potion]', factions).forEach(b => {
+      if (b.disabled) return;
+      armToConfirm(b, 'Tap again to drink', () => drinkPotion(b.dataset.potion));
+    });
     $('#endTurn', factions)?.addEventListener('click', endPlayerBody);
   }
 

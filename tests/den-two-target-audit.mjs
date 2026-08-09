@@ -87,6 +87,24 @@ const after = await page.evaluate(() => document.querySelector('#addHp')?.style.
 ok('LIVE the second target\'s bar actually moves when it takes damage',
   !!before && !!after && before !== after, `${before} -> ${after}`);
 
+
+/* THE PET'S BAR TOO. Tom, 2026-08-09: "why is my pets health always looking
+   empty". Same defect as the add's, and in v341 I fixed only the add, so the
+   class came straight back through the other bar. This guard covers BOTH. */
+const petBar = await page.evaluate(() => {
+  const w = document.getElementById('hudPet'); if (!w) return { none: true };
+  const bar = w.querySelector('.bar'), fill = document.getElementById('petHp');
+  const b = bar.getBoundingClientRect(), f = fill.getBoundingClientRect();
+  return { none: false, track: [Math.round(b.width), Math.round(b.height)],
+           fill: [Math.round(f.width), Math.round(f.height)], shown: f.height > 2 && f.width > 2 };
+});
+/* Assert the TRACK has room, not just the fill. My first version of this guard
+   passed with the 4px bug reintroduced, because a min-height on the fill papered
+   over a track that had no content box left. A check that cannot fail is not a
+   check: the track is the thing that was broken, so the track is what is tested. */
+ok('BAR the PET\'s bar has a track with room in it', !petBar.none && petBar.track[1] >= 8, JSON.stringify(petBar));
+ok('BAR the PET\'s fill draws inside it', !petBar.none && petBar.fill[1] >= 4 && petBar.fill[0] > 2, JSON.stringify(petBar));
+
 await browser.close();
 console.log(fails ? '\nDEN TWO-TARGET AUDIT FAILED' : '\nDEN TWO-TARGET VERIFIED');
 process.exit(fails);

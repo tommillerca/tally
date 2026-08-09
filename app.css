@@ -1197,6 +1197,20 @@ body::before {
 .fight-over { text-align: center; padding: 18px 0 8px; }
 
 /* ---------- the pit: arena ---------- */
+/* THE ARENA TAKES THE SLACK. Tom, 2026-08-09: "we currently arent using the
+   veritcal aspect ratio of the game well in this instance."
+   Measured before: on a 430x932 phone the arena was 258px and 388px under the
+   buttons was dead, so 42% of the screen was empty while a boss got clipped.
+   The fight body is a column and the arena claims whatever the HUD, the log line
+   and the buttons do not. Same shape as .sheet-body.map-sheet, which already
+   solves this for the map.
+   The fighters DELIBERATELY do not grow with it. I tried that and two columns
+   collided at 216px each in a 398px-wide arena. The space above them is not
+   waste: it is where a boss stands and where every spell happens, which is the
+   whole reason a Wraith at 212x190 was getting its hood cut off. */
+.fight-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.fight-body > .arena { flex: 1 1 0; min-height: 258px; }
+.fight-body > .fight-hud, .fight-body > .fight-meta, .fight-body > .fight-actions { flex: none; }
 .arena {
   position: relative; height: 258px; border-radius: var(--radius); overflow: hidden;
   background: radial-gradient(ellipse at 50% 120%, #1d1a14 0%, #14120e 45%, #0e0d12 100%);
@@ -1254,13 +1268,29 @@ body::before {
   font-size: var(--fs-0); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
   background: rgba(42, 45, 40, .8); border-radius: 6px; padding: 1px 6px;
 }
-.hud-pet .bar { flex: 1; height: 4px; }
+/* THE PET'S HEALTH BAR RENDERED AT ZERO HEIGHT. Tom, 2026-08-09: "why is my pets
+   health always looking empty". Measured in a real fight: track 66x4, fill 62x0.
+   `.bar i` is `height: 100%` of the CONTENT box, and a 4px track with 1.5px
+   borders top and bottom leaves ~1px to draw in, which rounds away to nothing.
+   The colour was never the problem: the fill was lime the whole time and zero
+   pixels tall.
+   This is the SAME defect I fixed for the second enemy in v341 and I only fixed
+   it there. Both bars now state their height explicitly and the fill carries its
+   own min-height so it can never be squeezed out by a border again. */
+.hud-pet .bar { flex: 1; }
 .hud-pet.down { opacity: 0.35; filter: grayscale(1); }
 .microbars { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .microbars .bar { height: 8px; border: 2px solid var(--ink); border-radius: 999px; }
-.hud-pet .bar { border: 1.5px solid var(--ink); border-radius: 999px; height: 7px; }
+.hud-pet .bar { border: 2px solid var(--ink); border-radius: 999px; height: 10px; }
+.hud-pet .bar > i { height: 100%; min-height: 4px; display: block; }
 .fstage {
-  width: 112px; height: 112px; min-height: 112px; border-radius: 16px;
+  /* Tom, 2026-08-09: "when fighting a smaller same sized boss the bonehead should
+     seem bigger otherwise it feels like a lot of empty space."
+     Scales with the arena now that the arena scales with the phone. The 150 cap
+     is measured, not chosen: the two columns sit 43px apart at 112px stages, and
+     a stage overflows its 128px column by (stage-128)/2 each side, so 150 leaves
+     21px between them. Anything past ~160 and they touch. */
+  width: clamp(112px, 24cqh, 150px); height: clamp(112px, 24cqh, 150px); min-height: 112px; border-radius: 16px;
   background: transparent; border: none; overflow: visible;
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.5));
@@ -3067,7 +3097,11 @@ body::before {
 .petcrop { position: relative; display: inline-block; overflow: hidden; }
 /* pet name/HP now lives in the fight HUD (.hud-pet), not floating over the sprite */
 .petname { font-size: 9px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
-.bar.fhp.mini { width: 48px; height: 4px; }
+/* 4px was the whole bug. `.bar i` is height:100% of the CONTENT box, and 4px
+   minus a 2px border top and bottom leaves nothing to draw, so the pet's health
+   rendered 62px wide and ZERO pixels tall. Measured, not guessed: this rule
+   (0,3,0) was quietly outranking the .hud-pet .bar fix (0,2,0) I tried first. */
+.bar.fhp.mini { width: 48px; height: 10px; }
 .pet-turn-h { text-align: center; font-family: var(--display); font-size: 15px; color: var(--accent); padding: 2px 0 6px; letter-spacing: .02em; }
 .fight-act.petmove { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 /* tap-to-target: pointer + a focus ring on the current target */
