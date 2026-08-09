@@ -1304,15 +1304,22 @@ function teaserLook(item, pool) {
    (197,66)-(389,264), centre (293,165): the stage is scaled so the skull plus a
    little air fills the tile and offset so that centre lands in the middle, which
    is why a tall hat and small shades both frame without per-item nudging. */
-function teaserHeadHtml(item, px = 76, pool = []) {
+/* A PORTRAIT of any outfit: a window onto the skull box, so whatever sits on the
+   head fills the tile. Pulled out of the teaser strip because two more surfaces
+   need exactly this crop (the drop row's icon and the bestiary row's monster),
+   and a 32px full body is unreadable while a 32px head is not. */
+function headshotHtml(eq, px, cls = '') {
   const scale = px / (SKULL_BOX.h * 1.30);
   const ox = px / 2 - SKULL_BOX.cx * scale;
   const oy = px / 2 - SKULL_BOX.cy * scale;
-  const eq = teaserLook(item, pool);
-  return `<span class="tz-head" style="width:${px}px;height:${px}px">
+  return `<span class="tz-head ${cls}" style="width:${px}px;height:${px}px">
     <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
       <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>
     </span></span>`;
+}
+
+function teaserHeadHtml(item, px = 76, pool = []) {
+  return headshotHtml(teaserLook(item, pool), px);
 }
 
 /* Show MANY. Tom: "where are more of the new hats. cmon man this marketing is
@@ -1337,12 +1344,23 @@ function teaserWallHtml(n, px) {
   return out.map(i => teaserHeadHtml(i, px, all)).join('');
 }
 
+/* Tom, 2026-08-09: "change the icon for the new headshots one too to one of the
+   original art items that's new." A crown is a generic badge; the row is selling
+   Cam's actual pieces, so it wears one. Picked from the drop DATA (first
+   legendary hat, else the first piece), so the day the drop changes the icon
+   follows it instead of pointing at something retired. */
+function dropRowIconHtml() {
+  const all = dropCosmetics();
+  const hero = all.find(i => i.slot === 'H' && i.rarity === 'legendary') || all[0];
+  return hero ? headshotHtml(teaserLook(hero, all), 32) : bhIcon('badge-crown', 26);
+}
+
 function cosmeticTeaserBannerHtml() {
   const all = dropCosmetics();
   const bySlot = c => all.filter(i => i.slot === c).length;
   return `<details class="glutton-banner teaser-banner">
     <summary>
-      <span class="gbn-ico teaser-ico">${bhIcon('badge-crown', 26)}</span>
+      <span class="gbn-ico teaser-ico">${dropRowIconHtml()}</span>
       <span class="gbn-txt"><i>Live now</i><b>${all.length} new cosmetics</b></span>
       <span class="gbn-chev">›</span>
     </summary>
@@ -2732,7 +2750,7 @@ function bestiaryBannerHtml() {
   const eq = themedLook(den.theme && den.theme.key, den.id);
   return `<details class="glutton-banner bestiary-banner">
     <summary>
-      <span class="gbn-ico bestiary-ico"><span class="bh-stage">${avatarLayersHtml(eq || {}, { noYard: true, skip: ['BG', 'C'] })}</span></span>
+      <span class="gbn-ico bestiary-ico">${headshotHtml(eq || {}, 32)}</span>
       <span class="gbn-txt"><i>Out hunting today</i><b>${esc(den.boss)} at ${esc(den.name)}</b></span>
       <span class="gbn-chev">›</span>
     </summary>
