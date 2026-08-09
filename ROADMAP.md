@@ -9,6 +9,70 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 👹 Themed Pit bosses from existing art (DECISION, investigated 2026-08-09, awaiting Tom's call)
+
+**Tom's ask.** "Currently when you fight enemies in the world of the pit they are
+just random skeletons. I want this to change. There is currently so much artwork
+we could use for themed bosses that are already existing if we assemble the parts
+right. For instance, I know there is like a swamp monster bonehead we could make.
+I want you to come up with all the viable options that fit the horror monster
+style theme for enemies we could face that are already out there."
+
+**Catalogue: 28 boss builds, artifact `3cb8cdc1-aa25-4f7e-ae2c-4a9eabf891a5`.**
+Everything preserved at `market-quality-mockups/pit-bosses/`: the contact sheet,
+the 86px readability strip, the offline copy of the artifact, the build list
+(`final2.json`) and the generators that rebuild all of it. Families: Swamp & Rot (5), Fire &
+Storm (3), Spirit & Crypt (4), Demon (3), Flesh (2), Deep & Frost (2), Iron &
+Blade (3), Blowfish Brood (2), Oddities (4).
+
+**Finding 1: the parts are already themed sets, not loose pieces.** All 276
+cosmetics across 15 slots were rendered and reviewed. Cam drew matched
+skull+body pairs that ARE monsters once worn together: `SK14/B14` moss-grown,
+`SK10/B10` molten, `SK13/B13` storm-struck, `SK16/B16` bandaged, `SK9/B9`
+glowing spectre, `SK7-8/B7-8` chrome, `SK4/B4` graveyard-tattooed, `SK12/B12`
+desiccated, `SK6-x` exposed brains. On top of that: `MS11` Swamp Gob, `ES15`
+Spore Eyes, `HS15` Moss Braids, `HS16` Ember Braids, `H2-1` gator jaw, `H7-1/2`
+horns, `H11-x` demon-fox masks, `P1` kraken kilt, `P2` mummy wrappings, `T1`
+exposed veins, `T3` heavy plate, `P3` piston legs, `H13-x` pufferfish heads.
+The swamp monster Tom remembered is real and it is `SK14 + B14 + ES15 + MS11 + HS15`.
+
+**Finding 2: 28 named enemies already exist and all render as random skeletons.**
+Ladder rungs 1-8 + The Marrow King (`js/pit.js:1416`), the 8-name gauntlet cycle,
+6 Boneyard den bosses (`js/poi.js:66`), 5 spire wardens (`js/spires.js:62`).
+One of them is **The Bog Body**, who guards **The Sour Marsh**, and who today
+turns up in whatever `foeOutfitFor()` rolled. Two more line up by name with no
+prompting: **Gravemaw** wants the gator jaw, **Calcite the Cruel** wants the
+frost build. The names are doing worldbuilding the art is not backing up.
+The artifact carries a full casting table.
+
+**Finding 3: it is a data change.** `foeOutfitFor(name)` (js/app.js:11860) hashes
+the name and coin-flips each of ten slots against the whole catalogue.
+`openFight` already prefers a fixed outfit (`foeCfg.foeOutfit || foeOutfitFor(...)`,
+js/app.js:11916), used today only by friend battles. A boss becomes a
+name-to-outfit lookup plus passing `foeOutfit` through the ladder, gauntlet, den
+and warden call sites. No new art, no new item ids, no crate-pool or inventory
+impact (every part is an existing catalogue item worn by an NPC).
+
+**Verified, not assumed.** Every build was composited in the app's real slot
+z-order and eyeballed, then re-rendered at `.bh-stage.fsmall` = **86px**, the
+actual in-fight sprite size. Three builds were cut there: at 86px, body colour,
+hats, tops and pants read, and eyes/fangs/mouth pieces do not, so a
+"face-detail-only" boss is just a plain skeleton in a fight. The Blowfish
+builds carry no skull and no eyes at all: `H13-x` replaces the whole head, and
+adding an eyes layer puts a second pair on the chest.
+
+**Open for Tom:**
+- Approve the roster, or cut/rename any of the 28 before a build plan is written.
+- Casting: accept the proposed table, or reassign.
+- The gauntlet cycles its 8 names forever (Hollow King II, III...). Same face on
+  repeats, or re-dress by cycle so rank 40 does not look like rank 8?
+- The Blowfish Brood read as a different species. Use them as the second fighter
+  (`foeCfg.add`, already supported) rather than as captains?
+
+**Not started.** Per the notes process this waits for Tom's word before any code.
+
+---
+
 ## 💰 The Bone Bazaar: player gear stalls on the Crew tab (PARKED 2026-08-08, Tom: "park it and we can circle back later")
 
 **Why parked, in one line:** the mechanic and economy protections are ready, but
@@ -1034,3 +1098,51 @@ guessed coordinates: casting hand (26%, 50%), hood void (58%, 27%), amulet
 (`~/Documents/Cam (Claude)/boneyard-creatures/hooded-wraith.jpg`) has a baked
 background and is a red line sketch, so it is a stand-in only. Needs the same
 treatment as the Glutton: transparent PNG, an idle and a combat pose.
+
+## The fight screen wastes its vertical (measured 2026-08-09, NOT built)
+
+Tom: "currently you have the majority of the boss cut off. maybe we need to make
+the fighting part of the game have more head room. we currently arent using the
+veritcal aspect ratio of the game well in this instance."
+
+He is right, and the numbers are worse than they look. On a 430x932 phone:
+
+| Band | y | height |
+|---|---|---|
+| sheet head | 41 | 62 |
+| fight HUD | 106 | 104 |
+| **arena** | 104 | **258** |
+| meta line | 372 | 32 |
+| actions | 416 | 128 |
+| **dead screen below the buttons** | 544 to 932 | **388** |
+
+**42% of the phone is empty.** The arena is a 258px letterbox in a 932px screen,
+which is why a boss sized to read as a boss gets clipped.
+
+I tried three fixes live and backed all three out, because each one traded the
+problem for a worse one:
+
+1. **Flex the arena into the slack** (`.fight-body` column, `.arena {flex:1}`,
+   same shape as `.sheet-body.map-sheet`). Arena went 258 -> 638 and the actions
+   landed at the bottom of the screen. But 112px fighters at the foot of a 638px
+   room look stranded: a bigger box is not the same as using the space.
+2. **Scale the fighters with the arena** via `container-type: size` on `.arena`
+   and `clamp(112px, 30cqh, 196px)` on `.fstage`. The two 216px fighter columns
+   then collided in a 398px-wide arena.
+3. **Cap the arena at 430.** Composed fine and gives a boss real headroom, but
+   leaves a visible hole between the arena and the buttons.
+
+**Stop tuning, do it properly.** This is a composition pass on the core combat
+screen, and the house process for a screen change is mockups first. What the
+mockup has to decide, all at once rather than one CSS value at a time:
+
+- how tall the arena is, and whether the buttons pin to the bottom or follow it
+- where the fighters stand in a taller frame, and how big they are (they are
+  currently bottom-anchored at a fixed 112px, which does not survive a resize)
+- what fills the upper two thirds: torches, fog, the den's ceiling, the boss
+- how a boss is staged differently from a normal foe, since the whole point is
+  that a Wraith at 212x190 needs air above it
+- what happens on a short screen (the 258px floor must still work)
+
+Everything above is reverted; `app.css` and `js/app.js` are back at v344.
+
