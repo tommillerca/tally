@@ -6272,13 +6272,21 @@ body::before {
 .cf { --card: 176px; width: 100%; }
 .cf-frame {
   position: relative; overflow: hidden; padding: 22px 0 14px;
+  height: calc(var(--card) * var(--cf-scale));
+  /* the ring is a 3D subtree; contain it so scrolling the sheet past it does not
+     force the whole thing to re-rasterise on every scroll frame */
+  contain: layout paint;
   cursor: grab; touch-action: pan-y; outline: none;
   /* a shorter viewer distance = a wider lens = a stronger rake. At 3x the
      neighbours read as merely offset rather than turned. */
   perspective: calc(var(--card) * 2.1);
 }
 .cf-frame:active { cursor: grabbing; }
-.cf-track { position: relative; height: var(--card); transform-style: preserve-3d; user-select: none; }
+.cf-track {
+  position: relative; height: var(--card); transform-style: preserve-3d; user-select: none;
+  transform: scale(var(--cf-scale)); transform-origin: 50% 0;
+  transition: transform .52s cubic-bezier(.76, 0, .24, 1);
+}
 /* MOTION BLUR. Tom, 2026-08-08: "there should be a little bit of motion blur
    to make it feel real and classy." Driven from JS, not a keyframe, because the
    amount has to follow ACTUAL velocity: a fixed blur on a slow drag looks like a
@@ -6396,9 +6404,17 @@ body::before {
    it a type, so it interpolates. The ring's spacing is computed from the measured
    card width, so js re-paints on rAF for the length of this transition, or the
    cards would keep their old pitch while the cards themselves shrank. */
-@property --card { syntax: '<length>'; inherits: true; initial-value: 176px; }
-.cf { transition: --card .52s cubic-bezier(.76, 0, .24, 1); }
-.cf-frame { transition: padding .52s cubic-bezier(.76, 0, .24, 1); }
+/* SCALE, DO NOT RESIZE. This was fixed in v332 and the catfish merge silently
+   reverted it, which is why the lag came back: the branch was cut before v332 and
+   git took its older version of this block wholesale.
+   Animating --card animates every card's WIDTH: a LAYOUT property on six
+   absolutely-positioned elements, plus a 520ms rAF loop repainting the ring
+   because its spacing is derived from the measured width. Layout sixty times a
+   second. A transform on the track does the same job for free: composited, and it
+   scales the spacing along with the cards because the pitch lives inside the
+   scaled space, so no repaint loop is needed at all. */
+.cf { --cf-scale: 1; }
+.cf-frame { transition: height .52s cubic-bezier(.76, 0, .24, 1), padding .52s cubic-bezier(.76, 0, .24, 1); }
 .cf-cap b { transition: font-size .52s cubic-bezier(.76, 0, .24, 1); }
 /* Height and opacity, not display:none. `display` cannot be transitioned, so the
    stat table and dots used to vanish on the first frame and take the eye with
@@ -6409,7 +6425,7 @@ body::before {
     margin-top .52s cubic-bezier(.76, 0, .24, 1), padding .52s cubic-bezier(.76, 0, .24, 1);
   max-height: 260px; opacity: 1;
 }
-.cf.panelled { --card: 118px; }
+.cf.panelled { --cf-scale: .62; }
 .cf.panelled .cf-frame { padding: 10px 0 6px; }
 .cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }
@@ -6482,3 +6498,115 @@ body::before {
    wrapper adds no box of its own and the existing sizing is untouched. */
 .pa-shiny { display: contents; }
 .pet-shiny-wrap > .pa-shiny { display: block; }
+
+/* ---------- The cosmetic teaser (banner + post) ----------------------------
+   Reads as a shop window, not a patch note: the art does the selling and the
+   counts are derived from the data so they cannot go stale. */
+.teaser-banner .teaser-ico { color: var(--gold); }
+.tz-row .bh-stage { width: 74px; height: 74px; }
+.tz-fit { display: inline-flex; align-items: flex-end; justify-content: center; }
+.tz-tally { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 10px 0 4px; }
+.tz-tally span {
+  font-size: 12px; color: var(--text-2); background: var(--surface-2);
+  border: 2px solid #17151d; border-radius: 999px; padding: 3px 10px;
+}
+.tz-tally b { color: var(--gold); font-family: var(--display); font-size: 15px; margin-right: 3px; }
+.tz-more { color: var(--accent); font-weight: 700; }
+
+.sheet-teaser .tz-pop { text-align: center; }
+.tz-kicker {
+  display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink); background: var(--gold);
+  border: 2px solid #17151d; border-radius: 999px; padding: 3px 11px; box-shadow: var(--sh-sm);
+}
+.tz-h { font-family: var(--display); font-weight: 400; font-size: 34px; letter-spacing: .04em; margin: 12px 0 2px; }
+.tz-sub { color: var(--text-2); margin: 0 0 14px; }
+.tz-grid { display: none; /* replaced by .tz-wall */
+  grid-template-columns: repeat(3, 1fr); gap: 8px;
+  background: var(--surface-2); border: 2px solid #17151d; border-radius: 14px;
+  padding: 10px; box-shadow: var(--sh-sm);
+}
+.tz-grid .bh-stage { width: 100%; aspect-ratio: 1; height: auto; }
+.tz-tally.big { margin: 14px 0 10px; }
+.tz-body { color: var(--text-2); font-size: 13.5px; line-height: 1.5; margin: 0 0 8px; }
+.tz-strong { color: var(--accent); font-weight: 700; }
+
+/* the head crop: a window onto the skull, so a head-only cosmetic fills the tile */
+.tz-head {
+  position: relative; overflow: hidden; display: inline-block; flex: none;
+  border-radius: 12px; background: var(--surface-2); border: 2px solid #17151d;
+}
+.tz-head-in { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* display:block is load-bearing. These stages are <span>s, and a span is
+   display:inline, where width and height are simply ignored: measured, the stage
+   came out 0x5px and every tile rendered as an empty box while its images
+   reported as decoded. Same trap as the Stable's thumbnails. */
+.tz-head-in .bh-stage { display: block; width: 640px; height: 640px; }
+.tz-head-in .bh-anim, .tz-head-in .bh-anim img { display: block; width: 640px; height: 640px; }
+.tz-head-in .bh-anim { position: relative; }
+.tz-head-in .bh-anim img { position: absolute; left: 0; top: 0; }
+.tz-strip {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin: 2px 0 10px;
+}
+.tz-wall {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 6px; justify-items: center;
+  background: var(--surface-2); border: 2px solid #17151d; border-radius: 14px;
+  padding: 8px; box-shadow: var(--sh-sm); max-height: 46vh; overflow-y: auto;
+}
+.tz-h em { font-style: normal; color: var(--gold); }
+
+/* ---------- the drop reel: grid -> solo -> quad, looping -------------------- */
+.tz-reel { position: relative; }
+.tz-reel .tz-wall, .tz-reel .tz-spot { transition: opacity .9s ease, transform .9s cubic-bezier(.76, 0, .24, 1); }
+.tz-spot {
+  position: absolute; inset: 0; display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; justify-content: center; align-content: center;
+  opacity: 0; pointer-events: none;
+}
+.tz-spot .tz-head { border-width: 3px; box-shadow: var(--sh); }
+.tz-spot-name {
+  position: absolute; left: 0; right: 0; bottom: 4px; text-align: center;
+  font-family: var(--display); font-size: 17px; letter-spacing: .04em; color: var(--gold);
+}
+/* grid beat: the wall is the hero */
+.tz-reel.tz-s-grid .tz-wall { opacity: 1; transform: scale(1); }
+.tz-reel.tz-s-grid .tz-spot { opacity: 0; }
+/* solo + quad beats: the wall recedes and the spotlight takes over */
+.tz-reel.tz-s-solo .tz-wall, .tz-reel.tz-s-quad .tz-wall { opacity: .12; transform: scale(.96); }
+.tz-reel.tz-s-solo .tz-spot, .tz-reel.tz-s-quad .tz-spot { opacity: 1; }
+.tz-kicker.live { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .tz-reel .tz-wall, .tz-reel .tz-spot { transition: none; }
+}
+
+/* ---------- the leaderboard: rank first, Bonehead proud ---------------------
+   The numeral is deliberately LARGER than the head it sits behind, and the head
+   overlaps it, so the eye reads the rank and then lands on the character. The old
+   row drew a full standing skeleton into 42px, which is why the art read as a
+   smudge (Tom: "the art is soooo small in the list"). */
+.lb-head {
+  position: relative; overflow: hidden; display: inline-block; flex: none;
+  border-radius: 12px; background: var(--surface-2); border: 2px solid #17151d;
+  margin-left: -22px;                 /* the overlap: art sits ON the numeral */
+  box-shadow: var(--sh-sm);
+}
+.lb-head .tz-head-in { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.lb-head .bh-stage { display: block; width: 640px; height: 640px; }
+.lb-head .bh-anim, .lb-head .bh-anim img { display: block; width: 640px; height: 640px; }
+.lb-head .bh-anim { position: relative; }
+.lb-head .bh-anim img { position: absolute; left: 0; top: 0; }
+.lb-num {
+  font-family: var(--display); font-weight: 400; line-height: .9;
+  font-size: 40px; color: var(--text-3); min-width: 42px; text-align: left;
+  letter-spacing: .02em; flex: none;
+}
+.lb-row.top .lb-num { font-size: 62px; min-width: 56px; }
+.lb-row.t1 .lb-num { color: var(--gold); }
+.lb-row.t2 .lb-num { color: #cfd6dd; }
+.lb-row.t3 .lb-num { color: #d09a63; }
+.lb-row.top .lb-head { border-width: 3px; border-color: var(--gold); }
+.lb-row.t2 .lb-head { border-color: #cfd6dd; }
+.lb-row.t3 .lb-head { border-color: #d09a63; }
+.lb-row.me .lb-head { border-color: var(--accent); }

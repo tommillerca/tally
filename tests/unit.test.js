@@ -1,5 +1,5 @@
 // Node unit tests: node tests/unit.test.js
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -39,7 +39,6 @@ import {
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
 import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
-import { existsSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -664,6 +663,41 @@ test('endless: the Glutton lands every 10 rungs and stays a real step at every t
   }
   // and he must still be on the ladder's own curve, not a spike that never scales
   assert.ok(pit.endlessFoe(100).mult > pit.endlessFoe(50).mult, 'the Glutton scales with the ladder');
+});
+
+/* UNRELEASED COSMETICS STAY DARK. Tom, 2026-08-08: "I want all of these as new
+   cosmetics for tally. Don't launch them just yet, I want to do a big teaser post
+   about the new cosmetics before they go live."
+   Sixty-three items sit in the data file flagged `unreleased`. The ONE thing that
+   must not happen before his post is one of them falling out of a crate, so this
+   asserts the gate rather than trusting it. It also checks the art is really on
+   disk: a teaser item whose PNG is missing is worse than no teaser at all.
+   PROVE-RED: drop the `.filter(i => !i.unreleased)` from the BH_ITEMS export and
+   the first assertion fails with 63 leaked. */
+test('cosmetics: the drop is live, its art exists, and the gate still works', async () => {
+  const data = await import('../data/boneheadz.js');
+  /* The 63-item drop launched on 2026-08-08. This asserts the LIVE state now, and
+     still asserts the gate mechanism, because that is what makes the next hidden
+     batch a one-word change. An `unreleased` item must never be reachable whether
+     or not any exist today. */
+  const leaked = data.BH_ITEMS.filter(i => i.unreleased);
+  assert.equal(leaked.length, 0, `unreleased cosmetics are reachable: ${leaked.map(i => i.id).join(', ')}`);
+
+  const DROP_RE = /^(H|E|M|G)S\d+$/;
+  const drop = data.BH_ITEMS.filter(i => DROP_RE.test(i.id));
+  assert.equal(drop.length, 63, `expected the 63-item drop to be live, found ${drop.length}`);
+
+  // art on disk, or a crate hands out a broken image
+  const missing = drop.filter(i => !existsSync(join(here, '..', 'assets', 'bh', i.slot, `${i.id}.png`)));
+  assert.deepEqual(missing.map(i => i.id), [], 'drop cosmetics with no art file');
+
+  // and they must sit in slots that already exist
+  const slots = new Set(data.BH_SLOTS.map(x => x.code));
+  for (const i of drop) assert.ok(slots.has(i.slot), `${i.id} uses unknown slot ${i.slot}`);
+
+  // the spread the teaser advertises has to be the real one
+  const by = c => drop.filter(i => i.slot === c).length;
+  assert.deepEqual({ H: by('H'), E: by('E'), M: by('M'), G: by('G') }, { H: 24, E: 23, M: 13, G: 3 });
 });
 
 // ---- boss dens (the bone road, reimagined) ----
@@ -1298,7 +1332,9 @@ test('css: the scroll container still reserves the safe area', () => {
 // ---- the Puffer Pack drop: manifest and shop must agree ----
 test('drop items exist in the manifest, legendary, with drop names', () => {
   const data = readFileSync(join(here, '..', 'data', 'boneheadz.js'), 'utf8');
-  const items = JSON.parse(data.match(/BH_ITEMS = (\[[\s\S]*?\]);/)[1]);
+  // BH_ITEMS_ALL is the raw array; BH_ITEMS is the released-only export built from
+  // it (see the unreleased-cosmetics gate in data/boneheadz.js). Match the array.
+  const items = JSON.parse(data.match(/BH_ITEMS_ALL = (\[[\s\S]*?\n\]);/)[1]);
   const byId = Object.fromEntries(items.map(i => [i.id, i]));
   const jackets = ['T9-5', 'T9-6', 'T9-7', 'T9-8', 'T9-9'];
   const hats = ['H13-2', 'H13-3', 'H13-4', 'H13-5', 'H13-6'];

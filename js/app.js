@@ -66,7 +66,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -584,6 +584,7 @@ async function boot() {
   maybeShowDropPopup();
   maybeShowGardenPopup();
   maybeShowSpireIntro();
+  maybeShowCosmeticTeaser();
   maybeShowRenameNotice();
   maybeShowRaceIntro();
   maybePromptRecovery();
@@ -679,6 +680,112 @@ async function maybeShowRenameNotice() {
     setTimeout(tick, 1200);
   } catch { /* never block boot on an apology */ }
 }
+
+/* The teaser POST. Same etiquette as every other takeover here: never over the
+   splash, the wheel or an open sheet, and a busy boot does not burn a showing.
+   Capped at 3 so it stays an announcement rather than a nag, and it stops
+   entirely once the cosmetics actually launch, because at that point the Shop is
+   the place to send people, not a "coming soon" card. */
+/* THE DROP REEL. Tom, 2026-08-08: "can make this a gif or something too where
+   it's showing all of them as a grid but then also animating and showing some
+   bigger and solo'd then maybe 4 together?" and "you don't have to say coming
+   soon you can just say live now in chests."
+   Three beats on a loop, because a static grid of 36 says "a lot" once and then
+   stops selling. The grid establishes scale, a solo lets one piece actually be
+   LOOKED at (at 62px nobody can see a grill), and the quad shows they combine.
+   It loops rather than playing once: this sits in a popup people open for a few
+   seconds, and a sequence that ends leaves a dead screen. */
+/* Tom, 2026-08-08: "the reel is going wayyy too fast between the art, chill it
+   out big time." Roughly doubled, and the solos got the most: 1.5s is barely long
+   enough to notice a head has arrived, let alone read its name, and the fast cut
+   made 63 items feel like a slideshow rather than a collection. The crossfade is
+   slower too, so the beats bleed into each other instead of snapping. */
+const TZ_BEATS = [
+  { cls: 'tz-s-grid', ms: 5200 },
+  { cls: 'tz-s-solo', ms: 3600 },
+  { cls: 'tz-s-solo', ms: 3600 },
+  { cls: 'tz-s-quad', ms: 5600 },
+];
+function openCosmeticTeaser() {
+  const all = dropCosmetics();
+  const bySlot = c => all.filter(i => i.slot === c).length;
+  const wrap = openSheet(`
+    <div class="sheet-body tz-pop">
+      <span class="tz-kicker live">Live now</span>
+      <h2 class="tz-h"><em>${all.length}</em> new cosmetics</h2>
+      <p class="tz-sub">All of them for your skull. In chests from today.</p>
+      <div class="tz-reel" id="tzReel">
+        <div class="tz-wall" id="tzWall">${teaserWallHtml(36, 70)}</div>
+        <div class="tz-spot" id="tzSpot"></div>
+      </div>
+      <div class="tz-tally big">
+        <span><b>${bySlot('H')}</b> lids</span><span><b>${bySlot('E')}</b> eyes</span>
+        <span><b>${bySlot('M')}</b> mouths</span><span><b>${bySlot('G')}</b> grillz</span>
+      </div>
+      <p class="tz-body">Hats, shades, grillz and things to chew on. <b>Every crate can drop them.</b></p>
+      <p class="tz-body tz-strong">And we are nowhere near done with this game.</p>
+      <button class="btn primary" id="tzClose" style="width:100%;margin-top:12px">Let me at them</button>
+    </div>
+  `, { cls: 'sheet-teaser', name: 'cosmetic_teaser' });
+  composeAvatars(wrap);
+  $('#tzClose', wrap)?.addEventListener('click', () => history.back());
+
+  /* The reel. Driven from JS rather than one long @keyframes because each beat
+     swaps WHICH items are on screen, not just how they are arranged, and a
+     keyframe cannot change content. Stops itself when the sheet goes: an interval
+     left running against a detached node is a leak that survives every later
+     screen. */
+  const reel = $('#tzReel', wrap), spot = $('#tzSpot', wrap);
+  if (reel && spot && !reducedMotion) {
+    const hero = all.filter(i => i.slot === 'H' || i.slot === 'E');
+    let beat = 0, pick = 0, timer = null;
+    const step = () => {
+      if (!reel.isConnected) { clearTimeout(timer); return; }
+      const b = TZ_BEATS[beat % TZ_BEATS.length];
+      reel.className = 'tz-reel ' + b.cls;
+      if (b.cls === 'tz-solo' || b.cls === 'tz-s-solo') {
+        const it = hero[pick++ % hero.length];
+        spot.innerHTML = teaserHeadHtml(it, 200, all);
+        spot.innerHTML += `<span class="tz-spot-name">${esc(it.name)}</span>`;
+      } else if (b.cls === 'tz-s-quad') {
+        const four = [0, 1, 2, 3].map(k => hero[(pick + k) % hero.length]);
+        pick += 4;
+        spot.innerHTML = four.map(i => teaserHeadHtml(i, 116, all)).join('');
+      } else {
+        spot.innerHTML = '';
+      }
+      composeAvatars(spot);
+      beat++;
+      timer = setTimeout(step, b.ms);
+    };
+    step();
+  }
+  return wrap;
+}
+async function maybeShowCosmeticTeaser() {
+  try {
+    if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
+    if (!dropCosmetics().length) return;   // nothing to announce
+    /* Tom, 2026-08-08: "let's make this popup show up on the next like 10 app
+       opens." Ten, not three. This is the biggest drop the game has had and a
+       single showing is easy to miss or dismiss on the way to something else.
+       A showing is only spent when the post is ACTUALLY shown, not when boot is
+       busy (see the tick below), so ten opens means ten sightings. */
+    const seen = await kvGet(TEASER_SEEN_KEY, 0);
+    if (seen >= 10) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;    // a busy boot must not consume a showing
+      }
+      await kvSet(TEASER_SEEN_KEY, seen + 1);
+      openCosmeticTeaser();
+    };
+    setTimeout(tick, 1400);
+  } catch { /* a teaser must never block boot */ }
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__cosmeticTeaser = openCosmeticTeaser;
 
 async function maybeShowSpireIntro() {
   try {
@@ -1005,6 +1112,148 @@ function openDropPopup() {
 
 // The pinned Today dropdown, same pattern as the Glutton banner: collapsed one-
 // liner, expands to the pitch + how-to-get-it + a straight line to the Shop.
+/* THE COSMETIC TEASER. Tom, 2026-08-08: "create a popup post and collapsible one
+   on the today page that will replace the garden and make it fun like a shopping
+   ad that shows we've added a TON of new cosmetics and that the game development
+   is far from over."
+   It shows the REAL unreleased art, not a mock-up of it: the items are in
+   data/boneheadz.js flagged `unreleased`, so BH_BY_ID resolves them for this
+   render while BH_ITEMS keeps them out of every crate and wardrobe until the flags
+   come off. A teaser that showed placeholder art would be a worse promise than no
+   teaser.
+   Counts are DERIVED, never typed. "63" hard-coded here would be a lie the moment
+   anyone adds or drops one. */
+const TEASER_SEEN_KEY = 'cosmeticTeaserSeen';
+/* THE DROP, identified by id rather than by the unreleased flag.
+   The teaser first keyed off `unreleased`, which was right while the items were
+   dark and wrong the moment they launched: the flags came off, the set went
+   empty, and the popup would have silently stopped showing on the very day it was
+   meant to shout. The drop is a fixed set of items, so name it as one.
+   Every id in this batch carries an S after its slot letter (HS1, ES1, MS1, GS1),
+   which is how they were minted and what keeps them separable from the 269 items
+   that came before. */
+const DROP_ID_RE = /^(H|E|M|G)S\d+$/;
+function dropCosmetics() {
+  return BH_ITEMS_WITH_UNRELEASED.filter(i => DROP_ID_RE.test(i.id));
+}
+function teaserPreviewIds(n) {
+  /* A spread across slots rather than the first n, or the strip is six hats and
+     reads as one item in six colours instead of a whole wardrobe. */
+  const bySlot = {};
+  for (const i of dropCosmetics()) (bySlot[i.slot] = bySlot[i.slot] || []).push(i);
+  const order = ['H', 'E', 'M', 'G'];
+  const out = [];
+  for (let round = 0; out.length < n; round++) {
+    let added = false;
+    for (const sl of order) {
+      const list = bySlot[sl] || [];
+      if (list[round]) { out.push(list[round]); added = true; }
+      if (out.length >= n) break;
+    }
+    if (!added) break;
+  }
+  return out;
+}
+/* HEAD CROP, NOT A FULL BODY. Tom, 2026-08-08: "if we are showcasing head only
+   cosmetics why show the full body?" Right: every one of these 63 items sits on
+   the skull, and a full-body skeleton renders the thing being advertised at about
+   a tenth of the tile.
+   The crop is derived from the SKULL's measured box in the 640 canvas
+   (197,66)-(389,264), centre (293,165). The stage is scaled so the skull plus a
+   margin fills the tile and offset so that centre lands in the middle, which is
+   why a tall hat and a small pair of shades both frame correctly without
+   per-item nudging. */
+const SKULL_BOX = { cx: 293, cy: 165, w: 193, h: 199 };
+/* Tom, 2026-08-08: "you don't have to only show them on base skulls either? have
+   some fun with it man." Right: thirty-six identical skulls in thirty-six hats
+   reads as a parts catalogue. Every head gets its own skull colourway and, most
+   of the time, a companion piece, so the wall reads as a room full of characters.
+   The companion is always from a DIFFERENT slot, so the item a tile is selling is
+   never hidden by the one next to it.
+   Seeded off the item id, so the wall is identical every render. A teaser that
+   reshuffles makes the collection look SMALLER than it is, because nobody can
+   tell one visit from the next. */
+function teaserSeed(id) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function teaserLook(item, pool) {
+  const r = teaserSeed(item.id);
+  const skulls = BH_ITEMS.filter(i => i.slot === 'SK');
+  const eq = { B: 'B0-1', SK: skulls[r % skulls.length].id, [item.slot]: item.id };
+  const others = pool.filter(i => i.slot !== item.slot);
+  /* UNSIGNED shifts. `>>` is signed, and the hash is a full uint32, so `r >> 5`
+     goes negative above 2^31 and indexes off the front of the array: measured, it
+     threw "Cannot read properties of undefined" and took the whole banner down
+     with it, so Today rendered with no teaser at all. */
+  if (others.length && (r >>> 8) % 3 !== 0) {
+    const mate = others[(r >>> 5) % others.length];
+    if (mate) eq[mate.slot] = mate.id;
+  }
+  return eq;
+}
+/* HEAD CROP, NOT A FULL BODY. Tom: "if we are showcasing head only cosmetics why
+   show the full body?" Every one of these 63 items sits on the skull, and a
+   full-body skeleton draws the thing being advertised at a tenth of the tile.
+   The crop comes from the SKULL's measured box in the 640 canvas,
+   (197,66)-(389,264), centre (293,165): the stage is scaled so the skull plus a
+   little air fills the tile and offset so that centre lands in the middle, which
+   is why a tall hat and small shades both frame without per-item nudging. */
+function teaserHeadHtml(item, px = 76, pool = []) {
+  const scale = px / (SKULL_BOX.h * 1.30);
+  const ox = px / 2 - SKULL_BOX.cx * scale;
+  const oy = px / 2 - SKULL_BOX.cy * scale;
+  const eq = teaserLook(item, pool);
+  return `<span class="tz-head" style="width:${px}px;height:${px}px">
+    <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
+      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>
+    </span></span>`;
+}
+
+/* Show MANY. Tom: "where are more of the new hats. cmon man this marketing is
+   bad." The number IS the pitch, so the art has to look like a wall of them
+   rather than a polite sample of six. */
+function teaserWallHtml(n, px) {
+  const all = dropCosmetics();
+  const bySlot = {};
+  for (const i of all) (bySlot[i.slot] = bySlot[i.slot] || []).push(i);
+  // interleave so the wall reads as a whole wardrobe, not a run of hats then a run of eyes
+  const order = ['H', 'E', 'M', 'G'];
+  const out = [];
+  for (let round = 0; out.length < n; round++) {
+    let added = false;
+    for (const sl of order) {
+      const list = bySlot[sl] || [];
+      if (list[round]) { out.push(list[round]); added = true; }
+      if (out.length >= n) break;
+    }
+    if (!added) break;
+  }
+  return out.map(i => teaserHeadHtml(i, px, all)).join('');
+}
+
+function cosmeticTeaserBannerHtml() {
+  const all = dropCosmetics();
+  const bySlot = c => all.filter(i => i.slot === c).length;
+  return `<details class="glutton-banner teaser-banner">
+    <summary>
+      <span class="gbn-ico teaser-ico">${bhIcon('badge-crown', 26)}</span>
+      <span class="gbn-txt"><i>Coming soon</i><b>${all.length} new cosmetics</b></span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      <div class="tz-strip">${teaserWallHtml(18, 62)}</div>
+      <div class="tz-tally">
+        <span><b>${bySlot('H')}</b> lids</span><span><b>${bySlot('E')}</b> eyes</span>
+        <span><b>${bySlot('M')}</b> mouths</span><span><b>${bySlot('G')}</b> grillz</span>
+      </div>
+      <p class="glutton-mech"><b>The biggest drop this game has had.</b> Not out yet. Soon.</p>
+      <p class="glutton-mech tz-more">And we are nowhere near done.</p>
+    </div>
+  </details>`;
+}
+
 function dropBannerHtml() {
   return `<details class="glutton-banner drop-banner">
     <summary>
@@ -1782,6 +2031,12 @@ async function renderToday(el) {
   $('details.drop-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#dropToShop')?.scrollIntoView({ block: 'center' });
   });
+  /* The teaser strip lives inside a <details>. Its heads are only composed when
+     the section is opened: compositing 18 layered stacks on every Today render,
+     for a row most people never expand, is work nobody sees. */
+  $('details.teaser-banner')?.addEventListener('toggle', e => {
+    if (e.target.open) composeAvatars(e.target);
+  });
   $('details.garden-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
   });
@@ -2149,6 +2404,26 @@ function avatarLayersHtml(eq, opts = {}) {
 const lbAvatar = (p, cls = 'lb-av') =>
   `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
     { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
+/* THE BOARD SHOWS THE BONEHEAD, NOT A THUMBNAIL. Tom, 2026-08-08: "make the
+   leaderboard look cooler, maybe the number is on top of the bonehead art? right
+   now the art is soooo small in the list" and "show the art proudly over 1. 2. 3.
+   bigger than the art itself".
+   The old row drew a whole standing skeleton into 42px, so the player's face --
+   the part they actually customised -- was a handful of pixels. Same crop the
+   drop reel uses: scale and offset from the skull's measured box, (197,66)-(389,264),
+   centre (293,165), so the head fills the tile whatever they are wearing.
+   Everyone stays in ONE list, his call: a separate podium makes the top three a
+   different species from everybody else and buries the person reading it. */
+function lbHeadHtml(p, px) {
+  const scale = px / (SKULL_BOX.h * 1.34);
+  const ox = px / 2 - SKULL_BOX.cx * scale;
+  const oy = px / 2 - SKULL_BOX.cy * scale;
+  const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
+  return `<span class="lb-head" style="width:${px}px;height:${px}px">
+    <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
+      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
+    </span></span>`;
+}
 // Test hook (webdriver only): the board renders from a server payload, so
 // "does a shiny row render shiny" was only ever checkable on a real phone.
 if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lbAvatar;
@@ -2367,9 +2642,12 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
       html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
     // the Glutton's feeding window closes; still time-limited, just less sharp
     { pri: 10, html: gluttonBannerHtml() },
-    // crops rot into nothing, but a ready crop is money sitting on the table
-    { pri: cropsRipe ? 20 : 50,
-      html: cropsRipe ? act(gardenBannerHtml(cropsRipe)) : gardenBannerHtml(cropsRipe) },
+    /* The teaser takes the Garden's seat, Tom's call. A ripe crop still outranks
+       it, because that is money rotting on the table and the teaser asks nothing
+       of anyone; with nothing ripe, the teaser is the more interesting row. */
+    ...(cropsRipe
+      ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }]
+      : [{ pri: 25, html: cosmeticTeaserBannerHtml() }]),
     // evergreen: the shop is not going anywhere
     { pri: 60, html: dropBannerHtml() },
   ].sort((a, b) => a.pri - b.pri);
@@ -5787,7 +6065,11 @@ async function renderFriends(el) {
   // can find everyone). Adding someone who already requested you auto-accepts.
   // Every row shows the player's actual Bonehead — the customization IS the flex.
   let lbData = null; // one fetch shared by the podium tile + the full sheet
-  const fetchLb = async () => (lbData || (lbData = await social.leaderboard()));
+  /* __testLb: webdriver-gated fixture, same idea as __testFriends. The board
+     renders entirely from a server payload, so its LAYOUT was only ever checkable
+     against a live account with enough players on it. */
+  const fetchLb = async () => (lbData
+    || (lbData = (navigator.webdriver && window.__testLb) || await social.leaderboard()));
   // the Crew-tab tile: top-3 Boneheadz on a podium (center = #1, raised)
   const hydratePodium = async () => {
     const players = await fetchLb();
@@ -5799,17 +6081,10 @@ async function renderFriends(el) {
       return;
     }
     if (wait) wait.hidden = true;
-    const top = players.slice(0, 3);
-    const order = top.length === 3 ? [top[1], top[0], top[2]] : top; // silver, GOLD, bronze
-    pod.innerHTML = order.map(p => {
-      const rank = players.indexOf(p) + 1;
-      return `<div class="lb-pod p${rank}">
-        <span class="lb-medal">${rank === 1 ? '👑 1st' : rank === 2 ? '2nd' : '3rd'}</span>
-        ${lbAvatar(p, 'lb-pod-av')}
-        <b>${esc(p.name)}</b><small>Lv ${p.level}</small>
-      </div>`;
-    }).join('');
-    pod.hidden = false;
+    /* No separate podium. Tom, 2026-08-08: "I just want it to include all players
+       in the main list." A podium lifted three people out of the board and made
+       everyone else a footnote; the list carries rank 1-3 itself now, bigger. */
+
     // WHERE YOU STAND. A podium of three strangers is somebody else's business;
     // your own rank is the reason to care about it.
     const meIdx = players.findIndex(p => p.you);
@@ -5840,9 +6115,14 @@ async function renderFriends(el) {
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
           : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
         const ol = onlineLabel(p.lastSeen);
-        return `<div class="lb-row ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
-          <span class="lb-rank r${i + 1}">${i + 1}</span>
-          ${lbAvatar(p)}
+        const rank = i + 1;
+        /* Top three get a bigger numeral and bigger art. The numeral is always
+           LARGER than the head it sits behind, and the head overlaps it, so the
+           rank reads first and the Bonehead is the thing you look at. */
+        const top3 = rank <= 3 ? ` top t${rank}` : '';
+        return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
+          <span class="lb-num r${rank}">${rank}</span>
+          ${lbHeadHtml(p, rank <= 3 ? 58 : 46)}
           <div class="lb-who"><b>${esc(p.name)}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
@@ -9216,6 +9496,24 @@ async function openStable(opts = {}) {
       //  testing unreliable and the frame resolves taps by side instead)
       paint();
       // hold the ring until its art is decoded, then arrive in one frame
+      /* PAUSE WHILE THE SHEET SCROLLS. Tom, 2026-08-08: "the stable is still laggy
+         when it first opens and you scroll."
+         An idle bob is invisible while the page is moving under it, and the ring is
+         a 3D subtree, so animating it during a scroll makes the compositor redo
+         work nobody can see. Reuses the same `.moving` class the ring already uses
+         for its own motion, so there is one pause path, not two.
+         Measured over a 24-step scroll: median frame 23.2ms -> 21.0ms and the worst
+         frame 32ms -> 23.4ms, which is the difference between dropping a frame and
+         not. */
+      const scroller = body.closest('.sheet-body') || body;
+      let scrollIdle = null;
+      const onScroll = () => {
+        setMoving(true);
+        clearTimeout(scrollIdle);
+        scrollIdle = setTimeout(() => setMoving(false), 140);
+      };
+      scroller.addEventListener('scroll', onScroll, { passive: true });
+
 
       /* Born at the old size, then transitioned to the new one on the next frame.
          The ring's spacing comes from the MEASURED card width, so a plain CSS
@@ -9225,27 +9523,11 @@ async function openStable(opts = {}) {
       const cfEl = $('.cf', body);
       const want = cfEl && cfEl.dataset.want === 'panelled';
       if (cfEl && want !== cfWasPanelled) {
-        requestAnimationFrame(() => {
-          cfEl.classList.toggle('panelled', want);
-          const DUR = 520;                       // matches the --card transition
-          const t0 = performance.now();
-          const follow = () => {
-            const t = Math.min(1, (performance.now() - t0) / DUR);
-            /* The resize moves every card without moving the ring, so frame-to-
-               frame position velocity is zero and the spin blur sees nothing.
-               This is the resize's own blur: a half-sine, peaking mid-flight where
-               the easing is fastest and back to nothing at both ends. */
-            /* No separate blur source here any more. The resize moves the OUTER
-               cards (their pitch changes), and paint() already measures that as
-               real displacement, so they smear on their own. The centre card does
-               not translate at all, only scales, so it stays sharp: blurring it
-               was the "blurring the non moving part" fault. */
-            paint();
-            if (t < 1) requestAnimationFrame(follow);
-            else paint();
-          };
-          requestAnimationFrame(follow);
-        });
+        /* No rAF follow loop. The panel change is a scale on the track, so the
+           cards AND their spacing scale together as one composited layer and there
+           is nothing for js to recompute mid-flight. That loop was running a full
+           ring repaint every frame for half a second. */
+        requestAnimationFrame(() => cfEl.classList.toggle('panelled', want));
       }
       cfWasPanelled = want;
     }
@@ -11131,7 +11413,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v334'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v335'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

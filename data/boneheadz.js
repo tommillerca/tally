@@ -93,7 +93,7 @@ export const BH_SLOTS = [
  }
 ];
 
-export const BH_ITEMS = [
+const BH_ITEMS_ALL = [
  {
   "id": "BG1",
   "slot": "BG",
@@ -1710,8 +1710,87 @@ export const BH_ITEMS = [
   "rarity": "legendary",
   "name": "Day One Lizard",
   "exclusive": true
- }
+ },
+ {"id": "ES1", "slot": "E", "rarity": "common", "name": "Sol Shades #1"},
+ {"id": "ES2", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #2"},
+ {"id": "ES3", "slot": "E", "rarity": "rare", "name": "Sol Shades #3"},
+ {"id": "ES4", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #4"},
+ {"id": "ES5", "slot": "E", "rarity": "common", "name": "Sol Shades #5"},
+ {"id": "ES6", "slot": "E", "rarity": "rare", "name": "Sol Shades #6"},
+ {"id": "ES7", "slot": "E", "rarity": "common", "name": "Sol Shades #7"},
+ {"id": "ES8", "slot": "E", "rarity": "legendary", "name": "Sol Shades #8"},
+ {"id": "ES9", "slot": "E", "rarity": "rare", "name": "Sol Shades #9"},
+ {"id": "ES10", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #10"},
+ {"id": "ES11", "slot": "E", "rarity": "common", "name": "Sol Shades #11"},
+ {"id": "ES12", "slot": "E", "rarity": "rare", "name": "Sol Shades #12"},
+ {"id": "ES13", "slot": "E", "rarity": "common", "name": "Sol Shades #13"},
+ {"id": "ES14", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #14"},
+ {"id": "ES15", "slot": "E", "rarity": "rare", "name": "Sol Shades #15"},
+ {"id": "ES16", "slot": "E", "rarity": "legendary", "name": "Sol Shades #16"},
+ {"id": "ES17", "slot": "E", "rarity": "common", "name": "Sol Shades #17"},
+ {"id": "ES18", "slot": "E", "rarity": "rare", "name": "Sol Shades #18"},
+ {"id": "ES19", "slot": "E", "rarity": "common", "name": "Sol Shades #19"},
+ {"id": "ES20", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #20"},
+ {"id": "ES21", "slot": "E", "rarity": "rare", "name": "Sol Shades #21"},
+ {"id": "ES22", "slot": "E", "rarity": "uncommon", "name": "Sol Shades #22"},
+ {"id": "ES23", "slot": "E", "rarity": "common", "name": "Sol Shades #23"},
+ {"id": "GS1", "slot": "G", "rarity": "common", "name": "Sol Grillz #1"},
+ {"id": "GS2", "slot": "G", "rarity": "uncommon", "name": "Sol Grillz #2"},
+ {"id": "GS3", "slot": "G", "rarity": "rare", "name": "Sol Grillz #3"},
+ {"id": "MS1", "slot": "M", "rarity": "common", "name": "Sol Mouth #1"},
+ {"id": "MS2", "slot": "M", "rarity": "uncommon", "name": "Sol Mouth #2"},
+ {"id": "MS3", "slot": "M", "rarity": "rare", "name": "Sol Mouth #3"},
+ {"id": "MS4", "slot": "M", "rarity": "uncommon", "name": "Sol Mouth #4"},
+ {"id": "MS5", "slot": "M", "rarity": "common", "name": "Sol Mouth #5"},
+ {"id": "MS6", "slot": "M", "rarity": "rare", "name": "Sol Mouth #6"},
+ {"id": "MS7", "slot": "M", "rarity": "common", "name": "Sol Mouth #7"},
+ {"id": "MS8", "slot": "M", "rarity": "legendary", "name": "Sol Mouth #8"},
+ {"id": "MS9", "slot": "M", "rarity": "rare", "name": "Sol Mouth #9"},
+ {"id": "MS10", "slot": "M", "rarity": "uncommon", "name": "Sol Mouth #10"},
+ {"id": "MS11", "slot": "M", "rarity": "common", "name": "Sol Mouth #11"},
+ {"id": "MS12", "slot": "M", "rarity": "rare", "name": "Sol Mouth #12"},
+ {"id": "MS13", "slot": "M", "rarity": "common", "name": "Sol Mouth #13"},
+ {"id": "HS1", "slot": "H", "rarity": "common", "name": "Sol Lid #1"},
+ {"id": "HS2", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #2"},
+ {"id": "HS3", "slot": "H", "rarity": "rare", "name": "Sol Lid #3"},
+ {"id": "HS4", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #4"},
+ {"id": "HS5", "slot": "H", "rarity": "common", "name": "Sol Lid #5"},
+ {"id": "HS6", "slot": "H", "rarity": "rare", "name": "Sol Lid #6"},
+ {"id": "HS7", "slot": "H", "rarity": "common", "name": "Sol Lid #7"},
+ {"id": "HS8", "slot": "H", "rarity": "legendary", "name": "Sol Lid #8"},
+ {"id": "HS9", "slot": "H", "rarity": "rare", "name": "Sol Lid #9"},
+ {"id": "HS10", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #10"},
+ {"id": "HS11", "slot": "H", "rarity": "common", "name": "Sol Lid #11"},
+ {"id": "HS12", "slot": "H", "rarity": "rare", "name": "Sol Lid #12"},
+ {"id": "HS13", "slot": "H", "rarity": "common", "name": "Sol Lid #13"},
+ {"id": "HS14", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #14"},
+ {"id": "HS15", "slot": "H", "rarity": "rare", "name": "Sol Lid #15"},
+ {"id": "HS16", "slot": "H", "rarity": "legendary", "name": "Sol Lid #16"},
+ {"id": "HS17", "slot": "H", "rarity": "common", "name": "Sol Lid #17"},
+ {"id": "HS18", "slot": "H", "rarity": "rare", "name": "Sol Lid #18"},
+ {"id": "HS19", "slot": "H", "rarity": "common", "name": "Sol Lid #19"},
+ {"id": "HS20", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #20"},
+ {"id": "HS21", "slot": "H", "rarity": "rare", "name": "Sol Lid #21"},
+ {"id": "HS22", "slot": "H", "rarity": "uncommon", "name": "Sol Lid #22"},
+ {"id": "HS23", "slot": "H", "rarity": "common", "name": "Sol Lid #23"},
+ {"id": "HS24", "slot": "H", "rarity": "legendary", "name": "Sol Lid #24"}
 ];
 
-export const BH_BY_ID = Object.fromEntries(BH_ITEMS.map(i => [i.id, i]));
+/* UNRELEASED COSMETICS. Tom, 2026-08-08: "I want all of these as new cosmetics
+   for tally. Don't launch them just yet, I want to do a big teaser post about the
+   new cosmetics before they go live."
+   The gate is HERE, at the source, not at the call sites. BH_ITEMS has eight
+   consumers (crate rolls, the wardrobe, the looks list, the shop, random outfits,
+   pet hatching, gear art) and filtering each one is how you miss one and quietly
+   ship a teaser item out of a crate. Everything downstream reads the filtered
+   list and needs no knowledge of this.
+   BH_BY_ID deliberately covers ALL of them, unreleased included, so art lookups
+   resolve for a teaser render and nothing degrades to a broken image.
+   TO LAUNCH: delete the `unreleased` flags. That is the whole switch. */
+/* LAUNCHED 2026-08-08. The flags came off, which is the whole switch. The filter
+   stays: it is what makes the next unreleased batch a one-word change rather than
+   a rewrite, and it costs nothing when nothing is flagged. */
+export const BH_ITEMS = BH_ITEMS_ALL.filter(i => !i.unreleased);
+export const BH_ITEMS_WITH_UNRELEASED = BH_ITEMS_ALL;
+export const BH_BY_ID = Object.fromEntries(BH_ITEMS_ALL.map(i => [i.id, i]));
 export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }

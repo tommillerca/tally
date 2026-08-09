@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 335, date: '2026-08-08', title: '63 new cosmetics, live now', items: [
+    '<b>63 new cosmetics</b> just landed: 24 lids, 23 pairs of eyes, 13 mouths and 3 grillz. Every crate can drop them.',
+    'The <b>leaderboard</b> shows your Bonehead properly now, with the rank up front, and everyone sits in one list.',
+    '<b>The Glutton</b> has come to the Gauntlet. He turns up every 10 rungs as a proper gear check, and losing to him costs nothing more than any other loss.',
+    'The Stable stopped stuttering when you first open it and scroll.',
+  ] },
   /* ONE ENTRY FOR THE WHOLE DAY. Tom, 2026-08-08: "condense all patch notes over
      the last 24 hours because we've pushed a lot of updates, TLDR the users."
      Thirty-nine separate entries shipped in a day, which is a build log, not a

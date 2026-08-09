@@ -9,7 +9,15 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 💰 The Bone Bazaar: player gear stalls on the Crew tab (DECISION, designed 2026-08-08, awaiting Tom's call)
+## 💰 The Bone Bazaar: player gear stalls on the Crew tab (PARKED 2026-08-08, Tom: "park it and we can circle back later")
+
+**Why parked, in one line:** the mechanic and economy protections are ready, but
+trades need liquidity (a crewmate who owns what you lack at a price you'll pay)
+and today's crew graphs are too small; revisit after public-launch traction.
+Design is complete below, dials pre-recommended; interactive mockup at
+`market-quality-mockups/bazaar.html` (card placement + stalls page + buy flow),
+screenshots alongside. Research notebook: "Boneheadz: player-market economy
+research" in NotebookLM.
 
 **Tom's ask.** "I want to brainstorm a system where players can post their own
 items for sale on the crew tab. These items make two players exchange gold for
