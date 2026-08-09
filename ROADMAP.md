@@ -1080,7 +1080,17 @@ cast is unmistakable at a glance. All additive (`mix-blend-mode: screen`).
 | **Amulet shatter** | a white flash at the amulet and ten shards thrown outward. Fires on the crit that breaks it |
 
 Built as `js/wraith-fx.js` in the same shape as `js/crate-fx.js`: self-contained,
-injects its own styles, touches no app CSS. Anchors come from the ART, not from
+injects its own styles, touches no app CSS.
+
+**Tom's review, 2026-08-09:** Hollow Bolt and Reap approved. Wail and the amulet
+shatter called cheap, the Rise tombstones called worse, and: "you need to audit
+your ability to create these spells and learn some design references that suit the
+art style of this app." That audit is `docs/FX-DESIGN-RULES.md`. The short version:
+I built the spells out of CSS primitives, and this app's effect language is
+hand-drawn cartoon frames (`assets/bh/fx/jab`, `assets/bh/fx/swing`,
+`graverise-hand.webp`). **Objects must be drawn art; only light may be procedural,
+and light must be soft and multi-layered.** Wail and Rise are revised against that
+rule; the amulet shards still need drawn art. Anchors come from the ART, not from
 guessed coordinates: casting hand (26%, 50%), hood void (58%, 27%), amulet
 (62%, 62%) of the sprite box, measured off the drawing with a grid overlay.
 
