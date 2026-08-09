@@ -219,6 +219,28 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) 
   // different size from its base pet.
   const S2 = mass ? Math.round(px * petScale(petId)) : px;
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
+  /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
+     of the same variety too."
+     There are no shiny ANIMATION assets: the animated pets are assembled from
+     separate layer PNGs (body, eyes, drops, shadow) while a shiny is a single
+     recoloured still, so a shiny of an animated species fell back to a static
+     image and sat there while its ordinary twin moved.
+     The animation is reused and recoloured instead. The hue shift is MEASURED off
+     the art rather than eyeballed: mean hue of the coloured pixels in the base
+     PNG against the shiny PNG, greys excluded because hue is meaningless there
+     and the outline would dominate.
+       C1 cloud    183 -> 238   +54deg,  saturation x1.03
+       C3 catfish  245 ->  76  -169deg,  saturation x1.43
+       C4 lizard    26 -> 183  +157deg,  saturation x1.34
+     CX is exempt as ever: its amethyst art IS its special look. */
+  const SHINY_TINT = { C1: 'hue-rotate(54deg) saturate(1.03)', C3: 'hue-rotate(-169deg) saturate(1.43)', C4: 'hue-rotate(157deg) saturate(1.34)' };
+  if (isShiny && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
+    const anim = animatedPetHtml(petId, S2);
+    if (anim) {
+      return `<div class="pet-shiny-wrap"><div class="pa-shiny" style="filter:${SHINY_TINT[petId]}">${anim}</div>`
+        + `<span class="shiny-spark">${sparkIco(12)}</span></div>`;
+    }
+  }
   if (petId !== 'CX' && isShiny) {
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
@@ -11109,7 +11131,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v333'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v334'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -11495,7 +11517,12 @@ async function renderPit(wrap) {
   $('#champBtn', body)?.addEventListener('click', () =>
     startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
-    startPit({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet' }));
+    startPit({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet',
+      /* Every tenth rung IS the Glutton, and he brings his own art rather than a
+         generated skeleton. `glutton` is carried alongside mode:'endless' rather
+         than replacing it, because the ladder still owns the rewards, the rank
+         and the ceiling: only the face and the difficulty step change. */
+      glutton: !!fightFoe.glutton }));
   $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); location.hash = '#/boneyard'; });
 }
 
@@ -11657,7 +11684,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
-        <div class="bh-stage fstage${foeCfg.mode === 'glutton' ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
           <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>

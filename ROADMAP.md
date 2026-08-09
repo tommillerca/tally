@@ -9,6 +9,100 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 💰 The Bone Bazaar: player gear stalls on the Crew tab (DECISION, designed 2026-08-08, awaiting Tom's call)
+
+**Tom's ask.** "I want to brainstorm a system where players can post their own
+items for sale on the crew tab. These items make two players exchange gold for
+whatever the other player will pay. Once the player sells the item they lose the
+stats and cosmetic. A player should only be able to sell a certain number of
+things at a time. ... We can't have players selling old gear for 1g and fucking
+up the economy of the game. But a long time ago I played a game called tales of
+pirates where you could do something similar." Locked in the same session: gear
+only in v1, no binding (floors do the work), crew-only scope.
+
+**The honest constraint the whole design bends around: the server can only ADD
+value.** Coins are device-local kv; the grants channel is strictly additive and
+never sees a balance. So escrow is consignment-by-removal: listing an item
+REMOVES it from inventory (the disenchant path: gearloadout slot cleared, inv
+row deleted, stats gone that moment), delist/expiry grants the item back, a
+sale grants coins to the seller. Every server message stays additive, and the
+`gearId` grant ingest the client already ships (js/social.js:487, currently
+minted by nothing) becomes the delivery mechanism. Boolean per-catalog-id gear
+ownership means dupes are structurally impossible and a buyer who already owns
+the piece has nothing to buy.
+
+**The shape.**
+- THE BAZAAR card on the Crew tab (between Step Race and Add-a-Friend): your
+  crew's stalls browsed PER SELLER, Tales of Pirates style. Deliberately no
+  price-sorted aggregate view: research finding, stall-style shops resist the
+  undercutting spirals that frictionless sorted auction lists create.
+- SET UP STALL on your own stall: pick gear from inventory, set a price at or
+  above the floor. The piece leaves your inventory immediately (you cannot wear
+  what you are selling).
+- Buying: atomic conditional UPDATE on the listing row; the loser of a race
+  gets `409 gone` BY NAME and refunds the locally-deducted coins. Winner gets
+  the gearId grant; seller gets `price minus tax` coins as a HELD grant, so the
+  Deliveries card shows a sealed coin pouch: "your stall sold the Femur Flail."
+- Listings auto-expire after 7 days via lazy sweep (siege-settlement pattern);
+  the item comes home as a grant.
+
+**Economy dials (v1 defaults, each is a DECISION dial for Tom):**
+
+| Dial | v1 | Why |
+|---|---|---|
+| Price floor | 3x dupe value: uncommon 75 / rare 180 / legendary 1,200 | The game already prices duplicates (crate dupe table); nothing may sell below 3x what the game itself pays. "1g gear" cannot exist. |
+| Tax, burned | 15%, rounded UP | D3's gold AH used exactly 15%; FFXIV/OSRS destroy most collected tax as their inflation sink. Round-up + the 75 floor closes OSRS's under-50-coins-is-tax-free rounding hole. Coins currently pool (merchant is the only big sink), so the Bazaar is a net sink. |
+| Listing slots | 2, +1 at level 20 | Matches OSRS F2P (3) and FFXIV's historical 1-2 retainers. Stalls stay curated. |
+| Buy cap | 5 purchases/day | Throttles twink pipelines. Research note: OSRS sizes buy limits as per-item 4h windows, a commodity-cornering defense; flat daily cap fits a unique-item friends market better. |
+| Level gate | existing gear minLevel stands | Buyable early, wearable at level. A level-3 buyer's 1,200-coin legendary does nothing until 14. |
+| Expiry | 7 days | No zombie stalls. Research silent here; UX call. |
+
+**Economy fit.** Faucets measured at ~1,000-1,300 coins/day engaged; merchant
+weapons 500-6,000. A legendary at the 1,200 floor is about a day of full
+engagement, and the seller permanently loses a piece only crate luck returns.
+Wash trading loses 15% per hop. A modified client can already mint 5,000
+coins/day/friend via gifts; the Bazaar adds no faster lever and taxes it.
+
+**Why crew-only is also the long-term call for a monetized app.** Monetization
+is locked cosmetic-only (2026-08-07): IAP cosmetics must NEVER be listable or
+paid goods become gold become gear (selling power through a side door); gear-only
+v1 gets that free. Diablo 3 is the canonical postmortem: ~50% of players used
+the AH, the loot hunt collapsed into spreadsheet shopping, Wilson says the GOLD
+house did more damage than the RMAH, and the 15% fee plus listing limits failed
+to stop saturation. Lesson: tax does not protect the loop, scope and friction
+do. Boneheadz's retention engine IS the acquisition loop (crates, dens,
+Glutton, quests); a friends-scale stall market amplifies it socially instead of
+strip-mining it. Future clean IAP synergy: stall SKINS (cosmetic, social,
+power-free). Schema keeps a visibility field so a curated global board stays
+possible as a separate later project.
+
+**Exploit matrix (maps to the Rewarded-actions SOP, guards named at build):**
+double-sell: impossible, item leaves inventory at list + UNIQUE open listing per
+(seller, gearId) · buyer race: atomic UPDATE, named `gone` answer, local refund
+· buy-what-you-own: client gate pre-charge; forced via modified client, ingest
+pays dupe value (less than the floor, strictly lossy) · replay: signed body+ts,
+grant keys `market-item-<listingId>` / `market-sold-<listingId>`, INSERT OR
+IGNORE · list-then-wear: impossible by ordering · self-buy: server rejects own
+listing; alt-hop loses 15% per hop · flooding: slots + floor now, nonrefundable
+5% listing fee held in reserve · second-attempt-pays-nothing: the unit.test.js
+NO-OP scanner auto-covers new `social.*Remote` payouts; add a market pin like
+the spire one, proven red.
+
+**Deliberately NOT in v1:** pets (instance model ready, breeding economy needs
+its own pass), cosmetics (append-only looks make "losing the cosmetic" a new
+revocation decision), weapons (the merchant is the designed coin sink; do not
+undercut it), price history, offers/haggling, global visibility.
+
+**Build notes (when Tom approves):** worktree branch; server migration replaces
+the dead `trades` table (schema.sql:38) with `listings`; endpoints
+`POST /market/list`, `POST /market/delist`, `GET /market/crew`,
+`POST /market/buy` following the spire idempotency shapes; Bazaar card mockup
+FIRST (mockups-first); crew-fan audit gains Bazaar rows; research notebook
+"Boneheadz: player-market economy research" (NotebookLM) holds the sourced
+brief behind the dial table.
+
+---
+
 ## 🗺️ Leaving the Boneyard and coming back could throw (BUG, FIXED, found 2026-08-07)
 
 **Found by** the new `tests/spire-gate.mjs` while auditing the spire fix, not by a report.

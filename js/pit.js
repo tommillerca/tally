@@ -1445,7 +1445,39 @@ const ENDLESS_TREES = [
   ['smite', 'radiance', 'ward', 'judgement', 'hallowed', 'lastlight'],
   ['frostbolt', 'firebolt', 'totemic', 'frostbite', 'wildfire', 'tempest'],
 ];
+/* THE GLUTTON IS A GEAR CHECK. Tom, 2026-08-08: "I want to include the glutton
+   art work in the infinite pit ladder. He should be a formidable boss that is a
+   gear check on players every so often." Every 10 rungs, his call.
+   Deliberately NOT a wall: losing costs what losing always costs, nothing more,
+   so the ladder stays the long-tail content it is meant to be. The check is that
+   he hits materially harder than the rung either side, so an under-geared player
+   stalls here and knows exactly why, rather than grinding on unaware.
+   The multiplier is the ordinary curve plus a flat step, so he scales with the
+   ladder forever instead of becoming trivial after rank 40. */
+export const GLUTTON_EVERY = 10;
+export const isGluttonRung = rank => rank > 0 && rank % GLUTTON_EVERY === 0;
 export function endlessFoe(rank) {
+  if (isGluttonRung(rank)) {
+    const tier = rank / GLUTTON_EVERY;
+    return {
+      rank,
+      name: tier > 1 ? `The Glutton ${['II', 'III', 'IV', 'V', 'VI'][tier - 2] || tier}` : 'The Glutton',
+      glutton: true,
+      art: 'assets/bh/glutton/tongue.png',
+      /* PROPORTIONAL, not a flat bonus. A flat +0.34 was a 21% step at rung 10
+         but only 12% by rung 30 and ~4% by rung 100, so he would quietly stop
+         being a check exactly where the ladder becomes the only content left.
+         A multiplier keeps the same bump at every tier. Measured: ~18% above the
+         rung below, at rung 10 and at rung 100 alike. */
+      mult: +((1.32 + rank * 0.07) * 1.18).toFixed(3),
+      talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
+      weaponId: 'bonecrusher',
+      aiLevel: 5,
+      xp: 140 + rank * 14,
+      coins: 260 + rank * 22,
+      repeatCoins: 25 + Math.min(45, rank * 3),
+    };
+  }
   const cycle = Math.floor((rank - 1) / ENDLESS_NAMES.length) + 1;
   const base = ENDLESS_NAMES[(rank - 1) % ENDLESS_NAMES.length];
   return {

@@ -370,7 +370,15 @@ const measure = async (bhSel, petSel) => {
       bhLayers: bhI.length, bhDecoded: bhI.filter(i => i.nw > 0).length,
       petLayers: petI.length, petDecoded: petI.filter(i => i.nw > 0).length,
       shinyWrap: !!pet.querySelector('.pet-shiny-wrap'),
-      shinySrc: petI.some(i => /\/shiny\//.test(i.src || '')),
+      /* A shiny is proven by it being DRAWN DIFFERENTLY from the base pet, and
+         there are now two honest ways that happens. A still shiny loads the
+         recoloured art from /shiny/. An ANIMATED species has no shiny animation
+         assets, so it reuses the animation under a measured hue-rotate instead
+         (SHINY_TINT in js/app.js). Checking only for the /shiny/ file would fail
+         the animated case while it is working correctly, and checking only for
+         the wrapper would pass a plain base pet in a shiny box. */
+      shinySrc: petI.some(i => /\/shiny\//.test(i.src || ''))
+        || !!(pet && pet.querySelector('.pa-shiny') && /hue-rotate/.test(getComputedStyle(pet.querySelector('.pa-shiny')).filter || '')),
     };
   }, [bhSel, petSel]);
   if (!raw.found) return raw;

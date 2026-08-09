@@ -18,6 +18,8 @@ export const CHANGES = [
     '<b>Boss dens move every week</b>, and the Boneyard keeps loading as you look around instead of only showing what is near your feet. Dens, spires and the Glutton also got the roomier 80m reach.',
     '<b>Ectoplasm is worth something.</b> Two new potions that are the strongest things you can drink, and the Necromancer\'s Feast is no longer a worse deal than just cooking two ordinary dishes.',
     '<b>Names are one-of-a-kind now</b>, and boss and Glutton loot is rolled for <b>you</b> rather than everyone getting the same drop. Map pickups no longer hand out the same few ingredients forever.',
+    '<b>The catfish is animated.</b> He swims, and the bead on his whisker moves with him. <b>Shiny pets now animate too</b> instead of standing still while their ordinary twin moves.',
+    '<b>The Glutton has come to the Gauntlet.</b> He turns up every 10 rungs of the endless ladder as a proper gear check. Losing to him costs nothing more than any other loss.',
     '<b>Every screen loads before it appears</b>, so tabs arrive in one piece instead of assembling themselves in front of you.',
     'Plus a long list of fixes: eggs that would not hatch, the step race showing wrong totals, boss dens you could beat twice, the Today card, and a lot of small ones.',
   ] },

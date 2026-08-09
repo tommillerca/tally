@@ -4,13 +4,16 @@
 // drop into any pet slot at the requested pixel width. Every other pet falls back to
 // its static image (animatedPetHtml returns null).
 //
-//   C1  cloud  — floats, blinks, rains (drops fall in front, fade before the ground)
-//   C4  lizard — fly loops above the head, blinks, tongue slurps into a closed mouth
+//   C1  cloud   — floats, blinks, rains (drops fall in front, fade before the ground)
+//   C3  catfish — beached; one flop per loop, sweat flies, the shadow answers the hop
+//   C4  lizard  — fly loops above the head, blinks, tongue slurps into a closed mouth
 //
-// Keyframes + layer geometry live in app.css (.pa-* classes). Loop = 6s, seamless.
+// Keyframes + layer geometry live in app.css (.pa-* classes). Seamless loops:
+// 6s for cloud/lizard, 4.8s for the catfish (each stage is its own loop clock).
 
 const CLOUD_W = 222, CLOUD_H = 219;
 const LIZ_W = 273, LIZ_H = 218;
+const CAT_W = 261, CAT_H = 206;
 const A = 'assets/bh/anim';
 
 function cloud(px) {
@@ -55,16 +58,39 @@ function lizard(px, skin = 'lizard') {
   </div>`;
 }
 
+// Layers from scripts/build-catfish.py. The shadow stays on the ground; only the
+// body flops (whiskers and fins are part of the body drawing, so they ride along).
+// The bead is the sweat drop Cam drew still attached to the back: it sits INSIDE
+// .pa-flop so it rides the body, gets flicked off at the hop, and re-beads
+// during the dwell.
+function catfish(px) {
+  const s = px / CAT_W;
+  return `<div class="petanim" style="width:${px}px;height:${(px * CAT_H / CAT_W).toFixed(1)}px">
+    <div class="pa-stage pa-catfish" style="transform:scale(${s.toFixed(4)})">
+      <div class="pa-art">
+        <img class="pa-fshadow" src="${A}/catfish/shadow.png" alt="">
+        <div class="pa-flop">
+          <img class="pa-fbody" src="${A}/catfish/body.png" alt="">
+          <img class="pa-bead" src="${A}/catfish/bead.png" alt="">
+        </div>
+        <img class="pa-sweat pa-s1" src="${A}/catfish/drop.png" alt="">
+        <img class="pa-sweat pa-s2" src="${A}/catfish/drop.png" alt="">
+      </div>
+    </div>
+  </div>`;
+}
+
 // Returns animated HTML for an animated pet id, or null to fall back to a static image.
 // px = target display width in CSS pixels.
 export function animatedPetHtml(petId, px) {
   if (petId === 'C1') return cloud(px);
+  if (petId === 'C3') return catfish(px);
   if (petId === 'C4') return lizard(px);
   if (petId === 'CX') return lizard(px, 'lizard-amethyst'); // Founder's Lizard (survey reward)
   return null;
 }
 
-export const ANIMATED_PETS = new Set(['C1', 'C4', 'CX']);
+export const ANIMATED_PETS = new Set(['C1', 'C3', 'C4', 'CX']);
 
 /* Pets are sized by WIDTH, which quietly shrinks the flat ones. In a 98px slot the
    cloud's art measures 82x81 while a lizard measures 81x61: a third less creature
@@ -78,6 +104,7 @@ export const ANIMATED_PETS = new Set(['C1', 'C4', 'CX']);
    gives 1.07 instead of the measured 1.32. */
 const ART_H_PER_WIDTH = {
   C1: (CLOUD_H / CLOUD_W) * (183 / CLOUD_H),
+  C3: (CAT_H / CAT_W) * (170 / CAT_H),   // flat and wide, like the lizard
   C4: (LIZ_H / LIZ_W) * (170 / LIZ_H),
   CX: (LIZ_H / LIZ_W) * (170 / LIZ_H),
 };

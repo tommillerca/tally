@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- Bare stage for scripts/capture-petanim.mjs: renders one animated pet at
+     native scale on a transparent page so the harness can seek + screenshot it.
+     Served from the repo root (module import needs http), e.g.
+     http://127.0.0.1:8179/scripts/petanim-stage.html?pet=C3 -->
+<html>
+<head>
+<meta charset="utf-8">
+<!-- petanim.js builds asset URLs relative to the app root, not /scripts/ -->
+<base href="../">
+<link rel="stylesheet" href="app.css">
+<style>
+  html, body { margin: 0; background: none !important; }
+  body::before { display: none !important; }  /* app.css grain overlay */
+  /* app.css sets margin:auto on .petanim; pin it at the origin for a stable clip */
+  .petanim { margin: 0; }
+</style>
+</head>
+<body>
+<script type="module">
+  import { animatedPetHtml } from './js/petanim.js';
+  const q = new URLSearchParams(location.search);
+  const pet = q.get('pet') || 'C3';
+  // px = the native stage width per species, so transform:scale() is 1.
+  const NATIVE = { C1: 222, C3: 261, C4: 273, CX: 273 };
+  const html = animatedPetHtml(pet, Number(q.get('px')) || NATIVE[pet]);
+  if (!html) document.title = 'NOT-ANIMATED';
+  else {
+    document.body.insertAdjacentHTML('beforeend', html);
+    Promise.all([...document.images].map(i => i.decode()))
+      .then(() => { document.title = 'READY'; });
+  }
+</script>
+</body>
+</html>

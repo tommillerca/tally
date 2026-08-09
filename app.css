@@ -3076,7 +3076,7 @@ body::before {
 }
 @media (prefers-reduced-motion: reduce) { .fstage.petpounce { animation: none; } }
 
-/* ===== Animated pets (C1 cloud, C4 lizard) — see js/petanim.js ===== */
+/* ===== Animated pets (C1 cloud, C3 catfish, C4 lizard) — see js/petanim.js ===== */
 /* .petanim reserves the scaled box; .pa-stage is the native-px stage, scaled by JS. */
 .petanim { position: relative; overflow: hidden; flex: none; margin: auto; }
 .pa-stage { position: absolute; top: 0; left: 0; transform-origin: top left; }
@@ -3093,10 +3093,12 @@ body::before {
    which is the "pet cut off on the crew screen" Tom reported three times. */
 .pa-cloud .pa-body, .pa-cloud .pa-eyes, .pa-cloud .pa-closed,
 .pa-lizard .pa-base, .pa-lizard .pa-mouthline, .pa-lizard .pa-drool,
-.pa-lizard .pa-lid, .pa-lizard .pa-tongue, .pa-lizard .pa-fly {
+.pa-lizard .pa-lid, .pa-lizard .pa-tongue, .pa-lizard .pa-fly,
+.pa-catfish .pa-fbody {
   width: 100% !important; height: 100% !important; left: 0 !important; top: 0 !important; }
 .pa-cloud { width: 222px; height: 219px; }
 .pa-lizard { width: 273px; height: 218px; }
+.pa-catfish { width: 261px; height: 206px; }
 
 /* --- cloud --- */
 .pa-cloud .pa-art { position: absolute; left: 18px; top: 18px; width: 186px; height: 183px; }
@@ -3133,6 +3135,40 @@ body::before {
 @keyframes paDrool { 0%,46%{opacity:1} 49.5%,78%{opacity:0} 87%,100%{opacity:1} }
 .pa-fly { animation: paBuzz 6s ease-in-out infinite; }
 @keyframes paBuzz { 0%{transform:translate(0,0)} 20%{transform:translate(-38px,-6px)} 40%{transform:translate(-73px,0)} 55%{transform:translate(-58px,-9px)} 72%{transform:translate(-23px,-4px)} 100%{transform:translate(0,0)} }
+
+/* --- catfish --- */
+/* Cam drew it mid-flop: body airborne over its own ground shadow, one sweat bead
+   still on its back and two flying. The loop completes the story: it lies beached
+   most of the cycle (+18px seats the visible BELLY on the shadow: the belly's wide
+   silhouette bottoms at y132 and the shadow spans y144-170, measured in
+   scripts/build-catfish.py's frame; the first +5px attempt keyed off the whisker
+   -tip bbox and left it levitating), then one flop per loop up through the drawn
+   pose while the two loose drops fly off. Sweat fires WITH the hop so one thing
+   happens at a time. The X eye is a drawn dizzy eye, so there is nothing to blink. */
+.pa-catfish .pa-art { position: absolute; left: 18px; top: 18px; width: 225px; height: 170px; }
+.pa-catfish .pa-flop { position: absolute; inset: 0; animation: paFlop 4.8s ease-in-out infinite; transform-origin: 50% 62%; }
+@keyframes paFlop { 0%,54%{transform:translateY(18px) rotate(0deg)} 57%{transform:translateY(-1px) rotate(-1.6deg)}
+  60%{transform:translateY(-4px) rotate(-2.2deg)} 63%{transform:translateY(0) rotate(-1.2deg)}
+  66.5%{transform:translateY(18px) rotate(.4deg)} 69%{transform:translateY(15px) rotate(.2deg)} 72%,100%{transform:translateY(18px) rotate(0deg)} }
+.pa-catfish .pa-fshadow { left: 68px !important; top: 144px !important; width: 81px !important; height: auto !important;
+             transform-origin: 50% 50%; animation: paFlopShadow 4.8s ease-in-out infinite; }
+@keyframes paFlopShadow { 0%,54%{transform:scale(1);opacity:.85} 60%{transform:scale(.8);opacity:.5}
+  66.5%{transform:scale(1);opacity:.85} 69%{transform:scale(.95);opacity:.75} 72%,100%{transform:scale(1);opacity:.85} }
+.pa-catfish .pa-sweat { height: auto !important; opacity: 0; animation: paSweat 4.8s ease-out infinite; }
+.pa-catfish .pa-s1 { left: 73px !important; top: 0 !important; width: 10px !important; }
+.pa-catfish .pa-s2 { left: 133px !important; top: 5px !important; width: 16px !important; animation-delay: -.08s; }
+@keyframes paSweat { 0%,55%{transform:translateY(6px) scale(.4);opacity:0} 58%{transform:translateY(0) scale(1);opacity:1}
+  64%{transform:translateY(-9px) scale(1);opacity:1} 67.5%{transform:translateY(-13px) scale(1);opacity:0} 68%,100%{transform:translateY(6px) scale(.4);opacity:0} }
+/* The attached bead rides .pa-flop and belongs to the same water cycle as the
+   free drops: gone through the dwell, it beads up as the wind-up RIGHT before
+   the flop (42-52%), rides the launch, and is flicked off with the rest of the
+   sweat. No mid-dwell regrowth (Tom: it came back too early and grew on its
+   own, which read as separate water). */
+.pa-catfish .pa-bead { left: 61px !important; top: 14px !important; width: 15px !important; height: auto !important;
+             transform-origin: 50% 100%; opacity: 0; animation: paBead 4.8s ease-out infinite; }
+@keyframes paBead { 0%,42%{transform:translate(0,0) scale(.3);opacity:0} 52%,54%{transform:translate(0,0) scale(1);opacity:1}
+  58%{transform:translate(-2px,-10px) scale(1);opacity:1} 63%{transform:translate(-4px,-18px) scale(1);opacity:0}
+  63.5%,100%{transform:translate(0,0) scale(.3);opacity:0} }
 
 /* ---- ultra-rare SHINY pet variant ---- */
 .pet-shiny-wrap { position: relative; display: inline-flex; }
@@ -6440,3 +6476,9 @@ body::before {
    applied by JS and ALWAYS applied, cap included, so a broken image degrades to
    ugly rather than to a blank tab. */
 /* (the Stable ring and Crew fan are covered by the router/sheet rule above) */
+
+/* A shiny of an animated species reuses the animation and recolours it (see
+   SHINY_TINT in js/app.js, measured off the art). display:contents so the tint
+   wrapper adds no box of its own and the existing sizing is untouched. */
+.pa-shiny { display: contents; }
+.pet-shiny-wrap > .pa-shiny { display: block; }

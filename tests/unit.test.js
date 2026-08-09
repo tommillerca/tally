@@ -636,6 +636,36 @@ test('map markers: no transform animation on a MapLibre marker root', () => {
   assert.deepEqual(bad, [], 'these animate transform on a marker root and will teleport the marker:\n  ' + bad.join('\n  '));
 });
 
+/* THE GLUTTON IS A GEAR CHECK, NOT A WALL. Tom, 2026-08-08: "I want to include
+   the glutton art work in the infinite pit ladder. He should be a formidable boss
+   that is a gear check on players every so often" -> "every 10 rungs, no
+   punishment on losing, just the usual."
+   Three properties, and the third is the one that rots silently: a FLAT bonus was
+   a 21% step at rung 10 but only 12% by rung 30 and ~4% by rung 100, so he would
+   stop being a check exactly where the ladder becomes the only content left.
+   PROVE-RED: change the multiplier back to `+ 0.34` and CONSISTENT fails. */
+test('endless: the Glutton lands every 10 rungs and stays a real step at every tier', async () => {
+  const pit = await import('../js/pit.js');
+  for (const r of [10, 20, 30, 50, 100]) {
+    assert.ok(pit.isGluttonRung(r), `rung ${r} should be a Glutton rung`);
+    assert.equal(pit.endlessFoe(r).glutton, true, `rung ${r} foe should be the Glutton`);
+  }
+  for (const r of [1, 9, 11, 19, 21, 99]) {
+    assert.ok(!pit.isGluttonRung(r), `rung ${r} must NOT be a Glutton rung`);
+    assert.ok(!pit.endlessFoe(r).glutton, `rung ${r} foe must be an ordinary climber`);
+  }
+  // he brings his own art rather than a generated skeleton
+  assert.match(pit.endlessFoe(10).art || '', /glutton/, 'the Glutton rung should carry his artwork');
+  // CONSISTENT: the same bump at rung 10 and rung 100
+  const step = r => pit.endlessFoe(r).mult / pit.endlessFoe(r - 1).mult - 1;
+  for (const r of [10, 50, 100]) {
+    assert.ok(step(r) > 0.15, `rung ${r} step ${(step(r) * 100).toFixed(1)}% is too small to be a check`);
+    assert.ok(step(r) < 0.30, `rung ${r} step ${(step(r) * 100).toFixed(1)}% is a wall, not a check`);
+  }
+  // and he must still be on the ladder's own curve, not a spike that never scales
+  assert.ok(pit.endlessFoe(100).mult > pit.endlessFoe(50).mult, 'the Glutton scales with the ladder');
+});
+
 // ---- boss dens (the bone road, reimagined) ----
 const poi = await import('../js/poi.js');
 /* Dens RELOCATE weekly (Tom, 2026-08-08). This test used to assert the exact
