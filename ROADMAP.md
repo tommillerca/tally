@@ -942,3 +942,66 @@ verbatim. Organised by what the answer actually is, not by the order raised.
     Applies to store copy, the site, onboarding and any share card.
 18. **No disease names on monsters or items.** Applies to the whole catalogue and
     to any future boss naming pass.
+
+## The Hooded Wraith (concept in, art due 2026-08-09)
+
+Tom: "later today we will have this new enemy for the pit and for world encounters
+like boss dens. rough it into the fights size wise and also come up with some
+different move sets and fighting techniques for this guy."
+
+### Size, measured in a real fight
+
+Roughed in against `__denFight` with the concept art knocked out of its
+background. Numbers, not guesses:
+
+| | |
+|---|---|
+| Arena | 398 x 258 |
+| A normal fighter's stage | 112 x 112 (`.fstage`; the `.fighterG` column width does nothing on its own) |
+| The Glutton, the only existing precedent | `#foeStage.glutton-foe` 176 x 134 |
+| **Proposed: the Wraith** | **212 x 190, lifted 26px off the floor** |
+
+At 212 it is **74% of the arena height and 1.84x the player**, with headroom left.
+176 (61%, 1.41x) does not read as a boss next to the Glutton. 240 (83%, 2.22x)
+clips the hood on a 258px arena. It gets its own detached floor shadow because
+**it floats** — the concept art has no legs and draws its shadow well below the
+robe. That single staging beat is what sells it as different from every other foe.
+The meeting note "shrink the player for drama" works here: the player's stage
+scales to 0.92 while a Wraith is on screen.
+
+### Fighting technique: it is a caster and a summoner, not a bruiser
+
+Everything below is read off the drawing: hood, no face but two pinpoint eyes, an
+outstretched clawed hand crackling with energy, a crossed-bone amulet on a cord,
+and no legs.
+
+| Move | What it does | What it checks |
+|---|---|---|
+| **Grasp** | filler. Drains a little Stamina and heals itself for what it takes | stamina-engine builds, which currently trivialise cost |
+| **Hollow Bolt** | magic damage that **ignores physical Armor** | Spell Armor / Reflex. The Glutton checks your gear; this checks a stat most players never think about |
+| **Wail** | your healing is **halved for 2 turns** | lifesteal stacking, which the balance audit named as the top exploit. A boss that exists to check the strongest thing in the game |
+| **Rise** | summons 1-2 lesser skeletons that act on their own | target priority. Reuses the `add` slot and the two-target HUD fixed in v341 |
+| **Fade** | untargetable for one turn; your attacks pass through | whether you can spend a turn on setup instead of damage |
+| **Reap** | telegraphed heavy hit that scales with **how much Stamina you have LEFT** | inverts the hoarding instinct: running dry is safe, sitting on a full bar is not |
+
+**The amulet is the mechanic.** It is drawn on the sprite, so it can visibly
+break. While it is intact the Wraith can cast Wail and Rise. A **crit** shatters
+it and disables both for the rest of the fight. That gives crit/Reflex builds a
+job no other fight gives them, and it gives the player a visible objective instead
+of a health bar to grind.
+
+**It floats, so it cannot be staggered or knocked down.** Concussive and every
+stagger effect simply do nothing. One rule, follows from the art, readable without
+a tooltip.
+
+**Placement:** a Pit rung boss (the Spell-Armor check) and a world encounter in
+boss dens (where Rise and the two-target HUD earn their keep).
+
+**Balance is measured, not argued.** Every number above goes through
+`tests/fight-sim.mjs` before it ships; my theories about this game's balance have
+been disproved by that sim before.
+
+**Blocked on:** the final art. The concept
+(`~/Documents/Cam (Claude)/boneyard-creatures/hooded-wraith.jpg`) has a baked
+background and is a red line sketch, so it is a stand-in only. Needs the same
+treatment as the Glutton: transparent PNG, an idle and a combat pose.
