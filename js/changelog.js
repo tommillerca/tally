@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 342, date: '2026-08-09', title: 'Out there today, tidied', items: [
+    'The <b>new cosmetics</b> are back on Today. A ripe crop in the Bone Garden used to take their place, so if you were growing anything you never saw the drop at all.',
+    'The <b>Puffer Pack</b> and <b>Glutton</b> banners are gone from Today. The Glutton is out on the map where you find him, not on a card advertising himself every morning.',
+  ] },
   { n: 341, date: '2026-08-08', title: '63 new cosmetics, live now', items: [
     'The new cosmetics have <b>real names</b> now, so you can tell a Gold Halo from a Party Cone in your wardrobe.',
     'Boss dens with <b>two enemies</b> show a proper health bar for the second one. It was rendering at zero height, so there was nothing to see.',

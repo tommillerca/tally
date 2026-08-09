@@ -3965,17 +3965,6 @@ body::before {
 @keyframes gluttonHaloPulse { 0%, 100% { opacity: .82; } 50% { opacity: 1; } }
 .map-glutton-mark.inrange img { filter: drop-shadow(0 0 12px rgba(165,232,71,.85)) drop-shadow(0 5px 8px rgba(0,0,0,.7)); }
 
-/* Glutton banner expanded body: real hero art + map visual (v-glutton fix) */
-.gbn-hero { width: 66%; max-width: 220px; margin: 4px auto 6px; }
-/* MUST stay positioned (relative) + clip: the hero's glow/bubbles are absolutely
-   positioned with %-based insets. If this is `static`, they resolve against a
-   far-up ancestor and the green radial glow balloons across the whole screen,
-   landing on the macro/wellness cards (Android bug report, v218). */
-.gbn-hero .glutton-hero { position: relative; width: 100%; margin: 0; overflow: hidden; }
-.gbn-maplabel { font-size: 10px; letter-spacing: .16em; color: var(--text-3); text-transform: uppercase; font-weight: 800; margin: 8px 0 6px; }
-.gbn-map { border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); margin-bottom: 10px; }
-.gbn-map svg { display: block; width: 100%; height: auto; }
-
 /* SLIMED gear: the rare green-glowing variant only the Glutton drops. Sits on
    top of the normal rarity styling so you can still read the piece's tier. */
 .ward-cell.slimed { border-color: rgba(159, 176, 78, .95); box-shadow: 0 0 14px rgba(120, 200, 60, .5), inset 0 0 12px rgba(120, 200, 60, .18); }
@@ -4168,25 +4157,12 @@ body::before {
 .drop-row .drop-fit:nth-child(1) { transform: rotate(-8deg) translate(26px, -4px) scale(0.85); }
 .drop-row .drop-fit:nth-child(2) { transform: rotate(6deg) translate(-2px, 2px) scale(1.05); z-index: 2; }
 .drop-row .drop-fit:nth-child(3) { transform: rotate(10deg) translate(-30px, -8px) scale(0.82); }
-.drop-row.sm { height: 118px; margin: 6px 0 10px; }
-.drop-row.sm .drop-fit { width: 106px; height: 106px; }
 .drop-cta { display: block; width: 100%; border: 0; border-radius: 16px; padding: 15px;
   font-family: var(--display); font-size: 20px; letter-spacing: 0.05em;
   background: var(--accent); color: var(--accent-ink); }
 .drop-later { display: block; width: 100%; background: none; border: 0; color: var(--text-3);
   font-size: 14px; padding: 12px 0 2px; }
 
-/* pinned Today banner (glutton-banner skeleton, drop skin) */
-.drop-banner summary .gbn-txt i { color: var(--accent); }
-.drop-ico { border-color: rgba(255, 201, 97, .4); background: #14100a; }
-/* one zoomed piece, the glutton-hero pattern. The first version put a layered
-   .drop-fit <span> here; outside a flex container a span stays inline, so its
-   width/height were ignored and the icon collapsed to an empty box. That reached
-   Tom's phone because the check read the banner's TEXT and never its pixels. */
-.drop-ico img { position: absolute; width: 242%; left: 50%; top: 50%; transform: translate(-40.7%, -23.4%); }
-/* 242% / -40.7% / -23.4% are MEASURED from H13-2.png's alpha bbox (art spans 38%
-   of the canvas, centred at 40.7%,23.4%), so the fish fills the box instead of
-   hiding in the corner of a mostly-empty layer canvas. */
 
 /* shop section: a COLLAPSED disclosure. Featured stock should not shove the coin
    shop down the page every time someone opens the tab, so it starts closed and
@@ -4743,11 +4719,10 @@ body::before {
    The eyebrow is still the feature's name, so it stays: just quieter, tighter, and
    in ONE colour. Four different accent eyebrows spent the accent on four things at
    once, and this system's accent is supposed to mark the single next action. */
-/* `.drop-banner summary .gbn-txt i` and `.spire-banner summary .gbn-txt i` each
-   set their own accent and both outrank a plain `.out-there .gbn-txt i`, so the
-   quiet treatment has to match their specificity or three of the four rows keep
-   shouting. Measured, not guessed: the confirm pass reported two different eyebrow
-   colours in a card that is supposed to have one. */
+/* `.spire-banner summary .gbn-txt i` sets its own accent and outranks a plain
+   `.out-there .gbn-txt i`, so the quiet treatment has to match its specificity or
+   the row keeps shouting. Measured, not guessed: the confirm pass reported two
+   different eyebrow colours in a card that is supposed to have one. */
 .out-there .glutton-banner > summary .gbn-txt i {
   font-size: 9px;
   letter-spacing: .12em;

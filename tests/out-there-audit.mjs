@@ -1,57 +1,96 @@
-/* Confirm pass. The accent rule is only real if a waiting row looks different
- * from a quiet one, so capture BOTH states and assert the colours differ. */
+/* "Out there today" on the Today screen.
+ *
+ * Tom, 2026-08-09: "why does out there today on today page not have the new gear
+ * drop anymore? Get rid of the puffer pack banner and glutton banner".
+ *
+ * The drop row was gone because it SHARED ONE SLOT with the Bone Garden: the
+ * teaser only rendered when nothing was ripe, so any ripe crop silently replaced
+ * the newest cosmetics with a gardening reminder. That is the whole bug, and it
+ * is why the RIPE case below is the check that matters. It is proven red against
+ * the old ternary.
+ *
+ * Run: node tests/out-there-audit.mjs [baseUrl]
+ */
 import { boot, sleep } from './godmode.js';
-const DIR='/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
-const { browser, page } = await boot(process.env.URL);
-let bad=0; const check=(l,ok,d='')=>{console.log(`${ok?'ok  ':'FAIL'} ${l}${d?'  '+d:''}`); if(!ok)bad++;};
-const hush = () => page.evaluate(() => {
-  document.querySelector('.dw')?.remove(); document.querySelector('.drop-veil')?.remove();
-  const t=document.getElementById('toast'); if(t){t.hidden=true;t.textContent='';}
-  const s=document.createElement('style'); s.textContent='.demo-badge,#demoBadge{display:none!important}#toast{display:none!important}'; document.head.appendChild(s);
-});
-const read = () => page.evaluate(() => {
-  const card=document.querySelector('.card.out-there');
-  if(!card) return {none:true};
+
+const base = process.argv[2] || 'http://localhost:8765/';
+const fails = [];
+const ok = (name, pass, detail = '') => {
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
+  if (!pass) fails.push(name);
+};
+
+// Put a ripe crop in the ground the way the garden itself stores one, so
+// cropsReady() answers honestly instead of being stubbed.
+async function setCrops(page, ripe) {
+  await page.evaluate(async n => {
+    const db = await import('./js/db.js');
+    const plots = [];
+    for (let i = 0; i < n; i++) plots.push({ ing: 'marrow', plantedAt: Date.now() - 9e6, readyAt: Date.now() - 6e6, watered: true });
+    while (plots.length < 3) plots.push(null);
+    await db.kvSet('garden', { plotsOwned: 3, plots, seeds: {}, composts: { date: '', used: 0 } });
+  }, ripe);
+  await page.evaluate(() => { location.hash = '#/pit'; });
+  await sleep(400);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1400);
+}
+
+const readCard = page => page.evaluate(() => {
+  const card = document.querySelector('.card.out-there');
+  if (!card) return { missing: true };
+  const rows = [...card.querySelectorAll(':scope > details, :scope > .glutton-banner')];
   return {
-    height: Math.round(card.getBoundingClientRect().height),
-    title: card.querySelector('.ot-head')?.textContent.trim(),
-    rows: [...card.querySelectorAll('.glutton-banner')].map(b => ({
-      name: b.querySelector('.gbn-txt i')?.textContent.trim(),
-      line: b.querySelector('.gbn-txt b')?.textContent.trim().slice(0,34),
-      eyebrow: getComputedStyle(b.querySelector('.gbn-txt i')).color,
-      action: b.classList.contains('has-action'),
+    missing: false,
+    rows: rows.map(r => ({
+      cls: r.className,
+      text: (r.querySelector('.gbn-txt')?.innerText || '').replace(/\s+/g, ' ').trim(),
     })),
+    html: card.innerHTML.length,
   };
 });
-// STATE A: nothing waiting
-await page.evaluate(() => { location.hash='#/today'; }); await sleep(2400); await hush();
-const quiet = await read();
-console.log('QUIET:', JSON.stringify(quiet.rows.map(r=>`${r.name}|${r.action?'ACT':'--'}|${r.eyebrow}`)));
-check('one card, not four', !quiet.none && !!quiet.title, quiet.title);
-check('all four features still listed', quiet.rows.length === 4, `${quiet.rows.length} rows`);
-check('with nothing waiting, no row claims the accent', quiet.rows.every(r=>!r.action));
-const eyeColors = new Set(quiet.rows.map(r=>r.eyebrow));
-check('and every eyebrow is the same quiet colour', eyeColors.size === 1, [...eyeColors].join(' / '));
-let el = await page.$('.card.out-there'); await el.screenshot({ path: `${DIR}/ot-quiet.png` });
 
-// STATE B: crops ready -> that row must light up AND lead
-await page.evaluate(async () => {
-  const db=await import('./js/db.js'), g=await import('./js/garden.js');
-  await g.grantSeed('graveroot',1); await g.plantSeed('graveroot');
-  const raw=await db.kvGet('garden'); raw.plots=raw.plots.map(p=>p?{...p,readyAt:Date.now()-1000}:p);
-  await db.kvSet('garden', raw);
+const { browser, page } = await boot(base);
+const errs = [];
+page.on('pageerror', e => errs.push(e.message));
+
+await page.evaluate(() => { location.hash = '#/today'; });
+await sleep(1500);
+
+/* ---- 1. with NOTHING ripe: the drop row is there, the two dead rows are not ---- */
+await setCrops(page, 0);
+let card = await readCard(page);
+ok('the Out there card renders', !card.missing);
+const dry = card.rows.map(r => r.cls).join(' | ');
+ok('no Glutton row', !card.rows.some(r => /glutton-banner$/.test(r.cls.trim()) && /Glutton/i.test(r.text)), dry);
+ok('no Puffer Pack row', !card.rows.some(r => /drop-banner/.test(r.cls) || /Puffer/i.test(r.text)), dry);
+ok('the cosmetics drop row is there (nothing ripe)', card.rows.some(r => /teaser-banner/.test(r.cls)), dry);
+
+/* ---- 2. with crops RIPE: BOTH the garden row and the drop row show ----
+   This is the regression Tom hit. Against the old code the drop row is absent
+   here, so this assertion is what goes red. */
+await setCrops(page, 2);
+card = await readCard(page);
+const wet = card.rows.map(r => r.cls).join(' | ');
+ok('the garden row appears when a crop is ripe', card.rows.some(r => /garden-banner|garden/.test(r.cls) || /crop/i.test(r.text)), wet);
+ok('the cosmetics drop row SURVIVES a ripe crop', card.rows.some(r => /teaser-banner/.test(r.cls)), wet);
+
+/* ---- 3. the surviving row still opens and still composes its art ---- */
+const opened = await page.evaluate(async () => {
+  const d = document.querySelector('.card.out-there details.teaser-banner');
+  if (!d) return { no: true };
+  d.querySelector('summary').click();
+  await new Promise(r => setTimeout(r, 900));
+  const imgs = [...d.querySelectorAll('.tz-strip img')];
+  return { no: false, open: d.open, imgs: imgs.length, decoded: imgs.filter(i => i.naturalWidth > 0).length };
 });
-await page.reload({ waitUntil:'networkidle2' }); await sleep(2800); await hush();
-const busy = await read();
-console.log('BUSY :', JSON.stringify(busy.rows.map(r=>`${r.name}|${r.action?'ACT':'--'}|${r.eyebrow}`)));
-const garden = busy.rows.find(r=>/garden/i.test(r.name||''));
-check('the ready crop row takes the accent', !!garden && garden.action, JSON.stringify(garden));
-check('and its eyebrow colour actually differs from the quiet rows',
-      garden && garden.eyebrow !== quiet.rows[0].eyebrow, `${garden?.eyebrow} vs ${quiet.rows[0].eyebrow}`);
-check('urgency reorders: the waiting row moves up', busy.rows.findIndex(r=>/garden/i.test(r.name||'')) < 2,
-      busy.rows.map(r=>r.name).join(' > '));
-el = await page.$('.card.out-there'); await el.screenshot({ path: `${DIR}/ot-busy.png` });
-console.log(`\nheights: quiet ${quiet.height}px, busy ${busy.height}px`);
+ok('the drop row expands', !opened.no && opened.open === true);
+// an empty sample set is a failure, not a pass (anti-regression rule 3)
+ok('its strip decodes real pixels', opened.imgs > 0 && opened.decoded === opened.imgs,
+  `${opened.decoded}/${opened.imgs} decoded`);
+
+ok('no page errors', errs.length === 0, errs.join(' ; '));
+
 await browser.close();
-console.log(bad?`\n${bad} FAILED`:'\nOUT THERE TODAY VERIFIED');
-process.exit(bad?1:0);
+console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
+process.exit(fails.length ? 1 : 0);

@@ -1076,8 +1076,7 @@ function gardenBannerHtml(cropsRipe) {
 
 /* ---------- the drop announcement ---------- */
 // A streetwear-style release card for DROP. Shows on the first 5 launches after
-// the drop lands (kv counter, bumped once per boot), then retires; the pinned
-// banner on Today (dropBannerHtml) carries it from there, glutton-style. Skips
+// the drop lands (kv counter, bumped once per boot), then retires. Skips
 // webdriver unless forced so audits stay quiet, and follows the house popup
 // etiquette: never over the splash, the wheel, or an open sheet.
 const DROP_SEEN_KEY = `dropSeen.${DROP.id}`;
@@ -1275,21 +1274,6 @@ function cosmeticTeaserBannerHtml() {
       </div>
       <p class="glutton-mech"><b>The biggest drop this game has had.</b> Every crate can drop them, starting today.</p>
       <p class="glutton-mech tz-more">And we are nowhere near done.</p>
-    </div>
-  </details>`;
-}
-
-function dropBannerHtml() {
-  return `<details class="glutton-banner drop-banner">
-    <summary>
-      <span class="gbn-ico drop-ico"><img src="assets/bh/H/H13-2.png" alt=""></span>
-      <span class="gbn-txt"><i>Fresh drop</i><b>${esc(DROP.title)} is live</b></span>
-      <span class="gbn-chev">›</span>
-    </summary>
-    <div class="gbn-body">
-      <div class="drop-row sm">${dropFitHtml('T9-6', 'H13-3')}${dropFitHtml('T9-5', 'H13-2')}${dropFitHtml('T9-8', 'H13-5')}</div>
-      <p class="glutton-mech"><b>${esc(DROP.blurb)}</b> ${esc(DROP.acquire)}</p>
-      <button class="btn ghost" id="dropToShop" style="width:100%">Open the Shop</button>
     </div>
   </details>`;
 }
@@ -2046,16 +2030,7 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#gluttonToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  $('#dropToShop')?.addEventListener('click', () => openCharacter('shop'));
   $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  // Expanding the banner leaves its CTA exactly under the fixed bottom nav, so
-  // taps fall through to the nav (ui-audit hit-test caught this pre-ship; it is
-  // the same failure shape as the Settings-gear/next-day collision). Scroll the
-  // CTA clear the moment the banner opens.
-  $('details.drop-banner')?.addEventListener('toggle', e => {
-    if (e.target.open) $('#dropToShop')?.scrollIntoView({ block: 'center' });
-  });
   /* The teaser strip lives inside a <details>. Its heads are only composed when
      the section is opened: compositing 18 layered stacks on every Today render,
      for a row most people never expand, is work nobody sees. */
@@ -2644,8 +2619,6 @@ function gluttonLoreHtml() {
     <div class="glutton-quote">&ldquo;Plan for what is difficult while it is easy,<br>do what is great while it is small.&rdquo;<br><b>- Sun Tzu&hellip; probably</b></div>
   </div>`;
 }
-// A collapsible teaser banner on Today (above Quests), not a fight entry point:
-// he's a world boss now, only fightable by finding his marker on the live map.
 /* ONE card instead of four competing ones.
  *
  * Today used to stack the Glutton, Dark Spires, the Puffer Pack and the Bone
@@ -2657,7 +2630,12 @@ function gluttonLoreHtml() {
  * They keep their own <details> bodies and their own button ids, so every handler
  * and every expanded panel still works exactly as before. What changes is that
  * they now share one container and are ORDERED BY URGENCY, because a deadline
- * must never sit below a standing offer. */
+ * must never sit below a standing offer.
+ *
+ * 2026-08-09, Tom's call: the Glutton and Puffer Pack rows are GONE. The Glutton
+ * is a world boss you find on the map, so a permanent card advertising him on
+ * Today was a standing offer pretending to be news, and the Puffer Pack stopped
+ * being the current drop some time ago. */
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
   const sieged = held.filter(s => s.siege).length;
   const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
@@ -2669,66 +2647,17 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
     // a siege has a clock on it, so it outranks everything
     { pri: sieged ? 0 : owed ? 30 : soon ? 35 : 45,
       html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
-    // the Glutton's feeding window closes; still time-limited, just less sharp
-    { pri: 10, html: gluttonBannerHtml() },
-    /* The teaser takes the Garden's seat, Tom's call. A ripe crop still outranks
-       it, because that is money rotting on the table and the teaser asks nothing
-       of anyone; with nothing ripe, the teaser is the more interesting row. */
-    ...(cropsRipe
-      ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }]
-      : [{ pri: 25, html: cosmeticTeaserBannerHtml() }]),
-    // evergreen: the shop is not going anywhere
-    { pri: 60, html: dropBannerHtml() },
+    ...(cropsRipe ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }] : []),
+    /* The current drop, ALWAYS. It used to share one slot with the Garden and
+       lose it to any ripe crop, which is exactly why Tom stopped seeing the new
+       drop on Today (2026-08-09). With the Puffer Pack row gone there is room
+       for both, and the newest cosmetics are the thing worth pointing at. */
+    { pri: 25, html: cosmeticTeaserBannerHtml() },
   ].sort((a, b) => a.pri - b.pri);
   return `<div class="card out-there">
     <div class="sect-h ot-head">Out there today</div>
     ${rows.map(r => r.html).join('')}
   </div>`;
-}
-
-function gluttonBannerHtml() {
-  return `<details class="glutton-banner">
-    <summary>
-      <span class="gbn-ico">${gluttonHeroHtml()}</span>
-      <span class="gbn-txt"><i>New on the map</i><b>The Glutton is loose</b></span>
-      <span class="gbn-chev">›</span>
-    </summary>
-    <div class="gbn-body">
-      <div class="gbn-hero">${gluttonHeroHtml()}</div>
-      ${gluttonLoreHtml()}
-      <div class="gbn-maplabel">How the blight reads on the map</div>
-      ${gluttonBlightMapHtml()}
-      <p class="glutton-mech">${gluttonWhenHtml()} He <b>blights</b> the ground he squats on, so nothing spawns near him. Walk out, find him, and fight him there: no button teleports you to him.</p>
-      <button class="btn ghost" id="gluttonToMap" style="width:100%">Open the Boneyard</button>
-    </div>
-  </details>`;
-}
-
-// A stylized "map screenshot" for the banner: the approved feathered-fog blight
-// with the REAL Glutton art at its heart + a couple of Boneyard markers, so the
-// banner shows what the player will see, not just describe it. Asset paths (not
-// base64) so it stays in sync with the shipped art.
-function gluttonBlightMapHtml() {
-  return `<div class="gbn-map"><svg viewBox="0 0 350 150" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <radialGradient id="gbnGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#9fb04e" stop-opacity="0.24"/><stop offset="100%" stop-color="#9fb04e" stop-opacity="0"/></radialGradient>
-      <radialGradient id="gbnCore" cx="45%" cy="45%" r="62%"><stop offset="0%" stop-color="#070a04" stop-opacity="0.9"/><stop offset="55%" stop-color="#111806" stop-opacity="0.5"/><stop offset="100%" stop-color="#111806" stop-opacity="0"/></radialGradient>
-      <filter id="gbnOoze" x="-40%" y="-40%" width="180%" height="180%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="26" xChannelSelector="R" yChannelSelector="G" result="d"/><feGaussianBlur in="d" stdDeviation="4"/></filter>
-      <filter id="gbnMottle" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.04 0.05" numOctaves="4" seed="6" result="t"/><feColorMatrix in="t" type="matrix" values="0 0 0 0 0.22  0 0 0 0 0.27  0 0 0 0 0.09  0 0 0 1.6 -0.55"/></filter>
-      <mask id="gbnMask"><g filter="url(#gbnOoze)" fill="#fff"><ellipse cx="232" cy="92" rx="88" ry="60"/><ellipse cx="176" cy="80" rx="38" ry="28"/><ellipse cx="286" cy="104" rx="40" ry="30"/><ellipse cx="258" cy="54" rx="30" ry="22"/></g></mask>
-    </defs>
-    <rect width="350" height="150" fill="#0d0c13"/>
-    <g stroke="#EAE3D2" stroke-opacity="0.09" stroke-width="4" stroke-linecap="round"><line x1="-10" y1="44" x2="360" y2="44"/><line x1="-10" y1="104" x2="360" y2="104"/><line x1="70" y1="-10" x2="70" y2="160"/><line x1="160" y1="-10" x2="160" y2="160"/></g>
-    <g transform="translate(40,52)"><path d="M0-11c6 0 11 5 11 11 0 8-11 18-11 18S-11 8-11 0c0-6 5-11 11-11z" fill="#e06a86" stroke="#12140a" stroke-width="2.5"/></g>
-    <circle cx="112" cy="34" r="7" fill="#c9a24a" stroke="#12140a" stroke-width="2.5"/>
-    <ellipse cx="232" cy="94" rx="110" ry="80" fill="url(#gbnGlow)"/>
-    <g mask="url(#gbnMask)">
-      <rect x="120" y="10" width="230" height="140" fill="#0a0d07" opacity="0.6"/>
-      <rect x="120" y="10" width="230" height="140" fill="url(#gbnCore)"/>
-      <rect x="120" y="10" width="230" height="140" filter="url(#gbnMottle)" opacity="0.85"/>
-    </g>
-    <image href="assets/bh/glutton/idle.png" x="196" y="52" width="74" height="74" preserveAspectRatio="xMidYMid meet"/>
-  </svg></div>`;
 }
 
 // Which appearance are we on? The window is the source of truth, but a fight that
@@ -11510,7 +11439,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v341'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v342'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
