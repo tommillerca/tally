@@ -580,24 +580,19 @@ async function boot() {
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
-  /* ONE AT A TIME. Tom, 2026-08-08: "the popup is glitching the app and popping
-     up briefly over and over before finally bringing up patch notes."
-     These were fired together and each polled every 500ms for a clear screen, so
-     they RACED: two could pass the "is anything open?" check in the same window
-     and stack, and because they each close with history.back(), unwinding one
-     could pop another off with it. That is the flicker.
-     They queue now, in priority order, and the next one does not begin until the
-     previous has actually closed. Same functions, same rules about when each
-     declines to show; only the scheduling changed. */
-  runBootPopups([
-    maybeShowRenameNotice,     // we owe this player something: goes first
-    maybeShowCosmeticTeaser,   // the drop
-    maybeShowWhatsNew,
-    maybeShowDropPopup,
-    maybeShowGardenPopup,
-    maybeShowSpireIntro,
-    maybeShowRaceIntro,
-  ]);
+  /* Fired together, each self-gating. Tom, 2026-08-08: my v336 queue put a
+     shared "wait for a clear screen" gate in FRONT of these, which stalled the
+     whole line behind the daily wheel for up to 16s and cost him the teaser on
+     his second open. Every one of these already waits for its own clear screen
+     with its own retry budget, and they cannot stack because each checks
+     sheetStack before opening. The extra gate only fought the ones underneath. */
+  maybeShowRenameNotice();
+  maybeShowCosmeticTeaser();
+  maybeShowWhatsNew();
+  maybeShowDropPopup();
+  maybeShowGardenPopup();
+  maybeShowSpireIntro();
+  maybeShowRaceIntro();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -783,30 +778,6 @@ function openCosmeticTeaser() {
   teaserOpen = wrap;
   return wrap;
 }
-/* The boot-popup queue. Each entry is one of the maybeShow* functions: it decides
-   for itself whether it has anything to say, and opens a sheet if so. The runner
-   only guarantees ORDER and EXCLUSIVITY.
-   Waits for the screen to be genuinely idle before starting the next one, and
-   gives up on a stuck entry rather than blocking the rest of the queue forever. */
-const bootPopupIdle = () => !sheetStack.length
-  && !document.querySelector('.dw')
-  && !document.getElementById('splash')
-  && !document.querySelector('.drop-veil');
-async function runBootPopups(list) {
-  for (const fn of list) {
-    // wait for a clear screen (cap: a stuck sheet must not eat the whole queue)
-    for (let i = 0; i < 40 && !bootPopupIdle(); i++) await new Promise(r => setTimeout(r, 400));
-    const before = sheetStack.length;
-    try { await fn(); } catch { /* one popup must never take the rest down */ }
-    // if it opened something, wait for the player to dismiss it before the next
-    for (let i = 0; i < 900; i++) {
-      if (sheetStack.length <= before) break;
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
-}
-
-let teaserFired = false;
 async function maybeShowCosmeticTeaser() {
   try {
     if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
@@ -821,8 +792,15 @@ async function maybeShowCosmeticTeaser() {
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;    // a busy boot must not consume a showing
+        /* Tom, 2026-08-08: "I didn't see the popup on my second open? I said
+           first 10 opens." 60 tries was 30 seconds, after which this gave up
+           SILENTLY, so any open where he read the patch notes or the daily wheel
+           for half a minute simply lost its showing and nothing said so. Waiting
+           is correct (a showing must never be spent while the screen is busy),
+           abandoning is not. Ten minutes of patience, which outlasts anything
+           that legitimately sits in front of it. */
+        if (tries++ < 1200) setTimeout(tick, 500);
+        return;
       }
       if (teaserFired) return;      // one showing per app session, no matter who asks
       teaserFired = true;
@@ -11472,7 +11450,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v336'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v337'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
