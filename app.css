@@ -3313,7 +3313,11 @@ body::before {
 .pack-count:not(:empty) { animation: crLabel .6s ease-out var(--b-count) both; }
 .pack-title { margin-top: 6px; font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .8px; color: var(--text); animation: crLabel .7s ease-out var(--b-title) both; }
 
-.pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; position: relative; touch-action: pan-y; }
+/* touch-action: none, not pan-y. pan-y told the browser that vertical drags
+   belong to a scroller, so a tap that drifted downward got claimed as a scroll
+   and cancelled mid-gesture. The reveal is a full takeover with nothing behind
+   it to scroll, so the card owns every gesture on it. */
+.pack-stage { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; position: relative; touch-action: none; }
 /* the fixed-proportion box the whole sequence is laid out inside */
 .pack-scene { position: relative; width: var(--pc-w); height: calc(var(--pc-w) * 1.986); }
 
@@ -3378,7 +3382,7 @@ body::before {
 .pack-reveal.browsing .pc-ghost.g1 { opacity: .9; }
 .pack-reveal.browsing .pc-ghost.g2 { opacity: .55; }
 
-.pack-tilt { position: relative; z-index: 1; width: 100%; cursor: grab; touch-action: pan-y; }
+.pack-tilt { position: relative; z-index: 1; width: 100%; cursor: grab; touch-action: none; }
 /* the rise out of the crate. Origin is the card's own bottom edge so scaling
    reads as "coming up out of the box", and the perspective for the sway lives
    here so the sway actually gets one. */

@@ -8878,9 +8878,19 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
            follows, so the tap silently did nothing on the one device that matters.
            pointerup with no movement IS the tap. `flung` keeps this and the click
            listener from both firing. */
-        if (Math.abs(dx) < 6) fling(-1);
-        else if (Math.abs(dx) > 60) fling(dx < 0 ? -1 : 1);
-        else settle();
+        /* NO DEAD ZONE. Tom, 2026-08-08: "the swipe and tap to see the next item
+           is still glitchy as fuck, it takes multiple tries to get to the next
+           item. This friction cannot be in our biggest dopamine hook."
+           It was a 54px hole: under 6px counted as a tap, over 60px counted as a
+           swipe, and everything BETWEEN just settled the card back and did
+           nothing. A mouse click lands on one pixel so every desktop test passed,
+           but a thumb rolls 10 to 30px on the way down and up, which is the whole
+           range that did nothing. Measured: 5 of 6 realistic taps were eaten.
+           There is no third meaning here. Every touch on a reveal card means
+           "next", so a long drag flies the way you threw it and everything else
+           advances. Nothing settles back. */
+        if (Math.abs(dx) > 60) fling(dx < 0 ? -1 : 1);
+        else fling(-1);
       };
       tilt.addEventListener('pointerup', end);
       tilt.addEventListener('pointercancel', end);
@@ -11485,7 +11495,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v338'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v339'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
