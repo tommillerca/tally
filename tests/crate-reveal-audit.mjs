@@ -199,6 +199,95 @@ const lastCard = await page.evaluate(async () => {
 ok('LASTCARD the final card flies away like the others before the sheet closes',
   !lastCard.err && lastCard.moved, JSON.stringify(lastCard));
 
+
+/* ---- BEST FIRST ------------------------------------------------------------
+   Tom, 2026-08-08: "the rarest thing should come out of the chest first so it's
+   exciting, in the current order the chests feel like a let down."
+   A hand dealt in roll order usually ENDS on a common, so the card you are left
+   looking at is the worst thing in the crate.
+   PROVE-RED: remove the REVEAL_RANK sort in openPackReveal and this fails,
+   because the fixture below is deliberately handed over worst-first. */
+/* Make sure nothing is still open. An earlier block's reveal survived its close
+   and this test then read ITS card, reporting a stale rarity as a failure of the
+   sort. Drain first, and assert the drain worked. */
+await page.evaluate(async () => {
+  for (let i = 0; i < 6; i++) {
+    if (!document.querySelector('.pack-reveal')) break;
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    await new Promise(r => setTimeout(r, 400));
+  }
+});
+await sleep(600);
+const drained = await page.evaluate(() => !document.querySelector('.pack-card, .pc-card'));
+ok('BEST FIRST the previous reveal actually closed (a stale card would fake this result)', drained, `drained=${drained}`);
+
+const order = await page.evaluate(async () => {
+  window.__crateForce = 1;
+  const worstFirst = [
+    { name: 'A common', rarity: 'common', kind: 'GEAR · HAT', stats: '+1 POW' },
+    { name: 'A rare', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' },
+    { name: 'A legendary', rarity: 'legendary', kind: 'GEAR · HAT', stats: '+18 POW' },
+    { name: 'An uncommon', rarity: 'uncommon', kind: 'GEAR · HAT', stats: '+3 POW' },
+  ];
+  window.__packReveal(worstFirst, { coins: 0 });
+  await new Promise(r => setTimeout(r, 1800));
+  /* The deck can hold more than one node (the rest of the hand stacks behind),
+     so querySelector returns whatever is first in DOM order, not what is on TOP.
+     Read the one inside .pc-rise, which is the card actually being presented. */
+  const rise = document.querySelector('.pc-rise .pack-card, .pc-rise .pc-card');
+  const all = [...document.querySelectorAll('.pack-card, .pc-card')].map(n => n.className);
+  const first = rise ? (rise.className || '') : (all[0] || '');
+  const b = document.querySelector('.pack-reveal .sheet-close');
+  if (b) b.click(); else history.back();
+  await new Promise(r => setTimeout(r, 500));
+  return { firstCardClass: first, allInDom: all };
+});
+ok('BEST FIRST the rarest card is dealt first, whatever order the roll produced',
+  /r-legendary/.test(order.firstCardClass), JSON.stringify(order));
+
+
+/* ---- TAP, WITHOUT A CLICK --------------------------------------------------
+   Tom, 2026-08-08: "tap on chests does not work you have to drag. There should be
+   tap too."
+   The click listener works when a click arrives, which it does in a desktop
+   harness, which is why this looked fine under test while failing on his phone: a
+   touch the browser suspects might be a scroll ends in pointercancel and NO click
+   ever follows. So this fires pointerdown/pointerup only, deliberately WITHOUT a
+   click, which is the real-device case.
+   PROVE-RED: move the tap decision back into the click listener alone and this
+   fails with the card unchanged. */
+await page.evaluate(async () => {
+  for (let i = 0; i < 6; i++) {
+    if (!document.querySelector('.pack-reveal')) break;
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    await new Promise(r => setTimeout(r, 400));
+  }
+});
+await sleep(500);
+const tap = await page.evaluate(async () => {
+  window.__crateForce = 1;
+  window.__packReveal([
+    { name: 'One', rarity: 'legendary', kind: 'GEAR · HAT', stats: '+18 POW' },
+    { name: 'Two', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' },
+  ], { coins: 0 });
+  await new Promise(r => setTimeout(r, 1800));
+  const cardCls = () => (document.querySelector('.pc-rise .pack-card') || {}).className || 'none';
+  const before = cardCls();
+  const tilt = document.querySelector('.pack-tilt');
+  if (!tilt) return { err: 'no card' };
+  const b = tilt.getBoundingClientRect();
+  const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+  tilt.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, clientX: cx, clientY: cy, bubbles: true }));
+  tilt.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: cx, clientY: cy, bubbles: true }));
+  // deliberately NO click event
+  await new Promise(r => setTimeout(r, 900));
+  return { before, after: cardCls() };
+});
+ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
+  !tap.err && tap.before !== tap.after && /r-rare/.test(tap.after), JSON.stringify(tap));
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;

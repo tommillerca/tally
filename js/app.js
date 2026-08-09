@@ -1205,6 +1205,8 @@ function currentTab() {
 let screenCleanup = null;
 
 function route({ keepScroll = false } = {}) {
+  // refresh() passes keepScroll: an in-place re-render, not a navigation
+  const isNav = !keepScroll;
   closeAllSheets();
   try { screenCleanup?.(); } catch { /* never block navigation on teardown */ }
   screenCleanup = null;
@@ -1220,6 +1222,7 @@ function route({ keepScroll = false } = {}) {
   // of the way and nothing sits above the Bonehead.
   if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
   const el = $('#screen');
+  if (isNav) el.classList.remove('screen-in');
   let done;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
   if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
@@ -1239,13 +1242,23 @@ function route({ keepScroll = false } = {}) {
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
     composeAvatars(el);
-    /* A route lands as ONE picture. The class goes on the rendered child so an
-       in-place refresh() never re-triggers it, and it is now applied only once
-       the child's art has DECODED: adding it the instant the DOM existed faded in
-       markup whose images had not arrived, which is why tabs assembled themselves
-       in front of you. revealWhenReady always applies it, cap included, so this
-       can never leave a screen blank. */
-    return revealWhenReady(el.firstElementChild, { cls: 'route-in', cap: 650 });
+    /* A route lands as ONE picture.
+     *
+     * THE CONTAINER, NOT THE FIRST CHILD. The first version of this waited on
+     * `el.firstElementChild`, on the assumption that a screen renders one root
+     * node. Measured, it does not: Crew renders NINE siblings and the first holds
+     * ZERO of the screen's 49 images, Today renders fifteen and the first holds 16
+     * of 41. So the wait resolved instantly against an empty wrapper while every
+     * image that mattered was in a sibling that had never been hidden, and the
+     * screens went on assembling themselves in front of you exactly as before.
+     * Hiding #screen itself is the only version that can see all of them.
+     *
+     * Only on real NAVIGATION. refresh() re-renders in place (logging water,
+     * changing the day, closing a sheet) and hiding the screen for that would
+     * flash the whole tab on every small edit. */
+    const child = el.firstElementChild;
+    if (!isNav) { el.classList.add('screen-in'); child?.classList.add('route-in'); return; }
+    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => child?.classList.add('route-in'));
   });
 }
 
@@ -8306,6 +8319,20 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}) {
   if (!cards.length && !coins) return Promise.resolve();
+  /* BEST FIRST. Tom, 2026-08-08: "the rarest thing should come out of the chest
+     first so it's exciting, in the current order the chests feel like a let down."
+     He is right about the shape of it: a hand dealt in whatever order the roll
+     produced usually ends on a common, so the LAST thing you see -- the one you
+     are left looking at -- is the worst thing in the crate. Opening on the prize
+     makes the crate feel like it paid out, and everything after it reads as
+     extra rather than as decline.
+     Stable within a rarity, so two legendaries keep the order the roll gave them
+     and nothing reshuffles between identical cards. */
+  const REVEAL_RANK = { legendary: 0, epic: 1, rare: 2, uncommon: 3, common: 4 };
+  cards = cards
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => (REVEAL_RANK[a.c.rarity] ?? 9) - (REVEAL_RANK[b.c.rarity] ?? 9) || a.i - b.i)
+    .map(x => x.c);
   // Warm every card's art up front so flicking through a multi-card pack never
   // waits: by the time you tap to advance, the next one is already decoded.
   for (const c of cards) {
@@ -8467,7 +8494,19 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const end = () => {
         if (pid == null) return;
         pid = null;
-        if (Math.abs(dx) > 60) fling(dx < 0 ? -1 : 1); else settle();
+        /* A TAP IS DECIDED HERE, not by waiting for a click. Tom, 2026-08-08:
+           "tap on chests does not work, you have to drag. There should be tap
+           too."
+           The click listener below does work when a click actually arrives, and it
+           does in a desktop harness, which is why this looked fine under test. On
+           a real touch screen a click is not guaranteed: if the browser decides
+           the touch might be a scroll it sends pointercancel and no click ever
+           follows, so the tap silently did nothing on the one device that matters.
+           pointerup with no movement IS the tap. `flung` keeps this and the click
+           listener from both firing. */
+        if (Math.abs(dx) < 6) fling(-1);
+        else if (Math.abs(dx) > 60) fling(dx < 0 ? -1 : 1);
+        else settle();
       };
       tilt.addEventListener('pointerup', end);
       tilt.addEventListener('pointercancel', end);
@@ -11070,7 +11109,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v332'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v333'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

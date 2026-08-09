@@ -3,204 +3,25 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 332, date: '2026-08-08', title: 'Every screen arrives in one piece', items: [
-    'Tabs no longer <b>assemble themselves in front of you</b>. Every screen and every sheet now waits until its artwork has finished loading, then appears all at once.',
-    'This applies <b>everywhere</b>, including screens added later, rather than being fixed one page at a time.',
+  /* ONE ENTRY FOR THE WHOLE DAY. Tom, 2026-08-08: "condense all patch notes over
+     the last 24 hours because we've pushed a lot of updates, TLDR the users."
+     Thirty-nine separate entries shipped in a day, which is a build log, not a
+     what's-new: nobody reads it and the unseen badge screams 39. Collapsed to one
+     entry grouped by what a player would actually notice. The build numbers those
+     entries carried only ever fed the "new since you last looked" dot, so nothing
+     is lost by folding them into the highest one. */
+  { n: 333, date: '2026-08-08', title: 'A big day: new Stable, new Crew, better crates', items: [
+    '<b>The Stable is a carousel.</b> Your pets sit on a turning ring, one in front with its stats and buttons underneath. Flick or tap to move between them. The cloud and both lizards are animated, and every card is tinted by how rare the pet is.',
+    '<b>The Crew tab is a hand of cards.</b> Your friends fan out as trading cards. Star your favourites to pull them to the front, online friends come next, and you can search by name or by a nickname you gave them.',
+    '<b>Crates actually crack open.</b> The crate lands, the lid blows off, light climbs out and your card rises out of the box. The rarest thing you got now comes out <b>first</b>. Tap or swipe each card away to see the next.',
+    '<b>Levelling up is a moment.</b> A burst blooms behind your bonehead, the level steps up, and the XP bar races to full and lands on what you carried into the new level.',
+    '<b>Boss dens move every week</b>, and the Boneyard keeps loading as you look around instead of only showing what is near your feet. Dens, spires and the Glutton also got the roomier 80m reach.',
+    '<b>Ectoplasm is worth something.</b> Two new potions that are the strongest things you can drink, and the Necromancer\'s Feast is no longer a worse deal than just cooking two ordinary dishes.',
+    '<b>Names are one-of-a-kind now</b>, and boss and Glutton loot is rolled for <b>you</b> rather than everyone getting the same drop. Map pickups no longer hand out the same few ingredients forever.',
+    '<b>Every screen loads before it appears</b>, so tabs arrive in one piece instead of assembling themselves in front of you.',
+    'Plus a long list of fixes: eggs that would not hatch, the step race showing wrong totals, boss dens you could beat twice, the Today card, and a lot of small ones.',
   ] },
-  { n: 331, date: '2026-08-08', title: 'Crates open quicker, and close properly', items: [
-    'The crate <b>gets on with it</b>. It used to sit closed for over two seconds before the lid moved; the card now arrives in about half the time.',
-    'Swiping the <b>last card</b> away no longer makes the screen vanish under your thumb. It flies off like every other card, then closes.',
-  ] },
-  { n: 330, date: '2026-08-08', title: 'Levelling up is a moment now', items: [
-    'Hitting a new level takes over the screen: a lime burst blooms behind <b>your</b> bonehead, the level steps up, and the XP bar races to full, flashes, and lands on what you carried into the new level.',
-    'It shows the level you <b>actually came from</b>, including when one meal jumps you several levels at once.',
-  ] },
-  { n: 329, date: '2026-08-08', title: 'Crates crack open', items: [
-    'Opening a crate is a <b>proper moment</b> now: the crate lands, the lid blows off, light climbs out of it and your card rises out of the box. A crate deals a hand, so tap or drag each card away to see the next.',
-    'The <b>daily crate</b> was being cut in the wrong place, so its lid sliced through the box. Fixed by measuring the artwork.',
-    'Swiping between friends in the Crew tab is <b>less twitchy</b>.',
-  ] },
-  { n: 328, date: '2026-08-08', title: 'Drag through your Crew properly', items: [
-    'Dragging the fan sideways now <b>moves you through your friends</b> as you go, and a longer drag travels further. It used to slide the whole deck as one block, spring back, and move you exactly one friend however far you dragged.',
-  ] },
-  { n: 327, date: '2026-08-08', title: 'Crew tab fixes', items: [
-    'The Crew tab <b>no longer scrolls sideways</b>. Friend cards flung out to the edges of the fan were hanging off the screen and dragging the whole app with them.',
-    'Dragging the fan up or down now <b>just scrolls the page</b> instead of sliding your friends sideways at the same time.',
-  ] },
-  { n: 326, date: '2026-08-08', title: 'Your Crew is a hand of cards now', items: [
-    'The Crew tab now greets you with your friends as a <b>fan of trading cards</b>: their fit, their backdrop, their pet, their level. Swipe the fan or tap a card to flip through them; tap the middle card to open their profile.',
-    '<b>Star your favourites</b> and they sort to the front of the fan, get a gold star on their card, and live as one-tap skull chips above the deck so they are always easy to find.',
-    'Cheering and gifting whoever is front and centre is now <b>one tap</b>, right under the fan.',
-    'The leaderboard, the Step Race, requests and your friend code all still live on the tab, right below the fan.',
-  ] },
-  { n: 325, date: '2026-08-08', title: 'The Stable stops stuttering', items: [
-    'Only the pet you are <b>currently looking at</b> animates. Two of the same species side by side were running the identical loop in perfect lockstep, which looked cheap, and the Stable was paying to animate six of them at once.',
-    'Everything <b>holds still while the ring is moving</b>, and the motion blur switches itself off if your phone is struggling. Smooth movement matters more than the effect decorating it.',
-  ] },
-  { n: 324, date: '2026-08-08', title: 'Pets move in the Stable', items: [
-    'The <b>cloud and both lizards</b> use their animated art in the Stable instead of a still. Shiny pets keep their recoloured art, since there are no animated shinies.',
-    'Each card is <b>tinted by rarity</b>, so you can read how rare a pet is off the card itself.',
-  ] },
-  { n: 323, date: '2026-08-08', title: 'Bigger pets, and the swipe stops hiccuping', items: [
-    'Letting go of a fast swipe no longer <b>stalls for a beat</b> before settling. The carousel was braking to a standstill the instant you released and then starting again; it now carries your speed straight through.',
-    'Pets are <b>bigger</b>, and the cards <b>sit closer together</b> so the Stable reads as one deck rather than three separate tiles.',
-  ] },
-  { n: 322, date: '2026-08-08', title: 'Smoother Stable, and the confetti is gone', items: [
-    'Swiping and flicking the Stable <b>stopped lagging</b>. The carousel was re-measuring a card on every single card, every frame, which forces the browser to redo its layout each time.',
-    'The motion blur is <b>much lighter</b>. It was overstating how fast things were actually moving.',
-    'The <b>dot</b> showing which pet you are on is round again instead of a clipped lozenge.',
-    '<b>Confetti has been retired</b> across the whole game: levelling, crates, breeding, friend accepts, the wheel and boss loot.',
-  ] },
-  { n: 321, date: '2026-08-08', title: 'Swiping the Stable feels right now', items: [
-    '<b>Tap a pet</b> to either side to bring it forward, or swipe. Tapping did nothing before.',
-    'A <b>hard flick travels further</b> than a gentle push, instead of always moving exactly one pet however hard you threw it.',
-    'Swiping sideways no longer <b>scrolls the page at the same time</b>. A gesture is now either a spin or a scroll, decided once.',
-    'The blur while cards move is <b>directional and much lighter</b>, and only on the cards that are actually moving. The pet you are looking at stays sharp.',
-    '<b>Equipping a pet</b> closes the talents panel and puts you back on your pet, big, with its stats.',
-  ] },
-  { n: 320, date: '2026-08-08', title: 'The Stable moves properly now', items: [
-    'The carousel <b>eases in and out</b> instead of lurching off the mark and creeping into place. Spinning to a pet a few places away takes a little longer than nudging to the one next door, the way it should.',
-    'Cards pick up a touch of <b>motion blur</b> while they move, more on the outer ones because they travel further, and none at all once things settle. Turned off entirely if you have reduced motion switched on.',
-  ] },
-  { n: 318, date: '2026-08-08', title: 'Ectoplasm is worth something now', items: [
-    'Two new <b>Ectoplasm potions</b>, and they are the strongest things you can drink. <b>Revenant\'s Draught</b> restores 60% HP and puts up a 50-point shield in one action. <b>Spectral Fury</b> is +50% damage for 4 turns plus a full Stamina refill.',
-    'The four everyday potions are <b>unchanged</b> and still cost commons, so nothing you already brew got harder.',
-    'The <b>Necromancer\'s Feast</b> was a trap: it cost more and cooked four times longer than simply making two ordinary dishes, and gave you less. It is now +25% damage, +35 Hype and lasts 4 fights, and cooks in 2 hours instead of 3.',
-    'The Stable\'s talents panel now <b>eases open</b> instead of snapping.',
-  ] },
-  { n: 317, date: '2026-08-08', title: 'The Stable is a carousel now', items: [
-    'Your pets sit on a <b>turning ring</b> instead of a long list. One pet is in front with its stats and its buttons underneath, and you flick or tap to bring another forward. No more scrolling past six pets to reach the one you were thinking about.',
-    '<b>Talents and breeding</b> open underneath without leaving the ring: it shrinks and stays on top, so you never lose track of which pet you are editing.',
-    'Every pet is drawn at the <b>same visual size</b>. A flat pet used to come out noticeably smaller than a round one in the same tile.',
-  ] },
-  { n: 316, date: '2026-08-08', title: 'The icon stops vanishing when you get close', items: [
-    'Walking into range of a <b>mini-boss, boss den or bone pile</b> made its icon disappear off the map, leaving only the button at the bottom. It was not hidden: the glow animation was fighting the map for control of where the marker sits, and the map lost, so the icon was flung into the top-left corner behind the header.',
-    'Now the icon <b>stays where it belongs and pulses</b> when you are close enough to act on it, and the button is still there too. Both, so you can see what you are walking up to.',
-  ] },
-  { n: 314, date: '2026-08-08', title: 'Your name, your loot, your ground', items: [
-    'Two players could take the <b>same name</b>. There was no uniqueness check at all, and it was never bad luck: everyone reaches for the same joke, so the funniest combination is the one that collides. Names are now first-come, and if yours is taken the app offers you the next free number.',
-    'Boss dens and the Glutton were handing <b>everyone the same drop</b>. The roll was seeded by the boss and the day with nothing about you in it, so two players who beat the same den got the identical two pieces. Drops are yours now.',
-    'A <b>Battle Charm</b> can no longer be used while one is already running. It used to quietly eat a second charm and stack the timer, which never made the bonus bigger. The button now reads ACTIVE and your spare stays in your bag.',
-    'Map pickups gave <b>the same few ingredients</b> forever. Each kind of pile could only ever drop two of the six, so four were simply unreachable from it. Coin piles still lean salt and peppers, bone piles still lean marrow and sinew, but anything can turn up now.',
-    'Your bonehead\'s <b>shadow sits under his shoes</b> now. It was drawn 8px below his soles and 5% to the right of them, because it was being centred on the card instead of on him, which made him look like he was hovering just above his own shadow.',
-  ] },
-  { n: 313, date: '2026-08-08', title: 'The dens move, and the map keeps going', items: [
-    'Boss dens now <b>relocate every week</b>. They used to sit on the same spot forever and only swap which boss was home, so the weekly refresh was invisible unless you read the name. New week, new places to walk to. They have already moved for this week.',
-    'The Boneyard <b>keeps loading as you look around</b>. Dens, spires, minis and secrets used to only ever exist in a small bubble around your own feet, so dragging the map showed you empty ground no matter how far you went. Now the world fills in wherever you are looking.',
-    'Nothing you only <b>looked</b> at counts as reached. Range is still measured from where you are actually standing.',
-  ] },
-  { n: 312, date: '2026-08-08', title: 'Boss dens got the bigger radius too', items: [
-    'The roomier <b>75m reach</b> only ever applied to finds on the ground. Boss dens, Dark Spires, the Glutton and roaming minis were all left on their old, tighter range, which meant the things you make a special trip for were <b>harder to stand on than a random pickup</b>. Dens, spires and the Glutton are 80m now, and minis match finds at 75m.',
-    'Secret dens are deliberately left tight. Having to be almost on top of one is the point of them.',
-  ] },
-  { n: 310, date: '2026-08-08', title: 'Eggs that would not hatch', items: [
-    'An egg could get <b>permanently stuck</b>: if your step history ever came back smaller than it was (a restore, or a reinstall), the egg was measuring against a number your phone no longer had, so its bar sat still no matter how far you walked. Those eggs re-anchor and start counting again the next time you open your Backpack.',
-    'An egg that is not moving because your <b>steps are not reaching the app</b> now says so, instead of showing a bar that never fills.',
-    'The welcome egg handed to new players is <b>actually ready</b> to crack.',
-  ] },
-  { n: 309, date: '2026-08-08', title: 'The Boneyard arrives all at once', items: [
-    'Finds on the map were still <b>trickling in after the map appeared</b>. The last one landed almost a second late, with nothing you did to cause it. The map now waits until everything has found its spot, then shows you the whole picture at once.',
-  ] },
-  { n: 308, date: '2026-08-08', title: 'The Today card, composed properly', items: [
-    'Your Bonehead is <b>centred on the card</b> and standing on the ground rather than buried behind the level bar. His feet clear it by design now, not by luck.',
-    'Some pets were <b>getting their beaks and tails clipped</b> by the edge of the card. Wide creatures like the duck and the lizards are scaled up so they read at the same size as the round ones, and that extra width was running off the frame. Every pet fits now, and a new one always will.',
-    'Your pet sits in from the border, and the speech bubble is no longer flush against the frame.',
-  ] },
-  { n: 307, date: '2026-08-08', title: 'Fight HUD, and the daily boss stays beaten', items: [
-    'The <b>daily Remote Den</b> could be fought again after you had already beaten it. It paid almost nothing the second time, but the FIGHT button was still sitting there, which is its own kind of lie. It locks to TOMORROW the moment you win now.',
-    'In fights, <b>both health bars are the same length</b> again. Your pet\'s and the second enemy\'s bars are sized against the fighter above them, so a small health pool looks small without a single number on screen.',
-    'A long boss name is no longer cut off.',
-    'Tapping someone on the <b>leaderboard</b> showed their gear as 0 no matter who they were. It shows the real count now, and their stats.',
-    'The <b>glow on a rare weapon</b> was floating beside the sword instead of on it in the Wardrobe. It has been doing that since the Wardrobe was rebuilt; it is fixed on every screen.',
-    'The Bonehead on the Today card was floating above the ground. He stands on it now.',
-  ] },
-  { n: 306, date: '2026-08-08', title: 'Today is a trading card now', items: [
-    'The home screen is <b>your Bonehead on a card</b>: a cream frame, a bigger stage, and nothing sitting on top of the art. Your level and XP fade into the bottom of the picture instead of taking a solid strip out of it, and the XP bar is a row of pips.',
-    'The four chips across the top became <b>one wallet</b> and a small Trends button, so the card is mostly card.',
-    'Your <b>pet is in the scene</b> now, standing on the same ground with its own shadow. <b>Tap it</b> and it will tell you what it thinks.',
-    'The Garden does not need its own button on Today: the <b>Kitchen door lights up</b> when a crop is ready, and GROW is one tap inside.',
-  ] },
-  { n: 305, date: '2026-08-08', title: 'The Bone Garden gets its own door', items: [
-    'The Garden was a single row buried in the Kitchen, which meant nothing ever told you a crop was ready. It has <b>its own door on Today</b> now, next to the Kitchen, with a count on it when there is something to pick.',
-    'The <b>Kitchen opens on two doors</b>, COOK and GROW, each showing what it is holding: dishes ready, crops ready, beds that want water, seeds you have not planted. Your ingredients sit under both, because GROW makes them and COOK spends them. Cooking is one tap further in than it was.',
-    'The Haunted Kitchen sign is <b>half the size</b> it was, so the doors underneath it lead instead of competing.',
-  ] },
-  { n: 303, date: '2026-08-08', title: 'Spire exploit closed, and the fight HUD reads properly', items: [
-    '<b>You could re-take a Dark Spire you already owned</b> and get paid the full takeover every time, and re-fight a siege that was already broken for the same. Both are closed: the server always knew nothing had changed, the game just was not listening. A repeat now pays pocket change, and a tower you hold no longer offers to be taken.',
-    'In fights, <b>every health bar states its numbers</b>, so the second enemy is no longer a mystery sliver, and a long boss name is not cut off any more.',
-    'A <b>shiny pet</b> no longer has a yellow box drawn around it in the arena. It glows instead.',
-    'A <b>nickname sits beside</b> your friend\'s Bonehead name now instead of replacing it, so you can still see who they actually are.',
-    'When a pet levels up, <b>Pick my talent</b> takes you to that exact pet in the Stable with its tree already open, instead of dropping you at the top of the list.',
-  ] },
-  { n: 302, date: '2026-08-08', title: 'Your Bonehead and your pet, done properly', items: [
-    'A <b>shiny pet now shows up as shiny everywhere</b>. It was being drawn in its base colours on the startup animation, the level-up card, the Bonehead tab, your map marker, the Dark Spire poster and in fights. Six screens, same mistake in each.',
-    'The <b>Today screen is rebuilt</b>. Your Bonehead is centred and nothing crosses him any more: your level and XP moved to their own band underneath instead of sitting over his legs and cutting your pet in half. Your pet stands <b>beside him on the same ground</b>, and the speech bubble comes out of his jaw rather than the top of his head.',
-    'Tapping a <b>Dark Spire</b> shows the keeper\'s pet next to them, in the right colours.',
-  ] },
-  { n: 301, date: '2026-08-08', title: 'Everyone in the race counts the same week', items: [
-    'The Step Race board was showing totals from before the race started. Your steps are counted <b>on your own phone</b>, so anyone who had not updated yet kept sending a number that included days the race had not begun. The board now <b>only ranks totals counted under the current rules</b>, so nobody leads with a head start. If a friend is missing from the standings, they need to open the app once to update.',
-    '<b>You are always on your own board</b> now, with the count from your own phone, even in the seconds before it reaches the server. No more being told nobody has walked a step on a day you walked five thousand.',
-    'Tapping a <b>Dark Spire</b> is a proper poster of whoever holds it: their Bonehead full size on their tower, their pet, the title they earned by holding it that long, and their name on the plate. Take it and it flies yours.',
-    'Your <b>Deliveries</b> history scrolls inside its own box instead of swallowing the Crew tab, so the button that closes it stays where your thumb is.',
-  ] },
-  { n: 295, date: '2026-08-08', title: 'Gifts get opened', items: [
-    'A gift from your Crew now <b>arrives sealed</b>. It waits on the Crew tab with the sender\'s name on it until you open it yourself, and opening it is a proper reveal rather than a number quietly changing.',
-    'Small fixes: your rank name is no longer clipped at the edges on iPhone, the Boneyard\'s icons all appear together instead of the spires arriving late, and tapping a Dark Spire shows the <b>Bonehead of whoever holds it</b>.',
-    'The Crew tab no longer flashes coral behind your Bonehead when you switch to it.',
-  ] },
-  { n: 290, date: '2026-08-08', title: 'The Step Race starts today', items: [
-    'Every Bonehead in the game is now in <b>one race</b>. Most steps in seven days wins, it starts the day you read this, and there is nothing to join: your steps are already counting.',
-    'The board lives on the <b>Crew tab</b>. It is a track, not a table: everyone runs a lane, <b>your own Bonehead is your marker</b>, and it tells you exactly how far behind first place you are and roughly how long a walk that is.',
-    'The <b>top five all get paid</b>. First takes <b>5,000 coins, a Golden Crate and 200 Bone Dust</b>, down to 400 coins and a crate for fifth. Then it starts over.',
-  ] },
-  { n: 288, date: '2026-08-08', title: 'Crow Lord comes back to earth', items: [
-    '<b>Crow Lord was broken.</b> A full Flock pecked for free every turn, never ran out, and won essentially every fight at every difficulty. Crows now <b>leave after they feed</b>, one per peck, so a big Flock is something you keep calling back rather than something you set once. Its damage also goes through armour and wards now, like every other attack in the game.',
-  ] },
-  { n: 287, date: '2026-08-08', title: 'Android gets its face back', needsBuild: true, items: [
-    'The <b>Android app icon</b> was still the generic placeholder from the app framework instead of the Bonehead. It now matches iPhone exactly. You will see it after the next Play Store update lands.',
-    'The Crew tab no longer greets you with an empty box while the standings load, or if it cannot reach the server.',
-  ] },
-  { n: 286, date: '2026-08-08', title: 'The Crew tab, rebuilt around the standings', items: [
-    'The <b>Crew tab now opens on the leaderboard</b>, with the top three and <b>where you stand</b> right there. Your Crew is next, then what has arrived for you. Your own friend code moved to the bottom, where you go looking for it rather than being greeted by it.',
-    '<b>Tap any Dark Spire on the Boneyard</b> to see whose it is: who holds it, the title they have earned for holding it that long, how many days it has stood, and what the tower is worth. If you are close enough, you can take it from there.',
-    '<b>Worth Adding</b> replaces New Boneheadz. It only suggests players who are actually playing, instead of accounts that signed up once and never came back.',
-    'Fixed some <b>code showing up as text</b> on the Activity and Quests cards. Same bug as the protein row last week, in three more places.',
-  ] },
-  { n: 285, date: '2026-08-08', title: 'Cheating death costs something now', items: [
-    '<b>Last Light</b> was making fights unloseable: it revived you with a fifth of your health back, and anything with healing simply topped straight back up. It now leaves you at <b>1 HP</b>, and the wound does not close: <b>all healing on you is halved</b> for the rest of that fight. It is still the strongest capstone in the game, but the fight can be lost again.',
-    'Your <b>Deliveries</b> list no longer treats your whole gift history as unread, and it shows what is actually new instead of burying the Crew tab. The rest is one tap away.',
-    '<b>New Boneheadz</b> shows the newest players you have not added yet, instead of only ever the last seven days (which on most weeks meant nobody).',
-    '<b>Herb patches</b> now grow out on the Boneyard: a new find that always pays seeds for the Bone Garden.',
-    'The level badge on Today is a proper gold plate again, the way it was designed.',
-  ] },
-  { n: 284, date: '2026-08-08', title: 'For the days you cannot get out', items: [
-    'A <b>Remote Den</b>: one boss a day, free, no walking and no location needed. It is the same boss for everyone that day, and beating it counts as a den win, which is what used to keep the Gauntlet locked for anyone who could not get to a real den on the map.',
-    '<b>Workouts feed your eggs and pets now.</b> Recorded exercise minutes count toward hatching, so an hour on the bike or in the gym moves the meter that used to only move by walking.',
-    '<b>Your own routines.</b> Add whatever you want to hold yourself to (stretch, meds, walk the dog) under Daily Wellness on Today, and tick them off. The first three a day pay XP.',
-  ] },
-  { n: 283, date: '2026-08-08', title: 'Balance pass', items: [
-    'Two builds were doing far more damage than anything else in the game, and one of them got further ahead the higher your level went. Both are reined in: the <b>Alchemist\'s Catalyst</b> now has a ceiling on how much your Toxicity can multiply a hit, and there is a cap on how far any stack of buffs can multiply a single attack.',
-    '<b>Gear can no longer hand you a free extra action</b> each turn. Set bonuses still grant moves and damage, but an extra action has to be paid for with a talent point like everyone else pays.',
-    'Nothing you own changed. No stats were reset, no talents refunded, and every other build measured the same before and after.',
-  ] },
-  { n: 282, date: '2026-08-08', title: 'Levels that are worth hitting', items: [
-    'Every level used to pay exactly the same thing. Now <b>every fifth level</b> adds a bonus crate, <b>every tenth</b> adds Bone Dust and a Step Egg on top, and <b>every twenty-fifth</b> is a proper event. It keeps going at 50, 75, 100 and past.',
-    'Milestone levels get their own stamp on the level-up screen, so 25 does not feel like 24.',
-    'On the <b>Boneyard</b>, the line at the top now counts the <b>steps left on your hatching egg</b> instead of how many spawns are nearby. The compass directions are gone: the map already shows you where things are.',
-  ] },
-  { n: 281, date: '2026-08-08', title: 'Nothing gets lost', items: [
-    'Gifts and cheers from your Crew now land in a <b>Deliveries</b> list on the Crew tab. Miss the popup and it is still there, with who sent it and when. Everything anyone has ever sent you is in there already.',
-    'The <b>Crew tab tells you</b> when something is waiting, and clears once you have looked.',
-    'A <b>New Boneheadz</b> section shows players who joined this week, so there is always someone to add.',
-  ] },
-  { n: 280, date: '2026-08-08', title: 'The deep screens get their turn', items: [
-    'The <b>Shop</b> leads with the current drop as a proper poster, and every price is a chip you can read at a glance.',
-    'The <b>Backpack</b> stacks your crates by type so a pile of eight is one card to crack, not eight rows to grind, and an incubating egg finally shows how far it has to go.',
-    '<b>Build</b> is no longer an essay. Your fighter, your armour and each stat sit on their own plates, with real plus and minus buttons for spending training points.',
-    'The <b>Pit</b> opens on the ladder instead of a stack of closed drawers, and a locked rung now tells you what to beat to open it.',
-    'In the <b>Garden</b>, a bed you own looks like soil rather than an empty box, and the one that needs water is the only loud thing on the screen. Tap a bed to water or harvest it.',
-    'Your pets in the <b>Stable</b> are trading cards now: the frame is the rarity, the active one glows, and talents have their own button instead of hiding behind a tap on the card.',
-  ] },
+
   { n: 279, date: '2026-08-07', title: 'Squashing day', items: [
     '<b>The Boneyard behaves.</b> Spawns no longer flash over water while you pan, Dark Spires stand on reachable ground like everything else, and the dead space at the top of the map on newer iPhones is gone.',
     '<b>Fights look right.</b> A slow connection can no longer leave a broken-image box sitting on top of a fighter, and the health bars hold their place no matter how long an enemy\'s name is.',

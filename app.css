@@ -5721,8 +5721,12 @@ body::before {
    broken or slow image degrades to ugly and never to a blank tab.
    This sits on the router, so it covers every screen that exists and every screen
    anyone adds later without them having to know about it. */
-.screen > :first-child { opacity: 0; }
-.screen > .route-in { opacity: 1; animation: routeIn .2s ease-out; }
+/* The CONTAINER carries the hide, not the first child: screens render many
+   sibling nodes (Crew nine, Today fifteen) and the first one routinely holds none
+   of the art, so hiding it waited on nothing. */
+.screen:not(.screen-in) { opacity: 0; }
+.screen.screen-in { opacity: 1; }
+.screen > .route-in { animation: routeIn .2s ease-out; }
 @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }
 /* Sheets are the app's other surface and get the same treatment. SCOPED TO
