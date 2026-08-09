@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS players (
   rename_of TEXT                     -- a name we owe them a change from (dup-name repair, 2026-08-08)
 );
 
+-- Names are one-of-a-kind, case-insensitively. /name enforces this in code too
+-- (and returns the lowest free #N when a name is taken), but the constraint is
+-- what makes it TRUE rather than merely intended: the code check shipped after
+-- two players already shared "Massive Coccyx". Partial index because a player who
+-- has never picked a name has NULL here and any number of those is fine.
+-- Applied to production 2026-08-08, once the one duplicate had resolved itself.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_players_name_ci ON players (lower(name)) WHERE name IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS friendships (
   a TEXT NOT NULL,                   -- canonical: a < b
   b TEXT NOT NULL,
