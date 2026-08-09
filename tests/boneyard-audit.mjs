@@ -63,7 +63,14 @@ await page.evaluateOnNewDocument(() => {
   setInterval(() => {
     const a = window.__arr;
     const snap = { t: Math.round(performance.now() - a.t0) };
-    for (const [sel, k] of Object.entries(KINDS)) snap[k] = document.querySelectorAll(sel).length;
+    /* VISIBLE markers, not DOM ones. This is the bug that let the Boneyard get
+       reported fixed three times while it still trickled: a marker enters the DOM
+       at the same instant either way, so counting nodes cannot tell a held marker
+       from a shown one. MapLibre writes `opacity: 1` inline on every marker it
+       owns, which beat the hide rule outright, and only computed opacity shows
+       that. Count what the player can see. */
+    for (const [sel, k] of Object.entries(KINDS))
+      snap[k] = [...document.querySelectorAll(sel)].filter(e => +getComputedStyle(e).opacity > 0.01).length;
     const last = a.tl[a.tl.length - 1];
     if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) a.tl.push(snap);
     const st = document.querySelector('#mapStage');
@@ -222,6 +229,57 @@ ok('ARRIVAL nothing pops in after the map is on screen',
   after.length
     ? after.map(r => `+${r.t - arr.reveal}ms spawn=${r.spawn} den=${r.den} mini=${r.mini} spire=${r.spire} glutton=${r.glutton}`).join(' | ')
     : `revealed at ${arr.reveal}ms with everything already placed`);
+
+/* ---- PANNING, which is where it actually trickles ------------------------------
+   Tom, 2026-08-08: "you've told me multiple times that the boneyard doesn't load
+   POIs differently anymore. It does. It still doesn't load cleanly, things
+   trickle in."
+   First load was clean and this audit only ever tested first load. Looking around
+   is the other half: POIs found while you pan were born after `markers-in`, so
+   they appeared one at a time. Measured before the fix: three separate visible
+   arrivals spread over 1281ms after a single pan.
+   PROVE-RED: drop `holdArrival` from js/map.js domMarker and this fails with
+   multiple arrival timestamps. */
+/* The EMPTY check above parks the map at sea on purpose, so panning from there
+   finds nothing and the guard below would pass by never running. Go back to a
+   POI-rich location and wait for a full arrival FIRST, or this check cannot
+   fail (anti-regression rule 1) and an empty sample is a failure (rule 3). */
+await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
+await page.evaluate(() => { location.hash = '#/today'; });
+await sleep(1200);
+await page.evaluate(() => { location.hash = '#/boneyard'; });
+await sleep(2500);
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
+  if (b) b.click();
+});
+await sleep(14000);
+
+const VIS = `[...document.querySelectorAll('.map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark')].filter(e => +getComputedStyle(e).opacity > 0.01).length`;
+await page.evaluate(v => {
+  window.__pan = { t0: performance.now(), tl: [] };
+  setInterval(() => {
+    const n = eval(v);
+    const last = window.__pan.tl[window.__pan.tl.length - 1];
+    if (!last || last.n !== n) window.__pan.tl.push({ t: Math.round(performance.now() - window.__pan.t0), n });
+  }, 40);
+}, VIS);
+await page.evaluate(() => { const m = window.__map || window.map; if (m) m.panBy([320, 260], { duration: 700 }); });
+await sleep(12000);
+const pan = await page.evaluate(() => window.__pan.tl);
+const arrivals = pan.slice(1);   // [0] is the baseline count, not an arrival
+const panBaseline = pan.length ? pan[0].n : 0;
+ok('PAN the map actually had markers to work with (an empty sample is a FAILURE)',
+  panBaseline > 0, `baseline ${panBaseline} visible markers`);
+/* Placement genuinely resolves in two waves ~2.6s apart, so "one beat" would
+   mean a blank map for 6.6s after every pan. The rule is that markers arrive in
+   COORDINATED BEATS rather than one at a time: at most two, never a per-marker
+   trickle. Before the fix this was three separate arrivals over 1281ms and the
+   count rose by one each time. */
+const perBeat = arrivals.map((a, i) => a.n - (i ? arrivals[i - 1].n : panBaseline));
+ok('PAN new POIs arrive in coordinated beats, not one marker at a time',
+  arrivals.length <= 2,
+  `${arrivals.length} beat(s), ${JSON.stringify(perBeat)} markers each: ${JSON.stringify(pan)}`);
 
 await browser.close();
 if (srv) srv.kill();

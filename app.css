@@ -6096,11 +6096,30 @@ body::before {
    from local data; spires alone need a network round trip, so without this they
    pop in a beat later and the map assembles itself in front of you. Hidden until
    the first full pass completes, then everything fades up together. */
+/* !important is not decoration here, it is the whole fix. MapLibre writes
+   `opacity: 1` as an INLINE style on every marker element it owns (measured
+   2026-08-08: `transform: translate(...); opacity: 1;`). An inline style beats
+   any selector, so this hide rule silently did nothing and markers were visible
+   the instant they were placed. That is why the Boneyard kept trickling after it
+   was reported fixed three times: the guard counted DOM nodes, which appear at
+   the same moment either way, instead of computed opacity, which was always 1.
+   Same family as the standing rule that MapLibre owns a marker root's transform.
+   It owns opacity too. */
 #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire {
-  opacity: 0; transition: opacity .22s ease;
+  opacity: 0 !important; transition: opacity .22s ease;
 }
 #mapStage.markers-in .map-spawn, #mapStage.markers-in .map-den-mark,
-#mapStage.markers-in .map-mini-mark, #mapStage.markers-in .map-spire { opacity: 1; }
+#mapStage.markers-in .map-mini-mark, #mapStage.markers-in .map-spire { opacity: 1 !important; }
+/* A marker that turns up after the map is already on screen waits for the rest of
+   its beat (js/map.js holdArrival) so late finds fade in together instead of
+   trickling. Specificity has to MATCH the .markers-in rule above or it loses. */
+#mapStage.markers-in .poi-arriving { opacity: 0 !important; }
+/* The entrance. On .poi-in the marker is already visible, so this only scales the
+   INNER art: MapLibre owns the root's transform for positioning and animating it
+   strands the marker at 0,0 (the v161 spire bug, same family). */
+#mapStage .poi-in > * { animation: poiPop .38s cubic-bezier(.22,1.2,.36,1) both; }
+@keyframes poiPop { from { transform: scale(.72); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #mapStage .poi-in > * { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire { transition: none; }
 }

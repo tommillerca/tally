@@ -66,11 +66,75 @@ export function createBoneyardMap(maplibregl, container, { lat, lng }) {
    useful. Reproducible by opening the Boneyard, leaving, and going back.
    A dead-marker stub rather than null, because ~6 call sites immediately do
    rec.marker.setLngLat(...) on the way back out. */
+/* LATE ARRIVALS FADE IN TOGETHER, NOT ONE AT A TIME.
+ *
+ * Tom, 2026-08-08: "you've told me multiple times that the boneyard doesn't load
+ * POIs differently anymore. It does. It still doesn't load cleanly, things
+ * trickle in."
+ *
+ * He was right and the audit was testing the wrong moment. First load IS clean:
+ * everything is held at opacity 0 until the first placement pass finishes, then
+ * `markers-in` fades the lot up together. But that class is permanent, so every
+ * marker created AFTER it -- which is every marker found while you look around,
+ * the roaming-POI feature working as asked -- was born already visible and popped
+ * in on its own. Measured after one pan: three separate arrivals spread over
+ * 1281ms.
+ *
+ * So the same rule the first load gets is applied to every later batch: a new
+ * marker is held invisible, and everything that lands in the same beat is
+ * revealed in one go. Debounced, because placement resolves in waves (the
+ * walkability snap needs tiles), with a hard cap so a marker can never be
+ * stranded invisible if the waves never stop.
+ */
+/* Measured after one pan (2026-08-08): placement resolves in TWO waves, at
+   ~1.5s and ~4.1s, because the walkability snap waits on tiles and spires need a
+   network round trip. A 500ms quiet window split them into two reveals, which is
+   the trickle.
+   Measured gap between the two waves: ~2.6s. The quiet window must outlast it or
+   the first wave reveals alone and the second still trickles in behind it. This
+   trades a little latency (late finds land together roughly 3s after you pan)
+   for the map never assembling itself in front of you, which is the complaint. */
+const ARRIVE_QUIET_MS = 1200;   // no new marker for this long = the beat is over
+const ARRIVE_MAX_MS = 2600;     // never hold anything longer than this
+const POI_CLASSES = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark'];
+let arriving = [];
+let quietT = null;
+let capT = null;
+function flushArrivals() {
+  clearTimeout(quietT); clearTimeout(capT); quietT = capT = null;
+  /* Everything in the beat is revealed on the SAME frame, with a deliberate
+     entrance. Measured 2026-08-08: placement genuinely lands in two waves ~2.6s
+     apart (local snap, then network-backed spires), so holding for both leaves
+     the map blank for 6.6s after a pan, which is its own bug. Two coordinated
+     beats with an entrance is not the complaint: the complaint is markers
+     appearing one at a time with no acknowledgement, which reads as the screen
+     still loading. A thing that ANNOUNCES itself reads as a discovery. */
+  const batch = arriving; arriving = [];
+  requestAnimationFrame(() => {
+    for (const n of batch) { n.classList.remove('poi-arriving'); n.classList.add('poi-in'); }
+    setTimeout(() => { for (const n of batch) n.classList.remove('poi-in'); }, 420);
+  });
+}
+function holdArrival(el) {
+  const stage = document.getElementById('mapStage');
+  // Before the first reveal, `markers-in` already owns the batching. Only markers
+  // that turn up AFTER the map is on screen need holding.
+  if (!stage || !stage.classList.contains('markers-in')) return;
+  if (!POI_CLASSES.some(c => el.classList.contains(c))) return;   // never the player's own marker
+  el.classList.add('poi-arriving');
+  arriving.push(el);
+  clearTimeout(quietT);
+  quietT = setTimeout(flushArrivals, ARRIVE_QUIET_MS);
+  // anti-regression rule 8: whatever hides something must own un-hiding it
+  if (!capT) capT = setTimeout(flushArrivals, ARRIVE_MAX_MS);
+}
+
 export function domMarker(maplibregl, map, { lat, lng, el, anchor = 'center' }) {
   if (!map) {
     try { el?.remove(); } catch { /* never attached */ }
     return { setLngLat() { return this; }, remove() { return this; }, getElement: () => el, _dead: true };
   }
+  holdArrival(el);
   const m = new maplibregl.Marker({ element: el, anchor })
     .setLngLat([lng, lat])
     .addTo(map);
