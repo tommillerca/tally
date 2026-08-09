@@ -1024,6 +1024,34 @@ body::before {
 .wn-update-note b:first-child { font-size: 15px; color: #d7a6ff; }
 .wn-update-note span { font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .wn-update-note b { color: var(--text); }
+/* What's New: two panes. "Updates" is the version list, "News" is every
+   announcement the game has ever popped, so a player who swiped one away while
+   walking can get back to it. Added 2026-08-09 on Tom's ask. */
+.wn-tabs { display: flex; gap: 8px; margin: 2px 0 14px; }
+.wn-tab {
+  flex: 1; padding: 9px 6px; border-radius: 999px; border: 2px solid var(--line-strong);
+  background: var(--surface-2); color: var(--text-2);
+  font-family: var(--display); font-size: 15px; letter-spacing: .04em;
+}
+.wn-tab.on { background: var(--ink); color: var(--paper, #F3EFE7); border-color: var(--ink); }
+.nw-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 12px; margin-bottom: 9px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.nw-thumb {
+  width: 56px; height: 56px; flex: none; border-radius: 12px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.nw-thumb .nw-img { width: 100%; height: 100%; object-fit: contain; }
+.nw-thumb .nw-fit { transform: scale(.42); transform-origin: center; display: block; }
+.nw-thumb .nw-wall { transform: scale(.52); transform-origin: center; display: block; }
+.nw-txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.nw-txt b { font-family: var(--display); font-size: 16px; letter-spacing: .02em; }
+.nw-txt small { color: var(--text-3); font-size: 12.5px; line-height: 1.35; }
+.nw-date { font-size: 11px; color: var(--text-3); font-weight: 700; letter-spacing: .06em; flex: none; }
+.nw-chev { color: var(--text-3); font-size: 20px; flex: none; }
 .wn-entry { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .wn-entry:last-child { border-bottom: 0; }
 .wn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }

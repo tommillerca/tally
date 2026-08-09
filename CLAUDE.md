@@ -207,3 +207,23 @@ Three rules if you touch this machinery:
    asserts the screen is both VISIBLE and has content, because "revealed" and
    "revealed with something on it" are different failures and an empty screen
    that faded in correctly is still broken. It caught the blank Boneyard above.
+
+## Naming cosmetics (non-negotiable, added 2026-08-09)
+
+Tom, after catching "Moss Braids" on an obvious knit beanie: **"always judge the
+item while naming based on its looks on the bonehead not in isolation."**
+
+Composite the item onto `SK0-1` (or the starter body for body slots) and view it
+at **300px or more per item** before naming it. Both halves matter:
+
+- **Worn, not loose.** HS4 in isolation is a green shape with two X's; on the
+  skull it is plainly a sleep mask pushed up on the forehead. HS18 in isolation is
+  a blade and a hilt; worn, the skull is skewered.
+- **Legible, not a thumbnail.** All 13 wrong names came off a contact sheet at
+  ~200px per cell, where a chunky beanie reads as braids, a bowl of water reads as
+  a hat and a fish reads as a whistle.
+
+`node tests/newart-audit.mjs <base> all` reports rows still carrying placeholder
+`#N` names and any two rows in the same slot sharing identical art. Duplicate art
+is a defect in itself: a player owns both and sees no difference, and it cannot be
+named honestly. Recolour one using brand palette colours, do not ship twins.

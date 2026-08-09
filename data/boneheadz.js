@@ -1934,7 +1934,7 @@ const BH_ITEMS_ALL = [
  {"id": "MS3", "slot": "M", "rarity": "rare", "name": "Cloud Puff"},
  {"id": "MS4", "slot": "M", "rarity": "uncommon", "name": "Fern Frond"},
  {"id": "MS5", "slot": "M", "rarity": "common", "name": "Dotted Grin"},
- {"id": "MS6", "slot": "M", "rarity": "rare", "name": "Bubble Wand"},
+ {"id": "MS6", "slot": "M", "rarity": "rare", "name": "Amber Wand"},
  {"id": "MS7", "slot": "M", "rarity": "common", "name": "Daisy Stem"},
  {"id": "MS8", "slot": "M", "rarity": "legendary", "name": "Fat Cigar"},
  {"id": "MS9", "slot": "M", "rarity": "rare", "name": "Firecracker"},

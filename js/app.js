@@ -6743,6 +6743,49 @@ function richLine(str) {
     .replace(/&lt;br\s*\/?&gt;/g, '<br>');
 }
 
+/* THE NEWS TAB. Tom, 2026-08-09: "put all pop up artwork into the patch notes
+   and create a subtab in patch notes called news that just has all pop ups in
+   there so people can catch up if they missed it."
+   Every announcement in the game is a one-shot veil: it fires a handful of times
+   and is gone forever, so a player who dismissed one while walking has no way
+   back to it. This is that way back.
+   It does NOT rebuild the art. Each row opens the REAL popup through its own
+   function, so the announcement a player sees here is byte-for-byte the one they
+   missed, and there is no second copy to drift. The thumbnail is a small piece of
+   that same popup's art for the same reason. */
+const NEWS = [
+  { id: 'drop', date: 'Aug 8', title: 'The Puffer Pack',
+    blurb: 'Ten legendary colourways. Puffer on puffer.',
+    thumb: () => `<span class="nw-fit">${dropFitHtml('T9-6', 'H13-3')}</span>`,
+    open: () => openDropPopup() },
+  { id: 'teaser', date: 'Aug 8', title: '63 new cosmetics',
+    blurb: 'Lids, eyes, mouths and grillz. Every crate can drop them.',
+    thumb: () => `<span class="nw-wall">${teaserWallHtml(4, 44)}</span>`,
+    open: () => openCosmeticTeaser() },
+  { id: 'race', date: 'Aug 7', title: 'The weekly step race',
+    blurb: 'Every Bonehead on one track. The purse pays the top three.',
+    thumb: () => `<span class="nw-ico">${ICONS.star(26)}</span>`,
+    open: () => openRaceIntro() },
+  { id: 'spire', date: 'Aug 6', title: 'Dark Spires',
+    blurb: 'Take a tower and it pays you tribute for visiting.',
+    thumb: () => `<img class="nw-img" src="assets/brand/tomb.png" alt="">`,
+    open: () => openSpireIntro() },
+  { id: 'garden', date: 'Aug 5', title: 'The Bone Garden',
+    blurb: 'Three beds in the Kitchen. Grow your own ingredients.',
+    thumb: () => `<span class="nw-ico">${bhIcon('garden-sprout', 26)}</span>`,
+    open: () => openGardenPopup() },
+];
+
+function newsHtml() {
+  return NEWS.map(n => `
+    <button class="nw-row" data-news="${esc(n.id)}">
+      <span class="nw-thumb">${n.thumb()}</span>
+      <span class="nw-txt"><b>${esc(n.title)}</b><small>${esc(n.blurb)}</small></span>
+      <span class="nw-date">${esc(n.date)}</span>
+      <span class="nw-chev">&rsaquo;</span>
+    </button>`).join('');
+}
+
 async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
@@ -6759,16 +6802,41 @@ async function openWhatsNew() {
       </div>` : ''}
       <ul class="wn-list">${c.items.map(i => `<li>${richLine(i)}</li>`).join('')}</ul>
     </div>`).join('');
-  openSheet(`
+  const wrap = openSheet(`
     <div class="sheet-head"><h2>What's New</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
-      ${isNative() ? `<div class="wn-update-note">
-        <b>📲 Update the app to get everything</b>
-        <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
-      </div>` : ''}
-      ${cards}
+      <div class="wn-tabs" role="tablist">
+        <button class="wn-tab on" data-wntab="updates" role="tab" aria-selected="true">Updates</button>
+        <button class="wn-tab" data-wntab="news" role="tab" aria-selected="false">News</button>
+      </div>
+      <div class="wn-pane" id="wnUpdates">
+        <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
+        ${isNative() ? `<div class="wn-update-note">
+          <b>📲 Update the app to get everything</b>
+          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
+        </div>` : ''}
+        ${cards}
+      </div>
+      <div class="wn-pane" id="wnNews" hidden>
+        <p class="note" style="margin:2px 2px 14px">Every announcement the game has shown, in case you swiped one away. Tap to see it again.</p>
+        ${newsHtml()}
+      </div>
     </div>`, { cls: 'full' });
+  $$('.wn-tab', wrap).forEach(t => t.addEventListener('click', () => {
+    const which = t.dataset.wntab;
+    $$('.wn-tab', wrap).forEach(x => {
+      const on = x === t;
+      x.classList.toggle('on', on); x.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $('#wnUpdates', wrap).hidden = which !== 'updates';
+    $('#wnNews', wrap).hidden = which !== 'news';
+  }));
+  /* Open the REAL popup, not a copy of it. The sheet stays open underneath so
+     dismissing the announcement puts them back in the list they came from. */
+  $$('[data-news]', wrap).forEach(b => b.addEventListener('click', () => {
+    const n = NEWS.find(x => x.id === b.dataset.news);
+    if (n) n.open();
+  }));
   await kvSet('changelogSeen', changelogLatest());
 }
 
@@ -11462,7 +11530,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v346'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v347'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
