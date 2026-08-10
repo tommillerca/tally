@@ -11496,7 +11496,11 @@ async function renderBoneyard(el) {
       if (!rec || rec.mini.dist > MINI_RADIUS_M || claimedMini.has(miniKey(date, rec.mini))) return;
       const mini = rec.mini;
       const fighter = await buildFighter();
-      openFight(wrap, fighter, { mode: 'mini', name: mini.name, mult: mini.mult, aiLevel: mini.aiLevel, talents: [], venue: 'The Boneyard', mini, date });
+      /* Themed, like every other fight on this map. Seeded on the mini's own cell
+         id so the thing you walked to is the thing you meet, and it keeps that
+         face all day instead of re-rolling on every marker refresh. */
+      openFight(wrap, fighter, { mode: 'mini', name: mini.name, mult: mini.mult, aiLevel: mini.aiLevel, talents: [],
+        venue: 'The Boneyard', foeOutfit: themedLook(mini.theme && mini.theme.key, `${date}:${mini.id}`) || undefined, mini, date });
     });
 
     // One button, three jobs, because a spire only ever wants one thing from you:
@@ -11813,7 +11817,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v355'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v356'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

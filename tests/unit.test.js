@@ -41,6 +41,8 @@ import {
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
 import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
+import { MINI_THEMES } from '../js/poi.js';
+import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -2173,6 +2175,35 @@ test('the Live Wire: Grasp turns your stamina into his health', async () => {
     }
   }
   assert.ok(drained, 'Grasp never fired in 120 tries');
+});
+
+/* EVERY ROAMING MINI-BOSS HAS A FACE. Tom, 2026-08-10: "the first miniboss i
+   fought today was not one of the ones we worked on creating yesterday that has a
+   theme to it."
+   The gap was that minis passed only a name into the fight, and no mini name is
+   in LOOKS, so all six fell through to foeOutfitFor's random-cosmetic coin flip.
+   This is the guard rail: a mini theme with no bloodline behind it fails here, so
+   a seventh mini added next month cannot ship faceless. It asserts the LOOK, not
+   the mapping table, because a THEME_POOL key pointing at a family that does not
+   exist would satisfy a table check and still draw nothing. */
+test('every roaming mini-boss theme resolves to a real themed look', () => {
+  const missing = [];
+  for (const t of MINI_THEMES) {
+    const look = themedLook(t.key, `2026-08-10:0_0`);
+    if (!look || !look.B || !look.SK) missing.push(`${t.key} (${t.name})`);
+  }
+  assert.deepEqual(missing, [], `mini themes with no look: ${missing.join(', ')}`);
+});
+
+/* And the pools they point at must be real. THEME_POOL naming a family that is
+   not in FAMILIES is a silent null from themedLook at every call site, not only
+   the minis'. */
+test('no THEME_POOL entry points at a family that does not exist', () => {
+  const bad = [];
+  for (const [k, fams] of Object.entries(THEME_POOL)) {
+    for (const f of fams) if (!FAMILIES[f]) bad.push(`${k} -> ${f}`);
+  }
+  assert.deepEqual(bad, [], bad.join(', '));
 });
 
 await runAll();

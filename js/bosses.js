@@ -127,6 +127,22 @@ export const THEME_POOL = {
   catacomb: ['demon'],
   colosseum: ['odd', 'flesh'],
   spire: ['crypt', 'deep'],      // the five tower wardens
+  /* THE ROAMING MINI-BOSSES (js/poi.js MINI_THEMES). Tom, 2026-08-10: "the first
+     miniboss i fought today was not one of the ones we worked on creating
+     yesterday that has a theme to it."
+     Right, and they never were. Dens and the Gauntlet have passed a themed look
+     into the fight since the roster existed; minis passed only a NAME, and none
+     of their six names is in LOOKS, so every one of them fell through to
+     foeOutfitFor's coin-flip: a starter body with random cosmetics bolted on. A
+     Marsh Ghoul and a Cinder Shade were the same plain skeleton wearing
+     different junk. Each one now draws from the bloodline its name already
+     promised. */
+  hound: ['flesh'],
+  wretch: ['crypt'],
+  ghoul: ['swamp'],
+  shade: ['fire'],
+  acolyte: ['demon'],
+  jester: ['odd'],
 };
 
 // Small stable hash. Same shape as poi.js's, kept local rather than imported so

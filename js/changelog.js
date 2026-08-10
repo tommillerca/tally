@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 356, date: '2026-08-10', title: 'The roaming monsters look like monsters', items: [
+    'The mini-bosses you walk to on the Boneyard never had faces. A Marsh Ghoul and a Cinder Shade were the same starter skeleton with random cosmetics thrown on. Each one is drawn from its own bloodline now, so what the name promises is what steps out.',
+  ] },
   { n: 355, date: '2026-08-09', title: 'Everything has a name now', items: [
     'The last 258 cosmetics were still called things like "Tidy Backdrop #1". They all have real names, read off each one worn on an actual Bonehead rather than guessed from the icon.',
   ] },

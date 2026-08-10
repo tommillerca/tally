@@ -128,11 +128,32 @@ Ritual taps add ceremony, zero economy.
    Pocket Camp's exact model) vs free walking (a joystick is a much bigger build
    and fights a scrolling sheet).
 8. **Pet in the garden:** the player's pet wanders the diorama idle
-   (recommended, cheap delight) or bonehead only.
+   (recommended, cheap delight) or bonehead only. Tom, 2026-08-09: "I like the
+   idea of the pet wandering", so this is a YES pending the look sign-off.
+
+**Look mockup BUILT (2026-08-09): `market-quality-mockups/hollow.html`.**
+Requested by Tom ("Show me how it would look in a mockup with a bonehead and
+our colours and style") and delivered as a 390px scene using REAL assets, not
+drawings: the bonehead is the actual layer stack (B0-1 + P4-1 jeans + T4-1 tank
++ SK0-1 + H9 straw hat, composited in app z-order), the shelf HUD uses the real
+`icons-pack.js` ingredient icons at their manifest tints, and the pet is C5
+wandering on a 9s CSS loop (cross, flip, return, with a bob;
+`prefers-reduced-motion` respected). Palette is all app tokens: ink outlines,
+bone fence, coral bricks + stall roof, mint brew, gold coin, Bangers signage.
+The scene shows every placement from the design: fence + seed pouch, two
+brick-ringed plot clusters with all bed states (growing / WATER ME / PICK! /
+DIG A BED / the 4,000-coin undug plot), forage crow, compost heap, gravestone
+garnish, floating shelf HUD, then the Apothecary stall (bubbling cauldron with
+timer chip, coral retort with BOTTLE IT, unlit burner with the tap-2× hint).
+Verified per the contract: rendered via puppeteer at a true 390px viewport
+(headless Chrome's ~500px window floor makes its screenshots lie at phone
+widths), all 6 layer images asserted decoded, the wander GIF proven to actually
+animate (frame-diff, not assumed). In the build, the fit and pet are whatever
+the player owns; the mockup's gardener fit is a stand-in.
 
 **Build plan (after approval):** Phase 0 mockup FIRST
-(`market-quality-mockups/hollow.html`: the scene, both halves, ritual
-storyboards) → Tom approves the look → Phase 1 build in a worktree (scene render
+(`market-quality-mockups/hollow.html`: look candidate BUILT, above; ritual
+storyboards still to add) → Tom approves the look → Phase 1 build in a worktree (scene render
 layer over intact garden.js/cooking.js; only logic change is the thirst gate +
 startCook moving to flame-catch) → Phase 2 verification per tally/CLAUDE.md:
 every ritual fired via the REAL controls with decoded-pixel asserts on the

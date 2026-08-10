@@ -137,6 +137,73 @@ const auto = await page.evaluate(async () => {
   return { backOnNews: !!document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden };
 });
 ok('dismissing drops you back on the News tab', auto.backOnNews, JSON.stringify(auto));
+
+/* EVERY ROW, NOT A SAMPLE. Tom, 2026-08-10: "the news tab has broken pop ups in
+   it you need to create guard rails to fix these things and then not have them
+   slip back to some bullshit broken code."
+   He is right that the guard rail was the problem, not just the bug. Everything
+   above this line drives exactly TWO of the seven rows ('drop' and 'garden'), so
+   five announcements could rot untouched and this file still printed all green.
+   A two-of-seven sample is the same defect as an empty sample.
+
+   So: read the ids out of the DOM (never a hard-coded list, or a row added
+   tomorrow is unguarded again) and drive every one of them, from a restored list
+   each time, asserting the popup is really on screen with its art decoded. */
+async function openNewsList() {
+  await page.evaluate(async () => {
+    document.querySelectorAll('.drop-veil').forEach(v => v.remove());
+    if (document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden) return;
+    location.hash = '#/friends';
+    await new Promise(r => setTimeout(r, 1500));
+    document.getElementById('crewWhatsNew')?.click();
+    await new Promise(r => setTimeout(r, 1300));
+    document.querySelector('[data-wntab="news"]')?.click();
+    await new Promise(r => setTimeout(r, 400));
+  });
+  await sleep(500);
+  return page.evaluate(() => [...document.querySelectorAll('[data-news]')].map(b => b.dataset.news));
+}
+
+const ids = await openNewsList();
+ok('the audit found rows to drive', ids.length >= 5, ids.join(', '));
+const dead = [];
+for (const id of ids) {
+  const here = await openNewsList();
+  if (!here.includes(id)) { dead.push(`${id}: row missing`); continue; }
+  const r = await page.evaluate(async i => {
+    document.querySelector(`[data-news="${i}"]`).click();
+    await new Promise(r => setTimeout(r, 1700));
+    const v = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
+    if (!v) return { why: 'no popup opened' };
+    const box = v.getBoundingClientRect();
+    if (box.width < 100 || box.height < 100) return { why: `popup box ${Math.round(box.width)}x${Math.round(box.height)}` };
+    if (+getComputedStyle(v).opacity < 0.9) return { why: `popup opacity ${getComputedStyle(v).opacity}` };
+    const title = (v.querySelector('.drop-title, .tz-h, h1, h2') || {}).textContent?.trim() || '';
+    if (!title) return { why: 'popup has no title' };
+    const imgs = [...v.querySelectorAll('img')];
+    await Promise.all(imgs.map(x => x.decode?.().catch(() => {})));
+    const broken = imgs.filter(x => !x.naturalWidth).map(x => x.getAttribute('src'));
+    if (broken.length) return { why: `broken art: ${broken.slice(0, 3).join(', ')}` };
+    /* Art means PIXELS. A popup whose only art is a <span> that lays out at zero
+       size is the trap the .nw-thumb comment above already records. Icon-only
+       announcements (the Garden) are legitimate, so accept an <svg> with a real
+       box as art too. */
+    const drawn = imgs.some(x => x.getBoundingClientRect().width > 8)
+      || [...v.querySelectorAll('svg')].some(s => s.getBoundingClientRect().width > 8);
+    if (!drawn) return { why: 'popup draws no art at all' };
+    return { title, imgs: imgs.length };
+  }, id);
+  if (r.why) dead.push(`${id}: ${r.why}`);
+  console.log(`      ${r.why ? 'x' : '.'} ${id.padEnd(10)} ${r.why || `"${r.title}" (${r.imgs} img)`}`);
+  await page.evaluate(() => {
+    const v = document.querySelector('.drop-veil');
+    if (v) { (v.querySelector('.drop-later') || v.querySelector('[id$="Later"]'))?.click(); v.remove(); return; }
+    document.getElementById('tzClose')?.click();
+  });
+  await sleep(1200);
+}
+ok('EVERY announcement opens with its real art', dead.length === 0, dead.join(' | '));
+
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
