@@ -74,6 +74,7 @@ const BROWSER = [
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'fight-layout-audit.mjs',  // the fight screen holds still
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
+  'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
@@ -123,7 +124,18 @@ const onDisk = (await readdir(here)).filter(f => /-audit\.mjs$/.test(f)).sort();
    in NEITHER tier fails the gate, so a new audit cannot quietly go unrun. */
 const FULL = onDisk.filter(f => !BROWSER.includes(f) && !SKIP[f]);
 const runAll = process.argv.includes('--all');
-const unrun = runAll ? [] : [];   // every audit belongs to a tier by construction
+/* ⚠️ THE COVERAGE CHECK HERE CANNOT FAIL, AND SAYING SO IS THE POINT.
+   I wrote `const unrun = runAll ? [] : []` and a comment claiming every audit
+   belongs to a tier "by construction". It is true and it is worthless: FULL is
+   defined as everything-not-FAST, so an undeclared audit is silently swept into
+   FULL rather than flagged, and the line this file prints about tiers is a
+   description, not protection. Walt proved it dead; anti-regression rule 1, in
+   the gate itself, written by the person who added the rule to the gate.
+   The real fix is his DECLARED-map version (W1b, his lane, next after this
+   push): every audit must be named in a tier, checked BEFORE any browser spawns,
+   an empty reason failing. Not duplicated here, because three of us fixing the
+   same thing in parallel is the week's other lesson. Until it lands, the output
+   below states what it is and must not be cited as coverage. */
 if (runAll) BROWSER.push(...FULL);
 
 const results = [];
@@ -142,8 +154,10 @@ for (const f of BROWSER) {
 
 if (own) own.server.close();
 if (!runAll && FULL.length) {
-  console.log(`\n${FULL.length} more audit(s) are in the FULL tier and did not run here.`);
+  console.log(`\n${FULL.length} audit(s) not in FAST were skipped (everything not named in FAST lands here).`);
   console.log('Run them before a release:  node tests/release-gate.mjs --all');
+  console.log('NOTE: this is a tally, not a guard. A new audit is swept in here silently;');
+  console.log('      the check that would flag it is Walt\'s W1b, not yet landed.');
 }
 const bad = results.filter(r => r.code !== 0);
 console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
