@@ -142,3 +142,58 @@ export async function initAnalytics(version) {
     else if (curScreen && curScreenAt) { track('screen_time', { s: curScreen, ms: Date.now() - curScreenAt }); curScreenAt = 0; }
   });
 }
+
+/* ---- production error telemetry (2026-08-10) --------------------------------
+ * If a player hits a crash, nobody finds out: there was no error reporting at
+ * all, and "Tom plays daily and finds most bugs himself" was the de facto crash
+ * channel. Every uncaught error and unhandled rejection now rides the SAME
+ * anonymous pipe as the rest of analytics, as 'err' rows in the existing events
+ * table: no new endpoint, no new data class. The no-PII rule holds because the
+ * payload is the exception's own message head, a path tail of the source file,
+ * the build and the screen name. Never food, weight, health or identity.
+ *
+ * Caps, because a crash loop must not become a flood: at most ERR_CAP rows per
+ * session, at most ERR_DUP of the same message, message clipped to 180 chars.
+ *
+ * BOT gating: automated browsers must never register as phantom testers, so
+ * errors honor the same BOT gate as track(). The ONE exception is
+ * window.__errProbe (webdriver-only escape hatch, the __crateForce idiom): it
+ * lets the audit prove errors are QUEUED without ever flushing them. flush()
+ * keeps its own BOT gate and no audit has an apiBase, so a probe row can never
+ * leave the device.
+ *
+ * Installed at MODULE LOAD, not from initAnalytics(): init is skipped on the
+ * onboarding path and returns early under BOT, and a crash during onboarding
+ * is precisely the launch-day crash we most need to hear about.
+ */
+const ERR_CAP = 5, ERR_DUP = 2;
+let errCount = 0;
+const errSeen = new Map();
+function pushErr(kind, msg, src) {
+  if (BOT && !(typeof window !== 'undefined' && window.__errProbe)) return;
+  if (errCount >= ERR_CAP) return;
+  const m = String(msg || 'unknown').slice(0, 180);
+  const dup = (errSeen.get(m) || 0) + 1;
+  errSeen.set(m, dup);
+  if (dup > ERR_DUP) return;
+  errCount += 1;
+  // path tail only: no origin, no query string, nothing device-identifying
+  const tail = src ? String(src).split('?')[0].split('/').slice(-2).join('/').slice(0, 80) : undefined;
+  // writes through the same serialized chain as track(), but deliberately past
+  // track()'s own BOT gate: pushErr has already decided above
+  writeChain = writeChain.then(async () => {
+    const q = (await kvGet('evq', [])) || [];
+    q.push({ name: 'err', props: { m, k: kind, src: tail, b: appV || undefined, s: curScreen || undefined }, ts: Date.now() });
+    await kvSet('evq', q.slice(-QCAP));
+  }).catch(() => { /* telemetry never breaks the app */ });
+  // a crashing tab may not live to the next interval flush
+  setTimeout(() => flush(), 2500);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', e =>
+    pushErr('error', e.message, e.filename ? `${e.filename}:${e.lineno || 0}` : null));
+  window.addEventListener('unhandledrejection', e => {
+    const r = e.reason;
+    pushErr('rejection', r && (r.message || String(r)), r && r.stack ? String(r.stack).split('\n')[1] : null);
+  });
+}
