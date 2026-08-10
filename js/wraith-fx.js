@@ -275,6 +275,28 @@ export const CASTS = {
    these by eye. */
 export const ANCHORS = { hand: [0.184, 0.502], hood: [0.490, 0.383], amulet: [0.558, 0.577] };
 
+/* THE STAGE BOX IS NOT THE DRAWING. mage-fight.png renders with object-fit:
+   contain inside #foeStage.mage-foe, whose aspect changes per device (width:100%
+   of the foe column, height clamped), so the image floats letterboxed inside the
+   box, centred by object-position 50% 50%. ANCHORS above are fractions of the
+   IMAGE (measured by colour off the file), so they must be applied to the DRAWN
+   rect: applied to the raw box they drift by the letterbox offset, which is
+   ~2-6px on a 390pt phone and ~27px on the hand at a 320px-wide stage column.
+   That drift is device-dependent, which is why it looked fixed on the phone the
+   anchors were tuned on. Figure-contract rule 3: align on ink, and
+   object-position is part of the mapping.
+   Falls back to the element box only when the plate is missing or undecoded;
+   the SW precaches the plate, so a real fight never takes the fallback. */
+export function plateRect(stageEl) {
+  const img = stageEl && (stageEl.querySelector('img.mage-plate') || stageEl.querySelector('img'));
+  const box = (img || stageEl).getBoundingClientRect();
+  if (!img || !img.naturalWidth || !box.width || !box.height) return box;
+  const asp = img.naturalWidth / img.naturalHeight;
+  const w = Math.min(box.width, box.height * asp);
+  const h = w / asp;
+  return { left: box.left + (box.width - w) / 2, top: box.top + (box.height - h) / 2, width: w, height: h };
+}
+
 /* `youRect` is optional and should be the PLAYER's stage. Without it the target
    falls back to a point measured once on one phone width, which the bolt could
    live with (it only aims) but reap cannot: reap now spans the midpoint between

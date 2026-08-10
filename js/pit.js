@@ -1390,8 +1390,17 @@ function actForEnemy(fight, who, events) {
       if (p.wind >= 10) kit.push({ id: 'grasp', w: 1.6 });
 
       const total = kit.reduce((n, k) => n + k.w, 0);
-      let roll = fight.rng() * total, castId = kit[kit.length - 1].id;
-      for (const k of kit) { roll -= k.w; if (roll <= 0) { castId = k.id; break; } }
+      let castId;
+      /* Test seam (set only by the webdriver-gated __bhFight.forceCast): a
+         forced cast must still be IN the kit, i.e. its own gates passed. The
+         seam replaces the dice, never the rules, so what the audit watches is
+         the same path a player watches. Never set in production. */
+      if (fight.forceCast && kit.some(k => k.id === fight.forceCast)) {
+        castId = fight.forceCast; fight.forceCast = null;
+      } else {
+        let roll = fight.rng() * total; castId = kit[kit.length - 1].id;
+        for (const k of kit) { roll -= k.w; if (roll <= 0) { castId = k.id; break; } }
+      }
 
       fight.ap -= 1;
       events.push({ t: 'foeAction', id: castId });
