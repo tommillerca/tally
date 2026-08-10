@@ -280,28 +280,39 @@ export const CASTS = {
    these by eye. */
 export const ANCHORS = { hand: [0.184, 0.502], hood: [0.490, 0.383], amulet: [0.558, 0.577] };
 
+/* THE STAGE BOX IS NOT THE DRAWING. mage-fight.png renders with object-fit:
+   contain inside #foeStage.mage-foe, whose aspect changes per device (width:100%
+   of the foe column, height clamped), so the image floats letterboxed inside the
+   box, centred by object-position 50% 50%. ANCHORS above are fractions of the
+   IMAGE (measured by colour off the file), so they must be applied to the DRAWN
+   rect: applied to the raw box they drift by the letterbox offset, which is
+   ~2-6px on a 390pt phone and ~27px on the hand at a 320px-wide stage column.
+   That drift is device-dependent, which is why it looked fixed on the phone the
+   anchors were tuned on. Figure-contract rule 3: align on ink, and
+   object-position is part of the mapping.
+   Falls back to the element box only when the plate is missing or undecoded;
+   the SW precaches the plate, so a real fight never takes the fallback. */
+export function plateRect(stageEl) {
+  const img = stageEl && (stageEl.querySelector('img.mage-plate') || stageEl.querySelector('img'));
+  const box = (img || stageEl).getBoundingClientRect();
+  if (!img || !img.naturalWidth || !box.width || !box.height) return box;
+  const asp = img.naturalWidth / img.naturalHeight;
+  const w = Math.min(box.width, box.height * asp);
+  const h = w / asp;
+  return { left: box.left + (box.width - w) / 2, top: box.top + (box.height - h) / 2, width: w, height: h };
+}
+
 /* `youRect` is optional and should be the PLAYER's stage. Without it the target
    falls back to a point measured once on one phone width, which the bolt could
    live with (it only aims) but reap cannot: reap now spans the midpoint between
    him and you, so a fixed target drifts off-centre on any other screen size. */
-/* The plate is drawn with object-fit: contain, so the DRAWING is letterboxed
-   inside the stage box and is not the stage box. Anchors are fractions of the
-   drawing, so they have to be applied to the contained rect: applying them to the
-   raw box put every cast tens of pixels off on a wide stage and a few off on a
-   phone, drifting with screen width. Aspect is read from the decoded image when
-   there is one, so a recrop of the art needs no change here. */
-export const FIGHT_PLATE_ASPECT = 914 / 1024;
-function containRect(box, aspect) {
-  const boxAspect = box.width / box.height;
-  const w = boxAspect > aspect ? box.height * aspect : box.width;
-  const h = boxAspect > aspect ? box.height : box.width / aspect;
-  return { left: box.left + (box.width - w) / 2, top: box.top + (box.height - h) / 2, width: w, height: h };
-}
-
-export function anchorsFor(stageRect, arenaRect, youRect = null, art = null) {
-  const aspect = (art && art.naturalWidth && art.naturalHeight)
-    ? art.naturalWidth / art.naturalHeight : FIGHT_PLATE_ASPECT;
-  const drawn = containRect(stageRect, aspect);
+/* `stageRect` MUST be the drawn-ink rect, not the element box: callers pass
+   plateRect(stage). Two implementations of that mapping existed briefly, mine
+   here and Reggie's plateRect(); his is the one kept, because it encapsulates
+   finding the plate and falling back to the element box, and it has a prove-red
+   at a squashed stage where a raw-box mapping misses the hand by ~30px. */
+export function anchorsFor(stageRect, arenaRect, youRect = null) {
+  const drawn = stageRect;
   const rel = ([fx, fy]) => ({
     x: Math.round(drawn.left - arenaRect.left + drawn.width * fx),
     y: Math.round(drawn.top - arenaRect.top + drawn.height * fy),
