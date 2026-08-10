@@ -52,18 +52,30 @@ function run(file, args) {
   });
 }
 
+/* A SUITE THAT CRASHES MUST NOT LOOK LIKE A QUIET FAILURE. This printed only
+   lines matching /^FAIL/, so a suite that died during boot (no assertions run,
+   no FAIL lines, exit 1) reported as a blank blocker and read like a flake. Show
+   the assertion failures when there are any, and the tail of the output when
+   there are not, which is where the stack will be. */
+function failLines(out) {
+  const lines = out.split('\n');
+  const hits = lines.filter(l => /^FAIL|FAILED/.test(l));
+  const show = hits.length ? hits.slice(0, 12) : ['(no assertions failed: the suite itself died)', ...lines.filter(Boolean).slice(-8)];
+  return show.map(l => '        ' + l).join('\n');
+}
+
 const results = [];
 for (const f of PURE) {
   const r = await run(f, []);
   results.push(r);
   console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(r.out.split('\n').filter(l => /FAIL|failed|Error/.test(l)).slice(0, 12).map(l => '        ' + l).join('\n'));
+  if (r.code !== 0) console.log(failLines(r.out));
 }
 for (const f of BROWSER) {
   const r = await run(f, [base]);
   results.push(r);
   console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(r.out.split('\n').filter(l => /^FAIL|FAILED/.test(l)).slice(0, 12).map(l => '        ' + l).join('\n'));
+  if (r.code !== 0) console.log(failLines(r.out));
 }
 
 const bad = results.filter(r => r.code !== 0);
