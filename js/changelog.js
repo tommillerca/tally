@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 354, date: '2026-08-09', title: 'The Live Wire fights like himself', items: [
+    'He is nearly twice your size now and he floats, which is what a boss should look like. He was the same size as you, which was a mistake.',
+    'He has his own moves: a bolt that goes straight through armour, a wail that stops your wounds closing, something he calls up out of the floor, and a reap that hits harder the more stamina you are sitting on.',
+    '<b>The amulet on his chest is the way in.</b> Land a crit and it shatters, and he can never wail or raise the dead again for the rest of that fight.',
+  ] },
   { n: 353, date: '2026-08-09', title: 'The Live Wire', items: [
     'A new boss, drawn by hand rather than dressed up out of cosmetics. A quarter of the boss dens on your map are his, and they stay his: go back next week and he is still standing there.',
     'He holds every seventh rung of the Gauntlet too, and some days he is the remote den.',

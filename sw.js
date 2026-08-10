@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v353';
+const VERSION = 'tally-v354';
 const PRECACHE = [
   './',
   './index.html',
@@ -44,7 +44,8 @@ const PRECACHE = [
   './assets/bh/fx/heckle/dark2.png',
   './assets/bh/fx/heckle/bone1.png',
   './assets/bh/fx/heckle/bone2.png',
-  './assets/bh/mage/mage.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
+  './assets/bh/mage/mage.png',
+  './assets/bh/mage/mage-fight.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
   './assets/bh/glutton/idle.png',
   './assets/bh/glutton/tongue.png',
   './assets/bh/glutton/middle.png',

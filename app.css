@@ -6827,7 +6827,21 @@ body::before {
 /* THE LIVE WIRE. Drawn art, not a cosmetic stack, so he gets a plate like The
    Glutton: contained, never mirrored, never stretched. */
 .mage-plate { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 50%; }
-.fstage.mage-foe { width: clamp(132px, 30cqh, 186px); }
+/* HE IS A BOSS AND HAS TO READ AS ONE. The rough-in measured it before the art
+   existed (ROADMAP, 2026-08-09): 1.84x the player with headroom, because 1.41x
+   does not read as a boss next to the Glutton. I then shipped him at 1.00x, the
+   exact size of the player, which is the thing that spec existed to prevent.
+   Height is free now the arena is 558 tall; width is not, so the foe column
+   widens for him and the player's stage steps back to 0.92, both from that spec.
+   He FLOATS: no legs in the drawing, so he is lifted clear of the floor and
+   keeps his own shadow well below the robe. */
+.arena.boss-mage .fighterG.foe-side { width: 208px; }
+#foeStage.mage-foe {
+  width: 100%; height: clamp(196px, 46cqh, 262px); align-self: end;
+  margin-bottom: 30px;                       /* the lift: he hangs, he does not stand */
+  filter: drop-shadow(0 26px 16px rgba(0, 0, 0, 0.55));
+}
+.arena.boss-mage .fighterG:not(.foe-side) > .fstage { transform: scale(.92); transform-origin: bottom center; }
 .bst-fig.bst-drawn { background: #0d0f08; }
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
 /* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */

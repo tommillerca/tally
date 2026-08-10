@@ -11813,7 +11813,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v353'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v354'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12292,6 +12292,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,
   });
+  /* THE LIVE WIRE FIGHTS LIKE HIMSELF. Without this he is only a new picture on
+     an ordinary skeleton, which is the exact thing the rough-in existed to
+     prevent. The kit lives in pit.js (Grasp, Hollow Bolt, Wail, Rise, Reap) and
+     the crossed-bone amulet on his chest is the mechanic: a crit shatters it. */
+  if (foeCfg.mage) foe.wraith = true;
   const add = foeCfg.add ? makeFighter({
     name: foeCfg.add.name,
     stats: scaleStats(fighter.stats, foeCfg.add.mult),
@@ -12364,7 +12369,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const body = $('#fightBody', wrap);
   let stopGluttonFoeAnim = () => {};
   body.innerHTML = `
-    <div class="arena" id="arena">
+    <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
       <div class="pit-crowd"></div>
       <div class="pit-banner l"></div><div class="pit-banner r"></div>
       <div class="pit-torch l"></div><div class="pit-torch r"></div>
@@ -12394,7 +12399,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
              character flips its chain, its pointing hand and its lightning. */
-          : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage.png" alt="">`
+          : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage-fight.png" alt="">`
           : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
@@ -12805,6 +12810,34 @@ async function openFight(pitWrap, fighter, foeCfg) {
       el('hudPet')?.classList.add('down');
       floatNode('🐾 DOWN', 'p', 'stamp dim');
       hitSound(S.sounds, 'thud');
+    } else if (ev.t === 'wraith') {
+      /* HIS SPELLS, the ones Tom art-directed on 2026-08-09 ("use blurring and
+         feathering etc to mimic real life textures"). js/wraith-fx.js was built
+         for exactly this and then sat unused when the art landed. */
+      const arena = $('#arena'), stage = el('foeStage');
+      if (arena && stage) {
+        import('./wraith-fx.js').then(fx => {
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect());
+          const name = ev.cast === 'grasp' ? 'reap' : ev.cast === 'rise' ? 'wail' : ev.cast;
+          if (fx.CASTS[name]) fx.cast(arena, name, anchors, { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
+        }).catch(() => {});
+      }
+      pulse(stage, 'lunge-l', fxMs);
+      hitSound(S.sounds, ev.cast === 'wail' ? 'thud' : 'hit');
+    } else if (ev.t === 'amulet') {
+      const arena = $('#arena'), stage = el('foeStage');
+      if (arena && stage) {
+        import('./wraith-fx.js').then(fx => {
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect());
+          if (fx.CASTS.amulet) fx.cast(arena, 'amulet', anchors, { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
+        }).catch(() => {});
+      }
+      floatNode('AMULET BROKEN', 'f', 'stamp');
+    } else if (ev.t === 'drain') {
+      if (ev.amount) floatNode(`-${ev.amount} STAM`, 'p', 'dim');
+      if (ev.healed) floatNode(`+${ev.healed}`, 'f', 'heal');
+    } else if (ev.t === 'summon') {
+      pulse(el('addStage'), 'pop', fxMs);
     } else if (ev.t === 'aoe') {
       const arena = $('#arena');
       if (arena) {
@@ -12858,7 +12891,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (ev.move === 'firebolt') return `${who} seared ${them} with fire for ${ev.damage}`;
       if (ev.whiffed && !ev.damage) return null;
       if (ev.flurry) return ev.hitNo === 1 ? `${who} unleashed a flurry: ${ev.damage}...` : `...${ev.damage}${ev.hitNo === 3 ? '!' : '...'}`;
-      return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : `landed a ${ACTIONS[ev.move].label.toLowerCase()} on`} ${them} for ${ev.damage}`;
+      /* MOVE NAMES THAT ARE NOT IN THE SHARED TABLE. The Live Wire's casts are his
+         own (bolt, reap), so ACTIONS[ev.move] is undefined for them and reading
+         .label off it threw mid-fight. Fall back to the move id. */
+      const moveLabel = (ACTIONS[ev.move] && ACTIONS[ev.move].label) || WRAITH_MOVE_LABEL[ev.move] || ev.move || 'hit';
+      return `${who} ${ev.signature ? 'UNLEASHED THE SIGNATURE on' : `landed a ${moveLabel.toLowerCase()} on`} ${them} for ${ev.damage}`;
     }
     if (ev.t === 'counter') return `${who === 'You' ? 'You counterstep' : who + ' countersteps'} for ${ev.damage}!`;
     if (ev.t === 'heal') return ev.mend ? `${who} mended ${who === 'You' ? 'your' : 'their'} marrow (+${ev.amount} HP)` : `${who} drank the marrow (+${ev.amount} HP)`;
@@ -12892,8 +12929,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'faint') return `${esc(ev.name)} went down! You fight on alone.`;
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
-    if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : 'swing'}... and hit nothing but air` : `${who} whiffed the haymaker`;
+    if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : (WRAITH_MOVE_LABEL[ev.move] || 'swing').toLowerCase()}... and hit nothing but air` : `${who} whiffed the haymaker`;
     if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep — ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
+    /* THE LIVE WIRE. Each line names what the move actually did, because his
+       whole point is that his moves check things nothing else checks. */
+    if (ev.t === 'wraith') return {
+      bolt: `${esc(ev.name)} throws a hollow bolt — straight through armour`,
+      wail: `${esc(ev.name)} WAILS. Your wounds will not close as fast.`,
+      rise: `${esc(ev.name)} calls something up out of the floor`,
+      reap: `${esc(ev.name)} reaps — and the fuller your lungs, the deeper it cuts`,
+      grasp: `${esc(ev.name)} reaches out and takes the wind out of you`,
+    }[ev.cast] || '';
+    if (ev.t === 'drain') return `${esc(ev.name)} drains ${ev.amount} stamina${ev.healed ? ` and heals ${ev.healed}` : ''}`;
+    if (ev.t === 'summon') return `${esc(ev.name)} claws its way up`;
+    if (ev.t === 'amulet') return `The amulet SHATTERS. ${esc(ev.name)} cannot wail or raise the dead again.`;
     if (ev.t === 'ko') return `${who} wins by KO`;
     return '';
   }
@@ -12939,6 +12988,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       `<button class="fight-act endturn" id="endTurn" ${mine ? '' : 'disabled'}><b>End Turn</b><small>${mine ? fight.ap + ' AP left' : (petPhase ? "pet's turn" : 'waiting...')}</small></button>`;
     if (mine) el('endTurn').addEventListener('click', endPlayerBody);
   }
+
+  /* his casts are not in ACTIONS; the log still has to be able to name them */
+  const WRAITH_MOVE_LABEL = { bolt: 'Hollow Bolt', reap: 'Reap' };
 
   function renderActions() {
     const factions = el('factions');

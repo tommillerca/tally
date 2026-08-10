@@ -734,13 +734,22 @@ function healMult(f) { return f.talents.has('hallowed') ? 1.2 : 1; }
 // Measured 2026-08-08: cheat-death + sustain won 99% at even stats and 95%
 // against a foe 20% stronger, i.e. the fight could not be lost. Now 63/41.
 export const LASTLIGHT_HEAL_MULT = 0.5;
+/* The Live Wire's Wail halves your healing for two turns. It rides the SAME
+   funnel as Last Light rather than inventing a second one, because that funnel
+   exists precisely so a heal cannot dodge the clause by not calling healMult. */
+export const WAIL_HEAL_MULT = 0.5;
 function healUp(f, amount) {
   if (!(amount > 0)) return 0;
-  const amt = Math.round(amount * (f.lastlightUsed ? LASTLIGHT_HEAL_MULT : 1));
+  const cut = (f.lastlightUsed ? LASTLIGHT_HEAL_MULT : 1) * (f.healCut > 0 ? WAIL_HEAL_MULT : 1);
+  const amt = Math.round(amount * cut);
   const before = f.hp;
   f.hp = Math.min(f.d.maxHp, f.hp + amt);
   return f.hp - before;
 }
+
+/* healUp is private on purpose (every heal must route through it). This lets a
+   test measure what it actually does instead of a copy of its maths. */
+export function healForTest(f, amount) { return healUp(f, amount); }
 
 export function dealDamage(fight, victimWho, amount, events) {
   const v = fighterOf(fight, victimWho);
@@ -1171,6 +1180,16 @@ export function applyAction(fight, actionId) {
     }
   }
 
+  /* THE AMULET IS THE MECHANIC. It is drawn on him, so it can visibly break: a
+     CRIT from you shatters it and takes Wail and Rise off his list for the rest
+     of the fight. Checked here, once, rather than at each of the dozen places a
+     hit event is pushed, so no move can be the one that forgets. */
+  if (fight.f && fight.f.wraith && fight.f.amulet !== false && fight.active === 'p'
+      && events.some(e => e.t === 'hit' && e.crit && !e.whiffed)) {
+    fight.f.amulet = false;
+    events.push({ t: 'amulet', who: 'f', name: fight.f.name });
+  }
+
   checkOver(fight);
   if (fight.over && fight.over.winner !== 'draw') events.push({ t: 'ko', who: fight.over.winner });
   return events;
@@ -1223,6 +1242,11 @@ export function endTurn(fight) {
   }
   tickDots(me, next, ticks);
   if (me.toxicity > 0) me.toxicity = Math.max(0, me.toxicity - 10); // Alchemist Toxicity bleeds off
+  // The Live Wire's Wail wears off at the start of your turn, like every other timer
+  if (me.healCut > 0) {
+    me.healCut -= 1;
+    if (me.healCut <= 0) { me.healCut = 0; ticks.push({ t: 'wailfade', who: next }); }
+  }
   // v70 class-identity ticks, at the START of this fighter's turn
   if (me.rage && me.hp > 0) {
     me.hp = Math.max(1, me.hp - 6); // bleed the cost; never self-KO
@@ -1315,6 +1339,69 @@ function actForEnemy(fight, who, events) {
   }
   let guard = 0;
   while (!fight.over && fight.active === who && fight.ap > 0 && guard++ < 6) {
+    /* ---------------- THE LIVE WIRE ----------------
+       Designed against the drawing before the art landed (ROADMAP, 2026-08-09):
+       he is a caster and a summoner, not a bruiser, and each move checks
+       something the game does not otherwise check. The crossed-bone amulet is
+       drawn on him, so it is the mechanic: while it is intact he can Wail and
+       Rise, and a CRIT shatters it, which gives crit builds a job no other fight
+       gives them. He floats, so stagger does nothing to him. */
+    if (f.wraith && who === 'f' && fight.ap >= 1) {
+      const kit = [];
+      // Reap: scales with the stamina you are SITTING ON. Hoarding is the risk.
+      if (p.wind >= p.d.maxWind * 0.5 && f.wind >= 25) kit.push({ id: 'reap', w: 3.2 });
+      // Wail: your healing halved. Checks lifesteal stacking, the top exploit.
+      if (f.amulet !== false && !(p.healCut > 0)) kit.push({ id: 'wail', w: 2.4 });
+      // Rise: he brings a body. Reuses the add slot and the two-target HUD.
+      if (f.amulet !== false && !fight.fAux) kit.push({ id: 'rise', w: 2.2 });
+      // Hollow Bolt: magic, straight through physical Armor.
+      kit.push({ id: 'bolt', w: 3 });
+      // Grasp: filler that takes your stamina and turns it into his health.
+      if (p.wind >= 10) kit.push({ id: 'grasp', w: 1.6 });
+
+      const total = kit.reduce((n, k) => n + k.w, 0);
+      let roll = fight.rng() * total, castId = kit[kit.length - 1].id;
+      for (const k of kit) { roll -= k.w; if (roll <= 0) { castId = k.id; break; } }
+
+      fight.ap -= 1;
+      events.push({ t: 'foeAction', id: castId });
+      events.push({ t: 'wraith', cast: castId, name: f.name });
+
+      if (castId === 'bolt') {
+        // his own power, none of your armour: Reflex and Spell resist matter, plate does not
+        const dmg = Math.max(4, Math.round(12 * (f.d.powerMult || 1) * (0.9 + fight.rng() * 0.3)));
+        events.push({ t: 'hit', who, move: 'bolt', damage: dmg, name: f.name, magic: true });
+        dealDamage(fight, fight.fTarget === 'pa' ? 'pa' : 'p', dmg, events);
+      } else if (castId === 'wail') {
+        p.healCut = 2;
+        events.push({ t: 'status', who: 'p', kind: 'wail' });
+      } else if (castId === 'rise') {
+        fight.fAux = makeFighter({
+          name: `${f.name}'s Risen`, beast: true,
+          stats: { power: Math.round(6 * (f.d.powerMult || 1)), toughness: 5, reflex: 4, spirit: 3 },
+          weaponId: 'starter',
+        });
+        fight.fAux.side = 'f';
+        events.push({ t: 'summon', who: 'f', name: fight.fAux.name });
+      } else if (castId === 'reap') {
+        // the fuller your bar, the harder it lands
+        const share = Math.min(1, p.wind / Math.max(1, p.d.maxWind));
+        const r = resolveHit({ move: 'haymaker', attacker: f, defender: fight.p, rng: fight.rng });
+        const dmg = Math.round(r.damage * (0.75 + share * 0.9));
+        f.wind = Math.max(0, f.wind - 25);
+        events.push({ t: 'hit', who, move: 'reap', damage: dmg, name: f.name });
+        dealDamage(fight, 'p', dmg, events);
+      } else {
+        const taken = Math.min(p.wind, 14);
+        p.wind -= taken;
+        const healed = healUp(f, Math.round(taken * 1.2));
+        events.push({ t: 'drain', who, amount: taken, healed, name: f.name });
+      }
+      gainHype(fight.p, 3);
+      checkOver(fight);
+      continue;
+    }
+
     const legal = actionsFor(fight).filter(x => x.enabled);
     if (!legal.length) break;
     const pick = (id) => legal.find(x => x.id === id);

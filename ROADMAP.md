@@ -9,7 +9,139 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 👹 The Bestiary: 56 themed bosses (BUILT 2026-08-09, branch `pit-bosses`, awaiting merge)
+## 🌱 The Hollow: garden + apothecary as one hands-on scene — DECISION (designed 2026-08-09, awaiting Tom's call)
+
+**Tom's ask (2026-08-09, with an Animal Crossing Pocket Camp garden screenshot):**
+merge how food is cooked and potions are created into one tab inspired by that
+garden. Top half: a garden where you plant ingredients; tap a few times to dig
+and prep a plot, put the seed in, water it, come back and water again for a good
+yield; a grown plant gets a plucking animation showing how many ingredients you
+earned. Bottom half: a potion-mixing apothecary with the same easy tap prep, a
+couple taps on a bunsen-burner thing, then the potions bubble and cook. Plus:
+plan where the rest of the potion/cooking parts of the game live.
+
+**Investigation: both halves already exist as SYSTEMS; the ask is the scene and
+the hands.** `js/garden.js` (The Bone Garden, v259) already has plots, seeds,
+plant, one mid-grow watering (+1 yield), harvest, compost, buyable beds.
+`js/cooking.js` already cooks dishes AND brews potions in the same pot slots
+(RECIPE_BY_ID is the union), with pantry, satchel, transmute, forage, buyable
+pots. The Kitchen sheet currently splits them behind two DOORS (COOK / GROW) and
+both are list/card UI. So this is a presentation + interaction merge over intact
+systems, NOT a new economy. Player note #4 from the same day (harvest gives no
+feedback) is subsumed: the pluck moment IS that fix.
+
+**The design: one continuous world-space diorama YOUR BONEHEAD stands in and
+tends.** (Tom's correction, same day, with AC Pocket Camp garden + Stardew
+screenshots: "i want the bonehead to be in the real space with the farm and the
+apothecary... like the bonehead is in a real space tending to the garden and
+the potions kind of like in stardew.") Not beds-as-buttons: a top-down-ish 3/4
+diorama (grass, stone path, brick-ringed plots, like the Pocket Camp shots)
+with the player's ACTUAL bonehead (their real equipped fit via
+`avatarLayersHtml`, transmog respected, figure contract obeyed) standing on the
+path. You tap a thing; the bonehead hops over and DOES it. That is exactly
+Pocket Camp's interaction model: tap-to-act, the avatar walks to the flower and
+tends it, no joystick.
+- **Top half, The Bone Garden:** plot clusters ringed in brick on grass, fence
+  with the seed pouch, compost heap in the corner, forage crow at the gate, an
+  undug plot with a price sign (the existing bed purchase).
+- **Ingredient shelf:** a thin strip between the halves with the 7 ingredient
+  counts. The hinge of the screen: GROW fills it, COOK spends it.
+- **Bottom half, The Apothecary:** the path leads down to a covered stall the
+  bonehead walks into: the owned pot slots become burner STATIONS (cauldron
+  skin for dishes, retort skin for potions, same slot either way), recipe book,
+  pantry cupboard (badge = stocked dishes), potion satchel on a hook, transmute
+  crystal, an empty counter spot with a price tag (the existing pot purchase).
+- **The bonehead is the hands.** Every ritual below is performed BY the avatar:
+  it hops to the tapped bed, swings the shovel on each dig tap, kneels to drop
+  the seed, tips the watering can, pulls the plant on the pluck, dumps
+  ingredients into the vessel, strikes the flint, stirs. Tools (shovel, can,
+  basket) are scene PROPS drawn in the hand zone, respecting the fixed IL/IR
+  z-order (never across the face). Optionally the player's pet wanders the
+  garden idle (petFrom + petAsideHtml rules, a new figure-audit SITES row).
+- **Technique:** DOM/SVG layers like the fight stage, not canvas: ground SVG +
+  positioned plot elements + the bonehead layer stack (~90-110px, .fsmall scale
+  reads fine: body, hat and colour carry it) + prop overlays. Movement = a
+  400-600ms eased hop of the avatar wrapper. Layers preload on open (the
+  screens-arrive-whole machinery already covers sheets).
+
+**The garden ritual (per planting):**
+1. Tap an empty bed 3x to dig: shovel strikes, dirt pops, bed goes cracked →
+   tilled (ephemeral UI state, nothing persisted; walking away costs nothing).
+2. Seed picker opens (existing sheet); seed drops in with a plop, mound forms.
+3. Watering can: one tap, arc of drops, soil darkens. This planting-time watering
+   is pure ceremony, no yield effect.
+4. Mid-grow: the bed turns THIRSTY once the crop is ~40% grown, and only then
+   does the existing `watered` bonus watering unlock (one new gate in garden.js:
+   `canWater` also requires elapsed ≥ 40% of grow time). That makes "come back
+   and water it later" literally true; today you can water 5 seconds after
+   planting and be done. Yield math untouched.
+5. Ready: tap the plant, it jiggles; tap again, it POPS out with the ingredients
+   bursting up and a big "+3 Bog Mushroom" count (floatNode + crate-reveal
+   vocabulary + haptic). This is the payoff moment player note #4 says is missing.
+6. Seed is only spent at step 2's confirm; abandoning any step loses nothing.
+
+**The apothecary ritual (per brew/cook):**
+1. Tap a free station (or the recipe book): recipe list opens, dishes + potions
+   together, exactly today's cards.
+2. Pick one: the needed ingredients arc into the vessel one by one (auto).
+3. The burner: tap twice to strike the flint, flame catches, liquid starts to
+   bubble. `startCook` fires HERE, at flame-catch, so ingredients are only spent
+   when the timer actually starts; abandoning earlier resets free.
+4. Bubbling = the existing cookMin timer, shown as the vessel simmering with a
+   progress ring, not a bar in a list.
+5. Ready: the vessel rattles and glows; tap it, a bottle fills (potion → satchel)
+   or a plate is served (dish → pantry). Existing collectDish, existing XP.
+
+**Nothing changes underneath (the guardrail list):** yields, grow times, cook
+times, compost cap (3/day), transmute cooldown, forage cost, bed/pot prices and
+caps, seed sources (walks + compost), XP awards, pantry/eat flow, potions drunk
+mid-fight in the Pit, Alchemist's future Toxicity kit untouched. The `garden` and
+`cooking` kv shapes are untouched; every ritual state is ephemeral in-sheet.
+Ritual taps add ceremony, zero economy.
+
+**Where everything else lives (the parts Tom didn't spell out):**
+| Part | Where |
+|---|---|
+| Recipe book (dishes + potions) | Book on the apothecary counter → existing recipe cards |
+| Pantry (cooked dishes, eat/toss) | Cupboard in the apothecary, badge shows stock |
+| Potion satchel (view counts) | Bag on a hook; DRINKING stays mid-fight in the Pit |
+| Active dish buffs | Small steam wisps over the cupboard + existing rows on tap |
+| Compost heap (ingredient → seeds) | Physical heap in the garden corner → existing sheet |
+| Seed pouch | Hanging on the garden fence → existing pouch |
+| Transmute (6 commons → Ectoplasm) | Crystal on the counter → existing confirm |
+| Forage (45 coins) | Crow with a basket at the garden gate → existing confirm |
+| Buy 4th/5th bed, 2nd/3rd pot | Price-sign plot / empty counter spot, armToConfirm as today |
+| Entry points | Today hero button, Today card, shop "Forage" link, Backpack "Open the Kitchen": all route to the one scene |
+
+**Decisions for Tom:**
+1. **Entry:** keep it as the Kitchen sheet off Today (recommended: it is one tap
+   and the tabbar stays 5-wide) or promote to a bottom-nav tab.
+2. **Name:** "The Hollow" (proposed), or keep "The Haunted Kitchen", or another.
+3. **Stations:** shared for dishes + potions (recommended: zero capacity/economy
+   change) vs separate kitchen pots and alchemy burners (new capacity to design).
+4. **Dig ritual every planting** (recommended, ~4 taps ≈ 2s) or first-use only.
+5. **Thirst gate at 40% growth** for the bonus watering: OK?
+6. **Art:** v1 scene backdrop in the app's inline-SVG style now; optional Cam
+   art brief later (hi-res + layered source per the art rules). The bonehead is
+   always the player's real layered PNG fit, never a redraw.
+7. **Movement:** tap-to-act with the bonehead hopping to the target (recommended,
+   Pocket Camp's exact model) vs free walking (a joystick is a much bigger build
+   and fights a scrolling sheet).
+8. **Pet in the garden:** the player's pet wanders the diorama idle
+   (recommended, cheap delight) or bonehead only.
+
+**Build plan (after approval):** Phase 0 mockup FIRST
+(`market-quality-mockups/hollow.html`: the scene, both halves, ritual
+storyboards) → Tom approves the look → Phase 1 build in a worktree (scene render
+layer over intact garden.js/cooking.js; only logic change is the thirst gate +
+startCook moving to flame-catch) → Phase 2 verification per tally/CLAUDE.md:
+every ritual fired via the REAL controls with decoded-pixel asserts on the
+bonehead, the pluck and the bubble FX, cold-cache pass, a figure-audit SITES row
+for the new avatar surface (and the pet if it joins), ui-audit rows for every
+new control, screen-sweep arrival, the 1s timer tick must keep holding while a
+confirm is armed, unit tests pin "thirst gate does not change yield" and
+"abandoned ritual spends nothing", each proven red. Handoff to the aggregator
+with the standard paste block.
 
 **Approved and built.** Tom, 2026-08-09: "ok you cooked with these bosses theyre
 super cool", then "add them to the pit ladder and elsewhere in the game for

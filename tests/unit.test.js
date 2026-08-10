@@ -25,6 +25,8 @@ import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../j
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
 import { STAT_META, WEAPONS } from '../js/pit.js';
+import * as pitMod from '../js/pit.js';
+const mkFighter = pitMod.makeFighter;
 import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
@@ -2053,6 +2055,124 @@ test('BOSSES every look uses real catalogue ids', async () => {
     else if (BH_BY_ID[id].slot !== slot) bad.push(`${id} is a ${BH_BY_ID[id].slot}, worn as ${slot}`);
   }
   assert.deepEqual([...new Set(bad)], [], 'a boss references art that does not exist');
+});
+
+
+/* THE LIVE WIRE'S KIT. Designed against the drawing before the art existed
+   (ROADMAP, 2026-08-09) and then, when the art landed, very nearly shipped
+   without any of it. Each move checks something the game does not otherwise
+   check, so each one gets a test that fails if it quietly stops doing that.
+   These run through aiTakeTurn, the real path, not by poking flags. */
+const wireFight = (seed, tweak = () => {}) => {
+  const you = mkFighter({ name: 'You', stats: { power: 12, marrow: 14, wind: 40, reflex: 10, spirit: 10 } });
+  const him = mkFighter({ name: 'The Live Wire', stats: { power: 16, marrow: 12, wind: 40, reflex: 8, spirit: 14 } });
+  him.wraith = true;
+  const fight = pitMod.createFight({ player: you, foe: him, seed, aiLevel: 4 });
+  you.hp = 9999; you.d.maxHp = 9999;
+  tweak({ fight, you, him });
+  /* hand the turn over the way the game does, rather than poking active/ap:
+     endTurn is what sets the foe's AP, ticks its timers and flips the side. */
+  pitMod.endTurn(fight);
+  return { fight, you, him };
+};
+const wireCasts = (n, tweak) => {
+  const seen = [];
+  for (let seed = 1; seed <= n; seed++) {
+    const { fight } = wireFight(seed, tweak);
+    for (const e of pitMod.aiTakeTurn(fight)) if (e.t === 'wraith') seen.push(e.cast);
+  }
+  return seen;
+};
+
+test('the Live Wire casts his own kit, not a skeleton\'s', async () => {
+  const casts = wireCasts(60);
+  assert.ok(casts.length >= 50, `he should act every turn, got ${casts.length} casts in 60 fights`);
+  const kinds = new Set(casts);
+  for (const id of ['bolt', 'reap', 'wail', 'rise']) {
+    assert.ok(kinds.has(id), `${id} never came up in 60 fights: ${[...kinds].join(', ')}`);
+  }
+});
+
+test('the Live Wire: Wail halves your healing and wears off', async () => {
+  const { fight, you } = wireFight(3);
+  // heal at full rate
+  you.hp = 100; you.d.maxHp = 1000;
+  const base = pitMod.healForTest(you, 100);
+  you.healCut = 2;
+  const cut = pitMod.healForTest(you, 100);
+  assert.equal(cut, Math.round(base * pitMod.WAIL_HEAL_MULT), `${cut} should be half of ${base}`);
+  // and it expires on its own
+  fight.active = 'f';
+  pitMod.endTurn(fight);        // -> player's turn ticks it
+  pitMod.endTurn(fight);
+  pitMod.endTurn(fight);
+  assert.equal(you.healCut, 0, 'Wail must not last the whole fight');
+});
+
+test('the Live Wire: a crit shatters the amulet, and only a crit', async () => {
+  const { fight, him } = wireFight(11);
+  fight.active = 'p';
+  assert.notEqual(him.amulet, false, 'it starts intact');
+  // a plain hit leaves it alone
+  const plain = pitMod.applyAction(fight, 'jab');
+  const wasCrit = plain.some(e => e.t === 'hit' && e.crit);
+  if (!wasCrit) assert.notEqual(him.amulet, false, 'a non-crit must not shatter it');
+  /* and a real crit shatters it. Driven through applyAction with a high-Reflex
+     player over many seeds rather than by setting the flag, so this fails if the
+     shatter ever stops being wired to the crit. */
+  let shattered = false, sawCrit = false;
+  for (let seed = 1; seed <= 60 && !shattered; seed++) {
+    const you2 = mkFighter({ name: 'You', stats: { power: 30, marrow: 10, wind: 80, reflex: 60, hype: 0 } });
+    const him2 = mkFighter({ name: 'The Live Wire', stats: { power: 10, marrow: 60, wind: 40, reflex: 6, hype: 0 } });
+    him2.wraith = true;
+    const f2 = pitMod.createFight({ player: you2, foe: him2, seed, aiLevel: 1 });
+    for (let i = 0; i < 8 && !shattered && !f2.over; i++) {
+      f2.ap = 3;
+      const evs = pitMod.applyAction(f2, 'swing');
+      if (evs.some(e => e.t === 'hit' && e.crit)) sawCrit = true;
+      if (evs.some(e => e.t === 'amulet')) { shattered = true; assert.equal(him2.amulet, false); }
+      if (f2.f.hp <= 0) { f2.f.hp = f2.f.d.maxHp; f2.over = null; }
+    }
+  }
+  assert.ok(sawCrit, 'the sample never landed a crit, so it proves nothing');
+  assert.ok(shattered, 'a crit should shatter the amulet');
+  // and with it gone he can no longer Wail or Rise
+  const after = wireCasts(40, ({ him: h }) => { h.amulet = false; });
+  assert.ok(!after.includes('wail'), 'Wail must be gone with the amulet');
+  assert.ok(!after.includes('rise'), 'Rise must be gone with the amulet');
+});
+
+test('the Live Wire: Reap punishes a full stamina bar, not an empty one', async () => {
+  const reap = wind => {
+    let total = 0, n = 0;
+    for (let seed = 1; seed <= 80; seed++) {
+      const { fight } = wireFight(seed, ({ you, him }) => { you.wind = wind; him.amulet = false; });
+      for (const e of pitMod.aiTakeTurn(fight)) if (e.t === 'hit' && e.move === 'reap') { total += e.damage; n++; }
+    }
+    return { avg: n ? total / n : 0, n };
+  };
+  const hi = reap(100), lo = reap(8);
+  assert.ok(hi.n > 0, 'Reap should fire against a full bar');
+  assert.equal(lo.n, 0, 'Reap should not fire at all against an empty bar');
+  assert.ok(hi.avg > 0, `full-bar Reap should hurt, got ${hi.avg}`);
+});
+
+test('the Live Wire: Grasp turns your stamina into his health', async () => {
+  let drained = 0;
+  for (let seed = 1; seed <= 120 && !drained; seed++) {
+    const { fight, you, him } = wireFight(seed, ({ you: y, him: h }) => {
+      y.wind = 40; h.amulet = false; h.hp = Math.round(h.d.maxHp * 0.5);
+    });
+    const hpBefore = fight.f.hp, windBefore = fight.p.wind;
+    for (const e of pitMod.aiTakeTurn(fight)) {
+      if (e.t === 'drain') {
+        assert.ok(fight.p.wind < windBefore, 'it should take stamina');
+        assert.ok(fight.f.hp > hpBefore, 'and turn it into his health');
+        drained = 1;
+      }
+    }
+  }
+  assert.ok(drained, 'Grasp never fired in 120 tries');
 });
 
 await runAll();

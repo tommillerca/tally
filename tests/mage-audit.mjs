@@ -245,6 +245,38 @@ ok("the Today row is him on his days", !row.none && row.isPlate && /live wire/i.
   JSON.stringify(row));
 ok('and it is drawn at a readable size', row.drawn && row.size >= 72, JSON.stringify(row));
 
+/* ---- 9. HE FIGHTS LIKE HIMSELF, and his spells are on screen. The kit and the
+   FX were designed with temp art on 2026-08-09 and then nearly shipped unused
+   when the real art landed, so this drives a real fight to the end and watches
+   what actually happens. ---- */
+await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+await sleep(700);
+await page.evaluate(async () => {
+  await window.__denFight(1.2, 0, { name: 'The Live Wire', mage: true });
+});
+await sleep(600); await settle(page); await sleep(1200);
+const combat = await page.evaluate(async () => {
+  const lines = new Set();
+  let fxMax = 0, amulet = false;
+  for (let step = 0; step < 120; step++) {
+    const pm = document.querySelector('.fight-act.petmove:not([disabled])');
+    const atk = document.querySelector('.fight-act[data-act=swing]:not([disabled])');
+    const et = document.getElementById('endTurn');
+    if (pm) pm.click(); else if (atk) atk.click(); else if (et && !et.disabled) et.click();
+    await new Promise(r => setTimeout(r, 260));
+    fxMax = Math.max(fxMax, document.querySelectorAll('.wfx, [class*="wfx"]').length);
+    const l = document.getElementById('flog')?.textContent || '';
+    if (l) lines.add(l);
+    if (/amulet/i.test(l)) amulet = true;
+  }
+  const casts = [...lines].filter(x => /hollow bolt|wails|reaps|takes the wind|claws its way|amulet/i.test(x));
+  return { casts, distinct: casts.length, fxMax, amulet, lines: lines.size };
+});
+ok('he casts his own moves in a real fight', combat.distinct >= 2,
+  `${combat.distinct} of his moves seen: ${combat.casts.join(' / ').slice(0, 160)}`);
+ok('his spells are drawn on screen', combat.fxMax > 0, `${combat.fxMax} FX layers at peak`);
+ok('the log names what each move did', combat.lines >= 4, `${combat.lines} distinct log lines`);
+
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nthe Live Wire is live');
 await browser.close();
 process.exit(fails.length ? 1 : 0);
