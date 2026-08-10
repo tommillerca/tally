@@ -594,6 +594,7 @@ async function boot() {
   maybeShowGardenPopup();
   maybeShowSpireIntro();
   maybeShowBossIntro();
+  maybeShowMageIntro();
   maybeShowRaceIntro();
   maybePromptRecovery();
   maybePromptName();
@@ -886,6 +887,50 @@ async function maybeShowBossIntro() {
     setTimeout(tick, 3000);
   } catch { /* never block boot */ }
 }
+
+/* THE MAGE. Tom, 2026-08-09: "we need a popup for the new boss art. i want some
+   dens to always be the new mage."
+   He is drawn, not assembled, so the poster is the drawing at full size and the
+   copy gets out of its way. */
+const MAGE_SEEN_KEY = 'mageIntroSeen';
+async function maybeShowMageIntro() {
+  try {
+    if ((navigator.webdriver && !window.__mageForce) || !S.settings) return;
+    if (await kvGet(MAGE_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(MAGE_SEEN_KEY, true);
+      openMageIntro();
+    };
+    setTimeout(tick, 3400);
+  } catch { /* never block boot */ }
+}
+
+function openMageIntro() {
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil mage-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">NEW</span>
+      <p class="drop-eyebrow">THE VAULT IS HIS</p>
+      <h1 class="drop-title">The <em>Live Wire</em></h1>
+      <img class="mage-poster" src="assets/bh/mage/mage.png" alt="The Live Wire">
+      <p class="drop-sub">He holds a quarter of the dens on your map and he is not letting them go. Same one every time you come back.</p>
+      <button class="drop-cta" id="mageGo">FIND HIS VAULT</button>
+      <button class="drop-later" id="mageLater">Not now</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#mageLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#mageGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__mageIntro = openMageIntro;
+if (typeof window !== 'undefined' && navigator.webdriver) window.__todayRow = day => bestiaryBannerHtml(remoteDen(day));
 
 /* THE WALL. Tom, 2026-08-09: "the popup isn't showing enough monsters it's
    boring and text heavy let the art speak."
@@ -2134,8 +2179,8 @@ async function renderToday(el) {
      composing. Unlike the teaser strip this is ONE figure and it is the whole
      reason the row is interesting, so it composes on render rather than on open
      (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
-  const bestIco = $('.bestiary-banner .gbn-ico');
-  if (bestIco) composeAvatars(bestIco);
+  const bestRow = $('.bestiary-banner');
+  if (bestRow) composeAvatars(bestRow);
   /* The teaser strip lives inside a <details>. Its heads are only composed when
      the section is opened: compositing 18 layered stacks on every Today render,
      for a row most people never expand, is work nobody sees. */
@@ -2751,20 +2796,26 @@ function gluttonLoreHtml() {
    surprise of every new enemy". Meeting a monster for the first time is the
    product. The only place the roster is ever shown is the one-time teaser wall
    in openBossIntro, which shows a sample and names nothing. */
-function bestiaryBannerHtml() {
-  const den = remoteDen(dateKey());
+function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   const eq = themedLook(den.theme && den.theme.key, den.id);
-  return `<details class="glutton-banner bestiary-banner">
-    <summary>
-      <span class="gbn-ico bestiary-ico">${headshotHtml(eq || {}, 52)}</span>
-      <span class="gbn-txt"><i>Out hunting today</i><b>${esc(den.boss)} at ${esc(den.name)}</b></span>
-      <span class="gbn-chev">›</span>
-    </summary>
-    <div class="gbn-body">
-      <p class="glutton-mech">Every den, tower and Pit rung now has a face, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones. They rotate daily, and your whole Crew meets the same one you do.</p>
-      <button class="btn ghost" id="bestiaryToMap" style="width:100%">Find today's on the Boneyard</button>
-    </div>
-  </details>`;
+  /* SHOW THE MONSTER. Tom, 2026-08-09: "you have a drop down banner that says
+     some shit about the bouncer below. it should have this type of art in there"
+     next to a screenshot of the teaser wall. Right: the row was a 52px head, a
+     chevron and a paragraph you had to open to read. A whole figure on a dark
+     tile, exactly as the teaser draws them, IS the row. Nothing to expand, and
+     the only place it goes is the map. */
+  const drawn = den.theme && den.theme.art === 'mage';
+  return `<button class="glutton-banner bestiary-banner" id="bestiaryToMap" type="button">
+    <span class="bh-stage boss-cell bst-fig${drawn ? ' bst-drawn' : ''}">${drawn
+      ? `<img class="mage-plate" src="assets/bh/mage/mage.png" alt="">`
+      : avatarLayersHtml(eq || {}, { noYard: true, skip: ['BG', 'C'] })}</span>
+    <span class="gbn-txt">
+      <i>Out hunting today</i>
+      <b>${esc(den.boss)}</b>
+      <em>${esc(den.name)} · find it on the Boneyard</em>
+    </span>
+    <span class="gbn-chev">›</span>
+  </button>`;
 }
 
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
@@ -2992,6 +3043,20 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__friendProfile = f => openFriendProfile(f, () => {});
 }
 
+/* THE DEN PIN. One function so the map and its audit build the same markup:
+   visuals + animations live on .den-fx, NOT the marker root, because MapLibre
+   owns the root's transform to position the marker and a transform-based CSS
+   animation there strands it at 0,0.
+   A mage den is HIS on the map too, or you walk to a tombstone and meet
+   something else: his pin drops the tombstone and the eyes for the drawing. */
+function buildDenPin(el, d) {
+  const isMage = !!(d.theme && d.theme.art === 'mage');
+  el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '') + (isMage ? ' mage-den' : '');
+  el.innerHTML = `<div class="den-fx">${isMage
+    ? `<img class="den-mage" src="assets/bh/mage/mage.png" alt="">`
+    : `<span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt="">`}<span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
+}
+
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
   const odds = denGearOdds(den.tier || 0);
   const r = den.reward || {};
@@ -3006,13 +3071,16 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
     <div class="sheet-head">
       <div class="hd">
         <h2>${den.roaming ? 'Roaming den' : 'Boss den'}</h2>
-        <div class="sub">${den.roaming ? 'Here today, gone tomorrow' : 'Rerolls its boss every Monday'}</div>
+        <div class="sub">${den.roaming ? 'Here today, gone tomorrow'
+          /* his dens do not reroll, so do not tell people they do */
+          : den.theme && den.theme.art === 'mage' ? 'His, and he is not moving'
+          : 'Rerolls its boss every Monday'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
       <div class="den-hero">
-        <span class="art"><img src="assets/brand/tombstone.png" alt=""></span>
+        <span class="art${den.theme && den.theme.art === 'mage' ? ' art-mage' : ''}"><img src="${den.theme && den.theme.art === 'mage' ? 'assets/bh/mage/mage.png' : 'assets/brand/tombstone.png'}" alt=""></span>
         <div class="who">
           <b>${esc(den.name || 'Boss den')}</b>
           <small>${esc(den.boss || 'Warden')}</small>
@@ -6892,12 +6960,18 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
+    blurb: 'A quarter of the dens on your map are his, and they stay his.',
+    thumb: () => `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`,
+    open: () => openMageIntro() },
   /* The Bestiary is a TEASER and this is the only place it lives on after the
      one-time showing. It shows a sample of the cast and names nothing: meeting a
      monster for the first time is the point. */
   { id: 'bestiary', date: 'Aug 9', title: 'The Bestiary',
     blurb: 'Fifty-six of them out there. The ground decides which one you meet.',
-    thumb: () => { const d = remoteDen(dateKey()); return headshotHtml(themedLook(d.theme && d.theme.key, d.id) || {}, 52); },
+    thumb: () => { const d = remoteDen(dateKey());
+      return d.theme && d.theme.art === 'mage' ? `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`
+        : headshotHtml(themedLook(d.theme && d.theme.key, d.id) || {}, 52); },
     open: () => openBossIntro() },
   { id: 'drop', date: 'Aug 8', title: 'The Puffer Pack',
     blurb: 'Ten legendary colourways. Puffer on puffer.',
@@ -8903,12 +8977,31 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
      was fixed. Same idiom as __crateForce / __spireForce: nothing changes unless a
      test opts in. pitWrap is only used to re-render the Pit on close, so null is
      safe here. */
-  window.__denFight = async (mult = 1.6, addMult = 0.5) => {
+  /* Open a real den sheet for a real den, so a test can look at what a player
+     looks at rather than at the data behind it. */
+  window.__openDen = async (theme = null) => {
+    const dens = densNear(isoWeekKey(new Date()), -50, -175);
+    const den = theme ? dens.find(d => !d.roaming && d.theme.key === theme) : dens[0];
+    if (!den) return null;
+    openDenSheet(den, { inRange: true });
+    return { name: den.name, boss: den.boss, theme: den.theme.key };
+  };
+  /* Build a den map marker exactly as the map builds it, without needing GPS. */
+  window.__denPinHtml = (theme = null) => {
+    const dens = densNear(isoWeekKey(new Date()), -50, -175);
+    const d = theme ? dens.find(x => !x.roaming && x.theme.key === theme) : dens[0];
+    if (!d) return null;
+    const el = document.createElement('div');
+    buildDenPin(el, d);
+    return el.outerHTML;
+  };
+  window.__denFight = async (mult = 1.6, addMult = 0.5, extra = {}) => {
     const fighter = await buildFighter();
     return openFight(null, fighter, {
       mode: 'boss', name: 'Test Captain', mult, bossMult: +(mult * 0.9).toFixed(3), aiLevel: 2,
       talents: [], venue: 'Test Den',
       add: { name: 'Test Beast', beast: true, mult: addMult, talents: [] },
+      ...extra,
     });
   };
 }
@@ -10926,11 +11019,7 @@ async function renderBoneyard(el) {
         let rec = denMarkers.get(d.id);
         if (!rec) {
           const el = document.createElement('div');
-          el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '');
-          // visuals + animations live on .den-fx, NOT the marker root — MapLibre
-          // owns the root's transform to position the marker, so a transform-based
-          // CSS animation on the root would fight it and strand the marker at 0,0.
-          el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
+          buildDenPin(el, d);
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
         } else {
@@ -11384,6 +11473,7 @@ async function renderBoneyard(el) {
            Gatormaw one day and Sporeback the next, and everyone in your Crew sees
            the same one, which is the whole point of it being worth mentioning. */
         foeOutfit: themedLook(den.theme && den.theme.key, den.id),
+        mage: !!(den.theme && den.theme.art === 'mage'),
       });
     });
 
@@ -11723,7 +11813,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v352'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v353'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12094,6 +12184,7 @@ async function renderPit(wrap) {
       // same roll as a walked-to den: the remote boss is a real den, just one you
       // did not have to reach, so it gets a real face too
       foeOutfit: themedLook(rDen.theme && rDen.theme.key, rDen.id),
+      mage: !!(rDen.theme && rDen.theme.art === 'mage'),
     });
   });
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
@@ -12112,14 +12203,25 @@ async function renderPit(wrap) {
   $('#champBtn', body)?.addEventListener('click', () =>
     startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
-    startPit({ mode: 'endless', rank: fightFoe.rank, name: fightFoe.name, mult: fightFoe.mult, talents: fightFoe.talents, weaponId: fightFoe.weaponId, aiLevel: fightFoe.aiLevel, coins: fightFoe.coins, repeatCoins: fightFoe.repeatCoins, xp: fightFoe.xp, venue: 'The Gauntlet',
-      /* Every tenth rung IS the Glutton, and he brings his own art rather than a
-         generated skeleton. `glutton` is carried alongside mode:'endless' rather
-         than replacing it, because the ladder still owns the rewards, the rank
-         and the ceiling: only the face and the difficulty step change. */
-      glutton: !!fightFoe.glutton }));
+    startPit(endlessFightCfg(fightFoe)));
   $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); location.hash = '#/boneyard'; });
 }
+
+/* THE GAUNTLET'S FIGHT CONFIG, as one function so the Pit and its audit build the
+   SAME object. Every tenth rung is the Glutton and every seventh is the Live
+   Wire; both bring their own drawing rather than a generated skeleton. The flags
+   ride alongside mode:'endless' rather than replacing it, because the ladder
+   still owns the rewards, the rank and the ceiling: only the face and the
+   difficulty step change. */
+function endlessFightCfg(f) {
+  return {
+    mode: 'endless', rank: f.rank, name: f.name, mult: f.mult, talents: f.talents,
+    weaponId: f.weaponId, aiLevel: f.aiLevel, coins: f.coins, repeatCoins: f.repeatCoins,
+    xp: f.xp, venue: 'The Gauntlet',
+    glutton: !!f.glutton, mage: !!f.mage,
+  };
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__endlessCfg = r => endlessFightCfg(endlessFoe(r));
 
 function foeOutfitFor(name) {
   /* A NAMED enemy wears its designed face. The Pit ladder, the Champion and the
@@ -12289,7 +12391,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
         </div>
       </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
-        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml() : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
+          /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
+             character flips its chain, its pointing hand and its lightning. */
+          : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage.png" alt="">`
+          : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
           <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>

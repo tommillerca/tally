@@ -6768,10 +6768,8 @@ body::before {
    32px full figure cropped its own legs off and read as a smudge; the skull box
    is the part that says which monster, or which hat, this is. The inner tile
    already carries the crop, so the icon shell only has to get out of its way. */
-.bestiary-ico { background: #0d0f08; border-color: rgba(253, 104, 87, .45); }
 .gbn-ico .tz-head { position: absolute; inset: 0; width: 100% !important; height: 100% !important;
   border: 0; border-radius: 0; background: none; }
-.bestiary-banner summary .gbn-txt i { color: var(--coral); }
 
 /* The announcement is a WALL of monsters, not a paragraph about monsters. Four
    across so a phone still shows a whole face per cell, and each cell pops in on
@@ -6803,13 +6801,37 @@ body::before {
    the portrait came out zoomed into a jaw. Measured, after two wrong guesses:
    head box 32x32 with an inline width of 52px and an inner transform built for
    52. The box and the px have to agree, so the box moves. */
-.out-there .bestiary-banner .gbn-ico { width: 52px; height: 52px; border-radius: 12px; }
 /* News rows: the garden bed art needs a box to sit in, same as the other thumbs */
 .nw-thumb .nw-garden { transform: scale(.30); transform-origin: center; display: block; }
 .nw-thumb .tz-head { border: none; border-radius: 11px; }
 
-/* THE BESTIARY sheet. A catalogue, so it reads as a grid of faces rather than a
-   paragraph about faces. */
-  font-size: 10px; line-height: 1.2; text-align: center; color: var(--text-2);
-  max-width: 72px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+
+/* THE DAY'S MONSTER IS THE ROW. Tom, 2026-08-09, with the teaser on screen:
+   "you have a drop down banner that says some shit about the bouncer below. it
+   should have this type of art in there". So the row borrows the teaser's own
+   tile: a whole figure on a dark square, at a size you can actually read. */
+.bestiary-banner {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 13px; text-align: left; cursor: pointer;
+  border-color: rgba(253, 104, 87, .3);
+  background: linear-gradient(160deg, rgba(253, 104, 87, .13), rgba(22, 20, 32, .9) 55%), var(--surface);
 }
+.bestiary-banner:active { transform: translateY(1px); }
+/* display:block is load-bearing: .bh-stage is a <span>, and width/height on an
+   inline box are simply ignored. Same trap the News thumbs hit. */
+.bst-fig { display: block; width: 88px; height: 88px; flex: 0 0 auto; animation: none; position: relative; }
+.bestiary-banner .gbn-txt i { color: var(--coral); }
+.bestiary-banner .gbn-txt b { font-size: 20px; line-height: 1.1; }
+.bestiary-banner .gbn-txt em { font-style: normal; font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+
+/* THE LIVE WIRE. Drawn art, not a cosmetic stack, so he gets a plate like The
+   Glutton: contained, never mirrored, never stretched. */
+.mage-plate { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 50%; }
+.fstage.mage-foe { width: clamp(132px, 30cqh, 186px); }
+.bst-fig.bst-drawn { background: #0d0f08; }
+.mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
+/* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */
+.mage-veil .drop-eyebrow { padding-right: 74px; }
+.map-den-mark.mage-den .den-fx .den-mage { width: 46px; height: auto; display: block; filter: drop-shadow(0 3px 6px rgba(0,0,0,.55)); }
+.den-hero .art.art-mage { background: none; border: 0; }
+.den-hero .art.art-mage img { width: 100%; height: 100%; object-fit: contain; }

@@ -56,6 +56,7 @@ const TIER_WEIGHTS = [3, 3, 2, 2, 1.2, 0.8, 0.4]; // mostly approachable, someti
 const DEN_BEASTS = {
   slab: 'Bonehound', greyhound: 'Pit Cur', gravewarden: 'Grave Wretch',
   ringmaster: 'Circus Beast', gravecaller: 'Risen Hound', boneshaman: 'Marsh Leech',
+  stormcaller: 'Arc Hound',
 };
 export function denBeastName(theme) {
   const b = DEN_BEASTS[theme && theme.arch];
@@ -63,6 +64,15 @@ export function denBeastName(theme) {
 }
 
 // Themes reuse the Bone Road / Pit art language.
+/* THE MAGE. Tom, 2026-08-09: "we need a popup for the new boss art. i want some
+   dens to always be the new mage." He is drawn, not assembled from cosmetics, so
+   he is a theme with `art` set and the fight draws the illustration instead of a
+   Bonehead stack, the same way The Glutton works. Deliberately NOT in the random
+   pool below: he is pinned to fixed cells so a mage den is a landmark you can go
+   back to, not a weekly coin flip. */
+export const MAGE_THEME = { key: 'mage', name: 'The Storm Vault', boss: 'The Live Wire', arch: 'stormcaller', art: 'mage' };
+export const MAGE_CELL_SHARE = 0.25;    // a quarter of landmark dens are his, forever
+
 export const DEN_THEMES = [
   { key: 'gate', name: 'The Boneyard Gate', boss: 'The Gatekeeper', arch: 'slab' },
   { key: 'catacomb', name: 'The Catacomb Club', boss: 'The Bouncer Below', arch: 'greyhound' },
@@ -77,6 +87,17 @@ function hashStr(s) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
+/* FNV alone is badly non-uniform on short, near-identical keys, and mulberry32's
+   FIRST output inherits that: `% 6` put the Mage on 6.5% of dens instead of 17%,
+   and seeding mulberry32 with it gave 33%. Both left a third of players with no
+   mage den anywhere near them. This is the standard finaliser avalanche, measured
+   at 24.9% share and 7.4% of neighbourhoods empty against a 25% target. */
+function mixHash(h) {
+  h ^= h >>> 16; h = Math.imul(h, 2246822507);
+  h ^= h >>> 13; h = Math.imul(h, 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -132,7 +153,12 @@ function denForCell(week, cx, cy) {
   const lng = (cy + (posRng() - 0.5) * 0.86) * DEN_CELL_DEG;
   // weekly identity: theme, boss tier
   const wkRng = mulberry32(hashStr(`den:${week}:${cx}:${cy}`));
-  const theme = DEN_THEMES[Math.floor(wkRng() * DEN_THEMES.length)];
+  const rolled = DEN_THEMES[Math.floor(wkRng() * DEN_THEMES.length)];
+  /* Seeded on the CELL, never the week: his dens do not rotate away. Run through
+     mulberry32 rather than a raw hash modulo, which is badly non-uniform on short
+     keys: `% 6` put him on 6.5% of dens instead of 17%, and left four players in
+     five with no mage den anywhere near them. Measured, not assumed. */
+  const theme = mixHash(hashStr(`mage:${cx}:${cy}`)) / 4294967296 < MAGE_CELL_SHARE ? MAGE_THEME : rolled;
   let roll = wkRng() * TIER_WEIGHTS.reduce((a, b) => a + b, 0), tier = 0;
   for (let i = 0; i < TIER_WEIGHTS.length; i++) { roll -= TIER_WEIGHTS[i]; if (roll <= 0) { tier = i; break; } }
   const den = {
@@ -222,7 +248,10 @@ export function denKey(week, den) {
 const REMOTE_MAX_TIER = 4;   // below the 2-on-1 monsters that gate on tier >= 5
 export function remoteDen(day = dateKey()) {
   const rng = mulberry32(hashStr(`remote:${day}`));
-  const theme = DEN_THEMES[Math.floor(rng() * DEN_THEMES.length)];
+  /* he is in this pool too, so the daily remote den (and the Today row that
+     names it) is him roughly one day in seven. */
+  const pool = [...DEN_THEMES, MAGE_THEME];
+  const theme = pool[Math.floor(rng() * pool.length)];
   const tier = Math.floor(rng() * (REMOTE_MAX_TIER + 1));
   const t = DEN_TIERS[tier];
   return {

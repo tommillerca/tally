@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 353, date: '2026-08-09', title: 'The Live Wire', items: [
+    'A new boss, drawn by hand rather than dressed up out of cosmetics. A quarter of the boss dens on your map are his, and they stay his: go back next week and he is still standing there.',
+    'He holds every seventh rung of the Gauntlet too, and some days he is the remote den.',
+    "Today's hunt shows the monster properly now, instead of a thumbnail next to a paragraph you had to open.",
+  ] },
   { n: 352, date: '2026-08-09', title: 'The fight screen holds still', items: [
     'The buttons no longer slide up and down between turns. End Turn is pinned in one place and stays there for the whole fight.',
     'The Bestiary is a teaser again, not a list. Meeting something new in the Pit should be a surprise, so there is no page that shows you the whole cast in advance.',

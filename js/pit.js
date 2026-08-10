@@ -1456,6 +1456,12 @@ const ENDLESS_TREES = [
    ladder forever instead of becoming trivial after rank 40. */
 export const GLUTTON_EVERY = 10;
 export const isGluttonRung = rank => rank > 0 && rank % GLUTTON_EVERY === 0;
+/* THE LIVE WIRE in the Gauntlet. Tom, 2026-08-09, on rolling the new boss out:
+   "the way itll be in boss dens, the way itll appear in the pit". Same mechanism
+   the Glutton already uses: he owns a repeating rung and brings his own drawing.
+   Offset from the Glutton's tens so the two never land on the same rank. */
+export const MAGE_EVERY = 7;
+export const isMageRung = rank => rank > 0 && rank % MAGE_EVERY === 0 && !isGluttonRung(rank);
 export function endlessFoe(rank) {
   if (isGluttonRung(rank)) {
     const tier = rank / GLUTTON_EVERY;
@@ -1476,6 +1482,24 @@ export function endlessFoe(rank) {
       xp: 140 + rank * 14,
       coins: 260 + rank * 22,
       repeatCoins: 25 + Math.min(45, rank * 3),
+    };
+  }
+  if (isMageRung(rank)) {
+    const tier = Math.floor(rank / MAGE_EVERY);
+    return {
+      rank,
+      name: tier > 1 ? `The Live Wire ${['II', 'III', 'IV', 'V', 'VI'][tier - 2] || tier}` : 'The Live Wire',
+      mage: true,
+      art: 'assets/bh/mage/mage.png',
+      // the same proportional step the Glutton gets, a shade lighter: he shows up
+      // more often, so he is a check rather than a wall.
+      mult: +((1.32 + rank * 0.07) * 1.11).toFixed(3),
+      talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
+      weaponId: 'starter',
+      aiLevel: 4,
+      xp: 110 + rank * 12,
+      coins: 200 + rank * 18,
+      repeatCoins: 22 + Math.min(40, rank * 3),
     };
   }
   const cycle = Math.floor((rank - 1) / ENDLESS_NAMES.length) + 1;

@@ -59,6 +59,30 @@ const dupes = await page.evaluate(async () => {
 });
 console.log(`  duplicate art (same slot)  : ${dupes.length}${dupes.length ? ' -> ' + dupes.map(d => d.join('=')).join(', ') : ''}`);
 
+/* A DANGLING DECLARATION SWALLOWS THE NEXT RULE. Deleting a selector line with a
+   regex left `font-size: 10px; ... }` on its own; the CSS parser ate the rule
+   after it, so a banner styled display:flex silently rendered inline-block, and
+   Chrome says nothing. Counting parsed rules cannot catch it (3462 of 3463 is
+   noise) and diffing selectors cannot either (the same defect breaks the source
+   scan symmetrically). The defect IS a brace at depth zero, so look for that. */
+{
+  const raw = (await import('node:fs')).readFileSync(new URL('../app.css', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  let depth = 0, line = 1, bad = 0, where = 0;
+  for (const ch of raw) {
+    if (ch === '\n') line++;
+    else if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth < 0) { bad++; where = where || line; depth = 0; } }
+  }
+  if (bad || depth !== 0) {
+    console.log(`FAIL  app.css: ${bad ? `stray closing brace at line ${where}` : `${depth} unclosed block(s)`}`);
+    console.log('      a declaration left outside any selector eats the rule that follows it');
+    process.exitCode = 1;
+  } else {
+    console.log('app.css braces balance (no orphaned declarations)');
+  }
+}
+
 await browser.close();
 if (missing.length || odd.length) { console.log('FAIL'); process.exit(1); }
 console.log('all catalogue art present, decoded and 640px');

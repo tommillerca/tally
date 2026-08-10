@@ -655,14 +655,47 @@ test('endless: the Glutton lands every 10 rungs and stays a real step at every t
   }
   // he brings his own art rather than a generated skeleton
   assert.match(pit.endlessFoe(10).art || '', /glutton/, 'the Glutton rung should carry his artwork');
-  // CONSISTENT: the same bump at rung 10 and rung 100
-  const step = r => pit.endlessFoe(r).mult / pit.endlessFoe(r - 1).mult - 1;
+  /* CONSISTENT: the same bump at rung 10 and rung 100, measured against the
+     LADDER'S OWN CURVE rather than the rung below. The rung below is not always
+     an ordinary climber any more (rung 49 is the Live Wire, who is himself a
+     step up), and comparing to him made the Glutton look like a smaller jump
+     than he is. The question the check is asking is "how far above the ordinary
+     ladder does he sit", so ask that. */
+  const plain = r => 1.32 + r * 0.07;
+  const step = r => pit.endlessFoe(r).mult / plain(r) - 1;
   for (const r of [10, 50, 100]) {
     assert.ok(step(r) > 0.15, `rung ${r} step ${(step(r) * 100).toFixed(1)}% is too small to be a check`);
     assert.ok(step(r) < 0.30, `rung ${r} step ${(step(r) * 100).toFixed(1)}% is a wall, not a check`);
   }
   // and he must still be on the ladder's own curve, not a spike that never scales
   assert.ok(pit.endlessFoe(100).mult > pit.endlessFoe(50).mult, 'the Glutton scales with the ladder');
+});
+
+/* THE LIVE WIRE holds his own rungs the same way, one step lighter because he
+   comes round more often. Tom, 2026-08-09: "the way itll appear in the pit". */
+test('endless: the Live Wire lands every 7 rungs, never on the Glutton', async () => {
+  const pit = await import('../js/pit.js');
+  for (const r of [7, 14, 21, 28, 42]) {
+    assert.equal(pit.endlessFoe(r).mage, true, `rung ${r} should be the Live Wire`);
+    assert.match(pit.endlessFoe(r).art || '', /mage/, `rung ${r} should carry his artwork`);
+    assert.match(pit.endlessFoe(r).name, /Live Wire/, `rung ${r} should be named for him`);
+  }
+  for (const r of [1, 6, 8, 10, 20, 70]) {
+    assert.ok(!pit.endlessFoe(r).mage, `rung ${r} must be someone else`);
+  }
+  // 70 is divisible by both: the Glutton keeps it, and they never double up
+  assert.equal(pit.endlessFoe(70).glutton, true, 'rung 70 stays the Glutton');
+  for (let r = 1; r <= 200; r++) {
+    const f = pit.endlessFoe(r);
+    assert.ok(!(f.mage && f.glutton), `rung ${r} cannot be both`);
+  }
+  // a real step above the ordinary ladder, but a lighter one than the Glutton's
+  const plain = r => 1.32 + r * 0.07;
+  for (const r of [7, 49, 105]) {
+    const s = pit.endlessFoe(r).mult / plain(r) - 1;
+    assert.ok(s > 0.08 && s < 0.16, `rung ${r} step ${(s * 100).toFixed(1)}% should be a check, not a wall`);
+    assert.ok(s < pit.endlessFoe(10).mult / plain(10) - 1, 'lighter than the Glutton');
+  }
 });
 
 /* UNRELEASED COSMETICS STAY DARK. Tom, 2026-08-08: "I want all of these as new

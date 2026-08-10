@@ -44,22 +44,31 @@ ok('nothing offers to show them all', spoiler.rosterCta === 0, `${spoiler.roster
 /* ---- the Today row: today's hunt, and a way to go find it ---- */
 const row = await page.evaluate(async () => {
   location.hash = '#/today';
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 1800));
   const d = document.querySelector('.bestiary-banner');
   if (!d) return { none: true };
-  d.open = true;
-  await new Promise(r => setTimeout(r, 400));
-  const heads = [...d.querySelectorAll('.tz-head')];
+  const fig = d.querySelector('.bst-fig');
+  const box = fig ? fig.getBoundingClientRect() : null;
+  /* the figure has to be DRAWN, at a size a person can read. A composed avatar
+     that never got its layers is an empty box that measures perfectly. */
+  const imgs = fig ? [...fig.querySelectorAll('img')] : [];
+  await Promise.all(imgs.map(i => i.decode().catch(() => {})));
   return {
     title: d.querySelector('.gbn-txt b')?.textContent.trim() || '',
-    monsters: heads.length,
-    toMap: !!d.querySelector('#bestiaryToMap'),
-    buttons: [...d.querySelectorAll('button')].map(b => b.textContent.trim()),
+    figures: d.querySelectorAll('.bst-fig').length,
+    size: box ? Math.round(Math.min(box.width, box.height)) : 0,
+    layers: imgs.length,
+    drawn: imgs.filter(i => i.naturalWidth > 0).length,
+    expandable: d.tagName === 'DETAILS' || !!d.querySelector('summary'),
+    tag: d.tagName,
   };
 });
 ok("the row names today's hunt", !!row.title && row.title.length > 3, row.title);
-ok('it shows that one monster, not a cast', row.monsters > 0 && row.monsters <= 2, `${row.monsters} figures`);
-ok('its only offer is to go find it', row.toMap && row.buttons.length === 1, JSON.stringify(row.buttons));
+ok('it shows that one monster, not a cast', row.figures === 1, `${row.figures} figures`);
+ok('the monster is drawn, not an empty tile', row.layers > 0 && row.drawn === row.layers,
+  `${row.drawn}/${row.layers} layers`);
+ok('at a size you can actually see', row.size >= 72, `${row.size}px  (a 52px head is what Tom rejected)`);
+ok('it is a tap, not a paragraph to expand', !row.expandable, row.tag);
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nbestiary stays a teaser');
 await browser.close();
