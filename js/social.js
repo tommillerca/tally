@@ -143,6 +143,7 @@ export async function backfillVaultMirror(deps = {}) {
     return kc.id.privJwk.d === id.privJwk.d ? 'already' : 'conflict';
   }
   await mirror(id);                              // CAS inside; empty vault -> write
+  import('./analytics.js').then(a => a.track('vault_backfill')).catch(() => {});
   return 'written';
 }
 
@@ -168,7 +169,16 @@ async function ensureIdentity() {
     await new Promise(r => setTimeout(r, 400 * (i + 1)));
     kc = await readKeychainIdentity();
   }
-  if (kc.id && kc.id.privJwk && kc.id.pubJwk) { await kvSet('identity', kc.id); return kc.id; }
+  if (kc.id && kc.id.privJwk && kc.id.pubJwk) {
+    await kvSet('identity', kc.id);
+    /* the moment the whole feature exists for: a wiped container came back as
+       the SAME account. Reported (anonymously) so real-world reinstalls prove
+       the net in D1 instead of anyone proving it by deleting their own app. */
+    // dynamic: analytics.js imports FROM this module, so a static import here
+    // would close a cycle (same trap cooking.js documents with poi.js)
+    import('./analytics.js').then(a => a.track('vault_recover')).catch(() => {});
+    return kc.id;
+  }
   if (!kc.ok) await kvSet('vaultUnreadable', Date.now());  // surfaced in Settings; do NOT mirror below
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   id = {
