@@ -37,6 +37,7 @@ const BROWSER = [
   'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'fight-layout-audit.mjs',  // the fight screen holds still
+  'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 

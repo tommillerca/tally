@@ -95,6 +95,37 @@ function mount(host) {
   .${NS} .haze{border-radius:50%;filter:blur(var(--b,30px));
     background:radial-gradient(circle, rgba(155,146,232,.55), rgba(155,146,232,0) 70%)}
   .${NS} .vig{inset:0;background:radial-gradient(120% 80% at 50% 45%, transparent 30%, rgba(12,10,20,.85) 100%)}
+  /* CAM'S OWN BOLTS. Tom, 2026-08-10: "You also haven't included any of the
+     lightning bolts etc that were attached in the artwork I gave you for the
+     Live Wire as separate layers. You should be using these to repurpose for his
+     moves. You could isolate the other layers and have them grow or flash etc
+     that's why cam included them."
+     Right, and mage-fx.png was sitting on disk unreferenced while this file drew
+     its own light from scratch. His bolts are now the SUBJECT of every cast and
+     the CSS light is demoted to the glow around them, which is the correct order:
+     the drawn thing is Cam's, the atmosphere is ours. Six sprites cut off the
+     supplied layer by connected component, trimmed to their own ink so a rotation
+     pivots on the bolt and not on empty canvas. */
+  .${NS} .artwrap{display:block;transform-origin:50% 50%}
+  .${NS} .art{inset:0;width:100%;height:100%;transform-origin:50% 50%;
+    /* screen-blend so the green rim glow Cam inked lifts off the dark arena
+       instead of sitting on it as a grey card */
+    mix-blend-mode:screen;
+    filter:drop-shadow(0 0 10px rgba(155,146,232,.75))}
+  .${NS} .art.strike{animation:${NS}strike .55s cubic-bezier(.16,1,.3,1) both}
+  .${NS} .art.grow{animation:${NS}grow .7s cubic-bezier(.16,1,.3,1) both}
+  .${NS} .art.flash{animation:${NS}flash .5s steps(1,end) 2 both}
+  .${NS} .art.sweep{animation:${NS}sweep .6s cubic-bezier(.7,0,.84,0) both}
+  @keyframes ${NS}strike{0%{opacity:0;transform:translateY(-14%) scaleY(.35)}
+    38%{opacity:1;transform:translateY(0) scaleY(1.06)}
+    100%{opacity:.9;transform:translateY(0) scaleY(1)}}
+  @keyframes ${NS}grow{0%{opacity:0;transform:scale(.28)}
+    46%{opacity:1;transform:scale(1.12)}100%{opacity:.85;transform:scale(1)}}
+  @keyframes ${NS}flash{0%{opacity:1}50%{opacity:.25}100%{opacity:1}}
+  @keyframes ${NS}sweep{0%{opacity:0;transform:translateX(26%) scaleX(.5)}
+    40%{opacity:1}100%{opacity:.9;transform:translateX(0) scaleX(1)}}
+  @media (prefers-reduced-motion: reduce){
+    .${NS} .art{animation:none !important}}
   `;
   host.ownerDocument.head.appendChild(css);
 }
@@ -113,6 +144,22 @@ function light(cls, style, { blur = 3, opacity = 1, bloom = true } = {}) {
 
 const box = (x, y, w, h) => `left:${x - w / 2}px;top:${y - h / 2}px;width:${w}px;height:${h}px`;
 
+/* One of Cam's bolts, centred on a point, sized by WIDTH with the height left to
+   the file's own aspect so nothing is squashed. `anim` picks which of the four
+   entrances it makes. */
+const FX_ASPECT = { 'bolt-sweep': 142 / 382, 'bolt-tall': 280 / 140, 'bolt-strike': 201 / 132,
+  'bolt-thin': 156 / 69, zigzag: 116 / 174, sparks: 87 / 159 };
+function sprite(name, x, y, w, { anim = 'grow', rot = 0, opacity = 1, flip = false } = {}) {
+  const h = w * (FX_ASPECT[name] || 1);
+  /* ROTATION LIVES ON A WRAPPER. The entrance animations own `transform` on the
+     image, so a rotate() in its inline style is simply discarded the moment the
+     animation starts: the first build of this had every bolt snap to 0deg on
+     frame one. The wrapper holds the pose, the image holds the motion. */
+  return `<span class="artwrap" style="left:${x - w / 2}px;top:${y - h / 2}px;width:${w}px;height:${h}px;`
+    + `transform:rotate(${rot}deg)${flip ? ' scaleX(-1)' : ''};opacity:${opacity}">`
+    + `<img class="art ${anim}" src="assets/bh/mage/fx/${name}.png" alt="" aria-hidden="true"></span>`;
+}
+
 /* ---------------------------------------------------------------- the casts */
 
 export const CASTS = {
@@ -123,10 +170,15 @@ export const CASTS = {
   wail(a) {
     const { hood } = a;
     let h = `<div class="vig" style="opacity:.75"></div>`;
-    [[132, 2.5, 1], [236, 4, .8], [344, 6, .5]].forEach(([w, b, o], i) => {
+    [[132, 2.5, .8], [236, 4, .55], [344, 6, .35]].forEach(([w, b, o], i) => {
       h += light(i % 2 ? 'ring alt' : 'ring', box(hood.x, hood.y, w, w * .62), { blur: b, opacity: o });
     });
-    h += light('haze', box(hood.x, hood.y, 260, 190), { blur: 28, opacity: .6, bloom: false });
+    h += light('haze', box(hood.x, hood.y, 260, 190), { blur: 28, opacity: .5, bloom: false });
+    /* the scream is the yellow: Cam's zigzag and his spark ticks are the only
+       yellow marks in the set, and wail is the one cast that is a SOUND */
+    h += sprite('zigzag', hood.x - 74, hood.y - 14, 116, { anim: 'flash', rot: -12 });
+    h += sprite('zigzag', hood.x + 76, hood.y - 6, 104, { anim: 'flash', rot: 14, flip: true, opacity: .9 });
+    h += sprite('sparks', hood.x, hood.y - 76, 108, { anim: 'grow' });
     return h;
   },
 
@@ -137,20 +189,36 @@ export const CASTS = {
     const dx = target.x - hand.x, dy = target.y - hand.y;
     const len = Math.hypot(dx, dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
     const lance = `left:${hand.x}px;top:${hand.y - 7}px;width:${len}px;height:14px;transform:rotate(${ang}deg)`;
-    return light('lance', lance, { blur: 2 })
-      + light('orb', box(hand.x, hand.y, 62, 62), { blur: 2, opacity: .8 })
-      + light('orb', box(target.x, target.y, 104, 104), { blur: 3, opacity: .6 })
-      + light('haze', box(target.x, target.y, 150, 150), { blur: 26, opacity: .4, bloom: false });
+    /* Cam's tall fork IS the bolt, laid along the hand->target vector. Its art is
+       drawn vertically, so it is rotated an extra 90deg onto the line of travel
+       and sized to the distance rather than to a fixed width. */
+    const mid = { x: (hand.x + target.x) / 2, y: (hand.y + target.y) / 2 };
+    /* NO LANCE. The CSS beam used to be the bolt; with Cam's fork doing that job
+       it rendered as a flat pale band straight across the arena and read as a
+       rendering artefact, not lightning. What is left is a glow at his hand and a
+       soft violet bloom where it lands: atmosphere around the drawing, not a
+       second drawing competing with it. */
+    return sprite('bolt-tall', mid.x, mid.y, Math.max(96, len * 0.58), { anim: 'strike', rot: ang + 90 })
+      + light('orb', box(hand.x, hand.y, 46, 46), { blur: 2, opacity: .55 })
+      + light('haze', box(target.x, target.y, 132, 132), { blur: 24, opacity: .34, bloom: false });
   },
 
   /* REAP — approved. Anticipation is the whole point: a hard white point
      collapses in the palm (EASE_IN, so nothing happens then everything does),
      the creature rim-lights, and only then does the arc tear across. */
   reap(a) {
-    const { hand } = a;
-    return light('orb', box(hand.x, hand.y, 88, 88), { blur: 3, opacity: .85 })
-      + light('lance', `left:${hand.x - 250}px;top:${hand.y - 96}px;width:300px;height:22px;transform:rotate(-24deg)`, { blur: 3, opacity: 1 })
-      + light('haze', box(hand.x - 70, hand.y - 30, 300, 210), { blur: 38, opacity: .42, bloom: false });
+    const { hand, target } = a;
+    /* Cam drew one bolt that travels horizontally with a hooked tail. That is the
+       reap: it tears across the arena rather than being thrown at a point. */
+    /* CENTRED ON THE SWING, NOT HUNG OFF HIS HAND. Placing it at hand.x - 70 put
+       most of a 300px sprite past the left edge of the arena, so the one cast
+       that is supposed to tear across the screen was the one you could barely
+       see. It spans the gap between him and you now, which is what the drawing
+       depicts. */
+    const mx = (hand.x + target.x) / 2, my = (hand.y + target.y) / 2 - 18;
+    return sprite('bolt-sweep', mx, my, 300, { anim: 'sweep' })
+      + light('orb', box(hand.x, hand.y, 62, 62), { blur: 3, opacity: .6 })
+      + light('haze', box(mx, my, 260, 170), { blur: 34, opacity: .32, bloom: false });
   },
 
   /* AMULET SHATTER — Tom, 2026-08-09: "keep the glowing lines instead of the
@@ -170,20 +238,57 @@ export const CASTS = {
         { blur: 2, opacity: .8 });
     }
     h += light('haze', box(amulet.x, amulet.y, 170, 170), { blur: 28, opacity: .45, bloom: false });
+    /* the amulet is gold, so it breaks in Cam's yellow, and his thin fork is
+       thrown out either side of it */
+    /* bigger than felt right on paper: at fight size a 46px fork is four pixels
+       of ink and the shatter read as a plain glow */
+    h += sprite('sparks', amulet.x, amulet.y - 6, 176, { anim: 'grow' });
+    h += sprite('bolt-thin', amulet.x - 84, amulet.y + 16, 74, { anim: 'strike', rot: -38 });
+    h += sprite('bolt-thin', amulet.x + 84, amulet.y + 16, 74, { anim: 'strike', rot: 38, flip: true });
     return h;
+  },
+
+  /* RISE — he calls something up out of the floor, so the bolt comes DOWN and
+     lands. Previously this reused the wail, which is a scream and reads nothing
+     like a summon. Cam's near-vertical strike is exactly the shape. */
+  rise(a) {
+    const { hand, hood } = a;
+    const gx = hand.x - 8, gy = hood.y + 168;
+    return light('haze', box(gx, gy, 240, 120), { blur: 32, opacity: .5, bloom: false })
+      + sprite('bolt-strike', gx, gy - 92, 128, { anim: 'strike' })
+      + light('orb', box(gx, gy, 118, 118), { blur: 3, opacity: .7 })
+      + light('ring', box(gx, gy + 16, 210, 74), { blur: 4, opacity: .55 });
   },
 };
 
-/* Anchors are FRACTIONS OF THE SPRITE BOX, measured off Cam's drawing with a
-   grid overlay, so they survive any resize and transfer to the final art. */
-export const ANCHORS = { hand: [0.26, 0.50], hood: [0.58, 0.27], amulet: [0.62, 0.62] };
+/* Anchors are FRACTIONS OF THE SPRITE BOX. These were originally eyeballed off
+   the TEMP art with a grid overlay and never re-measured when Cam's drawing
+   landed, and the fight uses a different crop again (mage-fight.png, 914x1024)
+   from the poster (mage.png, 1024x905), so every cast was firing from somewhere
+   near the mage rather than from him: the hood anchor was 0.09 out horizontally
+   and 0.11 vertically, which at a 200px stage is most of his head.
+   Re-measured off mage-fight.png itself, by colour, not by eye:
+     hand   the EXTENDED pointing hand, the larger left mint cluster (0.184,0.502)
+     hood   the yellow eyes inside the hood                          (0.490,0.383)
+     amulet the gold chain                                           (0.558,0.577)
+   If the fight plate is ever recropped, re-run that measurement; do not nudge
+   these by eye. */
+export const ANCHORS = { hand: [0.184, 0.502], hood: [0.490, 0.383], amulet: [0.558, 0.577] };
 
-export function anchorsFor(stageRect, arenaRect) {
+/* `youRect` is optional and should be the PLAYER's stage. Without it the target
+   falls back to a point measured once on one phone width, which the bolt could
+   live with (it only aims) but reap cannot: reap now spans the midpoint between
+   him and you, so a fixed target drifts off-centre on any other screen size. */
+export function anchorsFor(stageRect, arenaRect, youRect = null) {
   const rel = ([fx, fy]) => ({
     x: Math.round(stageRect.left - arenaRect.left + stageRect.width * fx),
     y: Math.round(stageRect.top - arenaRect.top + stageRect.height * fy),
   });
-  return { hand: rel(ANCHORS.hand), hood: rel(ANCHORS.hood), amulet: rel(ANCHORS.amulet) };
+  const target = youRect
+    ? { x: Math.round(youRect.left - arenaRect.left + youRect.width * 0.5),
+        y: Math.round(youRect.top - arenaRect.top + youRect.height * 0.45) }
+    : undefined;
+  return { hand: rel(ANCHORS.hand), hood: rel(ANCHORS.hood), amulet: rel(ANCHORS.amulet), ...(target ? { target } : {}) };
 }
 
 /* Play a cast. Three beats, always: wind up (EASE_IN so it collapses late),

@@ -42,6 +42,15 @@ ok('there is no roster to open', !spoiler.hasOpener && !spoiler.seeWholeBtn, JSO
 ok('nothing offers to show them all', spoiler.rosterCta === 0, `${spoiler.rosterCta} buttons`);
 
 /* ---- the Today row: today's hunt, and a way to go find it ---- */
+const rowRhythm = await page.evaluate(() => {
+  const card = document.querySelector('.out-there');
+  if (!card) return { ok: false, heights: ['no Out there today card'] };
+  const hs = [...card.querySelectorAll('.glutton-banner')].map(b => Math.round(b.getBoundingClientRect().height));
+  if (hs.length < 2) return { ok: false, heights: hs };
+  // ONE RHYTHM: no row may be more than a quarter taller than the shortest.
+  // 1.5 was too slack to fail on the real regression (102px against 72px passed).
+  return { ok: Math.max(...hs) <= Math.min(...hs) * 1.25, heights: hs };
+});
 const row = await page.evaluate(async () => {
   location.hash = '#/today';
   await new Promise(r => setTimeout(r, 1800));
@@ -67,7 +76,22 @@ ok("the row names today's hunt", !!row.title && row.title.length > 3, row.title)
 ok('it shows that one monster, not a cast', row.figures === 1, `${row.figures} figures`);
 ok('the monster is drawn, not an empty tile', row.layers > 0 && row.drawn === row.layers,
   `${row.drawn}/${row.layers} layers`);
-ok('at a size you can actually see', row.size >= 72, `${row.size}px  (a 52px head is what Tom rejected)`);
+/* THE SIZE FLOOR MOVED, ON TOM'S INSTRUCTION, AND THIS RECORDS WHY.
+   2026-08-09 he rejected a 52px head next to a paragraph and asked for the
+   monster itself, so this asserted >= 72px and the row was built at 88.
+   2026-08-10 he came back with "the 'out hunting today' banner is bigger than
+   the rest": measured 110px against 50 and 51 for its two siblings, which reads
+   as a layout fault rather than emphasis. Every row now shares a 72px minimum
+   and the figure is 58px inside it, which is still a whole monster and still
+   comfortably above the head-plus-paragraph he rejected.
+   The floor is 54, not 58: it guards against a collapse back to a thumbnail, and
+   pinning it to the exact current value would fail on any harmless tweak. */
+/* AND IT MUST NOT TOWER OVER ITS NEIGHBOURS. This is the check that was missing:
+   every size assertion here was a FLOOR, so a row that grew to twice the height
+   of the rest of the card passed everything. Tom found it instead. */
+ok('the row does not tower over the others in the card', rowRhythm.ok,
+  rowRhythm.heights.map(h => h + 'px').join(' / '));
+ok('at a size you can actually see', row.size >= 54, `${row.size}px  (a 52px head is what Tom rejected)`);
 ok('it is a tap, not a paragraph to expand', !row.expandable, row.tag);
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nbestiary stays a teaser');

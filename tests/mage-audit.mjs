@@ -259,7 +259,17 @@ const row = await page.evaluate(async () => {
 });
 ok("the Today row is him on his days", !row.none && row.isPlate && /live wire/i.test(row.title || ''),
   JSON.stringify(row));
-ok('and it is drawn at a readable size', row.drawn && row.size >= 72, JSON.stringify(row));
+/* THE SIZE FLOOR MOVED, ON TOM'S INSTRUCTION, AND THIS RECORDS WHY.
+   2026-08-09 he rejected a 52px head next to a paragraph and asked for the
+   monster itself, so this asserted >= 72px and the row was built at 88.
+   2026-08-10 he came back with "the 'out hunting today' banner is bigger than
+   the rest": measured 110px against 50 and 51 for its two siblings, which reads
+   as a layout fault rather than emphasis. Every row now shares a 72px minimum
+   and the figure is 58px inside it, which is still a whole monster and still
+   comfortably above the head-plus-paragraph he rejected.
+   The floor is 54, not 58: it guards against a collapse back to a thumbnail, and
+   pinning it to the exact current value would fail on any harmless tweak. */
+ok('and it is drawn at a readable size', row.drawn && row.size >= 54, JSON.stringify(row));
 
 /* ---- 9. HE FIGHTS LIKE HIMSELF, and his spells are on screen. The kit and the
    FX were designed with temp art on 2026-08-09 and then nearly shipped unused

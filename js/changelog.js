@@ -3,6 +3,18 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 359, date: '2026-08-10', title: 'A dozen fixes', items: [
+    "<b>The Live Wire fights with his own lightning.</b> Cam drew the bolts as separate layers and none of them were being used. They are his moves now: the fork he throws at you, the arc he tears across the floor, the strike he calls up, and the sparks when his amulet breaks.",
+    "<b>Two enemies now read as two enemies.</b> His creature is drawn solid instead of washed out and stands clear of him, anything you have already beaten drops on the spot instead of standing there looking alive, and whichever one is left flares so you know the fight is not over.",
+    "<b>The screen after a fight.</b> No more empty half-screen above your winnings.",
+    "<b>Chests.</b> Tap anywhere to move to the next card, not just on the card itself, and the deck behind it no longer looks like a card that failed to load.",
+    "<b>Eggs hatch where you left them</b> instead of shooting off the bottom of the screen.",
+    "<b>Tap any bar in your history</b> for that day's number. Every metric, every window, not just steps on the Trends page.",
+    "<b>Today counts toward your step averages now</b>, weighted by how much of a normal day's walking has actually happened, so a big morning shows up straight away without pretending the day is over.",
+    "<b>Steps update while you watch</b> instead of only when you reopen the screen.",
+    "<b>The Stable</b> tells you what to do after you pick the first pet to breed, closes a pet's talents when you swipe to another one, and scrolls without stuttering.",
+    "<b>Today's hunt</b> is the same size as everything else on the card, and tapping it opens the Bestiary again.",
+  ] },
   { n: 358, date: '2026-08-10', title: 'The Live Wire can be beaten again', items: [
     '<b>Fixed:</b> the Live Wire was unkillable in the Pit. What he raised out of the floor had no body you could hit, so once his health hit zero the fight had nothing left to end it and ran on until it timed out as a draw. He raises a bone minion now, the same way the Necromancer does, and the fight ends when he drops.',
     'Bosses past rung 50 have faces again. The Gauntlet ran out of names at the sixth cycle and everything after it turned into a random skeleton in random clothes. There is a whole second cast down there now.',

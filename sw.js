@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v358';
+const VERSION = 'tally-v359';
 const PRECACHE = [
   './',
   './index.html',
@@ -45,6 +45,14 @@ const PRECACHE = [
   './assets/bh/fx/heckle/bone1.png',
   './assets/bh/fx/heckle/bone2.png',
   './assets/bh/mage/mage.png',
+  // Cam's lightning layers, cut from mage-fx.png: his casts are drawn with these,
+  // so a cold cache must not fire a spell with no spell in it
+  './assets/bh/mage/fx/bolt-tall.png',
+  './assets/bh/mage/fx/bolt-sweep.png',
+  './assets/bh/mage/fx/bolt-strike.png',
+  './assets/bh/mage/fx/bolt-thin.png',
+  './assets/bh/mage/fx/zigzag.png',
+  './assets/bh/mage/fx/sparks.png',
   './assets/bh/mage/mage-fight.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
   './assets/bh/glutton/idle.png',
   './assets/bh/glutton/tongue.png',

@@ -2174,7 +2174,15 @@ async function renderToday(el) {
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  $('#bestiaryToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  /* THE ROW OPENS THE TEASER. Tom has said twice that "the monster bestiary
+     popup is gone", then "clicking it is broken": tapping the day's hunt jumped
+     straight to the map with no acknowledgement, which reads as a dead button.
+     The popup's own CTA still takes you hunting, so the map is one tap further,
+     not gone. Delegated off the card rather than bound to the node, because this
+     row is rebuilt on every Today refresh and a node-bound listener dies with it. */
+  $('.out-there')?.addEventListener('click', e => {
+    if (e.target.closest('#bestiaryToMap')) openBossIntro();
+  });
   /* The row's monster is a layered stack like any other Bonehead, so it needs
      composing. Unlike the teaser strip this is ONE figure and it is the whole
      reason the row is interesting, so it composes on render rather than on open
@@ -4770,6 +4778,66 @@ async function renderShop(el) {
 
 const STEP_REF = 10000; // step reference line on the activity chart (matches the home step goal)
 
+
+/* ================= today, counted honestly ================================= */
+/* Tom, 2026-08-10: "The averages should also prorate based on where you're at
+   that day and the amount of hours left. I know initially I said don't include
+   the current day in averages but I'm changing my mind... Don't let this data
+   skew things tho it needs to based logically in fact."
+ *
+ * The naive version weights today by the share of the CLOCK that has passed, and
+ * it lies: nobody walks between 1am and 6am, so at 8am you are 33% through the
+ * day with maybe 12% of a normal day's steps, and an ordinary morning reads as a
+ * huge over-performance. The average would spike at breakfast and sag all
+ * afternoon.
+ *
+ * So today is weighted by the share of a TYPICAL DAY'S STEPS that has normally
+ * happened by now, and joins the mean as a rate over comparable time:
+ *
+ *     avg = (sum of complete days + today so far) / (completeDays + weight)
+ *
+ * Nothing is extrapolated. No step is invented. The number can never claim more
+ * than the data supports, and a genuinely big morning does move the weekly
+ * average, which is the thing Tom asked for.
+ *
+ * THE ONE ASSUMPTION, stated because it is one: the curve below is a fixed
+ * population-shaped one, not the player's own. HealthKit can give hourly steps
+ * but the native bridge only ever sends daily totals, so there is no intraday
+ * history stored to fit a personal curve to. Deriving one is a native change.
+ *
+ * This is DISPLAY ONLY. Nothing that pays out may read it: a projected number
+ * must never be able to mint a reward.
+ */
+const DAY_STEP_CURVE = [
+  // cumulative share of a day's steps by the END of each hour, 0..23
+  0.005, 0.008, 0.010, 0.012, 0.016, 0.030, 0.060, 0.105,
+  0.165, 0.225, 0.285, 0.345, 0.415, 0.480, 0.540, 0.600,
+  0.665, 0.740, 0.820, 0.885, 0.930, 0.962, 0.985, 1.000,
+];
+function dayElapsedShare(now = new Date()) {
+  const h = now.getHours(), m = now.getMinutes();
+  const prev = h === 0 ? 0 : DAY_STEP_CURVE[h - 1];
+  // interpolate within the hour so the number does not step once an hour
+  return Math.min(1, Math.max(0.004, prev + (DAY_STEP_CURVE[h] - prev) * (m / 60)));
+}
+/* `days` newest-last, each {steps}. Returns {avg, weight, partial} where avg is
+   over complete days PLUS today at its honest weight. */
+function stepAvgWithToday(days) {
+  if (!days.length) return { avg: 0, weight: 0, partial: false };
+  const today = days[days.length - 1];
+  const done = days.slice(0, -1).filter(d => d.steps > 0);
+  const w = dayElapsedShare();
+  /* TODAY CANNOT BE THE WHOLE SAMPLE. With no complete days behind it the mean
+     collapses to todaySteps / w, and w floors at 0.004: at 00:15 with 100 steps
+     that renders a 25,000-step average. A fresh install is exactly this shape,
+     because the native bridge only ever sends today. The comment above promises
+     this number never claims more than the data supports, so it must not. */
+  if (!done.length) return { avg: 0, weight: w, partial: false };
+  const sum = done.reduce((a, d) => a + d.steps, 0) + (today.steps || 0);
+  const n = done.length + (today.steps > 0 ? w : 0);
+  return { avg: Math.round(sum / n), weight: w, partial: today.steps > 0 };
+}
+
 async function renderTrends(el) {
   const t = S.settings.targets;
   const weights = (await db.all('weights')).sort((a, b) => a.date.localeCompare(b.date));
@@ -4821,13 +4889,13 @@ async function renderTrends(el) {
   const loggedDays7 = days7.filter(d => d.logged).length;
   const kcalLogged14 = days14.filter(d => d.logged);
 
-  // Step averages EXCLUDE today (in-progress: no fair way to have a full day's
-  // steps yet, so it must not drag the average down). Count only days with steps.
-  const doneDays = days.slice(0, -1);
-  const stepAvg = arr => { const v = arr.filter(d => d.steps > 0); return v.length ? Math.round(v.reduce((a, d) => a + d.steps, 0) / v.length) : 0; };
+  /* Today COUNTS now, at the share of a normal day's steps that has actually
+     happened (see stepAvgWithToday). It used to be excluded outright. */
   const stepsToday = days[days.length - 1].steps;
-  const stepAvg7 = stepAvg(doneDays.slice(-7));
-  const stepAvg30 = stepAvg(doneDays.slice(-30));
+  const s7 = stepAvgWithToday(days.slice(-8));
+  const s30 = stepAvgWithToday(days.slice(-31));
+  const stepAvg7 = s7.avg, stepAvg30 = s30.avg;
+  const partialPct = Math.round(s7.weight * 100);
   const stepsHasData = days.some(d => d.steps > 0);
 
   const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
@@ -4856,12 +4924,12 @@ async function renderTrends(el) {
     <div class="card-title">STEPS${stepsHasData ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
     <div class="trend-stats" style="margin:2px 0 12px">
       <div class="st"><div class="l">Today</div><div class="v">${stepsToday.toLocaleString()}</div></div>
-      <div class="st"><div class="l">7-day avg</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
-      <div class="st"><div class="l">30-day avg</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">7-day avg${s7.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">30-day avg${s30.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
     </div>
     <div class="chart" id="stepsChart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}
       <p class="bc-readout note">${stepsHasData ? 'Tap any bar for that day\'s exact steps.' : ''}</p></div>
-    <p class="note" style="margin-top:8px">${stepsHasData ? `Line = ${(STEP_REF / 1000)}k steps. Averages skip today (still counting). Tap History for week / month / year.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
+    <p class="note" style="margin-top:8px">${stepsHasData ? `Line = ${(STEP_REF / 1000)}k steps. ${s7.partial ? `Today counts toward the averages at the ${Math.max(1, partialPct)}% of a normal day's walking that has happened so far, so a big morning shows up straight away without pretending the day is over.` : 'Today joins the averages once you have taken some steps, weighted by how much of a normal day has happened.'} Tap History for week / month / year.` : 'Connect Apple Health (Settings) so your steps power the game and show here.'}</p>
   </div>
 
   <div class="card">
@@ -4904,6 +4972,30 @@ async function renderTrends(el) {
   $('#openProg').addEventListener('click', openProgressSheet);
   el.querySelectorAll('[data-metric]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openMetricDetail(b.dataset.metric); }));
   wireBarChart($('#stepsChart', el), v => `${v.toLocaleString()} steps`);
+  /* LIVE STEPS. Re-render IN PLACE (not route()) so the screen does not jump back
+     to the top while you are reading it: refresh keeps scroll, navigation does not.
+     BOTH ROUTE NAMES. The first version gated on `currentTab() === 'trends'`, and
+     nothing in the app ever navigates there: every entry point goes to
+     '#/progress' and route() maps both names to renderTrends. So the guard was
+     never true and the whole feature was dead in the app while passing any test
+     that opened '#/trends' directly.
+     NO OBSERVER, EITHER. The teardown watched for `el` leaving the DOM, but `el`
+     is #screen, the static <main>: route() replaces its innerHTML and never the
+     element, so it is connected for the whole session. The observer could never
+     fire its disconnect and just sat on document.body with {childList, subtree}
+     for every DOM change in the app, including every frame of a fight. Wiring
+     once against a permanent element needs no teardown at all: the dataset flag
+     is the guard, and the handler re-reads the live screen each time. */
+  if (!el.dataset.liveWired) {
+    el.dataset.liveWired = '1';
+    const onTrends = () => ['progress', 'trends'].includes(currentTab());
+    const relive = () => {
+      const live = document.getElementById('screen');
+      if (live && onTrends()) renderTrends(live);
+    };
+    addEventListener('bh-health', relive);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) relive(); });
+  }
   wireBarChart($('#sleepChart', el), v => `${v.toFixed(1)} hours`);
   el.querySelectorAll('[data-sleepdetail]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openSleepDetail(); }));
   $('#trendConnect', el)?.addEventListener('click', openHealthGuide);
@@ -4953,8 +5045,11 @@ function wireBarChart(wrap, fmt) {
     const i = hit.dataset.i;
     svg.querySelectorAll('.bc-bar').forEach(b => b.classList.toggle('on', b.dataset.i === i));
     const raw = hit.dataset.val;
-    if (raw === '') { out.textContent = `${prettyDay(hit.dataset.date)} · nothing recorded`; return; }
-    out.textContent = `${prettyDay(hit.dataset.date)} · ${fmt(Number(raw))}`;
+    /* the detail chart labels year buckets by month name and has no date, so fall
+       back to whatever label it carried rather than printing an empty string */
+    const when = hit.dataset.date ? prettyDay(hit.dataset.date) : (hit.dataset.label || '');
+    if (raw === '') { out.textContent = `${when} · nothing recorded`; return; }
+    out.textContent = `${when} · ${fmt(Number(raw))}`;
   });
   svg.addEventListener('pointerleave', () => {
     svg.querySelectorAll('.bc-bar.on').forEach(b => b.classList.remove('on'));
@@ -5117,13 +5212,30 @@ function metricDetailChart(points, metricKey) {
     if (p.value == null) return '';
     const x = P + i * (bw + gap), yy = y(p.value), h = (H - 16 - P) - yy;
     const isBest = i === best;
-    return `<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5, h).toFixed(1)}" rx="1.5" fill="${isBest ? 'var(--accent)' : metric.color}" opacity="${isBest ? 1 : 0.55}"/>`;
+    return `<rect class="bc-bar${isBest ? ' best' : ''}" data-i="${i}" x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5, h).toFixed(1)}" rx="1.5" fill="${isBest ? 'var(--accent)' : metric.color}" opacity="${isBest ? 1 : 0.55}"/>`;
   }).join('');
+  /* TAP TARGETS, EVERYWHERE HISTORY IS DRAWN. Tom, 2026-08-10: "you still can't
+     tap around in your step history when you open it in trends... Make sure this
+     fix goes beyond the step trends too all of our tap in historical data should
+     be explorable by tapping around."
+     The Trends CARD chart has had hit targets and a readout since it was built.
+     This renderer, which is what the History sheet uses for EVERY metric, emitted
+     bare <rect>s with no classes, no data and no readout, so not one of them was
+     explorable. Full-height invisible targets, because a 3px-wide bar is not a
+     thumb target and the bottom of a short bar is unreachable.
+     The highlighted bar also had no explanation anywhere near it: Tom read it as
+     "a random bar is highlighted". It says what it is now, on the chart. */
+  const hits = points.map((p, i) => {
+    const x = P + i * (bw + gap);
+    return `<rect class="bc-hit" data-i="${i}" data-date="${esc(p.date || '')}" data-label="${esc(p.label || '')}" data-val="${p.value == null ? '' : p.value}"
+      x="${x.toFixed(1)}" y="0" width="${Math.max(bw, 8).toFixed(1)}" height="${H}" fill="transparent"/>`;
+  }).join('');
+  const bestLbl = best >= 0 ? `<text x="${(P + best * (bw + gap) + bw / 2).toFixed(1)}" y="${(y(points[best].value) - 4).toFixed(1)}" fill="var(--accent)" font-size="8.5" text-anchor="middle">${metric.goodLow ? 'lowest' : 'best'}</text>` : '';
   const by = y(base);
   const bl = `<line x1="${P}" y1="${by.toFixed(1)}" x2="${W - P}" y2="${by.toFixed(1)}" stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/><text x="${W - P}" y="${(by - 3).toFixed(1)}" fill="var(--text-3)" font-size="9" text-anchor="end">avg ${metricNum(metricKey, base)}</text>`;
   const leftLbl = { day: '2 wks ago', week: '7 days ago', month: '30 days ago', year: '12 mo ago' };
   const axis = `<text x="${P}" y="${H - 2}" fill="var(--text-3)" font-size="9">${leftLbl[points.length === 12 ? 'year' : (n === 7 ? 'week' : n === 14 ? 'day' : 'month')] || ''}</text><text x="${W - P}" y="${H - 2}" fill="var(--text-3)" font-size="9" text-anchor="end">now</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${bl}${bars}${axis}</svg>`;
+  return `<svg class="bc" viewBox="0 0 ${W} ${H}" width="100%">${bl}${bars}${bestLbl}${axis}${hits}</svg>`;
 }
 
 // a plain-language insight comparing the first vs second half of the window
@@ -5190,7 +5302,8 @@ async function openMetricDetail(metricKey) {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
       stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}–${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
-    return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}</div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
+    return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}
+      <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
   };
 
   const range0 = 'month';
@@ -5205,9 +5318,14 @@ async function openMetricDetail(metricKey) {
       <p class="note" style="margin:14px 2px 2px">Day, Week, Month and Year switch the window, like Apple Health. Baseline dashes = your recent average${metric.goodLow != null ? '; the green bar is your best day' : ''}.</p>
     </div>`;
   const wrap = openSheet(html, { cls: 'sheet-trend', name: 'trend_' + metricKey });
+  /* Re-wire on every range switch: the body is replaced wholesale, so a listener
+     bound to the old SVG dies with it. */
+  const wireDetail = () => wireBarChart($('.trend-panel', wrap), v => `${metricNum(metricKey, v)} ${metricUnit(metricKey)}`);
+  wireDetail();
   $$('.rtab', wrap).forEach(b => b.addEventListener('click', () => {
     $$('.rtab', wrap).forEach(x => x.classList.toggle('on', x === b));
     $('.trend-body', wrap).innerHTML = bodyHtml(b.dataset.r);
+    wireDetail();
   }));
 }
 
@@ -7918,12 +8036,19 @@ async function renderBonehead(el) {
 
 // Egg hatch: a bone egg wobbles, cracks spread, it bursts into shards and the
 // pet rises out. reducedMotion / headless skip straight to the reveal.
+/* webdriver seam: the hatch cinematic is otherwise only reachable by walking an
+   egg to term, which no check can arrange. Paired with __hatchForce, which lets
+   the animation actually run under automation. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openHatch = res => openHatchReveal(res, null);
 function openHatchReveal(res, charWrap) {
   const item = res.item;
-  const reduced = reducedMotion || navigator.webdriver;
+  /* THE SEAM. This cinematic could never run under automation, so nothing could
+     ever watch it, which is how an egg that flew off the bottom of the screen
+     shipped and stayed. Same escape hatch the crate reveal already has. */
+  const reduced = reducedMotion || (navigator.webdriver && !window.__hatchForce);
   const shards = Array.from({ length: 8 }, (_, i) => `<span class="egg-shard" style="--a:${i * 45}deg"></span>`).join('');
   const stageHtml = item ? `
-    <div class="hatch-stage${reduced ? ' burst' : ''}" id="hatchStage">
+    <div class="hatch-stage${reduced ? ' egg-burst' : ''}" id="hatchStage">
       <div class="hatch-glow"></div>
       <div class="hatch-flash"></div>
       <div class="bone-egg" id="boneEgg">
@@ -7976,11 +8101,11 @@ function openHatchReveal(res, charWrap) {
       cracks[i]?.classList.add('draw');
       hitSound(S.sounds, 'thud');
     }, t));
-    setTimeout(() => { if (stage.isConnected) { stage.classList.add('burst'); hitSound(S.sounds, 'zap'); } }, 1800);
+    setTimeout(() => { if (stage.isConnected) { stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 1800);
     setTimeout(() => { if (revealEl.isConnected) finish(); }, 2350);
   }
   $('#hatchOk', wrap2).addEventListener('click', () => history.back());
-  setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
+  if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
 }
 
 async function renderCharacter(wrap, tab, opts = {}) {
@@ -9089,6 +9214,9 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     // No confetti in here any more: it popped over the burst and fought it for
     // the same pixels. The light IS the fanfare now.
     const landed = tier => {
+      // the one moment the card is genuinely on screen, on both the crate-opening
+      // path and the browse path: the tap-anywhere handler gates on this
+      if (reveal) reveal.dataset.landed = '1';
       if (tier >= 2) { levelSound(S.sounds); tier >= 4 ? haptic.reward() : haptic.success(); }
       else { sparkleSound(S.sounds); haptic.tap(); }
     };
@@ -9108,6 +9236,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
       // the rest of the hand behind the live card; two deep reads as "more"
       const ghosts = cards.slice(i + 1, i + 3).map((_, n) => `<div class="pc-ghost g${n + 1}"></div>`).reverse().join('');
+      if (reveal) delete reveal.dataset.landed;
       deck.classList.remove('go');
       deck.innerHTML = ghosts
         + `<div class="pack-tilt"><div class="pc-rise"><div class="pc-sway">${packCardHtml(c)}</div></div></div>`;
@@ -9220,6 +9349,29 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       // footer said "tap or swipe" while only swiping worked. Measured with an
       // event probe, not guessed.
       tilt.addEventListener('click', () => { if (Math.abs(dx) < 6) fling(-1); });
+      /* AND ANYWHERE ELSE ON THE SCREEN. Tom, 2026-08-10: "it's not a good swipe
+         mechanic right now to next card that needs a fix too. Right now the swipe
+         requires precision this game is meant for people to on a walk."
+         Every gesture above is bound to the CARD, so a thumb that lands beside it
+         (which is most of the screen, and most taps when you are walking) did
+         nothing at all. The whole reveal surface now advances. The card keeps the
+         drag, so throwing it still works and still feels like throwing it. */
+      if (reveal && !reveal.dataset.tapWired) {
+        reveal.dataset.tapWired = '1';
+        reveal.addEventListener('click', e => {
+          if (e.target.closest('.pack-tilt')) return;   // the card handles itself
+          if (e.target.closest('button')) return;       // never eat a real control
+          /* NOT WHILE THE CRATE IS STILL OPENING. renderCard writes the card into
+             the deck immediately, but on the first card it sits behind the crate
+             for ~2.75s. Without this gate a second tap during the opening beat
+             (a laggy phone, or just tapping the crate) flung a card nobody had
+             seen yet, and on a single-card crate it closed the whole reveal about
+             330ms in. `landedAt` is set the moment the card is actually up. */
+          if (!reveal.dataset.landed) return;
+          const t = $('.pack-tilt', deck);
+          if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+      }
     }
     // a coins-only payout still gets its crate: play it out, then close
     if (cards.length) renderCard(); else at(opening ? 3400 : 700, done);
@@ -9305,6 +9457,12 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
   if (payload.wtypes) row.wtypes = payload.wtypes;
   await db.put('health', row);
   if (payload.steps != null) { await kvSet('hkLastSync', Date.now()); await kvSet('hkStaleNotified', false); }
+  /* LIVE. Tom, 2026-08-10: "why isn't the bar in the steps part of trends
+     updating in real time with steps for that day."
+     Because nothing told it. Steps land here and this function announced nothing,
+     so any screen already on the page kept whatever it rendered when you opened
+     it. Screens that care listen for this. */
+  dispatchEvent(new CustomEvent('bh-health', { detail: { date: payload.date, steps: payload.steps ?? null } }));
   if (payload.weightKg != null) {
     await db.put('weights', { date: payload.date, kg: payload.weightKg });
     await onWeighIn(payload.date);
@@ -9563,18 +9721,12 @@ async function openStable(opts = {}) {
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
-          <!-- DIRECTIONAL blur. Tom, 2026-08-08: "you're just kinda blurring the
-               non moving part ... what you have right now is more of just like a
-               heavy handed lens blur, we want the elements that are moving having
-               the blur based on the amount of movement."
-               CSS filter: blur() is isotropic, so it can only ever be a lens blur.
-               Real motion blur is a smear ALONG the axis of travel, which needs an
-               SVG feGaussianBlur with a two-value stdDeviation (x only, y zero).
-               One filter per card so each carries its own magnitude; the region is
-               widened on x so the smear is not clipped at the card edge. -->
-          <svg class="cf-mb" aria-hidden="true" focusable="false" width="0" height="0">
-            <defs>${roster.map((_, i) => `<filter id="cfmb${i}" x="-30%" y="-2%" width="160%" height="104%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="0 0"/></filter>`).join('')}</defs>
-          </svg>
+          <!-- The SVG motion-blur filter that used to live here is gone: measured
+               at 5% of frames over 32ms during a drag against 0.4% with no filter
+               at all. A composited two-copy smear was tried as a replacement and
+               removed: .cf-card is overflow:hidden, so the copies were clipped to
+               the card and never trailed past it. The ring's motion reads through
+               depth, rotation and fade. -->
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
@@ -9589,6 +9741,16 @@ async function openStable(opts = {}) {
            picking your second pet put the whole explanation off-screen behind
            you. It is the last thing in the body now and sticks to the bottom of
            the sheet, so it appears where your thumb already is. -->
+      ${!pair && sel.length === 1 ? `<div class="breed-bar sticky breed-waiting">
+          <div class="breed-h">Breeding: pick the second pet</div>
+          <p class="note" style="margin:2px 0 8px">Swipe the carousel to another pet and tap <b>BREED</b> on it. One of the two is kept and gains a lineage rank; the other is fed in.</p>
+          <div class="breed-waitrow">
+            <span class="bt-pet keep">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 42, one.shiny) : ''; })()}</span>
+            <span class="bw-arrow">${ICONS.chev(18)}</span>
+            <span class="bw-slot">?</span>
+          </div>
+          <button class="btn ghost" id="breedCancel">Cancel</button>
+        </div>` : ''}
       ${pair ? `<div class="breed-bar sticky${spareIsPrecious ? ' careful' : ''}">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
@@ -9662,17 +9824,17 @@ async function openStable(opts = {}) {
          turning. A card parked in the centre has dx = 0 and stays sharp even while
          the ring resizes around it, which is exactly the "blurring the non moving
          part" complaint. */
-      const prevX = new Array(N).fill(null);
-      const lastSigma = new Array(N).fill(-1);
-      /* THE BLUR IS THE LUXURY, THE FRAME RATE IS THE REQUIREMENT.
-         Tom, 2026-08-08: "it's still lagging quite heavily during movement we
-         cant have that." Six SVG filters re-rasterising over six animated sprite
-         stacks, each on its own 3D plane, is simply more than a phone will do at
-         60fps. So the ring MEASURES itself: if frames run long, the blur switches
-         off for the rest of the session and never comes back. An effect that
-         costs the thing it is decorating is not worth having, and this is a
-         judgement the device makes, not one guessed on a desktop. */
-      let blurOK = !reduced, slowFrames = 0, lastFrameT = 0;
+      /* THE BLUR IS GONE ENTIRELY, so its per-card bookkeeping goes with it.
+         Tom, 2026-08-10: "it's still pretty laggy I'm assuming this is due to the
+         blur effect. We cannot have lag in the interface people will uninstall
+         find a good compromise here."
+         The self-measuring bail-out that used to live here was the 2026-08-08
+         answer to the same complaint, and it was a half measure: it only helped
+         AFTER eight long frames had already been dropped, so the first swipe on
+         every session stuttered by design. Measured over four real drags with
+         seven pets: 5% of frames over 32ms with the SVG filter, 0.4% with no
+         filter at all. The ring keeps its depth, rotation and fade, which is
+         where its motion actually reads. */
       /* And the pets themselves stop animating while the ring is in motion.
          Nobody can appreciate an idle bob on a card flying past, so it costs
          nothing to look at and buys back the compositing. */
@@ -9683,7 +9845,6 @@ async function openStable(opts = {}) {
         const cf = $('.cf', body);
         if (cf) cf.classList.toggle('moving', on);
       };
-      const mbNodes = [...body.querySelectorAll('.cf-mb feGaussianBlur')];
       const cardPx = () => cards[0] ? cards[0].getBoundingClientRect().width || 150 : 150;
       const indexAt = p => ((Math.round(p) % N) + N) % N;
       const paint = () => {
@@ -9691,18 +9852,6 @@ async function openStable(opts = {}) {
            called again INSIDE this loop, immediately after writing a transform:
            six forced synchronous layouts per frame, each invalidated by the write
            before it. That is the drag lag. Read once, write many. */
-        const nowT = performance.now();
-        if (lastFrameT) {
-          const ft = nowT - lastFrameT;
-          // only judge frames that are part of a real animation run
-          if (ft > 26 && ft < 400) slowFrames++;
-          else if (ft < 20) slowFrames = Math.max(0, slowFrames - 1);
-          if (blurOK && slowFrames >= 8) {
-            blurOK = false;
-            cards.forEach((c, i) => { c.style.filter = ''; if (mbNodes[i]) mbNodes[i].setAttribute('stdDeviation', '0 0'); });
-          }
-        }
-        lastFrameT = nowT;
         const CW = cardPx();
         const PITCH = CW * (1 + GAP);
         cards.forEach((card, i) => {
@@ -9734,24 +9883,27 @@ async function openStable(opts = {}) {
              SVG filter re-renders whenever stdDeviation is touched, so setting it
              every frame on every card was re-rasterising six filters at 60Hz for
              sub-pixel differences nobody can see. Offscreen cards skip it. */
-          const prev = prevX[i];
-          const jumped = prev != null && Math.abs(x - prev) > PITCH * 1.5;
-          const dx = (prev == null || jumped) ? 0 : Math.abs(x - prev);
-          prevX[i] = x;
-          const vis = Math.max(0, 1 - FADE * dist) * edge;
-          const raw = (!blurOK || vis < 0.2) ? 0 : Math.min(2.2, dx * 0.15);
-          const sigma = raw < 0.6 ? 0 : +(Math.round(raw / 0.4) * 0.4).toFixed(1);
-          const fx = mbNodes[i];
-          if (fx && sigma !== lastSigma[i]) {
-            lastSigma[i] = sigma;
-            if (sigma > 0) {
-              fx.setAttribute('stdDeviation', `${sigma} 0`);
-              if (card.style.filter !== `url(#cfmb${i})`) card.style.filter = `url(#cfmb${i})`;
-            } else {
-              card.style.filter = '';       // parked: composite no filter at all
-              fx.setAttribute('stdDeviation', '0 0');
-            }
-          }
+          /* THE SMEAR IS COMPOSITED, NOT FILTERED. Tom, 2026-08-10: "it's still
+             pretty laggy I'm assuming this is due to the blur effect. We cannot
+             have lag in the interface people will uninstall find a good
+             compromise here."
+             He was right, and it was already as tuned as an SVG filter gets:
+             quantised sigma, written only on change, offscreen cards skipped.
+             Measured over four real drags with seven pets:
+                 with the filter   median 16.7ms   p95 33.3ms   5% of frames >32ms
+                 without it        median 16.7ms   p95 25.0ms   0.4%
+             Sixty frames a second either way, so it was never uniformly slow: it
+             was STUTTER, which is exactly what reads as lag. An SVG filter forces
+             rasterisation off the compositor, and on a phone that is worse than
+             it is here.
+             So the filter goes and nothing replaces it. A composited two-copy
+             smear was built first and then removed: .cf-card is overflow:hidden,
+             so the copies were clipped to the card's own box and could never
+             trail past its silhouette, and the trailing copy painted over the pet
+             art rather than behind it. The ring reads as motion through depth,
+             rotation and fade, which cost nothing and were already there. */
+
+
         });
         const idx = indexAt(pos);
         if (idx !== shown) {
@@ -9767,6 +9919,27 @@ async function openStable(opts = {}) {
              screen instead of six. */
           cards.forEach((c, i) => c.classList.toggle('focus', i === idx));
           $$('[data-cfdot]', body).forEach((d, i) => d.classList.toggle('on', i === idx));
+          /* THE TRAY BELONGS TO THE PET YOU ARE LOOKING AT. Tom, 2026-08-10:
+             "switching to another pet while one pet's talents are open doesn't
+             close the tray then swipe to the next pet like it should. The talents
+             just stay open."
+             openIid was independent of the focused card, so swiping left the
+             PREVIOUS pet's tree mounted underneath the new one: you were looking
+             at one bonehead and editing another's talents. A tree that is not the
+             focused pet's has no meaning, so moving the focus closes it. */
+          /* NOT MID-DRAG. paint() runs on every pointermove, and render() replaces
+             body.innerHTML wholesale: rebuilding while a finger is down detaches
+             the element that took pointer capture, so the drag stops following
+             the finger and the ring snaps. The tray is stale either way, so hide
+             it immediately (cheap, no reflow of the carousel) and do the real
+             re-render once the gesture is over. */
+          if (openIid && roster[idx] && roster[idx].iid !== openIid) {
+            const tree = $('.pet-tree', body);
+            if (tree) tree.hidden = true;
+            openIid = null;
+            if (!drag) { render(); return; }
+            treeDirty = true;   // flushed by endDrag
+          }
           repaintFocus();
         }
       };
@@ -9800,13 +9973,15 @@ async function openStable(opts = {}) {
           pos += vel * dt;
           paint();
           if (Math.abs(pos - target) < 0.0015 && Math.abs(vel) < 0.02) {
-            pos = target; vel = 0; setMoving(false); lastFrameT = 0; paint(); raf = null; return;
+            pos = target; vel = 0; setMoving(false); paint(); raf = null; return;
           }
           raf = requestAnimationFrame(step);
         };
         raf = requestAnimationFrame(step);
       };
       let drag = null;
+      // a talent tray hidden mid-drag still owes the sheet a real re-render
+      let treeDirty = false;
       /* TAP OR SWIPE, both. Tom, 2026-08-08: "you should be able to tap on the
          next pet or choose to swipe."
          Pointer capture is deliberately NOT taken on pointerdown: capturing
@@ -9852,6 +10027,8 @@ async function openStable(opts = {}) {
         if (!drag || drag.id !== e.pointerId) return;
         const wasMoved = drag.moved, dead = drag.dead, s = drag.samples;
         drag = null;
+        // the tray was hidden while the finger was down; rebuild for real now
+        if (treeDirty) { treeDirty = false; render(); return; }
         if (dead) return;                       // that gesture was a page scroll
         if (wasMoved) {
           /* Momentum proportional to the measured speed, so a hard flick travels
@@ -9993,6 +10170,14 @@ async function openStable(opts = {}) {
       else sel = [sel[1], iid];
       offSp = null; render();
     }));
+    /* THE FIRST PICK NOW SAYS WHAT TO DO NEXT. Tom, 2026-08-10: "Tapping breed
+       doesn't make it clear what to do next to find the next pet and also hit
+       breed?" Right: the first tap only turned one button into "BREEDING" and
+       said nothing else, because the whole explanation lives in the breed bar,
+       which does not exist until there ARE two. The waiting bar fills that gap in
+       the same place the real one will appear, so the answer is already where you
+       are about to look. */
+    $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
@@ -11821,7 +12006,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v358'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v359'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12393,6 +12578,54 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   const body = $('#fightBody', wrap);
   let stopGluttonFoeAnim = () => {};
+  let lastSolo = 0;   // markDowned(): which enemy is the last one standing
+  /* DEAD ENEMIES LIE DOWN, AND THE ONE STILL STANDING SAYS SO.
+     Tom, 2026-08-10: "if you defeat the live wire first and his health bar is
+     empty he just still looks alive as you move onto killing his henchman next.
+     It isn't clear." Right: the KO pose was only ever applied in settle(), at
+     fight END, so with two enemies the one at zero stayed upright until the
+     whole fight resolved. And then: "the other remaining enemy should glow in
+     rage or briefly scale up to show that there's still a second creature to
+     fight to win."
+     Both run off HP, every refresh, so they cannot drift out of step with the
+     bars. The survivor's flare fires ONCE, on the transition, not every frame:
+     a permanent glow is decoration, a flare at the moment its partner drops is
+     information. */
+  /* A SEAM FOR THE TWO-ENEMY STATE. Reaching "the boss is dead and the add is
+     not" by playing is luck: you cannot choose which one drops first. Webdriver
+     only, like every other seam here. */
+  if (typeof window !== 'undefined' && navigator.webdriver) {
+    window.__fightPoke = ({ foeHp, addHp } = {}) => {
+      if (foeHp != null) fight.f.hp = foeHp;
+      if (addHp != null && fight.fAux) fight.fAux.hp = addHp;
+      updateBars();
+    };
+  }
+  function markDowned() {
+    const fs = el('foeStage'), as = el('addStage');
+    const foeDown = foe.hp <= 0, addDown = !!add && add.hp <= 0;
+    if (fs) fs.classList.toggle('ko', foeDown);
+    if (as) as.classList.toggle('ko', addDown);
+    if (!add) return;
+    // exactly one of them is down: the other is what you still have to beat
+    const soloIdx = foeDown && !addDown ? 1 : (!foeDown && addDown ? 2 : 0);
+    if (soloIdx === lastSolo) return;
+    lastSolo = soloIdx;
+    const survivor = soloIdx === 1 ? as : soloIdx === 2 ? fs : null;
+    if (!survivor) return;
+    survivor.classList.remove('last-standing');
+    void survivor.offsetWidth;              // restart the flare on a re-entry
+    survivor.classList.add('last-standing');
+    /* and take it off when it finishes. Even without animation-fill-mode, a class
+       left on the element keeps its rule in the cascade and blocks a later
+       restart; with `both` it also outranked .fstage.ko outright, so an enemy
+       that had flared could never be shown knocked down. */
+    survivor.addEventListener('animationend', function off(e) {
+      if (e.animationName && !/lastStanding/i.test(e.animationName)) return;
+      survivor.classList.remove('last-standing');
+      survivor.removeEventListener('animationend', off);
+    });
+  }
   body.innerHTML = `
     <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
       <div class="pit-crowd"></div>
@@ -12518,6 +12751,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (pg) pg.classList.toggle('fainted', !!petBody.fainted);
       el('hudPet')?.classList.toggle('down', !!petBody.fainted);
     }
+    markDowned();
     if (add && el('addHp')) {
       el('addHp').style.width = Math.max(0, add.hp / add.d.maxHp * 100) + '%';
       const ag = el('addG'); if (ag) ag.classList.toggle('fainted', add.hp <= 0);
@@ -12842,8 +13076,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const arena = $('#arena'), stage = el('foeStage');
       if (arena && stage) {
         import('./wraith-fx.js').then(fx => {
-          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect());
-          const name = ev.cast === 'grasp' ? 'reap' : ev.cast === 'rise' ? 'wail' : ev.cast;
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect());
+          /* `rise` has its own cast now (Cam's downward strike). It used to borrow
+             the wail, which is a scream and reads nothing like a summon; leaving
+             the remap here meant the new one could never fire in a real fight. */
+          const name = ev.cast === 'grasp' ? 'reap' : ev.cast;
           if (fx.CASTS[name]) fx.cast(arena, name, anchors, { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
         }).catch(() => {});
       }
@@ -12853,7 +13090,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const arena = $('#arena'), stage = el('foeStage');
       if (arena && stage) {
         import('./wraith-fx.js').then(fx => {
-          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect());
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect());
           if (fx.CASTS.amulet) fx.cast(arena, 'amulet', anchors, { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
         }).catch(() => {});
       }
@@ -13246,6 +13483,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
     if (fight.over.winner === 'p' && add && el('addStage')) el('addStage').classList.add('ko'); // both enemies drop
+    markDowned();   // and anything already at zero stays down
     renderActions();
     let coins = 0, xp = 0, extras = [], extraCards = [], bossLoot = null;
     // item rewards render as pack cards (extras keeps coin-modifier notes only)
@@ -13511,6 +13749,16 @@ async function openFight(pitWrap, fighter, foeCfg) {
           <div style="height:12px"></div>
           <button class="btn ${bossLoot ? 'ghost' : ''}" id="fightDone">${bossLoot ? 'Skip the pick · back to the map' : foeCfg.mode === 'glutton' ? 'Done' : fromMap ? 'Back to the Boneyard' : 'Back to The Pit'}</button>
         </div>`);
+      /* CLOSE THE ARENA. Tom, 2026-08-10: "when you win a mini boss fight and it
+         scrolls down to show a chest there is a huge blank gap at the top of the
+         screen." Measured on a real win: ~450px of void between the log line and
+         VICTORY. The result is APPENDED to the fight body, so the arena (flex:1
+         with a 258px floor) is still sitting above it holding a full screen of
+         empty floor.
+         It cannot just be collapsed on the spot: the KO pose plays in there and
+         is worth watching. So it closes AFTER the knockdown, on a transition, and
+         the result ends up directly under the header. */
+      setTimeout(() => { if (body.isConnected) body.classList.add('fight-settled'); }, 900);
       const overEl = $('.fight-over', body);
       // Any pack card with imgSrc renders an EMPTY <canvas> until hydratePackArt
       // fills it. openPackReveal and wireLootChoice both call it; the plain reward
@@ -13518,7 +13766,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
       // and rarity over a blank art panel. Hydrating the whole block covers the
       // reward cards AND anything added to it later.
       if (overEl) hydratePackArt(overEl);
-      if (overEl) requestAnimationFrame(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }));
+      // after the arena has closed, not before: scrolling to a target that is
+      // about to move 250px leaves you looking at the wrong thing
+      if (overEl) setTimeout(() => overEl.scrollIntoView({ behavior: 'smooth', block: bossLoot ? 'start' : 'nearest' }), 1300);
       if (bossLoot) {
         wireLootChoice($('.loot-choice', body), gid => claimDenLoot(bossLoot.key, gid), picked => {
           toast(`${picked.name} claimed. Equip it in your Wardrobe.`, 3200);

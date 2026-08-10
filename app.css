@@ -2376,38 +2376,64 @@ body::before {
 .reward-pill svg { flex: none; }
 
 /* ===== egg hatch cinematic (bone egg -> shards -> pet) ===== */
-.hatch-stage { position: relative; height: 200px; display: grid; place-items: center; margin: 0 auto 4px; }
+/* THE STAGE MUST NOT BE SQUEEZED. Tom, 2026-08-10: "the end of the hatch egg
+   animation has the egg shoot down to the bottom of the screen randomly at the
+   end of its animation... it should be staying in the same spot during the hatch
+   it doesn't need to be moving up or down on the screen at all just cracking in
+   place."
+   It was never an animation. .reveal-body is a centred flex column, and a flex
+   item with a plain  is still SHRINKABLE: the instant the reveal panel
+   became visible the stage was squeezed from 200px to 18px and pushed to the
+   bottom of the column, dragging the egg 475px down the screen with it. Measured
+   frame by frame: stage y182 h200 -> y677 h18 in one step.
+   flex-shrink:0 with a matching min-height is what actually holds it still. */
+.hatch-stage { position: relative; height: 200px; min-height: 200px; flex: 0 0 auto; display: grid; place-items: center; margin: 0 auto 4px; }
 .hatch-glow {
   position: absolute; width: 220px; height: 220px; border-radius: 50%; opacity: 0;
   background: radial-gradient(circle, rgba(165, 232, 71, 0.28), transparent 62%);
 }
-.hatch-stage.burst .hatch-glow { animation: hatchGlow 0.9s ease-out forwards; }
+/* NAMESPACED, AND THIS IS WHY. Tom, 2026-08-10: "the end of the hatch egg
+   animation has the egg shoot down to the bottom of the screen randomly."
+   The hatch stage used to add a bare `burst` class to itself, which collided with
+   the COMBAT FX particle at line ~1466: `.burst { position:absolute; top:50%;
+   width:14px; height:14px; transform:translate(-50%,-50%); animation:burstPop }`.
+   So at the exact moment the egg cracked, the stage was yanked out of the flow,
+   shrunk to a 14px dot and translated away. Measured: the stage went from
+   y182 h200 to y495 h18 with transform matrix(1,0,0,1,-30.98,-100).
+   Nothing was animating the egg anywhere. It was being turned into a combat
+   spark by a name it happened to share. */
+.hatch-stage.egg-burst .hatch-glow { animation: hatchGlow 0.9s ease-out forwards; }
 @keyframes hatchGlow { 0% { opacity: 0; transform: scale(0.6) } 40% { opacity: 1 } 100% { opacity: 0.55; transform: scale(1) } }
 .hatch-flash {
   position: absolute; width: 60px; height: 60px; border-radius: 50%; opacity: 0;
   border: 4px solid var(--slime, #a5e847); box-shadow: 0 0 18px rgba(165, 232, 71, 0.7);
 }
-.hatch-stage.burst .hatch-flash { animation: hatchFlash 0.5s ease-out forwards; }
+.hatch-stage.egg-burst .hatch-flash { animation: hatchFlash 0.5s ease-out forwards; }
 @keyframes hatchFlash { 0% { opacity: 0.9; transform: scale(0.3) } 100% { opacity: 0; transform: scale(3.4) } }
 .hatch-pet { position: absolute; transform: scale(0.1); opacity: 0; z-index: 3; }
 .hatch-pet img { width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.45)); }
 .hatch-pet.r-epic img { filter: drop-shadow(0 0 10px rgba(155,146,232,0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
 .hatch-pet.r-legendary img { filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.95)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4)); }
-.hatch-stage.burst .hatch-pet { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.12s forwards; }
+.hatch-stage.egg-burst .hatch-pet { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) 0.12s forwards; }
 @keyframes hatchRise { 0% { transform: scale(0.1) translateY(18px); opacity: 0 } 60% { opacity: 1 } 100% { transform: scale(1) translateY(0); opacity: 1 } }
 .bone-egg {
   position: relative; width: 108px; height: 138px; z-index: 2;
   border-radius: 50% 50% 50% 50% / 62% 62% 40% 40%;
   background: radial-gradient(60% 55% at 42% 34%, #fbf5e6, #e9dcc0 55%, #cdbb95 100%);
   border: 3px solid #17140f; box-shadow: inset -8px -10px 16px rgba(120, 100, 66, 0.35), inset 6px 8px 12px rgba(255, 255, 255, 0.45), 0 8px 10px rgba(0, 0, 0, 0.35);
-  animation: eggDrop 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  /* IT DOES NOT MOVE. Tom, 2026-08-10: "the hatch should be staying in the same
+     spot during the hatch it doesn't need to be moving up or down on the screen
+     at all just cracking in place." eggDrop used to translateY(-40px) in, which
+     is what threw it around at the end of the sequence. It fades and settles its
+     scale now; nothing translates. */
+  animation: eggIn 0.42s cubic-bezier(0.2, 1.3, 0.4, 1) both;
 }
 /* The "faint bone suture seam" that used to live here was a repeating-linear-
    gradient down the middle of the egg: a permanent dashed line, present before
    anything hatched and unrelated to the cracks. Tom, 2026-08-08: "i dont like
    the weird dotted line on the egg during the hatching animation..it should only
    be the cracks." Removed. The cracks are the only marks on the egg now. */
-@keyframes eggDrop { 0% { transform: translateY(-40px) scale(0.7); opacity: 0 } 70% { opacity: 1 } 100% { transform: translateY(0) scale(1); opacity: 1 } }
+@keyframes eggIn { 0% { transform: scale(0.86); opacity: 0 } 70% { opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
 .bone-egg.wob { animation: eggWob 0.36s ease-in-out; }
 @keyframes eggWob { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-7deg) } 50% { transform: rotate(6deg) } 75% { transform: rotate(-3deg) } }
 .egg-cracks { position: absolute; inset: 8px 12px; width: calc(100% - 24px); height: calc(100% - 16px); overflow: visible; }
@@ -2421,9 +2447,9 @@ body::before {
   position: absolute; top: 50%; left: 50%; width: 12px; height: 16px; margin: -8px 0 0 -6px; opacity: 0; z-index: 3;
   background: linear-gradient(#f6efdd, #cdbb95); border: 2px solid #17140f; clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
-.hatch-stage.burst .bone-egg { animation: eggBurst 0.28s ease-out forwards; }
+.hatch-stage.egg-burst .bone-egg { animation: eggBurst 0.28s ease-out forwards; }
 @keyframes eggBurst { 0% { transform: scale(1) } 40% { transform: scale(1.12) } 100% { transform: scale(0.6); opacity: 0 } }
-.hatch-stage.burst .egg-shard { animation: shardFly 0.55s ease-out forwards; }
+.hatch-stage.egg-burst .egg-shard { animation: shardFly 0.55s ease-out forwards; }
 @keyframes shardFly { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1) } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-92px) scale(0.4) } }
 .hatch-reveal { opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.35s ease; }
 .hatch-reveal.show { opacity: 1; transform: none; }
@@ -2435,7 +2461,7 @@ body::before {
 .hatch-prize b { font-size: 20px; letter-spacing: -0.01em; }
 .hatch-prize small { color: var(--text-3); font-size: 12.5px; }
 .hatch-reveal.show .hatch-prize img { animation: hatchRise 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
-@media (prefers-reduced-motion: reduce) { .bone-egg, .hatch-stage.burst .hatch-pet, .hatch-stage.burst .egg-shard, .hatch-reveal.show .hatch-prize img { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .bone-egg, .hatch-stage.egg-burst .hatch-pet, .hatch-stage.egg-burst .egg-shard, .hatch-reveal.show .hatch-prize img { animation: none; } }
 
 /* ===== Build page: armor / defense readout ===== */
 .def-readout { display: flex; gap: 10px; margin: 0 2px 6px; }
@@ -3470,13 +3496,21 @@ body::before {
   background-color: #1b1a22;
   background-image: radial-gradient(rgba(242,233,215,.05) 1px, transparent 1.4px);
   background-size: 13px 13px;
-  border: 3px solid rgba(242,233,215,.45); box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0,0,0,.45);
+  /* A DECK EDGE, NOT A BLANK CARD. Tom, 2026-08-10: "some cards leave like an
+     empty silhouette as you move to the next one." That is exactly what these
+     were: a full card-sized block with a bright bone border at 0.9 opacity,
+     sitting directly behind the live one. While a card flew off you were left
+     looking at an empty card, which reads as art that failed to load.
+     They still say "there is more in here", but as the EDGE of a stack: dim,
+     inked rather than bone-bordered, and pushed further up so only the top of
+     each one is showing. Nothing reads as a card that forgot its contents. */
+  border: 2px solid rgba(42,45,40,.9); box-shadow: 0 0 0 1px rgba(242,233,215,.10), 5px 6px 0 rgba(0,0,0,.4);
   opacity: 0; transition: opacity .4s ease .1s;
 }
-.pc-ghost.g1 { transform: translateY(calc(var(--pc-w) * -.0882)) scale(.945); }
-.pc-ghost.g2 { transform: translateY(calc(var(--pc-w) * -.0504)) scale(.89); }
-.pack-reveal.browsing .pc-ghost.g1 { opacity: .9; }
-.pack-reveal.browsing .pc-ghost.g2 { opacity: .55; }
+.pc-ghost.g1 { transform: translateY(calc(var(--pc-w) * -.115)) scale(.945); }
+.pc-ghost.g2 { transform: translateY(calc(var(--pc-w) * -.075)) scale(.89); }
+.pack-reveal.browsing .pc-ghost.g1 { opacity: .34; }
+.pack-reveal.browsing .pc-ghost.g2 { opacity: .17; }
 
 .pack-tilt { position: relative; z-index: 1; width: 100%; cursor: grab; touch-action: none; }
 /* the rise out of the crate. Origin is the card's own bottom edge so scaling
@@ -4798,6 +4832,14 @@ body::before {
 .out-there .glutton-banner:first-of-type { border-top: none; }
 /* tighter rows: 62px x4 was 248px of chrome before any content */
 .out-there .glutton-banner > summary { padding: 9px 2px; gap: 10px; }
+/* ONE RHYTHM. Tom, 2026-08-10: "the 'out hunting today' banner is bigger than
+   the rest". Measured: 110px against 50px and 51px for its two siblings, because
+   it carries an 88px figure while they carry 32px icons. A card of rows is a
+   list, and a list where one row is twice the height of the others reads as a
+   layout bug rather than as emphasis. Every row now sits on the same minimum and
+   the hunt keeps the biggest art that fits it. */
+.out-there .glutton-banner { min-height: 72px; }
+.out-there .glutton-banner > summary { min-height: 72px; box-sizing: border-box; align-items: center; }
 .out-there .gbn-ico { width: 32px; height: 32px; border-radius: 9px; }
 .out-there .gbn-txt b { font-size: 14.5px; }
 .out-there .gbn-body { padding: 0 2px 12px; }
@@ -6812,16 +6854,16 @@ body::before {
    tile: a whole figure on a dark square, at a size you can actually read. */
 .bestiary-banner {
   display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 11px 13px; text-align: left; cursor: pointer;
+  padding: 7px 2px; text-align: left; cursor: pointer;
   border-color: rgba(253, 104, 87, .3);
   background: linear-gradient(160deg, rgba(253, 104, 87, .13), rgba(22, 20, 32, .9) 55%), var(--surface);
 }
 .bestiary-banner:active { transform: translateY(1px); }
 /* display:block is load-bearing: .bh-stage is a <span>, and width/height on an
    inline box are simply ignored. Same trap the News thumbs hit. */
-.bst-fig { display: block; width: 88px; height: 88px; flex: 0 0 auto; animation: none; position: relative; }
+.bst-fig { display: block; width: 58px; height: 58px; flex: 0 0 auto; animation: none; position: relative; }
 .bestiary-banner .gbn-txt i { color: var(--coral); }
-.bestiary-banner .gbn-txt b { font-size: 20px; line-height: 1.1; }
+.bestiary-banner .gbn-txt b { font-size: 16px; line-height: 1.15; }
 .bestiary-banner .gbn-txt em { font-style: normal; font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
 
 /* THE LIVE WIRE. Drawn art, not a cosmetic stack, so he gets a plate like The
@@ -6848,3 +6890,91 @@ body::before {
 .mage-veil .drop-eyebrow { padding-right: 74px; }
 .den-hero .art.art-mage { background: none; border: 0; }
 .den-hero .art.art-mage img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ===== two-enemy clarity (2026-08-10) ===================================== */
+/* THE ADD IS A CREATURE, NOT A GHOST. Tom: "fighting the live wire that has a
+   second minion shows the minion art as super transparent and kind of faded."
+   Measured: .petmini.beast was knocking it to saturate(.55) brightness(.82),
+   which is a big desaturation next to a full-colour hand-inked boss, and it read
+   as a rendering fault rather than as a lesser enemy. It keeps a slight cool cast
+   so it still reads as the boss's creature and not a second boss, but it is
+   SOLID now. */
+.petmini.beast { filter: saturate(.86) brightness(.95) drop-shadow(0 0 6px rgba(150,40,30,.5)); }
+
+/* NO BESPOKE POSITION. I moved the add out from under his robe and made it worse
+   at every real phone width: measured at right:212px it hung 36px off the left
+   edge of the arena at 320px and landed 39/52/76px ON THE PLAYER at 375/390/430.
+   Tom's complaint was that the creature was WASHED OUT, not that it overlapped;
+   sitting in front of the boss's hem reads as depth and is what every other den
+   add does. The de-saturation fix above is the whole fix. */
+
+/* THE ONE STILL STANDING. Tom: "the other remaining enemy should glow in rage or
+   briefly scale up to show that there's still a second creature to fight to win."
+   A single flare on the transition, not a permanent glow: it fires when its
+   partner drops, which is the moment the information is needed. */
+/* NOT `both`. animation-fill-mode: both keeps the 100% frame (transform:scale(1);
+   filter:none) applying from the animation origin FOREVER, which outranks any
+   normal declaration: once an enemy had flared, .fstage.ko's rotate(78deg) and
+   .petmini.beast's tint could never take effect again. So the add flared when the
+   boss died, and then when you killed the ADD it faded to 55% opacity and stayed
+   standing upright, which is verbatim the bug this was written to fix. The class
+   is also removed on animationend (js/app.js) so nothing lingers. */
+.fstage.last-standing { animation: lastStanding 1.15s cubic-bezier(.2,.9,.3,1) 1; }
+@keyframes lastStanding {
+  0%   { transform: scale(1);    filter: none; }
+  22%  { transform: scale(1.14); filter: drop-shadow(0 0 14px rgba(253,104,87,.95)) drop-shadow(0 0 26px rgba(253,104,87,.5)); }
+  55%  { transform: scale(1.03); filter: drop-shadow(0 0 10px rgba(253,104,87,.6)); }
+  100% { transform: scale(1);    filter: none; }
+}
+/* the KO pose already exists (.fstage.ko); it just never ran until a fight was
+   over. Nothing to add but the note that it is now driven off HP. */
+@media (prefers-reduced-motion: reduce) {
+  /* no filter override here either: it would sit on the element for the rest of
+     the fight and defeat the KO pose the same way the fill-mode did */
+  .fstage.last-standing { animation: none; outline: 2px solid rgba(253,104,87,.85); outline-offset: 3px; }
+}
+
+/* the arena closes once the knockdown has played, so the result is not preceded
+   by a screenful of empty floor (measured at ~450px before this) */
+.fight-body > .arena { transition: min-height .35s ease, height .35s ease, opacity .3s ease; }
+.fight-body.fight-settled > .arena { flex: 0 0 auto; min-height: 0; height: 0; opacity: 0; overflow: hidden; margin: 0; border: 0; }
+.fight-body.fight-settled > .fight-actions,
+.fight-body.fight-settled > #fendrow { display: none; }
+@media (prefers-reduced-motion: reduce) { .fight-body > .arena { transition: none; } }
+
+/* "incl. today" under a Trends stat label: today now counts toward the averages
+   at its honest weight, so the label has to say so rather than silently changing
+   what the number means */
+.trend-stats .st .l .st-note { display: block; font-style: normal; font-size: 9.5px; color: var(--text-3); letter-spacing: .02em; margin-top: 1px; }
+
+/* THE SMEAR IS GONE, AND SO IS THE BLUR. First attempt at Tom's "find a good
+   compromise here" was two composited copies of the card offset along the axis of
+   travel. It cannot work: .cf-card is overflow:hidden, so the copies were clipped
+   to the card's own box and never extended past its silhouette, and ::after
+   painted on top of .cf-art, veiling the pet instead of trailing it. Two extra
+   compositor layers per card for nothing.
+   The measurement that started this said the filter cost 5% of frames over 32ms
+   against 0.4% with no filter at all. So: no filter, no smear. The carousel keeps
+   its depth, rotation and fade, which is where its motion actually reads, and it
+   stops dropping frames. If a directional cue is wanted later it needs a wrapper
+   OUTSIDE the clipped card, not a pseudo-element inside it. */
+@media (prefers-reduced-motion: reduce) {
+  }
+
+/* the breed bar while only one pet is picked: same slot, same weight, so the
+   answer to "what now?" is where the real bar is about to appear */
+.breed-bar.breed-waiting { text-align: left; }
+.breed-waitrow { display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }
+.breed-waitrow .bw-arrow { color: var(--text-3); display: flex; }
+/* the picked pet must look like it does in the real breed bar: those rules are
+   all scoped to .breed-trade, so without this it rendered as a bare image next to
+   a fully styled slot */
+.breed-waitrow .bt-pet { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: rgba(242,233,215,.06); border: 2px solid rgba(242,233,215,.18); overflow: hidden; }
+.breed-waitrow .bt-pet.keep { border-color: var(--coral); }
+.breed-waitrow .bt-pet img { width: 100%; height: 100%; object-fit: contain; }
+.breed-waitrow .bw-slot {
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  border: 2px dashed rgba(242,233,215,.32); color: var(--text-3);
+  font-family: var(--display); font-size: 20px;
+}
