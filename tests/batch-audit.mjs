@@ -9,7 +9,16 @@ import { boot, seed, sleep, settle, finishFight } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const base = process.argv[2] || 'http://localhost:8765/';
+/* NO DEFAULT URL. This used to fall back to http://localhost:8765/, which in this
+   house is normally another session's checkout, so a green run proved nothing
+   about the code in front of you. There is no safe default: say which tree. */
+const base = process.argv[2];
+if (!base) {
+  console.log('FAIL  batch-audit needs a base URL, and there is no safe default.');
+  console.log('        Use `npm run gate` (it serves this checkout on its own port), or pass one:');
+  console.log('        node tests/batch-audit.mjs http://127.0.0.1:PORT/');
+  process.exit(1);
+}
 const { browser, page } = await boot(base);
 const errs = []; page.on('pageerror', e => errs.push(String(e)));
 await page.evaluateOnNewDocument(() => { window.__crateForce = 1; window.__hatchForce = 1; });

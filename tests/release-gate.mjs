@@ -10,15 +10,16 @@
  * are not run at all. An audit nobody runs is not a guard rail, it is a file.
  *
  * So this is one command that runs the audits guarding SHIPPED, PLAYER-FACING
- * surfaces, and exits non-zero if any of them fails. It is deliberately not all
- * forty: a gate that takes half an hour gets skipped, and a skipped gate is the
- * thing we are fixing. Anything guarding a surface a player touches every day
- * belongs on this list; add to it rather than running something on the side.
+ * surfaces, and exits non-zero if any of them fails. The FAST tier is deliberately
+ * not all fifty: a gate that takes half an hour gets skipped, and a skipped gate is
+ * the thing we are fixing.
  *
- *   node tests/release-gate.mjs [baseUrl]
+ *   node tests/release-gate.mjs            # FAST, serving THIS checkout
+ *   node tests/release-gate.mjs --all      # FAST + FULL, before a release
+ *   node tests/release-gate.mjs <baseUrl>  # against whatever is at that URL
  *
- * Run it against localhost BEFORE pushing, and against the live URL AFTER, per
- * the standing ritual (localhost passing is not "a player can use it").
+ * Run it bare BEFORE pushing, and against the live URL AFTER, per the standing
+ * ritual (localhost passing is not "a player can use it").
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -58,15 +59,13 @@ async function serveRepo() {
   return { server, url: `http://127.0.0.1:${server.address().port}/` };
 }
 
-const argUrl = process.argv[2];
-const own = argUrl ? null : await serveRepo();
-const base = argUrl || own.url;
-if (own) console.log(`serving this repo at ${base}\n`);
+const runAll = process.argv.includes('--all');
+const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
 
 /* Node-only checks first: they are seconds, and there is no point burning four
    minutes of browser time on a build whose pure logic is already broken. */
 const PURE = ['unit.test.js', 'pit.test.js'];
-const BROWSER = [
+const FAST = [
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
@@ -76,12 +75,109 @@ const BROWSER = [
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'screen-sweep.mjs',        // no screen renders blank or throws
+  'contrast-audit.mjs',      // every text pair on Today is still legible
+  'onb-audit.mjs',           // the launch funnel, on a fresh profile nothing else sees
 ];
 
-function run(file, args) {
+/* EVERY AUDIT NOT IN FAST IS DECLARED HERE, WITH A TIER AND A REASON.
+ *   'full' runs under --all, before a release.
+ *   'skip' never runs: it needs an argument, a stub, or it is a screenshot script.
+ * A *-audit.mjs in neither FAST nor this map FAILS the gate, by name, before a
+ * single browser starts.
+ *
+ * WHY IT IS A HAND-WRITTEN MAP and not the complement of FAST. The complement
+ * cannot fail: computing "FULL = everything not in FAST" means every new file is
+ * automatically in a tier, so the coverage check has nothing to catch and a new
+ * audit still goes unrun with nobody told. Verified against 61dd854: dropping an
+ * empty tests/zzz-audit.mjs into the tree and running the gate printed "52 more
+ * audits are in the FULL tier" and exited 0. That is anti-regression rule 1, in
+ * the gate itself. Declaring the file is the whole point: it costs one line and it
+ * puts the omission on the record as a decision.
+ */
+const DECLARED = {
+  'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
+  'ledger-voice-audit.mjs': ['skip', 'shoots the ledger copy for reading, into a fixed scratch dir; asserts nothing about layout.'],
+  'small-fixes-audit.mjs': ['skip', 'a one-off batch for three named fixes, kept as the record of how they were verified.'],
+  'v279-audit.mjs': ['skip', 'the v279 bug batch, one check per reported bug, kept as the record of that release.'],
+  'newart-audit.mjs': ['skip', 'needs a <base> argument and a mode (see tally/CLAUDE.md), so it cannot join a URL-only run list.'],
+  'siege-client-audit.mjs': ['skip', 'drives sieges against a stubbed server payload; the demo profile has no online crew.'],
+  'glutton-audit.mjs': ['skip', 'the Glutton farm, closed. unit.test.js carries the generalised rewarded-actions guard now.'],
+
+  'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
+  'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
+  'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
+  'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
+  'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
+  'den-two-target-audit.mjs': ['full', 'two health bars in a two-enemy den; batch-audit gates the two-enemy read every run.'],
+  'dust-safeguard-audit.mjs': ['full', 'one curious tap must not spend dust.'],
+  'ember-cohesion-audit.mjs': ['full', 'a lit cosmetic stays lit on every surface.'],
+  'faq-audit.mjs': ['full', 'the FAQ copy still matches what the engine does.'],
+  'feel-audit.mjs': ['full', 'toast queue, exits, dialogs, haptics.'],
+  'figure-audit.mjs': ['full', 'THE FIGURE CONTRACT, 32 checks. Mandatory per tally/CLAUDE.md before any figure work.'],
+  'garden-audit.mjs': ['full', 'the garden driven through real controls with a clock skip.'],
+  'garden-intro-audit.mjs': ['full', 'the garden intro popup, its retirement, and the Kitchen landing.'],
+  'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
+  'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
+  'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
+  'melt-ui-audit.mjs': ['full', 'the melt confirm bar is opaque and does not swallow a row tap.'],
+  'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
+  'pit-cap-audit.mjs': ['full', 'the Gauntlet ceiling reads as a ceiling.'],
+  'placeholder-audit.mjs': ['full', 'nothing prints a literal template placeholder.'],
+  'podium-audit.mjs': ['full', 'the Crew top three shows and still opens the full list.'],
+  'race-audit.mjs': ['full', 'the step race shows one set of numbers everywhere.'],
+  'respec-audit.mjs': ['full', 'refund-and-respend needs two taps and really returns the points.'],
+  'reward-art-audit.mjs': ['full', 'the victory gear card, read as pixels.'],
+  'scout-audit.mjs': ['full', 'the world follows where you look and stays the same size.'],
+  'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
+  'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
+  'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
+  't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow.'],
+  't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],
+  't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
+  'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
+  'wardrobe-audit.mjs': ['full', 'equipping does not flash the page; the background does not follow the character.'],
+  /* Declared here rather than in FAST on purpose: the file arrives with
+     walt/year-readout, and naming it in FAST would make THIS branch try to spawn a
+     file it does not have. A DECLARED entry for an absent file is inert, since the
+     tiers are built from what is on disk, so this is correct before and after that
+     branch lands. Promote it to FAST once both are in: it is 25s and it guards a
+     surface a player taps. */
+  'year-readout-audit.mjs': ['full', 'the Year chart names the month you tapped, instead of one letter three months share.'],
+  'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
+};
+
+/* COVERAGE FIRST, before a single browser starts. An undeclared audit is a
+   one-second failure here or a four-minute one at the end, and the four-minute
+   version is the one people stop running. */
+const onDisk = (await readdir(here)).filter(f => /-audit\.mjs$/.test(f)).sort();
+const undeclared = onDisk.filter(f => !FAST.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
+if (undeclared.length) {
+  console.log(`FAIL  coverage: ${undeclared.length} audit file(s) belong to no tier:`);
+  for (const f of undeclared) console.log(`        ${f}`);
+  console.log("        Add each to FAST, or to DECLARED as ['full', reason] or ['skip', reason].");
+  console.log('        An audit that exists but never runs radiates false confidence.');
+  process.exit(1);
+}
+const FULL = onDisk.filter(f => DECLARED[f] && DECLARED[f][0] === 'full');
+const BROWSER = runAll ? [...FAST, ...FULL] : [...FAST];
+console.log(`coverage: ${onDisk.length} audits on disk, ${FAST.filter(f => onDisk.includes(f)).length} fast, ${FULL.length} full, ${onDisk.length - FAST.filter(f => onDisk.includes(f)).length - FULL.length} skipped`);
+
+const own = argUrl ? null : await serveRepo();
+const base = argUrl || own.url;
+console.log(own ? `serving this repo at ${base}\n` : `testing ${base}\n`);
+
+function run(file, url) {
   return new Promise(res => {
     const t0 = Date.now();
-    const p = spawn(process.execPath, [join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    /* BOTH CONVENTIONS. Most suites read argv[2], but contrast-audit and onb-audit
+       read process.env.URL, and contrast-audit passes it to godmode's boot(),
+       whose own default is the LIVE site. Handing it args only would have had the
+       gate quietly grading production. Set both and neither can fall back to
+       something that is not the tree under test. */
+    const p = spawn(process.execPath, url ? [join(here, file), url] : [join(here, file)], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: url ? { ...process.env, URL: url } : process.env,
+    });
     let out = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { out += d; });
@@ -101,38 +197,15 @@ function failLines(out) {
   return show.map(l => '        ' + l).join('\n');
 }
 
-/* NO AUDIT MAY EXIST WITHOUT RUNNING. The BROWSER list above is hand-written, so
-   a new *-audit.mjs could sit in tests/ forever without the gate ever calling it,
-   which is worse than not having written it: it reads as coverage. Anything
-   deliberately out of the gate goes in SKIP with a reason, so the omission is a
-   decision on the record rather than an oversight. */
-const SKIP = {};
-const onDisk = (await readdir(here)).filter(f => /-audit\.mjs$/.test(f)).sort();
-/* TWO TIERS, BECAUSE THE ALTERNATIVE IS THEATRE EITHER WAY.
-   The hand-written list above was the only thing the gate ran, and 43 other
-   audits sat in tests/ never executed: guards against a dust exploit, a Glutton
-   farm on its third fix, literal ${...} printing in the UI, onboarding on a fresh
-   profile. Not throwaways. Unrun guards are worse than no guards, because they
-   read as coverage.
-   But running all 53 takes the better part of an hour, and Reggie's own warning
-   holds: a gate that takes half an hour gets skipped, and a skipped gate is what
-   we were fixing. So FAST runs on every push and FULL is everything else, run
-   before a release with `--all`. The coverage assertion below is the point: a file
-   in NEITHER tier fails the gate, so a new audit cannot quietly go unrun. */
-const FULL = onDisk.filter(f => !BROWSER.includes(f) && !SKIP[f]);
-const runAll = process.argv.includes('--all');
-const unrun = runAll ? [] : [];   // every audit belongs to a tier by construction
-if (runAll) BROWSER.push(...FULL);
-
 const results = [];
 for (const f of PURE) {
-  const r = await run(f, []);
+  const r = await run(f, null);
   results.push(r);
   console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
   if (r.code !== 0) console.log(failLines(r.out));
 }
 for (const f of BROWSER) {
-  const r = await run(f, [base]);
+  const r = await run(f, base);
   results.push(r);
   console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
   if (r.code !== 0) console.log(failLines(r.out));
