@@ -85,7 +85,24 @@ const BROWSER = [
 function run(file, args) {
   return new Promise(res => {
     const t0 = Date.now();
-    const p = spawn(process.execPath, [join(here, file), ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    /* THE URL GOES OUT BOTH WAYS, ARGV AND env.URL. Two conventions are in use:
+       most suites read process.argv[2], but contrast-audit reads process.env.URL
+       ONLY (`boot(process.env.URL)`), and godmode's boot() signature defaults to
+       https://tommillerca.github.io/tally/. So passing args alone meant
+       contrast-audit graded PRODUCTION while sitting in the FAST tier looking like
+       coverage of the tree under test. Measured, invoking it exactly as the gate
+       does, against an instrumented local server:
+         without this line   requests that reached the tree:   0
+         with it             requests that reached the tree: 101
+       Count the REQUESTS, not the pairs it prints. Both report 66 pairs right now
+       only because main was just deployed, so production and the tree are the same
+       code today; tomorrow they diverge and the number stops being a tell. A row
+       that cannot fail for its stated purpose is anti-regression rule 1, and this
+       is the second one to reach the gate in two days. */
+    const p = spawn(process.execPath, [join(here, file), ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: args[0] ? { ...process.env, URL: args[0] } : process.env,
+    });
     let out = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { out += d; });

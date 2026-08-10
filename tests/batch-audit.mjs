@@ -5,7 +5,7 @@
  *
  * Run: node tests/batch-audit.mjs [baseUrl]
  */
-import { boot, seed, sleep, settle, finishFight } from './godmode.js';
+import { boot, seed, sleep, settle, finishFight, setWidth } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -59,7 +59,10 @@ async function closeSheets() {
 }
 const KIT_CASTS = ['bolt', 'wail', 'rise', 'grasp', 'reap'];
 async function castRun(width, height = 900, squash = 0) {
-  await page.setViewport({ width, height, deviceScaleFactor: 2 });
+  /* setWidth, not page.setViewport: this line omitted isMobile/hasTouch, which
+     puppeteer reads as false, and since boot() launches with both true it flipped
+     them and RELOADED the page. That reload was the "phantom second boot". */
+  await setWidth(page, width, height);
   await closeSheets();
   await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
   /* WAIT FOR THE CONDITION, NOT THE CLOCK. This was `sleep(2400)`, which held
@@ -183,7 +186,7 @@ for (const [w, h, squash] of [[320, 900, 0], [760, 900, 0], [390, 620, 0], [390,
   ok(`anchors hold at ${w}x${h}${squash ? ' squashed to ' + squash : ''}`, !run.why && nearW(run.anchor),
     run.why || JSON.stringify(run.anchor));
 }
-await page.setViewport({ width: 390, height: 900, deviceScaleFactor: 2 });
+await setWidth(page, 390, 900);   // see castRun: a bare setViewport here reloaded the page
 await closeSheets();
 /* the amulet shatter is reached HONESTLY: a real crit from real jabs in a
    seeded fight. Bounded, and a miss is a report, not a hang. */

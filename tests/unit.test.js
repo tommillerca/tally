@@ -2320,6 +2320,74 @@ test('identity boot order stays local-first and backfill stays before the cloud 
   const fill = bs.indexOf('backfillVaultMirror');
   const gate = bs.indexOf("kvGet('cloudOff'");
   assert.ok(fill > -1 && gate > -1 && fill < gate, 'backfill runs after the cloud gates, so cloud-off players are unprotected');
+/* NOBODY CHANGES THE VIEWPORT WITHOUT SAYING isMobile AND hasTouch.
+ *
+ * puppeteer reloads the page for you when either one CHANGES, and it reads a
+ * missing key as false:
+ *   puppeteer-core/lib/cjs/puppeteer/cdp/Page.js:819
+ *     if (needsReload) { await this.reload(); }
+ *   puppeteer-core/lib/cjs/puppeteer/cdp/EmulationManager.js:335
+ *     const mobile = viewport?.isMobile || false;
+ * godmode's boot() launches with both true, so `{ width, height,
+ * deviceScaleFactor }` flips both and silently reloads. On this app that is a
+ * fresh 10-13s seeded boot mid-suite whose route() closes every open sheet, and it
+ * presents as an unrelated flake somewhere else entirely: batch-audit's "no fight
+ * or no seam". Two lines cost a week and three wrong theories (a renderer crash, a
+ * delayed popstate, a slow static server). Measured, extra documents served after
+ * one setViewport: bare [1,1,1], with both flags [0,0,0].
+ *
+ * The rule is PRESENCE, not a value. A desktop viewport is a legitimate thing to
+ * want; it just has to be deliberate, because it really will reload. Prefer
+ * godmode's setWidth(page, w, h), which always carries both.
+ */
+test('no browser test changes the viewport without isMobile and hasTouch', () => {
+  const dirs = [here, join(here, '..', 'scripts')];
+  const files = [];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      /* this file is skipped on purpose: it drives no browser, and it quotes the
+         very identifiers it is searching for, so scanning itself would be noise */
+      if (f === 'unit.test.js' || !/\.(mjs|js)$/.test(f)) continue;
+      files.push(join(dir, f));
+    }
+  }
+  /* ONLY FILES THAT BOOT THROUGH GODMODE. The flip needs a CHANGE, and godmode's
+     boot() is what makes the starting state isMobile/hasTouch true, so only its
+     callers can flip them by omission. scripts/capture-petanim.mjs launches its own
+     browser with no defaultViewport, so mobile is already false there and its bare
+     setViewport reloads nothing: including it would demand a meaningless edit, and
+     a guard that cries wolf gets deleted. Anything launching its own browser owns
+     its own defaults. */
+  const viaGodmode = files.filter(p => /from\s+'[^']*godmode\.js'/.test(readFileSync(p, 'utf8')));
+  const offenders = [];
+  let calls = 0;
+  for (const path of viaGodmode) {
+    const src = readFileSync(path, 'utf8');
+    let i = 0;
+    while ((i = src.indexOf('setViewport(', i)) !== -1) {
+      /* match the parens so a call broken across lines is read whole; a
+         line-at-a-time regex would simply miss it and report the tree clean */
+      const open = src.indexOf('(', i);
+      let depth = 0, j = open;
+      for (; j < src.length; j++) {
+        if (src[j] === '(') depth++;
+        else if (src[j] === ')' && --depth === 0) break;
+      }
+      const args = src.slice(open + 1, j);
+      calls++;
+      if (!/\bisMobile\b/.test(args) || !/\bhasTouch\b/.test(args)) {
+        offenders.push(`${path.split('/').pop()}:${src.slice(0, i).split('\n').length}`);
+      }
+      i = j;
+    }
+  }
+  /* AN EMPTY SCAN IS A FAILURE, NOT A CLEAN TREE. If the paren walk or the glob
+     ever breaks, this must go red rather than quietly passing forever. */
+  assert.ok(calls > 0, 'scanned no setViewport calls at all: the scan is broken, not the tree clean');
+  assert.deepEqual(offenders, [],
+    `these change the viewport without stating isMobile/hasTouch, so puppeteer will RELOAD the page: ${offenders.join(', ')}. `
+    + 'Use setWidth(page, w, h) from godmode.js, or state both keys if you really do want the reload.');
 });
 
 await runAll();

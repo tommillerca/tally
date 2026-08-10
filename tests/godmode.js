@@ -206,3 +206,27 @@ export async function settle(page, ms = 250) {
   await page.evaluate(() => document.getAnimations().forEach(a => { try { a.finish(); } catch {} }));
   await new Promise(r => setTimeout(r, ms));
 }
+
+/* CHANGE WIDTH THROUGH THIS, NEVER page.setViewport DIRECTLY.
+ *
+ * puppeteer reloads the page for you when isMobile or hasTouch CHANGE, and it
+ * reads a missing key as false:
+ *   cdp/Page.js:819           if (needsReload) { await this.reload(); }
+ *   cdp/EmulationManager.js:335  const mobile = viewport?.isMobile || false;
+ * boot() launches with both true (defaultViewport above), so a call that just
+ * says { width, height, deviceScaleFactor } flips both to false and silently
+ * throws the document away. On this app that costs a fresh 10-13s seeded boot in
+ * the middle of a suite, and its route() closes every sheet the audit had open.
+ * Measured on 54e359b, extra documents served after one setViewport:
+ *   { w, h, dsf }                     [1, 1, 1]
+ *   { w, h, dsf, isMobile, hasTouch } [0, 0, 0]
+ * It was two lines in batch-audit that cost a week of chasing a "phantom reload".
+ *
+ * This always carries both flags, so the viewport changes and nothing reloads.
+ * A desktop viewport is a legitimate thing to want, but it must be deliberate:
+ * pass them yourself and expect the reload. tests/unit.test.js enforces that any
+ * direct setViewport call states both keys.
+ */
+export async function setWidth(page, width, height = 932) {
+  await page.setViewport({ width, height, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+}
