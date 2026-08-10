@@ -33,12 +33,20 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
     ...opts,
   });
   const page = await browser.newPage();
-  page.on('pageerror', e => console.log('PAGEERROR', e.message));
+  /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
+     attaches its own pageerror listener after boot() returns cannot see anything
+     thrown during the very first load, which is exactly where a broken module
+     import or a bad top-level await lands: the app comes up empty, every later
+     assertion fails for its own reason, and the actual cause is nowhere in the
+     output. Returned so callers can assert on it. Additive: callers that
+     destructure only { browser, page } are unaffected. */
+  const errors = [];
+  page.on('pageerror', e => { errors.push(String(e)); console.log('PAGEERROR', e.message); });
   // ?demo puts us on the tally-demo database, which is what seed() insists on.
   await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' });
   await sleep(2400);
   await dismissOverlays(page);
-  return { browser, page, base: base.replace(/\/?$/, '/') };
+  return { browser, page, base: base.replace(/\/?$/, '/'), errors };
 }
 
 /* The demo profile opens with a daily spin and assorted first-run cards. They are
