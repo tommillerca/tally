@@ -179,11 +179,24 @@ function pushErr(kind, msg, src) {
   errCount += 1;
   // path tail only: no origin, no query string, nothing device-identifying
   const tail = src ? String(src).split('?')[0].split('/').slice(-2).join('/').slice(0, 80) : undefined;
+  /* THE SERVER CLIPS props AT 300 CHARS, MID-STRING, AND IS NOT JSON-AWARE.
+     server/src/index.js does `JSON.stringify(e.props).slice(0, 300)`. A 180-char
+     message plus an 80-char source serializes to 319, so it lands in D1 as
+     unterminated JSON and json_extract(props,'$.m') returns null on exactly the
+     crashes with the longest, most informative messages: the errors view would
+     silently miss them. Measured (319 -> invalid), not assumed.
+     Budgeted here rather than in the Worker because the client can shorten the
+     one field that varies, and a Worker deploy is a heavier, separately-owned
+     change. If the server cap ever rises this only becomes slack. */
+  const SRV_PROP_CAP = 300;
+  const fit = mm => JSON.stringify({ m: mm, k: kind, src: tail, b: appV || undefined, s: curScreen || undefined }).length;
+  let mFit = m;
+  while (mFit.length > 24 && fit(mFit) > SRV_PROP_CAP) mFit = mFit.slice(0, mFit.length - 8);
   // writes through the same serialized chain as track(), but deliberately past
   // track()'s own BOT gate: pushErr has already decided above
   writeChain = writeChain.then(async () => {
     const q = (await kvGet('evq', [])) || [];
-    q.push({ name: 'err', props: { m, k: kind, src: tail, b: appV || undefined, s: curScreen || undefined }, ts: Date.now() });
+    q.push({ name: 'err', props: { m: mFit, k: kind, src: tail, b: appV || undefined, s: curScreen || undefined }, ts: Date.now() });
     await kvSet('evq', q.slice(-QCAP));
   }).catch(() => { /* telemetry never breaks the app */ });
   // a crashing tab may not live to the next interval flush
