@@ -232,15 +232,25 @@ ok('NO page or console errors', errors.length === 0, errors.slice(0, 3).join(' |
     if (!cta) return { noCta: true };
     cta.click();
     await new Promise(r => setTimeout(r, 1200));
-    const imgs = [...document.querySelectorAll('.bst-tile img')];
-    await Promise.all(imgs.map(i => i.decode().catch(() => {})));
+    await new Promise(r => setTimeout(r, 6000));   // the painter runs one monster per frame
     const tiles = [...document.querySelectorAll('.bst-tile')];
+    /* PIXELS, not elements. Every monster is composited into a canvas, so "drawn"
+       means the canvas has opaque pixels in it. */
+    const drawn = tiles.filter(t => {
+      const c = t.querySelector('canvas.bst-can');
+      if (!c) return false;
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let on = 0; for (let i = 3; i < d.length; i += 4 * 17) if (d[i] > 8) on++;
+      return on > 40;
+    }).length;
+    /* THE CRASH GUARD. The shipped version mounted 355 full-size PNGs, about
+       555 MB of decoded bitmap, and killed the tab on a phone while passing on
+       desktop. Nothing may hold the roster as images. */
+    const liveImgs = document.querySelectorAll('.bst-tile img').length;
     return {
       tiles: tiles.length,
-      drawn: tiles.filter(t => [...t.querySelectorAll('img')].some(i => {
-        const bb = i.getBoundingClientRect();
-        return i.naturalWidth > 0 && bb.width > 8 && bb.height > 8;
-      })).length,
+      drawn,
+      liveImgs,
       sections: document.querySelectorAll('.bst-line').length,
       named: document.querySelectorAll('.bst-name').length,
       today: document.querySelectorAll('.bst-tile.today').length,
@@ -248,7 +258,9 @@ ok('NO page or console errors', errors.length === 0, errors.slice(0, 3).join(' |
   });
   ok('the banner opens a real Bestiary', !r.noBanner && !r.noCta && r.tiles >= 60, JSON.stringify(r));
   // an empty sample is a failure, not a pass: every tile must DRAW
-  ok('every monster in it draws', r.tiles > 0 && r.drawn === r.tiles, `${r.drawn}/${r.tiles}`);
+  ok('every monster in it draws', r.tiles > 0 && r.drawn === r.tiles, `${r.drawn}/${r.tiles} canvases painted`);
+  ok('it does not hold the roster as images', r.liveImgs === 0,
+    `${r.liveImgs} <img> in the sheet; 355 of them was 555 MB and crashed phones`);
   ok('it is grouped, not one long wall', r.sections >= 8, `${r.sections} sections`);
   ok('the named cast is labelled', r.named >= 17, `${r.named} names`);
   ok("today's monster is marked", r.today >= 1, `${r.today}`);

@@ -98,9 +98,14 @@ const after = await page.evaluate(async () => {
   /* Some announcements END on a navigation (Dark Spires sends you to the
      Boneyard) and that is the CTA doing its job, so returning to Crew is the
      player's move, not the app's. Go there the way they would. */
-  location.hash = '#/friends';
-  await new Promise(r => setTimeout(r, 1600));
-  document.getElementById('crewWhatsNew')?.click();
+  /* The app should bring them BACK on its own now, for any announcement whose
+     CTA does not navigate. Give it a beat and see. */
+  await new Promise(r => setTimeout(r, 1800));
+  if (!document.querySelector('.nw-row')) {
+    location.hash = '#/friends';
+    await new Promise(r => setTimeout(r, 1600));
+    document.getElementById('crewWhatsNew')?.click();
+  }
   await new Promise(r => setTimeout(r, 1300));
   document.querySelector('[data-wntab="news"]')?.click();
   await new Promise(r => setTimeout(r, 400));
@@ -114,6 +119,24 @@ ok('dismissing leaves no stray overlay', after.stray === 0, JSON.stringify(after
 ok('the news list is reachable again afterwards', after.rowsOnReturn >= 5, `${after.rowsOnReturn} rows`);
 ok('a SECOND announcement still opens', after.secondOpened, JSON.stringify(after));
 ok('overlays never stack', after.veilsStacked <= 1, `${after.veilsStacked} veils`);
+
+/* Dismissing a NON-navigating announcement must land you back on the News tab
+   without doing anything. Tom: "it makes no sense for people catching up". */
+const auto = await page.evaluate(async () => {
+  document.querySelectorAll('.drop-veil').forEach(v => v.remove());
+  await new Promise(r => setTimeout(r, 400));
+  if (!document.querySelector('.nw-row')) { location.hash = '#/friends'; await new Promise(r=>setTimeout(r,1600));
+    document.getElementById('crewWhatsNew')?.click(); await new Promise(r=>setTimeout(r,1200));
+    document.querySelector('[data-wntab="news"]')?.click(); await new Promise(r=>setTimeout(r,400)); }
+  document.querySelector('[data-news="garden"]')?.click();
+  await new Promise(r => setTimeout(r, 1300));
+  const veil = document.querySelector('.drop-veil');
+  const cta = veil?.querySelector('.drop-cta, button, .btn');
+  if (cta) cta.click(); else veil?.remove();
+  await new Promise(r => setTimeout(r, 2200));   // the app should bring us back
+  return { backOnNews: !!document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden };
+});
+ok('dismissing drops you back on the News tab', auto.backOnNews, JSON.stringify(auto));
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');

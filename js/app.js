@@ -2764,11 +2764,61 @@ const BLOODLINES = [
   ['odd', 'Worse', 'No category. That is the category.'],
 ];
 
+/* ONE CANVAS PER MONSTER, NOT FIVE IMAGES. Tom, 2026-08-09: "the popup that
+   shows the bestiary crashes". Measured on the shipped sheet: 355 <img>
+   elements, every one a 640x640 PNG, which is 145 million pixels and about
+   555 MB of decoded bitmap held at once. Desktop Chrome shrugged that off and my
+   check passed; a phone kills the tab. My own rule 4 says verify where the
+   failure can EXIST, and I verified where it could not.
+   loading="lazy" did not help (536 MB): these images live inside a transformed,
+   absolutely-positioned stage, so the viewport heuristic never fires. The fix is
+   to not hold them. Each monster is composited ONCE into a 144px canvas and the
+   source images are released immediately, so peak memory is a handful of images
+   rather than the whole roster. 74 canvases at 144px is about 6 MB. */
 function bestiaryTileHtml(eq, label, cls = '') {
   return `<div class="bst-tile ${cls}">
-    ${headshotHtml(eq || {}, 72)}
+    <canvas class="bst-can" width="144" height="144" data-eq='${esc(JSON.stringify(eq || {}))}'></canvas>
     ${label ? `<span class="bst-name">${esc(label)}</span>` : ''}
   </div>`;
+}
+
+const bstImgCache = new Map();
+function loadArt(src) {
+  if (bstImgCache.has(src)) return bstImgCache.get(src);
+  const p = new Promise(res => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => res(null);
+    im.src = src;
+  });
+  bstImgCache.set(src, p);
+  return p;
+}
+
+/* Draw the same head crop headshotHtml uses, but into a canvas. Sequential on
+   purpose: the point is that only a few bitmaps are alive at any moment. */
+async function paintBestiary(root) {
+  const cans = [...root.querySelectorAll('canvas.bst-can')];
+  const order = [...BH_SLOTS].sort((a, b) => a.z - b.z).map(x => x.code);
+  const S = 144;
+  const scale = S / (SKULL_BOX.h * 1.30);
+  const ox = S / 2 - SKULL_BOX.cx * scale;
+  const oy = S / 2 - SKULL_BOX.cy * scale;
+  for (const can of cans) {
+    if (!can.isConnected) return;              // sheet closed mid-paint
+    let eq = {};
+    try { eq = JSON.parse(can.dataset.eq || '{}'); } catch { /* keep {} */ }
+    const cx = can.getContext('2d');
+    for (const code of order) {
+      const id = eq[code];
+      if (!id || code === 'BG' || code === 'C' || !BH_BY_ID[id]) continue;
+      const im = await loadArt(bhAsset(BH_BY_ID[id]));
+      if (!im) continue;
+      cx.drawImage(im, ox, oy, 640 * scale, 640 * scale);
+    }
+    can.classList.add('drawn');
+    await new Promise(r => requestAnimationFrame(r));   // let the sheet stay responsive
+  }
 }
 
 async function openBestiary() {
@@ -2810,6 +2860,7 @@ async function openBestiary() {
       </div>
       ${lines}
     </div>`, { cls: 'full' });
+  paintBestiary($('#sheets') || document).catch(() => {});
 }
 
 function bestiaryBannerHtml() {
@@ -7055,8 +7106,30 @@ async function openWhatsNew() {
   $$('[data-news]', wrap).forEach(b => b.addEventListener('click', () => {
     const n = NEWS.find(x => x.id === b.dataset.news);
     if (!n) return;
+    /* AND COME BACK. Tom, 2026-08-09: "clicking out of the what's new things in
+       the news fully takes you out of that tab it makes no sense for people
+       catching up on the updates they've missed."
+       Right: the whole point of this list is reading several in a row. The sheet
+       still steps aside first (leaving it mounted is what let an announcement's
+       CTA tear it down), but when the announcement goes we put the player back
+       where they were, on the News tab.
+       UNLESS its CTA navigated on purpose: Dark Spires ends by sending you to the
+       Boneyard, and dragging someone back out of that would be worse. */
+    const cameFrom = location.hash;
     closeAllSheetsViaHistory();
-    setTimeout(() => n.open(), 220);   // let the sheet finish leaving
+    setTimeout(() => {
+      n.open();
+      let waited = 0;
+      const back = setInterval(() => {
+        waited += 300;
+        const stillOpen = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
+        if (stillOpen) return;
+        clearInterval(back);
+        if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
+        openWhatsNew().then(() => $('[data-wntab="news"]')?.click());
+      }, 300);
+      setTimeout(() => clearInterval(back), 180000);
+    }, 220);
   }));
   await kvSet('changelogSeen', changelogLatest());
 }
@@ -11757,7 +11830,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v350'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v351'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
