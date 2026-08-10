@@ -145,8 +145,9 @@ const mapAndSheet = await page.evaluate(async () => {
   const hero = document.querySelector('.den-hero .art img');
   if (hero) await hero.decode().catch(() => {});
   return {
-    pinIsMage: /mage-den/.test(mine || '') && /mage\.png/.test(mine || ''),
+    pinTellsNothing: /tombstone/.test(mine || '') && !/mage/.test(mine || ''),
     otherPinUnchanged: /tombstone/.test(other || '') && !/mage/.test(other || ''),
+    pinsIdentical: (mine || '').replace(/mage/g, '') === (other || '').replace(/gate/g, '') || undefined,
     denName: opened && opened.name, denBoss: opened && opened.boss,
     heroSrc: hero ? hero.getAttribute('src') : null,
     heroDrawn: hero ? hero.naturalWidth > 0 : false,
@@ -155,7 +156,12 @@ const mapAndSheet = await page.evaluate(async () => {
 });
 ok('his den is a real place with a name', !!mapAndSheet.denName && !!mapAndSheet.denBoss,
   `${mapAndSheet.denBoss} at ${mapAndSheet.denName}`);
-ok('his pin on the map is him', mapAndSheet.pinIsMage, JSON.stringify(mapAndSheet).slice(0, 140));
+/* THE PIN MUST NOT TELEGRAPH HIM. Tom, 2026-08-10: "You are supposed to go to a
+   boss den and be surprised when it's the mage not telegraph it."
+   This assertion used to demand the OPPOSITE (his art on his pin), which is the
+   thing he objected to, so it is inverted rather than deleted: a future edit that
+   puts a drawing back on the map fails here. */
+ok('his pin gives nothing away', mapAndSheet.pinTellsNothing, JSON.stringify(mapAndSheet).slice(0, 140));
 ok('every other den pin is untouched', mapAndSheet.otherPinUnchanged, 'a tombstone, as before');
 ok('the den sheet shows him, drawn', /mage\.png/.test(mapAndSheet.heroSrc || '') && mapAndSheet.heroDrawn,
   `${mapAndSheet.heroSrc} drawn=${mapAndSheet.heroDrawn}`);

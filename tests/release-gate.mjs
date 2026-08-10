@@ -33,6 +33,7 @@ const PURE = ['unit.test.js', 'pit.test.js'];
 const BROWSER = [
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
+  'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
   'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'fight-layout-audit.mjs',  // the fight screen holds still

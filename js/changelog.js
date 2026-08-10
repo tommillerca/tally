@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 357, date: '2026-08-10', title: 'The map stops spoiling the surprise', items: [
+    'Boss dens all look like boss dens again. One of them belongs to the Live Wire and nothing on the map will tell you which: you find out when you walk up to it.',
+    "The daily remote den now says when you have beaten it, instead of offering you a pointless re-fight. It always counted toward the Gauntlet's ceiling, it just never said so.",
+  ] },
   { n: 356, date: '2026-08-10', title: 'The roaming monsters look like monsters', items: [
     'The mini-bosses you walk to on the Boneyard never had faces. A Marsh Ghoul and a Cinder Shade were the same starter skeleton with random cosmetics thrown on. Each one is drawn from its own bloodline now, so what the name promises is what steps out.',
   ] },

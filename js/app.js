@@ -919,7 +919,7 @@ function openMageIntro() {
       <p class="drop-eyebrow">THE VAULT IS HIS</p>
       <h1 class="drop-title">The <em>Live Wire</em></h1>
       <img class="mage-poster" src="assets/bh/mage/mage.png" alt="The Live Wire">
-      <p class="drop-sub">He holds a quarter of the dens on your map and he is not letting them go. Same one every time you come back.</p>
+      <p class="drop-sub">Some of the dens out there are his, and he is not letting them go. Nothing on the map will tell you which. Walk up to one and find out.</p>
       <button class="drop-cta" id="mageGo">FIND HIS VAULT</button>
       <button class="drop-later" id="mageLater">Not now</button>
     </div>`;
@@ -3047,14 +3047,18 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
    visuals + animations live on .den-fx, NOT the marker root, because MapLibre
    owns the root's transform to position the marker and a transform-based CSS
    animation there strands it at 0,0.
-   A mage den is HIS on the map too, or you walk to a tombstone and meet
-   something else: his pin drops the tombstone and the eyes for the drawing. */
+   EVERY DEN LOOKS LIKE A DEN. Tom, 2026-08-10: "You are supposed to go to a boss
+   den and be surprised when it's the mage not telegraph it", and before that,
+   "you weren't supposed to change all boss dens on the boneyard to the mage art
+   work I never said that."
+   I had his pin drop the tombstone for his drawing, which put a full-colour
+   illustration next to grey stones: a quarter of the pins by count, but the only
+   ones your eye lands on, so the map read as his. Worse, it spent the reveal
+   before the walk. Same rule the Bestiary already lost an argument over: meeting
+   the monster is the product. The pin is a pin. */
 function buildDenPin(el, d) {
-  const isMage = !!(d.theme && d.theme.art === 'mage');
-  el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '') + (isMage ? ' mage-den' : '');
-  el.innerHTML = `<div class="den-fx">${isMage
-    ? `<img class="den-mage" src="assets/bh/mage/mage.png" alt="">`
-    : `<span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt="">`}<span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
+  el.className = 'map-den-mark' + (d.roaming ? ' roaming' : '');
+  el.innerHTML = `<div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(Math.min(3, 1 + Math.floor(d.tier / 3)))}</span></div>`;
 }
 
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
@@ -6961,7 +6965,7 @@ function richLine(str) {
    that same popup's art for the same reason. */
 const NEWS = [
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
-    blurb: 'A quarter of the dens on your map are his, and they stay his.',
+    blurb: 'Some of the dens out there are his, and nothing marks them.',
     thumb: () => `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`,
     open: () => openMageIntro() },
   /* The Bestiary is a TEASER and this is the only place it lives on after the
@@ -11817,7 +11821,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v356'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v357'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12103,12 +12107,29 @@ async function renderPit(wrap) {
      better. Lives at the TOP of the Pit because for a housebound player it is
      the day's event. */
   const rDen = remoteDen(date);
-  const rDone = beaten.has(denKey(date, rDen));
+  /* BEATEN MEANS BEATEN. Tom, 2026-08-10: "once the daily free boss is beaten it
+     should show that not a button that says free to fight again, there's no point
+     to that."
+     The cleared state was written and never once reached. `beaten` is
+     pitBeatKeys(), which collects ONLY 'pitrung' and 'pitchamp' rows, while the
+     remote win is filed by claimDenWin as a 'bossday' row under denKey(). So the
+     lookup could not match by construction, the card said "free" forever, and a
+     player who beat him was invited to do it again for ten pocket coins. Read the
+     ledger row the win actually writes.
+     Measured on the broken build: denWinsCount 0 -> 1 after the win (so the
+     Gauntlet ceiling HAD risen by 3) while the row still read "· free  FIGHT".
+     That is the whole of Tom's "why is it not raising the cap": it was, and
+     nothing on screen ever said so. */
+  const rDone = xpRows.some(r => r.key === denKey(date, rDen));
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
       <span class="t3-med">${bhIcon('badge-skull', 20)}</span>
-      <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone ? 'cleared today · back tomorrow' : `${denRewardLabel(rDen)} · free`}</small></div>
+      <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
+        ? 'beaten · a new one is here tomorrow, free'
+        /* denRewardLabel takes the REWARD, not the den: passing rDen read every
+           field as undefined and rendered a bare "· · free". */
+        : `${denRewardLabel(rDen.reward)} · free`}</small></div>
       ${rDone ? '<span class="t3-lock">TOMORROW</span>' : '<button class="btn" id="remoteDenBtn">FIGHT</button>'}
     </div>`;
 
@@ -12126,7 +12147,7 @@ async function renderPit(wrap) {
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
       : `<div class="pit-gate">
           <div class="pg-head"><span class="pg-ico">${bhIcon('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
-          <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b> out on the map. Each boss you beat raises the ceiling by <b>3 ranks</b>.</p>
+          <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b>. Each one raises the ceiling by <b>3 ranks</b>. <b>The remote den above counts</b>, so this moves whether or not you can get out today.</p>
           <div class="pg-meter"><span>${denWins} boss${denWins === 1 ? '' : 'es'} beaten</span><b>cap ${ceiling}</b><span>next boss → cap ${ceiling + 3}</span></div>
           <button class="btn" id="endlessGate" style="width:100%">Find a world boss on the map</button>
           <p class="pg-foot">You can still rematch rank ${ceiling} below for coins while you look.</p>

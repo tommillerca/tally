@@ -6846,6 +6846,5 @@ body::before {
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
 /* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */
 .mage-veil .drop-eyebrow { padding-right: 74px; }
-.map-den-mark.mage-den .den-fx .den-mage { width: 46px; height: auto; display: block; filter: drop-shadow(0 3px 6px rgba(0,0,0,.55)); }
 .den-hero .art.art-mage { background: none; border: 0; }
 .den-hero .art.art-mage img { width: 100%; height: 100%; object-fit: contain; }
