@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 355, date: '2026-08-09', title: 'Everything has a name now', items: [
+    'The last 258 cosmetics were still called things like "Tidy Backdrop #1". They all have real names, read off each one worn on an actual Bonehead rather than guessed from the icon.',
+  ] },
   { n: 354, date: '2026-08-09', title: 'The Live Wire fights like himself', items: [
     'He is nearly twice your size now and he floats, which is what a boss should look like. He was the same size as you, which was a mistake.',
     'He has his own moves: a bolt that goes straight through armour, a wail that stops your wounds closing, something he calls up out of the floor, and a reap that hits harder the more stamina you are sitting on.',

@@ -33,6 +33,32 @@ console.log(`checked ${rows.length} catalogue rows`);
 console.log(`  missing/undecodable : ${missing.length}${missing.length ? ' -> ' + missing.map(r => r.id).join(', ') : ''}`);
 console.log(`  not 640px           : ${odd.length}${odd.length ? ' -> ' + odd.map(r => r.id + '@' + r.w).join(', ') : ''}`);
 console.log(`  still placeholder-named: ${nameless.length}`);
+/* EVERY COSMETIC HAS A REAL NAME, and no two in a slot share one. 258 rows
+   carried a generated placeholder ("Tidy Backdrop #1") until 2026-08-09; the
+   names were read off each item WORN on a bonehead at 330px, per Tom's rule.
+   A duplicate inside a slot is the other failure: two rows a player cannot tell
+   apart in the wardrobe. */
+if (nameless.length) {
+  console.log(`FAIL  ${nameless.length} cosmetics still have a placeholder name -> ${nameless.slice(0, 8).map(r => r.id).join(', ')}`);
+  process.exitCode = 1;
+}
+{
+  /* unique across the WHOLE catalogue, not just the slot: unit.test.js has held
+     that line since the drop items were named, and a cross-slot collision is
+     just as confusing in a crate reveal as a same-slot one. */
+  const seen = new Map(), clashes = [];
+  for (const r of rows) {
+    const k = (r.name || '').toLowerCase();
+    if (seen.has(k)) clashes.push(`${seen.get(k)} + ${r.id} both "${r.name}"`);
+    else seen.set(k, r.id);
+  }
+  if (clashes.length) {
+    console.log(`FAIL  two cosmetics share a name -> ${clashes.slice(0, 6).join(' | ')}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`  all ${rows.length} names are unique`);
+  }
+}
 if (!rows.length) { console.log('EMPTY SAMPLE = FAILURE'); process.exit(1); }
 
 /* DUPLICATE ART. Two catalogue rows pointing at pixel-identical files is a real

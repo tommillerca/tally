@@ -290,746 +290,746 @@ const BH_ITEMS_ALL = [
   "id": "BG1",
   "slot": "BG",
   "rarity": "uncommon",
-  "name": "Tidy Backdrop #1"
+  "name": "Deep Indigo"
  },
  {
   "id": "BG10",
   "slot": "BG",
   "rarity": "rare",
-  "name": "Turbo Backdrop #2"
+  "name": "Marigold"
  },
  {
   "id": "BG2-1",
   "slot": "BG",
   "rarity": "rare",
-  "name": "Prime Backdrop #3"
+  "name": "Olive"
  },
  {
   "id": "BG2-2",
   "slot": "BG",
   "rarity": "common",
-  "name": "Everyday Backdrop #4"
+  "name": "Khaki"
  },
  {
   "id": "BG2-3",
   "slot": "BG",
   "rarity": "common",
-  "name": "Everyday Backdrop #5"
+  "name": "Mint"
  },
  {
   "id": "BG3-1",
   "slot": "BG",
   "rarity": "common",
-  "name": "Basic Backdrop #6"
+  "name": "Lilac Blue"
  },
  {
   "id": "BG3-2",
   "slot": "BG",
   "rarity": "uncommon",
-  "name": "Sharp Backdrop #7"
+  "name": "Orchid"
  },
  {
   "id": "BG3-3",
   "slot": "BG",
   "rarity": "common",
-  "name": "Standard Backdrop #8"
+  "name": "Violet"
  },
  {
   "id": "BG4-1",
   "slot": "BG",
   "rarity": "epic",
-  "name": "Haunted Backdrop #9"
+  "name": "Salmon"
  },
  {
   "id": "BG4-2",
   "slot": "BG",
   "rarity": "common",
-  "name": "Street Backdrop #10"
+  "name": "Cotton Candy"
  },
  {
   "id": "BG4-3",
   "slot": "BG",
   "rarity": "common",
-  "name": "Corner-store Backdrop #11"
+  "name": "Flamingo"
  },
  {
   "id": "BG5-1",
   "slot": "BG",
   "rarity": "rare",
-  "name": "Prime Backdrop #12"
+  "name": "Tangerine"
  },
  {
   "id": "BG5-2",
   "slot": "BG",
   "rarity": "common",
-  "name": "Corner-store Backdrop #13"
+  "name": "Watermelon"
  },
  {
   "id": "BG5-3",
   "slot": "BG",
   "rarity": "legendary",
-  "name": "Eternal Backdrop #14"
+  "name": "Poppy"
  },
  {
   "id": "BG6-1",
   "slot": "BG",
   "rarity": "common",
-  "name": "Standard Backdrop #15"
+  "name": "Lemon"
  },
  {
   "id": "BG6-2",
   "slot": "BG",
   "rarity": "uncommon",
-  "name": "Slick Backdrop #16"
+  "name": "Butter"
  },
  {
   "id": "BG6-3",
   "slot": "BG",
   "rarity": "common",
-  "name": "Everyday Backdrop #17"
+  "name": "Lime Zest"
  },
  {
   "id": "BG7-1",
   "slot": "BG",
   "rarity": "uncommon",
-  "name": "Sharp Backdrop #18"
+  "name": "Pool Blue"
  },
  {
   "id": "BG7-2",
   "slot": "BG",
   "rarity": "common",
-  "name": "Corner-store Backdrop #19"
+  "name": "Big Sky"
  },
  {
   "id": "BG7-3",
   "slot": "BG",
   "rarity": "common",
-  "name": "Standard Backdrop #20"
+  "name": "Denim"
  },
  {
   "id": "BG8",
   "slot": "BG",
   "rarity": "common",
-  "name": "Street Backdrop #21"
+  "name": "Charred"
  },
  {
   "id": "BG9",
   "slot": "BG",
   "rarity": "common",
-  "name": "Standard Backdrop #22"
+  "name": "Old Paper"
  },
  {
   "id": "B0-1",
   "slot": "B",
   "rarity": "common",
-  "name": "Slick Bones #1",
+  "name": "Charcoal Bones",
   "default": true
  },
  {
   "id": "B0-2",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Tidy Bones #2"
+  "name": "Old Bone Bones"
  },
  {
   "id": "B0-3",
   "slot": "B",
   "rarity": "common",
-  "name": "Everyday Bones #3"
+  "name": "Periwinkle Bones"
  },
  {
   "id": "B0-4",
   "slot": "B",
   "rarity": "rare",
-  "name": "Turbo Bones #4"
+  "name": "Bubblegum Bones"
  },
  {
   "id": "B0-5",
   "slot": "B",
   "rarity": "rare",
-  "name": "Prime Bones #5"
+  "name": "Coral Bones"
  },
  {
   "id": "B0-6",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Tidy Bones #6"
+  "name": "Highlighter Bones"
  },
  {
   "id": "B0-7",
   "slot": "B",
   "rarity": "common",
-  "name": "Everyday Bones #7"
+  "name": "Sky Bones"
  },
  {
   "id": "B1",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Tidy Bones #8"
+  "name": "Shoreline Bones"
  },
  {
   "id": "B10",
   "slot": "B",
   "rarity": "common",
-  "name": "Street Bones #9"
+  "name": "Magma Bones"
  },
  {
   "id": "B11-1",
   "slot": "B",
   "rarity": "common",
-  "name": "Basic Bones #10"
+  "name": "Brown Fuzz"
  },
  {
   "id": "B11-2",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Tidy Bones #11"
+  "name": "Ginger Fuzz"
  },
  {
   "id": "B11-3",
   "slot": "B",
   "rarity": "legendary",
-  "name": "Eternal Bones #12"
+  "name": "Frostbite"
  },
  {
   "id": "B12",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Slick Bones #13"
+  "name": "Terracotta Bones"
  },
  {
   "id": "B13",
   "slot": "B",
   "rarity": "common",
-  "name": "Corner-store Bones #14"
+  "name": "Static Bones"
  },
  {
   "id": "B14",
   "slot": "B",
   "rarity": "rare",
-  "name": "Turbo Bones #15"
+  "name": "Swamp Bones"
  },
  {
   "id": "B15",
   "slot": "B",
   "rarity": "rare",
-  "name": "Voltage Bones #16"
+  "name": "Pale Bones"
  },
  {
   "id": "B16",
   "slot": "B",
   "rarity": "common",
-  "name": "Corner-store Bones #17"
+  "name": "Wrapped Bones"
  },
  {
   "id": "B17",
   "slot": "B",
   "rarity": "common",
-  "name": "Everyday Bones #18"
+  "name": "Odd Socks"
  },
  {
   "id": "B18",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Fresh Bones #19"
+  "name": "Cold Marble Bones"
  },
  {
   "id": "B19",
   "slot": "B",
   "rarity": "common",
-  "name": "Basic Bones #20"
+  "name": "Shadow Bones"
  },
  {
   "id": "B2",
   "slot": "B",
   "rarity": "rare",
-  "name": "Voltage Bones #21"
+  "name": "Ivory Bones"
  },
  {
   "id": "B20",
   "slot": "B",
   "rarity": "rare",
-  "name": "Turbo Bones #22"
+  "name": "Amber Bones"
  },
  {
   "id": "B3-1",
   "slot": "B",
   "rarity": "common",
-  "name": "Street Bones #23"
+  "name": "Strawberry Bones"
  },
  {
   "id": "B3-2",
   "slot": "B",
   "rarity": "epic",
-  "name": "Royal Bones #24"
+  "name": "Lichen Bones"
  },
  {
   "id": "B4",
   "slot": "B",
   "rarity": "common",
-  "name": "Standard Bones #25"
+  "name": "Mauve Bones"
  },
  {
   "id": "B5",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Tidy Bones #26"
+  "name": "Confetti Bones"
  },
  {
   "id": "B6-1",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Slick Bones #27"
+  "name": "Mint Bones"
  },
  {
   "id": "B6-2",
   "slot": "B",
   "rarity": "common",
-  "name": "Standard Bones #28"
+  "name": "Cold Bones"
  },
  {
   "id": "B6-3",
   "slot": "B",
   "rarity": "common",
-  "name": "Corner-store Bones #29"
+  "name": "Hot Bones"
  },
  {
   "id": "B7",
   "slot": "B",
   "rarity": "common",
-  "name": "Corner-store Bones #30"
+  "name": "Half Machine Frame"
  },
  {
   "id": "B8",
   "slot": "B",
   "rarity": "common",
-  "name": "Corner-store Bones #31"
+  "name": "Chrome Frame"
  },
  {
   "id": "B9",
   "slot": "B",
   "rarity": "uncommon",
-  "name": "Sharp Bones #32"
+  "name": "Negative Bones"
  },
  {
   "id": "S1-1",
   "slot": "S",
   "rarity": "common",
-  "name": "Standard Socks #1"
+  "name": "Green Camo Socks"
  },
  {
   "id": "S1-2",
   "slot": "S",
   "rarity": "common",
-  "name": "Basic Socks #2"
+  "name": "Pink Camo Socks"
  },
  {
   "id": "S1-3",
   "slot": "S",
   "rarity": "common",
-  "name": "Corner-store Socks #3"
+  "name": "Orange Camo Socks"
  },
  {
   "id": "S2",
   "slot": "S",
   "rarity": "rare",
-  "name": "Deluxe Socks #4"
+  "name": "Smiley Socks"
  },
  {
   "id": "S3",
   "slot": "S",
   "rarity": "common",
-  "name": "Everyday Socks #5"
+  "name": "Flame Socks"
  },
  {
   "id": "S4-1",
   "slot": "S",
   "rarity": "uncommon",
-  "name": "Slick Socks #6"
+  "name": "Blue Squiggle Socks"
  },
  {
   "id": "S4-2",
   "slot": "S",
   "rarity": "uncommon",
-  "name": "Slick Socks #7"
+  "name": "Orange Squiggle Socks"
  },
  {
   "id": "S5",
   "slot": "S",
   "rarity": "uncommon",
-  "name": "Tidy Socks #8"
+  "name": "Sherbet Socks"
  },
  {
   "id": "S6",
   "slot": "S",
   "rarity": "common",
-  "name": "Standard Socks #9"
+  "name": "Traffic Cone Socks"
  },
  {
   "id": "S7",
   "slot": "S",
   "rarity": "legendary",
-  "name": "Ancient Socks #10"
+  "name": "Star Socks"
  },
  {
   "id": "S8",
   "slot": "S",
   "rarity": "uncommon",
-  "name": "Slick Socks #11"
+  "name": "Grey Tube Socks"
  },
  {
   "id": "S9",
   "slot": "S",
   "rarity": "epic",
-  "name": "Haunted Socks #12"
+  "name": "Red Toe Socks"
  },
  {
   "id": "FW1",
   "slot": "FW",
   "rarity": "common",
-  "name": "Everyday Kicks #1"
+  "name": "Bunny Slippers"
  },
  {
   "id": "FW2-1",
   "slot": "FW",
   "rarity": "common",
-  "name": "Basic Kicks #2"
+  "name": "Yellow Slides"
  },
  {
   "id": "FW2-2",
   "slot": "FW",
   "rarity": "epic",
-  "name": "Cosmic Kicks #3"
+  "name": "Brown Slides"
  },
  {
   "id": "FW3",
   "slot": "FW",
   "rarity": "uncommon",
-  "name": "Slick Kicks #4"
+  "name": "Rain Boots"
  },
  {
   "id": "FW4",
   "slot": "FW",
   "rarity": "rare",
-  "name": "Turbo Kicks #5"
+  "name": "Hiking Boots"
  },
  {
   "id": "FW5-1",
   "slot": "FW",
   "rarity": "uncommon",
-  "name": "Sharp Kicks #6"
+  "name": "Cream Canvas"
  },
  {
   "id": "FW5-2",
   "slot": "FW",
   "rarity": "common",
-  "name": "Street Kicks #7"
+  "name": "Black Canvas"
  },
  {
   "id": "FW6-1",
   "slot": "FW",
   "rarity": "common",
-  "name": "Basic Kicks #8"
+  "name": "Black Runners"
  },
  {
   "id": "FW6-2",
   "slot": "FW",
   "rarity": "epic",
-  "name": "Haunted Kicks #9"
+  "name": "Cream Runners"
  },
  {
   "id": "FW6-3",
   "slot": "FW",
   "rarity": "rare",
-  "name": "Deluxe Kicks #10"
+  "name": "Navy Runners"
  },
  {
   "id": "FW7-1",
   "slot": "FW",
   "rarity": "common",
-  "name": "Basic Kicks #11"
+  "name": "Sticker Hi-Tops"
  },
  {
   "id": "FW7-2",
   "slot": "FW",
   "rarity": "legendary",
-  "name": "Ancient Kicks #12"
+  "name": "Rose Hi-Tops"
  },
  {
   "id": "FW7-3",
   "slot": "FW",
   "rarity": "epic",
-  "name": "Cosmic Kicks #13"
+  "name": "Buckle Hi-Tops"
  },
  {
   "id": "FW7-4",
   "slot": "FW",
   "rarity": "common",
-  "name": "Street Kicks #14"
+  "name": "Red Hi-Tops"
  },
  {
   "id": "FW7-5",
   "slot": "FW",
   "rarity": "common",
-  "name": "Corner-store Kicks #15"
+  "name": "Lime Hi-Tops"
  },
  {
   "id": "FW7-6",
   "slot": "FW",
   "rarity": "rare",
-  "name": "Prime Kicks #16"
+  "name": "White Hi-Tops"
  },
  {
   "id": "FW8-1",
   "slot": "FW",
   "rarity": "uncommon",
-  "name": "Tidy Kicks #17"
+  "name": "Gold Court"
  },
  {
   "id": "FW8-2",
   "slot": "FW",
   "rarity": "common",
-  "name": "Street Kicks #18"
+  "name": "Red Court"
  },
  {
   "id": "FW8-3",
   "slot": "FW",
   "rarity": "rare",
-  "name": "Prime Kicks #19"
+  "name": "Olive Court"
  },
  {
   "id": "U1",
   "slot": "U",
   "rarity": "uncommon",
-  "name": "Tidy Undies #1"
+  "name": "Camo Briefs"
  },
  {
   "id": "U2",
   "slot": "U",
   "rarity": "common",
-  "name": "Street Undies #2"
+  "name": "Heart Briefs"
  },
  {
   "id": "U3",
   "slot": "U",
   "rarity": "legendary",
-  "name": "Ancient Undies #3"
+  "name": "Confetti Briefs"
  },
  {
   "id": "U4",
   "slot": "U",
   "rarity": "common",
-  "name": "Street Undies #4"
+  "name": "Leopard Briefs"
  },
  {
   "id": "U5",
   "slot": "U",
   "rarity": "epic",
-  "name": "Storm-forged Undies #5"
+  "name": "Tiger Briefs"
  },
  {
   "id": "U6",
   "slot": "U",
   "rarity": "uncommon",
-  "name": "Slick Undies #6"
+  "name": "Gold Briefs"
  },
  {
   "id": "U7",
   "slot": "U",
   "rarity": "common",
-  "name": "Street Undies #7"
+  "name": "Plain Whites"
  },
  {
   "id": "P1",
   "slot": "P",
   "rarity": "epic",
-  "name": "Royal Pants #1"
+  "name": "Tentacle Kilt"
  },
  {
   "id": "P2",
   "slot": "P",
   "rarity": "common",
-  "name": "Standard Pants #2"
+  "name": "Bandage Wrap"
  },
  {
   "id": "P3",
   "slot": "P",
   "rarity": "rare",
-  "name": "Radical Pants #3"
+  "name": "Servo Hips"
  },
  {
   "id": "P4-1",
   "slot": "P",
   "rarity": "common",
-  "name": "Standard Pants #4"
+  "name": "Blue Jeans"
  },
  {
   "id": "P4-2",
   "slot": "P",
   "rarity": "common",
-  "name": "Basic Pants #5"
+  "name": "Black Jeans"
  },
  {
   "id": "P4-3",
   "slot": "P",
   "rarity": "common",
-  "name": "Everyday Pants #6"
+  "name": "Light Wash Jeans"
  },
  {
   "id": "P5-1",
   "slot": "P",
   "rarity": "epic",
-  "name": "Storm-forged Pants #7"
+  "name": "Green Trunks"
  },
  {
   "id": "P5-2",
   "slot": "P",
   "rarity": "epic",
-  "name": "Storm-forged Pants #8"
+  "name": "Pink Trunks"
  },
  {
   "id": "P5-3",
   "slot": "P",
   "rarity": "legendary",
-  "name": "Celestial Pants #9"
+  "name": "Track Shorts"
  },
  {
   "id": "P6-1",
   "slot": "P",
   "rarity": "uncommon",
-  "name": "Slick Pants #10"
+  "name": "Green Camo Cargos"
  },
  {
   "id": "P6-2",
   "slot": "P",
   "rarity": "common",
-  "name": "Everyday Pants #11"
+  "name": "Ember Camo Cargos"
  },
  {
   "id": "P6-3",
   "slot": "P",
   "rarity": "epic",
-  "name": "Molten Pants #12"
+  "name": "Tan Cargos"
  },
  {
   "id": "P6-4",
   "slot": "P",
   "rarity": "uncommon",
-  "name": "Slick Pants #13"
+  "name": "Teal Cargos"
  },
  {
   "id": "T1",
   "slot": "T",
   "rarity": "epic",
-  "name": "Cosmic Top #1"
+  "name": "Loose Wiring"
  },
  {
   "id": "T10-1",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Fresh Top #2"
+  "name": "Boneheadz Tee"
  },
  {
   "id": "T10-2",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Slick Top #3"
+  "name": "Boneheadz Tee (Black)"
  },
  {
   "id": "T10-3",
   "slot": "T",
   "rarity": "epic",
-  "name": "Storm-forged Top #4"
+  "name": "Yellow X Tee"
  },
  {
   "id": "T10-4",
   "slot": "T",
   "rarity": "epic",
-  "name": "Royal Top #5"
+  "name": "Red X Tee"
  },
  {
   "id": "T2",
   "slot": "T",
   "rarity": "common",
-  "name": "Street Top #6"
+  "name": "Catch of the Day"
  },
  {
   "id": "T3",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Custom Top #7"
+  "name": "Carapace"
  },
  {
   "id": "T4-1",
   "slot": "T",
   "rarity": "common",
-  "name": "Corner-store Top #8"
+  "name": "Bone Tank"
  },
  {
   "id": "T4-2",
   "slot": "T",
   "rarity": "common",
-  "name": "Standard Top #9"
+  "name": "Chained Tank"
  },
  {
   "id": "T5-1",
   "slot": "T",
   "rarity": "rare",
-  "name": "Voltage Top #10"
+  "name": "Cream Hoodie"
  },
  {
   "id": "T5-2",
   "slot": "T",
   "rarity": "common",
-  "name": "Basic Top #11"
+  "name": "Smiley Hoodie"
  },
  {
   "id": "T6-1",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Tidy Top #12"
+  "name": "Green Camo Jacket"
  },
  {
   "id": "T6-2",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Slick Top #13"
+  "name": "Ember Camo Jacket"
  },
  {
   "id": "T7",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Custom Top #14"
+  "name": "Varsity Jacket"
  },
  {
   "id": "T8",
   "slot": "T",
   "rarity": "rare",
-  "name": "Radical Top #15"
+  "name": "Plaid Work Jacket"
  },
  {
   "id": "T9-1",
   "slot": "T",
   "rarity": "legendary",
-  "name": "Ancient Top #16"
+  "name": "Ice Puffer"
  },
  {
   "id": "T9-2",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Fresh Top #17"
+  "name": "Sunset Puffer"
  },
  {
   "id": "T9-3",
   "slot": "T",
   "rarity": "uncommon",
-  "name": "Fresh Top #18"
+  "name": "Hi-Vis Puffer"
  },
  {
   "id": "T9-4",
   "slot": "T",
   "rarity": "rare",
-  "name": "Deluxe Top #19"
+  "name": "Cobalt Puffer"
  },
  {
   "id": "T9-5",
@@ -1065,470 +1065,470 @@ const BH_ITEMS_ALL = [
   "id": "SK0-1",
   "slot": "SK",
   "rarity": "common",
-  "name": "Street Skull #1",
+  "name": "Charcoal Skull",
   "default": true
  },
  {
   "id": "SK0-2",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Sharp Skull #2"
+  "name": "Old Bone Skull"
  },
  {
   "id": "SK0-3",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #3"
+  "name": "Periwinkle Skull"
  },
  {
   "id": "SK0-4",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #4"
+  "name": "Bubblegum Skull"
  },
  {
   "id": "SK0-5",
   "slot": "SK",
   "rarity": "rare",
-  "name": "Radical Skull #5"
+  "name": "Coral Skull"
  },
  {
   "id": "SK0-6",
   "slot": "SK",
   "rarity": "common",
-  "name": "Basic Skull #6"
+  "name": "Highlighter Skull"
  },
  {
   "id": "SK0-7",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Tidy Skull #7"
+  "name": "Sky Skull"
  },
  {
   "id": "SK1",
   "slot": "SK",
   "rarity": "rare",
-  "name": "Turbo Skull #8"
+  "name": "Shoreline Skull"
  },
  {
   "id": "SK10",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #9"
+  "name": "Magma Skull"
  },
  {
   "id": "SK11-1",
   "slot": "SK",
   "rarity": "common",
-  "name": "Basic Skull #10"
+  "name": "Brown Mop"
  },
  {
   "id": "SK11-2",
   "slot": "SK",
   "rarity": "common",
-  "name": "Standard Skull #11"
+  "name": "Ginger Mop"
  },
  {
   "id": "SK11-3",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Slick Skull #12"
+  "name": "Frosted Mop"
  },
  {
   "id": "SK12",
   "slot": "SK",
   "rarity": "rare",
-  "name": "Turbo Skull #13"
+  "name": "Cracked Clay"
  },
  {
   "id": "SK13",
   "slot": "SK",
   "rarity": "epic",
-  "name": "Molten Skull #14"
+  "name": "Storm Skull"
  },
  {
   "id": "SK14",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Sharp Skull #15"
+  "name": "Swamp Skull"
  },
  {
   "id": "SK15",
   "slot": "SK",
   "rarity": "legendary",
-  "name": "Mythic Skull #16"
+  "name": "Moonlit Skull"
  },
  {
   "id": "SK16",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #17"
+  "name": "Wrapped Skull"
  },
  {
   "id": "SK17",
   "slot": "SK",
   "rarity": "epic",
-  "name": "Storm-forged Skull #18"
+  "name": "Sprinkles"
  },
  {
   "id": "SK18",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Slick Skull #19"
+  "name": "Cold Marble"
  },
  {
   "id": "SK19",
   "slot": "SK",
   "rarity": "common",
-  "name": "Basic Skull #20"
+  "name": "Warpaint"
  },
  {
   "id": "SK2",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #21"
+  "name": "Brains Out"
  },
  {
   "id": "SK20",
   "slot": "SK",
   "rarity": "common",
-  "name": "Basic Skull #22"
+  "name": "Amber Skull"
  },
  {
   "id": "SK3-1",
   "slot": "SK",
   "rarity": "common",
-  "name": "Basic Skull #23"
+  "name": "Strawberry Skull"
  },
  {
   "id": "SK3-2",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Slick Skull #24"
+  "name": "Lichen Skull"
  },
  {
   "id": "SK4",
   "slot": "SK",
   "rarity": "common",
-  "name": "Street Skull #25"
+  "name": "Midnight Yard"
  },
  {
   "id": "SK5",
   "slot": "SK",
   "rarity": "common",
-  "name": "Street Skull #26"
+  "name": "Confetti Skull"
  },
  {
   "id": "SK6-1",
   "slot": "SK",
   "rarity": "common",
-  "name": "Street Skull #27"
+  "name": "Mint Brain"
  },
  {
   "id": "SK6-2",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #28"
+  "name": "Cold Brain"
  },
  {
   "id": "SK6-3",
   "slot": "SK",
   "rarity": "rare",
-  "name": "Prime Skull #29"
+  "name": "Hot Brain"
  },
  {
   "id": "SK7",
   "slot": "SK",
   "rarity": "uncommon",
-  "name": "Sharp Skull #30"
+  "name": "Half Machine"
  },
  {
   "id": "SK8",
   "slot": "SK",
   "rarity": "common",
-  "name": "Everyday Skull #31"
+  "name": "Chrome Dome"
  },
  {
   "id": "SK9",
   "slot": "SK",
   "rarity": "common",
-  "name": "Corner-store Skull #32"
+  "name": "Negative Skull"
  },
  {
   "id": "E1",
   "slot": "E",
   "rarity": "legendary",
-  "name": "Grandmaster Eyes #1"
+  "name": "Pink Glow"
  },
  {
   "id": "E10",
   "slot": "E",
   "rarity": "common",
-  "name": "Standard Eyes #2"
+  "name": "Smiley Eyes"
  },
  {
   "id": "E11-1",
   "slot": "E",
   "rarity": "uncommon",
-  "name": "Tidy Eyes #3"
+  "name": "Red Lasers"
  },
  {
   "id": "E11-2",
   "slot": "E",
   "rarity": "common",
-  "name": "Everyday Eyes #4"
+  "name": "Blue Lasers"
  },
  {
   "id": "E2",
   "slot": "E",
   "rarity": "common",
-  "name": "Corner-store Eyes #5"
+  "name": "Ember Eyes"
  },
  {
   "id": "E3",
   "slot": "E",
   "rarity": "uncommon",
-  "name": "Tidy Eyes #6"
+  "name": "Yellow X"
  },
  {
   "id": "E4",
   "slot": "E",
   "rarity": "common",
-  "name": "Everyday Eyes #7"
+  "name": "Red Pinpricks"
  },
  {
   "id": "E5",
   "slot": "E",
   "rarity": "common",
-  "name": "Everyday Eyes #8"
+  "name": "Star Struck"
  },
  {
   "id": "E6-1",
   "slot": "E",
   "rarity": "common",
-  "name": "Basic Eyes #9"
+  "name": "Neon Scribble"
  },
  {
   "id": "E6-2",
   "slot": "E",
   "rarity": "epic",
-  "name": "Storm-forged Eyes #10"
+  "name": "Hot Scribble"
  },
  {
   "id": "E7",
   "slot": "E",
   "rarity": "uncommon",
-  "name": "Custom Eyes #11"
+  "name": "Ice Gems"
  },
  {
   "id": "E8",
   "slot": "E",
   "rarity": "common",
-  "name": "Standard Eyes #12"
+  "name": "Bound Eyes"
  },
  {
   "id": "E9",
   "slot": "E",
   "rarity": "uncommon",
-  "name": "Slick Eyes #13"
+  "name": "Amber Marbles"
  },
  {
   "id": "G1",
   "slot": "G",
   "rarity": "common",
-  "name": "Basic Grillz #1"
+  "name": "Gold Fangs"
  },
  {
   "id": "G10",
   "slot": "G",
   "rarity": "epic",
-  "name": "Molten Grillz #2"
+  "name": "Ice Pair"
  },
  {
   "id": "G11",
   "slot": "G",
   "rarity": "uncommon",
-  "name": "Slick Grillz #3"
+  "name": "Ice Row"
  },
  {
   "id": "G12",
   "slot": "G",
   "rarity": "common",
-  "name": "Street Grillz #4"
+  "name": "Ghost Cap"
  },
  {
   "id": "G13",
   "slot": "G",
   "rarity": "uncommon",
-  "name": "Fresh Grillz #5"
+  "name": "One Gold"
  },
  {
   "id": "G14",
   "slot": "G",
   "rarity": "rare",
-  "name": "Radical Grillz #6"
+  "name": "Gold Pair"
  },
  {
   "id": "G15",
   "slot": "G",
   "rarity": "common",
-  "name": "Everyday Grillz #7"
+  "name": "Gold Row"
  },
  {
   "id": "G2",
   "slot": "G",
   "rarity": "uncommon",
-  "name": "Tidy Grillz #8"
+  "name": "Bone Cap"
  },
  {
   "id": "G3",
   "slot": "G",
   "rarity": "uncommon",
-  "name": "Custom Grillz #9"
+  "name": "One Silver"
  },
  {
   "id": "G4",
   "slot": "G",
   "rarity": "uncommon",
-  "name": "Custom Grillz #10"
+  "name": "Silver Row"
  },
  {
   "id": "G5",
   "slot": "G",
   "rarity": "common",
-  "name": "Everyday Grillz #11"
+  "name": "Silver Pair"
  },
  {
   "id": "G6",
   "slot": "G",
   "rarity": "common",
-  "name": "Corner-store Grillz #12"
+  "name": "One Amethyst"
  },
  {
   "id": "G7",
   "slot": "G",
   "rarity": "common",
-  "name": "Everyday Grillz #13"
+  "name": "Amethyst Pair"
  },
  {
   "id": "G8",
   "slot": "G",
   "rarity": "epic",
-  "name": "Molten Grillz #14"
+  "name": "Amethyst Row"
  },
  {
   "id": "G9",
   "slot": "G",
   "rarity": "legendary",
-  "name": "Ancient Grillz #15"
+  "name": "One Ice"
  },
  {
   "id": "M1",
   "slot": "M",
   "rarity": "uncommon",
-  "name": "Sharp Chew #1"
+  "name": "Fishing Lure"
  },
  {
   "id": "M10",
   "slot": "M",
   "rarity": "uncommon",
-  "name": "Tidy Chew #2"
+  "name": "Rollie"
  },
  {
   "id": "M11",
   "slot": "M",
   "rarity": "uncommon",
-  "name": "Slick Chew #3"
+  "name": "Last Cigarette"
  },
  {
   "id": "M2",
   "slot": "M",
   "rarity": "rare",
-  "name": "Voltage Chew #4"
+  "name": "Pearl Chain"
  },
  {
   "id": "M3",
   "slot": "M",
   "rarity": "legendary",
-  "name": "Grandmaster Chew #5"
+  "name": "Chewed Straw"
  },
  {
   "id": "M4",
   "slot": "M",
   "rarity": "rare",
-  "name": "Deluxe Chew #6"
+  "name": "Matchstick"
  },
  {
   "id": "M5",
   "slot": "M",
   "rarity": "rare",
-  "name": "Radical Chew #7"
+  "name": "Bubblegum"
  },
  {
   "id": "M6",
   "slot": "M",
   "rarity": "common",
-  "name": "Standard Chew #8"
+  "name": "Pencil"
  },
  {
   "id": "M7",
   "slot": "M",
   "rarity": "epic",
-  "name": "Molten Chew #9"
+  "name": "Fire Breath"
  },
  {
   "id": "M8",
   "slot": "M",
   "rarity": "rare",
-  "name": "Deluxe Chew #10"
+  "name": "Gold Straw"
  },
  {
   "id": "M9",
   "slot": "M",
   "rarity": "rare",
-  "name": "Deluxe Chew #11"
+  "name": "Knife in Teeth"
  },
  {
   "id": "H1",
   "slot": "H",
   "rarity": "rare",
-  "name": "Radical Hat #1"
+  "name": "Daisy Bucket"
  },
  {
   "id": "H10",
   "slot": "H",
   "rarity": "common",
-  "name": "Basic Hat #2"
+  "name": "Star Rag"
  },
  {
   "id": "H11-1",
   "slot": "H",
   "rarity": "common",
-  "name": "Corner-store Hat #3"
+  "name": "Red Kitsune"
  },
  {
   "id": "H11-2",
   "slot": "H",
   "rarity": "uncommon",
-  "name": "Tidy Hat #4"
+  "name": "Bone Kitsune"
  },
  {
   "id": "H11-3",
   "slot": "H",
   "rarity": "common",
-  "name": "Basic Hat #5"
+  "name": "Pink Kitsune"
  },
  {
   "id": "H12-1",
   "slot": "H",
   "rarity": "epic",
-  "name": "Molten Hat #6"
+  "name": "Pint-Size Cop"
  },
  {
   "id": "H12-2",
   "slot": "H",
   "rarity": "epic",
-  "name": "Storm-forged Hat #7"
+  "name": "Little League"
  },
  {
   "id": "H13-2",
@@ -1564,337 +1564,337 @@ const BH_ITEMS_ALL = [
   "id": "H13",
   "slot": "H",
   "rarity": "common",
-  "name": "Everyday Hat #8"
+  "name": "Blowfish Hood"
  },
  {
   "id": "H2-1",
   "slot": "H",
   "rarity": "common",
-  "name": "Street Hat #9"
+  "name": "Gator Nap"
  },
  {
   "id": "H2-2",
   "slot": "H",
   "rarity": "uncommon",
-  "name": "Tidy Hat #10"
+  "name": "Grape Gator"
  },
  {
   "id": "H4",
   "slot": "H",
   "rarity": "rare",
-  "name": "Prime Hat #11"
+  "name": "Sticker Lid"
  },
  {
   "id": "H5-1",
   "slot": "H",
   "rarity": "uncommon",
-  "name": "Slick Hat #12"
+  "name": "Leopard Cap"
  },
  {
   "id": "H5-2",
   "slot": "H",
   "rarity": "common",
-  "name": "Basic Hat #13"
+  "name": "Acid Camo Cap"
  },
  {
   "id": "H5-3",
   "slot": "H",
   "rarity": "common",
-  "name": "Street Hat #14"
+  "name": "Swamp Camo Cap"
  },
  {
   "id": "H6-1",
   "slot": "H",
   "rarity": "legendary",
-  "name": "Mythic Hat #15"
+  "name": "Bee Daisy"
  },
  {
   "id": "H6-2",
   "slot": "H",
   "rarity": "common",
-  "name": "Corner-store Hat #16"
+  "name": "Bee Blossom"
  },
  {
   "id": "H7-1",
   "slot": "H",
   "rarity": "common",
-  "name": "Corner-store Hat #17"
+  "name": "Bone Horns"
  },
  {
   "id": "H7-2",
   "slot": "H",
   "rarity": "rare",
-  "name": "Turbo Hat #18"
+  "name": "Gold Horns"
  },
  {
   "id": "H8-1",
   "slot": "H",
   "rarity": "common",
-  "name": "Everyday Hat #19"
+  "name": "Blue Line Helmet"
  },
  {
   "id": "H8-2",
   "slot": "H",
   "rarity": "uncommon",
-  "name": "Custom Hat #20"
+  "name": "Red Line Helmet"
  },
  {
   "id": "H9",
   "slot": "H",
   "rarity": "common",
-  "name": "Street Hat #21"
+  "name": "Sun Boater"
  },
  {
   "id": "IL1-1",
   "slot": "IL",
   "rarity": "common",
-  "name": "Everyday Off-hand #1"
+  "name": "Skull Balloon"
  },
  {
   "id": "IL1-2",
   "slot": "IL",
   "rarity": "uncommon",
-  "name": "Sharp Off-hand #2"
+  "name": "Smiley Balloon"
  },
  {
   "id": "IL1-3",
   "slot": "IL",
   "rarity": "common",
-  "name": "Corner-store Off-hand #3"
+  "name": "Dead Balloon"
  },
  {
   "id": "IL2",
   "slot": "IL",
   "rarity": "rare",
-  "name": "Deluxe Off-hand #4"
+  "name": "Spiked Balloon"
  },
  {
   "id": "IL3-1",
   "slot": "IL",
   "rarity": "common",
-  "name": "Standard Off-hand #5"
+  "name": "Yellow Spray Can"
  },
  {
   "id": "IL3-2",
   "slot": "IL",
   "rarity": "legendary",
-  "name": "Celestial Off-hand #6"
+  "name": "Green Spray Can"
  },
  {
   "id": "IL4-1",
   "slot": "IL",
   "rarity": "rare",
-  "name": "Radical Off-hand #7"
+  "name": "Blue Peace Glove"
  },
  {
   "id": "IL4-2",
   "slot": "IL",
   "rarity": "uncommon",
-  "name": "Custom Off-hand #8"
+  "name": "Bone Peace"
  },
  {
   "id": "IL4-3",
   "slot": "IL",
   "rarity": "rare",
-  "name": "Radical Off-hand #9"
+  "name": "Star Peace Glove"
  },
  {
   "id": "IL5",
   "slot": "IL",
   "rarity": "uncommon",
-  "name": "Tidy Off-hand #10"
+  "name": "Bunch of Carrots"
  },
  {
   "id": "IL6-1",
   "slot": "IL",
   "rarity": "epic",
-  "name": "Haunted Off-hand #11"
+  "name": "Mixed Posy"
  },
  {
   "id": "IL6-2",
   "slot": "IL",
   "rarity": "common",
-  "name": "Everyday Off-hand #12"
+  "name": "White Posy"
  },
  {
   "id": "IL6-3",
   "slot": "IL",
   "rarity": "common",
-  "name": "Standard Off-hand #13"
+  "name": "Blue Posy"
  },
  {
   "id": "IL6-4",
   "slot": "IL",
   "rarity": "common",
-  "name": "Standard Off-hand #14"
+  "name": "Coral Posy"
  },
  {
   "id": "IL7-1",
   "slot": "IL",
   "rarity": "rare",
-  "name": "Radical Off-hand #15"
+  "name": "Blue Katana"
  },
  {
   "id": "IL7-2",
   "slot": "IL",
   "rarity": "uncommon",
-  "name": "Fresh Off-hand #16"
+  "name": "Gold Katana"
  },
  {
   "id": "IL7-3",
   "slot": "IL",
   "rarity": "epic",
-  "name": "Storm-forged Off-hand #17"
+  "name": "Steel Katana"
  },
  {
   "id": "IL8-1",
   "slot": "IL",
   "rarity": "legendary",
-  "name": "Mythic Off-hand #18"
+  "name": "Golden Perch"
  },
  {
   "id": "IL8-2",
   "slot": "IL",
   "rarity": "rare",
-  "name": "Turbo Off-hand #19"
+  "name": "Red Snapper"
  },
  {
   "id": "IL9",
   "slot": "IL",
   "rarity": "common",
-  "name": "Everyday Off-hand #20"
+  "name": "Sun Banner"
  },
  {
   "id": "IR1",
   "slot": "IR",
   "rarity": "common",
-  "name": "Corner-store Main-hand #1"
+  "name": "Angry Flail"
  },
  {
   "id": "IR2",
   "slot": "IR",
   "rarity": "common",
-  "name": "Street Main-hand #2"
+  "name": "Grumpy Sack"
  },
  {
   "id": "IR3-1",
   "slot": "IR",
   "rarity": "common",
-  "name": "Basic Main-hand #3"
+  "name": "Red Toothbrush"
  },
  {
   "id": "IR3-2",
   "slot": "IR",
   "rarity": "common",
-  "name": "Basic Main-hand #4"
+  "name": "Blue Toothbrush"
  },
  {
   "id": "IR4",
   "slot": "IR",
   "rarity": "common",
-  "name": "Everyday Main-hand #5"
+  "name": "Fishing Rod"
  },
  {
   "id": "IR5-1",
   "slot": "IR",
   "rarity": "common",
-  "name": "Street Main-hand #6"
+  "name": "Red Pennant"
  },
  {
   "id": "IR5-2",
   "slot": "IR",
   "rarity": "common",
-  "name": "Basic Main-hand #7"
+  "name": "Blue Pennant"
  },
  {
   "id": "IR5-3",
   "slot": "IR",
   "rarity": "uncommon",
-  "name": "Sharp Main-hand #8"
+  "name": "Green Pennant"
  },
  {
   "id": "IR6",
   "slot": "IR",
   "rarity": "common",
-  "name": "Street Main-hand #9"
+  "name": "Smiley Tote"
  },
  {
   "id": "IR7-1",
   "slot": "IR",
   "rarity": "common",
-  "name": "Standard Main-hand #10"
+  "name": "Smiley Katana"
  },
  {
   "id": "IR7-2",
   "slot": "IR",
   "rarity": "epic",
-  "name": "Storm-forged Main-hand #11"
+  "name": "Eyeball Katana"
  },
  {
   "id": "IR7-3",
   "slot": "IR",
   "rarity": "common",
-  "name": "Corner-store Main-hand #12"
+  "name": "Grudge Katana"
  },
  {
   "id": "IR8-1",
   "slot": "IR",
   "rarity": "common",
-  "name": "Street Main-hand #13"
+  "name": "Gold Spade"
  },
  {
   "id": "IR8-2",
   "slot": "IR",
   "rarity": "legendary",
-  "name": "Ancient Main-hand #14"
+  "name": "Steel Spade"
  },
  {
   "id": "IR9-1",
   "slot": "IR",
   "rarity": "uncommon",
-  "name": "Fresh Main-hand #15"
+  "name": "Violet Stick"
  },
  {
   "id": "IR9-2",
   "slot": "IR",
   "rarity": "uncommon",
-  "name": "Tidy Main-hand #16"
+  "name": "Bone Stick"
  },
  {
   "id": "IR9-3",
   "slot": "IR",
   "rarity": "rare",
-  "name": "Turbo Main-hand #17"
+  "name": "Gold Stick"
  },
  {
   "id": "C1",
   "slot": "C",
   "rarity": "epic",
-  "name": "Cosmic Pet #1"
+  "name": "Drizzle"
  },
  {
   "id": "C2",
   "slot": "C",
   "rarity": "legendary",
-  "name": "Eternal Pet #2"
+  "name": "Mallard"
  },
  {
   "id": "C3",
   "slot": "C",
   "rarity": "common",
-  "name": "Corner-store Pet #3"
+  "name": "Catfish"
  },
  {
   "id": "C4",
   "slot": "C",
   "rarity": "common",
-  "name": "Basic Pet #4"
+  "name": "Beardie"
  },
  {
   "id": "C5",
   "slot": "C",
   "rarity": "uncommon",
-  "name": "Tidy Pet #5"
+  "name": "Bulldog"
  },
  {
   "id": "CX",
