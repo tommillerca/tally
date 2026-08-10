@@ -2272,6 +2272,56 @@ test('every Gauntlet rank resolves a real monster look', () => {
   assert.deepEqual(naked, [], `ranks with no face: ${naked.slice(0, 8).join(', ')}`);
 });
 
+
+/* ================= BhVault backfill: additive-only, all four gates =========
+ * The iOS registration fix (2026-08-10) makes every existing player's device a
+ * "readable empty vault + real local identity" case, which nothing wrote
+ * before. backfillVaultMirror closes that; these pin its safety envelope, the
+ * same envelope that protects against the two historical account wipes:
+ * an unreadable vault is NEVER written, a different account is NEVER displaced,
+ * and only a confirmed-empty vault receives the local key. */
+
+test('vault backfill writes ONLY into a confirmed-empty vault', async () => {
+  const { backfillVaultMirror } = await import('../js/social.js');
+  const ME = { privJwk: { d: 'me' }, pubJwk: {} };
+  const OTHER = { privJwk: { d: 'other' }, pubJwk: {} };
+  const calls = [];
+  const mk = (readResult, id = ME) => ({
+    read: async () => readResult,
+    mirror: async v => { calls.push(v.privJwk.d); },
+    getId: async () => id,
+  });
+  // 1. unreadable: ok:false is a failed READ, not an empty vault. Never write.
+  assert.equal(await backfillVaultMirror(mk({ ok: false, id: null })), 'unreadable');
+  // 2. different account present: leave it alone (a recoverable account).
+  assert.equal(await backfillVaultMirror(mk({ ok: true, id: OTHER })), 'conflict');
+  // 3. same account already mirrored: nothing to do.
+  assert.equal(await backfillVaultMirror(mk({ ok: true, id: ME })), 'already');
+  // 4. no local identity yet: nothing to protect, never write.
+  assert.equal(await backfillVaultMirror(mk({ ok: true, id: null }, null)), 'no-local');
+  assert.deepEqual(calls, [], `cases 1-4 must write nothing, wrote: ${calls}`);
+  // 5. the one legal write: readable AND empty AND a real local identity.
+  assert.equal(await backfillVaultMirror(mk({ ok: true, id: null })), 'written');
+  assert.deepEqual(calls, ['me'], 'the empty-vault case mirrors the local key, exactly once');
+});
+
+test('identity boot order stays local-first and backfill stays before the cloud gates', () => {
+  const src = readFileSync(join(here, '../js/social.js'), 'utf8');
+  // ensureIdentity must return an existing local identity BEFORE any keychain
+  // read: the mirror-on-every-read bug once destroyed a good keychain entry.
+  const ei = src.slice(src.indexOf('async function ensureIdentity'), src.indexOf('async function signingKey'));
+  const firstReturn = ei.indexOf('return id;');
+  const firstRead = ei.indexOf('readKeychainIdentity');
+  assert.ok(firstReturn > -1 && firstRead > -1 && firstReturn < firstRead,
+    'ensureIdentity consults the keychain before honoring the local identity');
+  // bootSync must fire the backfill BEFORE the cloudOff / no-api early returns,
+  // or local-only players (cloud off) never get their reinstall protection.
+  const bs = src.slice(src.indexOf('export async function bootSync'));
+  const fill = bs.indexOf('backfillVaultMirror');
+  const gate = bs.indexOf("kvGet('cloudOff'");
+  assert.ok(fill > -1 && gate > -1 && fill < gate, 'backfill runs after the cloud gates, so cloud-off players are unprotected');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

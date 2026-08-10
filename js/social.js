@@ -117,6 +117,35 @@ export async function vaultOtherIdentity() {
   return cur.id.privJwk.d === mine?.privJwk?.d ? null : cur.id;
 }
 
+/* ONE-TIME BACKFILL for a vault that becomes available AFTER the account
+   exists. ensureIdentity deliberately never mirrors on the happy path (a
+   mirror-on-every-read once destroyed a good keychain entry), and the mint /
+   restore sites are the only writers. That leaves exactly one hole, and iOS
+   is standing in it as of the BhVault registration fix: every existing player
+   has a local identity and an EMPTY, newly-visible vault, and nothing ever
+   writes the mirror, so the plugin's whole purpose (surviving reinstalls)
+   stays unmet for them. This closes it, with the same additive-only rules as
+   everything else in this file:
+     - writes ONLY when the vault read succeeded AND came back empty
+     - an unreadable vault is never written (ok:false is not "empty")
+     - a different account in the vault is left alone (mirrorIdentity's
+       compare-and-set already refuses and records vaultConflict)
+   Deps are injectable so the four cases are unit-testable without a browser. */
+export async function backfillVaultMirror(deps = {}) {
+  const read = deps.read || readKeychainIdentity;
+  const mirror = deps.mirror || mirrorIdentity;
+  const getId = deps.getId || (() => kvGet('identity', null));
+  const id = await getId();
+  if (!id?.privJwk?.d) return 'no-local';        // nothing to protect yet
+  const kc = await read();
+  if (!kc.ok) return 'unreadable';               // never conclude empty from a failed read
+  if (kc.id?.privJwk?.d) {
+    return kc.id.privJwk.d === id.privJwk.d ? 'already' : 'conflict';
+  }
+  await mirror(id);                              // CAS inside; empty vault -> write
+  return 'written';
+}
+
 export async function forgetIdentity() {
   const v = vaultPlugin();
   try { if (v && v.remove) await v.remove({ key: 'identity' }); } catch { /* best effort */ }
@@ -722,6 +751,10 @@ export async function adoptIdentity(bundle) {
 
 export async function bootSync() {
   try {
+    /* fire-and-forget, deliberately BEFORE the cloud gates below: the mirror
+       backfill protects local-only players too (cloud off / no api), and it is
+       a no-op everywhere except "readable empty vault + existing local id". */
+    backfillVaultMirror().catch(() => {});
     if (await kvGet('cloudOff', false)) return { restored: false, reason: 'opted-out' };
     if (!(await apiBase())) return { restored: false, reason: 'no-api' };
     // ensure online (idempotent; ensureIdentity recovers the key from the OS
