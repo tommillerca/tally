@@ -2206,6 +2206,72 @@ test('no THEME_POOL entry points at a family that does not exist', () => {
   assert.deepEqual(bad, [], bad.join(', '));
 });
 
+/* A BOSS FIGHT MUST BE WINNABLE. Tom, 2026-08-10: "the live wire in the pit is
+   un beatable when his health hits 0 the player fights for infinity with no win"
+   and then "Ensure you don't make this bug occur in future fights with new
+   bosses."
+   The cause was `rise` installing a fight.fAux mid-fight: an enemy with no body,
+   no HP bar and no target chip, which checkOver then required you to kill.
+   Measured on that build with an invincible player: 40 of 60 fights ran to the
+   turn cap and reported a DRAW with the boss already at 0 HP.
+   The player here CANNOT lose, so the only thing under test is whether the fight
+   can reach a win at all. Any future boss kit that strands a fight fails here. */
+function fightToTheEnd(seed, dressFoe = () => {}) {
+  const you = mkFighter({ name: 'You', stats: { power: 40, marrow: 40, wind: 60, reflex: 30, spirit: 20 } });
+  const him = mkFighter({ name: 'Boss', stats: { power: 10, marrow: 6, wind: 30, reflex: 5, spirit: 8 } });
+  dressFoe(him);
+  const fight = pitMod.createFight({ player: you, foe: him, seed, aiLevel: 4 });
+  you.hp = 99999; you.d.maxHp = 99999;
+  let guard = 0;
+  while (!fight.over && guard++ < 300) {
+    if (fight.active === 'p') {
+      let inner = 0;
+      while (!fight.over && fight.active === 'p' && fight.ap > 0 && inner++ < 8) {
+        const legal = pitMod.actionsFor(fight).filter(x => x.enabled);
+        if (!legal.length) break;
+        pitMod.applyAction(fight, (legal.find(x => x.id === 'haymaker') || legal.find(x => x.id === 'swing') || legal[0]).id);
+      }
+      if (!fight.over) pitMod.endTurn(fight);
+    } else { pitMod.aiTakeTurn(fight); if (!fight.over) pitMod.endTurn(fight); }
+  }
+  return fight;
+}
+
+test('the Live Wire can actually be beaten', () => {
+  const bad = [];
+  for (let seed = 1; seed <= 40; seed++) {
+    const fight = fightToTheEnd(seed, f => { f.wraith = true; });
+    if (!fight.over) bad.push(`seed ${seed}: never ended`);
+    else if (fight.over.winner !== 'p') bad.push(`seed ${seed}: ${fight.over.winner} (foe hp ${fight.f.hp})`);
+  }
+  assert.deepEqual(bad, [], `an invincible player must always win: ${bad.slice(0, 5).join('; ')}`);
+});
+
+test('no boss may summon a second enemy mid-fight', () => {
+  /* The structural guard in createFight refuses the assignment and counts it, so
+     this catches a future boss kit doing what rise used to do. Runs the Live Wire
+     because he is the one with a summon; a plain foe has nothing to summon. */
+  const offenders = [];
+  for (let seed = 1; seed <= 40; seed++) {
+    const fight = fightToTheEnd(seed, f => { f.wraith = true; });
+    if (fight.badAuxAttempt) offenders.push(`seed ${seed}: ${fight.badAuxAttempt} attempt(s)`);
+  }
+  assert.deepEqual(offenders, [], `a second enemy can only be created at fight open: ${offenders.slice(0, 3).join('; ')}`);
+});
+
+/* THE LADDER ALWAYS HAS A FACE. Rank 51+ used to render "Bonefather 7", which
+   matched no LOOKS entry and fell through to a random cosmetic coin flip. */
+test('every Gauntlet rank resolves a real monster look', () => {
+  const naked = [];
+  for (let r = 1; r <= 140; r++) {
+    const f = pitMod.endlessFoe(r);
+    if (f.glutton || f.mage) continue;      // drawn bosses bring their own art
+    if (!f.look || !f.look.B || !f.look.SK) naked.push(`${r}: ${f.name}`);
+    if (/\s\d+$/.test(f.name)) naked.push(`${r}: bare digit in "${f.name}"`);
+  }
+  assert.deepEqual(naked, [], `ranks with no face: ${naked.slice(0, 8).join(', ')}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

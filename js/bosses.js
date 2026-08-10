@@ -170,6 +170,21 @@ export function themedLook(themeKey, seed) {
   return pool.length ? pool[hash(seed) % pool.length] : null;
 }
 
+/* A FACE FOR EVERY RANK, DERIVED FROM THE RANK. Tom, 2026-08-10, after fighting
+   two unthemed Gauntlet bosses: "just have the monsters start again for art with
+   a different name. people won't notice there are so many."
+   The old route went through the NAME: bossLook parsed a roman suffix, and the
+   suffix table stopped at VI, so from rank 51 on every ordinary foe was called
+   "Bonefather 7", matched nothing, and fell through to foeOutfitFor's random
+   cosmetic coin flip. Measured on that build: ranks 51-55 and 57-59 all drew
+   random junk. Deriving the look from the RANK removes the name from the loop
+   entirely, so the roster simply starts over with fresh art no matter how high
+   the ladder goes and no future naming change can break it again. */
+export function ladderLook(rank) {
+  const all = Object.values(FAMILIES).flat();
+  return all[hash(`ladder:${rank}`) % all.length];
+}
+
 /* The one entry point. A fixed-cast name wins; a repeat cycle re-dresses from
  * everything; anything else is left to the caller's own fallback. */
 export function bossLook(name) {

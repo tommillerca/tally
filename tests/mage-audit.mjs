@@ -6,6 +6,7 @@
    flips his chain, his pointing hand and his lightning), and the poster art has
    to actually decode (a broken <img> measures perfectly).
    Proven red against v352: no mage theme existed at all. */
+import { MAGE_CELL_SHARE } from '../js/poi.js';
 import { boot, sleep, settle } from './godmode.js';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -42,7 +43,16 @@ const dens = await page.evaluate(async () => {
 ok('the sample actually contains one of his dens', dens.mageInSample > 0,
   `${dens.mageInSample} mage dens in the tested neighbourhood`);
 ok('the same dens are his every week', dens.stable && dens.mageInSample > 0, dens.sample);
-ok('a real share of dens, not a rounding error', dens.share >= 15 && dens.share <= 40, `${dens.share}%`);
+/* THE CHECK TRACKS THE SETTING, NOT A MAGIC NUMBER. Tom moved his share from a
+   quarter to a half on 2026-08-10 ("because he's new eventually we can move to
+   1/4") and this line failed on 51.1%, which is the gate working but also a
+   check that has to be hand-edited every time a designer changes their mind.
+   It now reads MAGE_CELL_SHARE and asserts the MAP AGREES WITH IT, within the
+   spread you get from hashing cells. Moving back to 0.25 needs no edit here, and
+   a share that silently stops matching the constant still fails. */
+const wantShare = MAGE_CELL_SHARE * 100;
+ok('the map matches the configured share', Math.abs(dens.share - wantShare) <= 8,
+  `${dens.share}% against a configured ${wantShare}%`);
 ok('almost nobody has none nearby', dens.noneNearby <= 15, `${dens.noneNearby}% of neighbourhoods have no mage den`);
 
 /* ---- the fight draws HIM, facing the right way ---- */

@@ -71,7 +71,12 @@ export function denBeastName(theme) {
    pool below: he is pinned to fixed cells so a mage den is a landmark you can go
    back to, not a weekly coin flip. */
 export const MAGE_THEME = { key: 'mage', name: 'The Storm Vault', boss: 'The Live Wire', arch: 'stormcaller', art: 'mage' };
-export const MAGE_CELL_SHARE = 0.25;    // a quarter of landmark dens are his, forever
+/* HALF, FOR NOW. Tom, 2026-08-10: "Let's make 50% of dens live wire right now
+   because he's new eventually we can move to 1/4." A new boss should be the thing
+   you keep running into while he is the news; this drops back to 0.25 once he is
+   not. Nothing on the map marks his dens either way (see buildDenPin), so a
+   higher share is more encounters, not more spoilers. */
+export const MAGE_CELL_SHARE = 0.5;   // half while he is the new thing; 0.25 later
 
 export const DEN_THEMES = [
   { key: 'gate', name: 'The Boneyard Gate', boss: 'The Gatekeeper', arch: 'slab' },

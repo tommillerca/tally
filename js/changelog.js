@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 358, date: '2026-08-10', title: 'The Live Wire can be beaten again', items: [
+    '<b>Fixed:</b> the Live Wire was unkillable in the Pit. What he raised out of the floor had no body you could hit, so once his health hit zero the fight had nothing left to end it and ran on until it timed out as a draw. He raises a bone minion now, the same way the Necromancer does, and the fight ends when he drops.',
+    'Bosses past rung 50 have faces again. The Gauntlet ran out of names at the sixth cycle and everything after it turned into a random skeleton in random clothes. There is a whole second cast down there now.',
+    'Half the boss dens on your map are the Live Wire while he is the new thing. Nothing marks them: you find out when you get there.',
+  ] },
   { n: 357, date: '2026-08-10', title: 'The map stops spoiling the surprise', items: [
     'Boss dens all look like boss dens again. One of them belongs to the Live Wire and nothing on the map will tell you which: you find out when you walk up to it.',
     "The daily remote den now says when you have beaten it, instead of offering you a pointless re-fight. It always counted toward the Gauntlet's ceiling, it just never said so.",

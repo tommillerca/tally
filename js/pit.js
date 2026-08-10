@@ -1,4 +1,5 @@
 import { petAbilityEffect, petActionMeta } from './pets.js';
+import { bossLook, ladderLook } from './bosses.js';
 
 // The Pit: turn-based combat engine. Pure module (no DOM, injected RNG),
 // implementing boneheadz-combat-math-spec v0.1 exactly. Every constant here
@@ -701,9 +702,9 @@ export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) 
   if (pAux) pAux.owner = player;
   player.side = 'p'; foe.side = 'f';
   if (add) add.side = 'f';
-  return {
+  const fight = {
     p: player, f: foe,
-    pAux, fAux: add,
+    pAux,
     // each captain's current target ('f'/'fa' for the player, 'p'/'pa' for the foe)
     pTarget: 'f', fTarget: 'p',
     active: 'p',
@@ -714,6 +715,35 @@ export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) 
     log: [],
     over: null,        // {winner: 'p'|'f'|'draw'}
   };
+  /* THE SECOND ENEMY CAN ONLY EXIST AT OPEN. Tom, 2026-08-10, after the Live
+     Wire shipped unbeatable: "Ensure you don't make this bug occur in future
+     fights with new bosses."
+     The arena markup, the add's HP bar and the target chip are all built ONCE,
+     from `add`, when openFight runs. So a boss kit that assigns fight.fAux
+     mid-fight creates an enemy with no body, no bar and no way to be targeted,
+     and checkOver's `!fight.fAux || fight.fAux.hp <= 0` then makes winning
+     impossible: measured on that build, 40 of 60 sim fights ran to the turn cap
+     and reported a DRAW with the boss already at 0 HP.
+     A test alone would not stop the next boss doing it, so the shape of the
+     object stops it. The assignment is REFUSED rather than thrown, because
+     throwing mid-fight would take a real player's fight down with it; the
+     attempt is recorded instead, and `no boss may summon a second enemy
+     mid-fight` in tests/unit.test.js asserts the flag is never set.
+     A boss that wants a helper uses `f.minion`, which is a per-turn effect with
+     its own status chip and no bearing on whether the fight can end. */
+  let aux = add;
+  Object.defineProperty(fight, 'fAux', {
+    enumerable: true, configurable: false,
+    get: () => aux,
+    set: v => {
+      if (v === aux) return;
+      /* clearing it is fine (nothing is stranded by removing an enemy); creating
+         one after the arena is built is the bug */
+      if (v == null) { aux = v; return; }
+      fight.badAuxAttempt = (fight.badAuxAttempt || 0) + 1;
+    },
+  });
+  return fight;
 }
 
 function mulberry32(seed) {
@@ -1353,7 +1383,7 @@ function actForEnemy(fight, who, events) {
       // Wail: your healing halved. Checks lifesteal stacking, the top exploit.
       if (f.amulet !== false && !(p.healCut > 0)) kit.push({ id: 'wail', w: 2.4 });
       // Rise: he brings a body. Reuses the add slot and the two-target HUD.
-      if (f.amulet !== false && !fight.fAux) kit.push({ id: 'rise', w: 2.2 });
+      if (f.amulet !== false && !f.minion) kit.push({ id: 'rise', w: 2.2 });
       // Hollow Bolt: magic, straight through physical Armor.
       kit.push({ id: 'bolt', w: 3 });
       // Grasp: filler that takes your stamina and turns it into his health.
@@ -1376,13 +1406,22 @@ function actForEnemy(fight, who, events) {
         p.healCut = 2;
         events.push({ t: 'status', who: 'p', kind: 'wail' });
       } else if (castId === 'rise') {
-        fight.fAux = makeFighter({
-          name: `${f.name}'s Risen`, beast: true,
-          stats: { power: Math.round(6 * (f.d.powerMult || 1)), toughness: 5, reflex: 4, spirit: 3 },
-          weaponId: 'starter',
-        });
-        fight.fAux.side = 'f';
-        events.push({ t: 'summon', who: 'f', name: fight.fAux.name });
+        /* A MINION, NOT A SECOND BODY. Tom, 2026-08-10: "the live wire in the pit
+           is un beatable when his health hits 0 the player fights for infinity
+           with no win."
+           This used to install a fight.fAux mid-fight. A Pit fight opens with
+           add: null, so the arena has no add stage, no HP bar and no target
+           chip for it: the thing was invisible AND unkillable, it attacked you
+           every round from nowhere, and checkOver's `!fight.fAux ||
+           fight.fAux.hp <= 0` then made the win literally unreachable once he
+           dropped. An add can only ever be created at fight OPEN, when the arena
+           is built around it.
+           So he raises what the Necromancer's Raise Dead raises: a minion, which
+           is a per-turn effect with an existing status chip, an existing log line
+           and no bearing on whether the fight can end. Same fantasy, and it
+           cannot strand a fight. */
+        f.minion = { turns: 3, dmg: Math.max(6, Math.round(10 * (f.d.powerMult || 1))) };
+        events.push({ t: 'summon', who: 'f', kind: 'minion' });
       } else if (castId === 'reap') {
         // the fuller your bar, the harder it lands
         const share = Math.min(1, p.wind / Math.max(1, p.d.maxWind));
@@ -1524,6 +1563,14 @@ export const RUNG_TALENTS = {
 // Access is GATED by world-boss den wins (see gating in app.js) so you can't
 // couch-grind to the top: you have to go outside.
 const ENDLESS_NAMES = ['The Hollow King', 'Gravemaw', 'The Tallboy', 'Ossuary Prime', 'Rattle Lord', 'The Marrowmancer', 'Bonefather', 'Calcite the Cruel'];
+/* PAST THE SIXTH CYCLE THEY ARE NEW MONSTERS, NOT "Bonefather 7". Tom's call,
+   2026-08-10. The roman suffix only ever went to VI, and printing a bare digit
+   after that both read as a bug and broke the art lookup. Cycle 7 onward draws
+   from a second cast and keeps cycling it; the art restarts from the roster on
+   its own (see ladderLook), so a rank-60 foe is a fresh name over a face you have
+   not seen for fifty rungs. */
+const ENDLESS_NAMES_DEEP = ['The Ossuarch', 'Gristlejaw', 'The Long Quiet', 'Chalkwright',
+  'Sternum Sam', 'The Undermarrow', 'Kneecap Kate', 'The Last Tenant'];
 const ENDLESS_TREES = [
   ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'],
   ['lightfeet', 'counterstep', 'kite', 'bleedout', 'deeplungs', 'flurry'],
@@ -1554,7 +1601,7 @@ export function endlessFoe(rank) {
     const tier = rank / GLUTTON_EVERY;
     return {
       rank,
-      name: tier > 1 ? `The Glutton ${['II', 'III', 'IV', 'V', 'VI'][tier - 2] || tier}` : 'The Glutton',
+      name: tier > 1 ? `The Glutton${['II', 'III', 'IV', 'V', 'VI'][tier - 2] ? ' ' + ['II', 'III', 'IV', 'V', 'VI'][tier - 2] : ''}` : 'The Glutton',
       glutton: true,
       art: 'assets/bh/glutton/tongue.png',
       /* PROPORTIONAL, not a flat bonus. A flat +0.34 was a 21% step at rung 10
@@ -1575,7 +1622,7 @@ export function endlessFoe(rank) {
     const tier = Math.floor(rank / MAGE_EVERY);
     return {
       rank,
-      name: tier > 1 ? `The Live Wire ${['II', 'III', 'IV', 'V', 'VI'][tier - 2] || tier}` : 'The Live Wire',
+      name: tier > 1 ? `The Live Wire${['II', 'III', 'IV', 'V', 'VI'][tier - 2] ? ' ' + ['II', 'III', 'IV', 'V', 'VI'][tier - 2] : ''}` : 'The Live Wire',
       mage: true,
       art: 'assets/bh/mage/mage.png',
       // the same proportional step the Glutton gets, a shade lighter: he shows up
@@ -1590,10 +1637,22 @@ export function endlessFoe(rank) {
     };
   }
   const cycle = Math.floor((rank - 1) / ENDLESS_NAMES.length) + 1;
-  const base = ENDLESS_NAMES[(rank - 1) % ENDLESS_NAMES.length];
+  const ROMAN = ['II', 'III', 'IV', 'V', 'VI'];
+  /* cycles 1-6 keep the cast you have been learning; 7 and up hand over to the
+     deep cast and start ITS numbering from scratch, so nothing ever renders a
+     bare digit */
+  const deep = cycle > ROMAN.length + 1;
+  const pool = deep ? ENDLESS_NAMES_DEEP : ENDLESS_NAMES;
+  const base = pool[(rank - 1) % pool.length];
+  const dCycle = Math.floor((cycle - (ROMAN.length + 2)) / 1) === 0 ? 1
+    : Math.floor((cycle - (ROMAN.length + 2)) / ROMAN.length) + 1;
+  const suffix = deep
+    ? (dCycle > 1 ? ` ${ROMAN[Math.min(dCycle - 2, ROMAN.length - 1)]}` : '')
+    : (cycle > 1 ? ` ${ROMAN[cycle - 2]}` : '');
   return {
     rank,
-    name: cycle > 1 ? `${base} ${['II', 'III', 'IV', 'V', 'VI'][cycle - 2] || cycle}` : base,
+    name: base + suffix,
+    look: bossLook(base + suffix) || ladderLook(rank),
     mult: 1.32 + rank * 0.07,
     talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
     weaponId: rank % 3 === 0 ? 'bonecrusher' : 'starter',
