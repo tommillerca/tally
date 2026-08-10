@@ -12,9 +12,17 @@ const rows = await page.evaluate(async which => {
   const out = [];
   for (const it of items) {
     const src = m.bhAsset(it);
-    const img = new Image(); img.src = src;
-    const ok = await img.decode().then(() => true).catch(() => false);
-    out.push({ id: it.id, slot: it.slot, name: it.name, src, ok, w: img.naturalWidth });
+    /* createImageBitmap + close(), not new Image(): 364 catalogue rows at 640px
+       is ~580 MB of decoded bitmap, and holding them all at once is exactly the
+       wall that crashed the Bestiary. Held that way, decode() starts failing
+       partway through and this audit reports 201 files "missing" that are all
+       sitting on disk. Release each one. */
+    let ok = false, w = 0;
+    try {
+      const bmp = await createImageBitmap(await (await fetch(src)).blob());
+      ok = true; w = bmp.width; bmp.close();
+    } catch { ok = false; }
+    out.push({ id: it.id, slot: it.slot, name: it.name, src, ok, w });
   }
   return out;
 }, arg === 'all' ? 'all' : arg.split(','));

@@ -16,6 +16,14 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+/* This harness never advances CSS animations: an element reports playState
+   'running' with currentTime stuck at 0, so anything that fades in paints at its
+   FROM keyframe forever. Finish them before measuring opacity. */
+const settle = async (page, ms = 250) => {
+  await page.evaluate(() => document.getAnimations().forEach(a => { try { a.finish(); } catch {} }));
+  await new Promise(r => setTimeout(r, ms));
+};
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
 const puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default;
@@ -136,6 +144,12 @@ ok('NO page or console errors', errors.length === 0, errors.slice(0, 4).join(' |
 for (const t of ['today', 'boneyard', 'friends', 'bonehead', 'progress']) {
   await page.evaluate(tab => { location.hash = '#/' + tab; }, t);
   await sleep(2200);
+  /* This harness never advances CSS animations (playState 'running', currentTime
+     stuck at 0), so routeIn paints at its FROM keyframe and every screen reads
+     opacity 0 no matter how healthy it is. Finish them, then measure. The red
+     case survives: if revealWhenReady never fires, route-in is never added and
+     there is no animation to finish, so opacity stays 0 and this still fails. */
+  await settle(page);
   const arrival = await page.evaluate(() => {
     const child = document.querySelector('#screen > *');
     if (!child) return { err: 'nothing rendered' };

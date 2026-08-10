@@ -3,8 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 351, date: '2026-08-09', title: 'The Bestiary stops crashing', items: [
-    'It was loading every monster at full size all at once, which is more memory than a phone will give a web page. Each one is drawn once now, small.',
+  { n: 352, date: '2026-08-09', title: 'The fight screen holds still', items: [
+    'The buttons no longer slide up and down between turns. End Turn is pinned in one place and stays there for the whole fight.',
+    'The Bestiary is a teaser again, not a list. Meeting something new in the Pit should be a surprise, so there is no page that shows you the whole cast in advance.',
+  ] },
+  { n: 351, date: '2026-08-09', title: 'Catching up on News', items: [
     'Reading an announcement in <b>News</b> puts you back on the News list when you close it, so you can go through them one after another.',
   ] },
   { n: 350, date: '2026-08-09', title: 'There is an actual Bestiary now', items: [

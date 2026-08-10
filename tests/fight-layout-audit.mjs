@@ -4,7 +4,7 @@
    a phone screen" and "using an item in a fight should take two taps so you dont
    hit it by accident".
    Proven red against v344: arena 258 on a 932 screen (28%), and one tap drank. */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, settle } from './godmode.js';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const { browser, page } = await boot(process.argv[2] || 'http://localhost:8765/');
@@ -13,9 +13,11 @@ const { browser, page } = await boot(process.argv[2] || 'http://localhost:8765/'
 await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await page.evaluate(async () => { await window.__denFight(1.6, 0); });
 await sleep(1700);
+await settle(page);
 const tall = await page.evaluate(() => {
   const a = document.querySelector('.arena').getBoundingClientRect();
-  const act = document.querySelector('.fight-actions').getBoundingClientRect();
+  /* End Turn lives BELOW the tray now, so the bottom of the fight is its row. */
+  const act = (document.getElementById('fendrow') || document.querySelector('.fight-actions')).getBoundingClientRect();
   return { vh: innerHeight, arenaH: Math.round(a.height), pct: Math.round(a.height / innerHeight * 100),
            actionsBottom: Math.round(act.bottom), belowActions: Math.round(innerHeight - act.bottom) };
 });
@@ -26,6 +28,7 @@ ok('no dead band under the buttons', tall.belowActions < 60, `${tall.belowAction
 /* ---- 2. short phone: the 258 floor still fits ---- */
 await page.setViewport({ width: 375, height: 667, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await sleep(700);
+await settle(page);
 const short = await page.evaluate(() => {
   const a = document.querySelector('.arena').getBoundingClientRect();
   const act = document.querySelector('.fight-actions').getBoundingClientRect();
@@ -70,6 +73,42 @@ if (!potion.none) {
   ok('the second tap actually drinks it', potion.apAfterTwo < potion.ap0,
     `ap ${potion.ap0} -> ${potion.apAfterTwo}`);
 }
+
+/* ---- 4. the screen must not resize itself turn to turn ----
+   Tom, 2026-08-09: "the pit height was changing nonstop the buttons were moving
+   up and down based on the menu that was available really sloppy ui."
+   Proven red against v351: End Turn moved 200px+ every time the foe took a turn. */
+await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+await sleep(600);
+await page.evaluate(async () => { await window.__denFight(1.6, 0); });
+/* settle the slide-in FIRST: this harness never advances CSS animations, so a
+   sheet finished later would move the layout after the tray had already locked
+   and the drift would be the harness, not the app. */
+await sleep(400); await settle(page); await sleep(1400);
+const jitter = await page.evaluate(async () => {
+  const read = () => {
+    const t = document.querySelector('.fight-actions')?.getBoundingClientRect();
+    const a = document.querySelector('.arena')?.getBoundingClientRect();
+    return { trayTop: t ? Math.round(t.top) : -1, arenaH: a ? Math.round(a.height) : -1 };
+  };
+  const seen = [read()];
+  /* play three real turns: each one hands over to the foe and back, which is
+     exactly when the tray collapsed and everything jumped. */
+  for (let i = 0; i < 3; i++) {
+    document.getElementById('endTurn')?.click();
+    await new Promise(r => setTimeout(r, 500));
+    seen.push(read());                      // foe acting: the collapsed tray
+    await new Promise(r => setTimeout(r, 2600));
+    seen.push(read());                      // back to us
+  }
+  const tops = seen.map(s => s.trayTop).filter(v => v > 0);
+  const arenas = seen.map(s => s.arenaH).filter(v => v > 0);
+  return { seen, trayDrift: Math.max(...tops) - Math.min(...tops), arenaDrift: Math.max(...arenas) - Math.min(...arenas) };
+});
+ok('the buttons hold still across turns', jitter.trayDrift <= 2, `moved ${jitter.trayDrift}px  ${JSON.stringify(jitter.seen)}`);
+ok('the arena holds its height across turns', jitter.arenaDrift <= 2, `${jitter.arenaDrift}px`);
+
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
 process.exit(fails.length ? 1 : 0);

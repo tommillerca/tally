@@ -195,3 +195,14 @@ export const state = page => page.evaluate(() => ({
   build: (document.body.innerText.match(/v\d{3}/) || [])[0] || null,
   screen: document.querySelector('.screen')?.className || null,
 }));
+
+
+/* Headless Chrome here never advances CSS animations: a .sheet reports
+   playState 'running' with currentTime stuck at 0, so it paints at the FROM
+   keyframe, translate(-50%, 60%), and every getBoundingClientRect on a sheet
+   reads ~545px too low. Any audit that measures a sheet against the viewport is
+   measuring that artifact, not the app. Call this first. */
+export async function settle(page, ms = 250) {
+  await page.evaluate(() => document.getAnimations().forEach(a => { try { a.finish(); } catch {} }));
+  await new Promise(r => setTimeout(r, ms));
+}

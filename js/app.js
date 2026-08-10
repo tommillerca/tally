@@ -36,12 +36,12 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
-import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES, LOOKS as BOSS_LOOKS, THEME_POOL } from './bosses.js';
+import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, DEN_THEMES} from './poi.js';
+import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -2130,7 +2130,6 @@ async function renderToday(el) {
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#bestiaryToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  $('#bestiaryOpen')?.addEventListener('click', openBestiary);
   /* The row's monster is a layered stack like any other Bonehead, so it needs
      composing. Unlike the teaser strip this is ONE figure and it is the whole
      reason the row is interesting, so it composes on render rather than on open
@@ -2745,124 +2744,13 @@ function gluttonLoreHtml() {
 /* THE BESTIARY ROW. Names today's boss and SHOWS it, because "a boss is out
    there" is a sentence and the monster is a reason to walk. The art is the real
    fight outfit through the real avatar stack, so this card cannot describe a
-   monster the map does not have. Expanded, it explains the rotation once. */
-/* THE BESTIARY, the actual thing. Tom, 2026-08-09: "the out hunting still doesn't
-   show bestiary wtf". He was right and I fixed the wrong half twice: the row's
-   portrait was too small, yes, but opening it gave ONE monster and a paragraph.
-   A bestiary is a catalogue of creatures, and there wasn't one.
-   Honest about what exists: the 17 fixed cast carry real names, the den bosses
-   are named by their venue, and the pooled monsters are anonymous outfit
-   variants, so they are shown by bloodline without inventing names for them. */
-const BLOODLINES = [
-  ['swamp', 'Bog', 'Drowned things. They keep to the marsh.'],
-  ['fire', 'Cinder', 'Burnt, and still going.'],
-  ['crypt', 'Crypt', 'Buried, and objecting to it.'],
-  ['demon', 'Demon', 'Came up through something.'],
-  ['flesh', 'Flesh', 'More of it than there should be.'],
-  ['deep', 'Deep', 'From under the water table.'],
-  ['iron', 'Iron', 'Whatever was guarding the gate.'],
-  ['odd', 'Worse', 'No category. That is the category.'],
-];
-
-/* ONE CANVAS PER MONSTER, NOT FIVE IMAGES. Tom, 2026-08-09: "the popup that
-   shows the bestiary crashes". Measured on the shipped sheet: 355 <img>
-   elements, every one a 640x640 PNG, which is 145 million pixels and about
-   555 MB of decoded bitmap held at once. Desktop Chrome shrugged that off and my
-   check passed; a phone kills the tab. My own rule 4 says verify where the
-   failure can EXIST, and I verified where it could not.
-   loading="lazy" did not help (536 MB): these images live inside a transformed,
-   absolutely-positioned stage, so the viewport heuristic never fires. The fix is
-   to not hold them. Each monster is composited ONCE into a 144px canvas and the
-   source images are released immediately, so peak memory is a handful of images
-   rather than the whole roster. 74 canvases at 144px is about 6 MB. */
-function bestiaryTileHtml(eq, label, cls = '') {
-  return `<div class="bst-tile ${cls}">
-    <canvas class="bst-can" width="144" height="144" data-eq='${esc(JSON.stringify(eq || {}))}'></canvas>
-    ${label ? `<span class="bst-name">${esc(label)}</span>` : ''}
-  </div>`;
-}
-
-const bstImgCache = new Map();
-function loadArt(src) {
-  if (bstImgCache.has(src)) return bstImgCache.get(src);
-  const p = new Promise(res => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = () => res(null);
-    im.src = src;
-  });
-  bstImgCache.set(src, p);
-  return p;
-}
-
-/* Draw the same head crop headshotHtml uses, but into a canvas. Sequential on
-   purpose: the point is that only a few bitmaps are alive at any moment. */
-async function paintBestiary(root) {
-  const cans = [...root.querySelectorAll('canvas.bst-can')];
-  const order = [...BH_SLOTS].sort((a, b) => a.z - b.z).map(x => x.code);
-  const S = 144;
-  const scale = S / (SKULL_BOX.h * 1.30);
-  const ox = S / 2 - SKULL_BOX.cx * scale;
-  const oy = S / 2 - SKULL_BOX.cy * scale;
-  for (const can of cans) {
-    if (!can.isConnected) return;              // sheet closed mid-paint
-    let eq = {};
-    try { eq = JSON.parse(can.dataset.eq || '{}'); } catch { /* keep {} */ }
-    const cx = can.getContext('2d');
-    for (const code of order) {
-      const id = eq[code];
-      if (!id || code === 'BG' || code === 'C' || !BH_BY_ID[id]) continue;
-      const im = await loadArt(bhAsset(BH_BY_ID[id]));
-      if (!im) continue;
-      cx.drawImage(im, ox, oy, 640 * scale, 640 * scale);
-    }
-    can.classList.add('drawn');
-    await new Promise(r => requestAnimationFrame(r));   // let the sheet stay responsive
-  }
-}
-
-async function openBestiary() {
-  const den = remoteDen(dateKey());
-  const todayEq = themedLook(den.theme && den.theme.key, den.id);
-  const todayKey = JSON.stringify(todayEq);
-
-  const cast = Object.entries(BOSS_LOOKS)
-    .map(([name, eq]) => bestiaryTileHtml(eq, name)).join('');
-
-  const lines = BLOODLINES.map(([key, title, blurb]) => {
-    const looks = BOSS_FAMILIES[key] || [];
-    if (!looks.length) return '';
-    /* which venues draw from this bloodline: that is the honest label for a
-       pooled monster, since the pool itself carries no names */
-    const venues = Object.entries(THEME_POOL)
-      .filter(([, fams]) => fams.includes(key))
-      .map(([themeKey]) => (DEN_THEMES.find(t => t.key === themeKey) || {}).name)
-      .filter(Boolean);
-    return `<div class="bst-line">
-      <div class="bst-head"><b>${esc(title)}</b><small>${esc(blurb)}</small></div>
-      ${venues.length ? `<div class="bst-where">Found at ${venues.map(v => esc(v)).join(' · ')}</div>` : ''}
-      <div class="bst-grid">${looks.map(eq =>
-        bestiaryTileHtml(eq, '', JSON.stringify(eq) === todayKey ? 'today' : '')).join('')}</div>
-    </div>`;
-  }).join('');
-
-  openSheet(`
-    <div class="sheet-head"><h2>The Bestiary</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body">
-      <p class="note" style="margin:2px 2px 12px">Everything the Boneyard can put in front of you. The ground decides which one: the marsh keeps drowned things, the crypt keeps buried ones. World bosses rotate daily and your whole Crew meets the same one.</p>
-      <div class="bst-line">
-        <div class="bst-head"><b>Out hunting today</b><small>${esc(den.boss)} at ${esc(den.name)}</small></div>
-        <div class="bst-grid">${bestiaryTileHtml(todayEq, den.boss, 'today')}</div>
-      </div>
-      <div class="bst-line">
-        <div class="bst-head"><b>The Pit</b><small>The ladder, the Champion and the Gauntlet. These never change.</small></div>
-        <div class="bst-grid">${cast}</div>
-      </div>
-      ${lines}
-    </div>`, { cls: 'full' });
-  paintBestiary($('#sheets') || document).catch(() => {});
-}
-
+   monster the map does not have. Expanded, it explains the rotation once.
+   It does NOT lead anywhere that lists the roster. Tom, 2026-08-09: "the
+   bestiary was just supposed to be a marketing popup showing some of the
+   monsters... a click in beastiary that you can click into and ruin the
+   surprise of every new enemy". Meeting a monster for the first time is the
+   product. The only place the roster is ever shown is the one-time teaser wall
+   in openBossIntro, which shows a sample and names nothing. */
 function bestiaryBannerHtml() {
   const den = remoteDen(dateKey());
   const eq = themedLook(den.theme && den.theme.key, den.id);
@@ -2873,10 +2761,8 @@ function bestiaryBannerHtml() {
       <span class="gbn-chev">›</span>
     </summary>
     <div class="gbn-body">
-      <div class="bestiary-hero">${headshotHtml(eq || {}, 132)}</div>
       <p class="glutton-mech">Every den, tower and Pit rung now has a face, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones. They rotate daily, and your whole Crew meets the same one you do.</p>
-      <button class="btn" id="bestiaryOpen" style="width:100%">See the whole Bestiary</button>
-      <button class="btn ghost" id="bestiaryToMap" style="width:100%;margin-top:8px">Find today's on the Boneyard</button>
+      <button class="btn ghost" id="bestiaryToMap" style="width:100%">Find today's on the Boneyard</button>
     </div>
   </details>`;
 }
@@ -7006,6 +6892,13 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  /* The Bestiary is a TEASER and this is the only place it lives on after the
+     one-time showing. It shows a sample of the cast and names nothing: meeting a
+     monster for the first time is the point. */
+  { id: 'bestiary', date: 'Aug 9', title: 'The Bestiary',
+    blurb: 'Fifty-six of them out there. The ground decides which one you meet.',
+    thumb: () => { const d = remoteDen(dateKey()); return headshotHtml(themedLook(d.theme && d.theme.key, d.id) || {}, 52); },
+    open: () => openBossIntro() },
   { id: 'drop', date: 'Aug 8', title: 'The Puffer Pack',
     blurb: 'Ten legendary colourways. Puffer on puffer.',
     /* headshotHtml, not dropFitHtml. The fit helper returns a <span>, and a span
@@ -11830,7 +11723,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v351'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v352'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -12412,7 +12305,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div id="floats"></div>
     </div>
     <div class="fight-meta"><span class="range-pill" id="rangePill"></span><span class="fight-log" id="flog">Round one. Your turn.</span></div>
-    <div class="fight-actions" id="factions"></div>`;
+    <div class="fight-actions" id="factions"></div>
+    <div class="fight-endrow" id="fendrow"></div>`;
 
   if (foeCfg.mode === 'glutton') stopGluttonFoeAnim = startGluttonLoop($('.glutton-stage', body));
   composeAvatars(body);   // arena is built outside route(); without this the fighters never reveal
@@ -12898,11 +12792,54 @@ async function openFight(pitWrap, fighter, foeCfg) {
     return '';
   }
 
+  /* HOLD THE TRAY STILL. Tom, 2026-08-09, mid world boss: "the pit height was
+     changing nonstop the buttons were moving up and down based on the menu that
+     was available really sloppy ui."
+     He is describing the arena being elastic (flex:1) against a tray whose row
+     count changes every single re-render: the foe's turn collapses it to one
+     line, your pet's turn swaps in four different moves, a potion runs out, the
+     signature gets spent. Every one of those moved End Turn under his thumb.
+     So the tray keeps the tallest height this fight has ever needed. Worst case
+     it looks like its own busiest turn, which was always a reachable layout, so
+     nothing new can overflow. */
+  function lockTray(factions) {
+    factions.style.height = '';
+    fight.trayH = Math.max(fight.trayH || 0, factions.scrollHeight);
+    /* never past the bottom of the phone: End Turn sits under this and must stay
+       reachable without scrolling, so a huge spell list scrolls inside the tray
+       rather than pushing the fight off screen. */
+    /* Room is measured from terms that do NOT depend on the tray: the arena's CSS
+       floor, the pinned End Turn row, and the fixed HUD strips. Measuring the
+       arena's CURRENT height instead is circular (the arena is flex:1, so it is
+       whatever the tray left it) and settles 13px away on the first turn, which
+       is the jitter all over again. Layout space, never getBoundingClientRect:
+       the sheet is still sliding in when the first render lands. */
+    const body = factions.parentElement, row = el('fendrow');
+    const arena = body.querySelector('.arena');
+    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 258)
+             + (row ? row.offsetHeight : 56) + 12;
+    for (const kid of body.children) {
+      if (kid !== factions && kid !== row && kid !== arena) used += kid.offsetHeight;
+    }
+    factions.style.height = Math.max(96, Math.min(fight.trayH, body.clientHeight - used)) + 'px';
+  }
+  /* End Turn never moves and is never off screen: it lives below the tray, not
+     inside the grid that reflows every turn. */
+  function renderEndTurn() {
+    const row = el('fendrow');
+    if (!row) return;
+    const mine = fight.active === 'p' && !fight.over && !petPhase;
+    row.innerHTML = fight.over ? '' :
+      `<button class="fight-act endturn" id="endTurn" ${mine ? '' : 'disabled'}><b>End Turn</b><small>${mine ? fight.ap + ' AP left' : (petPhase ? "pet's turn" : 'waiting...')}</small></button>`;
+    if (mine) el('endTurn').addEventListener('click', endPlayerBody);
+  }
+
   function renderActions() {
     const factions = el('factions');
     const playerTurn = fight.active === 'p' && !fight.over;
     if (!playerTurn) {
       factions.innerHTML = `<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">${fight.over ? '' : esc(foe.name) + ' is acting...'}</p>`;
+      lockTray(factions); renderEndTurn();
       return;
     }
     if (petPhase) {           // your pet's turn: pick one of its moves
@@ -12912,6 +12849,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <b>${a.name}</b><small>${a.enabled ? esc(a.desc) : `ready in ${a.cd}`}</small></button>`).join('');
       factions.innerHTML = ph;
       $$('[data-petmove]', factions).forEach(b => b.addEventListener('click', () => petAct(b.dataset.petmove)));
+      lockTray(factions); renderEndTurn();
       return;
     }
     const legal = actionsFor(fight);
@@ -13002,8 +12940,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const enabled = fight.active === 'p' && fight.ap >= 1 && !fight.over;
       html += `<button class="fight-act potion" data-potion="${p.id}" ${enabled ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${n} · ${esc(potionShort(p))}</small></button>`;
     }
-    html += `<button class="fight-act endturn" id="endTurn"><b>End Turn</b><small>${fight.ap} AP left</small></button>`;
     factions.innerHTML = html;
+    lockTray(factions); renderEndTurn();
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
        hit it by accident." A potion is a one-shot consumable sitting in the same
@@ -13016,7 +12954,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (b.disabled) return;
       armToConfirm(b, 'Tap again to drink', () => drinkPotion(b.dataset.potion));
     });
-    $('#endTurn', factions)?.addEventListener('click', endPlayerBody);
   }
 
   async function drinkPotion(id) {
