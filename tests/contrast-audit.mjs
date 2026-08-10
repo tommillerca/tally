@@ -42,3 +42,17 @@ console.log(`FAILING: ${res.fails.length}`);
 for (const f of res.fails.sort((a,b)=>a.ratio-b.ratio).slice(0,10))
   console.log(`   ${f.ratio} (need ${f.need})  ${f.size}px/${f.w}  ${f.fg}  ${f.sel}  "${f.sample}"`);
 await browser.close();
+/* IT HAS TO BE ABLE TO GO RED. This printed its report and exited 0 whatever it
+   found, which made it the one audit in tests/ that could not fail, so putting it
+   on the release gate would have added a row that always says PASS: anti-regression
+   rule 1, in the gate itself. Zero pairs is a failure too, not a clean sheet: it
+   means Today never rendered and nothing was measured (rule 3). Measured at the
+   time this was wired up: 65 pairs, 0 failing. */
+if (!res.pairs) {
+  console.log('FAIL  no text pairs measured at all: Today did not render, so nothing was checked.');
+  process.exit(1);
+}
+if (res.fails.length) {
+  console.log(`FAILED: ${res.fails.length} of ${res.pairs} text pairs are below the WCAG AA ratio.`);
+  process.exit(1);
+}

@@ -74,6 +74,8 @@ const BROWSER = [
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'fight-layout-audit.mjs',  // the fight screen holds still
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
+  'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
+  'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
