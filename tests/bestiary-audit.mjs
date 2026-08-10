@@ -36,6 +36,24 @@ const PORT = 8188;
 const srv = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
 await sleep(900);
 const base = `http://127.0.0.1:${PORT}/`;
+/* PROVE THE SERVER IS OURS. python -m http.server exits quietly when the port is
+   already bound, so a squatter on 8188 leaves this audit testing a DIFFERENT
+   checkout while reporting green. That is not hypothetical: it happened on
+   2026-08-09 and hid a missing feature through two "clean" runs. Fetch a file we
+   know only this tree has and refuse to continue if it is not there. */
+{
+  const fs = await import('node:fs');
+  const mine = fs.readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const stamp = (mine.match(/const APP_BUILD = '(v\d+)'/) || [])[1];
+  await new Promise(r => setTimeout(r, 400));
+  const served = await fetch(base + 'js/app.js').then(r => r.text()).catch(() => '');
+  const servedStamp = (served.match(/const APP_BUILD = '(v\d+)'/) || [])[1];
+  if (!served || servedStamp !== stamp) {
+    console.log(`FAIL  port ${PORT} is not serving THIS checkout (mine ${stamp}, served ${servedStamp || 'nothing'}).`);
+    console.log('      Something else is bound to it. Kill it and re-run; a green result here would be meaningless.');
+    srv.kill(); process.exit(1);
+  }
+}
 const shots = process.env.SHOTS ? path.resolve(process.env.SHOTS) : null;
 
 const fails = [];
@@ -195,6 +213,46 @@ ok('FIGHT that rung wears its designed skull, not a random roll', !!fight.hit,
 if (shots) await page.screenshot({ path: path.join(shots, 'fight-rung4.png') });
 
 ok('NO page or console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+
+/* THE BANNER MUST LEAD TO AN ACTUAL BESTIARY. Tom, 2026-08-09: "the out hunting
+   still doesn't show bestiary wtf". Opening the row used to give ONE monster and
+   a paragraph, which is not a catalogue of creatures. Proven red against v349:
+   0 tiles, because openBestiary did not exist. */
+{
+  // the checks above navigate; come back to Today before reading its banner
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await new Promise(r => setTimeout(r, 2200));
+  const r = await page.evaluate(async () => {
+    const b = document.querySelector('.bestiary-banner');
+    if (!b) return { noBanner: true };
+    b.querySelector('summary').click();
+    await new Promise(r => setTimeout(r, 500));
+    const cta = document.getElementById('bestiaryOpen');
+    if (!cta) return { noCta: true };
+    cta.click();
+    await new Promise(r => setTimeout(r, 1200));
+    const imgs = [...document.querySelectorAll('.bst-tile img')];
+    await Promise.all(imgs.map(i => i.decode().catch(() => {})));
+    const tiles = [...document.querySelectorAll('.bst-tile')];
+    return {
+      tiles: tiles.length,
+      drawn: tiles.filter(t => [...t.querySelectorAll('img')].some(i => {
+        const bb = i.getBoundingClientRect();
+        return i.naturalWidth > 0 && bb.width > 8 && bb.height > 8;
+      })).length,
+      sections: document.querySelectorAll('.bst-line').length,
+      named: document.querySelectorAll('.bst-name').length,
+      today: document.querySelectorAll('.bst-tile.today').length,
+    };
+  });
+  ok('the banner opens a real Bestiary', !r.noBanner && !r.noCta && r.tiles >= 60, JSON.stringify(r));
+  // an empty sample is a failure, not a pass: every tile must DRAW
+  ok('every monster in it draws', r.tiles > 0 && r.drawn === r.tiles, `${r.drawn}/${r.tiles}`);
+  ok('it is grouped, not one long wall', r.sections >= 8, `${r.sections} sections`);
+  ok('the named cast is labelled', r.named >= 17, `${r.named} names`);
+  ok("today's monster is marked", r.today >= 1, `${r.today}`);
+}
 
 await browser.close();
 srv.kill();

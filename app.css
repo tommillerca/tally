@@ -6802,3 +6802,20 @@ body::before {
 /* News rows: the garden bed art needs a box to sit in, same as the other thumbs */
 .nw-thumb .nw-garden { transform: scale(.30); transform-origin: center; display: block; }
 .nw-thumb .tz-head { border: none; border-radius: 11px; }
+
+/* THE BESTIARY sheet. A catalogue, so it reads as a grid of faces rather than a
+   paragraph about faces. */
+.bst-line { margin-bottom: 18px; }
+.bst-head { display: grid; gap: 2px; margin-bottom: 6px; }
+.bst-head b { font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: .02em; }
+.bst-head small { color: var(--text-3); font-size: 12.5px; }
+.bst-where { font-size: 11px; letter-spacing: .06em; color: var(--text-3); margin-bottom: 8px; text-transform: uppercase; font-weight: 700; }
+.bst-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.bst-tile { width: 72px; display: grid; gap: 3px; justify-items: center; }
+.bst-tile .tz-head { border-radius: 14px; }
+.bst-name {
+  font-size: 10px; line-height: 1.2; text-align: center; color: var(--text-2);
+  max-width: 72px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.bst-tile.today .tz-head { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(var(--gold-rgb), .5); }
+.bst-tile.today .bst-name { color: var(--gold); font-weight: 800; }

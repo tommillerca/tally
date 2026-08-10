@@ -36,12 +36,12 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
-import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
+import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES, LOOKS as BOSS_LOOKS, THEME_POOL } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin } from './poi.js';
+import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, DEN_THEMES} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { attachWalk } from './walk.js';
@@ -2130,6 +2130,7 @@ async function renderToday(el) {
   $('#kitchenCard')?.addEventListener('click', openKitchen);
   $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#bestiaryToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#bestiaryOpen')?.addEventListener('click', openBestiary);
   /* The row's monster is a layered stack like any other Bonehead, so it needs
      composing. Unlike the teaser strip this is ONE figure and it is the whole
      reason the row is interesting, so it composes on render rather than on open
@@ -2745,6 +2746,72 @@ function gluttonLoreHtml() {
    there" is a sentence and the monster is a reason to walk. The art is the real
    fight outfit through the real avatar stack, so this card cannot describe a
    monster the map does not have. Expanded, it explains the rotation once. */
+/* THE BESTIARY, the actual thing. Tom, 2026-08-09: "the out hunting still doesn't
+   show bestiary wtf". He was right and I fixed the wrong half twice: the row's
+   portrait was too small, yes, but opening it gave ONE monster and a paragraph.
+   A bestiary is a catalogue of creatures, and there wasn't one.
+   Honest about what exists: the 17 fixed cast carry real names, the den bosses
+   are named by their venue, and the pooled monsters are anonymous outfit
+   variants, so they are shown by bloodline without inventing names for them. */
+const BLOODLINES = [
+  ['swamp', 'Bog', 'Drowned things. They keep to the marsh.'],
+  ['fire', 'Cinder', 'Burnt, and still going.'],
+  ['crypt', 'Crypt', 'Buried, and objecting to it.'],
+  ['demon', 'Demon', 'Came up through something.'],
+  ['flesh', 'Flesh', 'More of it than there should be.'],
+  ['deep', 'Deep', 'From under the water table.'],
+  ['iron', 'Iron', 'Whatever was guarding the gate.'],
+  ['odd', 'Worse', 'No category. That is the category.'],
+];
+
+function bestiaryTileHtml(eq, label, cls = '') {
+  return `<div class="bst-tile ${cls}">
+    ${headshotHtml(eq || {}, 72)}
+    ${label ? `<span class="bst-name">${esc(label)}</span>` : ''}
+  </div>`;
+}
+
+async function openBestiary() {
+  const den = remoteDen(dateKey());
+  const todayEq = themedLook(den.theme && den.theme.key, den.id);
+  const todayKey = JSON.stringify(todayEq);
+
+  const cast = Object.entries(BOSS_LOOKS)
+    .map(([name, eq]) => bestiaryTileHtml(eq, name)).join('');
+
+  const lines = BLOODLINES.map(([key, title, blurb]) => {
+    const looks = BOSS_FAMILIES[key] || [];
+    if (!looks.length) return '';
+    /* which venues draw from this bloodline: that is the honest label for a
+       pooled monster, since the pool itself carries no names */
+    const venues = Object.entries(THEME_POOL)
+      .filter(([, fams]) => fams.includes(key))
+      .map(([themeKey]) => (DEN_THEMES.find(t => t.key === themeKey) || {}).name)
+      .filter(Boolean);
+    return `<div class="bst-line">
+      <div class="bst-head"><b>${esc(title)}</b><small>${esc(blurb)}</small></div>
+      ${venues.length ? `<div class="bst-where">Found at ${venues.map(v => esc(v)).join(' · ')}</div>` : ''}
+      <div class="bst-grid">${looks.map(eq =>
+        bestiaryTileHtml(eq, '', JSON.stringify(eq) === todayKey ? 'today' : '')).join('')}</div>
+    </div>`;
+  }).join('');
+
+  openSheet(`
+    <div class="sheet-head"><h2>The Bestiary</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:2px 2px 12px">Everything the Boneyard can put in front of you. The ground decides which one: the marsh keeps drowned things, the crypt keeps buried ones. World bosses rotate daily and your whole Crew meets the same one.</p>
+      <div class="bst-line">
+        <div class="bst-head"><b>Out hunting today</b><small>${esc(den.boss)} at ${esc(den.name)}</small></div>
+        <div class="bst-grid">${bestiaryTileHtml(todayEq, den.boss, 'today')}</div>
+      </div>
+      <div class="bst-line">
+        <div class="bst-head"><b>The Pit</b><small>The ladder, the Champion and the Gauntlet. These never change.</small></div>
+        <div class="bst-grid">${cast}</div>
+      </div>
+      ${lines}
+    </div>`, { cls: 'full' });
+}
+
 function bestiaryBannerHtml() {
   const den = remoteDen(dateKey());
   const eq = themedLook(den.theme && den.theme.key, den.id);
@@ -2757,7 +2824,8 @@ function bestiaryBannerHtml() {
     <div class="gbn-body">
       <div class="bestiary-hero">${headshotHtml(eq || {}, 132)}</div>
       <p class="glutton-mech">Every den, tower and Pit rung now has a face, and the ground decides which one. The marsh keeps drowned things; the crypt keeps buried ones. They rotate daily, and your whole Crew meets the same one you do.</p>
-      <button class="btn ghost" id="bestiaryToMap" style="width:100%">Find it on the Boneyard</button>
+      <button class="btn" id="bestiaryOpen" style="width:100%">See the whole Bestiary</button>
+      <button class="btn ghost" id="bestiaryToMap" style="width:100%;margin-top:8px">Find today's on the Boneyard</button>
     </div>
   </details>`;
 }
@@ -11689,7 +11757,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v349'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v350'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

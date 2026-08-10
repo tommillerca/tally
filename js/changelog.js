@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 350, date: '2026-08-09', title: 'There is an actual Bestiary now', items: [
+    "Open <b>Out hunting today</b> and tap <b>See the whole Bestiary</b>: every monster the Boneyard can put in front of you, grouped by bloodline, with today's marked.",
+    'The Pit ladder, the Champion and the Gauntlet are in there by name. The rest are grouped by where the ground keeps them.',
+  ] },
   { n: 349, date: '2026-08-09', title: 'Fixes', items: [
     "The <b>News</b> list no longer breaks when you open something from it. Tapping an announcement used to leave the list stranded underneath, and everything after it did nothing.",
     'Every News row shows the <b>right artwork</b> now. Two of them were rendering as empty boxes.',
