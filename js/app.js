@@ -781,6 +781,18 @@ function openCosmeticTeaser() {
   teaserOpen = wrap;
   return wrap;
 }
+/* FOUND BY THE ERROR TELEMETRY, twelve minutes after v360 went live: two real
+   iOS devices reported `Can't find variable: teaserFired`. It was read at the
+   line below and DECLARED NOWHERE. ES modules are strict mode, so reading an
+   undeclared binding throws, and the throw happens inside `tick`, which runs
+   from a setTimeout: the try/catch around the scheduling code never saw it. So
+   the automatic "63 new cosmetics" showing has been dying silently on every
+   device that got that far, TEASER_SEEN_KEY never incremented, and nothing said
+   so. The News-tab route still worked because it calls openCosmeticTeaser()
+   directly, which is why this looked fine to everyone.
+   This is exactly the class of bug the telemetry was built for: uncaught,
+   invisible, and in the one branch nobody watches. */
+let teaserFired = false;   // one showing per app session, no matter who asks
 async function maybeShowCosmeticTeaser() {
   try {
     if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
@@ -12072,7 +12084,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v360'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v361'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

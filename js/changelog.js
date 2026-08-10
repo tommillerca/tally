@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 361, date: '2026-08-10', title: 'The new-cosmetics popup actually shows up', items: [
+    "The <b>63 new cosmetics</b> announcement was supposed to appear on your first ten app opens and never did: it crashed before it could draw, silently, every time. It works now, and your ten openings start from here.",
+  ] },
   { n: 360, date: '2026-08-10', title: 'The Stable explains itself', items: [
     'A <b>How pets work</b> sheet in the Stable: levelling, talents, what breeding actually does, when it stops being worth it, and what a shiny is. Short.',
     'Picking a pet to breed now tells you what to do next, from the top of the screen instead of from a panel sitting over the button it is telling you to press.',
