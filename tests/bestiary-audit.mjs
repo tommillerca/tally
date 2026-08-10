@@ -49,7 +49,11 @@ const rowRhythm = await page.evaluate(() => {
   if (hs.length < 2) return { ok: false, heights: hs };
   // ONE RHYTHM: no row may be more than a quarter taller than the shortest.
   // 1.5 was too slack to fail on the real regression (102px against 72px passed).
-  return { ok: Math.max(...hs) <= Math.min(...hs) * 1.25, heights: hs };
+  const icons = [...card.querySelectorAll('.glutton-banner')]
+    .map(b => b.querySelector('.bst-fig, .gbn-ico'))
+    .map(e => e ? Math.round(e.getBoundingClientRect().width) : 0);
+  return { ok: Math.max(...hs) <= Math.min(...hs) * 1.25, heights: hs,
+    icons, iconsMatch: icons.length > 1 && Math.max(...icons) <= Math.min(...icons) * 1.15 };
 });
 const row = await page.evaluate(async () => {
   location.hash = '#/today';
@@ -91,7 +95,16 @@ ok('the monster is drawn, not an empty tile', row.layers > 0 && row.drawn === ro
    of the rest of the card passed everything. Tom found it instead. */
 ok('the row does not tower over the others in the card', rowRhythm.ok,
   rowRhythm.heights.map(h => h + 'px').join(' / '));
-ok('at a size you can actually see', row.size >= 54, `${row.size}px  (a 52px head is what Tom rejected)`);
+/* NOT A BARE FLOOR. This has now been wrong twice in two days in both directions:
+   72 when the figure was 88, then 54 when it was 58, then it failed at 48 after
+   Tom asked for the hunt figure to MATCH its sibling icons rather than tower over
+   them. The requirement is consistency plus legibility, so that is what it checks:
+   the same box as the other rows in the card, and never so small it becomes a
+   thumbnail again. 40 is the floor because Tom rejected a 52px HEAD; a 48px whole
+   monster is a different thing and is what he asked for. */
+ok('at a size you can actually see', row.size >= 40, `${row.size}px  (a 52px head is what Tom rejected)`);
+ok('and the same size as the other rows in the card', rowRhythm.iconsMatch,
+  rowRhythm.icons.map(n => n + 'px').join(' / '));
 ok('it is a tap, not a paragraph to expand', !row.expandable, row.tag);
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nbestiary stays a teaser');

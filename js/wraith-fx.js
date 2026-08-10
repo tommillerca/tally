@@ -108,8 +108,13 @@ function mount(host) {
      pivots on the bolt and not on empty canvas. */
   .${NS} .artwrap{display:block;transform-origin:50% 50%}
   .${NS} .art{inset:0;width:100%;height:100%;transform-origin:50% 50%;
-    /* screen-blend so the green rim glow Cam inked lifts off the dark arena
-       instead of sitting on it as a grey card */
+    /* Screen-blends against the OTHER LAYERS OF THIS CAST, not against the arena
+       behind it: .wfx sets its own mask-image, which creates a stacking context
+       and an isolated blending group, so nothing here can reach the arena. That
+       is fine and is why the sprites still read (Cam inked them on transparency
+       with their own glow), but the earlier comment claimed more than the CSS
+       does. Leave the blend for the layering it does do; the lift off the dark
+       arena comes from the drop-shadow below. */
     mix-blend-mode:screen;
     filter:drop-shadow(0 0 10px rgba(155,146,232,.75))}
   .${NS} .art.strike{animation:${NS}strike .55s cubic-bezier(.16,1,.3,1) both}
@@ -279,10 +284,27 @@ export const ANCHORS = { hand: [0.184, 0.502], hood: [0.490, 0.383], amulet: [0.
    falls back to a point measured once on one phone width, which the bolt could
    live with (it only aims) but reap cannot: reap now spans the midpoint between
    him and you, so a fixed target drifts off-centre on any other screen size. */
-export function anchorsFor(stageRect, arenaRect, youRect = null) {
+/* The plate is drawn with object-fit: contain, so the DRAWING is letterboxed
+   inside the stage box and is not the stage box. Anchors are fractions of the
+   drawing, so they have to be applied to the contained rect: applying them to the
+   raw box put every cast tens of pixels off on a wide stage and a few off on a
+   phone, drifting with screen width. Aspect is read from the decoded image when
+   there is one, so a recrop of the art needs no change here. */
+export const FIGHT_PLATE_ASPECT = 914 / 1024;
+function containRect(box, aspect) {
+  const boxAspect = box.width / box.height;
+  const w = boxAspect > aspect ? box.height * aspect : box.width;
+  const h = boxAspect > aspect ? box.height : box.width / aspect;
+  return { left: box.left + (box.width - w) / 2, top: box.top + (box.height - h) / 2, width: w, height: h };
+}
+
+export function anchorsFor(stageRect, arenaRect, youRect = null, art = null) {
+  const aspect = (art && art.naturalWidth && art.naturalHeight)
+    ? art.naturalWidth / art.naturalHeight : FIGHT_PLATE_ASPECT;
+  const drawn = containRect(stageRect, aspect);
   const rel = ([fx, fy]) => ({
-    x: Math.round(stageRect.left - arenaRect.left + stageRect.width * fx),
-    y: Math.round(stageRect.top - arenaRect.top + stageRect.height * fy),
+    x: Math.round(drawn.left - arenaRect.left + drawn.width * fx),
+    y: Math.round(drawn.top - arenaRect.top + drawn.height * fy),
   });
   const target = youRect
     ? { x: Math.round(youRect.left - arenaRect.left + youRect.width * 0.5),

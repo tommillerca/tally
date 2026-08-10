@@ -39,7 +39,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -5160,7 +5160,11 @@ function metricSeries(metricKey, rangeKey, health, weights) {
       const mk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
       const arr = buckets[mk] || [];
       const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
-      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], value: avg });
+      /* `label` is the one-letter axis tick, which is all the chart needs; `full`
+         is what the READOUT says. Tapping a year bucket used to print "J ·
+         210,432 steps" and three different months answer to J. */
+      points.push({ label: 'JFMAMJJASOND'[dt.getMonth()], value: avg,
+        full: dt.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) });
     }
   } else {
     const n = rangeKey === 'week' ? 7 : rangeKey === 'day' ? 14 : 30;
@@ -5227,7 +5231,7 @@ function metricDetailChart(points, metricKey) {
      "a random bar is highlighted". It says what it is now, on the chart. */
   const hits = points.map((p, i) => {
     const x = P + i * (bw + gap);
-    return `<rect class="bc-hit" data-i="${i}" data-date="${esc(p.date || '')}" data-label="${esc(p.label || '')}" data-val="${p.value == null ? '' : p.value}"
+    return `<rect class="bc-hit" data-i="${i}" data-date="${esc(p.date || '')}" data-label="${esc(p.full || p.label || '')}" data-val="${p.value == null ? '' : p.value}"
       x="${x.toFixed(1)}" y="0" width="${Math.max(bw, 8).toFixed(1)}" height="${H}" fill="transparent"/>`;
   }).join('');
   const bestLbl = best >= 0 ? `<text x="${(P + best * (bw + gap) + bw / 2).toFixed(1)}" y="${(y(points[best].value) - 4).toFixed(1)}" fill="var(--accent)" font-size="8.5" text-anchor="middle">${metric.goodLow ? 'lowest' : 'best'}</text>` : '';
@@ -9560,6 +9564,48 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 // THE STABLE: the pet hub. Every pet you own, grouped by species, each individual
 // copy showing its own level/lineage/shiny/stats with Equip / Breed / Destroy.
 // Only the equipped pet levels. Breeding + the active pet's talent tree live here.
+/* WHAT PETS ARE FOR. Tom, 2026-08-10: "there should also be a tapable sheet at
+   the top of the stable... that explains the pets feature of the game - how
+   breeding works, why do it and where does it stop paying off? how do pet talents
+   work, what are shinies etc. keep it concise though not too verbose or
+   rambling."
+   Every number here is read from the code that enforces it (pets.js, loot.js)
+   rather than typed in, so this sheet cannot drift from the game the way a
+   hand-written help page always eventually does. Four questions, four answers. */
+function openPetsHelp() {
+  const maxSteps = PET_LEVEL_STEPS[PET_LEVEL_STEPS.length - 1];
+  const tiers = (PET_TREES[Object.keys(PET_TREES)[0]] || []).map(t => t.tier);
+  const shinyOdds = Math.round(1 / SHINY_CHANCE);
+  const costs = [1, 2, 3].map(n => breedCost(n));
+  openSheet(`
+    <div class="sheet-head"><h2>How pets work</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body pets-help">
+      <section>
+        <h3>Levelling</h3>
+        <p>Only the pet you have <b>equipped</b> levels, and it levels on your <b>steps</b>. Level ${PET_MAX_LEVEL} is the cap, at ${maxSteps.toLocaleString()} steps. Swapping pets does not lose progress: each one keeps its own.</p>
+      </section>
+      <section>
+        <h3>Talents</h3>
+        <p>Every pet has a small tree with a choice at levels ${tiers.join(', ')}. Two options each, one pick per tier, and the picks are per pet rather than shared. They only apply while that pet is the one fighting with you.</p>
+      </section>
+      <section>
+        <h3>Breeding</h3>
+        <p>Breeding feeds a <b>spare</b> pet into one you <b>keep</b>. The keeper gains a <b>lineage rank</b>, worth <b>+5% to every stat</b>, and keeps its own name, level and look. The spare is destroyed and does not come back.</p>
+        <p class="note">It costs Bone Dust and needs ${BREED_COOLDOWN_STEPS.toLocaleString()} steps of walking between breeds.</p>
+      </section>
+      <section>
+        <h3>When to stop</h3>
+        <p>Each rank is worth the same <b>+5%</b>, but each one costs more than the last: ${costs.map(c => `<b>${c}</b>`).join(', then ')} dust and climbing. So the first few ranks are cheap power and the later ones are a grind for the same step up.</p>
+        <p>Two things never transfer: a fed-in pet's <b>levels</b> and its <b>bloodline</b>. Feed in plain spares, not the pet you have been walking.</p>
+      </section>
+      <section>
+        <h3>Shinies</h3>
+        <p>About <b>1 in ${shinyOdds}</b> hatched pets is a shiny: a recoloured variant with <b>+8% stats</b> that follows your Bonehead. Its colour does <b>not</b> carry through breeding, so a shiny fed into another pet is gone for good.</p>
+      </section>
+      <p class="note" style="margin-top:6px">Spare pets you do not want can be melted for Bone Dust instead, from the same row.</p>
+    </div>`, { cls: 'full', name: 'pets_help' });
+}
+
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -9717,7 +9763,20 @@ async function openStable(opts = {}) {
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
+        <button class="chip chip-btn" id="petsHelp" type="button">${ICONS.info ? ICONS.info(13) : '?'} How pets work</button>
       </div>
+      <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
+           popup is good but it covers the breed button when you swipe to another
+           pet." It was a sticky footer, and BREED lives in the carousel's action
+           row directly above it: measured overlapping by 15px, so the control the
+           bar was telling you to press sat underneath the bar. A sticky footer
+           will always fight the row above it, so the instruction moved to the top
+           of the sheet where nothing it refers to can be behind it. -->
+      ${!pair && sel.length === 1 ? `<div class="breed-waiting">
+          <span class="bw-pet">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 34, one.shiny) : ''; })()}</span>
+          <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
+          <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
+        </div>` : ''}
       ${pair ? '' : `<p class="note" style="margin:2px 2px 10px"><b>Breed</b> feeds a spare pet into one you keep: the <b>keeper gains a lineage rank</b> (+5% to every stat) and the spare is destroyed. <b>Destroy</b> trades a spare for Bone Dust instead.</p>`}
       ${roster.length ? `
         <div class="cf${cfWasPanelled ? ' panelled' : ''}" data-want="${openIid || pair ? 'panelled' : 'open'}">
@@ -9741,16 +9800,6 @@ async function openStable(opts = {}) {
            picking your second pet put the whole explanation off-screen behind
            you. It is the last thing in the body now and sticks to the bottom of
            the sheet, so it appears where your thumb already is. -->
-      ${!pair && sel.length === 1 ? `<div class="breed-bar sticky breed-waiting">
-          <div class="breed-h">Breeding: pick the second pet</div>
-          <p class="note" style="margin:2px 0 8px">Swipe the carousel to another pet and tap <b>BREED</b> on it. One of the two is kept and gains a lineage rank; the other is fed in.</p>
-          <div class="breed-waitrow">
-            <span class="bt-pet keep">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 42, one.shiny) : ''; })()}</span>
-            <span class="bw-arrow">${ICONS.chev(18)}</span>
-            <span class="bw-slot">?</span>
-          </div>
-          <button class="btn ghost" id="breedCancel">Cancel</button>
-        </div>` : ''}
       ${pair ? `<div class="breed-bar sticky${spareIsPrecious ? ' careful' : ''}">
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
@@ -10178,6 +10227,13 @@ async function openStable(opts = {}) {
        the same place the real one will appear, so the answer is already where you
        are about to look. */
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
+    $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
+    /* SCROLL ROOM FOR THE STICKY BAR. Measured before this: the bar overlapped
+       .cf-acts by 15px, and BREED lives in that row, so the button the bar was
+       telling you to press was underneath the bar. The height varies with which
+       bar is showing, so it is measured rather than guessed. */
+    const stickyBar = $('.breed-bar.sticky', body);
+    body.style.paddingBottom = stickyBar ? (stickyBar.offsetHeight + 14) + 'px' : '';
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
@@ -12006,7 +12062,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v359'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v360'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -13076,7 +13132,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const arena = $('#arena'), stage = el('foeStage');
       if (arena && stage) {
         import('./wraith-fx.js').then(fx => {
-          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect());
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect(), stage.querySelector('.mage-plate'));
           /* `rise` has its own cast now (Cam's downward strike). It used to borrow
              the wail, which is a scream and reads nothing like a summon; leaving
              the remap here meant the new one could never fire in a real fight. */
@@ -13090,7 +13146,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const arena = $('#arena'), stage = el('foeStage');
       if (arena && stage) {
         import('./wraith-fx.js').then(fx => {
-          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect());
+          const anchors = fx.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect(), el('youStage')?.getBoundingClientRect(), stage.querySelector('.mage-plate'));
           if (fx.CASTS.amulet) fx.cast(arena, 'amulet', anchors, { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches });
         }).catch(() => {});
       }

@@ -4829,7 +4829,13 @@ body::before {
   border-radius: 0;
   margin: 0;
 }
-.out-there .glutton-banner:first-of-type { border-top: none; }
+/* :first-of-type MATCHES PER ELEMENT TYPE. These rows are a mix of <details> and
+   a <button>, so the first <details> AND the first <button> both counted as
+   "first" and lost their divider, while the second <details> kept one: exactly
+   one line in the card, under the hunt row, which is what Tom saw as
+   "there is a line under it. inconsistent design". :first-child is what was
+   meant. */
+.ot-head + .glutton-banner { border-top: none; }   /* :first-child never matched: the card title is the first child */
 /* tighter rows: 62px x4 was 248px of chrome before any content */
 .out-there .glutton-banner > summary { padding: 9px 2px; gap: 10px; }
 /* ONE RHYTHM. Tom, 2026-08-10: "the 'out hunting today' banner is bigger than
@@ -4840,7 +4846,13 @@ body::before {
    the hunt keeps the biggest art that fits it. */
 .out-there .glutton-banner { min-height: 72px; }
 .out-there .glutton-banner > summary { min-height: 72px; box-sizing: border-box; align-items: center; }
-.out-there .gbn-ico { width: 32px; height: 32px; border-radius: 9px; }
+/* ONE ICON SIZE. Tom, 2026-08-10: "you still have a larger icon than the other
+   banners in this section... inconsistent design." The row HEIGHTS were unified
+   but not the art inside them: 58px for the hunt against 32px for its siblings.
+   Levelled UP rather than down, because he rejected a small head on the hunt row
+   the day before ("it should have this type of art in there") and a 32px box in a
+   72px row was under-filled anyway. */
+.out-there .gbn-ico { width: 48px; height: 48px; border-radius: 11px; }
 .out-there .gbn-txt b { font-size: 14.5px; }
 .out-there .gbn-body { padding: 0 2px 12px; }
 /* an expanded row gets a faint ground so the open panel reads as belonging to the
@@ -6268,6 +6280,14 @@ body::before {
 
 /* The breed panel is a CHECKOUT BAR: it follows you down the pet list instead of
    sitting at the top where selecting your second pet pushed it off-screen. */
+/* A STICKY FOOTER NEEDS ITS OWN SCROLL ROOM. Tom, 2026-08-10: "the breeding popup
+   is good but it covers the breed button when you swipe to another pet."
+   Measured: the bar sat over .cf-acts by 15px, and the BREED button is in that
+   row, so the control you are being TOLD to press was under the thing telling you
+   to press it. A sticky element pinned to bottom:0 overlays whatever is behind it
+   whenever its own flow position is below the fold, so the fix is scroll room:
+   #stableBody gets a padding-bottom the size of the bar (set from JS, since the
+   bar's height varies), which lets the row above always rise clear of it. */
 .breed-bar.sticky {
   position: sticky; bottom: 0; z-index: 4; margin-top: 14px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius);
@@ -6861,7 +6881,10 @@ body::before {
 .bestiary-banner:active { transform: translateY(1px); }
 /* display:block is load-bearing: .bh-stage is a <span>, and width/height on an
    inline box are simply ignored. Same trap the News thumbs hit. */
-.bst-fig { display: block; width: 58px; height: 58px; flex: 0 0 auto; animation: none; position: relative; }
+/* matched to .out-there .gbn-ico above. A whole monster needs a little more room
+   than a head-and-shoulders icon, so it keeps the same BOX and simply fills more
+   of it, rather than being a different size. */
+.bst-fig { display: block; width: 48px; height: 48px; flex: 0 0 auto; animation: none; position: relative; }
 .bestiary-banner .gbn-txt i { color: var(--coral); }
 .bestiary-banner .gbn-txt b { font-size: 16px; line-height: 1.15; }
 .bestiary-banner .gbn-txt em { font-style: normal; font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
@@ -6900,6 +6923,17 @@ body::before {
    so it still reads as the boss's creature and not a second boss, but it is
    SOLID now. */
 .petmini.beast { filter: saturate(.86) brightness(.95) drop-shadow(0 0 6px rgba(150,40,30,.5)); }
+
+/* NARROW SCREENS: TUCK THE CREATURE IN, TOWARDS ITS OWNER. On a 320px phone the
+   arena is 288px and his stage alone is 208px, so the default add position put
+   the creature 100% on top of the PLAYER (measured: 76px of a 76px figure at
+   320, 47px at 390). Overlapping the boss reads as depth; overlapping you reads
+   as a broken layout. `right` counts from the right edge of the foe side, so a
+   SMALLER value pulls the add back towards him and away from you.
+   This does not touch how big he is, which is a separate question. */
+@media (max-width: 400px) {
+  .arena.boss-mage .foe-side .pet-fighter.add { right: 18px; }
+}
 
 /* NO BESPOKE POSITION. I moved the add out from under his robe and made it worse
    at every real phone width: measured at right:212px it hung 36px off the left
@@ -6963,18 +6997,39 @@ body::before {
 
 /* the breed bar while only one pet is picked: same slot, same weight, so the
    answer to "what now?" is where the real bar is about to appear */
-.breed-bar.breed-waiting { text-align: left; }
-.breed-waitrow { display: flex; align-items: center; gap: 12px; margin: 4px 0 10px; }
-.breed-waitrow .bw-arrow { color: var(--text-3); display: flex; }
+/* THE SECOND-PICK PROMPT. A compact banner pinned to the top of the Stable, so
+   it stays on screen while you swipe and can never sit over the BREED button it
+   is telling you to press. Fixed widths on the portrait and the button, and the
+   text is the only flexible column: the first attempt let three flex children
+   negotiate and the label wrapped one word per line. */
+.breed-waiting {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; margin: 0 0 12px;
+  background: var(--surface); border: 2px solid rgba(255,211,77,.45); border-radius: 14px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.42);
+}
+.breed-waiting .bw-pet { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center; overflow: hidden;
+  background: rgba(242,233,215,.06); border: 2px solid var(--coral); }
+.breed-waiting .bw-pet img { width: 100%; height: 100%; object-fit: contain; }
+.breed-waiting .bw-say { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.breed-waiting .bw-say b { font-size: 13.5px; line-height: 1.15; }
+.breed-waiting .bw-say small { font-size: 11px; color: var(--text-3); line-height: 1.2; }
+.breed-waiting .bw-cancel { flex: 0 0 auto; width: auto; padding: 6px 11px; font-size: 11px; }
+.chip-btn { cursor: pointer; border: 1px solid rgba(242,233,215,.22); background: rgba(242,233,215,.05); display: inline-flex; align-items: center; gap: 5px; }
 /* the picked pet must look like it does in the real breed bar: those rules are
    all scoped to .breed-trade, so without this it rendered as a bare image next to
    a fully styled slot */
-.breed-waitrow .bt-pet { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   background: rgba(242,233,215,.06); border: 2px solid rgba(242,233,215,.18); overflow: hidden; }
-.breed-waitrow .bt-pet.keep { border-color: var(--coral); }
-.breed-waitrow .bt-pet img { width: 100%; height: 100%; object-fit: contain; }
-.breed-waitrow .bw-slot {
   width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   border: 2px dashed rgba(242,233,215,.32); color: var(--text-3);
   font-family: var(--display); font-size: 20px;
 }
+
+/* the pets explainer. Four questions, four answers: readable at a glance, not a
+   wall. Section headings carry the question so the body can stay short. */
+.pets-help section { margin: 0 0 14px; }
+.pets-help h3 { font-family: var(--display); font-size: 17px; letter-spacing: .02em; margin: 0 0 4px; color: var(--accent); }
+.pets-help p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.45; }
+.pets-help p.note { font-size: 12px; }

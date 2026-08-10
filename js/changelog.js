@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 360, date: '2026-08-10', title: 'The Stable explains itself', items: [
+    'A <b>How pets work</b> sheet in the Stable: levelling, talents, what breeding actually does, when it stops being worth it, and what a shiny is. Short.',
+    'Picking a pet to breed now tells you what to do next, from the top of the screen instead of from a panel sitting over the button it is telling you to press.',
+    "Today's card: every row is the same size with the same dividers.",
+  ] },
   { n: 359, date: '2026-08-10', title: 'A dozen fixes', items: [
     "<b>The Live Wire fights with his own lightning.</b> Cam drew the bolts as separate layers and none of them were being used. They are his moves now: the fork he throws at you, the arc he tears across the floor, the strike he calls up, and the sparks when his amulet breaks.",
     "<b>Two enemies now read as two enemies.</b> His creature is drawn solid instead of washed out and stands clear of him, anything you have already beaten drops on the spot instead of standing there looking alive, and whichever one is left flares so you know the fight is not over.",
