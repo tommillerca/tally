@@ -9133,7 +9133,17 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
     return openFight(null, fighter, {
       mode: 'boss', name: 'Test Captain', mult, bossMult: +(mult * 0.9).toFixed(3), aiLevel: 2,
       talents: [], venue: 'Test Den',
-      add: { name: 'Test Beast', beast: true, mult: addMult, talents: [] },
+      /* addMult 0 must mean NO add. It used to build one anyway (0 is falsy in
+         the mult fallbacks downstream, so the beast spawned at full strength),
+         and a single-enemy test fight secretly carried a 165hp second body that
+         __bhFight.finish() never targets: whether such a fight could end inside
+         finish()'s 12 rounds depended on the pet's seeded rolls. Flaky by seed. */
+      add: addMult > 0 ? { name: 'Test Beast', beast: true, mult: addMult, talents: [] } : null,
+      /* a mode:'boss' settle path calls claimDenWin(foeCfg.den) unconditionally
+         (in production the map always supplies the den), so a den-less seam
+         fight that actually FINISHES throws at the win screen. A roaming-shaped
+         stub keeps the real claim path intact in the throwaway test profile. */
+      den: { name: 'Test Captain', roaming: true, day: dateKey(), id: 'seam', reward: { xp: 20 } },
       ...extra,
     });
   };
@@ -12651,9 +12661,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
      not" by playing is luck: you cannot choose which one drops first. Webdriver
      only, like every other seam here. */
   if (typeof window !== 'undefined' && navigator.webdriver) {
-    window.__fightPoke = ({ foeHp, addHp } = {}) => {
-      if (foeHp != null) fight.f.hp = foeHp;
-      if (addHp != null && fight.fAux) fight.fAux.hp = addHp;
+    window.__fightPoke = ({ foeHp, addHp, pHp } = {}) => {
+      if (foeHp != null) fight.f.hp = Math.min(foeHp, fight.f.d.maxHp);
+      if (addHp != null && fight.fAux) fight.fAux.hp = Math.min(addHp, fight.fAux.d.maxHp);
+      // pHp: keep the PLAYER alive too, so a long observation run's outcome
+      // does not depend on the fight's seed position within the audit
+      if (pHp != null) fight.p.hp = Math.min(pHp, fight.p.d.maxHp);
       updateBars();
     };
   }
@@ -13858,7 +13871,30 @@ async function openFight(pitWrap, fighter, foeCfg) {
         turn: fight.turn, active: fight.active, over: fight.over,
         you: fight.p.hp, pet: fight.pAux ? fight.pAux.hp : null,
         foe: fight.f.hp, add: fight.fAux ? fight.fAux.hp : null,
+        amulet: fight.f.amulet !== false,
       }),
+      /* STATE-ONLY SEAMS. They arrange the fight; the REAL path performs the
+         act: pit.js's own kit roll picks the move, its gates still apply, the
+         event renderer casts. Calling wraith-fx.cast() directly is banned by
+         the FX contract, and testing that way is exactly how the rise remap
+         stayed invisible: the library worked while the dispatch was broken. */
+      forceCast: id => {
+        // open the move's own gate, then let the roll find it
+        fight.p.hp = fight.p.d.maxHp;                                  // survive the turn
+        if (id === 'reap') { fight.p.wind = fight.p.d.maxWind; fight.f.wind = Math.max(fight.f.wind, 30); }
+        if (id === 'grasp') fight.p.wind = Math.max(fight.p.wind, 12);
+        if (id === 'wail') fight.p.healCut = 0;
+        if (id === 'rise') fight.f.minion = null;
+        fight.forceCast = id;
+        if (fight.active === 'p' && !petPhase) doEndTurn();            // hand him the turn for real
+      },
+      // one real player action (a jab can still whiff or CRIT, which is the
+      // honest way to reach the amulet shatter)
+      act: id => { if (fight.active === 'p' && !petPhase) playerAct(id); },
+      // arrangement, not performance: the next real hit is CERTAIN to crit, so
+      // the amulet shatter is reachable deterministically through resolveHit's
+      // own path (a seeded 5% crit missed 40 straight jabs in the audit)
+      sharpen: () => { fight.p.d.critChance = 1; },
       // finish('p') wins, finish('f') loses. Resolves through the real path or
       // reports false; it never claims an outcome it did not reach.
       finish: async (winner = 'p') => {

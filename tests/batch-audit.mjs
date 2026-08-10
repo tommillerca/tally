@@ -28,39 +28,187 @@ const { browser, page, errors: errs } = await boot(base);
 await page.evaluateOnNewDocument(() => { window.__crateForce = 1; window.__hatchForce = 1; });
 await seed(page, { level: 30, coins: 5000, dust: 5000 });
 
-/* ---- 4: Cam's lightning is the subject of every cast ---------------------- */
-/* "You also haven't included any of the lightning bolts etc that were attached
-   in the artwork I gave you... that's why cam included them." mage-fx.png sat on
-   disk unreferenced while wraith-fx.js drew its own light from scratch. */
-/* 3.2x, not 1.4x: at a seeded level 30 the player kills him in two swings and he
-   never casts anything, so a check driven at the lower multiplier reports "no
-   cast reached the screen" about a perfectly working dispatch. */
-await page.evaluate(async () => { await window.__denFight(3.2, 0.5, { mage: true, name: 'The Live Wire' }); });
-await sleep(2600); await settle(page, 400);
-const casts = await page.evaluate(async () => {
-  const arena = document.getElementById('arena'), stage = document.getElementById('foeStage');
-  const m = await import('./js/wraith-fx.js');
-  const anchors = m.anchorsFor(stage.getBoundingClientRect(), arena.getBoundingClientRect());
-  const ar = arena.getBoundingClientRect();
-  const out = {};
-  for (const name of Object.keys(m.CASTS)) {
-    document.querySelectorAll('.wfx').forEach(n => n.remove());
-    m.cast(arena, name, anchors, {});
-    await new Promise(r => setTimeout(r, 300));
-    const imgs = [...document.querySelectorAll('.wfx img.art')];
-    await Promise.all(imgs.map(i => i.decode().catch(() => {})));
-    /* ON SCREEN, not merely in the DOM. reap used to be positioned off the left
-       edge of the arena, so it was present, decoded, and invisible. */
-    const onStage = imgs.filter(i => {
-      const r = i.getBoundingClientRect();
-      const overlap = Math.max(0, Math.min(r.right, ar.right) - Math.max(r.left, ar.left));
-      return i.naturalWidth > 0 && r.width > 8 && overlap > r.width * 0.5;
+/* ---- 4: Cam's lightning, deterministic and THROUGH THE GAME ---------------- */
+/* Two layers of proof, complementary:
+   THIS SECTION drives every kit cast deterministically through the game's own
+   dispatch (webdriver seam __bhFight.forceCast replaces the AI's DICE only; the
+   move still passes its own gates in pit.js's kit roll), asserts decoded art on
+   stage mid-animation, and pins the anchor mapping to the drawn ink at four
+   geometries plus a squashed prove-red geometry. It replaced a direct
+   fx.cast() block: the FX contract bans calling the animation's own function,
+   and the rise remap lived at exactly the layer a direct call skips.
+   THE viaFight SECTION BELOW plays real random turns and checks each cast that
+   fired brought its own sprite: nondeterministic, end-to-end, catches what a
+   forced roll cannot (the AI never choosing a move at all). Keep both. */
+/* close stacked sheets one at a time, top first: a blanket click on every
+   .sheet-close in one tick only pops the top of the history stack, and this
+   audit opens six fights back to back */
+async function closeSheets() {
+  for (let i = 0; i < 10; i++) {
+    const n = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('.sheet-close')];
+      if (btns.length) btns[btns.length - 1].click();
+      return btns.length;
     });
-    out[name] = { total: imgs.length, onStage: onStage.length };
+    if (!n) break;
+    await sleep(500);
   }
-  document.querySelectorAll('.wfx').forEach(n => n.remove());
-  return out;
+}
+const KIT_CASTS = ['bolt', 'wail', 'rise', 'grasp', 'reap'];
+async function castRun(width, height = 900, squash = 0) {
+  await page.setViewport({ width, height, deviceScaleFactor: 2 });
+  await closeSheets();
+  await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
+  await sleep(2400); await settle(page, 400);
+  /* a COLD first boot can need longer than the fixed sleeps (measured: the same
+     code passed warm and failed cold); poll for readiness, and if it never
+     arrives the main evaluate still returns its own failure. Never a pass. */
+  for (let i = 0; i < 30; i++) {   // 15s ceiling: under gate load the first mage open has exceeded 6s
+    const ready = await page.evaluate(() => !!(document.getElementById('arena') && window.__bhFight && window.__bhFight.forceCast));
+    if (ready) break;
+    await sleep(500);
+  }
+  return page.evaluate(async (names, squash) => {
+    const arena = document.getElementById('arena');
+    if (!arena || !window.__bhFight || !window.__bhFight.forceCast) return { why: 'no fight or no seam', dbg: { arena: !!arena, bh: !!window.__bhFight, fc: !!(window.__bhFight && window.__bhFight.forceCast), hash: location.hash, sheets: document.querySelectorAll('.sheet-close').length, veils: document.querySelectorAll('.drop-veil').length } };
+    const out = { casts: {}, anchor: null };
+    const sample = async () => {
+      /* decoded pixels DURING the animation, best frame of ten (FX contract) */
+      let best = { total: 0, onStage: 0 };
+      const ar = arena.getBoundingClientRect();
+      for (let f = 0; f < 10; f++) {
+        const imgs = [...document.querySelectorAll('.wfx img.art')];
+        await Promise.all(imgs.map(i => i.decode().catch(() => {})));
+        const on = imgs.filter(i => {
+          const r = i.getBoundingClientRect();
+          const ox = Math.max(0, Math.min(r.right, ar.right) - Math.max(r.left, ar.left));
+          return i.naturalWidth > 0 && r.width > 8 && ox > r.width * 0.5;
+        });
+        if (on.length >= best.onStage) best = { total: imgs.length, onStage: on.length };
+        await new Promise(r => setTimeout(r, 90));
+      }
+      return best;
+    };
+    for (const name of names) {
+      window.__fightPoke && window.__fightPoke({ foeHp: 400 });         // the run must outlive the sampling
+      document.querySelectorAll('.wfx').forEach(n => n.remove());
+      window.__bhFight.forceCast(name);
+      await new Promise(r => setTimeout(r, 350));
+      out.casts[name] = await sample();
+      for (let i = 0; i < 24 && window.__bhFight.state().active !== 'p' && !window.__bhFight.state().over; i++) {
+        await new Promise(r => setTimeout(r, 150));
+      }
+      if (window.__bhFight.state().over) { out.casts[name].endedEarly = true; break; }
+    }
+    /* ANCHOR ACCURACY, measured against the drawn INK. The expectation is
+       computed here, independently, from the plate's own naturalWidth vs its
+       box (the object-fit: contain letterbox), so if the app ever maps anchors
+       onto the raw stage box again (the v359 bug), got and want disagree by the
+       letterbox offset and this goes red. rise lands its strike on the hand
+       column: hand.x - 8 in cast coordinates. */
+    const stage = document.getElementById('foeStage');
+    const img = stage && stage.querySelector('img.mage-plate');
+    if (img && img.naturalWidth && !window.__bhFight.state().over) {
+      /* geometry torture: the mapping must follow the INK under any box. At the
+         shipped stage aspect the letterbox is vertical and the anchors sit near
+         fraction 0.5, so a raw-box mapping misses by only ~3px and a tolerance
+         check cannot condemn it. Squashing the stage flips the fit to
+         height-bound, opens a ~50px side letterbox, and a raw-box mapping now
+         misses the hand by ~32px: that is the geometry where this guard was
+         proven red. */
+      if (squash) { stage.style.height = squash + 'px'; await new Promise(r => requestAnimationFrame(r)); }
+      const asp = img.naturalWidth / img.naturalHeight;
+      /* WANT is measured pre-cast, in arena coordinates, from the plate's own
+         contain-fit ink rect. GOT is read from the sprite wrapper's INLINE
+         left/top/width (the frozen cast coordinates), NOT from gBCR: the whole
+         .wfx layer breathes with an entrance/exit scale animation, so a gBCR
+         mid-flight is distorted by up to layer-half-height x (s-1): 14px at a
+         900-tall arena. That distortion is deliberate motion, not a misplaced
+         anchor; the inline style is what the anchor mapping actually produced.
+         The layer is inset:0 of the arena, so cast coords sit at the padding
+         box: 2px of border off the arena's gBCR. */
+      const arr = arena.getBoundingClientRect();
+      const b = img.getBoundingClientRect();
+      const w = Math.min(b.width, b.height * asp), h = w / asp;
+      const bord = 2;
+      const want = { x: b.left + (b.width - w) / 2 - arr.left - bord + w * 0.184 - 8,   // ANCHORS.hand x, rise's -8
+                     y: b.top + (b.height - h) / 2 - arr.top - bord + h * 0.383 + 76 }; // hood.y + 168 - 92
+      window.__fightPoke && window.__fightPoke({ foeHp: 400 });
+      document.querySelectorAll('.wfx').forEach(n => n.remove());
+      window.__bhFight.forceCast('rise');
+      await new Promise(r => setTimeout(r, 450));
+      const st = [...document.querySelectorAll('.wfx .artwrap')]
+        .find(el => el.querySelector('img[src*="bolt-strike"]'));
+      if (st) {
+        const gx = parseFloat(st.style.left) + parseFloat(st.style.width) / 2;
+        const gy = parseFloat(st.style.top) + parseFloat(st.style.height) / 2;
+        out.anchor = { dx: +(gx - want.x).toFixed(1), dy: +(gy - want.y).toFixed(1),
+          box: [+b.width.toFixed(1), +b.height.toFixed(1)], ink: [+w.toFixed(1), +h.toFixed(1)] };
+      }
+    }
+    return out;
+  }, KIT_CASTS, squash);
+}
+const cast390 = await castRun(390);
+if (cast390.why) {
+  ok('the kit casts fire through the real dispatch', false, cast390.why);
+} else {
+  const cn = Object.keys(cast390.casts);
+  ok('every kit cast fires through the real dispatch', cn.length === KIT_CASTS.length && cn.every(n => cast390.casts[n].total > 0),
+    cn.map(n => `${n}:${cast390.casts[n].total}`).join(' '));
+  const blank = cn.filter(n => cast390.casts[n].onStage === 0);
+  ok("and every cast draws Cam's art on stage, decoded, mid-animation", blank.length === 0,
+    blank.length ? `blank: ${blank.join(', ')}` : 'all sampled visible');
+  const near = a => !!a && Math.abs(a.dx) <= 8 && Math.abs(a.dy) <= 8;
+  ok('the strike lands on his hand, not on the letterbox', near(cast390.anchor), JSON.stringify(cast390.anchor));
+}
+/* the letterbox error is width-dependent (that is the whole bug), so the anchor
+   claim is re-proven where the drift is LARGEST: a wide stage column. 320 covers
+   the small-phone end. */
+/* the 390x620 run is the one that catches the ORIGINAL bug: a short viewport
+   clamps the stage height under the plate's aspect, the fit flips to
+   height-bound, and a raw-box mapping misses in X by the side letterbox. */
+for (const [w, h, squash] of [[320, 900, 0], [760, 900, 0], [390, 620, 0], [390, 900, 120]]) {
+  const run = await castRun(w, h, squash);
+  const nearW = a => !!a && Math.abs(a.dx) <= 8 && Math.abs(a.dy) <= 8;
+  ok(`anchors hold at ${w}x${h}${squash ? ' squashed to ' + squash : ''}`, !run.why && nearW(run.anchor),
+    run.why || JSON.stringify(run.anchor));
+}
+await page.setViewport({ width: 390, height: 900, deviceScaleFactor: 2 });
+await closeSheets();
+/* the amulet shatter is reached HONESTLY: a real crit from real jabs in a
+   seeded fight. Bounded, and a miss is a report, not a hang. */
+await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
+await sleep(2400); await settle(page, 400);
+const amuletRun = await page.evaluate(async () => {
+  if (!window.__bhFight) return { why: 'no fight' };
+  let shattered = false, fxSeen = 0;
+  window.__bhFight.sharpen();                       // the next real hit crits; resolveHit still does the work
+  for (let t = 0; t < 12 && !shattered && !window.__bhFight.state().over; t++) {
+    window.__fightPoke && window.__fightPoke({ foeHp: 400 });
+    if (window.__bhFight.state().active === 'p') window.__bhFight.act('jab');
+    await new Promise(r => setTimeout(r, 220));
+    if (!window.__bhFight.state().amulet) {
+      shattered = true;
+      for (let f = 0; f < 8; f++) {
+        const on = [...document.querySelectorAll('.wfx img.art')].filter(i => i.naturalWidth > 0).length;
+        fxSeen = Math.max(fxSeen, on);
+        await new Promise(r => setTimeout(r, 90));
+      }
+    }
+  }
+  return { shattered, fxSeen };
 });
+ok('a real crit shatters the amulet and draws its sparks', !amuletRun.why && amuletRun.shattered && amuletRun.fxSeen > 0,
+  amuletRun.why || `shattered=${amuletRun.shattered} decoded art at peak=${amuletRun.fxSeen}`);
+
+/* viaFight below needs a FRESH fight: the amulet run above shatters the amulet,
+   which gates wail and rise off his kit, and its fight is at 1.4x where a
+   swinging harness kills him early (Aggie measured both). 3.2x, clean slate. */
+await closeSheets();
+await page.evaluate(async () => { await window.__denFight(3.2, 0.5, { mage: true, name: 'The Live Wire' }); });
+await sleep(2400); await settle(page, 400);
+
 /* AND THROUGH THE GAME'S OWN DISPATCH. Everything above calls fx.cast() straight,
    which tests the LIBRARY. The `rise` cast was remapped to `wail` at the dispatch
    site in app.js and no direct-call check could ever see it: the library was
@@ -98,6 +246,12 @@ const viaFight = await page.evaluate(async () => {
     const et = document.getElementById('endTurn');
     const atk = document.querySelector('.fight-act[data-act=swing]:not([disabled])');
     if (pm) pm.click(); else if (et && !et.disabled) et.click(); else if (atk) atk.click();
+    /* arrangement, not performance: nobody is allowed to DIE before the kit has
+       been exercised, or whether this check sees rise and bolt depends on the
+       seed position of this fight in the audit (it did: reordering the suite
+       made the player die at step ~60 with one cast seen). No cast is faked;
+       death just stops being a stopping condition. */
+    window.__fightPoke && window.__fightPoke({ foeHp: 900, pHp: 900 });
     await new Promise(r => setTimeout(r, 240));
     const l = document.getElementById('flog')?.textContent || '';
     if (l) {
@@ -132,13 +286,6 @@ ok('and every cast that fired drew ITS OWN art', wrongArt.length === 0,
   wrongArt.length ? wrongArt.map(([id, , a]) => `${id} fired but ${a} never appeared`).join('; ')
                   : fired.map(([id, , a]) => `${id}->${a}`).join(', '));
 
-const castNames = Object.keys(casts);
-ok('every one of his casts exists', castNames.length >= 4, castNames.join(', '));
-const noArt = castNames.filter(n => casts[n].total === 0);
-ok("every cast draws Cam's own art", noArt.length === 0, noArt.length ? `no sprite: ${noArt.join(', ')}` : castNames.map(n => `${n}:${casts[n].total}`).join(' '));
-const offStage = castNames.filter(n => casts[n].onStage < casts[n].total);
-ok('and all of it is actually inside the arena', offStage.length === 0,
-  offStage.length ? offStage.map(n => `${n} ${casts[n].onStage}/${casts[n].total} on stage`).join(', ') : 'nothing clipped off the edge');
 
 /* ---- 5 + 6: two enemies read as two enemies ------------------------------ */
 /* AT EVERY PHONE WIDTH, AGAINST BOTH NEIGHBOURS. The first version measured the
