@@ -139,6 +139,17 @@ const runAll = process.argv.includes('--all');
    below states what it is and must not be cited as coverage. */
 if (runAll) BROWSER.push(...FULL);
 
+/* SWEEP ORPHANS FIRST. A SIGKILLed audit (harness timeout) strands 11 browser
+   processes that no in-process hook can catch, and they are still holding ~1.3GB
+   each when the next run starts: measured, that is what turned a healthy tree
+   into "five suites blocked". Only processes whose parent is already dead, so a
+   concurrent run in another session is untouched. */
+try {
+  const { execFileSync } = await import('node:child_process');
+  const out = execFileSync(process.execPath, [pjoin(here, 'reap-orphans.mjs'), '--kill']).toString().trim();
+  if (!/^no orphaned/.test(out)) console.log(out.split('\n').pop() + '\n');
+} catch { /* never block a gate run on housekeeping */ }
+
 const results = [];
 for (const f of PURE) {
   const r = await run(f, []);
