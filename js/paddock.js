@@ -169,10 +169,32 @@ export function assignBands(walkers, scene = PDK_SCENE) {
   return placed;   // [{iid, y, x0, x1}]
 }
 
+/* THE WALK CAP. The paid-for layout rule is measured on SPRITES (76px wide),
+ * not bands: two same-cluster walkers may share at most 20px, so their band
+ * spacing (bandW + GUTTER) must stay >= 56px. The top cluster's span is 202
+ * after the graveyard exclusion, which holds floor((202+24)/56) = 4 walkers,
+ * and round-robin dealing splits walkers evenly across the two row clusters,
+ * so the scene renders at most 8. Copies beyond that are not dropped, they
+ * ROTATE: a day-seeded hash picks today's herd, so every copy in a big
+ * collection takes its turn in the scene. The renderer skips placeless rows. */
+export const WALK_CAP = 8;
+
+/* Rotation seed. Raw FNV has NO avalanche on trailing characters: sorting by
+   hashStr(iid + day) picked the same herd every day, and hashStr(day + iid)
+   just sorted by the iid's last characters (both caught by the unit pin at
+   build). The murmur fmix32 finalizer diffuses every input bit. */
+function rotHash(s) {
+  let h = hashStr(s);
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  return (h ^ h >>> 16) >>> 0;
+}
+
 /* PURE: the whole scene cast from a roster. Walkers through assignBands;
  * flyers/hoverers/floppers onto their fixed lanes and spots, extras wrapping
- * with a small offset so a fourth catfish still lands somewhere sane. */
-export function placePaddock(roster, scene = PDK_SCENE) {
+ * with a small offset so a fourth catfish still lands somewhere sane.
+ * `day` only seeds the rotation; any stable per-day string works. */
+export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOString().slice(0, 10)) {
   const by = m => roster.filter(r => r.motion === m);
   const out = {};
   by('fly').forEach((r, i) => {
@@ -187,7 +209,13 @@ export function placePaddock(roster, scene = PDK_SCENE) {
     const s = scene.FLOP_SPOTS[i % scene.FLOP_SPOTS.length];
     out[r.iid] = { kind: 'flop', x: s.x, y: s.y - Math.floor(i / scene.FLOP_SPOTS.length) * 22, w: s.w };
   });
-  const bands = assignBands(by('walk'), scene);
+  let walkers = by('walk');
+  if (walkers.length > WALK_CAP) {
+    walkers = [...walkers]
+      .sort((a, b) => rotHash(day + ':' + a.iid) - rotHash(day + ':' + b.iid))
+      .slice(0, WALK_CAP);
+  }
+  const bands = assignBands(walkers, scene);
   for (const b of bands) out[b.iid] = { kind: 'walk', y: b.y, x0: b.x0, x1: b.x1, w: 76 };
   return out;
 }
