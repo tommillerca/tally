@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 366, date: '2026-08-11', title: 'Melting, out in the open', items: [
+    "<b>The Salvage Bench tells you what you're sitting on.</b> How many spare pieces you own and what they're worth in Bone Dust, before you tap anything. It used to be a closed panel three screens deep.",
+    "It opens itself when you actually have spares, and the pieces you're not wearing now read as the live controls they always were. The one you're wearing still asks twice.",
+    "<b>Every gear slot offers a look now</b>, including one holding a plain cosmetic. There are no stats to protect in that case, so switching there is <b>free</b>.",
+    "Nothing about melting changed: every piece in the game always paid real dust, and it keeps its look forever either way.",
+  ] },
   { n: 364, date: '2026-08-11', title: "Today's herd", items: [
     'The Paddock keeps its distance from the graveyard: pets standing behind the tombstone no longer walk through it.',
     "If you own more pets than the field can hold, they take turns. Eight are out there on any given day and the herd changes over with the rest of your day, so a big collection is something to come back to rather than a crowd.",

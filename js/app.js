@@ -8270,9 +8270,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
     const look = await equipped();
+    const rawEq = await equipped({ raw: true });   // pre-transmog: what is actually ON
     const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
-    const mogOf = code => (gearLo[code] ? tm[code] : null); // only reads while gear is worn
+    /* Matches equipped()'s own condition: a transmog applies to any slot that
+       HOLDS something, gear or a plain cosmetic. Keyed off gear alone, the badge
+       went missing on exactly the slots the panel was newly opened to. */
+    const mogOf = code => ((gearLo[code] || rawEq[code]) ? tm[code] : null);
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
     const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
@@ -8310,19 +8314,24 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // Trying a look is FREE and shows on the doll immediately; only the Apply
     // button in the bar below spends dust. Nobody pays for a tap.
     const wornGear = gearLo[slot] ? GEAR_BY_ID[gearLo[slot]] : null;
+    /* THE SLOT'S BASELINE LOOK: the statted piece's own art when one is worn,
+       otherwise the plain cosmetic actually equipped there. Everything below used
+       to key off wornGear alone, so a slot holding a cosmetic showed no transmog
+       panel at all, which is what Tom hit. */
+    const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);
     const stageEq = (() => {
       const p = S.lookPreview;
-      if (p == null || !wornGear) return look;
+      if (p == null || !baseArtId) return look;
       const e = { ...look };
       if (p === TRANSMOG_HIDE) delete e[slot];
-      else if (p === '') e[slot] = wornGear.artId;
+      else if (p === '') e[slot] = baseArtId;
       else if (BH_BY_ID[p]) e[slot] = p;
       return e;
     })();
     // Prices are paid-aware: a look you have already bought for this slot reads
     // free forever, which is what lets fits swap without a tax.
-    const slotArts = wornGear
-      ? BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== wornGear.artId) : [];
+    const slotArts = baseArtId
+      ? BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== baseArtId) : [];
     const lookPriceMap = {};
     for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
 
@@ -8399,23 +8408,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>`;
       })()}
       ${(() => {
-        // TRANSMOG. Only offered where a look is actually forced on you, i.e. a
-        // statted piece is worn. Equip a plain cosmetic and the look you picked
-        // is the look you get, so there is nothing to disguise.
-        if (!GEAR_SLOTS.includes(slot) || !wornGear) return '';
+        /* TRANSMOG. Offered on EVERY gear slot that holds something. It used to
+           require a statted piece, on the reasoning that a plain cosmetic already
+           looks like itself so there is nothing to disguise. True, and still the
+           reason it is free below, but Tom, 2026-08-11: "it's a dumb move in game
+           but the player should be able to do it for simple consistency." A panel
+           that silently is not there reads as broken. */
+        if (!GEAR_SLOTS.includes(slot) || !baseArtId) return '';
         const cur = tm[slot] ?? '';                        // '' = the gear's own look
         const sel = S.lookPreview == null ? cur : S.lookPreview;
         const arts = slotArts;
         const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
-        const ownArt = BH_BY_ID[wornGear.artId];
-        const nameOf = v => v === '' ? `${wornGear.name}, its own look` : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
+        const ownArt = BH_BY_ID[baseArtId];
+        const nameOf = v => v === ''
+          ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
+          : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
         const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
         const afford = dustBal >= cost;
         const changed = sel !== cur;
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<img src="${bhAsset(ownArt)}" alt="" loading="lazy"><span class="look-tag">Its own look</span>`, 'Wear the gear as it is')}
+          ${cell('', `<img src="${bhAsset(ownArt)}" alt="" loading="lazy"><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
           ${arts.map(i => cell(i.id, `<img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
         </div>
@@ -8427,7 +8441,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 : `<button class="btn ghost" disabled>Need ${cost} dust · you have ${dustBal}</button>`)
             : ''}
         </div>
-        <p class="note" style="text-align:center;margin-top:8px">Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
+        <p class="note" style="text-align:center;margin-top:8px">${wornGear
+          ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
+          : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
       })()}
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
@@ -8739,11 +8755,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // carries stats, so a stat-less sweep would have selected nothing.
         const JUNK_RARITIES = new Set(['common', 'uncommon']);
         const junk = spare.filter(g => JUNK_RARITIES.has(g.rarity));
-        return `<details class="melt-fold" style="margin-top:12px"><summary>Melt gear · ${rows.length} spare piece${rows.length === 1 ? '' : 's'} worth <span class="dust-ico">${ICONS.dust(13)}</span> ${totalDust.toLocaleString()}</summary>
+        /* OPEN WHEN THERE IS SOMETHING TO MELT. This was a collapsed <details>
+           three levels deep (Character > Backpack > Salvage Bench), so the whole
+           feature was invisible unless you went looking, which is the "melting is
+           too hidden" complaint. It opens itself when you actually have spares and
+           stays shut when you do not, so it is never an empty invitation. The
+           spare count and total also sit OUTSIDE the fold now: the number was
+           previously only legible in the summary of a closed panel. */
+        const spareDust = spare.reduce((a, g) => a + gearDustValue(g), 0);
+        return (spare.length
+          ? `<div class="melt-lede"><b>${spare.length} spare piece${spare.length === 1 ? '' : 's'}</b> you are not wearing, worth <b><span class="dust-ico">${ICONS.dust(13)}</span> ${spareDust.toLocaleString()}</b> in Bone Dust.</div>`
+          : '<p class="note" style="margin:2px 2px">Nothing spare to melt: every piece you own is on you.</p>')
+          + `<details class="melt-fold" style="margin-top:12px"${spare.length ? ' open' : ''}><summary>Melt gear · ${rows.length} piece${rows.length === 1 ? '' : 's'} in the bench</summary>
           <button class="btn danger melt-go" id="meltGo" hidden></button>
           <div class="melt-tools">
             <button class="link" id="meltAll">Select all ${spare.length} unworn</button>
-            ${junk.length && junk.length !== spare.length ? `<button class="link" id="meltJunk">Only the ${junk.length} junk</button>` : ''}
+            ${/* "junk" implied a category gate that does not exist: every piece in
+                  the game is meltable and pays real dust. Name the rarities the
+                  sweep actually selects, derived so it stays honest if a new tier
+                  ever ships rather than hardcoding today's roster. */''}
+            ${junk.length && junk.length !== spare.length ? `<button class="link" id="meltJunk">Only the ${junk.length} ${esc([...new Set(junk.map(g => RARITIES[g.rarity].label))].join(' + '))}</button>` : ''}
             <button class="link" id="meltNone">Clear</button>
           </div>` + rows.map(g => {
           const worn = gearLoNow[g.slot] === g.id;
@@ -8753,10 +8784,20 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
             <span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
             <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
-              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ${ICONS.boltIco(11)} ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">no stats · looks only</span>'
+              /* "no stats · looks only" read as a REASON TO KEEP something. It is
+                 a fact about the piece, not advice, so it states what melting
+                 leaves you: the look, which is kept forever either way. */
+              hasStats(g) ? `<span class="melt-stat">${esc(gearLabel(g))}${g.talent ? ` ${ICONS.boltIco(11)} ${esc(g.talentName)}` : ''}</span>` : '<span class="melt-nostat">looks only · no stats to lose</span>'
             }</small></div>
             ${worn ? `<button class="btn small danger" data-meltbench="${g.id}">+${gearDustValue(g)} dust</button>`
-                   : `<span class="melt-val">+${gearDustValue(g)}</span>`}
+                   /* THE CHEAP PIECES LOOKED UNMELTABLE. An unworn row rendered its
+                      value as muted grey text while the WORN row (the one you should
+                      not casually melt) carried the only button, so the pieces you
+                      most want gone presented as static labels. The row is a <label>
+                      wrapping the checkbox, so it has always been tappable; a button
+                      here would swallow that tap. Style it as the active chip it is
+                      instead of restyling the mechanism. */
+                   : `<span class="melt-val on">+${gearDustValue(g)}</span>`}
           </label>`;
         }).join('') + `</details>`;
       })()}`;
@@ -8859,12 +8900,20 @@ async function renderCharacter(wrap, tab, opts = {}) {
       // you can melt a whole stack of spare gear in one pass.
       btn.closest('.crate-row')?.remove();
       const fold = content.querySelector('.melt-fold');
-      const left = $$('[data-meltbench]', content);
-      if (fold && !left.length) { fold.remove(); }
+      /* KEEP THE SUMMARY HONEST AFTER AN IN-PLACE MELT. This counted the surviving
+         BUTTONS, which exist only on WORN rows, so after melting the piece you were
+         wearing the header read "0 spare pieces worth 0" over a bench still holding
+         thirteen. Count the rows.
+         The .melt-lede line outside the fold is deliberately NOT touched here: this
+         handler is reachable only from a worn row, and melting a worn piece cannot
+         change the SPARE count or its total. I wrote a refresh for it first, then
+         could not make a guard fail against its absence, which is the tell that the
+         code was unreachable rather than the test being weak. */
+      if (fold && !content.querySelector('.melt-row')) { fold.remove(); }
       else if (fold) {
-        const total = left.reduce((a, b) => a + (parseInt((b.textContent.match(/\d+/) || [0])[0], 10) || 0), 0);
+        const bench = $$('.melt-row', content).length;
         const sum = fold.querySelector('summary');
-        if (sum) sum.innerHTML = `Melt gear · ${left.length} spare piece${left.length === 1 ? '' : 's'} worth <span class="dust-ico">${ICONS.dust(13)}</span> ${total.toLocaleString()}`;
+        if (sum) sum.innerHTML = `Melt gear · ${bench} piece${bench === 1 ? '' : 's'} in the bench`;
       }
       const nd = await boneDust();
       content.querySelectorAll('.wallet-line b').forEach(b => { if (b.querySelector('.dust-ico')) b.innerHTML = `<span class="dust-ico">${ICONS.dust(13)}</span> ${nd.toLocaleString()}`; });
@@ -12310,7 +12359,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v365'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v366'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -4431,6 +4431,14 @@ body::before {
 .melt-row .melt-pick { width: 20px; height: 20px; flex: none; accent-color: var(--danger); }
 .melt-row.worn { opacity: 0.6; }
 .melt-val { color: var(--text-2); font-size: 13px; font-weight: 800; }
+/* An unworn piece's value used to be muted grey text beside a row whose only
+   button belonged to the WORN piece, so the pieces you most want gone read as
+   inert labels. The row is a <label> around the checkbox and has always been
+   tappable; this makes it LOOK like the live control it is. */
+.melt-val.on { color: var(--accent); background: var(--surface-3); border-radius: 999px;
+  padding: 4px 9px; flex: none; }
+.melt-lede { font-size: 13px; color: var(--text-2); line-height: 1.4; padding: 2px 2px 0; }
+.melt-lede b { color: var(--text-1); }
 /* which pieces carry stats, so a junk sweep cannot eat a statted piece by mistake */
 .melt-stat { color: var(--accent); font-weight: 700; }
 .melt-nostat { color: var(--text-3); }

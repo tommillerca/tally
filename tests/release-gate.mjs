@@ -172,7 +172,7 @@ const DECLARED = {
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
-  'melt-ui-audit.mjs': ['full', 'the melt confirm bar is opaque and does not swallow a row tap.'],
+  'melt-ui-audit.mjs': ['full', 'the Salvage Bench: entrance visible without a tap, every row actionable, melt pays exactly once (SOP), every rarity meltable, and transmog on a stat-less slot is offered AND free AND actually changes the look.'],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
   'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],

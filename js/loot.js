@@ -966,10 +966,19 @@ async function markPaid(slot, artId) {
   if (!list.includes(k)) { list.push(k); await kvSet('paidlooks', list); }
 }
 // What this slot change would cost right now (0 if free or already bought).
+/* A LOOK WITH NO STATS BEHIND IT IS FREE. Tom, 2026-08-11: "you can transmog
+   plain gear... the player should be able to do it for simple consistency."
+   The panel is offered on every gear slot now, but with no statted piece worn
+   there is nothing to disguise: "make this slot look like X" ends at exactly the
+   same appearance as equipping X, which costs nothing. Charging dust for that
+   would be selling a no-op, so the price is 0 and the button says free.
+   THE PRICE LIVES HERE, not in the UI. applyTransmog calls transmogPrice itself,
+   so a button merely LABELLED free would have shown free and still charged. */
 export async function transmogPrice(slot, artId) {
   if (!artId || artId === TRANSMOG_HIDE) return 0;
   const tm = await transmogMap();
   if (tm[slot] === artId) return 0;
+  if (!(await gearLoadout())[slot]) return 0;        // no stats in the slot: free
   return (await paidLooks()).has(paidKey(slot, artId)) ? 0 : transmogCost(artId);
 }
 
@@ -1108,7 +1117,13 @@ export async function equipped({ raw = false } = {}) {
   if (!slots.length) return eq;
   const lo = await gearLoadout();
   for (const slot of slots) {
-    if (!lo[slot]) continue;                       // rule 2: only overrides gear
+    /* USED TO BE `if (!lo[slot]) continue` (only overrides gear). Relaxed
+       2026-08-11 so a slot holding a plain cosmetic honours its transmog too,
+       per Tom's consistency call. Still requires the slot to HOLD something:
+       without this a stale tm entry would conjure a look into a genuinely empty
+       slot, which is a third behaviour nobody asked for. Free in that case, see
+       transmogPrice. */
+    if (!lo[slot] && !eq[slot]) continue;
     if (tm[slot] === TRANSMOG_HIDE) delete eq[slot];
     else if (BH_BY_ID[tm[slot]]) eq[slot] = tm[slot];
   }
@@ -1132,6 +1147,15 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
   if (!keepGear && GEAR_SLOTS.includes(slot)) {
     const lo = await gearLoadout();
     if (lo[slot]) { delete lo[slot]; await kvSet('gearloadout', lo); }
+    /* AND DROPS ANY DISGUISE ON IT. Deliberately picking a plain look means "this
+       is what I want to look like", so a leftover transmog must not survive it.
+       This matters as of 2026-08-11: equipped() now honours a transmog on a slot
+       with no statted gear, so without this a STALE entry (left behind by unequipping
+       gear, which never cleared it) would suddenly reapply and silently change how an
+       existing player looks the moment they updated. A look you chose should only
+       change when you choose. markPaid means re-picking it later is still free. */
+    const tm = await transmogMap();
+    if (tm[slot] != null) { delete tm[slot]; await kvSet('transmog', tm); }
   }
   return eq;
 }
