@@ -31,7 +31,15 @@ const base = process.argv[2] || 'http://localhost:8765/';
 /* poi.js is pure, so the fixture is computed here rather than scraped out of the
    page: that way the expectation comes from the generator and the page has to
    agree with it, not the other way round. */
-const date = new Date().toISOString().slice(0, 10);
+/* THE APP'S dateKey() IS LOCAL, NOT UTC. This used toISOString(), so from the
+   moment local time crossed into the next UTC day (17:00 here) the audit asked
+   poi.js for TOMORROW's minis, teleported to one that today's map does not spawn,
+   and reported "the map put a mini in reach" as a failure against working code.
+   It passed all day and would have failed every evening. Same function the app
+   uses, same day boundary. */
+const dateKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const date = dateKey();
 const HOME = { latitude: 49.2827, longitude: -123.1207 };
 const near = minisNear(date, HOME.latitude, HOME.longitude);
 const mini = near[0];
