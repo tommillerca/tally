@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  /* RENUMBER AT MERGE: claims v365 with js/app.js APP_BUILD and sw.js VERSION. */
+  { n: 365, date: '2026-08-11', title: 'Paddock polish', items: [
+    'Bonding with a pet gives it <b>hearts</b>. They were five red dots, which is not the same thing.',
+    'A pet card closes whichever way you reach for it: the × on the card, a tap on the field behind it, or tapping the same pet again.',
+    'Your pets fill their frames, on the card and in the collection shelf. They were drawn small and tucked into the corner of every box.',
+  ] },
   { n: 364, date: '2026-08-11', title: "Today's herd", items: [
     'The Paddock keeps its distance from the graveyard: pets standing behind the tombstone no longer walk through it.',
     "If you own more pets than the field can hold, they take turns. Eight are out there on any given day and the herd changes over with the rest of your day, so a big collection is something to come back to rather than a crowd.",

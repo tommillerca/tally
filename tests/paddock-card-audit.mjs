@@ -13,6 +13,7 @@
  * Run: node tests/paddock-card-audit.mjs <baseUrl>
  */
 import { boot, seed, sleep, settle, setWidth } from './godmode.js';
+import { PET_CROP } from '../data/boneheadz.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -313,6 +314,57 @@ const retap = await page.evaluate(async () => {
 });
 ok('re-tapping the same species dismisses the slider', retap.wasOpen === true && retap.stillOpen === false && retap.cards === 0,
   JSON.stringify(retap));
+
+/* INK FIT (figure contract rule 3). Tom: the pets read small and off-centre in their
+   boxes. This measures what he was looking at: the ink bounding box mapped through the
+   RENDERED geometry, never the img box. A box-fitted pet reads ~0.25 of its box with
+   its ink centre ~13% down and right of the box centre, which is what this went red on
+   before the fix; an ink-fitted one reads FILL (0.82) and dead centre. Both halves
+   matter: the size check alone passes on a big off-centre pet, and the centre check
+   alone passes on a perfectly centred tiny one. Decoded is asserted in the same sample,
+   because geometry reads fine over a blank frame (tally/CLAUDE.md, FX rules). */
+/* a card has to be OPEN or the thumb Tom taps through is not in the sample: the first
+   run of this measured 7 boxes (six tiles and the teaser) and said nothing about it */
+await ensureOpen('C5');
+await settle(page, 200);
+const ink = await page.evaluate(crop => {
+  const boxes = [];
+  const imgs = [
+    ...document.querySelectorAll('#pdkPanel .pdk-tile img'),
+    ...document.querySelectorAll('#pdkPanel .pdk-teaser img'),
+    ...document.querySelectorAll('#pdkCards .pdk-thumb img'),
+  ];
+  for (const img of imgs) {
+    const host = img.closest('[data-sp]') || img.closest('.pdk-card, .pdk-teaser');
+    const sp = host?.dataset?.sp || img.closest('.pdk-slider')?.dataset?.sp;
+    const c = crop[sp];
+    if (!c) continue;                       // no measured bbox = nothing to assert against
+    const box = img.parentElement.getBoundingClientRect();
+    const r = img.getBoundingClientRect();
+    if (!box.width || !r.width) continue;
+    /* the img shows the WHOLE 640-square, so the ink is a fixed fraction of its rect */
+    const ix = r.left + c.x0 * r.width, iy = r.top + c.y0 * r.height;
+    const iw = (c.x1 - c.x0) * r.width, ih = (c.y1 - c.y0) * r.height;
+    boxes.push({
+      sp, where: img.closest('.pdk-tile') ? 'tile' : img.closest('.pdk-teaser') ? 'teaser' : 'card',
+      fill: +(Math.max(iw, ih) / box.width).toFixed(3),
+      dx: +((ix + iw / 2 - (box.left + box.width / 2)) / box.width).toFixed(3),
+      dy: +((iy + ih / 2 - (box.top + box.height / 2)) / box.height).toFixed(3),
+      decoded: img.naturalWidth > 0,
+    });
+  }
+  return boxes;
+}, PET_CROP);
+const small = ink.filter(b => b.fill < 0.7);
+const offset = ink.filter(b => Math.abs(b.dx) > 0.02 || Math.abs(b.dy) > 0.02);
+const blank = ink.filter(b => !b.decoded);
+ok('every pet box was actually measured (empty sample = failure)', ink.length >= 8 && ink.some(b => b.where === 'card'),
+  `${ink.length} pet boxes: ${[...new Set(ink.map(b => b.where))].join(', ')}`);
+ok('THE INK fills its box, not the transparent canvas', ink.length > 0 && small.length === 0,
+  small.length ? JSON.stringify(small.slice(0, 3)) : `fill ${Math.min(...ink.map(b => b.fill))}-${Math.max(...ink.map(b => b.fill))} of the box`);
+ok('and the INK is centred in it, not the canvas', ink.length > 0 && offset.length === 0,
+  offset.length ? JSON.stringify(offset.slice(0, 3)) : 'all within 2% of centre');
+ok('the art measured is decoded art', ink.length > 0 && blank.length === 0, JSON.stringify(blank.slice(0, 2)));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 await browser.close();

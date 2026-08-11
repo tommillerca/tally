@@ -15,7 +15,7 @@
  * which the Boneyard reused as a SCREEN class, tied on specificity, and left the map
  * blank (tally/CLAUDE.md, "Scope reveal CSS to the surface it means").
  */
-import { BH_ITEMS, bhAsset } from '../data/boneheadz.js';
+import { BH_ITEMS, bhAsset, PET_CROP } from '../data/boneheadz.js';
 import { bhIcon } from './icons-pack.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
@@ -47,6 +47,7 @@ export function cardModel(row) {
   const sp = SPECIES_BY_ID[row.sp] || { name: row.sp, rarity: 'common' };
   return {
     iid: row.iid,
+    sp: row.sp,                     // the SPECIES id, kept so the thumb can ink-fit its art
     name: row.name || sp.name,
     species: sp.name,
     rarity: sp.rarity,
@@ -111,6 +112,35 @@ export function eggCardModel(eggs) {
 
 /* ---- markup ------------------------------------------------------------- */
 
+/* INK FIT. Tom: "the pets in the bottom pane seem small in their boxes they should be
+   centred and bigger". They were: every pet PNG is a 640² canvas whose drawing covers
+   only ~0.30 x 0.29 of it, centred at (0.70, 0.75), so `width:84%; object-fit:contain`
+   drew ~25% of the box worth of pet and parked it low and right of centre. Box-fitting
+   a figure is exactly what the figure contract's rule 3 forbids.
+   FILL is the ink's longest edge as a fraction of the box, matching croppedPetImg's
+   0.82 so a Paddock pet is the same visual size as the same pet anywhere else. This is
+   croppedPetImg's maths in percentages instead of pixels, so one style string is right
+   for the 54px card thumb and for a fluid grid tile, and it anchors the art at the
+   box's top-left for the same reason croppedPetImg does: these boxes are
+   `overflow:hidden`, and Chrome clamps a centred OVERFLOWING grid item back to the
+   start edge in the block axis, so `place-items:center` centred the art across and
+   dropped it 0.85 of a box low. Never trust the parent's alignment for a figure.
+   An unknown species returns '' and keeps the plain contain fit rather than guessing. */
+const INK_FILL = 0.82;
+export function inkFitStyle(sp, fill = INK_FILL) {
+  const c = PET_CROP[sp];
+  if (!c) return '';
+  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;
+  const size = fill / Math.max(cw, ch);                     // image size, fraction of the box
+  const tx = (0.5 / size - (c.x0 + cw / 2)) * 100;          // ink centre -> box centre, % of the IMAGE
+  const ty = (0.5 / size - (c.y0 + ch / 2)) * 100;
+  /* WIDTH ONLY, height:auto. A percentage HEIGHT resolves against a grid row that is
+     itself sized from this image's auto height, and the browser settles that in two
+     passes: `height:279%` measured 623px on a 223px-wide image in an 84px tile. The
+     art is square, so auto height is the width and needs no second guess. */
+  return `position:absolute;left:0;top:0;width:${(size * 100).toFixed(1)}%;height:auto;max-width:none;transform:translate(${tx.toFixed(1)}%,${ty.toFixed(1)}%)`;
+}
+
 /* REAL HEARTS. Tom: "tapping the give hearts thing gives red dots not hearts". They
    were CSS circles (and the burst glyphs were rotated rounded squares), which at 17px
    read as dots because that is what they were. This is game-icons.net's heart (Skoll,
@@ -126,7 +156,7 @@ export function cardHtml(m) {
   return `<article class="pdk-card" data-iid="${esc(m.iid)}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
-      <span class="pdk-thumb"><img src="${esc(m.art)}" alt="" loading="eager"></span>
+      <span class="pdk-thumb"><img src="${esc(m.art)}" style="${inkFitStyle(m.sp)}" alt="" loading="eager"></span>
       <div class="pdk-id">
         <b class="pdk-name">${esc(m.name)}</b>
         <span class="pdk-chips">
@@ -152,7 +182,7 @@ export function lockedCardHtml(sp) {
   const s = SPECIES_BY_ID[sp] || { name: sp };
   return `<article class="pdk-card pdk-locked" data-sp="${esc(sp)}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
-    <div class="pdk-head"><span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(s.id ? s : { slot: 'C', id: sp }))}" alt=""></span>
+    <div class="pdk-head"><span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(s.id ? s : { slot: 'C', id: sp }))}" style="${inkFitStyle(sp)}" alt=""></span>
       <div class="pdk-id"><b class="pdk-name">${esc(s.name)}</b></div></div>
     <p class="pdk-flavor">Day-one Boneheadz only. Check your inbox, bony buddy.</p>
   </article>`;
@@ -184,7 +214,7 @@ export function panelHtml(roster, eggs) {
   const egg = eggCardModel(eggs);
   return `<div class="pdk-inner">
     <button class="pdk-teaser" data-sp="CX">
-      <span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(SPECIES_BY_ID.CX || { slot: 'C', id: 'CX' }))}" alt=""></span>
+      <span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(SPECIES_BY_ID.CX || { slot: 'C', id: 'CX' }))}" style="${inkFitStyle('CX')}" alt=""></span>
       <span class="pdk-teaser-tx"><small>SOMETHING'S IN THE BUSHES</small>
         <b>Riding since day one? Check your inbox, bony buddy.</b></span>
     </button>
@@ -194,7 +224,7 @@ export function panelHtml(roster, eggs) {
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
       ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
-        <img src="${esc(t.art)}" alt="${esc(t.name)}">
+        <img src="${esc(t.art)}" style="${inkFitStyle(t.sp)}" alt="${esc(t.name)}">
         ${t.showCount ? `<span class="pdk-x">×${t.count}</span>` : ''}
         ${t.anyShiny ? '<span class="pdk-star" aria-hidden="true"></span>' : ''}
         ${t.owned ? '' : '<span class="pdk-q">?</span>'}

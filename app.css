@@ -7132,7 +7132,10 @@ body::before {
 }
 @keyframes pdkPop { 0% { transform: scale(.84); opacity: 0 } 60% { transform: scale(1.04); opacity: 1 } 100% { transform: scale(1) } }
 .pdk-head { display: flex; gap: 10px; align-items: center; position: relative; }
-.pdk-thumb { width: 54px; height: 54px; flex: 0 0 54px; background: #14131a; border: 2px solid #17151d; border-radius: 12px; display: grid; place-items: center; overflow: hidden; }
+/* position: relative so an ink-fitted pet (inkFitStyle, absolute at the box's top-left)
+   anchors HERE and not on some ancestor. The thumb is bigger than the art's ink, so the
+   art is deliberately larger than this box and clipped by it. */
+.pdk-thumb { position: relative; width: 54px; height: 54px; flex: 0 0 54px; background: #14131a; border: 2px solid #17151d; border-radius: 12px; display: grid; place-items: center; overflow: hidden; }
 .pdk-thumb img { width: 100%; height: 100%; object-fit: contain; }
 .pdk-sil img { filter: brightness(0); opacity: .72; }
 .pdk-name { font-family: Bangers, system-ui; font-size: 19px; color: #f2e9d7; letter-spacing: .5px; }
@@ -7184,7 +7187,10 @@ body::before {
 .pdk-tile.r-legendary { box-shadow: 0 3px 0 #17151d, 0 0 14px rgba(255,201,97,.28); }
 .pdk-tile.r-epic { box-shadow: 0 3px 0 #17151d, 0 0 12px rgba(155,146,232,.26); }
 .pdk-lockt { background: #17161d; border-style: dashed; }
-.pdk-lockt img { filter: brightness(0); opacity: .55; }
+/* .4, not .55: ink-fitting the art made these silhouettes fill their tile, and at .55
+   the blob and the centred "?" fought each other. Dimming the hint keeps the glyph in
+   front without shrinking the art back down or moving the glyph off centre. */
+.pdk-lockt img { filter: brightness(0); opacity: .4; }
 .pdk-q { position: absolute; font-family: Bangers, system-ui; font-size: 22px; color: #8f8578; }
 .pdk-x { position: absolute; top: 3px; right: 3px; background: #f2e9d7; color: #17151d; border: 1.5px solid #17151d; border-radius: 999px; font-size: 9px; font-weight: 800; padding: 0 4px; }
 .pdk-star { position: absolute; top: 3px; left: 3px; width: 11px; height: 11px; background: #ffc961; clip-path: polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%); }

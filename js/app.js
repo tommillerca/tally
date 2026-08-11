@@ -68,7 +68,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -111,18 +111,10 @@ const S = {
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
 };
 
-// The pet art PNGs draw the creature small in the lower-right of a 640² canvas,
-// so a plain <img> renders tiny. These are the measured content bounding boxes
-// (fractions of the square) so we can crop each pet to its art and scale it to
-// fill the slot — matching the tightly-framed animated pets (cloud/lizard).
-const PET_CROP = {
-  C1: { x0: 0.5594, y0: 0.6047, x1: 0.8531, y1: 0.8938 },
-  C2: { x0: 0.5453, y0: 0.5922, x1: 0.9187, y1: 0.8500 },
-  C3: { x0: 0.5422, y0: 0.6125, x1: 0.8969, y1: 0.8812 },
-  C4: { x0: 0.5344, y0: 0.6250, x1: 0.8891, y1: 0.8938 },
-  C5: { x0: 0.5375, y0: 0.6391, x1: 0.8422, y1: 0.8797 },
-  CX: { x0: 0.5375, y0: 0.6281, x1: 0.8859, y1: 0.8906 },   // Day One Lizard = C4 recolored at the same bbox
-};
+// PET_CROP (the measured ink bounding boxes) now lives in data/boneheadz.js next to
+// bhAsset, because the Paddock's cards need the same numbers and cannot import this
+// file: tests/unit.test.js imports js/paddock-cards.js in node, and reaching back
+// into app.js from there would evaluate the whole app headless.
 // Height-per-unit-width for a STATIC cropped pet, matching croppedPetImg's maths
 // (FILL 0.82 against the longest content edge). Pairs with petMassScale() for the
 // animated stack so a pet is the same visual size whichever path draws it.

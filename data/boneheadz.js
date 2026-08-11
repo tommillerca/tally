@@ -1986,3 +1986,19 @@ export const BH_ITEMS = BH_ITEMS_ALL.filter(i => !i.unreleased);
 export const BH_ITEMS_WITH_UNRELEASED = BH_ITEMS_ALL;
 export const BH_BY_ID = Object.fromEntries(BH_ITEMS_ALL.map(i => [i.id, i]));
 export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }
+
+/* The pet art PNGs draw the creature small in the lower-right of a 640² canvas, so a
+   plain full-square image renders it tiny and off-centre: the ink is ~0.30 x 0.29 of
+   the square, centred at (0.70, 0.75). These are the measured alpha bounding boxes
+   (fractions of the square), so any surface can crop a pet to its art and scale that
+   to fill its slot, which is what the figure contract means by aligning on INK.
+   Re-measure with PIL's getbbox on assets/bh/C/*.png if the art is ever redrawn;
+   every value below is within 0.002 of the current files. */
+export const PET_CROP = {
+  C1: { x0: 0.5594, y0: 0.6047, x1: 0.8531, y1: 0.8938 },
+  C2: { x0: 0.5453, y0: 0.5922, x1: 0.9187, y1: 0.8500 },
+  C3: { x0: 0.5422, y0: 0.6125, x1: 0.8969, y1: 0.8812 },
+  C4: { x0: 0.5344, y0: 0.6250, x1: 0.8891, y1: 0.8938 },
+  C5: { x0: 0.5375, y0: 0.6391, x1: 0.8422, y1: 0.8797 },
+  CX: { x0: 0.5375, y0: 0.6281, x1: 0.8859, y1: 0.8906 },   // Day One Lizard = C4 recolored at the same bbox
+};
