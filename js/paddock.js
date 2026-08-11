@@ -199,7 +199,21 @@ export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOSt
   const out = {};
   by('fly').forEach((r, i) => {
     const lane = scene.FLY_LANES[i % scene.FLY_LANES.length];
-    out[r.iid] = { kind: 'fly', y: lane.y + Math.floor(i / scene.FLY_LANES.length) * 26, w: lane.w, dur: lane.dur, phase: lane.phase || 0 };
+    /* Tom, 2026-08-11: "most of my ducks are flying in a clump they should
+       stagger more." They clumped by construction: every duck on a lane got
+       the lane's dur and phase VERBATIM, so they held the same x forever, a
+       vertical stack sliding across the sky. Each duck now gets its own
+       phase offset (spreads them along the crossing) and a small iid-seeded
+       speed variance (so they drift apart over time instead of holding a
+       fixed formation). Deterministic: same herd, same sky. */
+    const drift = rotHash('fly:' + r.iid);
+    out[r.iid] = {
+      kind: 'fly',
+      y: lane.y + Math.floor(i / scene.FLY_LANES.length) * 26,
+      w: lane.w,
+      dur: lane.dur + (drift % 5),                                   // 0-4s slower
+      phase: (lane.phase || 0) - i * 5.5 - (drift % 100) / 25,       // spread along the lane
+    };
   });
   by('hover').forEach((r, i) => {
     const s = scene.HOVER_SPOTS[i % scene.HOVER_SPOTS.length];
