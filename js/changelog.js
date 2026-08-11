@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 362, date: '2026-08-11', title: 'The Paddock', items: [
+    'Every pet you own, out in one haunted field together, wandering. Not a list: a place. Reach it from the Stable.',
+    'Tap any of them for its own card: level, bond, lineage, where it came from.',
+    'Your spares are out there too, so the ones sitting in the Stable finally have somewhere to be.',
+  ] },
   { n: 361, date: '2026-08-10', title: 'The new-cosmetics popup actually shows up', items: [
     "The <b>63 new cosmetics</b> announcement was supposed to appear on your first ten app opens and never did: it crashed before it could draw, silently, every time. It works now, and your ten openings start from here.",
   ] },
