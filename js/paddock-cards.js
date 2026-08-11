@@ -130,8 +130,8 @@ export function cardHtml(m) {
     <div class="pdk-bond" data-bond="${m.bond}">${heartsHtml(m.bond)}</div>
     ${m.maxed ? '<span class="pdk-bff">BEST FRIEND</span>' : ''}
     <div class="pdk-acts">
-      <button class="pdk-btn pdk-pet" data-act="pet" data-iid="${esc(m.iid)}">Pet</button>
-      <button class="pdk-btn pdk-feed" data-act="feed" data-iid="${esc(m.iid)}">Feed</button>
+      <button class="pdk-btn pdk-btn-pet" data-act="pet" data-iid="${esc(m.iid)}">Pet</button>
+      <button class="pdk-btn pdk-btn-feed" data-act="feed" data-iid="${esc(m.iid)}">Feed</button>
     </div>
   </article>`;
 }
@@ -170,7 +170,7 @@ export function sliderHtml(roster, sp) {
 export function panelHtml(roster, eggs) {
   const tiles = gridModel(roster);
   const egg = eggCardModel(eggs);
-  return `<section class="pdk-panel">
+  return `<div class="pdk-inner">
     <button class="pdk-teaser" data-sp="CX">
       <span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(SPECIES_BY_ID.CX || { slot: 'C', id: 'CX' }))}" alt=""></span>
       <span class="pdk-teaser-tx"><small>SOMETHING'S IN THE BUSHES</small>
@@ -192,5 +192,143 @@ export function panelHtml(roster, eggs) {
       <button class="pdk-seg" data-seg="pedia" disabled>BONEPEDIA</button>
       <button class="pdk-seg on" data-seg="count">${esc(footerLabel(roster))}</button>
     </div>
-  </section>`;
+  </div>`;
+}
+
+/* ---- live half: state, mount, handlers ---------------------------------- *
+ * The slider owns its OWN state (Reggie's call, so neither half waits on the
+ * other): the scene calls open on a pet tap and close on a scene tap, and asks
+ * isPaddockCardOpen() for the coach mark. Nothing else crosses the seam.
+ */
+import { bondUp } from './loot.js';
+import { haptic } from './haptics.js';
+
+let sel = null;        // species id whose slider is open, or null
+let host = null;       // the element the cards are mounted into
+let rosterRef = [];    // the roster the open slider was built from
+
+export function isPaddockCardOpen() { return sel !== null; }
+export function paddockSel() { return sel; }
+
+export function closePaddockCards() {
+  sel = null;
+  if (host) host.innerHTML = '';
+  host?.classList.remove('pdk-open');
+}
+
+/* Re-tap dismiss lives HERE rather than in the scene, so the rule is one line and
+   cannot disagree with itself: opening the species already open closes it. */
+export async function openPaddockCards(sp) {
+  /* THE SCENE CALLS THIS WITH ONE ARGUMENT (js/app.js: the #pdkScene tap handler and
+     the nest), so the module fetches its own data and owns its own host rather than
+     making the scene carry state for it. Re-tap dismiss lives here too, so the rule
+     is one line and cannot disagree with itself. */
+  if (sel === sp) { closePaddockCards(); return false; }
+  const scene = document.getElementById('pdkScene');
+  if (!scene) return false;
+  host = document.getElementById('pdkCards');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'pdkCards';
+    host.className = 'pdk-host';
+    scene.appendChild(host);
+  }
+  const { paddockRoster, paddockEggs } = await import('./paddock.js');
+  const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
+  sel = sp;
+  rosterRef = roster;
+  host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp);
+  host.classList.add('pdk-open');
+  wire();
+  return true;
+}
+
+/* The collection panel is not tap-driven: it is the screen's lower half and must be
+   there the moment the Paddock opens. The scene leaves `#pdkPanel` empty for me. */
+export async function mountPaddockPanel() {
+  const el = document.getElementById('pdkPanel');
+  if (!el) return false;
+  const { paddockRoster, paddockEggs } = await import('./paddock.js');
+  const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
+  el.innerHTML = panelHtml(roster, eggs);
+  el.querySelectorAll('[data-sp]').forEach(b => b.addEventListener('click', () => openPaddockCards(b.dataset.sp)));
+  el.querySelector('[data-egg]')?.addEventListener('click', () => openPaddockCards('egg'));
+  return true;
+}
+
+function wire() {
+  const rail = host.querySelector('.pdk-rail');
+  /* DOTS FOLLOW THE REAL SCROLL. Not a click counter and not an index we increment
+     ourselves: the carousel is scroll-snap, so a swipe moves it without telling us,
+     and any state we kept in parallel would drift from what the player sees. */
+  if (rail) rail.addEventListener('scroll', () => {
+    const cards = [...rail.querySelectorAll('.pdk-card')];
+    if (!cards.length) return;
+    const mid = rail.scrollLeft + rail.clientWidth / 2;
+    let best = 0, bestD = Infinity;
+    cards.forEach((c, i) => { const d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < bestD) { bestD = d; best = i; } });
+    host.querySelectorAll('.pdk-dot').forEach((d, i) => d.classList.toggle('on', i === best));
+  }, { passive: true });
+
+  host.querySelectorAll('.pdk-btn').forEach(b => b.addEventListener('click', async e => {
+    e.stopPropagation();
+    const iid = b.dataset.iid, kind = b.dataset.act;
+    const card = host.querySelector(`.pdk-card[data-iid="${CSS.escape(iid)}"]`);
+    if (!card || b.disabled) return;
+    b.disabled = true;
+    /* ASK THE AUTHORITY, THEN PAINT. bondUp is the persisted write and it refuses a
+       ghost iid by name, so rendering from its RETURN means a refusal can never
+       paint a heart that was not banked. Incrementing a local copy would. */
+    const res = await bondUp(iid).catch(() => ({ ok: false, reason: 'threw' }));
+    b.disabled = false;
+    if (!res || !res.ok) return;
+    paintBond(card, res.bond, res.maxed);
+    /* AND THE ANIMATION MUST NOT LIE. changed:false means the cap refused the
+       press, so there is nothing to celebrate: no burst. That is the invisible
+       punch lesson inverted, an FX that plays over a write that never happened. */
+    if (res.changed) { burst(card, kind); try { haptic.success(); } catch { /* haptics optional */ } }
+  }));
+}
+
+export function paintBond(card, bond, maxed) {
+  const hearts = [...card.querySelectorAll('.pdk-heart')];
+  hearts.forEach((h, i) => h.classList.toggle('on', i < bond));
+  card.querySelector('.pdk-bond')?.setAttribute('data-bond', String(bond));
+  if (maxed && !card.querySelector('.pdk-bff')) {
+    const b = document.createElement('span');
+    b.className = 'pdk-bff pdk-pop';
+    b.textContent = 'BEST FRIEND';
+    card.querySelector('.pdk-bond')?.after(b);
+  }
+}
+
+/* Three glyphs, staggered, drifting up and fading. Hearts for Pet, bones for Feed. */
+export function burst(card, kind) {
+  const head = card.querySelector('.pdk-head') || card;
+  const wrap = document.createElement('span');
+  wrap.className = 'pdk-burst';
+  for (let i = 0; i < 3; i++) {
+    const g = document.createElement('i');
+    g.className = `pdk-glyph pdk-${kind === 'feed' ? 'bone' : 'heart'}g`;
+    g.style.animationDelay = `${i * 100}ms`;
+    g.style.setProperty('--dx', `${(i - 1) * 14}px`);
+    wrap.appendChild(g);
+  }
+  head.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 950);
+}
+
+/* THE SEAM. Webdriver-only, and it stays after the scene shell lands: it mounts the
+   REAL builders with a REAL roster and wires the REAL handlers, so the audit drives
+   what ships instead of hand-calling functions. Deleting a seam that earns its keep
+   is how audits drift back to proving nothing. */
+export function installPaddockSeam() {
+  if (typeof window === 'undefined' || navigator.webdriver !== true) return;
+  window.__pdkMountCards = async (sp) => {
+    const { paddockRoster } = await import('./paddock.js');
+    const roster = await paddockRoster();
+    const opened = await openPaddockCards(sp);
+    return { opened, copies: roster.filter(r => r.sp === sp).length, open: isPaddockCardOpen() };
+  };
+  window.__pdkClose = () => { closePaddockCards(); return isPaddockCardOpen(); };
 }
