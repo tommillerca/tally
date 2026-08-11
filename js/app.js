@@ -12890,7 +12890,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const petBody = fight.pAux;                              // your pet as a real body
   const petArtId = fighter.petMeta ? fighter.petMeta.id : null;
   const venue = foeCfg.venue || PIT_VENUES[foeCfg.mode === 'champ' ? 'champ' : foeCfg.mode === 'rung' ? foeCfg.rung : 'spar'] || 'The Pit';
-  if (!fast && !reducedMotion) {
+  /* __giForce: gateintro.js already honors it so its harness can run under
+     webdriver; honoring it HERE too lets an audit drive the real call site,
+     which is the hop that shipped the wrong figure (a harness that calls
+     showGateIntro directly can never catch what openFight passes it). */
+  if ((!fast || window.__giForce) && !reducedMotion) {
     if (foeCfg.mode === 'boss') {
       // world-map Boneyard dens get the full gate cinematic: the boss breaches
       // the tomb portal. Fire-and-forget overlay (z-index 200 covers the sheet
@@ -12898,7 +12902,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
       showGateIntro({
         foeName: foeCfg.name,
         venue,
-        spriteHtml: avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) }),
+        /* THE THING THAT EMERGES MUST BE THE THING YOU FIGHT. Tom, 2026-08-11:
+           "the live wire still does not appear from the pre-fight animation. A
+           different bonehead emerges from the archway and then you fight the
+           live wire." The arena renders a mage boss from his hand-drawn plate
+           (mage-fight.png, foeStage below) while this intro assembled a
+           bonehead from foe.outfit: two different figure sources for one
+           being, the figure-contract class. Mage bosses now walk out as
+           themselves; gateintro's own header says spriteHtml must be "the
+           same markup the arena uses". */
+        spriteHtml: foeCfg.mage
+          ? '<img src="assets/bh/mage/mage-fight.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">'
+          : avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) }),
         sounds: S.sounds,
       });
     } else {

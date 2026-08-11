@@ -218,6 +218,36 @@ const amuletRun = await page.evaluate(async () => {
 ok('a real crit shatters the amulet and draws its sparks', !amuletRun.why && amuletRun.shattered && amuletRun.fxSeen > 0,
   amuletRun.why || `shattered=${amuletRun.shattered} decoded art at peak=${amuletRun.fxSeen}`);
 
+/* ---- the archway walk-out IS the thing you fight -------------------------- */
+/* Tom, 2026-08-11: "A different bonehead emerges from the archway and then you
+   fight the live wire." The arena draws a mage boss from mage-fight.png; the
+   gate intro assembled a bonehead from foe.outfit. Two figure sources, one
+   being. Driven through the REAL call site (__giForce lets the intro run under
+   webdriver; a harness calling showGateIntro directly cannot see what
+   openFight passes it), pixels asserted while the intro is on screen per the
+   FX contract. */
+const gate = await page.evaluate(async () => {
+  window.__giForce = true;
+  document.querySelectorAll('.sheet-close').forEach(b => b.click());
+  await new Promise(r => setTimeout(r, 600));
+  window.__denFight(1.4, 0, { mage: true, name: 'The Live Wire' });   // fire-and-forget so we can sample DURING the intro
+  let seen = null;
+  for (let i = 0; i < 40 && !(seen && seen.magePlate && seen.decoded); i++) {
+    const gi = document.querySelector('.gi .gi-boss.gi-front');
+    if (gi) {
+      const img = gi.querySelector('img[src*="mage-fight"]');
+      seen = { magePlate: !!img, decoded: img ? img.naturalWidth > 0 : false, imgs: gi.querySelectorAll('img').length };
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  document.querySelector('.gi')?.click();               // tap-to-skip, the real control
+  window.__giForce = false;
+  await new Promise(r => setTimeout(r, 800));
+  return seen || { why: 'the gate intro never appeared (empty sample = failure)' };
+});
+ok('the mage walks out of the archway as himself, decoded on screen',
+  !gate.why && gate.magePlate && gate.decoded, gate.why || JSON.stringify(gate));
+
 /* ---- the seams die with their fight -------------------------------------- */
 /* A closed fight's __bhFight/__fightPoke stayed on window and answered from a
    dead closure (the stale-__bhFight lesson, 2026-08-10): the next check to
