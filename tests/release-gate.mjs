@@ -58,7 +58,16 @@ async function serveRepo() {
   return { server, url: `http://127.0.0.1:${server.address().port}/` };
 }
 
-const argUrl = process.argv[2];
+/* ARGV[2] IS NOT NECESSARILY A URL. `npm run gate:all` passes `--all`, so this
+   read the literal string "--all" as the base, skipped spawning the server
+   (because argUrl was truthy), and handed "--all" to all 42 suites: every
+   browser suite died in ~1s at page.goto with a CDP error, and the run looked
+   like 42 catastrophic failures on a tree that is 15/15 green.
+   So gate:all has NEVER once worked, and it failed in the direction that looks
+   like real breakage, which is the expensive direction: I nearly sent Reggie a
+   triage list of 42 phantom failures. Flags are flags; the URL is the first
+   argument that is not one. */
+const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
 const own = argUrl ? null : await serveRepo();
 const base = argUrl || own.url;
 if (own) console.log(`serving this repo at ${base}\n`);
