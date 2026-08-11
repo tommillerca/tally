@@ -2482,6 +2482,68 @@ test('plugin parity: Settings still carries the diagnostics row', () => {
     'diagnostics must FETCH the served sw.js: reporting the compiled VERSION constant would agree with itself and prove nothing about what is being served');
 });
 
+/* ================= Paddock data layer: bonds + derived names ==============
+ * Lane R interface for The Paddock (design handoff 2026-08-10). Pins the
+ * additive-only bond envelope and the determinism the scene depends on. */
+test('bondAfter only ever steps +1 into [0, BOND_MAX]', async () => {
+  const { bondAfter, BOND_MAX } = await import('../js/loot.js');
+  assert.equal(bondAfter(0), 1);
+  assert.equal(bondAfter(4), 5);
+  assert.equal(bondAfter(BOND_MAX), BOND_MAX, 'capped at max, never past it');
+  assert.equal(bondAfter(-3), 1, 'garbage below zero clamps to a first pet');
+  assert.equal(bondAfter(99), BOND_MAX, 'garbage above max clamps to max');
+});
+test('bond writes are guarded: ghost iids refused, removals clean up', () => {
+  const src = readFileSync(join(here, '../js/loot.js'), 'utf8');
+  const up = src.slice(src.indexOf('export async function bondUp'), src.indexOf('async function clearBond'));
+  assert.ok(up.indexOf('petInstances()') < up.indexOf("kvSet('petBonds'"),
+    'bondUp must confirm the iid is a live instance BEFORE writing');
+  // both instance-removal paths take the bond row with them
+  const salv = src.slice(src.indexOf('export async function salvageInstance'));
+  assert.ok(/clearBond\(iid\)/.test(salv), 'salvage leaves an orphaned bond row');
+  const breedRegion = src.slice(src.indexOf('delete bank[feedIid]'));
+  assert.ok(/clearBond\(feedIid\)/.test(breedRegion.slice(0, 200)), 'breed-consume leaves an orphaned bond row');
+});
+test('paddock names are deterministic, collision-free, order-independent', async () => {
+  const { assignNames, PADDOCK_NAMES, flavorFor } = await import('../js/paddock.js');
+  const iids = ['p1-a-C5', 'p2-b-C5', 'p3-c-C4', 'p4-d-C4', 'p5-e-C3'];
+  const a = assignNames(iids);
+  const b = assignNames([...iids].reverse());
+  assert.deepEqual(a, b, 'render order must not change anyone\'s name');
+  assert.equal(new Set(Object.values(a)).size, iids.length, 'two copies share a nickname');
+  // pool overflow still yields unique, deterministic names
+  const many = Array.from({ length: PADDOCK_NAMES.length + 4 }, (_, i) => `pz-${i}-C5`);
+  const m = assignNames(many);
+  assert.equal(new Set(Object.values(m)).size, many.length, 'overflow suffixes collided');
+  assert.equal(flavorFor('p1-a-C5'), flavorFor('p1-a-C5'), 'flavor must be stable per iid');
+});
+
+
+test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule)', async () => {
+  const { assignBands, placePaddock, PDK_SCENE } = await import('../js/paddock.js');
+  for (const n of [1, 2, 3, 5, 7, 9, 14]) {
+    const bands = assignBands(Array.from({ length: n }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })));
+    assert.equal(bands.length, n, `lost a walker at n=${n}`);
+    let checked = 0;
+    for (const a of bands) for (const b of bands) {
+      if (a.iid >= b.iid) continue;
+      if (Math.abs(a.y - b.y) < 40) {
+        checked++;
+        const ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        assert.ok(ov <= 20, `n=${n}: ${a.iid}@${a.y} and ${b.iid}@${b.y} share ${ov}px of x-range (rule: <=20)`);
+      }
+    }
+    if (n >= 2) assert.ok(checked > 0, `n=${n}: no same-cluster pairs were checked, the rule never ran`);
+    for (const b of bands) assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
+  }
+  // every motion kind gets placed, none invents a position off-scene
+  const cast = [...Array(4)].flatMap((_, i) => [
+    { iid: `a${i}`, motion: 'walk' }, { iid: `b${i}`, motion: 'fly' },
+    { iid: `c${i}`, motion: 'hover' }, { iid: `d${i}`, motion: 'flop' }]);
+  const placed = placePaddock(cast);
+  assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

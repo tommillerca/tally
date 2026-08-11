@@ -7033,3 +7033,85 @@ body::before {
 .pets-help h3 { font-family: var(--display); font-size: 17px; letter-spacing: .02em; margin: 0 0 4px; color: var(--accent); }
 .pets-help p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.45; }
 .pets-help p.note { font-size: 12px; }
+
+/* ===== THE PADDOCK (pet playland; design_handoff_the_paddock 2026-08-10) =====
+   Namespaced .pdk-*: .pd-* is the Wardrobe PAPERDOLL (line ~2942), collision
+   caught by Walt before a rule shipped. Scene is Lane R; cards/panel (Lane W)
+   mount inside .pdk-panel. All ambient motion is CSS keyframes, no rAF. */
+.pdk-scene { position: relative; height: 520px; overflow: hidden; border-radius: 0;
+  background: linear-gradient(#171f12 0 196px, #3a482e 212px, #36432c 360px, #303c27 520px); }
+.pdk-scene svg.pdk-ground { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* the herd */
+.pdk-pet { position: absolute; z-index: 5; }
+.pdk-pet .pdk-flip { display: block; width: 100%; height: 100%; }
+.pdk-pet .pdk-shadow { position: absolute; left: 14%; right: 14%; bottom: 2px; height: 9px;
+  border-radius: 50%; background: rgba(10, 12, 8, .5); filter: blur(2px); }
+/* walkers: wander on the wrapper, synced flip on the sprite (48%/96%), trot bob */
+.pdk-walk { animation: pdkWander var(--pdk-dur, 11s) ease-in-out infinite; }
+@keyframes pdkWander { 0%, 100% { transform: translateX(0); } 48% { transform: translateX(var(--pdk-range, 60px)); } }
+.pdk-walk .pdk-flip { animation: pdkFace var(--pdk-dur, 11s) step-end infinite; }
+@keyframes pdkFace { 0%, 47.9% { transform: scaleX(1); } 48%, 95.9% { transform: scaleX(-1); } 96%, 100% { transform: scaleX(1); } }
+.pdk-walk .pdk-bob { display: block; animation: pdkTrot .48s ease-in-out infinite alternate; }
+@keyframes pdkTrot { from { transform: translateY(0) rotate(-1deg); } to { transform: translateY(-4px) rotate(1deg); } }
+/* flyers: full crossing, wing bob on the sprite */
+.pdk-fly { animation: pdkCross var(--pdk-dur, 15s) linear infinite; animation-delay: var(--pdk-phase, 0s); z-index: 4; }
+@keyframes pdkCross { from { transform: translateX(-170px); } to { transform: translateX(440px); } }
+.pdk-fly .pdk-bob { display: block; animation: pdkWing 1.9s ease-in-out infinite alternate; }
+@keyframes pdkWing { from { transform: translateY(-9px) rotate(-2deg); } to { transform: translateY(9px) rotate(2deg); } }
+.pdk-fly.pdk-gold { filter: drop-shadow(0 0 8px rgba(255, 201, 97, .95)); }
+/* hoverers: drift + bob, epic glow */
+.pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; z-index: 4; }
+@keyframes pdkDrift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
+.pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; }
+@keyframes pdkHoverBob { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
+.pdk-hover.pdk-epic { filter: drop-shadow(0 0 7px rgba(155, 146, 232, .9)); }
+/* floppers: one flop per cycle, origin low so it pivots off the ground */
+.pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; }
+@keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-15px) rotate(-9deg); } }
+/* keeper: idle bob + moonlit rim (charcoal bones vanish on the dark scene without it) */
+.pdk-keeper { position: absolute; z-index: 6; pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(232, 228, 210, .35)) drop-shadow(0 6px 8px rgba(0, 0, 0, .45));
+  animation: pdkKeeper 4s ease-in-out infinite alternate; }
+@keyframes pdkKeeper { from { transform: translateY(0); } to { transform: translateY(-7px); } }
+.pdk-keeper img { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* lurker tease: hidden most of a 13s cycle, rises briefly; silhouette treatment */
+.pdk-lurker { position: absolute; z-index: 3; overflow: hidden; }
+.pdk-lurker img { filter: brightness(0); opacity: .72; display: block; width: 100%;
+  animation: pdkPeek 13s ease-in-out infinite; transform: translateY(60px); }
+@keyframes pdkPeek { 0%, 74%, 92%, 100% { transform: translateY(60px); } 78%, 88% { transform: translateY(4px); } }
+.pdk-lurker .pdk-eyes { position: absolute; top: 26px; left: 50%; width: 26px; margin-left: -13px;
+  display: flex; justify-content: space-between; opacity: 0; animation: pdkPeekEyes 13s ease-in-out infinite; }
+@keyframes pdkPeekEyes { 0%, 74%, 92%, 100% { opacity: 0; } 78%, 88% { opacity: 1; } }
+.pdk-lurker .pdk-eyes i { width: 6px; height: 6px; border-radius: 50%; background: #a5e847;
+  box-shadow: 0 0 7px 2.5px rgba(165, 232, 71, .95); }
+/* scene furniture animations */
+.pdk-sign { position: absolute; top: 0; left: 50%; z-index: 7; transform-origin: 50% 0;
+  animation: pdkSway 5s ease-in-out infinite alternate; }
+@keyframes pdkSway { from { transform: translateX(-50%) rotate(-1.6deg); } to { transform: translateX(-50%) rotate(1.6deg); } }
+.pdk-grass { transform-origin: 50% 100%; animation: pdkGrass 3.4s ease-in-out infinite alternate; }
+@keyframes pdkGrass { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+.pdk-fog { position: absolute; width: 300px; height: 90px; border-radius: 50%; z-index: 6; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(214, 226, 210, .13), transparent);
+  animation: pdkFog var(--pdk-dur, 26s) ease-in-out infinite alternate; }
+@keyframes pdkFog { from { transform: translateX(-70px); } to { transform: translateX(70px); } }
+.pdk-blink { animation: pdkBlink var(--pdk-dur, 7s) step-end infinite; }
+@keyframes pdkBlink { 0%, 87.9%, 94% { opacity: 1; } 88%, 93.9% { opacity: 0; } }
+.pdk-nestglow { animation: pdkNest 3.2s ease-in-out infinite alternate; }
+@keyframes pdkNest { from { opacity: .3; } to { opacity: .75; } }
+.pdk-vignette { position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(10, 12, 8, .32)),
+    linear-gradient(rgba(20, 28, 40, .16), transparent 30%); }
+.pdk-back { position: absolute; top: 12px; left: 14px; z-index: 10; width: 44px; height: 44px;
+  border-radius: 50%; background: rgba(13, 12, 18, .42); backdrop-filter: blur(10px);
+  border: 0; color: var(--text); display: grid; place-items: center; }
+.pdk-coach { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 9;
+  font-family: var(--display); font-size: 15px; color: #17151d; background: #f2e9d7;
+  border-radius: 999px; padding: 7px 18px 6px; box-shadow: 0 3px 0 rgba(0, 0, 0, .38); }
+/* panel shell: Lane W mounts inside */
+.pdk-panel { position: relative; z-index: 9; margin-top: -22px; background: #14131a;
+  border-radius: 26px 26px 0 0; border-top: 2.5px solid #17151d; min-height: 340px; padding: 16px 12px 24px; }
+@media (prefers-reduced-motion: reduce) {
+  .pdk-walk, .pdk-walk .pdk-flip, .pdk-walk .pdk-bob, .pdk-fly, .pdk-fly .pdk-bob,
+  .pdk-hover, .pdk-hover .pdk-bob, .pdk-flop .pdk-bob, .pdk-keeper, .pdk-lurker img,
+  .pdk-sign, .pdk-grass, .pdk-fog, .pdk-blink { animation: none; }
+}

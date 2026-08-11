@@ -9689,6 +9689,142 @@ function openPetsHelp() {
     </div>`, { cls: 'full', name: 'pets_help' });
 }
 
+/* ================= THE PADDOCK (design_handoff_the_paddock, 2026-08-10) ====
+ * Affection surface, NOT management: every owned copy wanders one haunted
+ * scene; tapping a pet opens Lane W's per-copy card slider (js/paddock-cards
+ * .js, loaded lazily; absent until Walt's half lands and the tap degrades to
+ * a no-op rather than an error). Scene placement comes from js/paddock.js
+ * (placePaddock: the exclusive x-band rule as an algorithm, unit-pinned).
+ * FIDELITY DEVIATION, flagged for review: the handoff draws its own in-scene
+ * back chevron; this build keeps the standard sheet-head instead, because the
+ * back-swipe / history behavior of openSheet is house machinery we do not
+ * fork per screen. The hanging sign stays. */
+async function openPaddock() {
+  const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE } = await import('./paddock.js');
+  const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
+  const places = placePaddock(roster);
+  const ownedSpecies = new Set(roster.map(r => r.sp));
+
+  const backdrop = `
+    <svg class="pdk-ground" viewBox="0 0 390 520" aria-hidden="true">
+      <g fill="#202a18">
+        <path d="M28 0 q-8 90 6 196 l26 0 q-12 -110 -4 -196 z"/>
+        <path d="M118 0 q10 80 -2 178 l24 0 q10 -96 2 -178 z"/>
+        <path d="M258 0 q-10 84 2 186 l26 0 q-8 -100 0 -186 z"/>
+        <path d="M348 0 q8 76 -4 168 l24 0 q8 -88 2 -168 z"/>
+      </g>
+      <g fill="#131a0e" opacity=".65">
+        <path d="M38 8 q-4 80 4 176 l7 0 q-6 -96 -2 -176 z"/>
+        <path d="M128 6 q6 72 -2 166 l7 0 q7 -88 2 -166 z"/>
+        <path d="M268 10 q-6 76 2 170 l7 0 q-5 -92 0 -170 z"/>
+      </g>
+      <g stroke="#202a18" stroke-width="7" stroke-linecap="round" fill="none">
+        <path d="M50 60 q34 -14 56 4"/><path d="M136 96 q-30 -18 -52 -6"/>
+        <path d="M282 74 q30 -12 50 6"/><path d="M356 120 q-24 -14 -42 -4"/>
+      </g>
+      <circle cx="314" cy="62" r="54" fill="rgba(232,228,210,.32)" opacity=".5"/>
+      <circle cx="314" cy="62" r="19" fill="#e8e4d2"/>
+      <g fill="#cfcab6"><circle cx="308" cy="57" r="3"/><circle cx="320" cy="66" r="2.4"/><circle cx="312" cy="70" r="1.7"/></g>
+      <g class="pdk-blink" style="--pdk-dur:7s">
+        <circle cx="88" cy="128" r="5.5" fill="rgba(255,201,97,.25)"/><circle cx="99" cy="128" r="5.5" fill="rgba(255,201,97,.25)"/>
+        <circle cx="88" cy="128" r="2.8" fill="#ffc961"/><circle cx="99" cy="128" r="2.8" fill="#ffc961"/>
+      </g>
+      <g class="pdk-blink" style="--pdk-dur:9s">
+        <circle cx="262" cy="152" r="6" fill="rgba(165,232,71,.25)"/><circle cx="272" cy="152" r="6" fill="rgba(165,232,71,.25)"/>
+        <circle cx="262" cy="152" r="3" fill="#a5e847"/><circle cx="272" cy="152" r="3" fill="#a5e847"/>
+      </g>
+      <g fill="#26301c">
+        <ellipse cx="60" cy="196" rx="52" ry="22"/><ellipse cx="308" cy="188" rx="58" ry="24"/><ellipse cx="180" cy="204" rx="44" ry="18"/>
+      </g>
+      <g fill="#2e3a22"><ellipse cx="96" cy="200" rx="34" ry="15"/><ellipse cx="262" cy="196" rx="36" ry="16"/></g>
+      <ellipse cx="200" cy="376" rx="120" ry="80" fill="rgba(232,228,210,.09)"/>
+      <g stroke="#4f3a26" stroke-width="7"><path d="M0 262 h390"/><path d="M0 286 h390"/></g>
+      <g stroke="#43301f" stroke-width="9">
+        <path d="M28 248 v52"/><path d="M118 246 v56"/><path d="M208 250 v50"/><path d="M298 247 v54"/><path d="M378 249 v52"/>
+      </g>
+      <g>
+        <path d="M16 330 v-18 q0 -12 13 -12 q13 0 13 12 v18 z" fill="#7a7268"/>
+        <path d="M25 306 h8 M27 300 v10" stroke="#5d564c" stroke-width="2.4"/>
+        <g transform="rotate(-8 70 322)"><path d="M62 316 h16 M70 308 v22" stroke="#5d4a37" stroke-width="4" stroke-linecap="round"/></g>
+        <rect x="306" y="316" width="52" height="30" rx="6" fill="#a98c48"/>
+        <path d="M306 326 h52 M306 336 h52" stroke="#8a7038" stroke-width="3"/>
+      </g>
+      <g id="pdkNest">
+        <ellipse class="pdk-nestglow" cx="343" cy="368" rx="46" ry="20" fill="rgba(165,232,71,.35)"/>
+        <path d="M300 360 q0 24 43 24 q43 0 43 -24 l-6 -8 h-74 z" fill="#7a5c3a" stroke="#17151d" stroke-width="2.5"/>
+        <path d="M304 366 h78 M308 374 h70" stroke="#5d4630" stroke-width="2"/>
+        <path d="M300 356 q43 -12 86 0" stroke="#8f6d47" stroke-width="3" fill="none"/>
+        <path d="M296 352 q6 -8 12 -4 M386 350 q-6 -9 -12 -5" stroke="#a98c48" stroke-width="2.4" fill="none"/>
+        ${Array.from({ length: Math.min(4, Math.max(0, eggs.count)) }, (_, i) => {
+          const speck = ['#b8ddf0', '#c9b8e8', '#f5c9a8'][i % 3];
+          const x = 326 + i * 14, tilt = i === 0 ? 0 : (i % 2 ? -12 : 12);
+          return `<g transform="rotate(${tilt} ${x} 348)"><ellipse cx="${x}" cy="348" rx="11" ry="14" fill="${i === 3 ? '#e5dcc8' : '#f2e9d7'}" stroke="#17151d" stroke-width="2"/><circle cx="${x - 3}" cy="344" r="1.5" fill="${speck}"/><circle cx="${x + 3}" cy="350" r="1.3" fill="${speck}"/></g>`;
+        }).join('')}
+      </g>
+      ${[46, 132, 218, 350, 84, 296].map((x, i) => `<g class="pdk-grass" style="animation-delay:${-i * .7}s"><path d="M${x} ${470 + (i % 3) * 12} l-3 -14 M${x} ${470 + (i % 3) * 12} l0 -17 M${x} ${470 + (i % 3) * 12} l4 -13" stroke="#3a4a2c" stroke-width="3.5" stroke-linecap="round" fill="none"/></g>`).join('')}
+    </svg>`;
+
+  const petHtml = r => {
+    const p = places[r.iid];
+    if (!p) return '';
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny });
+    const rarity = (BH_BY_ID[r.sp] || {}).rarity;
+    const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
+    const pos = p.kind === 'walk'
+      ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
+      : p.kind === 'fly'
+        ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
+    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" style="${pos}">
+      <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
+      ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
+    </div>`;
+  };
+
+  const K = PDK_SCENE.KEEPER;
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Paddock</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" style="padding:0">
+      <div class="pdk-scene" id="pdkScene">
+        ${backdrop}
+        <div class="pdk-sign">
+          <svg width="196" height="58" viewBox="0 0 196 58">
+            <path d="M30 0 v14 M166 0 v14" stroke="#5d4a37" stroke-width="4"/>
+            <rect x="8" y="14" width="180" height="40" rx="8" fill="#3a2f26" stroke="#17151d" stroke-width="4"/>
+            <rect x="14" y="20" width="168" height="28" rx="5" fill="none" stroke="#524336" stroke-width="2"/>
+            <text x="98" y="42" text-anchor="middle" font-family="Bangers, 'Arial Black', sans-serif" font-size="24" letter-spacing="2.5" fill="#f2e9d7">THE PADDOCK</text>
+          </svg>
+        </div>
+        <div class="pdk-keeper" style="left:${K.x - K.px / 2}px;top:${K.y - K.px / 2}px;width:${K.px}px;height:${K.px}px">
+          <img src="assets/bh/B/B0-1.png" alt=""><img src="assets/bh/SK/SK0-1.png" alt=""><img src="assets/bh/H/H9.png" alt="">
+        </div>
+        ${roster.map(petHtml).join('')}
+        ${!ownedSpecies.has('CX') ? `<div class="pdk-lurker" data-pdk="CX" style="left:296px;top:158px;width:96px;height:64px">
+          <img src="${bhAsset(BH_BY_ID['CX'])}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
+        </div>` : ''}
+        <i class="pdk-fog" style="left:20px;top:172px;--pdk-dur:26s"></i>
+        <i class="pdk-fog" style="left:120px;top:214px;--pdk-dur:32s"></i>
+        <div class="pdk-vignette"></div>
+        <div class="pdk-coach" id="pdkCoach">Tap a pet to say hi</div>
+      </div>
+      <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
+    </div>`, { cls: 'sheet-paddock' });
+
+  $('#pdkScene', wrap)?.addEventListener('click', e => {
+    const hit = e.target.closest('[data-pdk]');
+    if (!hit) return;
+    $('#pdkCoach', wrap)?.remove();
+    const sp = hit.dataset.pdk;
+    /* Lane W's module; a tap before it lands degrades to nothing, never to an
+       error (anti-regression rule 8's spirit: absent halves degrade visibly
+       calm, not broken). */
+    import('./paddock-cards.js').then(m => m.openPaddockCards(sp)).catch(() => {});
+  });
+  $('#pdkNest', wrap)?.addEventListener('click', () => {
+    import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});
+  });
+}
+
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -9846,10 +9982,17 @@ async function openStable(opts = {}) {
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
-        <!-- no ICONS.info exists; the `? :` fallback shipped a bare "?" glyph and
-             hid the missing icon from readers but not from t2-audit's
-             ICONS-RESOLVE guard, which is exactly what that guard is for -->
+        <!-- no ICONS.info exists; the ternary fallback shipped a bare "?" glyph
+             and hid the missing icon from readers but not from t2-audit's
+             ICONS-RESOLVE guard, which is exactly what that guard is for.
+             Reggie's branch re-added that call because it forked before the fix;
+             keeping BOTH halves: my removal and his new Paddock entry.
+             NO BACKTICKS IN THIS COMMENT: it sits inside a template literal, and
+             the first draft quoted the ternary in backticks, which closed the
+             string and took the whole app down. Every browser suite failed in
+             four seconds and the gate said so immediately. -->
         <button class="chip chip-btn" id="petsHelp" type="button">How pets work</button>
+        <button class="chip chip-btn" id="stableToPaddock" type="button">\u{1F43E} The Paddock</button>
       </div>
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -10314,6 +10457,7 @@ async function openStable(opts = {}) {
        are about to look. */
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
+    $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
     /* SCROLL ROOM FOR THE STICKY BAR. Measured before this: the bar overlapped
        .cf-acts by 15px, and BREED lives in that row, so the button the bar was
        telling you to press was underneath the bar. The height varies with which
