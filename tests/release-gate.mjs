@@ -174,6 +174,7 @@ const DECLARED = {
   'melt-ui-audit.mjs': ['full', 'the melt confirm bar is opaque and does not swallow a row tap.'],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
+  'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],
   'pit-cap-audit.mjs': ['full', 'the Gauntlet ceiling reads as a ceiling.'],
   'placeholder-audit.mjs': ['full', 'nothing prints a literal template placeholder.'],
   'podium-audit.mjs': ['full', 'the Crew top three shows and still opens the full list.'],
