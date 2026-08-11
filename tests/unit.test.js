@@ -2892,6 +2892,49 @@ test('paddock: nothing emits a .pd- class', () => {
   assert.deepEqual([...new Set(bad)], [], 'the Paddock must not use the paperdoll namespace');
 });
 
+test('paddock: the care state a card renders from is TODAY\'s record or nothing', () => {
+  /* a stale record is not "given": the day rolled over, so both kinds are offered again.
+     Reading a yesterday record as given is how a daily ritual quietly becomes a
+     once-per-lifetime one. */
+  assert.deepEqual(PDK.careState({ day: '2026-08-10', pet: true, feed: true, streak: 9 }, '2026-08-11'),
+    { pet: false, feed: false, streak: 0 });
+  assert.deepEqual(PDK.careState({ day: '2026-08-11', pet: true, feed: false, streak: 4 }, '2026-08-11'),
+    { pet: true, feed: false, streak: 4 });
+  assert.deepEqual(PDK.careState(null, '2026-08-11'), { pet: false, feed: false, streak: 0 });
+  /* the same 1-floor Reggie put on his side: a record for today with no streak on it
+     still represents a day with care in it */
+  assert.equal(PDK.careState({ day: '2026-08-11', pet: true }, '2026-08-11').streak, 1);
+});
+
+test('paddock: a streak says nothing on day one, and the card carries it', () => {
+  assert.equal(PDK.streakLine(0), '');
+  assert.equal(PDK.streakLine(1), '');            // "1 day running" is just today
+  assert.equal(PDK.streakLine(4), '4 days running');
+  const m = PDK.cardModel({ iid: 'w1', sp: 'C5', bond: 2 }, { day: 'D', pet: true, feed: false, streak: 3 }, 'D');
+  const html = PDK.cardHtml(m);
+  assert.ok(/3 days running/.test(html), 'the streak line is on the card');
+  assert.ok(/data-streak="3"/.test(html), 'and stored on it, so a cleared refusal can restore it');
+  assert.ok(/pdk-btn-pet given/.test(html) && />Petted</.test(html), 'a given kind reads as given');
+  assert.ok(!/pdk-btn-feed given/.test(html) && />Feed</.test(html), 'and the other kind is still offered');
+});
+
+test('paddock: every bondUp refusal has words, and the two dead ends differ', () => {
+  /* keyed on the NAME bondUp returns, so the copy cannot drift from the reason the
+     write actually refused. "today" and "maxed" are different situations and a player
+     who is told the wrong one will keep pressing. */
+  assert.match(PDK.refusalCopy('today', 'pet'), /come back tomorrow/i);
+  assert.match(PDK.refusalCopy('today', 'feed'), /fed already/i);
+  assert.match(PDK.refusalCopy('maxed', 'pet'), /close as it gets/i);
+  assert.notEqual(PDK.refusalCopy('today', 'pet'), PDK.refusalCopy('maxed', 'pet'));
+  assert.match(PDK.refusalCopy('unknown', 'pet'), /wandered off/i);
+  assert.equal(PDK.refusalCopy(undefined, 'pet'), '', 'no reason, no words invented');
+  /* every reason bondUp can return must HAVE copy, or a real refusal renders silence */
+  for (const r of ['today', 'maxed', 'unknown']) {
+    assert.ok(PDK.refusalCopy(r, 'pet').length > 8, `no copy for reason ${r}`);
+    assert.ok(PDK.refusalCopy(r, 'feed').length > 8, `no feed copy for reason ${r}`);
+  }
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

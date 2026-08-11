@@ -4,12 +4,17 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
   /* RENUMBER AT MERGE: claims v370 with js/app.js APP_BUILD and sw.js VERSION.
-     AGGIE, DO NOT SHIP THIS ENTRY WITHOUT REGGIE'S SCENE HALF. The fix has two halves
-     by design: his figures must carry data-iid and pass it, mine focuses the rail on
-     that copy. My half alone changes nothing a player can see, so this entry would be
-     announcing a fix that is not live. Both halves ride one train or neither does. */
+     THE EARLIER GATE ON THIS ENTRY IS NOW SATISFIED. It said not to ship the tap fix
+     without Reggie's scene half, because my half alone changes nothing a player can
+     see. His half (figures carry data-iid and pass it) is MERGED INTO THIS BRANCH and
+     the whole path is asserted end to end: tapping the second figure of a species opens
+     that animal BY NAME, proven red two ways. Both halves are here, so the entry is
+     true. The daily-ritual line covers the same train: his loot.js layer plus my cards.
+     Aggie: this branch is main + walt/paddock-focus + reggie/bond-ritual + my consuming
+     half, so it needs no partner and must not be split. */
   { n: 370, date: '2026-08-11', title: 'The right pet answers', items: [
     'Tapping an animal in the Paddock opens THAT animal. If you own three ducks, the card you get is the duck you tapped, with its own name, bond and lineage: it was always opening the first one, so two names did all the talking.',
+    'Pet and feed each animal <b>once a day each</b>. Come back tomorrow and you can again, and the card counts the days you keep it up. Nothing is lost by missing a day except the streak.',
   ] },
   { n: 368, date: '2026-08-11', title: 'The Pit keeps up with you', items: [
     "<b>Beat a boss and The Pit now notices.</b> Your win and your raised ceiling were always recorded, but the screen behind the fight never re-read them, so a boss you had just beaten still offered you the fight. Nothing was lost: it was the view that was stale.",

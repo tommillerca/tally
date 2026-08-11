@@ -30,6 +30,7 @@ import { PET_CROP } from '../data/boneheadz.js';
 const TIMED_ABSENCE = [
   'and a refused press at the cap fires NO burst',
   'and tapping INSIDE the card does not dismiss it',
+  'RITUAL: a second press today fires NO burst and SAYS WHY (never a dead button)',
 ];
 
 const fails = [];
@@ -76,6 +77,19 @@ await setWidth(page, 390, 900);
 /* Reaching the Paddock is done TWICE (once before the bond, once after the reload),
    so it is one function: a second hand-rolled copy is how the post-reload half ended
    up never opening the screen at all, which read as a persistence failure. */
+/* THE DAILY RITUAL CHANGED THE ECONOMICS OF THIS SCREEN, and four checks below were
+   written against the old rule. Pressing Pet ten times used to bank ten hearts; now each
+   kind lands once per pet per LOCAL DAY, so a press loop banks one. Those checks are
+   about the CAP and about an animation that must not lie, not about the daily rule, so
+   they need successive DAYS rather than successive taps. Wiping today's care record is
+   exactly that: the next press is tomorrow's. Loosening them to expect one heart would
+   have deleted the cap coverage, which is the drift trap. */
+const nextDay = () => page.evaluate(async () => {
+  const db = await new Promise(res => { const r = indexedDB.open('tally-demo'); r.onsuccess = () => res(r.result); });
+  await new Promise(res => { const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').delete('petCare'); tx.oncomplete = res; });
+});
+
 async function reachPaddock() {
   /* WAIT FOR EACH CONTROL BEFORE CLICKING IT. This clicked #stableBtn optional-chained
      with no wait, so on a slow first render the click hit nothing, silently, and then
@@ -193,13 +207,28 @@ ok('THE ROUND TRIP: the bond is still there after a reload', afterPress > 0 && s
 
 /* ---- the cap, and an animation that must not lie ------------------------- */
 const capped = await page.evaluate(async () => {
+  /* "tomorrow", inline: raw kv, the same way this file seeds everything else. It lives
+     here rather than as a seam in the shipped module, because a test-only trapdoor into
+     player data is not something to ship for the sake of a tidier test. */
+  const tomorrow = async () => {
+    const db = await new Promise(res => { const r = indexedDB.open('tally-demo'); r.onsuccess = () => res(r.result); });
+    await new Promise(res => { const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete('petCare'); tx.oncomplete = res; });
+  };
   const btn = () => document.querySelector('#pdkCards .pdk-card[data-iid="w2"] .pdk-btn-pet');
   const hearts = () => document.querySelectorAll('#pdkCards .pdk-card[data-iid="w2"] .pdk-heart.on').length;
-  for (let i = 0; i < 7; i++) { btn()?.click(); await new Promise(r => setTimeout(r, 260)); }
+  for (let i = 0; i < 7; i++) {
+    await tomorrow();                     // successive DAYS, not successive taps
+    btn()?.click();
+    await new Promise(r => setTimeout(r, 260));
+  }
   const atCap = hearts();
   const bffs = document.querySelectorAll('#pdkCards .pdk-card[data-iid="w2"] .pdk-bff').length;
   /* press once more AT the cap and watch for a burst: bondUp returns changed:false,
-     so celebrating would be an animation over a write that never happened */
+     so celebrating would be an animation over a write that never happened. On a FRESH
+     day, so the refusal is the cap refusing and not the daily rule: a check that passes
+     for the wrong reason is the thing this file exists to avoid. */
+  await tomorrow();
   btn()?.click();
   await new Promise(r => setTimeout(r, 220));
   const burstAtCap = document.querySelectorAll('#pdkCards .pdk-card[data-iid="w2"] .pdk-burst').length;
@@ -270,6 +299,7 @@ ok('and it is on screen while it runs', !burst.why && burst.shown > 0,
 
 /* and the PET burst carries the real heart (Feed carries bones, by design) */
 await ensureOpen('C5');
+await nextDay();          // the burst checks press expecting a WRITE, so: tomorrow
 const petGlyphs = await page.evaluate(async () => {
   document.querySelector('#pdkCards .pdk-card[data-iid="w1"] .pdk-btn-pet')?.click();
   await new Promise(r => setTimeout(r, 150));
@@ -483,6 +513,146 @@ ok('tapping a DIFFERENT copy moves the rail instead of dismissing',
   !focus.why && focus.movedNotClosed && focus.afterMove === focus.copies[0].iid, JSON.stringify(focus));
 ok('tapping the copy already in front still dismisses', !focus.why && focus.sameCopyDismisses === true,
   JSON.stringify({ sameCopyDismisses: focus.sameCopyDismisses }));
+
+/* THE DAILY RITUAL, consuming half (Tom picked B+C). Reggie's layer decides what a press
+   does; these checks are about what the player is TOLD, which is my half of the split.
+   The important one is the READ path: a card has to show "Petted" before anybody taps
+   anything, because bondUp's return only speaks after a write, and a card that can only
+   learn today's state by pressing the button is the no-op this feature exists to remove.
+   That is also why it is checked AFTER A RELOAD, the same way the bond round trip is:
+   rendering the right label once proves nothing about where it came from. */
+/* a clean day first: the bond and burst checks above have already petted this pet
+   today, so without this the "starts unspent" check would fail on THEIR writes and tell
+   me nothing about the render */
+await nextDay();
+await ensureOpen('C5');
+const ritual = await page.evaluate(async () => {
+  const out = {};
+  const card = () => document.querySelector('#pdkCards .pdk-card');
+  const btn = k => card()?.querySelector(`.pdk-btn[data-act="${k}"]`);
+  const noteText = () => card()?.querySelector('.pdk-note')?.textContent?.trim() || '';
+  const given = k => !!btn(k)?.classList.contains('given');
+  out.beforePet = { label: btn('pet')?.textContent.trim(), given: given('pet') };
+  btn('pet').click();
+  await new Promise(r => setTimeout(r, 500));
+  out.afterFirstPet = { label: btn('pet')?.textContent.trim(), given: given('pet'), note: noteText() };
+  /* the SECOND press of the same kind today: no burst, and it must SAY why.
+     DRAIN FIRST, do not subtract. The burst glyphs are transient (they float up and
+     remove themselves), so a before/after delta measured -3 when the FIRST press's
+     glyphs expired mid-check: the count went down, not up, and the check failed on its
+     own arithmetic rather than on the app. Waiting for a clean zero and then asserting
+     zero is the honest shape. */
+  const glyphs = () => document.querySelectorAll('#pdkCards .pdk-glyph').length;
+  for (let i = 0; i < 40 && glyphs() > 0; i++) await new Promise(r => setTimeout(r, 100));
+  out.drainedToZero = glyphs() === 0;
+  btn('pet').click();
+  await new Promise(r => setTimeout(r, 500));
+  out.afterSecondPet = { note: noteText(), given: given('pet'), newBursts: glyphs() };
+  /* Feed is a DIFFERENT kind: petting must not have spent it */
+  out.feedStillOffered = { label: btn('feed')?.textContent.trim(), given: given('feed') };
+  btn('feed').click();
+  await new Promise(r => setTimeout(r, 500));
+  out.afterFeed = { label: btn('feed')?.textContent.trim(), given: given('feed'), note: noteText() };
+  return out;
+});
+ok('RITUAL: a card starts with its kinds unspent', ritual.beforePet.label === 'Pet' && ritual.beforePet.given === false,
+  JSON.stringify(ritual.beforePet));
+ok('RITUAL: giving a kind marks it given, from the answer', ritual.afterFirstPet.given === true && ritual.afterFirstPet.label === 'Petted',
+  JSON.stringify(ritual.afterFirstPet));
+ok('RITUAL: a second press today fires NO burst and SAYS WHY (never a dead button)',
+  ritual.drainedToZero === true && ritual.afterSecondPet.newBursts === 0
+  && /come back tomorrow/i.test(ritual.afterSecondPet.note),
+  JSON.stringify({ ...ritual.afterSecondPet, drainedToZero: ritual.drainedToZero }));
+ok('RITUAL: Feed is its own kind, unspent by petting', ritual.feedStillOffered.given === false && ritual.feedStillOffered.label === 'Feed',
+  JSON.stringify(ritual.feedStillOffered));
+ok('RITUAL: and giving Feed marks Feed, not Pet', ritual.afterFeed.given === true && ritual.afterFeed.label === 'Fed',
+  JSON.stringify(ritual.afterFeed));
+
+/* THE READ PATH, across a reload. Nothing below presses anything. */
+await page.reload({ waitUntil: 'networkidle2' });
+await page.waitForFunction(() => typeof window.__pdkMountCards === 'function', { timeout: 30000, polling: 100 }).catch(() => {});
+await setWidth(page, 390, 900);
+const backAgain = await reachPaddock();
+const readBack = await page.evaluate(async () => {
+  const res = await window.__pdkMountCards('C5');
+  await new Promise(r => setTimeout(r, 400));
+  const card = document.querySelector('#pdkCards .pdk-card');
+  if (!card) return { why: 'no card after the reload' };
+  const lbl = k => card.querySelector(`.pdk-btn[data-act="${k}"]`)?.textContent.trim();
+  const given = k => !!card.querySelector(`.pdk-btn[data-act="${k}"]`)?.classList.contains('given');
+  return { opened: !!(res && res.open), pet: lbl('pet'), feed: lbl('feed'),
+           givenPet: given('pet'), givenFeed: given('feed'),
+           note: card.querySelector('.pdk-note')?.textContent?.trim() || '' };
+});
+ok('RITUAL ROUND TRIP: after a reload the card knows both kinds were given, with nobody pressing anything',
+  backAgain && !readBack.why && readBack.givenPet === true && readBack.givenFeed === true
+  && readBack.pet === 'Petted' && readBack.feed === 'Fed', JSON.stringify(readBack));
+
+/* the streak line, seeded rather than waited for: a real one needs consecutive days */
+const streakSeen = await page.evaluate(async () => {
+  const db = await new Promise(res => { const r = indexedDB.open('tally-demo'); r.onsuccess = () => res(r.result); });
+  const today = new Date();
+  const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  await new Promise(res => { const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put({ k: 'petCare', v: { w1: { day, pet: true, feed: false, streak: 4 } } });
+    tx.oncomplete = res; });
+  await window.__pdkClose();
+  await window.__pdkMountCards('C5', 'w1');
+  await new Promise(r => setTimeout(r, 400));
+  const card = document.querySelector('#pdkCards .pdk-card[data-iid="w1"]');
+  return { note: card?.querySelector('.pdk-note')?.textContent?.trim() || '', streakAttr: card?.dataset.streak };
+});
+ok('RITUAL: a streak of 4 says so on the card', /4 days running/i.test(streakSeen.note), JSON.stringify(streakSeen));
+
+/* END TO END, THE WHOLE OF TOM'S BUG. Everything above drives my half through the seam,
+   which proves the slider CAN focus a copy but not that the scene asks it to. This taps a
+   REAL figure in the field, by coordinates, and asserts the name on the resulting card is
+   that figure's own. It spans both halves (Reggie's data-iid on the figure, my rail
+   focus), which is why it asserts the thing the player experiences rather than either
+   side's internals. Skips honestly if fewer than two figures of one species are out in
+   the field today, because the herd rotates and a one-figure field cannot show the bug. */
+await page.evaluate(() => window.__pdkClose && window.__pdkClose());
+await settle(page, 200);
+const e2e = await page.evaluate(async () => {
+  /* select on .pdk-pet and read the iid SEPARATELY, so the two ways this can break say
+     different things: figures missing entirely, versus figures that carry no iid. The
+     first version selected [data-iid] and reported "no figures in the field" when the
+     scene simply stopped tagging them, which is a true red with a misleading reason. */
+  const figs = [...document.querySelectorAll('#pdkScene .pdk-pet')];
+  if (!figs.length) return { why: 'no figures in the field at all' };
+  const tagged = figs.filter(f => f.dataset.iid);
+  if (!tagged.length) return { why: `THE SCENE TAGS NO IIDS: ${figs.length} figures, none with data-iid, so every tap is lossy again` };
+  const bySp = {};
+  for (const f of tagged) (bySp[f.dataset.pdk] = bySp[f.dataset.pdk] || []).push(f);
+  const sp = Object.keys(bySp).find(k => bySp[k].length >= 2);
+  if (!sp) return { why: `no species has two tagged figures in the field today (${tagged.length} tagged)` };
+  /* the SECOND figure of that species: copy #1 is what the bug always showed */
+  const fig = bySp[sp][1];
+  const r = fig.getBoundingClientRect();
+  return { sp, iid: fig.dataset.iid, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+let tapped = { why: e2e.why };
+if (!e2e.why) {
+  await page.mouse.click(e2e.x, e2e.y);
+  await page.waitForFunction(() => document.querySelectorAll('#pdkCards .pdk-card').length > 0,
+    { timeout: 8000, polling: 50 }).catch(() => {});
+  await settle(page, 350);
+  tapped = await page.evaluate(async askedIid => {
+    const rail = document.querySelector('#pdkCards .pdk-rail');
+    const cards = [...document.querySelectorAll('#pdkCards .pdk-card')];
+    if (!rail || !cards.length) return { why: 'the tap opened no cards' };
+    const mid = rail.scrollLeft + rail.clientWidth / 2;
+    const front = cards.reduce((b, c) => Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid)
+      < Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid) ? c : b, cards[0]);
+    const { paddockRoster } = await import('./js/paddock.js');
+    const row = (await paddockRoster()).find(x => x.iid === askedIid);
+    return { asked: askedIid, askedName: row && row.name, gotIid: front.dataset.iid,
+             gotName: front.querySelector('.pdk-name')?.textContent || null, cards: cards.length };
+  }, e2e.iid);
+}
+ok('END TO END: tapping the SECOND figure of a species opens THAT animal, by name',
+  !tapped.why && tapped.gotIid === tapped.asked && tapped.gotName === tapped.askedName,
+  tapped.why ? `SKIPPED-AS-FAILURE: ${tapped.why}` : JSON.stringify(tapped));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 

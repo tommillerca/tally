@@ -7183,6 +7183,15 @@ body::before {
 .pdk-heart .bhi { filter: drop-shadow(0 1px 1px rgba(10,12,8,.55)); }
 .pdk-heart { color: #26232e; }
 .pdk-heart.on { color: #fd6857; }
+/* GIVEN, NOT DEAD. A kind already given today keeps its button tappable (the tap is how
+   the player learns WHY) but stops shouting: parchment goes quiet, the lime goes flat.
+   Never `disabled`, never display:none: a control that vanishes teaches nothing. */
+.pdk-btn.given { filter: saturate(.35) brightness(.82); }
+.pdk-btn.given::after { content: ' \2713'; }
+/* the card's own voice: the streak by default, the refusal reason when there is one */
+.pdk-note { min-height: 13px; margin: 2px 0 0; font-size: 11px; font-weight: 700;
+  letter-spacing: .01em; color: #8f8578; }
+.pdk-note[data-note="why"] { color: #ffc961; }
 .pdk-bff { display: inline-block; margin-top: 7px; background: #ffc961; color: #17151d; border: 2px solid #17151d; border-radius: 999px; padding: 2px 9px; font-family: Bangers, system-ui; font-size: 13px; }
 .pdk-bff.pdk-pop { animation: pdkBadge 450ms cubic-bezier(.34,1.56,.64,1) both; }
 @keyframes pdkBadge { 0% { transform: scale(0) } 62% { transform: scale(1.2) } 100% { transform: scale(1) } }

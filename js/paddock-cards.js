@@ -43,9 +43,23 @@ const num = n => Number(n || 0).toLocaleString();
 /* One card = one OWNED COPY, keyed by iid. Never species+index: the bond is banked
    against the instance, so an index would move the affection to a different animal
    the first time the roster sorts differently. */
-export function cardModel(row) {
+/* THE DAILY RITUAL, read half (Tom picked B+C: the scene pays it back, plus a daily
+   ritual). Reggie's layer owns the writing and the day logic; these cards own what the
+   player is TOLD, so the care record arrives as an argument and `today` with it. Passing
+   the day in rather than calling dateKey here is what keeps this file pure and testable
+   in node, which is the whole reason the models live apart from the DOM.
+   Both default to nothing, so every existing caller and unit test keeps working and a
+   card with no care data renders as "not given yet" rather than guessing. */
+export function careState(care, today) {
+  const c = care && today && care.day === today ? care : null;
+  return { pet: !!(c && c.pet), feed: !!(c && c.feed), streak: c ? (c.streak | 0) || 1 : 0 };
+}
+
+export function cardModel(row, care = null, today = null) {
   const sp = SPECIES_BY_ID[row.sp] || { name: row.sp, rarity: 'common' };
+  const cared = careState(care, today);
   return {
+    cared,
     iid: row.iid,
     sp: row.sp,                     // the SPECIES id, kept so the thumb can ink-fit its art
     name: row.name || sp.name,
@@ -63,8 +77,9 @@ export function cardModel(row) {
 
 /* The slider: every copy of ONE species, in roster order, plus the dots model. Dots
    only exist above one copy, per the handoff. */
-export function sliderModel(roster, sp) {
-  const copies = (roster || []).filter(r => r.sp === sp).map(cardModel);
+export function sliderModel(roster, sp, careMap = null, today = null) {
+  const copies = (roster || []).filter(r => r.sp === sp)
+    .map(r => cardModel(r, careMap ? careMap[r.iid] : null, today));
   return { sp, copies, dots: copies.length > 1 ? copies.length : 0 };
 }
 
@@ -152,8 +167,29 @@ export function inkFitStyle(sp, fill = INK_FILL) {
 const heartsHtml = n => Array.from({ length: 5 }, (_, i) =>
   `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true">${bhIcon('heart', 17)}</i>`).join('');
 
+/* A streak says nothing on day one, because "1 day running" is not an achievement, it
+   is just today. Information is rationed on purpose here. */
+export function streakLine(streak) {
+  return (streak | 0) >= 2 ? `${streak} days running` : '';
+}
+
+/* WHY, NEVER A DEAD BUTTON (Reggie's rule and mine): a given kind still takes the tap
+   and answers in words. The two dead ends say DIFFERENT things because they are
+   different: one is "not today", the other is "there is nothing left to give". Keyed on
+   the refusal NAME from bondUp, not on booleans, so the copy cannot drift from the
+   reason the write actually refused. */
+export const REFUSAL_COPY = {
+  today: { pet: 'Petted already today. Come back tomorrow.', feed: 'Fed already today. Come back tomorrow.' },
+  maxed: { pet: 'You two are as close as it gets.', feed: 'You two are as close as it gets.' },
+  unknown: { pet: 'That one has wandered off.', feed: 'That one has wandered off.' },
+};
+export function refusalCopy(reason, kind) {
+  const row = REFUSAL_COPY[reason];
+  return row ? (row[kind] || row.pet) : '';
+}
+
 export function cardHtml(m) {
-  return `<article class="pdk-card" data-iid="${esc(m.iid)}">
+  return `<article class="pdk-card" data-iid="${esc(m.iid)}" data-streak="${m.cared.streak}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
       <span class="pdk-thumb"><img src="${esc(m.art)}" style="${inkFitStyle(m.sp)}" alt="" loading="eager"></span>
@@ -169,9 +205,10 @@ export function cardHtml(m) {
     <p class="pdk-flavor">${esc(m.flavor)}</p>
     <div class="pdk-bond" data-bond="${m.bond}">${heartsHtml(m.bond)}</div>
     ${m.maxed ? '<span class="pdk-bff">BEST FRIEND</span>' : ''}
+    <p class="pdk-note" data-note="streak">${streakLine(m.cared.streak)}</p>
     <div class="pdk-acts">
-      <button class="pdk-btn pdk-btn-pet" data-act="pet" data-iid="${esc(m.iid)}">Pet</button>
-      <button class="pdk-btn pdk-btn-feed" data-act="feed" data-iid="${esc(m.iid)}">Feed</button>
+      <button class="pdk-btn pdk-btn-pet${m.cared.pet ? ' given' : ''}" data-act="pet" data-iid="${esc(m.iid)}">${m.cared.pet ? 'Petted' : 'Pet'}</button>
+      <button class="pdk-btn pdk-btn-feed${m.cared.feed ? ' given' : ''}" data-act="feed" data-iid="${esc(m.iid)}">${m.cared.feed ? 'Fed' : 'Feed'}</button>
     </div>
   </article>`;
 }
@@ -199,8 +236,8 @@ export function eggCardHtml(eggs) {
   </article>`;
 }
 
-export function sliderHtml(roster, sp) {
-  const { copies, dots } = sliderModel(roster, sp);
+export function sliderHtml(roster, sp, careMap = null, today = null) {
+  const { copies, dots } = sliderModel(roster, sp, careMap, today);
   if (!copies.length) return lockedCardHtml(sp);
   return `<div class="pdk-slider" data-sp="${esc(sp)}">
     <div class="pdk-rail">${copies.map(cardHtml).join('')}</div>
@@ -242,7 +279,8 @@ export function panelHtml(roster, eggs) {
  * other): the scene calls open on a pet tap and close on a scene tap, and asks
  * isPaddockCardOpen() for the coach mark. Nothing else crosses the seam.
  */
-import { bondUp } from './loot.js';
+import { bondUp, petCare } from './loot.js';
+import { dateKey } from './nutrition.js';
 import { haptic } from './haptics.js';
 
 let sel = null;        // species id whose slider is open, or null
@@ -360,10 +398,12 @@ export async function openPaddockCards(sp, iid = null) {
     scene.appendChild(host);
   }
   const { paddockRoster, paddockEggs } = await import('./paddock.js');
-  const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
+  /* READ the care record, never press to find out. A card must show "Petted" before
+     anybody taps anything, and bondUp's return only speaks after a write. */
+  const [roster, eggs, care] = await Promise.all([paddockRoster(), paddockEggs(), petCare()]);
   sel = sp;
   rosterRef = roster;
-  host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp);
+  host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp, care, dateKey());
   host.classList.add('pdk-open');
   wire();
   armOutsideTap();
@@ -429,15 +469,53 @@ function wire() {
     /* ASK THE AUTHORITY, THEN PAINT. bondUp is the persisted write and it refuses a
        ghost iid by name, so rendering from its RETURN means a refusal can never
        paint a heart that was not banked. Incrementing a local copy would. */
-    const res = await bondUp(iid).catch(() => ({ ok: false, reason: 'threw' }));
+    /* THE KIND GOES IN. Both buttons used to call bondUp(iid) blind, so Pet and Feed
+       were the same press twice; a daily ritual only means something if the layer below
+       knows which kind was given. */
+    const res = await bondUp(iid, kind).catch(() => ({ ok: false, reason: 'threw' }));
     b.disabled = false;
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) { note(card, refusalCopy(res && res.reason, kind)); return; }
     paintBond(card, res.bond, res.maxed);
+    paintStreak(card, res.streak);
     /* AND THE ANIMATION MUST NOT LIE. changed:false means the cap refused the
        press, so there is nothing to celebrate: no burst. That is the invisible
        punch lesson inverted, an FX that plays over a write that never happened. */
-    if (res.changed) { burst(card, kind); try { haptic.success(); } catch { /* haptics optional */ } }
+    if (res.changed) {
+      burst(card, kind);
+      try { haptic.success(); } catch { /* haptics optional */ }
+      /* the button reads as given from the ANSWER, not from a local guess */
+      markGiven(b, kind);
+      note(card, '');
+    } else {
+      /* a refusal that still returned ok. It is NAMED, so it says WHY instead of
+         looking broken, and `today` also means this kind is given: show that state,
+         which is what the next render would have drawn anyway. */
+      if (res.reason === 'today') markGiven(b, kind);
+      note(card, refusalCopy(res.reason, kind));
+    }
   }));
+}
+
+/* The note line is the card's own voice. No toast helper exists in this lane, and a
+   message where the player is already looking beats one that flies in elsewhere. An
+   empty string restores the streak line, so a successful press clears a stale refusal. */
+function note(card, text) {
+  const el = card && card.querySelector('.pdk-note');
+  if (!el) return;
+  el.dataset.note = text ? 'why' : 'streak';
+  el.textContent = text || streakLine(Number(card.dataset.streak) || 0);
+}
+
+function markGiven(b, kind) {
+  b.classList.add('given');
+  b.textContent = kind === 'feed' ? 'Fed' : 'Petted';
+}
+
+export function paintStreak(card, streak) {
+  if (!card) return;
+  card.dataset.streak = String(streak | 0);
+  const el = card.querySelector('.pdk-note');
+  if (el && el.dataset.note !== 'why') el.textContent = streakLine(streak);
 }
 
 export function paintBond(card, bond, maxed) {
