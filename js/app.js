@@ -44,6 +44,7 @@ import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMIL
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
+import { installPaddockSeam } from './paddock-cards.js';
 import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
@@ -574,6 +575,10 @@ async function boot() {
   window.addEventListener('hashchange', route);
   bindTabs();
   route();
+  /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
+     and handlers before the scene shell exists, and after it lands too. A no-op in
+     every real session (navigator.webdriver !== true). */
+  installPaddockSeam();
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
@@ -9812,6 +9817,11 @@ async function openPaddock() {
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
     </div>`, { cls: 'sheet-paddock' });
 
+  /* Lane W's collection panel is the screen's lower half, not a tap target, so it is
+     mounted as the sheet opens rather than on first interaction. Failure degrades to
+     an empty panel, never to a thrown render. */
+  import('./paddock-cards.js').then(m => m.mountPaddockPanel()).catch(() => {});
+
   $('#pdkScene', wrap)?.addEventListener('click', e => {
     const hit = e.target.closest('[data-pdk]');
     if (!hit) return;
@@ -12294,7 +12304,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v361'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v362'; // RENUMBER AT MERGE // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
