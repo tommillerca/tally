@@ -47,6 +47,19 @@ import { execFileSync } from 'node:child_process';
    "http.server 8298". A reaper that kills any process quoting its own marker is
    worse than no reaper, so the match must start at the executable and be a real
    `python -m http.server`. Parent: ppid 1, as for the browsers. */
+/* WHAT THIS MUST NEVER REAP: a gate PARENT. Reggie spotted an idle
+   `node tests/release-gate.mjs` (pid 3346) holding no children and almost no CPU
+   for 30 minutes and asked whether the reaper should cover it. It should not, and
+   the reason is the line this file is built on. Browsers and http.servers are LEAF
+   resources: their owner is provably gone, they can only hold memory and ports,
+   and killing one aborts nothing. A gate parent is an ORCHESTRATOR, and ppid 1
+   does not mean it is dead: a gate launched from a shell that has since closed is
+   reparented to launchd while still perfectly alive, and between suites it looks
+   exactly like the idle one, no children and no CPU. Reaping by that signature
+   would SIGKILL another session's live run mid-gate, which is the precise thing
+   the kill-by-PID-only rule exists to prevent. A stranded gate parent is a report,
+   never a kill, and the operator decides. (3346 was gone by the time I looked and
+   I could not prove whose it was, so nothing was killed then either.) */
 const MARKERS = ['Chrome for Testing', 'chrome-headless-shell'];
 const SERVER = /^\S*python[\d.]*\s+-m\s+http\.server\s+8[123]\d\d\b/;
 const ps = execFileSync('ps', ['-eo', 'pid=,ppid=,command=']).toString().split('\n');
