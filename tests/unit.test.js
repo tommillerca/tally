@@ -2579,6 +2579,23 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   const call = (appSrc.match(/placePaddock\([^)]*\)/g) || []).filter(c => !c.includes('placePaddock:'));
   assert.ok(call.length, 'no placePaddock call found in app.js: an empty sample is a failure, not a pass');
   for (const c of call) assert.ok(/dateKey\(\)/.test(c), `openPaddock must pass the app's LOCAL day, got ${c}`);
+
+  /* THE DUCK STAGGER (Tom, 2026-08-11: "most of my ducks are flying in a
+     clump they should stagger more"). Two flyers sharing a lane with the same
+     dur AND phase hold the same x forever: a clump by construction. Every
+     same-lane pair must differ in at least one of the two, and the sky must
+     stay deterministic for the same herd. */
+  const flock = Array.from({ length: 6 }, (_, i) => ({ iid: 'd' + i, motion: 'fly' }));
+  const sky = placePaddock(flock, undefined, '2026-08-11');
+  const flies = Object.entries(sky).map(([iid, p], i) => ({ iid, lane: i % 2, dur: p.dur, phase: p.phase }));
+  let flyPairs = 0;
+  for (const a of flies) for (const b of flies) {
+    if (a.iid >= b.iid || a.lane !== b.lane) continue;
+    flyPairs++;
+    assert.ok(a.dur !== b.dur || a.phase !== b.phase, `${a.iid}/${b.iid} share a lane with identical dur AND phase: they fly as one`);
+  }
+  assert.ok(flyPairs > 0, 'no same-lane duck pairs were checked, the stagger rule never ran');
+  assert.deepEqual(placePaddock(flock, undefined, '2026-08-11'), sky, 'the sky must be deterministic for the same herd');
 });
 
 
