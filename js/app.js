@@ -5821,7 +5821,7 @@ function crewCardHtml(f) {
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
     <div class="cfan-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}</div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
-    <span class="cfan-fstar" hidden>★</span>
+    <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
     <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small>${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}<span class="lv">LV ${p.level || 1}</span></small></div>
   </button>`;
 }
@@ -6161,7 +6161,7 @@ async function renderFriends(el) {
     const ol = onlineLabel(f.lastSeen);
     const gearN = p.gearCount ?? (p.gear ? p.gear.length : 0);
     box.innerHTML = `
-      <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">★</button>
+      <button class="cfan-star${favs.has(f.playerId) ? ' on' : ''}" id="cfanStar" aria-label="Star this friend">${ICONS.star(!!favs.has(f.playerId))}</button>
       <div class="cfan-sel-tx">
         <button class="cfan-sel-nm" id="cfanView">${nameWithAlias(f)}${ol.text ? ` <em>${ol.on ? '<i class="live-dot"></i> online' : esc(ol.text)}</em>` : ''}</button>
         <div class="cfan-chips">
@@ -6179,6 +6179,8 @@ async function renderFriends(el) {
       favs.has(f.playerId) ? favs.delete(f.playerId) : favs.add(f.playerId);
       await kvSet('crewFaves', [...favs]);
       toast(favs.has(f.playerId) ? `${esc(f.alias || f.name)} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
+      const sb = $('#cfanStar', box);
+      if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.innerHTML = ICONS.star(!!favs.has(f.playerId)); }
       resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
     });
     $('#cfanView', box).addEventListener('click', () => openFriendProfile(f, paint));
