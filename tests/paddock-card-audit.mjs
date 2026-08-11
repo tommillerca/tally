@@ -15,8 +15,26 @@
 import { boot, seed, sleep, settle, setWidth } from './godmode.js';
 import { PET_CROP } from '../data/boneheadz.js';
 
+/* TIMED-ABSENCE CHECKS, DECLARED (Reggie's refinement to the gate-contention rule,
+   2026-08-11). Most assertions here cannot be faked by machine load: contention cannot
+   make a wrong DOM state read right, so a green is credible and a RED is the suspect.
+   These two are the exception, and they are the ones he fished for when he asked what
+   would break my argument. Both assert that something did NOT happen within a wait, so
+   a starved renderer can satisfy them for the wrong reason: the burst never got to
+   fire, the dismissal never got to run. A green on THESE two only means something on a
+   quiet machine.
+   The list is MECHANICAL, not prose: every name here must match a check that actually
+   ran, and DRIFT below fails if one does not. A comment naming checks would rot the
+   first time somebody reworded one, which is the disease that has bitten this repo
+   twice today already. */
+const TIMED_ABSENCE = [
+  'and a refused press at the cap fires NO burst',
+  'and tapping INSIDE the card does not dismiss it',
+];
+
 const fails = [];
-const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
+const ran = [];
+const ok = (n, p, d = '') => { ran.push(n); console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const base = process.argv[2] || process.env.URL;
 if (!base) {
   console.log('FAIL  paddock-card-audit needs a base URL, and there is no safe default.');
@@ -467,6 +485,13 @@ ok('tapping the copy already in front still dismisses', !focus.why && focus.same
   JSON.stringify({ sameCopyDismisses: focus.sameCopyDismisses }));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
+
+/* DRIFT: the declaration has to describe the checks that exist, or it is decoration.
+   Reword a timed-absence check without updating the list and this fails by name. */
+const missing = TIMED_ABSENCE.filter(n => !ran.includes(n));
+ok('the timed-absence declaration matches the checks that ran', missing.length === 0,
+  missing.length ? `declared but never ran: ${missing.join(' | ')}` : `${TIMED_ABSENCE.length} declared, all present`);
+console.log(`\nQUIET-RUN CHECKS (green here only counts on an idle machine): ${TIMED_ABSENCE.join(' | ')}`);
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\npaddock cards clean');
 process.exit(fails.length ? 1 : 0);
