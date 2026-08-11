@@ -7101,6 +7101,21 @@ body::before {
   text-shadow: 0 0 6px rgba(255, 201, 97, .9); opacity: 0; animation: pdkLureSpark 13s ease-in-out infinite; }
 .pdk-lure-spark.s2 { left: 68%; top: 8px; font-size: 10px; animation-delay: .6s; }
 @keyframes pdkLureSpark { 0%, 74%, 92%, 100% { opacity: 0; transform: translateY(6px); } 78%, 88% { opacity: 1; transform: translateY(-4px); } }
+/* the greeting: bonded pets (3+ hearts) say hi when the Paddock opens, with a
+   heart puff; --pdk-hi staggers the field so it ripples. The hop composes with
+   the walker's own trot by listing both animations; clouds, ducks and catfish
+   keep their own motion (their bob animations are their species' whole
+   character) and greet with the heart alone. */
+.pdk-walk.pdk-greet .pdk-bob { animation-name: pdkTrot, pdkHello; animation-duration: .48s, .9s;
+  animation-timing-function: ease-in-out, cubic-bezier(.3, 1.6, .5, 1);
+  animation-iteration-count: infinite, 2; animation-direction: alternate, normal;
+  animation-delay: 0s, var(--pdk-hi, 0s); }
+@keyframes pdkHello { 0%, 100% { translate: 0 0; } 38% { translate: 0 -13px; } }
+.pdk-hi { position: absolute; left: 50%; top: -4px; margin-left: -7px; font-size: 15px; color: #fd6857;
+  text-shadow: 0 0 6px rgba(253, 104, 87, .8); opacity: 0; pointer-events: none;
+  animation: pdkHiPuff 1.5s ease-out var(--pdk-hi, 0s) 1; }
+@keyframes pdkHiPuff { 0% { opacity: 0; transform: translateY(4px) scale(.6); } 25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-22px) scale(1.15); } }
 /* scene furniture animations */
 .pdk-sign { position: absolute; top: 0; left: 50%; z-index: 7; transform-origin: 50% 0;
   animation: pdkSway 5s ease-in-out infinite alternate; }
@@ -7130,7 +7145,9 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .pdk-walk, .pdk-walk .pdk-flip, .pdk-walk .pdk-bob, .pdk-fly, .pdk-fly .pdk-bob,
   .pdk-hover, .pdk-hover .pdk-bob, .pdk-flop .pdk-bob, .pdk-keeper, .pdk-lurker img,
-  .pdk-sign, .pdk-grass, .pdk-fog, .pdk-blink { animation: none; }
+  .pdk-sign, .pdk-grass, .pdk-fog, .pdk-blink, .pdk-hi,
+  .pdk-walk.pdk-greet .pdk-bob { animation: none; }
+  .pdk-hi { opacity: 0; }
 }
 /* ===== THE PADDOCK: cards + collection panel (Lane W) =====================
    `.pdk-`, NOT `.pd-`: `.pd-*` is the wardrobe paperdoll above. Same reason the

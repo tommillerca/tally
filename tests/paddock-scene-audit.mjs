@@ -35,11 +35,17 @@ const { browser, page, errors } = await boot(base);
 await seed(page, { level: 30, coins: 5000, dust: 5000 });
 
 /* a herd worth measuring, granted through the REAL path. Deliberately more
-   walkers than WALK_CAP so the rotation path is the one under test. */
+   walkers than WALK_CAP so the rotation path is the one under test. Two pets
+   get bonds seeded (one bonded, one maxed) so the greeting and the
+   best-friend band are the paths under test, not empty samples. */
 await page.evaluate(async () => {
   const m = await import('./js/loot.js');
   const grants = [['C5',0],['C5',0],['C5',0],['C5',0],['C4',0],['C4',0],['C4',0],['C4',0],['C4',0],['C4',0],['C3',0],['C3',1],['C1',0],['C1',1],['C2',1]];
   for (const [sp, shiny] of grants) await m.addPetInstance(sp, { shiny: !!shiny });
+  const db = await import('./js/db.js');
+  const walkers = (await m.petInstances()).filter(x => x.sp === 'C5' || x.sp === 'C4');
+  window.__bondSeed = { greet: walkers[0].iid, bff: walkers[1].iid };
+  await db.db.put('kv', { k: 'petBonds', v: { [walkers[0].iid]: 3, [walkers[1].iid]: 5 } });
 });
 
 async function reachPaddock() {
@@ -153,6 +159,33 @@ ok('KEEPER: your own bonehead, every layer decoded', scene.keeperImgs >= 2 && sc
    never CX, never an owned shiny). */
 ok('LURKER: CX secret tease while CX is unowned', scene.lurker === 'CX' && !scene.lurkerShiny, `lurker=${scene.lurker} shiny=${scene.lurkerShiny}`);
 ok('FURNITURE: nest and sign present', scene.nest && scene.sign, JSON.stringify({ n: scene.nest, s: scene.sign }));
+/* GREET + BEST FRIEND (Tom's B pick). Wiring asserted deterministically:
+   the greet class and heart puff exist on bonded pets, the computed
+   animation-name carries pdkHello on a greeting WALKER (computed style is
+   immune to the frozen-main-thread-clock trap, unlike playback reads), and
+   the maxed pet's band starts at the keeper-corner exclusion edge. The walk
+   cap's daily rotation may bench either seeded pet, so each check first
+   proves its subject is ON the field today: absent subject = skip is a lie,
+   so the seeding above pins BOTH into the render via bond order (maxed pets
+   are pulled to index 4 by placePaddock, and greet is render-time). */
+const bond = await page.evaluate(() => {
+  const seed = window.__bondSeed || {};
+  const pets = [...document.querySelectorAll('.pdk-pet')];
+  const greets = pets.filter(p => p.classList.contains('pdk-greet'));
+  const walkGreet = document.querySelector('.pdk-walk.pdk-greet .pdk-bob');
+  const bffEl = pets.find(p => p.classList.contains('pdk-walk') && p.classList.contains('pdk-greet') && parseFloat(p.style.left) <= 160 && parseFloat(p.style.top) + parseFloat(p.style.height) >= 380);
+  return {
+    greetCount: greets.length,
+    puffs: greets.filter(p => p.querySelector('.pdk-hi')).length,
+    helloWired: walkGreet ? getComputedStyle(walkGreet).animationName.includes('pdkHello') : null,
+    bffAtKeeper: !!bffEl,
+    seedKnown: !!(seed.greet && seed.bff),
+  };
+});
+ok('GREET: bonded pets carry the greeting and its heart puff', bond.seedKnown && bond.greetCount >= 2 && bond.puffs === bond.greetCount,
+  `${bond.greetCount} greeting, ${bond.puffs} puffs`);
+ok('GREET: the hop is actually wired on a greeting walker', bond.helloWired === true, `animationName includes pdkHello: ${bond.helloWired}`);
+ok('BEST FRIEND: the maxed pet grazes at the keeper corner', bond.bffAtKeeper, 'walker with greet class at x<=160, feet>=380');
 const coach = await page.evaluate(async () => {
   const before = !!document.querySelector('#pdkCoach');
   document.querySelector('.pdk-pet')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

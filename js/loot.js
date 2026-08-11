@@ -3,6 +3,7 @@
 // stays portable (no DOM, no web-only APIs).
 
 import { db, kvGet, kvSet, newId } from './db.js';
+import { dateKey } from './nutrition.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -521,21 +522,60 @@ export const BOND_MAX = 5;
 // pure: the only legal transition is +1, clamped into [0, BOND_MAX]
 export function bondAfter(cur) { return Math.min(BOND_MAX, Math.max(0, cur | 0) + 1); }
 export async function petBonds() { return (await kvGet('petBonds', {})) || {}; }
-export async function bondUp(iid) {
+/* THE DAILY RITUAL (Tom's B+C pick, 2026-08-11): each kind of care, Pet or
+ * Feed, lands ONCE per pet per LOCAL day, and consecutive days of caring for
+ * a pet build its streak. Rationing is the feature (Finch's loop): affection
+ * becomes a small daily visit instead of a button you mash to five. Nothing
+ * here PAYS anything, so the rewarded-actions SOP note below still stands;
+ * the day any bond level or streak pays, that payout gets the full treatment.
+ *
+ * careAfter is PURE so the day/streak rules are unit-pinned without a DB:
+ * given yesterday's record it answers whether this care lands, and what the
+ * new record looks like. kv 'petCare' is ADDITIVE ({iid: {day, pet, feed,
+ * streak}}): pre-ritual builds and rollbacks read instances and bonds
+ * untouched. */
+export function careAfter(rec, kind, day, yesterday) {
+  const c = rec || {};
+  const fresh = c.day !== day;
+  const given = !fresh && !!c[kind];
+  const streak = fresh ? (c.day === yesterday ? (c.streak | 0) + 1 : 1) : (c.streak | 0) || 1;
+  if (given) return { given: true, streak: c.streak | 0 };
+  const next = { day, pet: fresh ? false : !!c.pet, feed: fresh ? false : !!c.feed, streak };
+  next[kind] = true;
+  return { given: false, streak, next };
+}
+function localYesterday(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  const t = new Date(y, m - 1, d); t.setDate(t.getDate() - 1);
+  return dateKey(t);
+}
+export async function bondUp(iid, kind = 'pet') {
   // never bank affection for a ghost: the iid must be a live instance
   const list = await petInstances();
   if (!list.some(x => x.iid === iid)) return { ok: false, reason: 'unknown' };
+  const day = dateKey();
+  const care = (await kvGet('petCare', {})) || {};
+  const res = careAfter(care[iid], kind, day, localYesterday(day));
   const bonds = await petBonds();
   const before = bonds[iid] | 0;
+  if (res.given) {
+    // a second same-kind care today changes nothing, and says WHY by name
+    return { ok: true, bond: before, maxed: before >= BOND_MAX, changed: false, reason: 'today', streak: res.streak };
+  }
+  care[iid] = res.next;
+  await kvSet('petCare', care);   // the ritual records even at max bond: the streak is the point
   const after = bondAfter(before);
-  if (after === before) return { ok: true, bond: before, maxed: true, changed: false };
+  if (after === before) return { ok: true, bond: before, maxed: true, changed: false, streak: res.streak };
   bonds[iid] = after;
   await kvSet('petBonds', bonds);
-  return { ok: true, bond: after, maxed: after === BOND_MAX, changed: true };
+  return { ok: true, bond: after, maxed: after === BOND_MAX, changed: true, streak: res.streak };
 }
+export async function petCare() { return (await kvGet('petCare', {})) || {}; }
 async function clearBond(iid) {
   const bonds = await petBonds();
   if (iid in bonds) { delete bonds[iid]; await kvSet('petBonds', bonds); }
+  const care = (await kvGet('petCare', {})) || {};
+  if (iid in care) { delete care[iid]; await kvSet('petCare', care); }
 }
 
 // Destroy ONE specific pet instance for Bone Dust (the Stable's "Destroy"). Drops

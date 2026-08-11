@@ -2601,6 +2601,44 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
 });
 
 
+
+test('the daily care ritual: one of each kind per pet per local day, streaks honest (B+C, 2026-08-11)', async () => {
+  const { careAfter } = await import('../js/loot.js');
+  const D = '2026-08-11', Y = '2026-08-10';
+  // first care of a fresh day lands and starts a streak
+  const a = careAfter(undefined, 'pet', D, Y);
+  assert.ok(!a.given && a.next.pet === true && a.next.feed === false && a.streak === 1, JSON.stringify(a));
+  // the SAME kind again today is refused, streak unmoved
+  const b = careAfter(a.next, 'pet', D, Y);
+  assert.ok(b.given === true && b.streak === 1, 'a second pet today must be refused by name');
+  // the OTHER kind still lands today
+  const c = careAfter(a.next, 'feed', D, Y);
+  assert.ok(!c.given && c.next.feed === true && c.next.pet === true, 'feed must land on a day pet already landed');
+  // caring on the NEXT consecutive day grows the streak
+  const d = careAfter(c.next, 'pet', '2026-08-12', D);
+  assert.equal(d.streak, 2, 'consecutive days must grow the streak');
+  // a missed day resets it
+  const e = careAfter(c.next, 'pet', '2026-08-14', '2026-08-13');
+  assert.equal(e.streak, 1, 'a gap must reset the streak');
+  // and a fresh day resets the per-kind flags
+  assert.ok(d.next.feed === false, 'a new day must reopen the other kind');
+});
+
+
+test('the best friend grazes beside the keeper (B pick, 2026-08-11)', async () => {
+  const { placePaddock, PDK_SCENE } = await import('../js/paddock.js');
+  const herd = Array.from({ length: 6 }, (_, i) => ({ iid: 'w' + i, motion: 'walk', bond: 0, maxed: false }));
+  herd[1] = { ...herd[1], bond: 5, maxed: true };
+  const placed = placePaddock(herd, undefined, '2026-08-11');
+  // index 4 is the bottom cluster's first band: y = WALK_ROWS[4], x0 at the
+  // keeper-corner exclusion edge
+  const p = placed['w1'];
+  assert.equal(p.y, PDK_SCENE.WALK_ROWS[4], `best friend must take the keeper-side row, got y=${p.y}`);
+  assert.equal(p.x0, PDK_SCENE.ROW_XMIN(p.y), `best friend band must start at the keeper corner, got x0=${p.x0}`);
+  // no maxed pet: nobody is teleported anywhere (same herd, no bond)
+  const plain = placePaddock(Array.from({ length: 6 }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })), undefined, '2026-08-11');
+  assert.equal(plain['w4'].y, PDK_SCENE.WALK_ROWS[4], 'without bonds the deal order must stand');
+});
 test("duplicate instance iids heal deterministically (Tom's pooled duck hearts, 2026-08-11)", async () => {
   const { healDupIids } = await import('../js/loot.js');
   const dup = [
