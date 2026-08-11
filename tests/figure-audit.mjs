@@ -176,9 +176,10 @@ const SITES = [
        matches the roster-row destructure on the call line. */
     key: 'paddock-herd', claim: 'petSpriteHtml(r.sp', paired: false, undriven:
       'the scene is driven end-to-end by tests/paddock-scene-audit.mjs '
-      + '(Lane R, in build tonight): real Stable chip tap, decoded herd from a '
-      + 'real roster, band-overlap assertion in the live DOM. Until that lands, '
-      + 'the scene was live-verified at build: 15-pet herd, 68/68 decoded.',
+      + '(gate FULL tier): real Stable chip tap, decoded herd from a real '
+      + 'roster, band-overlap assertion in the live DOM, and motion asserted '
+      + 'as rendered pixels (headless freezes the main-thread animation clock, '
+      + 'so gBCR lies; screenshots are the layer the player sees).',
   },
   /* Pet-only surfaces. No Bonehead beside them, so PLANE and NEAR do not apply,
      but they are registered because COVERAGE has to see every call site: an
