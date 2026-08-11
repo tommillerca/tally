@@ -408,6 +408,7 @@ export async function breedPets(keepIid, feedIid) {
   // bank entry for the pet that is gone.
   const bank = await petLevelBank();
   delete bank[feedIid];
+  await clearBond(feedIid);          // the fed pet's affection goes with it
   await kvSet('petLvlSteps', bank);
 
   // if you fed away the pet you had out, the keeper takes its place
@@ -462,6 +463,34 @@ export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null,
   return inst;
 }
 
+/* ---------- Paddock bonds (kv 'petBonds' = {iid: 0..5}) ----------
+ * Per-copy affection for The Paddock. Same shape as petLvlSteps: its own kv
+ * map keyed by instance id, ADDITIVE, never a new field on the instance rows,
+ * so pre-Paddock builds and rollbacks read the instances untouched. Pet/Feed
+ * are free and unlimited by design (no dust, no coins, no XP), so the
+ * rewarded-actions SOP does not bite here; the moment any bond level PAYS
+ * anything, that payout needs the full SOP treatment. */
+export const BOND_MAX = 5;
+// pure: the only legal transition is +1, clamped into [0, BOND_MAX]
+export function bondAfter(cur) { return Math.min(BOND_MAX, Math.max(0, cur | 0) + 1); }
+export async function petBonds() { return (await kvGet('petBonds', {})) || {}; }
+export async function bondUp(iid) {
+  // never bank affection for a ghost: the iid must be a live instance
+  const list = await petInstances();
+  if (!list.some(x => x.iid === iid)) return { ok: false, reason: 'unknown' };
+  const bonds = await petBonds();
+  const before = bonds[iid] | 0;
+  const after = bondAfter(before);
+  if (after === before) return { ok: true, bond: before, maxed: true, changed: false };
+  bonds[iid] = after;
+  await kvSet('petBonds', bonds);
+  return { ok: true, bond: after, maxed: after === BOND_MAX, changed: true };
+}
+async function clearBond(iid) {
+  const bonds = await petBonds();
+  if (iid in bonds) { delete bonds[iid]; await kvSet('petBonds', bonds); }
+}
+
 // Destroy ONE specific pet instance for Bone Dust (the Stable's "Destroy"). Drops
 // ownership + clears the legacy anchor when its species' last copy is gone, and
 // re-points the equipped pet if you just scrapped the one you had out.
@@ -473,6 +502,7 @@ export async function salvageInstance(iid) {
   const next = list.filter(x => x.iid !== iid);
   await savePetInstances(next);
   const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
+  await clearBond(iid);              // a destroyed pet takes its affection with it
   if ((await kvGet('petEquipped', null)) === iid) {
     const repl = bestInstance(next, inst.sp) || next[0] || null;
     await kvSet('petEquipped', repl ? repl.iid : null);

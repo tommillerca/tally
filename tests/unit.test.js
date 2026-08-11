@@ -2391,6 +2391,43 @@ test('no browser test changes the viewport without isMobile and hasTouch', () =>
     + 'Use setWidth(page, w, h) from godmode.js, or state both keys if you really do want the reload.');
 });
 
+
+/* ================= Paddock data layer: bonds + derived names ==============
+ * Lane R interface for The Paddock (design handoff 2026-08-10). Pins the
+ * additive-only bond envelope and the determinism the scene depends on. */
+test('bondAfter only ever steps +1 into [0, BOND_MAX]', async () => {
+  const { bondAfter, BOND_MAX } = await import('../js/loot.js');
+  assert.equal(bondAfter(0), 1);
+  assert.equal(bondAfter(4), 5);
+  assert.equal(bondAfter(BOND_MAX), BOND_MAX, 'capped at max, never past it');
+  assert.equal(bondAfter(-3), 1, 'garbage below zero clamps to a first pet');
+  assert.equal(bondAfter(99), BOND_MAX, 'garbage above max clamps to max');
+});
+test('bond writes are guarded: ghost iids refused, removals clean up', () => {
+  const src = readFileSync(join(here, '../js/loot.js'), 'utf8');
+  const up = src.slice(src.indexOf('export async function bondUp'), src.indexOf('async function clearBond'));
+  assert.ok(up.indexOf('petInstances()') < up.indexOf("kvSet('petBonds'"),
+    'bondUp must confirm the iid is a live instance BEFORE writing');
+  // both instance-removal paths take the bond row with them
+  const salv = src.slice(src.indexOf('export async function salvageInstance'));
+  assert.ok(/clearBond\(iid\)/.test(salv), 'salvage leaves an orphaned bond row');
+  const breedRegion = src.slice(src.indexOf('delete bank[feedIid]'));
+  assert.ok(/clearBond\(feedIid\)/.test(breedRegion.slice(0, 200)), 'breed-consume leaves an orphaned bond row');
+});
+test('paddock names are deterministic, collision-free, order-independent', async () => {
+  const { assignNames, PADDOCK_NAMES, flavorFor } = await import('../js/paddock.js');
+  const iids = ['p1-a-C5', 'p2-b-C5', 'p3-c-C4', 'p4-d-C4', 'p5-e-C3'];
+  const a = assignNames(iids);
+  const b = assignNames([...iids].reverse());
+  assert.deepEqual(a, b, 'render order must not change anyone\'s name');
+  assert.equal(new Set(Object.values(a)).size, iids.length, 'two copies share a nickname');
+  // pool overflow still yields unique, deterministic names
+  const many = Array.from({ length: PADDOCK_NAMES.length + 4 }, (_, i) => `pz-${i}-C5`);
+  const m = assignNames(many);
+  assert.equal(new Set(Object.values(m)).size, many.length, 'overflow suffixes collided');
+  assert.equal(flavorFor('p1-a-C5'), flavorFor('p1-a-C5'), 'flavor must be stable per iid');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
