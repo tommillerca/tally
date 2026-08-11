@@ -292,12 +292,26 @@ ok('and never lands mostly on the player', onPlayer.length === 0,
    layout. Printed so nobody has to re-derive it. */
 console.log(`      two-enemy geometry: ${geo.filter(g => !g.why).map(g => `${g.w}px add ${g.addW}w onBoss ${g.onBoss}px onPlayer ${g.onPlayer}px ${g.nearerFoe ? 'nearer-boss' : 'NEARER-PLAYER'}`).join(' | ')}`);
 
+/* REOPEN A FIGHT FIRST. The width loop above ends by closing every sheet, so
+   without this the next line dereferences a null #foeStage and kills the whole
+   suite. That has now happened THREE times in this file: once in my original,
+   once when I merged Reggie's FX section over it, and once when Walt's unified
+   loop replaced the block that carried the reopen. The recurring shape is "a
+   section closes the sheets, the next section assumes a fight", so the guard
+   below reports a MISSING fight as a failed assertion instead of dying, and the
+   next person to restructure this file gets a red line rather than a stack. */
+await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
+await page.waitForFunction(() => !!document.getElementById('foeStage') && !!window.__fightPoke,
+  { timeout: 15000, polling: 120 }).catch(() => {});
+await settle(page, 350);
+
 /* A dead enemy must go down THE MOMENT its bar empties, not when the fight ends,
    and the survivor must announce itself. */
 const killOne = await page.evaluate(async () => {
   /* kill the BOSS only and leave the add up: the state the fight had no visual
      language for at all */
   const f = document.getElementById('foeStage');
+  if (!f) return { why: 'no fight open: a section above closed the sheets' };
   if (!window.__fightPoke) return { why: 'no seam' };
   window.__fightPoke({ foeHp: 0 });
   await new Promise(r => setTimeout(r, 700));
