@@ -16,6 +16,7 @@
  * blank (tally/CLAUDE.md, "Scope reveal CSS to the surface it means").
  */
 import { BH_ITEMS, bhAsset } from '../data/boneheadz.js';
+import { bhIcon } from './icons-pack.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
 const SPECIES_BY_ID = Object.fromEntries(PET_SPECIES.map(p => [p.id, p]));
@@ -110,11 +111,20 @@ export function eggCardModel(eggs) {
 
 /* ---- markup ------------------------------------------------------------- */
 
+/* REAL HEARTS. Tom: "tapping the give hearts thing gives red dots not hearts". They
+   were CSS circles (and the burst glyphs were rotated rounded squares), which at 17px
+   read as dots because that is what they were. This is game-icons.net's heart (Skoll,
+   CC-BY 3.0), added through assets/icons-proposal + the manifest and regenerated with
+   gen_icons.mjs rather than pasted into the generated file, so a future regen keeps it.
+   Icon-system rules: flat fill, no rim, tint from the manifest (#fd6857 coral), and
+   the soft drop-shadow lives in CSS. An empty pip is the SAME shape dimmed, so five
+   hearts read as five hearts whether or not they are filled. */
 const heartsHtml = n => Array.from({ length: 5 }, (_, i) =>
-  `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true"></i>`).join('');
+  `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true">${bhIcon('heart', 17)}</i>`).join('');
 
 export function cardHtml(m) {
   return `<article class="pdk-card" data-iid="${esc(m.iid)}">
+    <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
       <span class="pdk-thumb"><img src="${esc(m.art)}" alt="" loading="eager"></span>
       <div class="pdk-id">
@@ -141,6 +151,7 @@ export function cardHtml(m) {
 export function lockedCardHtml(sp) {
   const s = SPECIES_BY_ID[sp] || { name: sp };
   return `<article class="pdk-card pdk-locked" data-sp="${esc(sp)}">
+    <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head"><span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(s.id ? s : { slot: 'C', id: sp }))}" alt=""></span>
       <div class="pdk-id"><b class="pdk-name">${esc(s.name)}</b></div></div>
     <p class="pdk-flavor">Day-one Boneheadz only. Check your inbox, bony buddy.</p>
@@ -150,6 +161,7 @@ export function lockedCardHtml(sp) {
 export function eggCardHtml(eggs) {
   const m = eggCardModel(eggs);
   return `<article class="pdk-card pdk-egg">
+    <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head"><span class="pdk-thumb pdk-eggico" aria-hidden="true"></span>
       <div class="pdk-id"><b class="pdk-name">SOUL EGGS ×${m.count}</b></div></div>
     <p class="pdk-flavor">${esc(m.line)}</p>
@@ -214,6 +226,32 @@ export function closePaddockCards() {
   sel = null;
   if (host) host.innerHTML = '';
   host?.classList.remove('pdk-open');
+  if (outsideTap) { document.getElementById('pdkScene')?.removeEventListener('click', outsideTap, true); outsideTap = null; }
+}
+
+/* EVERY WAY OUT LIVES HERE, TOGETHER. Tom: "it's kinda hard to get out of the paddock
+ * feed/affection for pet dialogue". There were two exits and both were guessable only
+ * if you already knew them: tap the same pet again, or leave the sheet. Now there are
+ * four, and they are declared in one place so the rules cannot drift apart:
+ *   1. tap the same species again        (openPaddockCards, below)
+ *   2. the × on the card                 (wired in wire())
+ *   3. tap anywhere in the scene that is not the card
+ *   4. leave the sheet                   (unchanged, the sheet owns that)
+ * The outside-tap listener is CAPTURING and checks the target itself rather than
+ * relying on stopPropagation inside the card: a capturing listener sees the tap first,
+ * so a card control can never be swallowed by the dismisser, and the pets underneath
+ * stay tappable because a tap on another pet closes this card and the scene's own
+ * handler then opens that one. */
+let outsideTap = null;
+function armOutsideTap() {
+  const scene = document.getElementById('pdkScene');
+  if (!scene || outsideTap) return;
+  outsideTap = e => {
+    if (!sel) return;
+    if (host && host.contains(e.target)) return;          // inside the card: not a dismissal
+    closePaddockCards();
+  };
+  scene.addEventListener('click', outsideTap, true);
 }
 
 /* Re-tap dismiss lives HERE rather than in the scene, so the rule is one line and
@@ -240,6 +278,7 @@ export async function openPaddockCards(sp) {
   host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp);
   host.classList.add('pdk-open');
   wire();
+  armOutsideTap();
   return true;
 }
 
@@ -270,6 +309,10 @@ function wire() {
     host.querySelectorAll('.pdk-dot').forEach((d, i) => d.classList.toggle('on', i === best));
   }, { passive: true });
 
+  host.querySelectorAll('.pdk-x-btn').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    closePaddockCards();
+  }));
   host.querySelectorAll('.pdk-btn').forEach(b => b.addEventListener('click', async e => {
     e.stopPropagation();
     const iid = b.dataset.iid, kind = b.dataset.act;
@@ -310,6 +353,9 @@ export function burst(card, kind) {
   for (let i = 0; i < 3; i++) {
     const g = document.createElement('i');
     g.className = `pdk-glyph pdk-${kind === 'feed' ? 'bone' : 'heart'}g`;
+    /* the floating glyphs are the same real heart, so the burst matches the meter it
+       fills; Feed keeps its bone shape, which was never a dot */
+    if (kind !== 'feed') g.innerHTML = bhIcon('heart', 13);
     g.style.animationDelay = `${i * 100}ms`;
     g.style.setProperty('--dx', `${(i - 1) * 14}px`);
     wrap.appendChild(g);

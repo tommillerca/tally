@@ -2712,10 +2712,18 @@ test('paddock: the bond meter fills to its value and BEST FRIEND is the cap', ()
 });
 
 test('paddock: locked and egg cards offer no affection controls', () => {
+  /* NARROWED, and here is what moved: the cards gained a close control (Tom, morning
+     of 2026-08-11: "it's kinda hard to get out of the paddock feed/affection for pet
+     dialogue"), which is an EXIT and not affection. This read `data-act=` and so
+     forbade every button including that one. The rule was always "nothing to bond
+     with, so no way to bond": it now says that, by naming the affection acts. */
+  const affection = /pdk-heart\b|data-act="(pet|feed)"/;
   const locked = PDK.lockedCardHtml('CX');
-  assert.ok(!/pdk-heart|data-act=/.test(locked), 'nothing to bond with, so no hearts and no buttons');
+  assert.ok(!affection.test(locked), 'nothing to bond with, so no hearts and no Pet/Feed');
+  assert.ok(/data-act="close"/.test(locked), 'but it must still offer a way out');
   const egg = PDK.eggCardHtml({ count: 2, nearest: { togo: 2140, pct: 0.4, ready: false } });
-  assert.ok(!/pdk-heart|data-act=/.test(egg), 'same for the egg card');
+  assert.ok(!affection.test(egg), 'same for the egg card');
+  assert.ok(/data-act="close"/.test(egg), 'and the egg card can be dismissed too');
 });
 
 test('paddock: the egg card carries a REAL step count in every state', () => {

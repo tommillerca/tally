@@ -7142,8 +7142,13 @@ body::before {
 .pdk-lv { background: #14131a; color: #8f8578; border: 1px solid #26232e; }
 .pdk-flavor { font-size: 11.5px; font-weight: 600; color: #8f8578; margin: 8px 0 6px; }
 .pdk-bond { display: flex; gap: 5px; }
-.pdk-heart { width: 17px; height: 17px; border-radius: 50%; border: 1.8px solid #17151d; background: #26232e; }
-.pdk-heart.on { background: #fd6857; }
+/* the pips hold a real heart icon now (game-icons.net Skoll, CC-BY 3.0). Flat fill, NO
+   rim: the icon system's rule. The soft shadow belongs here, not on the art. An EMPTY
+   pip is the same heart dimmed, so five always read as five. */
+.pdk-heart { width: 17px; height: 17px; display: grid; place-items: center; }
+.pdk-heart .bhi { filter: drop-shadow(0 1px 1px rgba(10,12,8,.55)); }
+.pdk-heart { color: #26232e; }
+.pdk-heart.on { color: #fd6857; }
 .pdk-bff { display: inline-block; margin-top: 7px; background: #ffc961; color: #17151d; border: 2px solid #17151d; border-radius: 999px; padding: 2px 9px; font-family: Bangers, system-ui; font-size: 13px; }
 .pdk-bff.pdk-pop { animation: pdkBadge 450ms cubic-bezier(.34,1.56,.64,1) both; }
 @keyframes pdkBadge { 0% { transform: scale(0) } 62% { transform: scale(1.2) } 100% { transform: scale(1) } }
@@ -7151,13 +7156,22 @@ body::before {
 .pdk-btn { flex: 1; font-family: Bangers, system-ui; font-size: 16px; color: #17151d; border: 2.5px solid #17151d; border-radius: 12px; padding: 7px 0; box-shadow: 0 4px 0 #17151d; }
 .pdk-btn-pet { background: #a5e847; } .pdk-btn-feed { background: #f2e9d7; }
 .pdk-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #17151d; }
+.pdk-x-btn {
+  position: absolute; top: -10px; right: -10px; z-index: 3; width: 30px; height: 30px;
+  border-radius: 50%; background: #1d1b22; border: 2.5px solid #17151d; color: #f2e9d7;
+  font-family: Bangers, system-ui; font-size: 19px; line-height: 1; padding: 0;
+  display: grid; place-items: center; box-shadow: 0 3px 0 #17151d;
+}
+.pdk-x-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-dots { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
 .pdk-dot { width: 8px; height: 8px; border-radius: 50%; background: #14131a; border: 1.5px solid #17151d; }
 .pdk-dot.on { background: #a5e847; }
 /* the burst floats out of the header; pointer-events none so it never eats a tap */
 .pdk-burst { position: absolute; right: 4px; top: 0; pointer-events: none; }
 .pdk-glyph { position: absolute; right: 0; top: 0; width: 13px; height: 13px; opacity: 0; animation: pdkFloat 850ms ease-out both; }
-.pdk-heartg { background: #fd6857; border-radius: 50% 50% 50% 0; transform: rotate(45deg); }
+/* the burst glyph carries the same heart, so what floats up matches what fills */
+.pdk-heartg { color: #fd6857; }
+.pdk-heartg .bhi { filter: drop-shadow(0 1px 1px rgba(10,12,8,.5)); }
 .pdk-boneg { background: #f2e9d7; border-radius: 3px; }
 @keyframes pdkFloat { 0% { opacity: 0; transform: translate(0,0) scale(.7) } 22% { opacity: 1 } 100% { opacity: 0; transform: translate(var(--dx,0), -46px) scale(1) } }
 /* collection panel: rendered INTO his #pdkPanel container, so no wrapper rule here */
