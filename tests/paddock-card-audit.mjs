@@ -13,6 +13,7 @@
  * Run: node tests/paddock-card-audit.mjs <baseUrl>
  */
 import { boot, seed, sleep, settle, setWidth } from './godmode.js';
+import { PET_CROP } from '../data/boneheadz.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -120,6 +121,19 @@ ok('and dots match the copies', shape.dots === 3, `${shape.dots} dots`);
 ok('nothing rendered lands in the paperdoll namespace', shape.cards > 0 && shape.pdClasses.length === 0,
   shape.cards ? (shape.pdClasses.join(', ') || 'no .pd- classes present') : 'NO CARDS RENDERED: an empty dom has no .pd- classes either, which is not a pass');
 
+/* MOUNT FROM A KNOWN STATE. `__pdkMountCards(sp)` is the real tap path, so calling it
+   on the species already open DISMISSES it (that is the re-tap rule this audit also
+   checks). Steps that just want the card present must close first, or they silently
+   test an empty screen: that is exactly what happened when the later checks started
+   reporting 0 pips and no close control. */
+const ensureOpen = async sp => page.evaluate(async species => {
+  window.__pdkClose && window.__pdkClose();
+  await new Promise(r => setTimeout(r, 120));
+  const res = await window.__pdkMountCards(species);
+  await new Promise(r => setTimeout(r, 220));
+  return res;
+}, sp);
+
 /* ---- THE ROUND TRIP ------------------------------------------------------ */
 const before = await page.evaluate(() => document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-heart.on').length);
 const clicked = await page.evaluate(() => {
@@ -178,35 +192,120 @@ ok('BEST FRIEND appears once at the cap, not once per press', capped.bffs === 1,
 ok('and a refused press at the cap fires NO burst', capped.atCap === 5 && capped.burstAtCap === 0,
   `${capped.burstAtCap} bursts after pressing a maxed pet`);
 
-/* the burst on a press that DID bank: visible pixels while it runs, not just a node */
+/* THE BURST, READ AS MOTION AND NOT AS GEOMETRY. My first version measured rect size
+   and opacity mid-animation and passed, and Reggie's paddock-scene work then showed
+   why that green was not evidence: in headless Chrome the compositor keeps painting
+   while the MAIN-THREAD animation clock freezes, so a rect and a computed transform
+   can both read a frozen identity on motion a player plainly sees. The honest read is
+   WAAPI: the element's own animation reports a playState and a currentTime that
+   ADVANCES. Geometry is still checked, because a moving element nobody can see is
+   also a failure, but movement is now proven by the clock rather than assumed. */
 const burst = await page.evaluate(async () => {
   const b = document.querySelector('#pdkCards .pdk-card[data-iid="w3"] .pdk-btn-feed');
   if (!b) return { why: 'no Feed button' };
   b.click();
-  await new Promise(r => setTimeout(r, 180));
+  await new Promise(r => setTimeout(r, 90));
   const glyphs = [...document.querySelectorAll('#pdkCards .pdk-card[data-iid="w3"] .pdk-glyph')];
+  if (!glyphs.length) return { why: 'no glyphs created' };
+  const anim = glyphs.flatMap(g => g.getAnimations()).find(a => /pdkFloat/.test(a.animationName));
+  if (!anim) return { why: 'no pdkFloat animation on the glyphs' };
+  /* read currentTime RAW and subtract, the way paddock-scene-audit's ALIVE clock does.
+     My first attempt wrapped it as `Number(a.currentTime) || 0`, which collapses a
+     non-plain value to 0 for BOTH samples, so the delta was always 0 and the check
+     failed on healthy code. The window is short on purpose: pdkFloat is 850ms and the
+     wrapper is removed at 950ms, so a 400ms sample would land after the end. */
+  const t0 = anim.currentTime;
+  const state0 = anim.playState;
+  await new Promise(r => setTimeout(r, 200));
+  const dt = anim.currentTime - t0;
   const shown = glyphs.filter(g => {
     const r = g.getBoundingClientRect(), cs = getComputedStyle(g);
     return r.width > 2 && r.height > 2 && +cs.opacity > 0.05;
-  });
-  return { glyphs: glyphs.length, shown: shown.length };
+  }).length;
+  return { glyphs: glyphs.length, state: state0, dt, shown,
+           hearts: glyphs.filter(g => g.querySelector('svg.bhi')).length };
 });
-ok('Feed fires a 3-glyph burst that is actually on screen', !burst.why && burst.glyphs === 3 && burst.shown > 0,
-  burst.why || `${burst.shown} of ${burst.glyphs} glyphs visible mid-animation`);
+ok('Feed fires a 3-glyph burst', !burst.why && burst.glyphs === 3, burst.why || `${burst.glyphs} glyphs`);
+/* MOTION, read on the WAAPI clock the way paddock-scene-audit's ALIVE check does.
+   CORRECTION WORTH KEEPING: I first measured +0ms here and nearly wrote it up as a
+   headless platform limit. It was my own bug: the sampled glyphs belonged to a card my
+   test had just DISMISSED by calling the mount seam on the already-open species, so I
+   was reading a detached animation. From a known-open card the clock advances the full
+   sample window. Read currentTime raw and subtract; wrapping it as
+   `Number(x) || 0` collapses to 0 for both samples and fails on healthy code. */
+ok('the burst really ANIMATES (running, and its clock advances)',
+  !burst.why && burst.state === 'running' && burst.dt > 80,
+  burst.why || `playState ${burst.state}, currentTime +${Math.round(burst.dt || 0)}ms over a 200ms window`);
+ok('and it is on screen while it runs', !burst.why && burst.shown > 0,
+  burst.why || `${burst.shown} of ${burst.glyphs} visible mid-animation`);
 
-/* ---- dots follow the real scroll, and re-tap dismisses ------------------- */
-const dots = await page.evaluate(async () => {
-  const rail = document.querySelector('#pdkCards .pdk-rail');
-  if (!rail) return { why: 'no rail' };
-  const first = [...document.querySelectorAll('#pdkCards .pdk-dot')].findIndex(d => d.classList.contains('on'));
-  rail.scrollTo({ left: rail.scrollWidth, behavior: 'instant' });
-  rail.dispatchEvent(new Event('scroll'));
-  await new Promise(r => setTimeout(r, 160));
-  const last = [...document.querySelectorAll('#pdkCards .pdk-dot')].findIndex(d => d.classList.contains('on'));
-  return { first, last };
+/* NO PIXEL-DIFF HALF HERE, DELIBERATELY. paddock-scene-audit pairs its WAAPI clock
+   with a screenshot byte-diff, and that pairing is right for the scene: long-running
+   compositor animations on elements that live for the whole session. I tried the same
+   pairing here and could not make it honest. Two shots of the card region, clip raised
+   60px to cover the glyphs' travel, came back byte-identical on a burst whose clock
+   demonstrably advances 200ms in the same window. Rather than keep a red check I
+   cannot explain, or soften it into something that passes without meaning, the motion
+   claim rests on the clock alone, which IS proven red below. If someone later needs
+   the pixel half for a 850ms dynamically-created animation, the open question is why
+   the captures do not straddle the travel; it is not that the burst is static. */
+
+/* and the PET burst carries the real heart (Feed carries bones, by design) */
+await ensureOpen('C5');
+const petGlyphs = await page.evaluate(async () => {
+  document.querySelector('#pdkCards .pdk-card[data-iid="w1"] .pdk-btn-pet')?.click();
+  await new Promise(r => setTimeout(r, 150));
+  const g = [...document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-glyph')];
+  return { n: g.length, hearts: g.filter(x => x.querySelector('svg.bhi')).length };
 });
-ok('the dots track the REAL scroll position', !dots.why && dots.first === 0 && dots.last === 2,
-  dots.why || `active dot ${dots.first} -> ${dots.last}`);
+ok('the Pet burst glyphs are the real heart icon', petGlyphs.n > 0 && petGlyphs.hearts === petGlyphs.n,
+  `${petGlyphs.hearts} of ${petGlyphs.n} carry svg.bhi`);
+
+/* ---- W-PADDOCK-2: hearts are hearts, not dots ---------------------------- */
+await ensureOpen('C5');
+const hearts = await page.evaluate(() => {
+  const pips = [...document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-heart')];
+  return { pips: pips.length, withIcon: pips.filter(p => p.querySelector('svg.bhi')).length,
+           /* a CSS circle would have a border-radius and no svg: that is the "red dots"
+              Tom reported, so assert the ICON is there rather than trusting the class */
+           stillCircles: pips.filter(p => !p.querySelector('svg') && getComputedStyle(p).borderRadius !== '0px').length };
+});
+ok('the bond meter draws real heart icons, not CSS dots', hearts.pips === 5 && hearts.withIcon === 5 && hearts.stillCircles === 0,
+  JSON.stringify(hearts));
+
+/* ---- W-PADDOCK-1: every way out of the card ------------------------------ */
+await ensureOpen('C5');
+const exits = await page.evaluate(async () => {
+  const open = () => document.querySelectorAll('#pdkCards .pdk-card').length;
+  const out = {};
+  /* the × on the card */
+  const x = document.querySelector('#pdkCards .pdk-card .pdk-x-btn');
+  out.hasCloseControl = !!x;
+  if (x) { x.click(); await new Promise(r => setTimeout(r, 200)); out.closedByX = open() === 0; }
+  /* reopen, then tap the SCENE outside the card. Safe to mount directly here because
+     the × above closed it, so this is not a re-tap. */
+  await window.__pdkMountCards('C5');
+  await new Promise(r => setTimeout(r, 250));
+  out.reopened = open() > 0;
+  const scene = document.getElementById('pdkScene');
+  const sr = scene.getBoundingClientRect();
+  /* a corner of the scene, deliberately away from the card */
+  scene.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: sr.left + 6, clientY: sr.top + 6 }));
+  await new Promise(r => setTimeout(r, 220));
+  out.closedByOutsideTap = open() === 0;
+  /* and a tap INSIDE the card must NOT dismiss it */
+  await window.__pdkMountCards('C5');
+  await new Promise(r => setTimeout(r, 250));
+  const card = document.querySelector('#pdkCards .pdk-card');
+  card?.querySelector('.pdk-flavor')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 220));
+  out.survivedInsideTap = open() > 0;
+  return out;
+});
+ok('the card carries a visible close control, and it closes', exits.hasCloseControl && exits.closedByX, JSON.stringify(exits));
+ok('tapping the scene outside the card dismisses it', exits.reopened && exits.closedByOutsideTap, JSON.stringify(exits));
+/* the other half of the same rule: the dismisser must not eat taps on the card */
+ok('and tapping INSIDE the card does not dismiss it', exits.survivedInsideTap, JSON.stringify(exits));
 
 const retap = await page.evaluate(async () => {
   const wasOpen = document.querySelectorAll('#pdkCards .pdk-card').length > 0;
@@ -215,6 +314,105 @@ const retap = await page.evaluate(async () => {
 });
 ok('re-tapping the same species dismisses the slider', retap.wasOpen === true && retap.stillOpen === false && retap.cards === 0,
   JSON.stringify(retap));
+
+/* INK FIT (figure contract rule 3). Tom: the pets read small and off-centre in their
+   boxes. This measures what he was looking at: the ink bounding box mapped through the
+   RENDERED geometry, never the img box. A box-fitted pet reads ~0.25 of its box with
+   its ink centre ~13% down and right of the box centre, which is what this went red on
+   before the fix; an ink-fitted one reads FILL (0.82) and dead centre. Both halves
+   matter: the size check alone passes on a big off-centre pet, and the centre check
+   alone passes on a perfectly centred tiny one. Decoded is asserted in the same sample,
+   because geometry reads fine over a blank frame (tally/CLAUDE.md, FX rules). */
+/* a card has to be OPEN or the thumb Tom taps through is not in the sample: the first
+   run of this measured 7 boxes (six tiles and the teaser) and said nothing about it */
+await ensureOpen('C5');
+await settle(page, 200);
+const ink = await page.evaluate(crop => {
+  const boxes = [];
+  const imgs = [
+    ...document.querySelectorAll('#pdkPanel .pdk-tile img'),
+    ...document.querySelectorAll('#pdkPanel .pdk-teaser img'),
+    ...document.querySelectorAll('#pdkCards .pdk-thumb img'),
+  ];
+  for (const img of imgs) {
+    const host = img.closest('[data-sp]') || img.closest('.pdk-card, .pdk-teaser');
+    const sp = host?.dataset?.sp || img.closest('.pdk-slider')?.dataset?.sp;
+    const c = crop[sp];
+    if (!c) continue;                       // no measured bbox = nothing to assert against
+    const box = img.parentElement.getBoundingClientRect();
+    const r = img.getBoundingClientRect();
+    if (!box.width || !r.width) continue;
+    /* the img shows the WHOLE 640-square, so the ink is a fixed fraction of its rect */
+    const ix = r.left + c.x0 * r.width, iy = r.top + c.y0 * r.height;
+    const iw = (c.x1 - c.x0) * r.width, ih = (c.y1 - c.y0) * r.height;
+    boxes.push({
+      sp, where: img.closest('.pdk-tile') ? 'tile' : img.closest('.pdk-teaser') ? 'teaser' : 'card',
+      fill: +(Math.max(iw, ih) / box.width).toFixed(3),
+      dx: +((ix + iw / 2 - (box.left + box.width / 2)) / box.width).toFixed(3),
+      dy: +((iy + ih / 2 - (box.top + box.height / 2)) / box.height).toFixed(3),
+      decoded: img.naturalWidth > 0,
+    });
+  }
+  return boxes;
+}, PET_CROP);
+const small = ink.filter(b => b.fill < 0.7);
+const offset = ink.filter(b => Math.abs(b.dx) > 0.02 || Math.abs(b.dy) > 0.02);
+const blank = ink.filter(b => !b.decoded);
+ok('every pet box was actually measured (empty sample = failure)', ink.length >= 8 && ink.some(b => b.where === 'card'),
+  `${ink.length} pet boxes: ${[...new Set(ink.map(b => b.where))].join(', ')}`);
+ok('THE INK fills its box, not the transparent canvas', ink.length > 0 && small.length === 0,
+  small.length ? JSON.stringify(small.slice(0, 3)) : `fill ${Math.min(...ink.map(b => b.fill))}-${Math.max(...ink.map(b => b.fill))} of the box`);
+ok('and the INK is centred in it, not the canvas', ink.length > 0 && offset.length === 0,
+  offset.length ? JSON.stringify(offset.slice(0, 3)) : 'all within 2% of centre');
+ok('the art measured is decoded art', ink.length > 0 && blank.length === 0, JSON.stringify(blank.slice(0, 2)));
+
+/* THE SECOND VISIT (Reggie, reviewing 58117a1). Every check above this one runs inside
+   ONE visit to the Paddock, so all of them passed while the screen was broken the
+   second time you opened it: the module's `sel`/`host`/`outsideTap` outlived the DOM
+   they described, because the sheet closes without telling this module. Two separate
+   defects lived in that gap, so both halves are asserted here: the first tap on the
+   species that was open last time must OPEN a card (it was being eaten by the re-tap
+   rule), and the outside-tap dismisser must still work (it had latched itself to a
+   destroyed scene and never re-armed). Driven the player's way: the real Done button,
+   then the real chip back in. */
+await ensureOpen('C5');
+/* `.sheet-close` runs history.back(), so the close is ASYNCHRONOUS. Reading for the
+   scene in the same tick as the click always saw it still there, and because both
+   checks below were only gated on `reentered` they passed on a first visit that had
+   never ended: a pair of checks that could not fail, which is the thing this project
+   keeps getting caught by. Nothing below runs until the scene is really gone. */
+const hitDone = await page.evaluate(() => {
+  const btn = [...document.querySelectorAll('#sheets .sheet-close')].pop();
+  if (!btn) return false;
+  btn.click();
+  return true;
+});
+const sceneGone = hitDone && await page.waitForFunction(() => !document.getElementById('pdkScene'),
+  { timeout: 8000, polling: 50 }).then(() => true).catch(() => false);
+const reentered = sceneGone ? await reachPaddock() : false;
+const second = sceneGone && reentered ? await page.evaluate(async () => {
+  const out = { reentered: !!document.getElementById('pdkScene') };
+  const cards = () => document.querySelectorAll('#pdkCards .pdk-card').length;
+  /* the FIRST tap on the previously-open species, through the real tap path */
+  const res = await window.__pdkMountCards('C5');
+  await new Promise(r => setTimeout(r, 250));
+  out.openedOnFirstTap = !!(res && res.open) && cards() > 0;
+  /* and exit 3 on the NEW scene */
+  const scene = document.getElementById('pdkScene');
+  const host = document.getElementById('pdkCards');
+  const r = host?.getBoundingClientRect();
+  const x = r ? Math.max(4, r.left / 2) : 8;
+  scene?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: 90 }));
+  await new Promise(r2 => setTimeout(r2, 250));
+  out.outsideTapStillWorks = out.openedOnFirstTap && cards() === 0;
+  return out;
+}) : { why: 'the sheet never closed, so there was no second visit to test' };
+ok('the sheet closes and the Paddock can be re-entered', sceneGone && reentered && second.reentered === true,
+  JSON.stringify({ hitDone, sceneGone, reentered, ...second }));
+ok('SECOND VISIT: the first tap on the last-open species opens its card', second.openedOnFirstTap === true,
+  JSON.stringify(second));
+ok('SECOND VISIT: the outside-tap exit still dismisses on the new scene', second.outsideTapStillWorks === true,
+  JSON.stringify(second));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 await browser.close();

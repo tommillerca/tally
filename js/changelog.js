@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 368, date: '2026-08-11', title: 'The Pit keeps up with you', items: [
+    "<b>Beat a boss and The Pit now notices.</b> Your win and your raised ceiling were always recorded, but the screen behind the fight never re-read them, so a boss you had just beaten still offered you the fight. Nothing was lost: it was the view that was stale.",
+    'Bonding with a pet gives it <b>hearts</b>. They were five red dots, which is not the same thing.',
+    'A pet card closes whichever way you reach for it: the × on the card, a tap on the field behind it, or tapping the same pet again. And it still works on your second visit.',
+    'Your pets fill their frames, on the card and in the collection shelf. They were drawn small and tucked into the corner of every box.',
+  ] },
   { n: 367, date: '2026-08-11', title: 'Your ducks are individuals', items: [
     "<b>Every duck was sharing one identity.</b> That is why they were all called the same thing, and why hearts given to one lit up all of them. They are separate copies now, each with its own name and its own bond. Nobody loses a single heart in the repair.",
     'Ducks no longer fly in lockstep either: they set off at their own moment and at their own pace.',
