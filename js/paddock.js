@@ -121,7 +121,9 @@ export const PDK_SCENE = {
   /* measured on the first live render: clouds at y176-210 sat on the keeper's
      hat and inside the duck lanes; they drift LOW over the fence line now */
   HOVER_SPOTS: [{ x: 64, y: 244 }, { x: 306, y: 252 }, { x: 196, y: 232 }],
-  FLOP_SPOTS: [{ x: 304, y: 420, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 0, y: 452, w: 58 }],
+  /* third flop spot moved off the bottom-left corner: the keeper (your own
+     bonehead) stands there now (Tom, 2026-08-11) */
+  FLOP_SPOTS: [{ x: 304, y: 420, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 140, y: 458, w: 58 }],
   WALK_ROWS: [322, 318, 356, 350, 396, 398, 428, 460],
   /* the props own the right flank above y~370 (hay 306,316; nest 300,352):
      walker bands on those rows stop short of them. Measured, not assumed: the
@@ -133,8 +135,11 @@ export const PDK_SCENE = {
      world space, yet the herd layer draws over the backdrop SVG and hides
      them. Rows below the base pass in FRONT, which is correct perspective and
      stays allowed. Measured on the first live render, same class as the hay. */
-  ROW_XMIN: y => (y <= 340 ? 86 : 8),
-  KEEPER: { x: 100, y: 240, px: 190 },
+  ROW_XMIN: y => (y <= 340 ? 86 : y >= 420 ? 152 : 8),
+  /* the keeper is the PLAYER's bonehead now, standing low in the bottom-left
+     grass (Tom, 2026-08-11); rows at y>=420 keep out of that corner for the
+     same world-depth reason as the tombstone: their feet land above his */
+  KEEPER: { x: 96, y: 402, px: 172 },
 };
 
 /* PURE: partition walkers into exclusive x-bands.
@@ -183,7 +188,7 @@ export const WALK_CAP = 8;
    hashStr(iid + day) picked the same herd every day, and hashStr(day + iid)
    just sorted by the iid's last characters (both caught by the unit pin at
    build). The murmur fmix32 finalizer diffuses every input bit. */
-function rotHash(s) {
+export function rotHash(s) {
   let h = hashStr(s);
   h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
   h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
