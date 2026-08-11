@@ -30,6 +30,34 @@ const stats = async () => page.evaluate(async () => {
   return gearStats(lo, owned, 40);
 });
 
+/* EQUIP SOMETHING THAT CAN ACTUALLY GLOW, FIRST.
+   The glow only ever applies to an EPIC or LEGENDARY item in a hand slot
+   (js/app.js: `S.glow && (s.code === 'IR' || s.code === 'IL') && (rarity ===
+   'epic' || 'legendary')`). The demo profile holds IR1 and IL1-1, both COMMON,
+   so nothing on screen could glow whatever the setting said, and the check below
+   measured 0 with the toggle ON and reported the feature broken. Measured during
+   the gate:all debut triage: canGlowAtAll=false, onScreen=0. That is an EMPTY
+   SAMPLE, which anti-regression rule 3 calls a failure of the CHECK, and the
+   assertion's own parenthetical ("else the check proves nothing") shows its
+   author knew the hole was there.
+   The glow is not broken. This arranges the one state in which the question can
+   be asked at all. */
+await page.evaluate(async () => {
+  const { kvGet, kvSet } = await import('./js/db.js');
+  const eq = (await kvGet('equipped', {})) || {};
+  await kvSet('equipped', { ...eq, IL: 'IL11-3' });   // Nightfall Katana, legendary
+});
+await page.reload({ waitUntil: 'networkidle2' });
+await sleep(2600);
+await page.evaluate(() => document.querySelector('.dw')?.remove());
+const glowable = await page.evaluate(async () => {
+  const { kvGet } = await import('./js/db.js');
+  const eq = (await kvGet('equipped', {})) || {};
+  return eq.IL === 'IL11-3';
+});
+check('a glowing item is actually equipped (an empty sample proves nothing)', glowable,
+  glowable ? 'IL11-3 Nightfall Katana, legendary' : 'the equip did not stick, so every glow result below is meaningless');
+
 // ---- the glow toggle is COSMETIC ----
 const before = await stats();
 await page.evaluate(async () => { const db = await import('./js/db.js'); await db.kvSet('glow', false); });

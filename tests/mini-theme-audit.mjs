@@ -41,11 +41,21 @@ const dateKey = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const date = dateKey();
 const HOME = { latitude: 49.2827, longitude: -123.1207 };
+/* CANDIDATES, NOT JUST THE NEAREST. The generator's position is not where the app
+   puts the mini: placeWalkable snaps it onto reachable ground, and that snap can
+   move it further than MINI_RADIUS_M (75m) from where we teleported. Standing on
+   near[0] therefore works or does not depending on the DAY'S SEED, which is a
+   fixture that fails at midnight and passes by morning: exactly the shape of the
+   UTC bug this file already carries a comment about. Today (2026-08-11) near[0]
+   snapped out of reach and the run went red on working code.
+   So the audit tries the closest few in turn and reports which one it stood on.
+   Running out of candidates is a real failure, not a silent skip. */
 const near = minisNear(date, HOME.latitude, HOME.longitude);
-const mini = near[0];
-// an empty sample is a failure, not a pass
-ok('the fixture actually has a mini to walk to', !!mini, mini ? `${mini.name} (${mini.theme.key}) at ${Math.round(mini.dist)}m` : 'none near Vancouver today');
-if (!mini) { console.log('\n1 FAILED: no mini fixture'); process.exit(1); }
+ok('the fixture actually has minis to walk to', near.length > 0,
+  near.length ? `${near.length} near Vancouver: ${near.slice(0, 3).map(m => `${m.name} @${Math.round(m.dist)}m`).join(', ')}` : 'none today');
+if (!near.length) { console.log('\n1 FAILED: no mini fixture'); process.exit(1); }
+const CANDIDATES = near.slice(0, 4);
+let mini = CANDIDATES[0];
 
 const want = themedLook(mini.theme.key, `${date}:${mini.id}`);
 ok('and its theme has a look behind it', !!want, JSON.stringify(want));
@@ -62,19 +72,31 @@ await page.setGeolocation({ latitude: mini.lat, longitude: mini.lng });
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await seed(page, { level: 18, coins: 500 });
 
-await page.evaluate(() => { location.hash = '#/boneyard'; });
-await sleep(2500);
-await page.evaluate(() => {
-  const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
-  if (b) b.click();
-});
-await sleep(9000);
-
-const reach = await page.evaluate(() => {
-  const b = document.getElementById('mapMini');
-  return { exists: !!b, hidden: b ? b.hidden : null, marks: document.querySelectorAll('.map-mini-mark').length };
-});
-ok('the map put a mini in reach', reach.exists && reach.hidden === false, JSON.stringify(reach));
+async function standOn(cand) {
+  await page.setGeolocation({ latitude: cand.lat, longitude: cand.lng });
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(600);
+  await page.evaluate(() => { location.hash = '#/boneyard'; });
+  await sleep(2500);
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
+    if (b) b.click();
+  });
+  await sleep(9000);
+  return page.evaluate(() => {
+    const b = document.getElementById('mapMini');
+    return { exists: !!b, hidden: b ? b.hidden : null, marks: document.querySelectorAll('.map-mini-mark').length };
+  });
+}
+let reach = { exists: false, hidden: true, marks: 0 }, tried = [];
+for (const cand of CANDIDATES) {
+  reach = await standOn(cand);
+  tried.push(`${cand.name}@${Math.round(cand.dist)}m:${reach.hidden === false ? 'IN REACH' : 'snapped away'}`);
+  if (reach.exists && reach.hidden === false) { mini = cand; break; }
+}
+ok('the map put a mini in reach', reach.exists && reach.hidden === false,
+  tried.join(' | ') + (reach.hidden === false ? '' : '  <- every candidate snapped out of the 75m radius'));
+const want2 = themedLook(mini.theme.key, `${date}:${mini.id}`);
 
 if (reach.exists && reach.hidden === false) {
   await page.evaluate(() => document.getElementById('mapMini').click());
@@ -98,7 +120,7 @@ if (reach.exists && reach.hidden === false) {
      rendered" (the coin-flip look renders art too, which is exactly why this went
      unnoticed) and not a set comparison against the whole look (equipped gear can
      legitimately add a weapon layer). */
-  const wantIds = Object.entries(want || {}).filter(([k]) => k !== 'BG' && k !== 'YD').map(([, v]) => v);
+  const wantIds = Object.entries(want2 || want || {}).filter(([k]) => k !== 'BG' && k !== 'YD').map(([, v]) => v);
   const drawn = new Set(foe.ids || []);
   const missing = wantIds.filter(id => !drawn.has(id));
   ok('the drawn layers are the themed ones', wantIds.length > 0 && missing.length === 0,
