@@ -45,6 +45,11 @@
   .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
   .rmeta a { color: #7cc4ff; }
   .err { color: #ff8080; }
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0 14px; }
+  .tbl th { text-align:left; opacity:.6; font-weight:600; padding:4px 8px 4px 0; border-bottom:1px solid rgba(128,128,128,.3); }
+  .tbl td { padding:5px 8px 5px 0; border-bottom:1px solid rgba(128,128,128,.15); vertical-align:top; }
+  .tbl td.msg { max-width:34em; }
+  .tbl td.src { opacity:.65; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; }
 </style>
 </head>
 <body>
@@ -117,6 +122,27 @@
           <div class="card"><div class="n">${s.avgSessionMin != null ? s.avgSessionMin + 'm' : '—'}</div><div class="l">Avg session</div></div>
           <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Total events</div></div>
         </div>
+        <h2>Crashes</h2>
+        ${(s.errors || []).length ? `
+          <p class="note">Grouped by message, newest first. <b>devices</b> is the spread: 1 is one unlucky phone, several is everybody. Not filtered by the developer-device exclusion, because a crash is a crash.</p>
+          <table class="tbl"><tr><th>message</th><th>times</th><th>devices</th><th>build</th><th>screen</th><th>where</th><th>last seen</th></tr>
+          ${s.errors.map(e => `<tr>
+            <td class="msg">${esc(e.msg || '(no message)')}</td>
+            <td>${e.n}</td><td>${e.devices}</td><td>${esc(e.build || '?')}</td>
+            <td>${esc(e.screen || '—')}</td><td class="src">${esc(e.src || '—')}</td>
+            <td>${e.lastTs ? new Date(e.lastTs).toLocaleString() : '—'}</td></tr>`).join('')}
+          </table>
+          ${(s.errorsByBuild || []).length ? `<p class="note">By build: ${s.errorsByBuild.map(b => `<b>${esc(b.build || '?')}</b> ${b.n} on ${b.devices} device${b.devices === 1 ? '' : 's'}`).join(' · ')}. A message that stops appearing on a newer build is a fix confirming itself.</p>` : ''}
+        ` : '<p class="note">No crashes reported. That is either good news or the telemetry not reaching us: check that a build carrying it is actually live.</p>'}
+
+        <h2>Keychain vault (iOS reinstall recovery)</h2>
+        ${(s.vault || []).length ? `
+          <p class="note">A <b>backfill</b> spike is expected once, when the native build carrying the plugin reaches existing players. A <b>recover</b> trickle after that is the net catching real reinstalls: that is the proof, and it needs nobody to delete their own app.</p>
+          <table class="tbl"><tr><th>event</th><th>times</th><th>devices</th><th>build</th><th>first</th><th>last</th></tr>
+          ${s.vault.map(v => `<tr><td>${esc(v.name)}</td><td>${v.n}</td><td>${v.devices}</td><td>${esc(v.build || '?')}</td><td>${esc(v.firstDay || '')}</td><td>${esc(v.lastDay || '')}</td></tr>`).join('')}
+          </table>
+        ` : '<p class="note">Nothing yet, which is correct until a native build ships the BhVault registration. Backfills with zero recovers after a few weeks would itself be a finding.</p>'}
+
         <h2>Screen time — where testers spend it</h2>${stime.length ? stime.map(d => bar(d.s || '?', d.min || 0, stMax)).join('') : '<p class="note">No screen-time data yet (ships in the next app update).</p>'}
         <h2>Feature usage — opens</h2>${fopen.length ? fopen.map(d => bar(d.f || '?', d.n || 0, foMax)).join('') : '<p class="note">No feature data yet.</p>'}
         <h2>Feature usage — minutes in each</h2>${ftime.length ? ftime.map(d => bar(d.f || '?', d.min || 0, ftMax)).join('') : '<p class="note">No feature-time data yet.</p>'}

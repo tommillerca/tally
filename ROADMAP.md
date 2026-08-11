@@ -9,6 +9,45 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🐾 The Paddock: pet playland on the Stable (BUILDING, assigned 2026-08-10)
+
+**Tom's ask:** "got a sick new feature for us, we are gonna attach this to the
+stable." High-fidelity design handoff at
+`~/Downloads/design_handoff_the_paddock/` (README is the spec; prototype
+verified rendering at 390x930). Finch-inspired affection surface: every owned
+pet copy wanders one haunted-forest scene; tap -> per-copy card slider; Pet/
+Feed fills a 0-5 bond meter; 5/5 earns BEST FRIEND. Explicitly NOT management:
+equip/breed/talents/destroy stay in the Stable. Mockups-first is satisfied by
+the handoff itself.
+
+**Operation split (two-man + aggregator):**
+- LANE R (Reggie, starts now): bond as a NEW persisted per-copy instance field
+  (additive-DB, unit pins first); the scene (spec SVG, herd renderer from the
+  REAL roster with exclusive x-band allocator + mechanical band guard, petanim
+  reuse for C1/C3/C4/CX, shiny per INSTANCE per figure contract rule 1, keeper
+  stack via the figure conventions + figure-audit SITES row, lurker, egg nest
+  wired to the real egg system); C2-fly shadow-cropped art adopted via a
+  scripted crop with QC gates (intake lesson: bundled PNGs verified against
+  repo art, never trusted by filename); Stable entry point + route. Lands the
+  DATA INTERFACE (bonds API, roster derivation, sel/slide state) before Lane W
+  begins.
+- LANE W (Walt, after his W4 build): card slider (scroll-snap per-copy
+  carousel, chips, flavor, hearts, Pet/Feed + burst FX, BEST FRIEND badge,
+  locked/egg cards with REAL step counts), collection panel (teaser, species
+  grid with xN/shiny/rarity/locked tiles, footer segments, Bonepedia stub).
+- AUDITS, each lane ships its own, proven red: paddock-scene-audit (decoded
+  herd from a real roster, band-overlap assertion, feet above the panel line,
+  empty roster = failure) and paddock-card-audit (bond +1 persists ACROSS
+  RELOAD, cap 5, badge, burst decoded, dots track scroll, re-tap dismiss).
+- Aggie: review/merge per the standing flow; only expected overlap with his
+  melt/transmog lane is app.css appends (Paddock namespaced `.pd-*`).
+
+**Decisions surfaced (Tom, only two):** 1. Bonepedia footer: stub as disabled
+tease or hide until built? (handoff says "navigates to the collection index
+(not built here)"). 2. Entry point: a card/button inside the Stable sheet, or
+also a Today-surface teaser row? Everything else is decided by the handoff
+(coach mark ON, free/unlimited Pet+Feed, teaser lurker = CX).
+
 ## 🌱 The Hollow: garden + apothecary as one hands-on scene — DECISION (designed 2026-08-09, awaiting Tom's call)
 
 **Tom's ask (2026-08-09, with an Animal Crossing Pocket Camp garden screenshot):**

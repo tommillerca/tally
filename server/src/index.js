@@ -1003,7 +1003,32 @@ export default {
         const reports = await all(`SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device WHERE ${nin('r.device')} ORDER BY r.ts DESC LIMIT 100`);
         // survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
         const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, generatedAt: Date.now() });
+        /* CRASHES. Deliberately NOT filtered by nin(): the developer-device
+           exclusion exists so one heavy tester cannot skew usage counts, but a
+           crash is a crash and hiding Tom's would hide the ones we hear about
+           first. Grouped by message so a crash loop reads as one row with a
+           count, newest-affected first, with the device spread so "one unlucky
+           phone" is distinguishable from "everybody". */
+        const errors = await all(
+          `SELECT json_extract(props,'$.m') msg, COUNT(*) n, COUNT(DISTINCT device) devices,
+                  MAX(app_v) build, MAX(json_extract(props,'$.k')) kind,
+                  MAX(json_extract(props,'$.src')) src, MAX(json_extract(props,'$.s')) screen,
+                  MAX(ts) lastTs
+           FROM events WHERE name='err' GROUP BY msg ORDER BY MAX(ts) DESC LIMIT 40`);
+        const errorsByBuild = await all(
+          `SELECT app_v build, COUNT(*) n, COUNT(DISTINCT device) devices
+           FROM events WHERE name='err' GROUP BY app_v ORDER BY app_v DESC LIMIT 10`);
+        /* VAULT. Two events with opposite meanings. A backfill SPIKE is expected
+           once, when the native build carrying the BhVault registration reaches
+           existing iOS players. A recover TRICKLE afterwards is the net catching
+           real reinstalls, which is the only proof the feature works that does not
+           require anyone to delete their own app. Backfills with zero recovers
+           after a few weeks would itself be the finding. */
+        const vault = await all(
+          `SELECT name, COUNT(*) n, COUNT(DISTINCT device) devices, MAX(app_v) build,
+                  MIN(day) firstDay, MAX(day) lastDay
+           FROM events WHERE name IN ('vault_backfill','vault_recover') GROUP BY name`);
+        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
       /* Admin: hand a specific player coins through the normal grants channel, so a
