@@ -7095,6 +7095,12 @@ body::before {
 @keyframes pdkPeekEyes { 0%, 74%, 92%, 100% { opacity: 0; } 78%, 88% { opacity: 1; } }
 .pdk-lurker .pdk-eyes i { width: 6px; height: 6px; border-radius: 50%; background: #a5e847;
   box-shadow: 0 0 7px 2.5px rgba(165, 232, 71, .95); }
+/* a SHINY hides here: gold eyes + drifting sparks, timed to the same peek */
+.pdk-lure-shiny .pdk-eyes i { background: #ffc961; box-shadow: 0 0 7px 2.5px rgba(255, 201, 97, .95); }
+.pdk-lure-spark { position: absolute; top: 18px; left: 22%; color: #ffc961; font-size: 13px;
+  text-shadow: 0 0 6px rgba(255, 201, 97, .9); opacity: 0; animation: pdkLureSpark 13s ease-in-out infinite; }
+.pdk-lure-spark.s2 { left: 68%; top: 8px; font-size: 10px; animation-delay: .6s; }
+@keyframes pdkLureSpark { 0%, 74%, 92%, 100% { opacity: 0; transform: translateY(6px); } 78%, 88% { opacity: 1; transform: translateY(-4px); } }
 /* scene furniture animations */
 .pdk-sign { position: absolute; top: 0; left: 50%; z-index: 7; transform-origin: 50% 0;
   animation: pdkSway 5s ease-in-out infinite alternate; }

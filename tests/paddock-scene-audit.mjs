@@ -75,8 +75,10 @@ const scene = await page.evaluate(async () => {
     roster: roster.length, pets: pets.length, walkCount, expectedFigures, cap: pdk.WALK_CAP,
     decoded: imgs.filter(i => i.naturalWidth > 0).length, imgs: imgs.length,
     walkers, flops,
-    keeper: [...document.querySelectorAll('.pdk-keeper img')].filter(i => i.naturalWidth > 0).length,
-    lurker: !!document.querySelector('.pdk-lurker'),
+    keeperImgs: document.querySelectorAll('.pdk-keeper img').length,
+    keeperDecoded: [...document.querySelectorAll('.pdk-keeper img')].filter(i => i.naturalWidth > 0).length,
+    lurker: document.querySelector('.pdk-lurker')?.dataset.pdk || null,
+    lurkerShiny: !!document.querySelector('.pdk-lurker.pdk-lure-shiny'),
     cxOwned: roster.some(r => r.sp === 'CX'),
     nest: !!document.querySelector('#pdkNest'),
     sign: !!document.querySelector('.pdk-sign'),
@@ -140,8 +142,17 @@ await sleep(900);
 const shotB = await page.screenshot({ clip: { x: 0, y: 100, width: 390, height: 400 } });
 ok('ALIVE pixels: the rendered scene changes between frames',
   Buffer.compare(Buffer.from(shotA), Buffer.from(shotB)) !== 0, `${Math.abs(shotA.length - shotB.length)} png byte delta`);
-ok('FURNITURE: keeper 3/3 decoded, nest, sign', scene.keeper === 3 && scene.nest && scene.sign, JSON.stringify({ k: scene.keeper, n: scene.nest, s: scene.sign }));
-ok('LURKER: teases exactly when CX is unowned', scene.lurker === !scene.cxOwned, `lurker=${scene.lurker} cxOwned=${scene.cxOwned}`);
+/* KEEPER IS THE PLAYER: layer count varies with the equipped outfit, so the
+   check is every layer decoded and at least body+skull present (an empty
+   keeper div would pass a decoded-only filter: rule 3). */
+ok('KEEPER: your own bonehead, every layer decoded', scene.keeperImgs >= 2 && scene.keeperDecoded === scene.keeperImgs,
+  `${scene.keeperDecoded}/${scene.keeperImgs} layers`);
+/* LURKER, both states. Fresh profile owns no CX, so the secret tease shows
+   first; granting CX through the real path must flip the bushes to an
+   uncollected-SHINY tease (gold treatment, species the player owns base of,
+   never CX, never an owned shiny). */
+ok('LURKER: CX secret tease while CX is unowned', scene.lurker === 'CX' && !scene.lurkerShiny, `lurker=${scene.lurker} shiny=${scene.lurkerShiny}`);
+ok('FURNITURE: nest and sign present', scene.nest && scene.sign, JSON.stringify({ n: scene.nest, s: scene.sign }));
 const coach = await page.evaluate(async () => {
   const before = !!document.querySelector('#pdkCoach');
   document.querySelector('.pdk-pet')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -149,6 +160,31 @@ const coach = await page.evaluate(async () => {
   return { before, after: !!document.querySelector('#pdkCoach') };
 });
 ok('COACH: a pet tap dismisses the coach mark', coach.before && !coach.after, JSON.stringify(coach));
+/* LURKER, second state, LAST because it tears the sheets down: granting CX
+   through the real path must flip the bushes to an uncollected-SHINY tease
+   (gold treatment, a species whose base the player owns, never CX). */
+await page.evaluate(async () => {
+  const m = await import('./js/loot.js');
+  await m.addPetInstance('CX', {});
+  document.querySelectorAll('.sheet-close').forEach(b => b.click());
+});
+await sleep(900);
+const re = await reachPaddock();
+await sleep(2400);
+const lurk2 = await page.evaluate(async () => {
+  const el = document.querySelector('.pdk-lurker');
+  const loot = await import('./js/loot.js');
+  const owned = await loot.ownedCosmeticIds();
+  const insts = await loot.petInstances();
+  return { reopened: !!document.querySelector('.pdk-scene'), sp: el?.dataset.pdk || null,
+    shinyTreat: !!el?.classList.contains('pdk-lure-shiny'), ownBase: el ? owned.has(el.dataset.pdk) : false,
+    /* the whole point: the teased shiny must be one the player does NOT have */
+    shinyAlreadyOwned: el ? insts.some(x => x.sp === el.dataset.pdk && x.shiny) : null };
+});
+ok('LURKER: once CX is owned, the bushes tease an uncollected shiny you could hunt',
+  re && lurk2.reopened && !!lurk2.sp && lurk2.sp !== 'CX' && lurk2.shinyTreat && lurk2.ownBase && lurk2.shinyAlreadyOwned === false,
+  JSON.stringify(lurk2));
+
 ok('no page errors from the first load', (errors || []).length === 0, (errors || [])[0] || '');
 
 await browser.close();

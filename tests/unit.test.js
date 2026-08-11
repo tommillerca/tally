@@ -2545,6 +2545,8 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
     /* and the exclusion itself is pinned to the measured graveyard edge (the
        cross ends at x78), so weakening the spec cannot pass the loop above */
     assert.ok(PDK_SCENE.ROW_XMIN(322) >= 86, 'top-row left exclusion regressed below the graveyard edge');
+    /* and the bottom-left corner is the player's own bonehead now */
+    assert.ok(PDK_SCENE.ROW_XMIN(460) >= 152, 'bottom-row left exclusion regressed into the keeper corner');
   }
   // every motion kind gets placed, none invents a position off-scene
   const cast = [...Array(4)].flatMap((_, i) => [

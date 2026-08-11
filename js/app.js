@@ -9756,8 +9756,8 @@ function openPetsHelp() {
  * back-swipe / history behavior of openSheet is house machinery we do not
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
-  const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE } = await import('./paddock.js');
-  const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
+  const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
+  const [roster, eggs, eqOwn, ownedIds] = await Promise.all([paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds()]);
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -9765,7 +9765,24 @@ async function openPaddock() {
      dateKey. Same class as the bug documented at the top of mini-theme-audit.mjs.
      Pass the app's own day so there is one day boundary in the game. */
   const places = placePaddock(roster, PDK_SCENE, dateKey());
-  const ownedSpecies = new Set(roster.map(r => r.sp));
+  /* THE BUSHES TEASE WHAT YOU ARE MISSING. Tom, 2026-08-11: "I like the hiding
+     in the bushes thing but maybe it should be uncollected shinies? It's
+     showing the day one lizard as hiding in the bushes for me but I have it."
+     Two fixes in one: ownership now reads the cosmetic inventory (the same
+     source the wardrobe trusts) instead of the instance roster, which missed
+     legacy grants like the Founder's Lizard and showed veterans their own pet;
+     and the tease is now a shiny you have NOT collected, of a species you DO
+     own (never spoils an unseen pet), rotating daily. The CX secret keeps
+     priority for players who genuinely lack it. CX has no shiny variant, so it
+     is never a shiny candidate. Nothing missing = no lurker: an empty tease
+     would be a lie. */
+  /* shiny ownership comes off the INSTANCES already in hand, not S.shinyPets:
+     that cache refreshes at boot + hatch, so a mid-session grant or restore
+     would leave the bushes teasing a shiny the player just collected */
+  const shinyOwned = new Set(roster.filter(r => r.shiny).map(r => r.sp));
+  const shinyGaps = [...ownedIds].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && id !== 'CX' && !shinyOwned.has(id)).sort();
+  const lurkSp = !ownedIds.has('CX') ? 'CX'
+    : shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
 
   const backdrop = `
     <svg class="pdk-ground" viewBox="0 0 390 520" aria-hidden="true">
@@ -9857,12 +9874,19 @@ async function openPaddock() {
             <text x="98" y="42" text-anchor="middle" font-family="Bangers, 'Arial Black', sans-serif" font-size="24" letter-spacing="2.5" fill="#f2e9d7">THE PADDOCK</text>
           </svg>
         </div>
+        <!-- THE KEEPER IS YOU. Tom, 2026-08-11: "the paddock should show your
+             own bone head in the field with the pets... stand a bit lower in
+             the space closer to the bottom left where there's some empty room."
+             Your equipped outfit, rendered by the same layer stack as the Today
+             hero (skip BG: the scene is the backdrop; skip C: your pets are
+             already the point of the field). -->
         <div class="pdk-keeper" style="left:${K.x - K.px / 2}px;top:${K.y - K.px / 2}px;width:${K.px}px;height:${K.px}px">
-          <img src="assets/bh/B/B0-1.png" alt=""><img src="assets/bh/SK/SK0-1.png" alt=""><img src="assets/bh/H/H9.png" alt="">
+          ${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}
         </div>
         ${roster.map(petHtml).join('')}
-        ${!ownedSpecies.has('CX') ? `<div class="pdk-lurker" data-pdk="CX" style="left:296px;top:158px;width:96px;height:64px">
-          <img src="${bhAsset(BH_BY_ID['CX'])}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
+        ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
+          <img src="${bhAsset(BH_BY_ID[lurkSp])}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
+          ${lurkSp !== 'CX' ? '<span class="pdk-lure-spark">✦</span><span class="pdk-lure-spark s2">✦</span>' : ''}
         </div>` : ''}
         <i class="pdk-fog" style="left:20px;top:172px;--pdk-dur:26s"></i>
         <i class="pdk-fog" style="left:120px;top:214px;--pdk-dur:32s"></i>
