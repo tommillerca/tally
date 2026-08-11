@@ -2562,21 +2562,31 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
  *      token ':'" at a random line is a miserable way to learn about a
  *      comment).
  * Proven red against the exact production bytes of 178f442. */
-test('every js module parses (a shell that cannot parse cannot report itself)', async () => {
-  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+test('every js module parses (a shell that cannot parse cannot report itself)', () => {
+  /* PARSED, NEVER EXECUTED. The first version of this (Reggie's, written from
+     the same urgent message within fifteen minutes of mine) imported each file
+     as a base64 data URI and caught SyntaxError. That detects the parse failure
+     correctly, but `import()` RUNS the module: for js/app.js it executes top-level
+     code in node until something throws on a missing browser global, so the check
+     depends on side effects it does not want and cannot control.
+     `--check --input-type=module` through stdin parses and stops. It is the same
+     step the browser performs before running a line, and it touches nothing.
+     Kept his framing and his sibling backtick lint; only the mechanism is mine.
+     PROVEN RED against the exact production bytes of the 13-minute outage:
+     `git show 178f442:js/app.js` yields "SyntaxError: Unexpected token ':'". */
+  const jsDir = join(here, '..', 'js');
+  const files = readdirSync(jsDir).filter(f => f.endsWith('.js')).sort();
   assert.ok(files.length > 20, 'the js/ scan found almost nothing: scan broken, not tree clean');
   const broken = [];
   for (const f of files) {
     try {
-      // data-URI import: parse errors reject with SyntaxError BEFORE any
-      // browser-global runtime error can occur; resolution errors mean the
-      // parse SUCCEEDED (imports resolve after parse).
-      await import('data:text/javascript;base64,' + readFileSync(join(here, '../js', f)).toString('base64'));
+      execFile_.execFileSync(process.execPath, ['--check', '--input-type=module'],
+        { input: readFileSync(join(jsDir, f), 'utf8'), stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (e) {
-      if (e instanceof SyntaxError) broken.push(`${f}: ${e.message}`);
+      broken.push(`js/${f}: ${(String(e.stderr).match(/SyntaxError.*/) || ['parse failed'])[0]}`);
     }
   }
-  assert.deepEqual(broken, [], `modules that do not parse: ${broken.join(' | ')}`);
+  assert.deepEqual(broken, [], `these files would not load in a browser:\n  ${broken.join('\n  ')}`);
 });
 test('no template-literal HTML comment carries a backtick', () => {
   const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
