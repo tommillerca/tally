@@ -9941,7 +9941,9 @@ async function openStable(opts = {}) {
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
-    const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
+    /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
+       below draws your own Bonehead at the gate, the same way the scene does. */
+    const [insts, eqIid, bank, st, eqOwn] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     // expanded talent tree: default to the active pet so it's visible right away
     /* Default CLOSED (v317). The list layout opened the active pet's tree on
@@ -10069,7 +10071,70 @@ async function openStable(opts = {}) {
     const spChips = pair ? [a, b]
       .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
 
+    /* THE WAY IN. Tom, 2026-08-11: the Paddock's entry was the FOURTH CHIP in the row
+       below, `chip chip-btn`, measured 134x38 and therefore the same class and the same
+       size as "How pets work". The newest place in the game looked like a help link and
+       read as less important than a sentence about levelling. Mocked both ways first
+       (market-quality-mockups/paddock-entry/) and Tom picked the door, above the
+       carousel, counting PETS.
+       It is a DOOR, not a louder label: the Paddock's pitch is "not a list, a place", so
+       the entry shows the place with your own animals standing in it. Figure contract in
+       full, because this is a new figure surface:
+         - the Bonehead goes through the same avatar layer stack the scene uses, with
+           BG and the C slot skipped, so your outfit at the gate matches your outfit in
+           the field and the pet slot is skipped rather than passed (STACK's two honest
+           paths are about drawing a pet INSIDE the stack; here the pets are beside it).
+         - each pet goes through petAsideHtml, given a pet from petFrom with a bare
+           species so shiny is left UNDEFINED and S.shinyPets answers, which is the only
+           correct source for your OWN pet. That helper seats it, mass-normalises it and
+           keeps it on the character's baseline. No raw image tags here: the mock used
+           them, shipping code does not.
+         - PROSE IN THIS COMMENT AVOIDS CALL SHAPES ON PURPOSE. COVERAGE and STACK are
+           line greps for `name` followed by an open paren, and they skip only lines
+           starting with function, // or *. The first draft of this comment described
+           both calls in their real syntax and was itself reported as an unregistered
+           pet call site and an avatar that never says whose shiny it is.
+         - PLANE by construction: every figure is bottom-aligned to one ground line, so
+           a hovering species floats off the same baseline the others stand on.
+       Registered as `stable-door` in tests/figure-audit.mjs. Keeps the id
+       `stableToPaddock` so the existing handler and every audit that clicks it are
+       untouched. */
+    /* TWO pets, not three, and laid out by FLEX rather than by hand-placed slots.
+       Measured, not guessed: petAsideHtml mass-normalises, so the px asked for is not
+       the px drawn (a 34px duck renders 48 wide), and there is only 72px of scene to
+       the right of the keeper. Three sprites measured 48 + 29 + 39 = 116px and the
+       third one's box ended at 161 inside a 150px panel, so it was clipped and all
+       three overlapped. Per-species tuning is not available either: `order` is
+       rarity-sorted, so which species land here changes per player. A flex row anchored
+       to the safe box holds whatever two species turn up, at any normalised size, and
+       two animals beside you reads as a field with company rather than a contact sheet.
+       Your two RAREST, because that is the collection worth walking out to see. */
+    const doorSp = order.slice(0, 2);
+    const doorPx = 28;
     body.innerHTML = `
+      <button class="pdk-door" id="stableToPaddock" type="button">
+        <span class="pdk-door-scene" aria-hidden="true">
+          <i class="pdk-door-moon"></i>
+          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
+          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
+          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}</span>
+          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx)}</span>`).join('')}</span>
+          <i class="pdk-door-vig"></i>
+        </span>
+        <span class="pdk-door-tx">
+          <b>THE PADDOCK</b>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} out in the field</small>
+        </span>
+        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
+             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
+             the chip row below: a ternary hides a missing icon from readers and ships
+             a bare "?" glyph.
+             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
+             quoted the ternary in backticks, closed the template literal it sits
+             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
+             warning below is not decoration, it is a rake, and I stepped on it. -->
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
@@ -10081,9 +10146,11 @@ async function openStable(opts = {}) {
              NO BACKTICKS IN THIS COMMENT: it sits inside a template literal, and
              the first draft quoted the ternary in backticks, which closed the
              string and took the whole app down. Every browser suite failed in
-             four seconds and the gate said so immediately. -->
+             four seconds and the gate said so immediately.
+             THE PADDOCK CHIP IS GONE FROM THIS ROW: it is the door above now. It
+             moved rather than being duplicated, so there is still exactly one way
+             in and it still carries the id every handler and audit clicks. -->
         <button class="chip chip-btn" id="petsHelp" type="button">How pets work</button>
-        <button class="chip chip-btn" id="stableToPaddock" type="button">\u{1F43E} The Paddock</button>
       </div>
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -12383,7 +12450,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v367'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v369'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION. RENUMBER AT MERGE (with sw.js VERSION + changelog n)
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

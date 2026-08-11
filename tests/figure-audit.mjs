@@ -169,6 +169,27 @@ const SITES = [
   },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
+    /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder
+       button on 2026-08-11). A 150x94 window onto the field: your own Bonehead at the
+       gate via the same avatarLayersHtml call the scene makes, and up to three of your
+       species beside it through petAsideHtml(petFrom(null, sp), px). DRIVEN, not
+       excused: it is a new paired surface, so the two rules that exist because a pet
+       once got exiled to a corner and once floated off the baseline are measured here
+       on the real screen. The scene is small and the figures are deliberately close, so
+       NEAR is comfortable; PLANE gets the flat tolerance because everything in the
+       panel bottom-aligns to one ground line, and a hovering species is the only thing
+       that should read above it. */
+    key: 'stable-door', claim: 'pdk-door-pet', paired: true,
+    bh: '.pdk-door-keeper', pet: '.pdk-door-pet:first-child',
+    planeTol: 34,
+    drive: async page => {
+      await page.evaluate(() => { location.hash = '#/pets'; });
+      await sleep(900);
+      await page.evaluate(() => document.getElementById('stableBtn')?.click());
+      await sleep(1600);
+    },
+  },
+  {
     /* THE PADDOCK herd (Lane R scene, 2026-08-11). One petSpriteHtml call
        renders every owned COPY; shiny comes off the INSTANCE row from
        paddockRoster (contract rule 1), and placement runs through

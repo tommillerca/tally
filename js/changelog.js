@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  /* RENUMBER AT MERGE: claims v369 with js/app.js APP_BUILD and sw.js VERSION. */
+  { n: 369, date: '2026-08-11', title: 'A door to the Paddock', items: [
+    'The Stable opens with a window into the Paddock: your own Bonehead at the gate and your animals out in the field behind it. It was a small chip in a row of chips, which was no way to announce a place.',
+  ] },
   { n: 367, date: '2026-08-11', title: 'Your ducks are individuals', items: [
     "<b>Every duck was sharing one identity.</b> That is why they were all called the same thing, and why hearts given to one lit up all of them. They are separate copies now, each with its own name and its own bond. Nobody loses a single heart in the repair.",
     'Ducks no longer fly in lockstep either: they set off at their own moment and at their own pace.',
