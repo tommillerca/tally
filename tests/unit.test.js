@@ -2628,6 +2628,105 @@ test('no template-literal HTML comment carries a backtick', () => {
   assert.deepEqual(hits, [], `backticks inside HTML comments (template-literal killers): ${hits.join(', ')}`);
 });
 
+/* ===== THE PADDOCK, Lane W: cards + collection panel =====================
+ * These are the decisions about WHAT a player reads, so they are testable with no
+ * browser and they live here rather than in the audit. The audit owns what only a
+ * browser can answer: scroll, pops, decoded art, and the bond reload round trip.
+ * NOTE (Reggie flagged it): every lane inserts tests before this same `await
+ * runAll();`, so whoever merges resolves by hand AND RUNS the suite. `node --check`
+ * will not save you: it misreports top-level await in ESM as a syntax error, which
+ * cost me a broken unit.test.js earlier today.
+ */
+const PDK = await import('../js/paddock-cards.js');
+const PDK_ROSTER = [
+  { iid: 'a1', sp: 'C5', shiny: false, bond: 0, levelSteps: 0, name: 'DOOM', flavor: 'Chews fence posts.' },
+  { iid: 'a2', sp: 'C5', shiny: false, bond: 5, levelSteps: 45000, name: 'GRAVY', flavor: 'Sits on the hay.' },
+  { iid: 'a3', sp: 'C5', shiny: false, bond: 2, levelSteps: 0, name: 'TANK', flavor: 'Snores.' },
+  { iid: 'b1', sp: 'C3', shiny: true, bond: 1, levelSteps: 0, name: 'GILDA', flavor: 'Flops.' },
+  { iid: 'c1', sp: 'C2', shiny: false, bond: 3, levelSteps: 0, name: 'MEATBALL', flavor: 'Flies.' },
+];
+
+test('paddock: a card is a COPY, addressed by iid', () => {
+  const s = PDK.sliderModel(PDK_ROSTER, 'C5');
+  assert.equal(s.copies.length, 3, 'three Bulldog copies, three cards');
+  assert.deepEqual(s.copies.map(c => c.iid), ['a1', 'a2', 'a3']);
+  /* the bond is banked against the INSTANCE, so the card must carry iid. A
+     species+index identity would move the affection to a different animal the
+     first time the roster sorted differently. */
+  const html = PDK.cardHtml(s.copies[2]);
+  assert.ok(html.includes('data-iid="a3"'), 'the card and its buttons must carry the iid');
+  assert.ok(/data-act="pet" data-iid="a3"/.test(html), 'Pet must post the copy it belongs to');
+});
+
+test('paddock: dots exist only above one copy, and track copies', () => {
+  assert.equal(PDK.sliderModel(PDK_ROSTER, 'C5').dots, 3);
+  assert.equal(PDK.sliderModel(PDK_ROSTER, 'C2').dots, 0, 'one copy needs no dots');
+  assert.ok(!PDK.sliderHtml(PDK_ROSTER, 'C2').includes('pdk-dots'), 'and must not render the row');
+});
+
+test('paddock: the bond meter fills to its value and BEST FRIEND is the cap', () => {
+  const [doom, gravy, tank] = PDK.sliderModel(PDK_ROSTER, 'C5').copies;
+  assert.equal((PDK.cardHtml(doom).match(/pdk-heart on/g) || []).length, 0, '0/5 fills nothing');
+  assert.equal((PDK.cardHtml(tank).match(/pdk-heart on/g) || []).length, 2, '2/5 fills two');
+  assert.equal((PDK.cardHtml(gravy).match(/pdk-heart on/g) || []).length, 5, '5/5 fills five');
+  assert.ok(!PDK.cardHtml(tank).includes('pdk-bff'), 'no badge below the cap');
+  assert.ok(PDK.cardHtml(gravy).includes('pdk-bff'), 'badge at the cap');
+  /* a bond above the cap is a bug upstream, but the card must not draw six hearts */
+  assert.equal(PDK.cardModel({ iid: 'x', sp: 'C5', bond: 9 }).bond, 5, 'clamped for display');
+});
+
+test('paddock: locked and egg cards offer no affection controls', () => {
+  const locked = PDK.lockedCardHtml('CX');
+  assert.ok(!/pdk-heart|data-act=/.test(locked), 'nothing to bond with, so no hearts and no buttons');
+  const egg = PDK.eggCardHtml({ count: 2, nearest: { togo: 2140, pct: 0.4, ready: false } });
+  assert.ok(!/pdk-heart|data-act=/.test(egg), 'same for the egg card');
+});
+
+test('paddock: the egg card carries a REAL step count in every state', () => {
+  assert.match(PDK.eggCardModel({ count: 0, nearest: null }).line, /Nothing in the nest/);
+  assert.match(PDK.eggCardModel({ count: 3, nearest: { togo: 2140, pct: 0.4 } }).line, /2,140 steps to go/);
+  assert.match(PDK.eggCardModel({ count: 1, nearest: { togo: 0, pct: 1, ready: true } }).line, /ready to hatch/);
+  /* the handoff shipped a hardcoded "2,140 steps to go"; wiring the real number is
+     the point, so a placeholder surviving into the copy is a failure */
+  assert.ok(!/2,140/.test(PDK.eggCardModel({ count: 1, nearest: { togo: 77, pct: 0.1 } }).line),
+    'the line must come from the egg data, not from the mockup');
+});
+
+test('paddock: the species grid counts copies, stars shinies and locks the rest', () => {
+  const g = PDK.gridModel(PDK_ROSTER);
+  assert.equal(g.length, PDK.PET_SPECIES.length, 'every species gets a tile, owned or not');
+  const by = Object.fromEntries(g.map(t => [t.sp, t]));
+  assert.equal(by.C5.count, 3);
+  assert.ok(by.C5.showCount, 'duplicates show xN');
+  assert.ok(!by.C2.showCount, 'a single copy shows no badge');
+  assert.ok(by.C3.anyShiny, 'one shiny copy stars the species');
+  assert.ok(!by.C5.anyShiny);
+  assert.ok(!by.C1.owned && !by.CX.owned, 'unowned species stay locked rather than hidden');
+  const html = PDK.panelHtml(PDK_ROSTER, { count: 0, nearest: null });
+  assert.ok(html.includes('×3'), 'the count badge reaches the markup');
+  assert.ok(html.includes('pdk-lockt'), 'and so does the locked treatment');
+});
+
+test('paddock: the footer counts copies and kinds, not species rows', () => {
+  assert.equal(PDK.footerLabel(PDK_ROSTER), '5 PETS · 3 OF 6 KINDS');
+  assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), '1 PET · 1 OF 6 KINDS', 'singular reads right');
+  assert.equal(PDK.footerLabel([]), '0 PETS · 0 OF 6 KINDS');
+});
+
+test('paddock: nothing emits a .pd- class', () => {
+  /* `.pd-*` is the wardrobe PAPERDOLL (app.css "wardrobe: paperdoll":
+     .pd-slot/.pd-art/.pd-center/.pd-gear/.pd-stat, used by renderCharacter).
+     The Paddock is `.pdk-`. A generic collision on a dark screen is the same defect
+     as the `.sheet-body` reveal rule that left the Boneyard map blank, so this
+     stops it at the source rather than after someone reports a blank panel. */
+  const out = PDK.sliderHtml(PDK_ROSTER, 'C5') + PDK.panelHtml(PDK_ROSTER, { count: 1, nearest: { togo: 5, pct: 0.9 } })
+    + PDK.lockedCardHtml('CX') + PDK.eggCardHtml({ count: 1, nearest: null });
+  const bad = [...out.matchAll(/class="([^"]*)"/g)]
+    .flatMap(m => m[1].split(/\s+/)).filter(c => /^pd-/.test(c));
+  assert.ok(out.length > 0, 'no markup produced at all: the scan proves nothing');
+  assert.deepEqual([...new Set(bad)], [], 'the Paddock must not use the paperdoll namespace');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
