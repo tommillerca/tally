@@ -2652,7 +2652,7 @@ test('bondUp refusals are NAMED and carry the full meter (Walt interface pins, 2
      Unclassified is the only failing state, which is the point: the healed-pet
      data loss Walt caught came from a map nobody thought to register. */
   const lootSrc = readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
-  const NOT_IID_KEYED = ['petInst', 'pets', 'petBreedCredit', 'petEquipped', 'petLvlV', 'petCareV'];
+  const NOT_IID_KEYED = ['petInst', 'pets', 'petBreedCredit', 'petEquipped', 'petLvlV', 'petCareV', 'petStepCredit', 'pettalents'];   // petStepCredit = scalar checkpoint; pettalents = SPECIES-keyed (callers pass .sp)
   const petKeys = [...new Set([...lootSrc.matchAll(/kv(?:Set|Get)\('(pet\w*)'/g)].map(m => m[1]))];
   for (const k of petKeys) {
     assert.ok(IID_KEYED_MAPS.includes(k) || NOT_IID_KEYED.includes(k),
