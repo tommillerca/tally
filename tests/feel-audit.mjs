@@ -23,9 +23,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { boot, sleep } = await import(path.join(ROOT, 'tests/godmode.js'));
 
-let srv = spawn('python3', ['-m', 'http.server', '8147', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
-await sleep(900);
-const base = process.env.URL || 'http://127.0.0.1:8147/';
+/* serveTree: OS-assigned port, and a hard error if python never bound. */
+const srvHandle = process.env.URL ? null : await serveTree(ROOT);
+const srv = { kill: () => srvHandle && srvHandle.close() };
+const base = process.env.URL || srvHandle.url;
 
 const results = [];
 const ok = (n, pass, d = '') => { results.push({ n, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); };

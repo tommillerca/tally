@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree} from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -21,12 +21,15 @@ const ok = (label, pass, detail = '') => {
   if (!pass) fails = 1;
 };
 
-let srv = null;
+let srv = null, srvHandle = null;
 let base = process.env.URL;
 if (!base) {
-  srv = spawn('python3', ['-m', 'http.server', '8177', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
-  await sleep(900);
-  base = 'http://127.0.0.1:8177/';
+  /* serveTree: a free port from the OS, and a HARD ERROR if python never
+     bound. The hard-coded port with stdio:'ignore' meant a stranded server
+     already holding it made this audit talk to whatever was listening. */
+  srvHandle = await serveTree(ROOT);
+  srv = { kill: () => srvHandle.close() };
+  base = srvHandle.url;
 }
 
 const FRIENDS = [

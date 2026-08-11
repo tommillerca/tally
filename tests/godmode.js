@@ -238,3 +238,52 @@ export async function settle(page, ms = 250) {
 export async function setWidth(page, width, height = 932) {
   await page.setViewport({ width, height, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 }
+
+/* SERVE THIS CHECKOUT, AND FAIL LOUDLY IF THE PORT WAS NOT OURS.
+ *
+ * The self-serving audits each did:
+ *   spawn('python3', ['-m','http.server','8134','--bind','127.0.0.1'], { stdio: 'ignore' })
+ * on a HARD-CODED port with stdio thrown away. Three problems, in rising order of
+ * nastiness:
+ *   1. A stranded server from a killed run already holds the port. python exits with
+ *      "Address already in use" straight into /dev/null, and the audit then talks to
+ *      whatever IS listening. It passes or fails about somebody else's tree.
+ *   2. Three ports are double-booked INSIDE this repo: 8146 (crew-inbox, onb-audit),
+ *      8147 (feel-audit, milestones), 8171 (race-you, scout-audit). One checkout is
+ *      only honest because they never run at the same moment.
+ *   3. `await sleep(900)` then carry on: a slow start reads as a dead server.
+ *
+ * So: ask the OS for a free port, keep the child's stderr, and wait for python to say
+ * it is serving. If it exits first, that is a hard error naming what python said. A
+ * failed bind can no longer be silent, which is the whole point.
+ */
+export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = {}) {
+  /* forcePort exists so the failure branches can be PROVEN: point it at a privileged
+     port and python cannot bind, which is the stranded-server case without needing a
+     stranded server (macOS happily lets two processes share a port with SO_REUSEADDR,
+     so squatting does not reproduce it). */
+  const { spawn } = await import('node:child_process');
+  const net = await import('node:net');
+  const port = forcePort || await new Promise((res, rej) => {
+    const s = net.createServer();
+    s.once('error', rej);
+    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
+  });
+  const srv = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  let err = '';
+  srv.stderr.on('data', d => { err += d; });
+  srv.stdout.on('data', () => {});
+  let exited = null;
+  srv.on('exit', (code, sig) => { exited = sig || `exit ${code}`; });
+
+  const url = `http://127.0.0.1:${port}/`;
+  const t0 = Date.now();
+  for (;;) {
+    if (exited) throw new Error(`serveTree: python died before serving ${url} (${exited}). stderr: ${err.trim().split('\n').pop() || '(silent)'}`);
+    try { if ((await fetch(url + 'index.html')).ok) break; } catch { /* not up yet */ }
+    if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return { url, port, close: () => { try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
+}

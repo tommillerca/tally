@@ -66,9 +66,10 @@ const ok = (n, pass, d = '') => { results.push({ n, pass }); console.log(`${pass
      `${rarityLines} rarity rules; ${offenders.length ? offenders.join(' | ') : 'all on deck tokens'}`);
 }
 
-const srv = spawn('python3', ['-m', 'http.server', '8136', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
-await sleep(900);
-const base = process.env.URL || 'http://127.0.0.1:8136/';
+/* serveTree: OS-assigned port, and a hard error if python never bound. */
+const srvHandle = process.env.URL ? null : await serveTree(ROOT);
+const srv = { kill: () => srvHandle && srvHandle.close() };
+const base = process.env.URL || srvHandle.url;
 const { browser, page } = await boot(base, {
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],

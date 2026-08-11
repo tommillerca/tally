@@ -10,7 +10,7 @@
  *     nothing and paints zero pixels regardless of what the transform says.
  *   - samples === 0       → an empty sample set is a FAILURE, never a pass.
  */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree} from './godmode.js';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -31,10 +31,10 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 let srv = null;
 let base = process.env.URL;
 if (!base) {
-  srv = spawn('python3', ['-m', 'http.server', '8219', '--bind', '127.0.0.1'],
-    { cwd: path.resolve(HERE, '..'), stdio: 'ignore' });
-  await new Promise(r => setTimeout(r, 900));
-  base = 'http://127.0.0.1:8219/';
+  /* serveTree: OS-assigned port, and a hard error if python never bound. */
+  const srvHandle = await serveTree(path.resolve(HERE, '..'));
+  srv = { kill: () => srvHandle.close() };
+  base = srvHandle.url;
 }
 const { browser, page } = await boot(base, { protocolTimeout: 180000 });
 let bad = 0;
