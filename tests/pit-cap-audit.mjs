@@ -2,7 +2,12 @@
  * body text, or the section summary still claiming a rank you cannot fight. */
 import { boot, sleep } from './godmode.js';
 const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
-const { browser, page } = await boot(process.env.URL);
+/* argv FIRST, env.URL second: the convention error-telemetry-audit and
+   year-readout-audit already use. Reading env.URL ONLY meant that any run passing
+   the URL as an argument (which is how the release gate invokes every suite) fell
+   through to godmode's boot() default, https://tommillerca.github.io/tally/, and
+   graded PRODUCTION while reading as coverage of the tree under test. */
+const { browser, page } = await boot(process.argv[2] || process.env.URL);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -32,13 +37,26 @@ await (await page.$('#pitBtn')).click();
 await sleep(2200);
 
 const st = await page.evaluate(() => {
-  const sects = [...document.querySelectorAll('.pit-sect')];
-  const g = sects.find(s => /Gauntlet/.test(s.querySelector('summary')?.textContent || ''));
-  if (!g) return { none: true };
-  g.open = true;
-  const gate = g.querySelector('.pit-gate');
+  /* RE-ANCHORED, AND HERE IS THE DESIGN CHANGE. The Pit sheet's sections used to be
+     collapsible `<details class="pit-sect"><summary>Endless · The Gauntlet</summary>`.
+     They are flat `<div class="t3-sect"><b>Endless · The Gauntlet</b></div>` headers
+     now, the same section pattern the rest of the app uses: `.t3-sect` appears 18
+     times in js/app.js and `.pit-sect` survives only in one stale guard, so this is a
+     deliberate unification rather than an accident. Consequences for this audit:
+     there is no summary to read, nothing to open (the content was never collapsed),
+     and the section is a HEADER plus the siblings that follow it, so the body has to
+     be gathered up to the next header instead of queried inside a wrapper. */
+  const heads = [...document.querySelectorAll('.t3-sect')];
+  const head = heads.find(h => /Gauntlet/.test(h.textContent || ''));
+  if (!head) return { none: true };
+  /* the section body: every sibling after the header until the next header */
+  const body = [];
+  for (let n = head.nextElementSibling; n && !n.classList.contains('t3-sect'); n = n.nextElementSibling) body.push(n);
+  const q = sel => { for (const n of body) { const hit = n.matches?.(sel) ? n : n.querySelector?.(sel); if (hit) return hit; } return null; };
+  const g = { querySelector: q, textContent: body.map(n => n.textContent).join(' ') };
+  const gate = q('.pit-gate');
   return {
-    summary: g.querySelector('summary').textContent.replace(/\s+/g, ' ').trim(),
+    summary: head.textContent.replace(/\s+/g, ' ').trim(),   // the header IS the summary now
     hasGateCard: !!gate,
     gateHead: gate?.querySelector('.pg-head b')?.textContent.trim(),
     hasMeter: !!gate?.querySelector('.pg-meter'),
@@ -47,12 +65,18 @@ const st = await page.evaluate(() => {
     ctaIsLink: !!gate?.querySelector('a#endlessGate') || (gate?.querySelector('#endlessGate')?.className || '').includes('link'),
     ctaText: gate?.querySelector('#endlessGate')?.textContent.trim(),
     fightBtn: g.querySelector('#endlessBtn')?.textContent.trim(),
-    rowSaysRematchOnly: /rematch only/i.test(g.querySelector('.crate-row')?.textContent || ''),
+    rowSaysRematchOnly: /rematch only/i.test(q('.t3-row')?.textContent || ''),   // was .crate-row
   };
 });
 console.log('gauntlet at the cap:', JSON.stringify(st));
 check('the Gauntlet section exists', !st.none);
-check('the SUMMARY says you are at the cap, not a fightable rank', /AT THE CAP/.test(st.summary), st.summary);
+/* CASE-INSENSITIVE, and that is a re-anchor with a reason rather than a relaxation.
+   The cap state used to be uppercase copy inside the `<summary>`; it now lives in a
+   `<span class="r chip">At the cap</span>` beside the header. `.t3-sect b` is
+   uppercased by CSS (text-transform) while `.chip` is not, so the SOURCE text this
+   audit reads is title case even though the heading still LOOKS uppercase on screen.
+   The check is about what the section says, not how the stylesheet cases it. */
+check('the SUMMARY says you are at the cap, not a fightable rank', /at the cap/i.test(st.summary), st.summary);
 check('there is a real gate card, not a sentence in a note', st.hasGateCard);
 check('it names the ceiling', /ceiling at rank \d+/i.test(st.gateHead || ''), st.gateHead);
 check('it shows the arithmetic (bosses beaten, cap, next cap)', st.hasMeter && /cap \d+/.test(st.meter || ''), st.meter);
@@ -76,22 +100,29 @@ await sleep(1600);
 await (await page.$('#pitBtn')).click();
 await sleep(2000);
 const un = await page.evaluate(() => {
-  const g = [...document.querySelectorAll('.pit-sect')].find(s => /Gauntlet/.test(s.querySelector('summary')?.textContent || ''));
-  g.open = true;
-  return { summary: g.querySelector('summary').textContent.replace(/\s+/g, ' ').trim(), hasGate: !!g.querySelector('.pit-gate'), btn: g.querySelector('#endlessBtn')?.textContent.trim() };
+  /* same re-anchor as above: header + following siblings, no summary, nothing to open */
+  const head = [...document.querySelectorAll('.t3-sect')].find(h => /Gauntlet/.test(h.textContent || ''));
+  if (!head) return { none: true };
+  const body = [];
+  for (let n = head.nextElementSibling; n && !n.classList.contains('t3-sect'); n = n.nextElementSibling) body.push(n);
+  const q = sel => { for (const n of body) { const hit = n.matches?.(sel) ? n : n.querySelector?.(sel); if (hit) return hit; } return null; };
+  return { summary: head.textContent.replace(/\s+/g, ' ').trim(), hasGate: !!q('.pit-gate'), btn: q('#endlessBtn')?.textContent.trim() };
 });
 console.log('gauntlet below the cap:', JSON.stringify(un));
-check('below the cap there is NO gate card', un.hasGate === false, JSON.stringify(un));
-check('and the summary shows a fightable rank', /rank \d+/.test(un.summary) && !/AT THE CAP/.test(un.summary), un.summary);
+check('below the cap there is NO gate card', !un.none && un.hasGate === false, JSON.stringify(un));
+check('and the summary shows a fightable rank', /rank \d+/i.test(un.summary) && !/at the cap/i.test(un.summary), un.summary);
 check('and the button says Fight', /^Fight$/i.test(un.btn || ''), un.btn);
 
 await page.evaluate(() => {
-  const g = [...document.querySelectorAll('.pit-sect')].find(s => /Gauntlet/.test(s.querySelector('summary')?.textContent || ''));
-  g.scrollIntoView({ block: 'center' });
-});
+  const head = [...document.querySelectorAll('.t3-sect')].find(h => /Gauntlet/.test(h.textContent || ''));
+  head?.scrollIntoView({ block: 'center' });   // optional-chained: a missing header is
+});                                            // a reported failure above, not a throw here
 await sleep(400);
-const el = await page.$('.pit-sect');
-if (el) { await el.screenshot({ path: `${DIR}/pit-uncapped.png` }); }
+/* the shot used to query the dead `.pit-sect` and skip in silence, so a moved
+   anchor cost the evidence too. */
+const el = await page.$('.t3-sect');
+if (el) { const { mkdirSync } = await import('node:fs'); mkdirSync(DIR, { recursive: true }); await el.screenshot({ path: `${DIR}/pit-uncapped.png` }); }
+else { console.log('note: no .t3-sect to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nPIT CEILING IS UNMISSABLE');
 process.exit(bad ? 1 : 0);

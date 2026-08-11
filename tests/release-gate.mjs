@@ -213,14 +213,19 @@ if (undeclared.length) {
    one line changes what tree all of them test. The rule lives here instead.
    Static scanners are exempt, they need no URL (gate-audit reads sources and never
    boots), and self-servers are exempt, they cannot fall through to the default. */
+/* EVERY TIER, NOT JUST FAST. My first version checked only the fast list, and
+   `--all` runs the FULL tier, so twenty env-URL-only audits sat in FULL silently
+   grading PRODUCTION on every gate:all. That is the same defect as contrast-audit's,
+   at ten times the scale, missed because the guard's scope was narrower than the
+   runner's. Guard what the runner runs. */
 const notPointable = [];
-for (const f of BROWSER) {
+for (const f of [...BROWSER, ...onDisk.filter(x => DECLARED[x] && DECLARED[x][0] === 'full')]) {
   const src = await readFile(join(here, f), 'utf8');
   const boots = /\bboot\s*\(|puppeteer/.test(src);
   if (boots && !/process\.argv/.test(src) && !/http\.server/.test(src)) notPointable.push(f);
 }
 if (notPointable.length) {
-  console.log(`FAIL  ${notPointable.length} FAST suite(s) cannot be pointed at this tree, so they would grade PRODUCTION:`);
+  console.log(`FAIL  ${notPointable.length} gated suite(s) cannot be pointed at this tree, so they would grade PRODUCTION:`);
   for (const f of notPointable) console.log(`        ${f}`);
   console.log('        Read `process.argv[2] || process.env.URL` (see error-telemetry-audit), or serve your own tree.');
   process.exit(1);
