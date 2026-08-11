@@ -2320,6 +2320,7 @@ test('identity boot order stays local-first and backfill stays before the cloud 
   const fill = bs.indexOf('backfillVaultMirror');
   const gate = bs.indexOf("kvGet('cloudOff'");
   assert.ok(fill > -1 && gate > -1 && fill < gate, 'backfill runs after the cloud gates, so cloud-off players are unprotected');
+});
 /* NOBODY CHANGES THE VIEWPORT WITHOUT SAYING isMobile AND hasTouch.
  *
  * puppeteer reloads the page for you when either one CHANGES, and it reads a

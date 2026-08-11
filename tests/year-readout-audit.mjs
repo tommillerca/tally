@@ -24,7 +24,7 @@
  *
  * Run: node tests/year-readout-audit.mjs <baseUrl>   (or via npm run gate)
  */
-import { boot, sleep, settle, dismissOverlays } from './godmode.js';
+import { boot, settle, dismissOverlays } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -87,16 +87,32 @@ const seeded = await page.evaluate(async () => {
 if (seeded.error) { console.log(`FAIL  ${seeded.error}`); await browser.close(); process.exit(1); }
 console.log(`seeded ${seeded.n} monthly step readings, ${seeded.from} to ${seeded.to}`);
 
+/* WAIT FOR THE CONDITION, NOT THE CLOCK. Every wait below was a fixed sleep, and
+   this audit passed standalone while failing inside the gate, where ten suites run
+   back to back and everything arrives later. That is the same mistake, in the same
+   week, that the fight suite next door was fixed for; a clock that is long enough on
+   a quiet machine is a coin flip on a busy one. Each waitForFunction names the thing
+   it is waiting for, so a timeout reports which step never arrived instead of
+   failing later with an empty sample. */
 await page.reload({ waitUntil: 'networkidle2' });
-await sleep(2400);
+await page.waitForFunction(() => !!document.querySelector('[data-metric="steps"]') || !!document.getElementById('screen')?.children.length,
+  { timeout: 30000, polling: 100 }).catch(() => {});
 await dismissOverlays(page);
 await page.evaluate(() => { location.hash = '#/progress'; });
-await sleep(2600);
+/* the Steps tile is the thing the next line clicks, so that is the condition */
+const tileReady = await page.waitForFunction(() => {
+  const el = document.querySelector('[data-metric="steps"]');
+  return !!el && el.getBoundingClientRect().width > 0;
+}, { timeout: 30000, polling: 100 }).then(() => true).catch(() => false);
+ok('the Progress screen arrived with its Steps tile', tileReady, tileReady ? '' : 'no [data-metric="steps"] control after 30s: the screen never finished rendering');
 await settle(page, 300);
 
 const openedTile = await clickSel(page, '[data-metric="steps"]');
 ok('the Steps tile on Progress opens its history', openedTile, openedTile ? '' : 'no [data-metric="steps"] control on the Progress screen');
-await sleep(1400);
+/* the sheet is open when the window tabs it owns exist */
+const sheetReady = await page.waitForFunction(() => !!document.querySelector('.sheet-trend .rtab[data-r="year"]'),
+  { timeout: 30000, polling: 100 }).then(() => true).catch(() => false);
+ok('the history sheet opened', sheetReady, sheetReady ? '' : 'no .sheet-trend with range tabs after 30s');
 await settle(page, 300);
 
 /* EVERY QUERY IS SCOPED TO THE SHEET. The Progress screen behind it draws its own
@@ -109,7 +125,11 @@ ok('exactly one history sheet is open', sheets === 1, `${sheets} .sheet-trend el
 
 const openedYear = await clickSel(page, '.sheet-trend .rtab[data-r="year"]');
 ok('the sheet offers a Year window', openedYear, openedYear ? '' : 'no .rtab[data-r="year"] in the history sheet');
-await sleep(900);
+/* the year panel is REBUILT on the range switch, so wait for its twelve bars
+   rather than for a duration */
+const yearReady = await page.waitForFunction(() => document.querySelectorAll('.sheet-trend .bc-hit').length === 12,
+  { timeout: 30000, polling: 100 }).then(() => true).catch(() => false);
+ok('the Year panel rebuilt with twelve buckets', yearReady, yearReady ? '' : `${await page.evaluate(() => document.querySelectorAll('.sheet-trend .bc-hit').length)} tap targets after 30s, expected 12`);
 await settle(page, 250);
 
 const hits = await page.evaluate(() => [...document.querySelectorAll('.sheet-trend .bc-hit')].map(h => {
@@ -130,7 +150,11 @@ ok('and every one of them has a reading to tap', withVal.length === 12, `${withV
 const readouts = [];
 for (const h of withVal) {
   await page.mouse.click(h.x, h.y);
-  await sleep(90);
+  /* wireBarChart marks the clicked bar .on, which is a signal independent of the
+     readout's TEXT. Waiting on the text would hang on the very bug this audit
+     exists to catch, because two months reading the same is what "broken" means. */
+  await page.waitForFunction(i => !!document.querySelector(`.sheet-trend .bc-bar.on[data-i="${i}"]`),
+    { timeout: 10000, polling: 50 }, h.i).catch(() => {});
   const txt = await page.evaluate(() => (document.querySelector('.sheet-trend .bc-readout')?.textContent || '').trim());
   readouts.push({ i: h.i, label: h.label, text: txt, when: txt.split('·')[0].trim() });
 }
