@@ -55,7 +55,17 @@ if (reset) {
   // and they are genuinely re-spendable: the pool must be back to full
   await openBuild();
   const pool = await page.evaluate(() => {
-    const t = document.querySelector('.tp-count')?.textContent || '';
+    /* RE-ANCHORED 2026-08-11. `.tp-count` stopped existing in the Tier-3 Build
+       rebuild: the counter now renders as a chip in the "Training points"
+       section header ("N to spend · X/Y used"), same copy, new home. The old
+       selector read nothing, matched nothing, and reported avail:null, which
+       the gate:all debut surfaced looking exactly like players losing talent
+       points. They were not: the refund path (trainalloc cleared, pool
+       recomputed on render) was verified working during this diagnosis; only
+       the read was dead. Anchored to the COPY, not a class, so a restyle
+       cannot kill it again: any element whose text says "N to spend". */
+    const el = [...document.querySelectorAll('span,div,b')].find(n => /\d+ to spend/.test(n.textContent || '') && n.children.length === 0);
+    const t = el ? el.textContent : '';
     const m = t.match(/(\d+) to spend/);
     return { text: t.trim(), avail: m ? +m[1] : null, plusEnabled: [...document.querySelectorAll('[data-tpplus]')].some(b => !b.disabled) };
   });
