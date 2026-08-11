@@ -168,6 +168,18 @@ const SITES = [
       'petPanelHtml has no caller in js/app.js (dead render, left alone deliberately)',
   },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
+  {
+    /* THE PADDOCK herd (Lane R scene, 2026-08-11). One petSpriteHtml call
+       renders every owned COPY; shiny comes off the INSTANCE row from
+       paddockRoster (contract rule 1), and placement runs through
+       placePaddock's band allocator, unit-pinned in unit.test.js. The claim
+       matches the roster-row destructure on the call line. */
+    key: 'paddock-herd', claim: 'petSpriteHtml(r.sp', paired: false, undriven:
+      'the scene is driven end-to-end by tests/paddock-scene-audit.mjs '
+      + '(Lane R, in build tonight): real Stable chip tap, decoded herd from a '
+      + 'real roster, band-overlap assertion in the live DOM. Until that lands, '
+      + 'the scene was live-verified at build: 15-pet herd, 68/68 decoded.',
+  },
   /* Pet-only surfaces. No Bonehead beside them, so PLANE and NEAR do not apply,
      but they are registered because COVERAGE has to see every call site: an
      unregistered one is how a new screen quietly starts drawing a pet its own
