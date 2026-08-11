@@ -253,6 +253,60 @@ const fastAudits = BROWSER.filter(f => onDisk.includes(f)).length;
 console.log(`coverage: ${onDisk.length} audits on disk, ${fastAudits} fast, ${FULL.length} full, ${onDisk.length - fastAudits - FULL.length} skipped`);
 if (runAll) BROWSER.push(...FULL);
 
+/* READ THE GATE LOCK BEFORE RUNNING. NOT after, and not by assuming.
+ *
+ * Three sessions share this machine and the lock is a line in CHAT-HANDOFF.md. It
+ * collided TWICE on 2026-08-11 in opposite directions, and both failures were the
+ * same shape: a claim written with a `sed` keyed to the line's CURRENT text, which
+ * silently matches nothing when somebody else has rewritten it. Walt's claim failed
+ * that way, then mine did, and neither of us noticed because a no-op sed exits 0.
+ * I then started a gate ~26s into a run he was holding.
+ *
+ * "Everyone remembers to read the line first" is not a protocol, it is a hope, and
+ * a green taken under contention certifies nothing. So the runner reads it, and
+ * refuses. Escape hatch is explicit: --no-lock, which prints that it was used, so
+ * skipping is a decision on the record rather than a silent default.
+ * Identity via --as <name> (or GATE_OWNER), because the release has to know whose
+ * claim to leave and whose to respect. */
+const lockPath = pjoin(repoRoot, '..', 'CHAT-HANDOFF.md');
+const owner = (process.argv.find(a => a.startsWith('--as='))?.slice(5)) || process.env.GATE_OWNER || '';
+const noLock = process.argv.includes('--no-lock');
+const LOCK_RE = /^(\s*GATE LOCK:\s*)(.*)$/m;
+let lockClaimed = false;
+async function readLock() {
+  try { return (await readFile(lockPath, 'utf8')).match(LOCK_RE)?.[2]?.trim() ?? null; } catch { return null; }
+}
+async function writeLock(text) {
+  try {
+    const src = await readFile(lockPath, 'utf8');
+    if (!LOCK_RE.test(src)) return false;
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(lockPath, src.replace(LOCK_RE, (_m, head) => `${head}${text}`));
+    return true;
+  } catch { return false; }
+}
+const held = await readLock();
+if (noLock) {
+  console.log(`GATE LOCK: SKIPPED via --no-lock (line currently reads: ${held ?? 'unreadable'})\n`);
+} else if (held === null) {
+  console.log('GATE LOCK: no lock line found, continuing (nothing to contend with).\n');
+} else if (!/^\(free\)/i.test(held)) {
+  console.log(`FAIL  the machine is claimed, so this run would certify nothing:\n        ${held}`);
+  console.log('        Wait for it to clear, or pass --no-lock if you know it is stale.');
+  process.exit(1);
+} else if (owner) {
+  const stamp = new Date().toTimeString().slice(0, 5);
+  lockClaimed = await writeLock(`${owner} — release-gate${runAll ? ' --all' : ''} — taken ${stamp}`);
+  console.log(lockClaimed ? `GATE LOCK: taken by ${owner}\n` : 'GATE LOCK: could not write the claim, continuing unclaimed\n');
+} else {
+  console.log('GATE LOCK: free, but no --as <name> given, so nothing was claimed.\n');
+}
+async function releaseLock() {
+  if (!lockClaimed) return;
+  const stamp = new Date().toTimeString().slice(0, 5);
+  await writeLock(`(free) — released ${stamp} by ${owner}.`);
+}
+
 /* SWEEP ORPHANS FIRST. A SIGKILLed audit (harness timeout) strands 11 browser
    processes that no in-process hook can catch, and they are still holding ~1.3GB
    each when the next run starts: measured, that is what turned a healthy tree
@@ -288,4 +342,7 @@ if (!runAll && FULL.length) {
 const bad = results.filter(r => r.code !== 0);
 console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
 if (bad.length) console.log(`BLOCKED: ${bad.map(r => r.file).join(', ')}`);
+/* Release on the way out, pass or fail: a lock only ever left behind on a RED run
+   trains everyone to ignore the line, which is how it stopped meaning anything. */
+await releaseLock();
 process.exit(bad.length ? 1 : 0);
