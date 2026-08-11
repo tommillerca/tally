@@ -2545,46 +2545,54 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
 });
 
-/* ================= THE SHIP MUST PARSE ====================================
- * 2026-08-10, a 13-minute production outage, entirely mine. I resolved a merge
- * conflict by writing an explanatory HTML comment inside body.innerHTML's
- * TEMPLATE LITERAL, and quoted a ternary in BACKTICKS. The first backtick closed
- * the string; js/app.js died at parse; main deploys straight to Pages and the app
- * shell is network-first, so every fresh open in that window got a syntax-dead
- * app. Reggie caught it from the live bytes.
- *
- * TWO REASONS NOTHING ELSE WOULD HAVE CAUGHT IT.
- *   - The error telemetry is blind to this BY CONSTRUCTION: the module dies
- *     before analytics.js installs its hooks, so there are no err rows. The one
- *     crash the pipe cannot see is the shell failing to parse.
- *   - `node --check file.js` misreports ESM (it blamed `await runAll()` for a
- *     missing brace earlier the same night), which is why the house rule is to
- *     run the suite. But the suite never PARSED the app, only imported pure
- *     modules, so a dead shell passed every unit test.
- *
- * The gate catches it in seconds, but the gate runs after a push in practice.
- * This runs in `npm test`, before. Parsed with --input-type=module through
- * stdin, which is the only form that reads these files the way the browser does.
- * PROVEN RED against the exact broken commit: `git show 178f442:js/app.js`
- * yields "SyntaxError: Unexpected token ':'" here. */
-test('every shipped module parses as an ES module', () => {
-  // ESM: no require() in this file
-  const { execFileSync } = execFile_;
-  const jsDir = join(here, '..', 'js');
-  const files = readdirSync(jsDir).filter(f => f.endsWith('.js')).sort();
-  assert.ok(files.length > 5, `expected the js/ directory, found ${files.length} files`);
+
+/* ================= the shell parse gate (2026-08-11, after a 14-minute
+ * production outage) ========================================================
+ * 178f442 shipped an HTML comment containing BACKTICKS inside a template
+ * literal in js/app.js: the first backtick terminated the string, the module
+ * died at parse, and because main IS the deploy branch and the app shell is
+ * network-first, every fresh app open got a dead app for ~14 minutes
+ * (23:00-23:14 PDT). Error telemetry was blind BY CONSTRUCTION: the app dies
+ * before analytics.js installs its hooks. So the guard runs where it cannot
+ * be blind: every module must PARSE, in npm test, before anything reaches
+ * the deploy branch. Two layers:
+ *   1. every js/*.js parses as an ES module (catches the whole class);
+ *   2. no template-literal HTML comment contains a backtick (catches THIS
+ *      shape at the lint level with a readable message, because "Unexpected
+ *      token ':'" at a random line is a miserable way to learn about a
+ *      comment).
+ * Proven red against the exact production bytes of 178f442. */
+test('every js module parses (a shell that cannot parse cannot report itself)', async () => {
+  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+  assert.ok(files.length > 20, 'the js/ scan found almost nothing: scan broken, not tree clean');
   const broken = [];
   for (const f of files) {
-    const src = readFileSync(join(jsDir, f), 'utf8');
     try {
-      execFileSync(process.execPath, ['--check', '--input-type=module'],
-        { input: src, stdio: ['pipe', 'pipe', 'pipe'] });
+      // data-URI import: parse errors reject with SyntaxError BEFORE any
+      // browser-global runtime error can occur; resolution errors mean the
+      // parse SUCCEEDED (imports resolve after parse).
+      await import('data:text/javascript;base64,' + readFileSync(join(here, '../js', f)).toString('base64'));
     } catch (e) {
-      const line = (String(e.stderr).match(/SyntaxError.*/) || ['parse failed'])[0];
-      broken.push(`js/${f}: ${line}`);
+      if (e instanceof SyntaxError) broken.push(`${f}: ${e.message}`);
     }
   }
-  assert.deepEqual(broken, [], `these files would not load in a browser:\n  ${broken.join('\n  ')}`);
+  assert.deepEqual(broken, [], `modules that do not parse: ${broken.join(' | ')}`);
+});
+test('no template-literal HTML comment carries a backtick', () => {
+  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+  const hits = [];
+  for (const f of files) {
+    const src = readFileSync(join(here, '../js', f), 'utf8');
+    let m;
+    const re = /<!--([\s\S]*?)-->/g;
+    while ((m = re.exec(src))) {
+      if (m[1].includes('`')) {
+        const line = src.slice(0, m.index).split('\n').length;
+        hits.push(`${f}:${line}`);
+      }
+    }
+  }
+  assert.deepEqual(hits, [], `backticks inside HTML comments (template-literal killers): ${hits.join(', ')}`);
 });
 
 await runAll();
