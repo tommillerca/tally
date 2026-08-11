@@ -307,21 +307,34 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   const MON = Date.parse('2030-01-07T00:00:00Z');   // a Monday
   const wk = new Date(MON + (Date.now() % 400) * 7 * 86400000).toISOString().slice(0, 10);
   const prev = new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
-  const mk = async (level, weekKey, steps) => {
+  /* raceV IS REQUIRED, and this test never sent it. The v300 stale-client fix added
+     `raceV >= RACE_RULES` to the board query so a client still counting steps under
+     the OLD rules cannot rank against clients on the new ones. The real app sends it
+     (js/app.js, `raceV: RACE_RULES`); this fixture did not, so COALESCE made it 0,
+     every racer was filtered out, and the suite failed deterministically on a
+     perfectly good server. Stale test, not a bug: the same audit-drift shape as the
+     dust and spire audits earlier today.
+     Must match RACE_RULES in server/src/index.js and js/app.js. */
+  const RACE_V = 2;
+  const mk = async (level, weekKey, steps, raceV = RACE_V) => {
     const k = await makeKeys();
     const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
-    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps }, appV: 'test' });
+    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV }, appV: 'test' });
     assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
     return { k, p };
   };
   const walker = await mk(5, wk, 42000);
   const slower = await mk(5, wk, 9000);
   const stale = await mk(5, prev, 999999);       // last week's total, must NOT rank now
+  // and now the gate itself is COVERED rather than merely tripped over: a client on
+  // the old rules must not rank, however many steps it claims
+  const oldRules = await mk(5, wk, 888888, RACE_V - 1);
 
   const r = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
   const ids = r.players.map(x => x.playerId);
   assert.ok(ids.includes(walker.p.playerId) && ids.includes(slower.p.playerId), 'this week\'s racers are on the board');
   assert.ok(!ids.includes(stale.p.playerId), 'a stale sync from last week does not rank in this one');
+  assert.ok(!ids.includes(oldRules.p.playerId), 'a client on the OLD race rules does not rank, however many steps it claims');
   const wi = ids.indexOf(walker.p.playerId), si = ids.indexOf(slower.p.playerId);
   assert.ok(wi < si, 'ordered by steps, most first');
   assert.equal(r.players[wi].rank, wi + 1, 'rank is 1-based and matches position');
