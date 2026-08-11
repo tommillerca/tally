@@ -2,16 +2,34 @@
  * crash: it is copy that drifts from what the engine does, or a fold nobody can open. */
 import { boot, sleep } from './godmode.js';
 const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
-const { browser, page } = await boot(process.env.URL);
+const base = process.argv[2] || process.env.URL;
+const { browser, page } = await boot(base);
 let bad = 0;
+/* DYING IS WORSE THAN FAILING. This suite crashed inside an evaluate on a selector
+   that had been renamed away, so it produced a stack and NOT ONE assertion: the gate
+   printed a blank blocker and it read like a flake. Everything below runs inside a
+   guard that turns any throw into a named failure plus a crash tail, and the exit is
+   non-zero either way. */
+const crash = (where, e) => {
+  bad++;
+  console.log(`FAIL ${where} DIED: ${String(e && e.message || e).split('\n')[0]}`);
+  console.log('     (a selector this suite depends on is probably gone; re-anchor it rather than deleting the check)');
+};
+const guard = async (where, fn, fallback = null) => {
+  try { return await fn(); } catch (e) { crash(where, e); return fallback; }
+};
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1800);
-await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="talents"]').click());
+await guard('opening the Build tab', () => page.evaluate(() => {
+  const t = document.querySelector('#chTabs .ch-tab[data-tab="talents"]');
+  if (!t) throw new Error('no #chTabs .ch-tab[data-tab="talents"]');
+  t.click();
+}));
 await sleep(2000);
 
-const card = await page.evaluate(() => {
+const card = await guard('reading the FAQ card', () => page.evaluate(() => {
   const c = document.querySelector('.faq-card');
   if (!c) return null;
   return {
@@ -19,9 +37,21 @@ const card = await page.evaluate(() => {
     heading: c.querySelector('summary')?.textContent.trim(),
     styles: [...c.querySelectorAll('.faq-style > div > b:first-child')].map(b => b.textContent.trim()),
     folds: [...c.querySelectorAll('.faq-deep > summary')].map(s => s.textContent.trim()),
-    aboveTheControls: !!(c.compareDocumentPosition(document.querySelector('[data-bsect="fighter"]')) & Node.DOCUMENT_POSITION_FOLLOWING),
+    /* RE-ANCHORED. This read `[data-bsect="fighter"]`, which no longer exists: the
+       fighter section stopped being a <details class="bsect"> and became a plain
+       `.t3-fighter` header line, with buildFaqHtml() rendering after it and the armour
+       and stat controls after that. compareDocumentPosition(null) THREW, which is why
+       the suite died before asserting anything.
+       The intent was "the FAQ is above the controls", and that intent still holds, so
+       the anchor is now the controls themselves (.t3-armor, the first control block
+       after the FAQ) instead of a wrapper that has been renamed away. */
+    aboveTheControls: (() => {
+      const ctrls = document.querySelector('.t3-armor') || document.querySelector('.t3-stat');
+      if (!ctrls) return null;   // null, not false: "could not tell" is not "it is wrong"
+      return !!(c.compareDocumentPosition(ctrls) & Node.DOCUMENT_POSITION_FOLLOWING);
+    })(),
   };
-});
+}));
 console.log('faq card:', JSON.stringify(card));
 check('the FAQ exists in the Build tab', !!card);
 check('it is collapsed by default, so it never blocks the controls', card && card.open === false, String(card?.open));
@@ -72,9 +102,14 @@ check('the FAQ covers which weapon to buy', weapons.mentionsWeapons && weapons.s
 check('and names the vendor it comes from', weapons.namesVendor);
 check('and reassures that the plain weapon is always fine', weapons.reassures);
 
-const el = await page.$('.faq-card');
-await el.screenshot({ path: `${DIR}/build-faq.png` });
-console.log('shot build-faq');
+await guard('shooting the FAQ card', async () => {
+  const el = await page.$('.faq-card');
+  if (!el) throw new Error('no .faq-card to shoot');
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(DIR, { recursive: true });   // the dir belongs to another session's scratchpad
+  await el.screenshot({ path: `${DIR}/build-faq.png` });
+  console.log('shot build-faq');
+});
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nBUILD FAQ VERIFIED');
 process.exit(bad ? 1 : 0);
