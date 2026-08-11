@@ -9846,7 +9846,10 @@ async function openStable(opts = {}) {
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
-        <button class="chip chip-btn" id="petsHelp" type="button">${ICONS.info ? ICONS.info(13) : '?'} How pets work</button>
+        <!-- no ICONS.info exists; the `? :` fallback shipped a bare "?" glyph and
+             hid the missing icon from readers but not from t2-audit's
+             ICONS-RESOLVE guard, which is exactly what that guard is for -->
+        <button class="chip chip-btn" id="petsHelp" type="button">How pets work</button>
       </div>
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another

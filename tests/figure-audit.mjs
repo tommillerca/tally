@@ -192,6 +192,15 @@ const SITES = [
     key: 'breed-fused', claim: 'gone-pet', paired: false, undriven:
       'same overlay as breed-trade, the parents strip inside it',
   },
+  {
+    /* Added 2026-08-10 with the Stable's "now pick the second pet" banner. This
+       audit had never been run by the gate, so it caught the omission hours
+       later on its first-ever execution rather than at the moment I wrote it:
+       the coverage rule works, it simply had nobody running it. */
+    key: 'breed-waiting', claim: 'bw-pet', paired: false, undriven:
+      'only rendered while exactly one pet is flagged for breeding; the state is '
+      + 'driven by the Stable checks rather than from here',
+  },
 ];
 
 /* ------------------------------------------------------ COVERAGE + STATIC ---- */

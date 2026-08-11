@@ -40,7 +40,7 @@ the handoff itself.
   empty roster = failure) and paddock-card-audit (bond +1 persists ACROSS
   RELOAD, cap 5, badge, burst decoded, dots track scroll, re-tap dismiss).
 - Aggie: review/merge per the standing flow; only expected overlap with his
-  melt/transmog lane is app.css appends (Paddock namespaced `.pd-*`).
+  melt/transmog lane is app.css appends (Paddock namespaced `.pdk-*` (`.pdk-*` = Wardrobe paperdoll, collision caught by Walt)).
 
 **Decisions surfaced (Tom, only two):** 1. Bonepedia footer: stub as disabled
 tease or hide until built? (handoff says "navigates to the collection index
