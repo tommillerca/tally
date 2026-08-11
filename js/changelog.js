@@ -3,15 +3,23 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  /* The v367 entry originally claimed the shared-pet-names-and-hearts bug was
+     fixed. Telemetry says the repair we shipped has never once run on any device,
+     so it addresses something nobody actually has, and the real cause is still
+     open. The claim has been removed from that entry rather than left to be
+     discovered as untrue, and it is stated plainly here. */
+  { n: 369, date: '2026-08-11', title: 'The archway shows the right monster', items: [
+    'The boss that rises from the archway before a fight is now the boss you actually fight. It used to be whatever the ladder felt like showing.',
+    "<b>Still chasing:</b> pets sharing names and hearts. We shipped a repair for it yesterday and the telemetry proves that repair has never run on a single device, which means the cause is something other than what we thought. It is not fixed, and we would rather say so than let you find out.",
+  ] },
   { n: 368, date: '2026-08-11', title: 'The Pit keeps up with you', items: [
     "<b>Beat a boss and The Pit now notices.</b> Your win and your raised ceiling were always recorded, but the screen behind the fight never re-read them, so a boss you had just beaten still offered you the fight. Nothing was lost: it was the view that was stale.",
     'Bonding with a pet gives it <b>hearts</b>. They were five red dots, which is not the same thing.',
     'A pet card closes whichever way you reach for it: the × on the card, a tap on the field behind it, or tapping the same pet again. And it still works on your second visit.',
     'Your pets fill their frames, on the card and in the collection shelf. They were drawn small and tucked into the corner of every box.',
   ] },
-  { n: 367, date: '2026-08-11', title: 'Your ducks are individuals', items: [
-    "<b>Every duck was sharing one identity.</b> That is why they were all called the same thing, and why hearts given to one lit up all of them. They are separate copies now, each with its own name and its own bond. Nobody loses a single heart in the repair.",
-    'Ducks no longer fly in lockstep either: they set off at their own moment and at their own pace.',
+  { n: 367, date: '2026-08-11', title: 'Ducks fly on their own schedule', items: [
+    'Ducks no longer fly in lockstep: they set off at their own moment and at their own pace.',
     "<b>The keeper in the Paddock is you.</b> Your own bonehead, wearing what you are wearing, standing at the gate.",
     'And something in the bushes now hints at a shiny you have never seen, instead of one already in your Stable.',
   ] },
