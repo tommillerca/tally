@@ -107,3 +107,78 @@ export async function paddockEggs() {
   }
   return { count: rows.length, nearest };
 }
+
+/* ================= scene placement (Lane R part 2) =========================
+ * The layout rule from the handoff, made an algorithm because the demo's
+ * hand-placed bands cannot survive a real roster: each WALKER owns an
+ * exclusive x-band, and two pets whose foot rows sit within 40px vertically
+ * must never share more than ~20px of x-range. The README marks this as a
+ * review defect the design already paid for once; here it is enforced by
+ * construction and pinned by unit test, not by eyeballing. */
+export const PDK_SCENE = {
+  W: 390, PANEL_Y: 498,                 // feet must stay above the panel edge
+  FLY_LANES: [{ y: 112, w: 122, dur: 15 }, { y: 152, w: 102, dur: 19, phase: -12 }],
+  /* measured on the first live render: clouds at y176-210 sat on the keeper's
+     hat and inside the duck lanes; they drift LOW over the fence line now */
+  HOVER_SPOTS: [{ x: 64, y: 244 }, { x: 306, y: 252 }, { x: 196, y: 232 }],
+  FLOP_SPOTS: [{ x: 304, y: 420, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 0, y: 452, w: 58 }],
+  WALK_ROWS: [322, 318, 356, 350, 396, 398, 428, 460],
+  /* the props own the right flank above y~370 (hay 306,316; nest 300,352):
+     walker bands on those rows stop short of them. Measured, not assumed: the
+     first render parked a beardie on the hay bale. */
+  ROW_XMAX: y => (y <= 370 ? 288 : 382),
+  KEEPER: { x: 100, y: 240, px: 190 },
+};
+
+/* PURE: partition walkers into exclusive x-bands.
+ * Walkers are dealt round-robin onto foot rows; rows within 40px of each other
+ * form a vertical CLUSTER; each cluster's occupants split the scene width into
+ * disjoint bands with a 24px gutter (> the 20px the rule tolerates, so the
+ * guard has margin, not luck). Deterministic from roster order (iid-sorted
+ * upstream), no randomness, so the same herd always grazes the same way. */
+export function assignBands(walkers, scene = PDK_SCENE) {
+  const rows = scene.WALK_ROWS;
+  const placed = walkers.map((w, i) => ({ iid: w.iid, y: rows[i % rows.length] }));
+  // cluster rows vertically (<40px apart share x-space budget)
+  const clusters = [];
+  for (const p of placed) {
+    let c = clusters.find(c => c.some(q => Math.abs(q.y - p.y) < 40));
+    if (!c) { c = []; clusters.push(c); }
+    c.push(p);
+  }
+  const PAD = 8, GUTTER = 24;
+  for (const c of clusters) {
+    // the row group's usable width ends where the props begin
+    const xmax = Math.min(...c.map(p => (scene.ROW_XMAX ? scene.ROW_XMAX(p.y) : scene.W - PAD)));
+    const span = xmax - PAD;
+    const bandW = Math.floor((span - GUTTER * (c.length - 1)) / c.length);
+    c.forEach((p, i) => {
+      p.x0 = PAD + i * (bandW + GUTTER);
+      p.x1 = p.x0 + bandW;
+    });
+  }
+  return placed;   // [{iid, y, x0, x1}]
+}
+
+/* PURE: the whole scene cast from a roster. Walkers through assignBands;
+ * flyers/hoverers/floppers onto their fixed lanes and spots, extras wrapping
+ * with a small offset so a fourth catfish still lands somewhere sane. */
+export function placePaddock(roster, scene = PDK_SCENE) {
+  const by = m => roster.filter(r => r.motion === m);
+  const out = {};
+  by('fly').forEach((r, i) => {
+    const lane = scene.FLY_LANES[i % scene.FLY_LANES.length];
+    out[r.iid] = { kind: 'fly', y: lane.y + Math.floor(i / scene.FLY_LANES.length) * 26, w: lane.w, dur: lane.dur, phase: lane.phase || 0 };
+  });
+  by('hover').forEach((r, i) => {
+    const s = scene.HOVER_SPOTS[i % scene.HOVER_SPOTS.length];
+    out[r.iid] = { kind: 'hover', x: s.x + Math.floor(i / scene.HOVER_SPOTS.length) * 30, y: s.y, w: 96 };
+  });
+  by('flop').forEach((r, i) => {
+    const s = scene.FLOP_SPOTS[i % scene.FLOP_SPOTS.length];
+    out[r.iid] = { kind: 'flop', x: s.x, y: s.y - Math.floor(i / scene.FLOP_SPOTS.length) * 22, w: s.w };
+  });
+  const bands = assignBands(by('walk'), scene);
+  for (const b of bands) out[b.iid] = { kind: 'walk', y: b.y, x0: b.x0, x1: b.x1, w: 76 };
+  return out;
+}

@@ -2428,6 +2428,32 @@ test('paddock names are deterministic, collision-free, order-independent', async
   assert.equal(flavorFor('p1-a-C5'), flavorFor('p1-a-C5'), 'flavor must be stable per iid');
 });
 
+
+test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule)', async () => {
+  const { assignBands, placePaddock, PDK_SCENE } = await import('../js/paddock.js');
+  for (const n of [1, 2, 3, 5, 7, 9, 14]) {
+    const bands = assignBands(Array.from({ length: n }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })));
+    assert.equal(bands.length, n, `lost a walker at n=${n}`);
+    let checked = 0;
+    for (const a of bands) for (const b of bands) {
+      if (a.iid >= b.iid) continue;
+      if (Math.abs(a.y - b.y) < 40) {
+        checked++;
+        const ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        assert.ok(ov <= 20, `n=${n}: ${a.iid}@${a.y} and ${b.iid}@${b.y} share ${ov}px of x-range (rule: <=20)`);
+      }
+    }
+    if (n >= 2) assert.ok(checked > 0, `n=${n}: no same-cluster pairs were checked, the rule never ran`);
+    for (const b of bands) assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
+  }
+  // every motion kind gets placed, none invents a position off-scene
+  const cast = [...Array(4)].flatMap((_, i) => [
+    { iid: `a${i}`, motion: 'walk' }, { iid: `b${i}`, motion: 'fly' },
+    { iid: `c${i}`, motion: 'hover' }, { iid: `d${i}`, motion: 'flop' }]);
+  const placed = placePaddock(cast);
+  assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
