@@ -1,7 +1,22 @@
 /* Re-measure the exact thing the critique flagged: composited contrast on every
  * distinct text/background pair on Today. Token changes do not always propagate. */
 import { boot, sleep } from './godmode.js';
-const { browser, page } = await boot(process.env.URL);
+/* argv FIRST, env.URL second, which is the convention error-telemetry-audit and
+   year-readout-audit already use. This read env.URL ONLY, and the release gate
+   passes the URL as argv, so inside the gate this was boot(undefined) and godmode's
+   signature defaults to https://tommillerca.github.io/tally/: the row sat in the
+   FAST tier GRADING PRODUCTION while reading as coverage of the tree under test.
+   Measured, invoked exactly as the gate does, against an instrumented local server:
+   0 requests reached the tree before this line, 101 after. Count REQUESTS, not the
+   pair count it prints, which matches production today only because main was just
+   deployed and the two are the same code.
+   FIXED HERE AND NOT IN THE GATE ON PURPOSE. Teaching the gate to export env.URL
+   looks equivalent and is not: 53 suites read process.env.URL and 24 of them spawn
+   their OWN server when it is unset, so exporting it changes what tree two dozen
+   suites test, all at once, on one line. One file reading argv like everyone else
+   has no blast radius at all. */
+const base = process.argv[2] || process.env.URL;
+const { browser, page } = await boot(base);
 await page.evaluate(() => { location.hash='#/today'; }); await sleep(2500);
 await page.evaluate(() => { document.querySelector('.dw')?.remove(); document.querySelector('.drop-veil')?.remove(); });
 const res = await page.evaluate(() => {
