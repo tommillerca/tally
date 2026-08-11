@@ -175,6 +175,7 @@ const DECLARED = {
   'melt-ui-audit.mjs': ['full', 'the Salvage Bench: entrance visible without a tap, every row actionable, melt pays exactly once (SOP), every rarity meltable, and transmog on a stat-less slot is offered AND free AND actually changes the look.'],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
+  'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen.'],
   'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],
   'pit-cap-audit.mjs': ['full', 'the Gauntlet ceiling reads as a ceiling.'],
   'placeholder-audit.mjs': ['full', 'nothing prints a literal template placeholder.'],
