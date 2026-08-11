@@ -2544,6 +2544,56 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
 });
 
+
+/* ================= the shell parse gate (2026-08-11, after a 14-minute
+ * production outage) ========================================================
+ * 178f442 shipped an HTML comment containing BACKTICKS inside a template
+ * literal in js/app.js: the first backtick terminated the string, the module
+ * died at parse, and because main IS the deploy branch and the app shell is
+ * network-first, every fresh app open got a dead app for ~14 minutes
+ * (23:00-23:14 PDT). Error telemetry was blind BY CONSTRUCTION: the app dies
+ * before analytics.js installs its hooks. So the guard runs where it cannot
+ * be blind: every module must PARSE, in npm test, before anything reaches
+ * the deploy branch. Two layers:
+ *   1. every js/*.js parses as an ES module (catches the whole class);
+ *   2. no template-literal HTML comment contains a backtick (catches THIS
+ *      shape at the lint level with a readable message, because "Unexpected
+ *      token ':'" at a random line is a miserable way to learn about a
+ *      comment).
+ * Proven red against the exact production bytes of 178f442. */
+test('every js module parses (a shell that cannot parse cannot report itself)', async () => {
+  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+  assert.ok(files.length > 20, 'the js/ scan found almost nothing: scan broken, not tree clean');
+  const broken = [];
+  for (const f of files) {
+    try {
+      // data-URI import: parse errors reject with SyntaxError BEFORE any
+      // browser-global runtime error can occur; resolution errors mean the
+      // parse SUCCEEDED (imports resolve after parse).
+      await import('data:text/javascript;base64,' + readFileSync(join(here, '../js', f)).toString('base64'));
+    } catch (e) {
+      if (e instanceof SyntaxError) broken.push(`${f}: ${e.message}`);
+    }
+  }
+  assert.deepEqual(broken, [], `modules that do not parse: ${broken.join(' | ')}`);
+});
+test('no template-literal HTML comment carries a backtick', () => {
+  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+  const hits = [];
+  for (const f of files) {
+    const src = readFileSync(join(here, '../js', f), 'utf8');
+    let m;
+    const re = /<!--([\s\S]*?)-->/g;
+    while ((m = re.exec(src))) {
+      if (m[1].includes('`')) {
+        const line = src.slice(0, m.index).split('\n').length;
+        hits.push(`${f}:${line}`);
+      }
+    }
+  }
+  assert.deepEqual(hits, [], `backticks inside HTML comments (template-literal killers): ${hits.join(', ')}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
