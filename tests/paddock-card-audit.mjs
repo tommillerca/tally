@@ -58,8 +58,23 @@ await setWidth(page, 390, 900);
    so it is one function: a second hand-rolled copy is how the post-reload half ended
    up never opening the screen at all, which read as a persistence failure. */
 async function reachPaddock() {
-  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  /* WAIT FOR EACH CONTROL BEFORE CLICKING IT. This clicked #stableBtn optional-chained
+     with no wait, so on a slow first render the click hit nothing, silently, and then
+     the run sat for 30s waiting for a sheet that was never going to open. Measured
+     flaky 1-in-3 that way. Every step now waits for its own precondition, which makes
+     reaching the screen deterministic instead of lucky: the clock-versus-condition
+     lesson, one level up from the waits inside the screen. */
+  const gone = await page.waitForFunction(() => !!document.getElementById('stableBtn'),
+    { timeout: 30000, polling: 100 }).then(() => false).catch(() => true);
+  if (gone) return false;
+  await page.evaluate(() => document.getElementById('stableBtn').click());
   await page.waitForFunction(() => !!document.getElementById('stableToPaddock'), { timeout: 30000, polling: 100 }).catch(() => {});
+  /* SETTLE BEFORE MEASURING. The Stable is a sheet and it ANIMATES IN. Reading the
+     button's rect mid-animation and then mouse-clicking those coordinates meant the
+     click landed where the button had been, so the Paddock never opened: measured
+     flaky 2-in-4. godmode's settle() finishes the animations first, which is what it
+     exists for (headless Chrome leaves sheet transforms parked, per its own note). */
+  await settle(page, 250);
   const at = await page.evaluate(() => {
     const b = document.getElementById('stableToPaddock');
     if (!b) return false;
@@ -126,8 +141,16 @@ ok('pressing Pet fills a heart', afterPress === before + 1, `${before} -> ${afte
 await page.reload({ waitUntil: 'networkidle2' });
 await page.waitForFunction(() => typeof window.__pdkMountCards === 'function', { timeout: 30000, polling: 100 }).catch(() => {});
 await setWidth(page, 390, 900);
-await reachPaddock();          // the sheet does not survive a reload; the bond must
-await page.evaluate(async () => await window.__pdkMountCards('C5'));
+/* ASSERT THE REOPEN. The sheet does not survive a reload, the bond must. When this
+   was silent, a failed reopen read as "the bond did not persist", which sent me
+   hunting a persistence bug in Lane R's bondUp that did not exist. */
+const reopened = await reachPaddock();
+const sceneBack = reopened && await page.evaluate(() => !!document.getElementById('pdkScene'));
+ok('the Paddock reopens after the reload', sceneBack,
+  sceneBack ? '' : (reopened ? 'scene missing after reopen' : 'could not reach the Stable or its Paddock button again'));
+const remounted = await page.evaluate(async () => window.__pdkMountCards ? await window.__pdkMountCards('C5') : null);
+ok('and the cards remount from the persisted roster', !!remounted && remounted.opened,
+  JSON.stringify(remounted));
 await settle(page, 250);
 const survived = await page.evaluate(() => ({
   hearts: document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-heart.on').length,
