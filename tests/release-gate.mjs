@@ -220,11 +220,24 @@ if (undeclared.length) {
    grading PRODUCTION on every gate:all. That is the same defect as contrast-audit's,
    at ten times the scale, missed because the guard's scope was narrower than the
    runner's. Guard what the runner runs. */
+/* THE EXEMPTION IS A CAPABILITY, NOT A STRING. This tested for the literal
+   `http.server`, which was how a self-serving audit was recognised. walt/serve-bind
+   then did the right thing and moved that spawn into godmode's serveTree (OS-assigned
+   port, stderr kept, a failed bind now loud), which deleted the string from all 26
+   audits: at merge time this guard failed FIFTEEN suites, screen-sweep among them, so
+   the gate hard-failed before a browser started and accused them of grading
+   production. They do not. I ran five of them on the merged tree (onb 15/15, t1
+   34/34, figure 32/32, crate-reveal 13/13, weapon-charge clean) and serveTree's own
+   happy path serves THIS tree, verified by reading tally-v365 back out of it.
+   So the guard went red because the code got better, which is the failure mode of a
+   check pinned to an incidental. Match the capability: argv, an inline server, or
+   serveTree. `http.server` stays for anything not yet migrated. */
 const notPointable = [];
 for (const f of [...BROWSER, ...onDisk.filter(x => DECLARED[x] && DECLARED[x][0] === 'full')]) {
   const src = await readFile(join(here, f), 'utf8');
   const boots = /\bboot\s*\(|puppeteer/.test(src);
-  if (boots && !/process\.argv/.test(src) && !/http\.server/.test(src)) notPointable.push(f);
+  const pointable = /process\.argv/.test(src) || /http\.server/.test(src) || /\bserveTree\s*\(/.test(src);
+  if (boots && !pointable) notPointable.push(f);
 }
 if (notPointable.length) {
   console.log(`FAIL  ${notPointable.length} gated suite(s) cannot be pointed at this tree, so they would grade PRODUCTION:`);
