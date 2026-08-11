@@ -18,14 +18,26 @@ await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="shop
 await sleep(1800);
 
 const before = await dust();
+/* WHAT THE CELL MUST HAVE, not what one build's markup called it. This asked for
+   `.dc-desc`, a class that only ever existed in the OLD Backpack-crates dust grid
+   (js/app.js ~8880). The Tier 3 shop that actually renders on this screen writes a
+   bare `<small>`, so the check went red on a cell that explains itself perfectly:
+   "BATTLE CHARM 25 Next Pit win pays more". A class name is not the property. The
+   property is that a player is told what the item DOES before spending on it, so
+   read the description text and require it to say something the name does not.
+   PROVE-RED: drop `<small>${esc(d.desc)}</small>` from the DUST_SHOP cell template
+   and `desc` comes back empty. */
 const cell = await page.evaluate(() => {
   const b = document.querySelector('[data-dustbuy="charm"]');
   if (!b) return null;
   b.scrollIntoView({ block: 'center' });
-  return { label: b.textContent.replace(/\s+/g, ' ').trim(), hasDesc: !!b.querySelector('.dc-desc') };
+  const name = (b.querySelector('b')?.textContent || '').trim();
+  const desc = [...b.querySelectorAll('small')].map(s => s.textContent.trim()).filter(Boolean).join(' ');
+  return { label: b.textContent.replace(/\s+/g, ' ').trim(), name, desc };
 });
 console.log('charm cell:', JSON.stringify(cell), 'dust', before);
-check('the cell exists and explains the item', !!cell && cell.hasDesc, JSON.stringify(cell));
+check('the cell exists and explains the item', !!cell && cell.desc.length > 3 && cell.desc.toLowerCase() !== cell.name.toLowerCase(),
+  JSON.stringify(cell));
 check('it names what it does', /pays more|Pit win/i.test(cell?.label || ''), cell?.label);
 
 // FIRST tap: must not spend
@@ -38,7 +50,15 @@ const armed = await page.evaluate(() => {
 });
 console.log('after one tap:', afterOne, JSON.stringify(armed));
 check('ONE tap spends nothing', afterOne === before, `${before} -> ${afterOne}`);
-check('and it asks for confirmation', armed.armed === '1' && /tap again/i.test(armed.text), JSON.stringify(armed));
+/* ASK FOR CONFIRMATION, in whatever words. This pinned /tap again/i, the literal
+   copy of the old grid. The shared armToConfirm helper the Tier 3 shop uses says
+   "Spend 25 dust?" instead, so a working safeguard read as a broken one. What has
+   to be true: the cell is armed, the face of it CHANGED so the player can see the
+   tap landed, and the new face states the price they are about to pay.
+   PROVE-RED: delete `btn.innerHTML = esc(confirmLabel)` from armToConfirm and the
+   face never changes; delete the arm branch entirely and `armed` is undefined. */
+check('and it asks for confirmation', armed.armed === '1' && armed.text !== cell.label && armed.text.includes('25'),
+  JSON.stringify(armed));
 
 // SECOND tap: buys
 await (await page.$('[data-dustbuy="charm"]')).click();

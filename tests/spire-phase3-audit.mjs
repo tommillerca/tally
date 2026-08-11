@@ -62,11 +62,26 @@ const order = await page.evaluate(async () => {
   const block = src.slice(i, i + 2400);
   const iRemote = block.indexOf('claimSpireRemote');
   const iLocal = block.indexOf('await claimSpire(');
+  /* PIN THE PROPERTY, NOT ONE BUILD'S PUNCTUATION. This was
+     `/refused \? \{ ok: false/`, the exact text of the pre-SOP ternary. The
+     2026-08-07 rewarded-actions fix widened that guard to
+     `(refused || already) ? ...` so a re-claim of a tower you already hold also
+     skips the local write, and this check went red on code that is STRICTER than
+     what it was written to demand: the audit was asking the guard to stay weak.
+     So scope to the statement that assigns `r` and assert the shape instead: it
+     consults the refusal, and the local write sits on the false side of it.
+     PROVE-RED: replace the statement with `const r = await claimSpire(...)` and
+     `refused` leaves the statement; move claimSpire above the guard and the order
+     check below it fails. The authoritative guard on this branch's PAYOUT is the
+     proven-red NO-OP pair in tests/unit.test.js; this one guards the write order. */
+  const stmt = (block.match(/const r = [\s\S]*?;\n/) || [''])[0];
   return {
     remoteFirst: iRemote > -1 && iLocal > -1 && iRemote < iLocal,
     guardsRefusal: /const refused =/.test(block),
-    localOnlyWhenAllowed: /refused \? \{ ok: false/.test(block),
+    localOnlyWhenAllowed: /refused/.test(stmt) && /:\s*await claimSpire\(/.test(stmt)
+      && stmt.indexOf('refused') < stmt.indexOf('await claimSpire('),
     shieldCopy: /walls hold/.test(block),
+    stmt: stmt.trim().slice(0, 120),
   };
 });
 console.log('settle order:', JSON.stringify(order));
