@@ -218,6 +218,21 @@ const amuletRun = await page.evaluate(async () => {
 ok('a real crit shatters the amulet and draws its sparks', !amuletRun.why && amuletRun.shattered && amuletRun.fxSeen > 0,
   amuletRun.why || `shattered=${amuletRun.shattered} decoded art at peak=${amuletRun.fxSeen}`);
 
+/* ---- the seams die with their fight -------------------------------------- */
+/* A closed fight's __bhFight/__fightPoke stayed on window and answered from a
+   dead closure (the stale-__bhFight lesson, 2026-08-10): the next check to
+   grab them poked a fight that no longer existed and got plausible numbers.
+   The teardown nulls them on close, so a stale poke now fails loudly. A
+   FAILING result here is a non-null seam after the sheet has closed. */
+const seams = await page.evaluate(async () => {
+  const before = { fight: !!window.__bhFight, poke: !!window.__fightPoke };
+  document.querySelectorAll('.sheet-close').forEach(b => b.click());
+  await new Promise(r => setTimeout(r, 700));
+  return { before, fight: window.__bhFight === null, poke: window.__fightPoke === null };
+});
+ok('closing the fight nulls its test seams', seams.before.fight && seams.before.poke && seams.fight && seams.poke,
+  JSON.stringify(seams));
+
 /* ---- 5 + 6: two enemies read as two enemies ------------------------------ */
 /* ONE LOOP, AT EVERY PHONE WIDTH. This region carried two checks doing the same
    job: a single-viewport `twoUp` reading whatever width the harness happened to

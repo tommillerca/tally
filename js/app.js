@@ -12862,11 +12862,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret' || foeCfg.mode === 'glutton';
+  const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
     { cls: 'full', onClose: () => {
       stopGluttonFoeAnim();
+      /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
+         die with the sheet, but they stayed on window, so an audit poking
+         them after the close got a dead closure that still answered
+         plausibly (the stale-__bhFight lesson, 2026-08-10). Null them so a
+         stale poke fails LOUDLY, and only our own install: a newer fight may
+         already own the names. */
+      if (window.__bhFight && window.__bhFight._owner === seamOwner) window.__bhFight = null;
+      if (window.__fightPoke && window.__fightPoke._owner === seamOwner) window.__fightPoke = null;
       if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
       /* CLOSE THE DOOR BEHIND A WIN. Tom, 2026-08-07: "i think you can spam beat
          the one a day raid boss right now?? ... it should just be gone after the
@@ -12904,6 +12913,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (addHp != null && fight.fAux) fight.fAux.hp = addHp;
       updateBars();
     };
+    window.__fightPoke._owner = seamOwner;   // see the onClose teardown
   }
   function markDowned() {
     const fs = el('foeStage'), as = el('addStage');
@@ -14102,6 +14112,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
      What the test sees is what a player sees. */
   if (navigator.webdriver) {
     window.__bhFight = {
+      _owner: seamOwner,   // see the onClose teardown
       state: () => ({
         turn: fight.turn, active: fight.active, over: fight.over,
         you: fight.p.hp, pet: fight.pAux ? fight.pAux.hp : null,
