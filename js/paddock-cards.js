@@ -308,13 +308,48 @@ function armOutsideTap() {
 
 /* Re-tap dismiss lives HERE rather than in the scene, so the rule is one line and
    cannot disagree with itself: opening the species already open closes it. */
-export async function openPaddockCards(sp) {
+/* Bring ONE copy to the front of the rail. Compares dataset.iid rather than building a
+   selector, because an iid is minted data ('m-' migration rows, 'p-' mint rows) and not
+   something to interpolate into a query. Sets scrollLeft rather than calling
+   scrollIntoView: the rail lives inside a sheet inside a scroller, and scrollIntoView
+   walks every ancestor, so it would drag the whole screen to reach a card. The dots need
+   no help, they follow the real scroll (see wire). */
+function focusCopy(iid) {
+  const rail = host && host.querySelector('.pdk-rail');
+  if (!rail || !iid) return false;
+  const card = [...rail.querySelectorAll('.pdk-card')].find(c => c.dataset.iid === iid);
+  if (!card) return false;
+  rail.scrollLeft = card.offsetLeft - rail.offsetLeft;
+  return true;
+}
+
+/* THE NAMES MYSTERY (W-PADDOCK-5, Tom reported it repeatedly, Reggie root-caused it).
+ * Every figure in the scene carried only `data-pdk`, the SPECIES, so tapping any duck
+ * opened this slider at copy #1 and showed copy #1's name. Tom's first duck is Noodle
+ * and his first cloud is Meatball, which is why those two names came back whichever
+ * animal he tapped: the cards were right, the tap was lossy. The scene passes the iid
+ * now, and `iid` is OPTIONAL because the nest and the collection panel legitimately have
+ * a species and no copy in mind.
+ */
+export async function openPaddockCards(sp, iid = null) {
   /* THE SCENE CALLS THIS WITH ONE ARGUMENT (js/app.js: the #pdkScene tap handler and
      the nest), so the module fetches its own data and owns its own host rather than
      making the scene carry state for it. Re-tap dismiss lives here too, so the rule
      is one line and cannot disagree with itself. */
   dropStaleState();                       // a previous visit's sel/host may be dead DOM
-  if (sel === sp) { closePaddockCards(); return false; }
+  /* RE-TAP IS NOW COPY-AWARE, and this is the half that actually fixes Tom's bug.
+     Dismissing on any second tap of an open species would mean tapping duck #2 while
+     duck #1's card is open just closes the card: the player asks about a different
+     animal and gets nothing. So a tap naming a DIFFERENT copy moves the rail to it, and
+     only a tap on the copy already in front is a dismissal. */
+  if (sel === sp) {
+    if (iid) {
+      const front = frontCopy();
+      if (front && front !== iid && focusCopy(iid)) return true;
+    }
+    closePaddockCards();
+    return false;
+  }
   const scene = document.getElementById('pdkScene');
   if (!scene) return false;
   host = document.getElementById('pdkCards');
@@ -332,7 +367,26 @@ export async function openPaddockCards(sp) {
   host.classList.add('pdk-open');
   wire();
   armOutsideTap();
+  /* after wire(), so the dots' scroll listener is already attached and updates itself */
+  if (iid) focusCopy(iid);
   return true;
+}
+
+/* Which copy is in front RIGHT NOW, read from the live scroll position rather than from
+   a remembered index: the rail is scroll-snap, so a swipe moves it without telling this
+   module, and any parallel index would disagree with what the player is looking at. */
+function frontCopy() {
+  const rail = host && host.querySelector('.pdk-rail');
+  if (!rail) return null;
+  const cards = [...rail.querySelectorAll('.pdk-card')];
+  if (!cards.length) return null;
+  const mid = rail.scrollLeft + rail.clientWidth / 2;
+  let best = cards[0], bestD = Infinity;
+  for (const c of cards) {
+    const d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best.dataset.iid || null;
 }
 
 /* The collection panel is not tap-driven: it is the screen's lower half and must be
@@ -423,11 +477,14 @@ export function burst(card, kind) {
    is how audits drift back to proving nothing. */
 export function installPaddockSeam() {
   if (typeof window === 'undefined' || navigator.webdriver !== true) return;
-  window.__pdkMountCards = async (sp) => {
+  /* the seam carries the iid too, or the audit cannot drive the tap that Tom's bug was
+     actually about: a species-only seam would keep testing the lossy call for ever */
+  window.__pdkMountCards = async (sp, iid = null) => {
     const { paddockRoster } = await import('./paddock.js');
     const roster = await paddockRoster();
-    const opened = await openPaddockCards(sp);
-    return { opened, copies: roster.filter(r => r.sp === sp).length, open: isPaddockCardOpen() };
+    const opened = await openPaddockCards(sp, iid);
+    return { opened, copies: roster.filter(r => r.sp === sp).length, open: isPaddockCardOpen(),
+             front: frontCopy() };
   };
   window.__pdkClose = () => { closePaddockCards(); return isPaddockCardOpen(); };
 }

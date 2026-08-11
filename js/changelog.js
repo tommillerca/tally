@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  /* RENUMBER AT MERGE: claims v370 with js/app.js APP_BUILD and sw.js VERSION.
+     AGGIE, DO NOT SHIP THIS ENTRY WITHOUT REGGIE'S SCENE HALF. The fix has two halves
+     by design: his figures must carry data-iid and pass it, mine focuses the rail on
+     that copy. My half alone changes nothing a player can see, so this entry would be
+     announcing a fix that is not live. Both halves ride one train or neither does. */
+  { n: 370, date: '2026-08-11', title: 'The right pet answers', items: [
+    'Tapping an animal in the Paddock opens THAT animal. If you own three ducks, the card you get is the duck you tapped, with its own name, bond and lineage: it was always opening the first one, so two names did all the talking.',
+  ] },
   { n: 368, date: '2026-08-11', title: 'The Pit keeps up with you', items: [
     "<b>Beat a boss and The Pit now notices.</b> Your win and your raised ceiling were always recorded, but the screen behind the fight never re-read them, so a boss you had just beaten still offered you the fight. Nothing was lost: it was the view that was stale.",
     'Bonding with a pet gives it <b>hearts</b>. They were five red dots, which is not the same thing.',

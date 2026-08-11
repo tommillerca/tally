@@ -414,6 +414,58 @@ ok('SECOND VISIT: the first tap on the last-open species opens its card', second
 ok('SECOND VISIT: the outside-tap exit still dismisses on the new scene', second.outsideTapStillWorks === true,
   JSON.stringify(second));
 
+/* THE NAMES MYSTERY (W-PADDOCK-5). Tom kept reporting that the Paddock showed the same
+   two names whichever animal he tapped, and he was right: scene figures carried only the
+   SPECIES, so every duck opened this slider at copy #1 and copy #1's name is what he
+   read. The cards were never wrong; the tap threw the copy away. This drives the fixed
+   call and asserts the thing HE experienced, the NAME on the card in front, not just an
+   internal index: three copies of one species, all named differently by assignNames, and
+   opening by the third one's iid must put the third one in front. */
+const focus = await page.evaluate(async () => {
+  const out = {};
+  const { paddockRoster } = await import('./js/paddock.js');
+  const roster = (await paddockRoster()).filter(r => r.sp === 'C5');
+  out.copies = roster.map(r => ({ iid: r.iid, name: r.name }));
+  out.distinctNames = new Set(roster.map(r => r.name)).size;
+  if (roster.length < 3) return { ...out, why: 'need three copies to tell a wrong one apart' };
+  const target = roster[2];
+  out.target = target;
+  await window.__pdkClose();
+  const res = await window.__pdkMountCards('C5', target.iid);
+  await new Promise(r => setTimeout(r, 420));
+  out.front = res.front;
+  /* the NAME the player is looking at: the card nearest the middle of the rail */
+  const rail = document.querySelector('#pdkCards .pdk-rail');
+  const cards = [...document.querySelectorAll('#pdkCards .pdk-card')];
+  const mid = rail.scrollLeft + rail.clientWidth / 2;
+  const front = cards.reduce((b, c) => Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid)
+    < Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid) ? c : b, cards[0]);
+  out.frontName = front.querySelector('.pdk-name')?.textContent || null;
+  out.frontIid = front.dataset.iid;
+  out.dotOn = [...document.querySelectorAll('#pdkCards .pdk-dot')].findIndex(d => d.classList.contains('on'));
+  /* and a tap on ANOTHER copy while this one is open must MOVE, not dismiss */
+  const other = roster[0];
+  const moved = await window.__pdkMountCards('C5', other.iid);
+  await new Promise(r => setTimeout(r, 420));
+  out.movedNotClosed = !!(moved && moved.open);
+  out.afterMove = moved && moved.front;
+  /* while a tap on the copy already in front is still a dismissal */
+  const again = await window.__pdkMountCards('C5', other.iid);
+  await new Promise(r => setTimeout(r, 300));
+  out.sameCopyDismisses = !(again && again.open);
+  return out;
+});
+ok('three copies exist and are named differently (an empty or same-named set proves nothing)',
+  !focus.why && focus.copies.length >= 3 && focus.distinctNames >= 3, JSON.stringify(focus.copies || focus.why));
+ok("THE NAMES BUG: opening by a copy's iid shows THAT copy's name, not copy #1's",
+  !focus.why && focus.frontIid === focus.target.iid && focus.frontName === focus.target.name,
+  JSON.stringify({ asked: focus.target, gotIid: focus.frontIid, gotName: focus.frontName, dot: focus.dotOn }));
+ok('and the dots agree with what is in front', !focus.why && focus.dotOn === 2, `dot ${focus.dotOn} lit`);
+ok('tapping a DIFFERENT copy moves the rail instead of dismissing',
+  !focus.why && focus.movedNotClosed && focus.afterMove === focus.copies[0].iid, JSON.stringify(focus));
+ok('tapping the copy already in front still dismisses', !focus.why && focus.sameCopyDismisses === true,
+  JSON.stringify({ sameCopyDismisses: focus.sameCopyDismisses }));
+
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\npaddock cards clean');
