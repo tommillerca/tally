@@ -12959,7 +12959,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
          rewarded-actions SOP in tally/CLAUDE.md: close the entry point too. The
          Pit sheet was never re-rendered when the fight closed, so the FIGHT
          button you had just used was still sitting there. */
-      if (pitWrap && pitWrap.isConnected && $('.pit-sect', pitWrap)) renderPit(pitWrap);
+      /* Pinned to #pitBody, the element renderPit itself requires, because the
+         old guard was pinned to '.pit-sect', a class the t3 Build rebuild
+         renamed to '.t3-sect': a selector that could never match again, so the
+         post-fight re-render silently died for EVERY Pit fight. Tom hit it as
+         "I beat the remote den and it still says FIGHT and my cap did not
+         move": the ledger had both, the screen never re-read them
+         (2026-08-11). A guard pinned to an incidental punishes improvement;
+         pin it to the capability the re-render actually needs. */
+      if (pitWrap && pitWrap.isConnected && $('#pitBody', pitWrap)) renderPit(pitWrap);
     } });
 
   const body = $('#fightBody', wrap);
