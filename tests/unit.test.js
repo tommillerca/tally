@@ -1,5 +1,6 @@
 // Node unit tests: node tests/unit.test.js
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import * as execFile_ from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -2542,6 +2543,48 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
     { iid: `c${i}`, motion: 'hover' }, { iid: `d${i}`, motion: 'flop' }]);
   const placed = placePaddock(cast);
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
+});
+
+/* ================= THE SHIP MUST PARSE ====================================
+ * 2026-08-10, a 13-minute production outage, entirely mine. I resolved a merge
+ * conflict by writing an explanatory HTML comment inside body.innerHTML's
+ * TEMPLATE LITERAL, and quoted a ternary in BACKTICKS. The first backtick closed
+ * the string; js/app.js died at parse; main deploys straight to Pages and the app
+ * shell is network-first, so every fresh open in that window got a syntax-dead
+ * app. Reggie caught it from the live bytes.
+ *
+ * TWO REASONS NOTHING ELSE WOULD HAVE CAUGHT IT.
+ *   - The error telemetry is blind to this BY CONSTRUCTION: the module dies
+ *     before analytics.js installs its hooks, so there are no err rows. The one
+ *     crash the pipe cannot see is the shell failing to parse.
+ *   - `node --check file.js` misreports ESM (it blamed `await runAll()` for a
+ *     missing brace earlier the same night), which is why the house rule is to
+ *     run the suite. But the suite never PARSED the app, only imported pure
+ *     modules, so a dead shell passed every unit test.
+ *
+ * The gate catches it in seconds, but the gate runs after a push in practice.
+ * This runs in `npm test`, before. Parsed with --input-type=module through
+ * stdin, which is the only form that reads these files the way the browser does.
+ * PROVEN RED against the exact broken commit: `git show 178f442:js/app.js`
+ * yields "SyntaxError: Unexpected token ':'" here. */
+test('every shipped module parses as an ES module', () => {
+  // ESM: no require() in this file
+  const { execFileSync } = execFile_;
+  const jsDir = join(here, '..', 'js');
+  const files = readdirSync(jsDir).filter(f => f.endsWith('.js')).sort();
+  assert.ok(files.length > 5, `expected the js/ directory, found ${files.length} files`);
+  const broken = [];
+  for (const f of files) {
+    const src = readFileSync(join(jsDir, f), 'utf8');
+    try {
+      execFileSync(process.execPath, ['--check', '--input-type=module'],
+        { input: src, stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (e) {
+      const line = (String(e.stderr).match(/SyntaxError.*/) || ['parse failed'])[0];
+      broken.push(`js/${f}: ${line}`);
+    }
+  }
+  assert.deepEqual(broken, [], `these files would not load in a browser:\n  ${broken.join('\n  ')}`);
 });
 
 await runAll();
