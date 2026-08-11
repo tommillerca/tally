@@ -2552,6 +2552,20 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
     { iid: `c${i}`, motion: 'hover' }, { iid: `d${i}`, motion: 'flop' }]);
   const placed = placePaddock(cast);
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
+
+  /* THE WALK CAP (Aggie's measured ceiling, 2026-08-11): the rule is measured
+     on 76px sprites, so same-cluster spacing (bandW + GUTTER) must stay >= 56,
+     which the top cluster's 202px span can only give 4 walkers. A big herd
+     rotates by day instead of crushing the clusters. */
+  const herd = Array.from({ length: 20 }, (_, i) => ({ iid: 'h' + i, motion: 'walk' }));
+  const capped = placePaddock(herd, undefined, '2026-08-11');
+  const walks = Object.entries(capped).filter(([, p]) => p.kind === 'walk');
+  assert.equal(walks.length, 8, `walk cap must render exactly 8 of 20, got ${walks.length}`);
+  for (const [iid, p] of walks) assert.ok(p.x1 - p.x0 >= 32, `${iid}: capped band ${p.x1 - p.x0}px, below the 32px floor the 56px spacing rule implies`);
+  const again = placePaddock(herd, undefined, '2026-08-11');
+  assert.deepEqual(Object.keys(again).sort(), Object.keys(capped).sort(), 'same day must pick the same herd');
+  const other = placePaddock(herd, undefined, '2026-08-12');
+  assert.notDeepEqual(Object.keys(other).sort(), Object.keys(capped).sort(), 'a new day must rotate the herd (deterministic fixture: a collision here means the day seed is dead)');
 });
 
 

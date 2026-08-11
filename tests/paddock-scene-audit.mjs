@@ -34,10 +34,11 @@ if (!base) { console.log('FAIL  needs a base URL, no safe default.'); process.ex
 const { browser, page, errors } = await boot(base);
 await seed(page, { level: 30, coins: 5000, dust: 5000 });
 
-/* a herd worth measuring, granted through the REAL path */
+/* a herd worth measuring, granted through the REAL path. Deliberately more
+   walkers than WALK_CAP so the rotation path is the one under test. */
 await page.evaluate(async () => {
   const m = await import('./js/loot.js');
-  const grants = [['C5',0],['C5',0],['C4',0],['C4',0],['C4',0],['C3',0],['C3',1],['C1',0],['C1',1],['C2',1]];
+  const grants = [['C5',0],['C5',0],['C5',0],['C5',0],['C4',0],['C4',0],['C4',0],['C4',0],['C4',0],['C4',0],['C3',0],['C3',1],['C1',0],['C1',1],['C2',1]];
   for (const [sp, shiny] of grants) await m.addPetInstance(sp, { shiny: !!shiny });
 });
 
@@ -57,7 +58,10 @@ await sleep(2400);
 ok('ENTRY: the real Stable chip opens the Paddock', entered && await page.evaluate(() => !!document.querySelector('.pdk-scene')), String(entered));
 
 const scene = await page.evaluate(async () => {
-  const roster = await (await import('./js/paddock.js')).paddockRoster();
+  const pdk = await import('./js/paddock.js');
+  const roster = await pdk.paddockRoster();
+  const walkCount = roster.filter(r => r.motion === 'walk').length;
+  const expectedFigures = roster.length - Math.max(0, walkCount - pdk.WALK_CAP);
   const pets = [...document.querySelectorAll('.pdk-pet')];
   const imgs = [...document.querySelectorAll('.pdk-pet img')];
   const walkers = [...document.querySelectorAll('.pdk-walk')].map(w => {
@@ -68,7 +72,7 @@ const scene = await page.evaluate(async () => {
   });
   const flops = [...document.querySelectorAll('.pdk-flop')].map(f => parseFloat(f.style.top) + parseFloat(f.style.height));
   return {
-    roster: roster.length, pets: pets.length,
+    roster: roster.length, pets: pets.length, walkCount, expectedFigures, cap: pdk.WALK_CAP,
     decoded: imgs.filter(i => i.naturalWidth > 0).length, imgs: imgs.length,
     walkers, flops,
     keeper: [...document.querySelectorAll('.pdk-keeper img')].filter(i => i.naturalWidth > 0).length,
@@ -79,7 +83,12 @@ const scene = await page.evaluate(async () => {
     coach: !!document.querySelector('#pdkCoach'),
   };
 });
-ok('HERD: one figure per owned copy, roster non-empty', scene.roster > 0 && scene.pets === scene.roster, `${scene.pets} figures / ${scene.roster} roster rows`);
+/* HERD is cap-aware: one figure per copy up to WALK_CAP rendered walkers,
+   and the grant list above guarantees walkCount > cap so the rotation path
+   is the one being measured (empty-sample rule: a sub-cap herd would let a
+   broken cap pass unexercised) */
+ok('HERD: one figure per owned copy up to the walk cap', scene.roster > 0 && scene.walkCount > scene.cap && scene.pets === scene.expectedFigures,
+  `${scene.pets} figures / ${scene.roster} roster rows (${scene.walkCount} walkers, cap ${scene.cap})`);
 ok('DECODED: every herd sprite has pixels', scene.imgs > 0 && scene.decoded === scene.imgs, `${scene.decoded}/${scene.imgs}`);
 /* BANDS, on the rendered DOM. Proven red at build by injecting
    style.left overrides that force two same-row walkers onto one range. */
