@@ -2238,7 +2238,10 @@ body::before {
   border-radius: 7px; padding: 0 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.03em;
 }
 .cfan-live { position: absolute; top: 8px; right: 8px; z-index: 2; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); }
-.cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; font-size: 15px; color: var(--gold); text-shadow: 1px 1px 0 var(--ink), -1px 1px 0 var(--ink), 1px -1px 0 var(--ink), -1px -1px 0 var(--ink); }
+.cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; display: grid; place-items: center;
+  /* was a 15px ★ with an ink text-shadow faking a keyline; ICONS.star draws its own
+     stroke, so the shadow becomes a drop-shadow on the svg instead of on glyph edges */
+  filter: drop-shadow(1px 1px 0 var(--ink)) drop-shadow(-1px -1px 0 var(--ink)); }
 
 .cfan-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 6px 0 0; }
 .cfan-arrow {
