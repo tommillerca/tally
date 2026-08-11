@@ -127,6 +127,13 @@ export const PDK_SCENE = {
      walker bands on those rows stop short of them. Measured, not assumed: the
      first render parked a beardie on the hay bale. */
   ROW_XMAX: y => (y <= 370 ? 288 : 382),
+  /* and the graveyard corner owns the LEFT flank on the top rows: the
+     tombstone (x16-42, base y330) and cross (x62-78) sit at ground y330, so a
+     walker whose feet land ABOVE that base (rows 318/322) is BEHIND them in
+     world space, yet the herd layer draws over the backdrop SVG and hides
+     them. Rows below the base pass in FRONT, which is correct perspective and
+     stays allowed. Measured on the first live render, same class as the hay. */
+  ROW_XMIN: y => (y <= 340 ? 86 : 8),
   KEEPER: { x: 100, y: 240, px: 190 },
 };
 
@@ -148,12 +155,14 @@ export function assignBands(walkers, scene = PDK_SCENE) {
   }
   const PAD = 8, GUTTER = 24;
   for (const c of clusters) {
-    // the row group's usable width ends where the props begin
+    // the row group's usable width starts past the graveyard and ends where
+    // the props begin (both bounds conservative across the cluster)
     const xmax = Math.min(...c.map(p => (scene.ROW_XMAX ? scene.ROW_XMAX(p.y) : scene.W - PAD)));
-    const span = xmax - PAD;
+    const xmin = Math.max(...c.map(p => (scene.ROW_XMIN ? scene.ROW_XMIN(p.y) : PAD)));
+    const span = xmax - xmin;
     const bandW = Math.floor((span - GUTTER * (c.length - 1)) / c.length);
     c.forEach((p, i) => {
-      p.x0 = PAD + i * (bandW + GUTTER);
+      p.x0 = xmin + i * (bandW + GUTTER);
       p.x1 = p.x0 + bandW;
     });
   }

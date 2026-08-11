@@ -96,6 +96,15 @@ ok('BANDS: same-row walkers never share more than 20px of range', scene.walkers.
   scene.walkers.length < 2 ? 'FEWER THAN 2 WALKERS: the rule never ran' : viol.join(', ') || `${pairs} pairs checked`);
 ok('FLOOR: every foot above the panel edge', [...scene.walkers.map(w => w.foot), ...scene.flops].every(f => f <= 498),
   JSON.stringify([...scene.walkers.map(w => Math.round(w.foot)), ...scene.flops.map(Math.round)]));
+/* STONE: the graveyard corner (tombstone x16-42 base y330, cross x62-78).
+   A walker whose feet land above that base is BEHIND the props in world
+   space, so its band (x0 .. x0+w+range) may never reach x<86 or the herd
+   layer draws it over them. Proven red at build by reverting ROW_XMIN to
+   PAD. Rows below the base pass in front, correct perspective, allowed. */
+const stoneViol = scene.walkers.filter(w => w.foot <= 340 && w.x0 < 86);
+const stoneRows = scene.walkers.filter(w => w.foot <= 340).length;
+ok('STONE: no behind-the-tombstone walker enters the graveyard corner', stoneRows > 0 && stoneViol.length === 0,
+  stoneRows === 0 ? 'NO TOP-ROW WALKERS: the rule never ran' : `${stoneRows} top-row walkers checked`);
 /* ALIVE, measured on the layer the player sees. gBCR and getComputedStyle
  * both FROZE at identity here while the herd visibly moved: headless Chrome
  * runs the wander on the compositor and stops ticking the main-thread

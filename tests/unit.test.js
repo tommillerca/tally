@@ -2535,7 +2535,16 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
       }
     }
     if (n >= 2) assert.ok(checked > 0, `n=${n}: no same-cluster pairs were checked, the rule never ran`);
-    for (const b of bands) assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
+    for (const b of bands) {
+      assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
+      /* the graveyard corner (tombstone x16-42 base y330, cross x62-78): a
+         walker whose feet sit above that base must never enter its x-range,
+         because the herd layer would draw it over props it stands behind */
+      assert.ok(b.x0 >= PDK_SCENE.ROW_XMIN(b.y), `n=${n}: ${b.iid}@${b.y} band starts at ${b.x0}, inside the row's left exclusion (${PDK_SCENE.ROW_XMIN(b.y)})`);
+    }
+    /* and the exclusion itself is pinned to the measured graveyard edge (the
+       cross ends at x78), so weakening the spec cannot pass the loop above */
+    assert.ok(PDK_SCENE.ROW_XMIN(322) >= 86, 'top-row left exclusion regressed below the graveyard edge');
   }
   // every motion kind gets placed, none invents a position off-scene
   const cast = [...Array(4)].flatMap((_, i) => [
