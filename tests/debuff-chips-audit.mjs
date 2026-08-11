@@ -1,6 +1,11 @@
 /* Tapping a debuff chip must explain it. Failure = a chip that swallows the tap. */
 import { boot, sleep, click } from './godmode.js';
-const { browser, page } = await boot(process.env.URL);
+/* argv FIRST, env.URL second: the convention error-telemetry-audit and
+   year-readout-audit already use. Reading env.URL ONLY meant that any run passing
+   the URL as an argument (which is how the release gate invokes every suite) fell
+   through to godmode's boot() default, https://tommillerca.github.io/tally/, and
+   graded PRODUCTION while reading as coverage of the tree under test. */
+const { browser, page } = await boot(process.argv[2] || process.env.URL);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
