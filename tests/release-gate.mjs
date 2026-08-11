@@ -281,8 +281,9 @@ if (own) own.server.close();
 if (!runAll && FULL.length) {
   console.log(`\n${FULL.length} audit(s) not in FAST were skipped (everything not named in FAST lands here).`);
   console.log('Run them before a release:  node tests/release-gate.mjs --all');
-  console.log('NOTE: this is a tally, not a guard. A new audit is swept in here silently;');
-  console.log('      the check that would flag it is Walt\'s W1b, not yet landed.');
+  console.log('NOTE: this is a tally, not a guard, but a new audit can no longer be swept');
+  console.log('      in here silently: the COVERAGE assertion above refuses to start a');
+  console.log('      browser until every file on disk is DECLARED with a reason.');
 }
 const bad = results.filter(r => r.code !== 0);
 console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
