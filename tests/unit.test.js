@@ -2391,6 +2391,97 @@ test('no browser test changes the viewport without isMobile and hasTouch', () =>
     + 'Use setWidth(page, w, h) from godmode.js, or state both keys if you really do want the reload.');
 });
 
+/* ===== PLUGIN PARITY =====================================================
+ * @capacitor/haptics was missing for weeks and nothing could notice, because a
+ * missing plugin degrades to silence by design: js/haptics.js falls back to
+ * navigator.vibrate?.(), which does not exist in an iOS WKWebView, inside a
+ * try/catch. The same shape shipped BhVault compiled-but-unregistered on iOS,
+ * where js/social.js reads a missing vault as an empty one on purpose.
+ * native/capabilities.json is the declared list; these check it both ways.
+ * Static, so they cost no browser time and run in `npm test`.
+ */
+const CAPS = JSON.parse(readFileSync(join(here, '..', 'native', 'capabilities.json'), 'utf8'));
+const nat = f => readFileSync(join(here, '..', 'native', f), 'utf8');
+
+test('plugin parity: every plugin the web code asks for is declared', () => {
+  /* THE DIRECTION THAT CATCHES THE ORIGINAL BUG. Haptics was referenced by
+     js/haptics.js and declared in no manifest, no package.json, nowhere. A
+     forward-only check cannot see a plugin nobody declared. */
+  const asked = new Set();
+  for (const f of readdirSync(join(here, '..', 'js')).filter(f => f.endsWith('.js'))) {
+    const src = readFileSync(join(here, '..', 'js', f), 'utf8');
+    for (const m of src.matchAll(/Capacitor\s*\??\.\s*Plugins\s*\??\.\s*([A-Za-z][A-Za-z0-9]*)/g)) asked.add(m[1]);
+  }
+  assert.ok(asked.size > 0, 'found no Capacitor.Plugins references at all: the scan is broken, not the code clean');
+  const declared = new Set(CAPS.plugins.map(p => p.id));
+  const missing = [...asked].filter(id => !declared.has(id));
+  assert.deepEqual(missing, [], `js/ asks for these and native/capabilities.json does not declare them: ${missing.join(', ')}`);
+});
+
+test('plugin parity: every declared plugin is really wired up', () => {
+  const pkg = JSON.parse(nat('package.json'));
+  const spm = nat('ios/App/CapApp-SPM/Package.swift');
+  const settingsGradle = nat('android/capacitor.settings.gradle');
+  const buildGradle = nat('android/app/capacitor.build.gradle');
+  const iosReg = nat('ios/App/App/BoneheadzViewController.swift');
+  const androidReg = nat('android/app/src/main/java/com/boneheadz/gym/MainActivity.java');
+  const pbx = nat('ios/App/App.xcodeproj/project.pbxproj');
+
+  const problems = [];
+  for (const p of CAPS.plugins) {
+    const gaps = [];
+    if (p.source === 'npm') {
+      // npm alone is NOT enough: iOS needs two more lines, Android two more files
+      if (!pkg.dependencies?.[p.pkg]) gaps.push('not in native/package.json');
+      if (!spm.includes(p.pkg)) gaps.push('no .package/.product in CapApp-SPM/Package.swift (iOS would not link it)');
+      const slug = p.pkg.replace('@capacitor/', 'capacitor-');
+      if (!settingsGradle.includes(slug)) gaps.push(`no '${slug}' in capacitor.settings.gradle`);
+      if (!buildGradle.includes(slug)) gaps.push(`no '${slug}' in app/capacitor.build.gradle`);
+    } else {
+      /* the native CLASS name is not always the JS-facing id: the Health plugin is
+         `HealthPlugin` in Swift and Kotlin but `Capacitor.Plugins.Health` in JS, so
+         the manifest states the class rather than the guard guessing it. */
+      const cls = p.class || p.id;
+      /* a local plugin must EXIST, be in the Xcode target, and be REGISTERED on each
+         platform. Capacitor 8 does not auto-discover app-target plugins, which is how
+         BhVault shipped compiled but unreachable on iOS. */
+      if (p.platforms.includes('ios')) {
+        const f = p.files.ios;
+        if (!existsSync(join(here, '..', f))) gaps.push(`${f} missing`);
+        else if (!pbx.includes(f.split('/').pop())) gaps.push(`${f} is not in the Xcode target`);
+        if (!new RegExp(`registerPluginInstance\\(\\s*${cls}\\s*\\(`).test(iosReg)) gaps.push(`not registerPluginInstance'd on iOS`);
+      }
+      if (p.platforms.includes('android')) {
+        const f = p.files.android;
+        if (!existsSync(join(here, '..', f))) gaps.push(`${f} missing`);
+        if (!new RegExp(`registerPlugin\\(\\s*${cls}\\.class`).test(androidReg)) gaps.push('not registerPlugin\'d on Android');
+      }
+    }
+    if (!gaps.length) {
+      /* THE RECORD MUST NOT ROT. A known_gap left on a plugin that is now wired up
+         would quietly excuse the next real gap. */
+      if (p.known_gap) problems.push(`${p.id}: is wired up now, so DELETE its known_gap from native/capabilities.json`);
+    } else if (!p.known_gap) {
+      problems.push(`${p.id}: ${gaps.join('; ')}`);
+    }
+  }
+  assert.ok(CAPS.plugins.length > 0, 'no plugins declared at all: the manifest is empty, which is not the same as clean');
+  assert.deepEqual(problems, [],
+    `native/capabilities.json disagrees with the native projects:\n  ${problems.join('\n  ')}`);
+});
+
+test('plugin parity: Settings still carries the diagnostics row', () => {
+  /* The row is the only runtime half of this feature. It could be deleted in a
+     Settings tidy-up and nothing else would notice, so pin the three things that
+     make it useful: it renders, it reports the SERVED sw version rather than the
+     compiled constant, and it can be copied. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/id="diagLine"/.test(app), 'the diagnostics line is gone from renderSettings');
+  assert.ok(/id="copyDiag"/.test(app), 'the Copy control is gone');
+  assert.ok(/fetch\('\.\/sw\.js\?diag=1'/.test(app),
+    'diagnostics must FETCH the served sw.js: reporting the compiled VERSION constant would agree with itself and prove nothing about what is being served');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

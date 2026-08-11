@@ -7239,6 +7239,53 @@ async function openWhatsNew() {
   await kvSet('changelogSeen', changelogLatest());
 }
 
+/* ONE LINE TOM CAN SCREENSHOT, and it has to be honest about what it cannot know.
+ *
+ * Two things this exists for. First, @capacitor/haptics was missing for weeks and
+ * nothing could notice, because a missing plugin degrades to silence by design; the
+ * declared list is native/capabilities.json and a static guard in unit.test.js keeps
+ * it true, but only a runtime probe can say what THIS device actually got. Second,
+ * "is he even running the new code" has cost several rounds of misdiagnosis, so the
+ * running build and the SERVED service-worker version are on the same line: when
+ * they disagree, the answer is stale JS and nobody has to guess.
+ *
+ * THREE STATES, because collapsing them is how the original bug hid:
+ *   registered   the plugin object exists on the bridge. Cheap and certain.
+ *   permitted    only where an API exists to ASK without prompting. Notifications
+ *                has checkPermissions(); the vault has status(). Health is NOT
+ *                probed here: per lessons_tally_health_permissions its sheet shows
+ *                once, and a Settings row must never be the thing that burns it.
+ *   no readback  haptics can be fired and never answers. Saying "ok" there would be
+ *                a claim we cannot support, so it says what it is.
+ */
+async function diagnosticsLine() {
+  const bits = [`build ${APP_BUILD}`];
+  try { bits.push(`platform ${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'}`); } catch { bits.push('platform web'); }
+  /* the SERVED sw, fetched no-store, not the constant compiled into this bundle:
+     the whole point is to catch the case where they differ */
+  try {
+    const r = await fetch('./sw.js?diag=1', { cache: 'no-store' });
+    const m = /VERSION\s*=\s*'([^']+)'/.exec(await r.text());
+    bits.push(`sw ${m ? m[1] : '?'}`);
+  } catch { bits.push('sw unreachable'); }
+  try { bits.push(navigator.serviceWorker && navigator.serviceWorker.controller ? 'sw controlling' : 'sw not controlling'); } catch { /* no sw api */ }
+
+  const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+  const seen = [];
+  for (const id of ['App', 'Health', 'LocalNotifications', 'BhVault', 'Haptics']) {
+    if (!P[id]) { seen.push(`${id}:missing`); continue; }
+    let extra = '';
+    try {
+      if (id === 'LocalNotifications' && P[id].checkPermissions) extra = ':' + ((await P[id].checkPermissions()).display || '?');
+      else if (id === 'BhVault' && P[id].status) { const s = await P[id].status(); extra = ':' + (s && s.readable === false ? 'unreadable' : (s && s.present ? 'has-key' : 'empty')); }
+      else if (id === 'Haptics') extra = ':no-readback';
+      else if (id === 'Health') extra = ':auth-not-probed';
+    } catch { extra = ':probe-failed'; }
+    seen.push(`${id}:ok${extra}`);
+  }
+  return bits.concat(seen).join(' · ');
+}
+
 async function renderSettings(el) {
   const t = S.settings.targets;
   const p = S.settings.profile;
@@ -7257,6 +7304,7 @@ async function renderSettings(el) {
     const AppPlug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
     if (AppPlug && AppPlug.getInfo) { const i = await AppPlug.getInfo(); shellV = ` · shell ${i.version} (${i.build})`; }
   } catch { /* web: no shell */ }
+  const diag = await diagnosticsLine();
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
@@ -7410,6 +7458,7 @@ async function renderSettings(el) {
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
+    <div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -7584,6 +7633,18 @@ async function renderSettings(el) {
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched — it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', hardRefresh);
+  /* Copy, not just screenshot: a screenshot means somebody retypes these values to
+     search for them. Clipboard can be refused, so the fallback is selecting the text
+     rather than a toast claiming a copy that did not happen. */
+  $('#copyDiag')?.addEventListener('click', async () => {
+    const txt = $('#diagLine')?.textContent || '';
+    try { await navigator.clipboard.writeText(txt); toast('Diagnostics copied.', 1800); }
+    catch {
+      const n = $('#diagLine');
+      if (n) { const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      toast('Could not copy: the line is selected, copy it by hand.', 2600);
+    }
+  });
 }
 
 /* ================= profile / onboarding ================= */
