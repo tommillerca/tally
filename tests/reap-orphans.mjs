@@ -1,4 +1,4 @@
-/* KILL THE BROWSERS WHOSE OWNER IS DEAD. Nothing else.
+/* KILL THE TEST PROCESSES WHOSE OWNER IS DEAD. Nothing else.
  *
  * WHAT ACTUALLY LEAKS, measured rather than assumed. I first blamed "audits that
  * crash before browser.close()" and wrote an in-process exit hook for it. That
@@ -24,7 +24,31 @@
  */
 import { execFileSync } from 'node:child_process';
 
+/* THE SERVERS LEAK THE SAME WAY, and this reaper's scope stopped one process type
+   short of the runner's. ~20 self-serving audits spawn `python3 -m http.server`
+   on a FIXED port with `stdio: 'ignore'`, and they do kill it on a normal exit,
+   so the leak is the same SIGKILL path the browsers have. Measured 2026-08-11
+   02:5x: NINE stranded servers holding 8123/8134/8136/8165/8173/8177/8219/8281/
+   8321, ages 3 hours to 2 DAYS, all ppid 1.
+   Consequence today is mild, not nil: a stranded server holds the port, the next
+   run's `http.server` fails to bind, and because stdio is ignored that failure is
+   SILENT. The audit then talks to whatever already holds the port. In this house
+   every session shares one checkout and http.server reads from disk per request,
+   so it serves the same bytes and the run stays honest. It stops being honest the
+   day a second checkout exists, which is precisely the hazard release-gate.mjs's
+   own header was written about. Reaping them is the cheap half; a bind check in
+   the audits is the real fix and belongs to whoever owns that plumbing.
+   SCOPED THREE WAYS, and the third was found by testing the reaper against
+   itself. Port: the audit servers all sit in 8100-8399, so a bare 'http.server'
+   match is refused and a server Tom started himself on 9000 survives (he closed
+   the terminal, so it is ppid 1 too and looks identical otherwise). Anchor: the
+   first version matched the string ANYWHERE in the command line, so it flagged
+   the `node -e` process I was testing with, whose SOURCE merely contained
+   "http.server 8298". A reaper that kills any process quoting its own marker is
+   worse than no reaper, so the match must start at the executable and be a real
+   `python -m http.server`. Parent: ppid 1, as for the browsers. */
 const MARKERS = ['Chrome for Testing', 'chrome-headless-shell'];
+const SERVER = /^\S*python[\d.]*\s+-m\s+http\.server\s+8[123]\d\d\b/;
 const ps = execFileSync('ps', ['-eo', 'pid=,ppid=,command=']).toString().split('\n');
 const orphans = [];
 for (const line of ps) {
@@ -32,13 +56,14 @@ for (const line of ps) {
   if (!m) continue;
   const [, pid, ppid, cmd] = m;
   if (ppid !== '1') continue;                       // owner still alive: not ours to touch
+  if (SERVER.test(cmd)) { orphans.push({ pid: Number(pid), cmd: cmd.slice(0, 80) }); continue; }
   if (!MARKERS.some(k => cmd.includes(k))) continue;
   if (/--type=/.test(cmd) === false && !/Chrome for Testing|chrome-headless-shell/.test(cmd)) continue;
   orphans.push({ pid: Number(pid), cmd: cmd.slice(0, 80) });
 }
 
-if (!orphans.length) { console.log('no orphaned test browsers'); process.exit(0); }
-console.log(`${orphans.length} orphaned test browser process(es) (ppid 1):`);
+if (!orphans.length) { console.log('no orphaned test browsers or servers'); process.exit(0); }
+console.log(`${orphans.length} orphaned test process(es) (ppid 1):`);
 for (const o of orphans.slice(0, 6)) console.log(`   ${o.pid}  ${o.cmd}`);
 if (orphans.length > 6) console.log(`   ... and ${orphans.length - 6} more`);
 

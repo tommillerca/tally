@@ -48,6 +48,13 @@ tease or hide until built? (handoff says "navigates to the collection index
 also a Today-surface teaser row? Everything else is decided by the handoff
 (coach mark ON, free/unlimited Pet+Feed, teaser lurker = CX).
 
+**Post-ship (2026-08-11):** shipped v363 tombstone-depth fix, then a walk cap:
+the scene renders at most 8 walking pets (the measured band ceiling: 76px
+sprites + the 20px overlap rule = 4 per row cluster) and bigger collections
+rotate daily, every copy takes its turn ("today's herd"). Fliers, clouds and
+catfish stack their own spots, uncapped. FYI not a decision: cap and rotation
+are tunable one-liners if you want a different number or a "+N more" hint.
+
 ## 🌱 The Hollow: garden + apothecary as one hands-on scene — DECISION (designed 2026-08-09, awaiting Tom's call)
 
 **Tom's ask (2026-08-09, with an Animal Crossing Pocket Camp garden screenshot):**
