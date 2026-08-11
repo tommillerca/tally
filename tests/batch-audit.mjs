@@ -20,8 +20,12 @@ if (!base) {
   console.log('        node tests/batch-audit.mjs http://127.0.0.1:PORT/');
   process.exit(1);
 }
-const { browser, page } = await boot(base);
-const errs = []; page.on('pageerror', e => errs.push(String(e)));
+/* THE FIRST LOAD COUNTS. This attached its own pageerror listener here, after
+   boot() had already navigated, so anything thrown while the app booted was
+   invisible to the check at the bottom: the single error that takes the whole app
+   down was the one error it could not see. godmode's boot() hooks the page before
+   its first goto now and hands back what it collected. */
+const { browser, page, errors: errs } = await boot(base);
 await page.evaluateOnNewDocument(() => { window.__crateForce = 1; window.__hatchForce = 1; });
 await seed(page, { level: 30, coins: 5000, dust: 5000 });
 
@@ -215,71 +219,78 @@ ok('a real crit shatters the amulet and draws its sparks', !amuletRun.why && amu
   amuletRun.why || `shattered=${amuletRun.shattered} decoded art at peak=${amuletRun.fxSeen}`);
 
 /* ---- 5 + 6: two enemies read as two enemies ------------------------------ */
-const twoUp = await page.evaluate(() => {
-  const a = document.getElementById('addStage'), f = document.getElementById('foeStage');
-  if (!a || !f) return { why: 'no add in this fight' };
-  const box = e => { const r = e.getBoundingClientRect(); return { x: r.x, w: r.width, right: r.right }; };
-  const A = box(a), F = box(f);
-  const ar = document.getElementById('arena').getBoundingClientRect();
-  const sat = /saturate\(([\d.]+)\)/.exec(getComputedStyle(a).filter);
-  return { sat: sat ? +sat[1] : 1, addW: A.w,
-    offStage: Math.round(Math.max(0, ar.left - A.x) + Math.max(0, A.right - ar.right)) };
-});
-ok('the add is not washed out', !twoUp.why && twoUp.sat >= 0.8, `saturate(${twoUp.sat}) (0.55 was the faded one)`);
-/* NOT "clear of the boss": sitting in front of his hem is the intended depth and
-   is what every other den add does. The first version of this check demanded
-   separation, I moved the add to satisfy it, and MEASURED the result at real
-   phone widths: 36px off the left edge of the arena at 320, and 39/52/76px on top
-   of the player at 375/390/430. The check was wrong, not the layout. What must
-   never happen is the add leaving the stage, so that is what is asserted. */
-ok('the add is fully on stage', !twoUp.why && twoUp.offStage === 0,
-  twoUp.why || `${twoUp.offStage}px outside the arena`);
-
-/* AND AT EVERY WIDTH, AGAINST BOTH NEIGHBOURS. The first version measured the add
-   against the BOSS only, at one viewport. So when I moved the add to satisfy it,
-   the new position hung 36px off the arena at 320px and sat 39/52/76px ON THE
-   PLAYER at 375/390/430, and this file went green on all of it. A layout claim
-   that is not checked at 320 / 390 / 430 is a claim about one phone. */
+/* ONE LOOP, AT EVERY PHONE WIDTH. This region carried two checks doing the same
+   job: a single-viewport `twoUp` reading whatever width the harness happened to
+   leave behind, and the width loop below it. The single one is gone; everything it
+   asserted (saturation, staying on stage) is asserted here at all three widths
+   instead of at one.
+   The first version measured the add against the BOSS only, at one viewport. So
+   when the add was moved to satisfy it, the new position hung 36px off the arena at
+   320px and sat 39/52/76px ON THE PLAYER at 375/390/430, and this file went green on
+   all of it. A layout claim that is not checked at 320 / 390 / 430 is a claim about
+   one phone. */
 const WIDTHS = [320, 390, 430];
 const geo = [];
 for (const w of WIDTHS) {
-  await page.setViewport({ width: w, height: 800, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await setWidth(page, w, 800);
   await page.evaluate(() => document.querySelectorAll('.sheet-close').forEach(b => b.click()));
   await sleep(600);
   await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
   await sleep(2200); await settle(page, 300);
   geo.push(await page.evaluate(wid => {
     const g = id => document.getElementById(id);
-    const box = e => { if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, w: r.width }; };
-    const add = box(g('addStage')), you = box(g('youStage')), arena = box(document.getElementById('arena'));
-    if (!add || !you || !arena) return { w: wid, why: 'missing stage' };
+    const box = e => { if (!e) return null; const r = e.getBoundingClientRect();
+      return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
+    const add = box(g('addStage')), you = box(g('youStage')), foe = box(g('foeStage')),
+          arena = box(document.getElementById('arena'));
+    if (!add || !you || !foe || !arena) return { w: wid, why: 'missing stage' };
     const ov = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l));
+    const sat = /saturate\(([\d.]+)\)/.exec(getComputedStyle(g('addStage')).filter);
+    const cx = r => r.l + r.w / 2;
     return { w: wid,
-      offStage: Math.round(Math.max(0, arena.l - add.l) + Math.max(0, add.r - arena.r)),
-      onPlayer: Math.round(ov(add, you)), addW: Math.round(add.w) };
+      /* ALL FOUR EDGES. Left and right alone meant an add pushed through the floor
+         or the ceiling of the arena still read as fully on stage. Proven: with
+         `bottom: -90px` on the add, left+right-only reports ok at all three widths
+         and four-edge reports 74px outside at all three. */
+      offStage: Math.round(Math.max(0, arena.l - add.l) + Math.max(0, add.r - arena.r)
+                         + Math.max(0, arena.t - add.t) + Math.max(0, add.b - arena.b)),
+      onPlayer: Math.round(ov(add, you)), onBoss: Math.round(ov(add, foe)),
+      addW: Math.round(add.w), sat: sat ? +sat[1] : 1,
+      nearerFoe: Math.abs(cx(add) - cx(foe)) < Math.abs(cx(add) - cx(you)) };
   }, w));
   await page.evaluate(() => document.querySelectorAll('.sheet-close').forEach(b => b.click()));
   await sleep(400);
 }
-await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await setWidth(page, 430, 932);
+/* AN EMPTY SAMPLE IS A FAILURE. A width whose fight never opened sets
+   why:'missing stage' and was then filtered out of every check below, so a run that
+   reached no fight at all could report three passes. */
+ok('the two-enemy fight opened at every width', geo.length === WIDTHS.length && geo.every(g => !g.why),
+  geo.map(g => `${g.w}:${g.why || 'ok'}`).join(' '));
 const offAny = geo.filter(g => g.why || g.offStage > 0);
 ok('the add stays inside the arena at 320 / 390 / 430', offAny.length === 0,
   offAny.length ? offAny.map(g => `${g.w}px: ${g.why || g.offStage + 'px outside'}`).join(', ')
                 : geo.map(g => `${g.w}:ok`).join(' '));
+const faded = geo.filter(g => !g.why && g.sat < 0.8);
+ok('the add is not washed out, at any width', faded.length === 0,
+  faded.length ? faded.map(g => `${g.w}px: saturate(${g.sat})`).join(', ')
+               : geo.map(g => `${g.w}:saturate(${g.sat})`).join(' ') + '  (0.55 was the faded one)');
 /* The boss's own stage is 208px inside a 288px arena at 320px, so the three
    figures are genuinely crowded there and a zero-overlap rule would fail on
    shipped, pre-existing layout. What must not happen is the add sitting mostly on
-   the player, which is what my own "fix" did. */
+   the player, which is what an earlier "fix" did. */
 const onPlayer = geo.filter(g => !g.why && g.onPlayer > g.addW * 0.5);
 ok('and never lands mostly on the player', onPlayer.length === 0,
   onPlayer.length ? onPlayer.map(g => `${g.w}px: ${g.onPlayer}px of a ${g.addW}px figure`).join(', ')
                   : geo.map(g => `${g.w}:${g.onPlayer}px`).join(' '));
-
-/* Reopen a fight: the width loop above closes every sheet, so without this the
-   next line dereferences a null #foeStage and kills the suite. Cost a debugging
-   round twice now, once in my own batch and once again when merging. */
-await page.evaluate(async () => { await window.__denFight(1.4, 0.5, { mage: true, name: 'The Live Wire' }); });
-await sleep(2300); await settle(page, 350);
+/* MEASURED, NOT ASSERTED: overlap with the BOSS. It is ~100% at every width by
+   construction, because the add is a child of .fighterG.foe-side and #foeStage
+   fills that column, and sitting in front of his hem is the intended depth every
+   other den add uses. Worth recording which way a break goes: BOTH ways of
+   misplacing the add REDUCE these numbers toward zero, because it leaves the arena,
+   so an "overlap under 25%" rule would go green on the bug and red on the shipped
+   layout. Printed so nobody has to re-derive it. */
+console.log(`      two-enemy geometry: ${geo.filter(g => !g.why).map(g => `${g.w}px add ${g.addW}w onBoss ${g.onBoss}px onPlayer ${g.onPlayer}px ${g.nearerFoe ? 'nearer-boss' : 'NEARER-PLAYER'}`).join(' | ')}`);
 
 /* A dead enemy must go down THE MOMENT its bar empties, not when the fight ends,
    and the survivor must announce itself. */
