@@ -9846,8 +9846,14 @@ async function openPaddock() {
       : p.kind === 'fly'
         ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
         : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
-    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" style="${pos}">
+    /* THE GREETING (Tom's B pick): a pet you have bonded with (3+ hearts) is
+       glad to see you: one little hop and a heart puff when the Paddock
+       opens, staggered so the field ripples rather than jumps in unison.
+       Render-time class, CSS does the rest, reduced-motion turns it off. */
+    const greet = (r.bond | 0) >= 3 ? ` pdk-greet` : '';
+    return `<div class="pdk-pet pdk-${p.kind}${glow}${greet}" data-pdk="${r.sp}" data-iid="${esc(r.iid)}" style="${pos}${greet ? `;--pdk-hi:${(roster.indexOf(r) % 5) * 0.35}s` : ''}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
+      ${greet ? '<span class="pdk-hi" aria-hidden="true">♥</span>' : ''}
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
   };
@@ -9898,10 +9904,13 @@ async function openPaddock() {
     if (!hit) return;
     $('#pdkCoach', wrap)?.remove();
     const sp = hit.dataset.pdk;
-    /* Lane W's module; a tap before it lands degrades to nothing, never to an
-       error (anti-regression rule 8's spirit: absent halves degrade visibly
-       calm, not broken). */
-    import('./paddock-cards.js').then(m => m.openPaddockCards(sp)).catch(() => {});
+    /* THE FIGURE YOU TAP IS THE PET YOU SEE (Tom, 2026-08-11: every duck tap
+       showed copy #1's card, so all his ducks "were named Noodle"). Each
+       figure carries its own iid; the slider opens scrolled to that copy.
+       Lane W's module consumes the second arg; a tap before his half lands
+       degrades to copy #1, never to an error (anti-regression rule 8's
+       spirit: absent halves degrade visibly calm, not broken). */
+    import('./paddock-cards.js').then(m => m.openPaddockCards(sp, hit.dataset.iid || null)).catch(() => {});
   });
   $('#pdkNest', wrap)?.addEventListener('click', () => {
     import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});

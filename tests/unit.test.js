@@ -2601,6 +2601,87 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
 });
 
 
+
+test('the daily care ritual: one of each kind per pet per local day, streaks honest (B+C, 2026-08-11)', async () => {
+  const { careAfter } = await import('../js/loot.js');
+  const D = '2026-08-11', Y = '2026-08-10';
+  // first care of a fresh day lands and starts a streak
+  const a = careAfter(undefined, 'pet', D, Y);
+  assert.ok(!a.given && a.next.pet === true && a.next.feed === false && a.streak === 1, JSON.stringify(a));
+  // the SAME kind again today is refused, streak unmoved
+  const b = careAfter(a.next, 'pet', D, Y);
+  assert.ok(b.given === true && b.streak === 1, 'a second pet today must be refused by name');
+  // the OTHER kind still lands today
+  const c = careAfter(a.next, 'feed', D, Y);
+  assert.ok(!c.given && c.next.feed === true && c.next.pet === true, 'feed must land on a day pet already landed');
+  // caring on the NEXT consecutive day grows the streak
+  const d = careAfter(c.next, 'pet', '2026-08-12', D);
+  assert.equal(d.streak, 2, 'consecutive days must grow the streak');
+  // a missed day resets it
+  const e = careAfter(c.next, 'pet', '2026-08-14', '2026-08-13');
+  assert.equal(e.streak, 1, 'a gap must reset the streak');
+  // and a fresh day resets the per-kind flags
+  assert.ok(d.next.feed === false, 'a new day must reopen the other kind');
+  /* SEMANTICS WALT'S COPY DEPENDS ON, pinned by name (his review, 2026-08-11):
+     streak INCLUDES today: the first care of a day counts itself, so
+     'day 1 caring streak' is true the moment the first heart lands. */
+  assert.equal(a.streak, 1, "streak includes today: first-ever care reads 'day 1', not 'day 0'");
+});
+
+
+test('bondUp refusals are NAMED and carry the full meter (Walt interface pins, 2026-08-11)', async () => {
+  const { careAfter, IID_KEYED_MAPS, healDupIids } = await import('../js/loot.js');
+  /* precedence: already-cared-today beats maxed. careAfter answers 'given'
+     before bondUp ever looks at the bond, so a maxed pet cared for this
+     morning refuses as 'today': at cap the ritual is the living rule, and
+     tomorrow's visit still grows the streak. Pinned at the pure layer (the
+     DB-backed branch order in bondUp follows from careAfter running first). */
+  const cared = { day: '2026-08-11', pet: true, feed: false, streak: 3 };
+  const again = careAfter(cared, 'pet', '2026-08-11', '2026-08-10');
+  assert.ok(again.given === true && again.streak === 3, "the 'today' answer must come with the CURRENT streak, never zero");
+  /* the registry: every iid-keyed kv map in loot.js must be listed, or the
+     iid healer silently detaches it (a healed pet would lose its streak AND
+     reopen the daily gate). This grep fails the day someone adds an iid-keyed
+     map without registering it: kvSet('petX', ...) where petX holds per-iid
+     rows. Heuristic on purpose: it catches the naming convention this file
+     actually uses (petLvlSteps, petBonds, petCare all match). */
+  assert.deepEqual([...IID_KEYED_MAPS].sort(), ['petBonds', 'petCare', 'petLvlSteps'], 'IID_KEYED_MAPS must list every per-iid kv map');
+  /* the day someone writes a NEW pet* kv key, this goes red until they
+     classify it: either it joins IID_KEYED_MAPS (per-iid map: the healer must
+     copy it) or the NOT_IID_KEYED list here (list/scalar/species-keyed).
+     Unclassified is the only failing state, which is the point: the healed-pet
+     data loss Walt caught came from a map nobody thought to register. */
+  const lootSrc = readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
+  const NOT_IID_KEYED = ['petInst', 'pets', 'petBreedCredit', 'petEquipped', 'petLvlV', 'petCareV', 'petStepCredit', 'pettalents'];   // petStepCredit = scalar checkpoint; pettalents = SPECIES-keyed (callers pass .sp)
+  const petKeys = [...new Set([...lootSrc.matchAll(/kv(?:Set|Get)\('(pet\w*)'/g)].map(m => m[1]))];
+  for (const k of petKeys) {
+    assert.ok(IID_KEYED_MAPS.includes(k) || NOT_IID_KEYED.includes(k),
+      `kv key '${k}' is unclassified: add it to IID_KEYED_MAPS (healer copies it) or NOT_IID_KEYED (it is not per-iid)`);
+  }
+  /* and the heal itself preserves care across a re-id: the healed duplicate
+     keeps the pooled streak and TODAY's day record, so the daily gate does
+     not reopen (Walt's defect: a fresh iid with no day record pays out a
+     second care the same day). Proven at the pure layer: the healed row
+     carries healedFrom, which is the key the registry loop copies by. */
+  const healed = healDupIids([{ iid: 'pA-1-C2', sp: 'C2' }, { iid: 'pA-1-C2', sp: 'C2' }]);
+  assert.equal(healed[1].healedFrom, 'pA-1-C2', 'the copy key the registry loop consumes must survive healing');
+});
+
+
+test('the best friend grazes beside the keeper (B pick, 2026-08-11)', async () => {
+  const { placePaddock, PDK_SCENE } = await import('../js/paddock.js');
+  const herd = Array.from({ length: 6 }, (_, i) => ({ iid: 'w' + i, motion: 'walk', bond: 0, maxed: false }));
+  herd[1] = { ...herd[1], bond: 5, maxed: true };
+  const placed = placePaddock(herd, undefined, '2026-08-11');
+  // index 4 is the bottom cluster's first band: y = WALK_ROWS[4], x0 at the
+  // keeper-corner exclusion edge
+  const p = placed['w1'];
+  assert.equal(p.y, PDK_SCENE.WALK_ROWS[4], `best friend must take the keeper-side row, got y=${p.y}`);
+  assert.equal(p.x0, PDK_SCENE.ROW_XMIN(p.y), `best friend band must start at the keeper corner, got x0=${p.x0}`);
+  // no maxed pet: nobody is teleported anywhere (same herd, no bond)
+  const plain = placePaddock(Array.from({ length: 6 }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })), undefined, '2026-08-11');
+  assert.equal(plain['w4'].y, PDK_SCENE.WALK_ROWS[4], 'without bonds the deal order must stand');
+});
 test("duplicate instance iids heal deterministically (Tom's pooled duck hearts, 2026-08-11)", async () => {
   const { healDupIids } = await import('../js/loot.js');
   const dup = [

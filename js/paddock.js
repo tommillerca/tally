@@ -234,6 +234,17 @@ export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOSt
       .sort((a, b) => rotHash(day + ':' + a.iid) - rotHash(day + ':' + b.iid))
       .slice(0, WALK_CAP);
   }
+  /* THE BEST FRIEND STAYS CLOSE (Tom's B pick, 2026-08-11: bonded pets behave
+     differently in the scene). The highest-bond MAXED walker takes the band
+     beside the keeper: index 4 is the bottom cluster's first band, whose x0
+     starts right at the keeper-corner exclusion, so your best friend grazes
+     at your bonehead's elbow. Deterministic (bond, then iid). */
+  const bf = walkers.filter(w => w.maxed).sort((a, b) => ((b.bond | 0) - (a.bond | 0)) || (a.iid < b.iid ? -1 : 1))[0];
+  if (bf && walkers.length > 1) {
+    const to = Math.min(4, walkers.length - 1);
+    const from = walkers.indexOf(bf);
+    if (from !== to) { walkers = [...walkers]; walkers.splice(from, 1); walkers.splice(to, 0, bf); }
+  }
   const bands = assignBands(walkers, scene);
   for (const b of bands) out[b.iid] = { kind: 'walk', y: b.y, x0: b.x0, x1: b.x1, w: 76 };
   return out;
