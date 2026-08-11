@@ -35,18 +35,14 @@ const seeded = await page.evaluate(async () => {
     tx.oncomplete = res; tx.onerror = () => rej(tx.error);
   });
   const pets = [
-    { id: 'pet-w1', kind: 'pet', sp: 'C5', iid: 'w1', shiny: false, ts: 1 },
-    { id: 'pet-w2', kind: 'pet', sp: 'C5', iid: 'w2', shiny: false, ts: 2 },
-    { id: 'pet-w3', kind: 'pet', sp: 'C5', iid: 'w3', shiny: true, ts: 3 },
+    { iid: 'w1', sp: 'C5', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'w2', sp: 'C5', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'w3', sp: 'C5', lineage: 1, shiny: true, hatchedAtSteps: 0 },
   ];
-  await put('inv', pets);
-  /* THE PRE-FIELD SAVE, on purpose: no petBonds key at all, which is every existing
-     player's save. The round trip has to work on THAT, not only on a profile the
-     feature already touched. */
-  await new Promise((res, rej) => {
-    const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete('petBonds');
-    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
-  });
+  /* instances live in the kv 'petInst' ARRAY (loot.js petInstances), not as inv
+     rows: seeding the wrong store left the Stable with no pets, so its Paddock
+     button never rendered and every check below cascaded off one missing control */
+  await put('kv', [{ k: 'petInst', v: pets }]);
   return { pets: pets.length };
 });
 if (seeded.error) { console.log(`FAIL  ${seeded.error}`); await browser.close(); process.exit(1); }
@@ -54,6 +50,41 @@ await page.reload({ waitUntil: 'networkidle2' });
 await page.waitForFunction(() => typeof window.__pdkMountCards === 'function', { timeout: 30000, polling: 100 })
   .then(() => {}).catch(() => {});
 await setWidth(page, 390, 900);
+
+/* OPEN THE REAL SCREEN FIRST. The cards mount into the scene's own DOM (#pdkScene,
+   #pdkPanel), so a seam that mounts into a bare body would be testing markup in a
+   vacuum. Drive the real entry point: the Stable's Paddock button. */
+/* Reaching the Paddock is done TWICE (once before the bond, once after the reload),
+   so it is one function: a second hand-rolled copy is how the post-reload half ended
+   up never opening the screen at all, which read as a persistence failure. */
+async function reachPaddock() {
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await page.waitForFunction(() => !!document.getElementById('stableToPaddock'), { timeout: 30000, polling: 100 }).catch(() => {});
+  const at = await page.evaluate(() => {
+    const b = document.getElementById('stableToPaddock');
+    if (!b) return false;
+    b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (at) await page.mouse.click(at.x, at.y);
+  await page.waitForFunction(() => !!document.getElementById('pdkScene'), { timeout: 30000, polling: 100 }).catch(() => {});
+  await settle(page, 400);
+  return !!at;
+}
+
+const opened = await reachPaddock();
+ok('the Stable offers a way into the Paddock', !!opened, opened ? '' : 'no #stableToPaddock control');
+const screen = await page.evaluate(() => ({
+  scene: !!document.getElementById('pdkScene'),
+  panelMounted: (document.getElementById('pdkPanel')?.children.length || 0) > 0,
+  tiles: document.querySelectorAll('#pdkPanel .pdk-tile').length,
+  foot: document.querySelector('#pdkPanel .pdk-seg.on')?.textContent?.trim() || null,
+}));
+ok('the Paddock scene opened', screen.scene, JSON.stringify(screen));
+/* the panel is Lane W's and is mounted as the sheet opens, not on first tap */
+ok('the collection panel mounted itself with the screen', screen.panelMounted && screen.tiles > 0,
+  `${screen.tiles} tiles, footer ${screen.foot}`);
 
 const mounted = await page.evaluate(async () => window.__pdkMountCards ? await window.__pdkMountCards('C5') : null);
 ok('the seam mounts real cards for a real roster', !!mounted && mounted.opened && mounted.copies === 3,
@@ -71,8 +102,8 @@ const shape = await page.evaluate(() => {
 ok('one card per owned copy, all of them drawn', shape.cards === 3 && shape.visible === 3, JSON.stringify(shape));
 ok('and dots match the copies', shape.dots === 3, `${shape.dots} dots`);
 /* the namespace collision, checked in the RENDERED dom and not only in the builder */
-ok('nothing rendered lands in the paperdoll namespace', shape.pdClasses.length === 0,
-  shape.pdClasses.join(', ') || 'no .pd- classes present');
+ok('nothing rendered lands in the paperdoll namespace', shape.cards > 0 && shape.pdClasses.length === 0,
+  shape.cards ? (shape.pdClasses.join(', ') || 'no .pd- classes present') : 'NO CARDS RENDERED: an empty dom has no .pd- classes either, which is not a pass');
 
 /* ---- THE ROUND TRIP ------------------------------------------------------ */
 const before = await page.evaluate(() => document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-heart.on').length);
@@ -95,13 +126,14 @@ ok('pressing Pet fills a heart', afterPress === before + 1, `${before} -> ${afte
 await page.reload({ waitUntil: 'networkidle2' });
 await page.waitForFunction(() => typeof window.__pdkMountCards === 'function', { timeout: 30000, polling: 100 }).catch(() => {});
 await setWidth(page, 390, 900);
+await reachPaddock();          // the sheet does not survive a reload; the bond must
 await page.evaluate(async () => await window.__pdkMountCards('C5'));
 await settle(page, 250);
 const survived = await page.evaluate(() => ({
   hearts: document.querySelectorAll('#pdkCards .pdk-card[data-iid="w1"] .pdk-heart.on').length,
   kv: null,
 }));
-ok('THE ROUND TRIP: the bond is still there after a reload', survived.hearts === afterPress,
+ok('THE ROUND TRIP: the bond is still there after a reload', afterPress > 0 && survived.hearts === afterPress,
   `${afterPress} before the reload, ${survived.hearts} after (on a save that had no petBonds key at all)`);
 
 /* ---- the cap, and an animation that must not lie ------------------------- */
@@ -120,7 +152,7 @@ const capped = await page.evaluate(async () => {
 });
 ok('the bond caps at 5 however many times you press', capped.atCap === 5 && capped.overfilled === 5, JSON.stringify(capped));
 ok('BEST FRIEND appears once at the cap, not once per press', capped.bffs === 1, `${capped.bffs} badges`);
-ok('and a refused press at the cap fires NO burst', capped.burstAtCap === 0,
+ok('and a refused press at the cap fires NO burst', capped.atCap === 5 && capped.burstAtCap === 0,
   `${capped.burstAtCap} bursts after pressing a maxed pet`);
 
 /* the burst on a press that DID bank: visible pixels while it runs, not just a node */
@@ -154,10 +186,11 @@ ok('the dots track the REAL scroll position', !dots.why && dots.first === 0 && d
   dots.why || `active dot ${dots.first} -> ${dots.last}`);
 
 const retap = await page.evaluate(async () => {
+  const wasOpen = document.querySelectorAll('#pdkCards .pdk-card').length > 0;
   const openAgain = await window.__pdkMountCards('C5');   // same species = dismiss
-  return { stillOpen: openAgain.open, cards: document.querySelectorAll('#pdkCards .pdk-card').length };
+  return { wasOpen, stillOpen: openAgain.open, cards: document.querySelectorAll('#pdkCards .pdk-card').length };
 });
-ok('re-tapping the same species dismisses the slider', retap.stillOpen === false && retap.cards === 0,
+ok('re-tapping the same species dismisses the slider', retap.wasOpen === true && retap.stillOpen === false && retap.cards === 0,
   JSON.stringify(retap));
 
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));

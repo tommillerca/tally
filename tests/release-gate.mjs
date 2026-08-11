@@ -155,6 +155,7 @@ const DECLARED = {
   'siege-client-audit.mjs': ['skip', 'drives sieges against a stubbed server payload; the demo profile has no online crew.'],
   'glutton-audit.mjs': ['skip', 'the Glutton farm, closed. unit.test.js carries the generalised rewarded-actions guard now.'],
 
+  'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
   'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
