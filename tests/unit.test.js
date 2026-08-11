@@ -2601,6 +2601,27 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
 });
 
 
+test("duplicate instance iids heal deterministically (Tom's pooled duck hearts, 2026-08-11)", async () => {
+  const { healDupIids } = await import('../js/loot.js');
+  const dup = [
+    { iid: 'pabc-1-C2', sp: 'C2' }, { iid: 'pabc-1-C2', sp: 'C2' },
+    { iid: 'pabc-1-C2', sp: 'C2' }, { iid: 'pxyz-2-C5', sp: 'C5' },
+  ];
+  const healed = healDupIids(dup);
+  const ids = healed.map(x => x.iid);
+  assert.equal(new Set(ids).size, ids.length, `healed list still carries duplicates: ${ids}`);
+  assert.equal(healed[0].iid, 'pabc-1-C2', 'the first occurrence must KEEP the original iid (bond/bank stay attached)');
+  assert.ok(healed[1].healedFrom === 'pabc-1-C2' && healed[2].healedFrom === 'pabc-1-C2', 'later duplicates must record where they came from');
+  assert.equal(healed[3].iid, 'pxyz-2-C5', 'a unique row must pass through untouched');
+  assert.deepEqual(healDupIids(dup), healed, 'healing must be deterministic (sync-safe across devices)');
+  // healing an already-clean list returns the SAME reference: no write happens
+  const clean = [{ iid: 'a-C2', sp: 'C2' }, { iid: 'b-C2', sp: 'C2' }];
+  assert.equal(healDupIids(clean), clean, 'a clean list must come back by reference, or every read becomes a write');
+  // and a healed list is stable under re-heal (the suffix ids must not collide)
+  assert.equal(healDupIids(healed), healed, 're-healing a healed list must be a no-op');
+});
+
+
 /* ================= the shell parse gate (2026-08-11, after a 14-minute
  * production outage) ========================================================
  * 178f442 shipped an HTML comment containing BACKTICKS inside a template

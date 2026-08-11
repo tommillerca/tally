@@ -432,9 +432,56 @@ function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSe
 
 // Read the instance list, migrating on first access (additive: never touches the
 // legacy `pets`/`inv` state, so a rollback to a pre-v126 build still works).
+/* PURE: re-id duplicate instance rows. Two rows sharing one iid make every
+ * per-copy map (bond, level bank, names) silently pool onto the one key:
+ * Tom's ducks all answered to NOODLE and shared one set of hearts
+ * (2026-08-11). First occurrence keeps the original iid, later ones get a
+ * deterministic `~k` suffix, so every device that syncs the same array heals
+ * it the same way. Returns the SAME array reference when nothing needed
+ * healing, so callers can cheaply tell "no write needed". */
+export function healDupIids(list) {
+  const seen = new Set();
+  let healed = false;
+  const out = (list || []).map(x => {
+    if (!x || !x.iid || !seen.has(x.iid)) { if (x && x.iid) seen.add(x.iid); return x; }
+    healed = true;
+    let k = 2, nid = `${x.iid}~${k}`;
+    while (seen.has(nid)) nid = `${x.iid}~${++k}`;
+    seen.add(nid);
+    return { ...x, iid: nid, healedFrom: x.iid };
+  });
+  return healed ? out : list;
+}
+
 export async function petInstances() {
   let list = await kvGet('petInst', null);
-  if (Array.isArray(list)) return list;
+  if (Array.isArray(list)) {
+    const healed = healDupIids(list);
+    if (healed !== list) {
+      /* duplicate iids exist in the wild (mechanism unproven: every mint and
+         merge path here checks out, so the origin has to identify itself from
+         telemetry). COPY the pooled bond/level values onto the new ids, never
+         delete the original key: additive-DB rule, and the first row still
+         owns it. Raw kv reads, because petLevelBank() calls back into here. */
+      const bank = await kvGet('petLvlSteps', null);
+      const bonds = await kvGet('petBonds', null);
+      for (const row of healed) {
+        if (!row || !row.healedFrom) continue;
+        if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
+        if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
+      }
+      if (bank) await kvSet('petLvlSteps', bank);
+      if (bonds) await kvSet('petBonds', bonds);
+      await kvSet('petInst', healed);
+      const dupIids = healed.filter(r => r && r.healedFrom).map(r => r.healedFrom);
+      import('./analytics.js').then(a => a.track('pet_iid_heal', {
+        n: dupIids.length,
+        sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
+      })).catch(() => {});
+      return healed;
+    }
+    return list;
+  }
   const owned = await ownedCosmeticIds();
   const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
   const petsRec = (await kvGet('pets', {})) || {};
