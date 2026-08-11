@@ -2605,6 +2605,29 @@ test('no template-literal HTML comment carries a backtick', () => {
   assert.deepEqual(hits, [], `backticks inside HTML comments (template-literal killers): ${hits.join(', ')}`);
 });
 
+
+/* the NARROWER sibling of the parse gate above (both, not either): the parse
+ * gate catches any syntax death; this names the one shape that caused the
+ * 2026-08-10 outage BEFORE it becomes one, by file:line with a readable
+ * message, because "Unexpected token ':'" at a random line is a miserable way
+ * to learn about a comment. Proven red against 178f442 (names app.js:9849). */
+test('no template-literal HTML comment carries a backtick', () => {
+  const files = readdirSync(join(here, '../js')).filter(f => f.endsWith('.js'));
+  const hits = [];
+  for (const f of files) {
+    const src = readFileSync(join(here, '../js', f), 'utf8');
+    let m;
+    const re = /<!--([\s\S]*?)-->/g;
+    while ((m = re.exec(src))) {
+      if (m[1].includes('`')) {
+        const line = src.slice(0, m.index).split('\n').length;
+        hits.push(`${f}:${line}`);
+      }
+    }
+  }
+  assert.deepEqual(hits, [], `backticks inside HTML comments (template-literal killers): ${hits.join(', ')}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
