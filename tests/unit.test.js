@@ -2566,6 +2566,19 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   assert.deepEqual(Object.keys(again).sort(), Object.keys(capped).sort(), 'same day must pick the same herd');
   const other = placePaddock(herd, undefined, '2026-08-12');
   assert.notDeepEqual(Object.keys(other).sort(), Object.keys(capped).sort(), 'a new day must rotate the herd (deterministic fixture: a collision here means the day seed is dead)');
+
+  /* AND THE APP MUST ASK FOR ITS OWN DAY. placePaddock's default seed is
+     toISOString(), which is UTC, and openPaddock called it with no day at all:
+     a capped herd would have rotated at 17:00 local here while streaks, daily
+     bosses and every other rollover in this app use the LOCAL dateKey. Exactly
+     the class of bug documented at the top of mini-theme-audit.mjs, but visible
+     to the player rather than to a test. The default stays (paddock.js is pure
+     and must not import the app's date code); the CALL SITE is what is pinned.
+     PROVE-RED: revert the call to `placePaddock(roster)` and this fails. */
+  const appSrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const call = (appSrc.match(/placePaddock\([^)]*\)/g) || []).filter(c => !c.includes('placePaddock:'));
+  assert.ok(call.length, 'no placePaddock call found in app.js: an empty sample is a failure, not a pass');
+  for (const c of call) assert.ok(/dateKey\(\)/.test(c), `openPaddock must pass the app's LOCAL day, got ${c}`);
 });
 
 

@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 364, date: '2026-08-11', title: "Today's herd", items: [
+    'The Paddock keeps its distance from the graveyard: pets standing behind the tombstone no longer walk through it.',
+    "If you own more pets than the field can hold, they take turns. Eight are out there on any given day and the herd changes over with the rest of your day, so a big collection is something to come back to rather than a crowd.",
+  ] },
   { n: 362, date: '2026-08-11', title: 'The Paddock', items: [
     'Every pet you own, out in one haunted field together, wandering. Not a list: a place. Reach it from the Stable.',
     'Tap any of them for its own card: level, bond, lineage, where it came from.',

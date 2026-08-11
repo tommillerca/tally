@@ -9709,7 +9709,13 @@ function openPetsHelp() {
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE } = await import('./paddock.js');
   const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
-  const places = placePaddock(roster);
+  /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
+     defaults to toISOString(), which is UTC, and calling it with no day meant a
+     collection past the walk cap swapped its herd at 17:00 local here while
+     streaks, daily bosses and every other rollover in the app use the LOCAL
+     dateKey. Same class as the bug documented at the top of mini-theme-audit.mjs.
+     Pass the app's own day so there is one day boundary in the game. */
+  const places = placePaddock(roster, PDK_SCENE, dateKey());
   const ownedSpecies = new Set(roster.map(r => r.sp));
 
   const backdrop = `
@@ -12304,7 +12310,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v363'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v364'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
