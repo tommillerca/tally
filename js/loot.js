@@ -440,6 +440,12 @@ function newIid(sp) { _iidSeq += 1; return `p${Date.now().toString(36)}-${_iidSe
  * deterministic `~k` suffix, so every device that syncs the same array heals
  * it the same way. Returns the SAME array reference when nothing needed
  * healing, so callers can cheaply tell "no write needed". */
+/* Every kv map keyed by pet instance id. The iid healer copies pooled values
+ * across for each of these when it re-ids a duplicate row; clearBond-style
+ * teardown should also cover them. Exported so a unit test can fail the day a
+ * new iid-keyed kv map exists in this file without being registered. */
+export const IID_KEYED_MAPS = ['petLvlSteps', 'petBonds', 'petCare'];
+
 export function healDupIids(list) {
   const seen = new Set();
   let healed = false;
@@ -461,18 +467,23 @@ export async function petInstances() {
     if (healed !== list) {
       /* duplicate iids exist in the wild (mechanism unproven: every mint and
          merge path here checks out, so the origin has to identify itself from
-         telemetry). COPY the pooled bond/level values onto the new ids, never
+         telemetry). COPY the pooled per-iid values onto the new ids, never
          delete the original key: additive-DB rule, and the first row still
-         owns it. Raw kv reads, because petLevelBank() calls back into here. */
-      const bank = await kvGet('petLvlSteps', null);
-      const bonds = await kvGet('petBonds', null);
-      for (const row of healed) {
-        if (!row || !row.healedFrom) continue;
-        if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
-        if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
+         owns it. Raw kv reads, because petLevelBank() calls back into here.
+         A REGISTRY, not named maps (Walt's catch, 2026-08-11): the first
+         version hard-coded bank+bonds, so the next iid-keyed map (petCare)
+         would have silently detached on heal, losing streaks and reopening
+         the once-per-day gate. Every iid-keyed map lives on this list; add
+         yours here or your feature loses its memory when a pet is healed. */
+      for (const mapKey of IID_KEYED_MAPS) {
+        const m = await kvGet(mapKey, null);
+        if (!m) continue;
+        for (const row of healed) {
+          if (!row || !row.healedFrom) continue;
+          if (m[row.healedFrom] != null && m[row.iid] == null) m[row.iid] = m[row.healedFrom];
+        }
+        await kvSet(mapKey, m);
       }
-      if (bank) await kvSet('petLvlSteps', bank);
-      if (bonds) await kvSet('petBonds', bonds);
       await kvSet('petInst', healed);
       const dupIids = healed.filter(r => r && r.healedFrom).map(r => r.healedFrom);
       import('./analytics.js').then(a => a.track('pet_iid_heal', {
@@ -538,8 +549,11 @@ export function careAfter(rec, kind, day, yesterday) {
   const c = rec || {};
   const fresh = c.day !== day;
   const given = !fresh && !!c[kind];
+  /* the same floor on every path: a malformed record with today's flag but no
+     streak reads 1 everywhere, because a day with care in it IS a 1-day streak
+     (Walt's review: the given path read 0 while the fresh path read 1) */
   const streak = fresh ? (c.day === yesterday ? (c.streak | 0) + 1 : 1) : (c.streak | 0) || 1;
-  if (given) return { given: true, streak: c.streak | 0 };
+  if (given) return { given: true, streak };
   const next = { day, pet: fresh ? false : !!c.pet, feed: fresh ? false : !!c.feed, streak };
   next[kind] = true;
   return { given: false, streak, next };
@@ -565,7 +579,12 @@ export async function bondUp(iid, kind = 'pet') {
   care[iid] = res.next;
   await kvSet('petCare', care);   // the ritual records even at max bond: the streak is the point
   const after = bondAfter(before);
-  if (after === before) return { ok: true, bond: before, maxed: true, changed: false, streak: res.streak };
+  /* the two dead ends say different things: 'today' means come back tomorrow,
+     'maxed' means you two are as close as it gets. When both hold, 'today'
+     wins (checked above): at cap the ritual is the living rule, and tomorrow's
+     visit still grows the streak. Every refusal carries the CURRENT bond and
+     streak so a render-from-return can never blank a full meter. */
+  if (after === before) return { ok: true, bond: before, maxed: true, changed: false, reason: 'maxed', streak: res.streak };
   bonds[iid] = after;
   await kvSet('petBonds', bonds);
   return { ok: true, bond: after, maxed: after === BOND_MAX, changed: true, streak: res.streak };
