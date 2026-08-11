@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 367, date: '2026-08-11', title: 'Your ducks are individuals', items: [
+    "<b>Every duck was sharing one identity.</b> That is why they were all called the same thing, and why hearts given to one lit up all of them. They are separate copies now, each with its own name and its own bond. Nobody loses a single heart in the repair.",
+    'Ducks no longer fly in lockstep either: they set off at their own moment and at their own pace.',
+    "<b>The keeper in the Paddock is you.</b> Your own bonehead, wearing what you are wearing, standing at the gate.",
+    'And something in the bushes now hints at a shiny you have never seen, instead of one already in your Stable.',
+  ] },
   { n: 366, date: '2026-08-11', title: 'Melting, out in the open', items: [
     "<b>The Salvage Bench tells you what you're sitting on.</b> How many spare pieces you own and what they're worth in Bone Dust, before you tap anything. It used to be a closed panel three screens deep.",
     "It opens itself when you actually have spares, and the pieces you're not wearing now read as the live controls they always were. The one you're wearing still asks twice.",
