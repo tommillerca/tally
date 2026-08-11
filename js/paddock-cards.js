@@ -256,7 +256,20 @@ export function closePaddockCards() {
   sel = null;
   if (host) host.innerHTML = '';
   host?.classList.remove('pdk-open');
-  if (outsideTap) { document.getElementById('pdkScene')?.removeEventListener('click', outsideTap, true); outsideTap = null; }
+  /* detach from the element we ATTACHED to, not from whatever #pdkScene resolves to
+     now: on a second visit that is a different element and this removed nothing */
+  if (outsideTap && tapScene) tapScene.removeEventListener('click', outsideTap, true);
+  outsideTap = null; tapScene = null;
+}
+
+/* SECOND VISIT. The sheet can close without this module hearing about it (openPaddock
+   has no onClose into here), so `sel` and `host` outlive the DOM they described and the
+   next visit starts with a lie: the first tap on whichever species was last open hit
+   `sel === sp`, "closed" a card that no longer existed, and did nothing. Liveness is
+   the check, not a flag: if the host is no longer in the live document, there is no
+   open card, whatever the module last remembered. */
+function dropStaleState() {
+  if (sel !== null && !(host && host.isConnected)) { sel = null; host = null; }
 }
 
 /* EVERY WAY OUT LIVES HERE, TOGETHER. Tom: "it's kinda hard to get out of the paddock
@@ -273,14 +286,23 @@ export function closePaddockCards() {
  * stay tappable because a tap on another pet closes this card and the scene's own
  * handler then opens that one. */
 let outsideTap = null;
+let tapScene = null;      // the #pdkScene element the listener is attached to
+/* KEYED ON THE ELEMENT, NOT ON `outsideTap` BEING TRUTHY. A sheet close leaves the
+   listener nulled only if closePaddockCards ran, and nothing calls it when the sheet
+   goes away, so `outsideTap` stayed set while its scene was destroyed: this returned
+   early on the next visit and exit 3 was dead for the rest of the session. Re-arm
+   whenever the live scene is not the one we attached to. */
 function armOutsideTap() {
   const scene = document.getElementById('pdkScene');
-  if (!scene || outsideTap) return;
+  if (!scene) return;
+  if (outsideTap && tapScene === scene) return;
+  if (outsideTap && tapScene) tapScene.removeEventListener('click', outsideTap, true);
   outsideTap = e => {
     if (!sel) return;
     if (host && host.contains(e.target)) return;          // inside the card: not a dismissal
     closePaddockCards();
   };
+  tapScene = scene;
   scene.addEventListener('click', outsideTap, true);
 }
 
@@ -291,6 +313,7 @@ export async function openPaddockCards(sp) {
      the nest), so the module fetches its own data and owns its own host rather than
      making the scene carry state for it. Re-tap dismiss lives here too, so the rule
      is one line and cannot disagree with itself. */
+  dropStaleState();                       // a previous visit's sel/host may be dead DOM
   if (sel === sp) { closePaddockCards(); return false; }
   const scene = document.getElementById('pdkScene');
   if (!scene) return false;

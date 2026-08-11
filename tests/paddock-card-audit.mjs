@@ -366,6 +366,54 @@ ok('and the INK is centred in it, not the canvas', ink.length > 0 && offset.leng
   offset.length ? JSON.stringify(offset.slice(0, 3)) : 'all within 2% of centre');
 ok('the art measured is decoded art', ink.length > 0 && blank.length === 0, JSON.stringify(blank.slice(0, 2)));
 
+/* THE SECOND VISIT (Reggie, reviewing 58117a1). Every check above this one runs inside
+   ONE visit to the Paddock, so all of them passed while the screen was broken the
+   second time you opened it: the module's `sel`/`host`/`outsideTap` outlived the DOM
+   they described, because the sheet closes without telling this module. Two separate
+   defects lived in that gap, so both halves are asserted here: the first tap on the
+   species that was open last time must OPEN a card (it was being eaten by the re-tap
+   rule), and the outside-tap dismisser must still work (it had latched itself to a
+   destroyed scene and never re-armed). Driven the player's way: the real Done button,
+   then the real chip back in. */
+await ensureOpen('C5');
+/* `.sheet-close` runs history.back(), so the close is ASYNCHRONOUS. Reading for the
+   scene in the same tick as the click always saw it still there, and because both
+   checks below were only gated on `reentered` they passed on a first visit that had
+   never ended: a pair of checks that could not fail, which is the thing this project
+   keeps getting caught by. Nothing below runs until the scene is really gone. */
+const hitDone = await page.evaluate(() => {
+  const btn = [...document.querySelectorAll('#sheets .sheet-close')].pop();
+  if (!btn) return false;
+  btn.click();
+  return true;
+});
+const sceneGone = hitDone && await page.waitForFunction(() => !document.getElementById('pdkScene'),
+  { timeout: 8000, polling: 50 }).then(() => true).catch(() => false);
+const reentered = sceneGone ? await reachPaddock() : false;
+const second = sceneGone && reentered ? await page.evaluate(async () => {
+  const out = { reentered: !!document.getElementById('pdkScene') };
+  const cards = () => document.querySelectorAll('#pdkCards .pdk-card').length;
+  /* the FIRST tap on the previously-open species, through the real tap path */
+  const res = await window.__pdkMountCards('C5');
+  await new Promise(r => setTimeout(r, 250));
+  out.openedOnFirstTap = !!(res && res.open) && cards() > 0;
+  /* and exit 3 on the NEW scene */
+  const scene = document.getElementById('pdkScene');
+  const host = document.getElementById('pdkCards');
+  const r = host?.getBoundingClientRect();
+  const x = r ? Math.max(4, r.left / 2) : 8;
+  scene?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: 90 }));
+  await new Promise(r2 => setTimeout(r2, 250));
+  out.outsideTapStillWorks = out.openedOnFirstTap && cards() === 0;
+  return out;
+}) : { why: 'the sheet never closed, so there was no second visit to test' };
+ok('the sheet closes and the Paddock can be re-entered', sceneGone && reentered && second.reentered === true,
+  JSON.stringify({ hitDone, sceneGone, reentered, ...second }));
+ok('SECOND VISIT: the first tap on the last-open species opens its card', second.openedOnFirstTap === true,
+  JSON.stringify(second));
+ok('SECOND VISIT: the outside-tap exit still dismisses on the new scene', second.outsideTapStillWorks === true,
+  JSON.stringify(second));
+
 ok('no page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\npaddock cards clean');
