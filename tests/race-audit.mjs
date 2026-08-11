@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep } from './godmode.js';
+import { boot, seed, sleep, serveTree} from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -77,12 +77,15 @@ ok('RULES FILTER the board refuses totals counted under older rules',
   'board query gates on raceV');
 
 /* ---------- START: the race begins on its epoch, not a calendar Monday ---------- */
-let srv = null;
+let srv = null, srvHandle = null;
 let base = process.env.URL;
 if (!base) {
-  srv = spawn('python3', ['-m', 'http.server', '8157', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
-  await sleep(900);
-  base = 'http://127.0.0.1:8157/';
+  /* serveTree: a free port from the OS, and a HARD ERROR if python never
+     bound. The hard-coded port with stdio:'ignore' meant a stranded server
+     already holding it made this audit talk to whatever was listening. */
+  srvHandle = await serveTree(ROOT);
+  srv = { kill: () => srvHandle.close() };
+  base = srvHandle.url;
 }
 const { browser, page } = await boot(base, {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],

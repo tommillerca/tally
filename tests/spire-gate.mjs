@@ -22,18 +22,22 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { serveTree } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
 const puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let srv = null;
+let srv = null, srvHandle = null;
 let base = process.env.URL;
 if (!base) {
-  srv = spawn('python3', ['-m', 'http.server', '8132', '--bind', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore' });
-  await sleep(900);
-  base = 'http://127.0.0.1:8132/';
+  /* serveTree: a free port from the OS, and a HARD ERROR if python never
+     bound. The hard-coded port with stdio:'ignore' meant a stranded server
+     already holding it made this audit talk to whatever was listening. */
+  srvHandle = await serveTree(ROOT);
+  srv = { kill: () => srvHandle.close() };
+  base = srvHandle.url;
 }
 base = base.replace(/\/?$/, '/');
 
