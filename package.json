@@ -8,5 +8,8 @@
     "test": "node tests/unit.test.js && node tests/pit.test.js",
     "gate": "node tests/release-gate.mjs",
     "gate:all": "node tests/release-gate.mjs --all"
+  },
+  "devDependencies": {
+    "puppeteer": "24.43.1"
   }
 }

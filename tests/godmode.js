@@ -22,9 +22,44 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* PUPPETEER MUST BE RESOLVABLE ON A MACHINE THAT IS NOT TOM'S.
+ *
+ * This used to be one hardcoded path:
+ *   $HOME/Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer
+ * which is a SIBLING PROJECT, not a dependency of this repo, and package.json
+ * declared no dependencies at all. So a fresh clone could run `npm test` (unit and
+ * pit are pure, they only read source) and NOTHING else: every browser audit and
+ * the release gate died at this import. That matters because the gate is the
+ * mandatory pre-push check, so an outside contributor literally could not satisfy
+ * the rule the project enforces.
+ *
+ * Order is deliberate. The repo's OWN node_modules wins, so a normal
+ * `npm install` works anywhere. The kit path stays as a fallback so the three
+ * machines already set up this way keep working with no install and no version
+ * drift, and it is only consulted when a local copy is absent. If neither exists,
+ * THROW with both paths and the fix named: a missing browser must not read as a
+ * broken app. package.json pins the same version the kit carries (24.43.1) so the
+ * two routes cannot behave differently.
+ */
+const KIT = path.join(process.env.HOME || '', 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
+let _pptr = null;
+export async function loadPuppeteer() {
+  if (_pptr) return _pptr;
+  try { _pptr = (await import('puppeteer')).default; return _pptr; } catch { /* fall through to the kit */ }
+  const kitEntry = path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js');
+  if (fs.existsSync(kitEntry)) { _pptr = (await import(kitEntry)).default; return _pptr; }
+  throw new Error(
+    'puppeteer not found, so no browser audit can run.\n' +
+    // fileURLToPath, not URL.pathname: the latter percent-encodes, and this line
+    // exists to be copy-pasted ("Hyperframes%20Editor" is not a directory).
+    `  tried: the repo's own node_modules (run \`npm install\` in ${path.join(path.dirname(fileURLToPath(import.meta.url)), '..')})\n` +
+    `  tried: ${kitEntry}\n` +
+    '  This is a SETUP failure, not a test failure: nothing about the app has been checked.');
+}
 
 /* A browser that is present but not where puppeteer looks is the same outage as
    no browser at all, and it reads as one: "Could not find Chrome". Take an
@@ -43,7 +78,7 @@ const chromePath = () => {
 };
 
 export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
-  const puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default;
+  const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
      check here dies at launch and reads as "the browser is broken". No-op on a
      normal machine: the flag is only added when we are already root, which is

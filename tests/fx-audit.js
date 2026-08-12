@@ -34,14 +34,19 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { loadPuppeteer } from './godmode.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// The repo is "type": "module", and puppeteer is borrowed from the
-// overlay-render-kit rather than added as a dependency here.
-const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
+/* puppeteer is a real dependency of this repo now, resolved by godmode's
+   loadPuppeteer: the repo's own node_modules first so a fresh clone works after
+   `npm install`, the overlay-render-kit as fallback so machines already set up
+   that way need no install. This file used to carry its own copy of the kit path,
+   which meant it could only ever run on one Mac. The exit-1-with-a-reason
+   behaviour is kept: a missing browser is a SETUP failure and must not read as an
+   FX failure. */
 let puppeteer;
-try { puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default; }
-catch (e) { console.error(`FX AUDIT CANNOT RUN: no puppeteer at ${KIT}\n${e.message}`); process.exit(1); }
+try { puppeteer = await loadPuppeteer(); }
+catch (e) { console.error(`FX AUDIT CANNOT RUN (setup, not a failing check):\n${e.message}`); process.exit(1); }
 
 const BASE = (process.argv[2] || 'https://tommillerca.github.io/tally/').replace(/\/?$/, '/');
 const APP_JS = path.join(__dirname, '..', 'js', 'app.js');

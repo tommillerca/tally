@@ -16,11 +16,15 @@
  * A skip when the demo save has no unspent points is reported, not passed.
  */
 import path from 'node:path';
+import { loadPuppeteer } from './godmode.js';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const KIT = path.join(process.env.HOME, 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
-const puppeteer = (await import(path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js'))).default;
+/* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
+   fresh clone works after `npm install`, the overlay-render-kit as fallback so the
+   already-configured machines need no install. Each of these files used to carry
+   its OWN copy of a hardcoded path into a sibling project. */
+const puppeteer = await loadPuppeteer();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const srv = spawn('python3', ['-m','http.server','8139','--bind','127.0.0.1'], { cwd: ROOT, stdio:'ignore' });
 await sleep(900);
