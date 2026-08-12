@@ -293,11 +293,11 @@ undriven.forEach(s => console.log(`      NOT DRIVEN  ${s.key}: ${s.undriven}`));
  * ran behind them.
  *
  * So the ink pipeline proves itself before it is allowed to judge anything, and
- * a failure here is NOT a finding — it exits 2, a code no figure bug can produce,
+ * a failure here is NOT a finding: it exits 2, a code no figure bug can produce,
  * before a single PLANE line exists to be misread. exit 1 still means findings.
  *
  * Two halves, because they fail for different reasons: a synthetic image with a
- * bbox known by construction (proves the decoder's filter maths and its scan —
+ * bbox known by construction (proves the decoder's filter maths and its scan;
  * a decoder that quietly mis-decodes is a new way to be blind), and a real asset
  * off disk (proves ROOT resolves and the files are actually there). CRCs are not
  * written because the parser does not read them; pretending otherwise would test
@@ -360,7 +360,7 @@ try {
   ok('SETUP ink measurement works on this machine', true,
     `decoder exact on a synthetic bbox; ${GATE_ASSET} ${JSON.stringify(real)}`);
 } catch (e) {
-  console.log('FAIL  SETUP ink measurement is broken — this is the HARNESS, not the app');
+  console.log('FAIL  SETUP ink measurement is broken. This is the HARNESS, not the app');
   console.log(`      ${e.message}`);
   console.log('      PLANE and NEAR cannot be measured, so they are not being run and');
   console.log('      not being reported as figure failures either. Fix this first: until');
@@ -416,7 +416,7 @@ const bboxCache = new Map();
  *     FAIL  <site> PLANE measurable at all  {"bhInk":null,"petInk":null}
  * which looks exactly like a figure bug and is not one. Worse than the noise: a
  * null bbox short-circuits the branch, so PLANE and NEAR never ran at all. Four
- * paired sites, two checks each — eight assertions silently not executed, and
+ * paired sites, two checks each, so eight assertions silently not executed, and
  * the run still called itself 24/28. The audit could not tell a broken figure
  * from a broken machine, and neither could anybody reading it.
  *
@@ -426,7 +426,7 @@ const bboxCache = new Map();
  * because a format this cannot read honestly is a fact about the harness and
  * must never be laundered into a null.
  *
- * Returns PIL's getbbox() semantics exactly — exclusive right/bottom — so the
+ * Returns PIL's getbbox() semantics exactly (exclusive right/bottom), so the
  * geometry in inkEdges is unchanged. null means genuinely no ink, which is a
  * finding about the asset, not a failure to measure. */
 function pngAlphaBox(file) {
@@ -563,7 +563,7 @@ const measure = async (bhSel, petSel) => {
   }, [bhSel, petSel]);
   if (!raw.found) return raw;
   /* Past the SETUP gate the decoder is known good, so a throw here is about one
-     named asset — report which, instead of an anonymous null. */
+     named asset, so report which, instead of an anonymous null. */
   try {
     raw.bhInk = inkEdges(raw.bhLayersRaw);
     raw.petInk = inkEdges(raw.petLayersRaw);

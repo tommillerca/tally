@@ -29,7 +29,7 @@ export const sleep = ms => new Promise(r => setTimeout(r, ms));
 /* A browser that is present but not where puppeteer looks is the same outage as
    no browser at all, and it reads as one: "Could not find Chrome". Take an
    explicit CHROME_PATH, else the browsers a CI image usually already ships, else
-   nothing — and nothing means puppeteer resolves it exactly as it does today, so
+   nothing, and nothing means puppeteer resolves it exactly as it does today, so
    a machine with its own Chrome downloaded is untouched by this. */
 const chromePath = () => {
   const tries = [process.env.CHROME_PATH, ...(process.env.PLAYWRIGHT_BROWSERS_PATH
