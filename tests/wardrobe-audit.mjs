@@ -3,7 +3,7 @@
  *   FLASH  -> is unrelated DOM being destroyed on each tap? Stamp a marker and see
  *             if it survives.
  *   BACKDROP -> is the background inside the element carrying the idle animation? */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, retryOnDetach } from './godmode.js';
 const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
@@ -33,7 +33,17 @@ await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="ward
 await sleep(2200);
 
 // ---- the BACKDROP ----
-const bgInfo = await page.evaluate(() => {
+/* This page.evaluate is the exact site that reproduced "Attempted to use
+   detached Frame" under load-avg 13 on 2026-08-12: a plain post-click read
+   of the just-rendered wardrobe stage, with nothing navigating between the
+   tab click at line 32 and this evaluate. Under CDP starvation the frame's
+   execution-context id flips out from under puppeteer between the sleep
+   and this call, and the audit dies naming this line. Wrapped in the
+   harness-level retryOnDetach (godmode.js): only the specific detach text
+   is caught, exactly one retry, and the resync re-waits for .bh-stage.lg
+   before the second read so the retry reads a settled page rather than
+   guessing. A second detach or any other error propagates untouched. */
+const readBgInfo = () => page.evaluate(() => {
   const stage = document.querySelector('.bh-stage.lg');
   if (!stage) return null;
   const back = stage.querySelector('.bh-backdrop');
@@ -46,6 +56,9 @@ const bgInfo = await page.evaluate(() => {
     backdropAnimation: back ? getComputedStyle(back).animationName : null,
   };
 });
+const bgInfo = await retryOnDetach(readBgInfo, () =>
+  page.waitForFunction(() => !!document.querySelector('.bh-stage.lg'),
+    { timeout: 15000, polling: 100 }));
 console.log('backdrop:', JSON.stringify(bgInfo));
 check('the stage renders a static backdrop element', !!bgInfo?.hasBackdrop);
 check('the backdrop is NOT inside the animated stack', bgInfo && bgInfo.backdropInsideAnimated === false);
