@@ -10,11 +10,23 @@ const { browser, page } = await boot(process.argv[2] || process.env.URL);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 const alloc = () => page.evaluate(async () => (await (await import('./js/db.js')).kvGet('trainalloc', {})));
+/* A CONTROL THAT IS NOT THERE IS THIS AUDIT'S FINDING, NOT A CRASH.
+   `(await page.$(sel)).click()` throws a TypeError exactly when the control has
+   gone missing, which is the failure being hunted, and the throw killed every
+   check below it, including all three combat-safety ones. So: name the missing
+   control as a FAIL, do not click, and let the assertions below fail on their
+   own merits instead of never running. */
+const tap = async (sel, what) => {
+  const h = await page.$(sel);
+  check(what, !!h, h ? '' : `${sel} is not on the page`);
+  if (h) await h.click();
+  return !!h;
+};
 
 const openBuild = async () => {
   await page.evaluate(() => { location.hash = '#/bonehead'; });
   await sleep(1700);
-  await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="talents"]').click());
+  await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="talents"]')?.click());
   await sleep(1900);
   await page.evaluate(() => document.querySelector('[data-bsect="fighter"]')?.setAttribute('open', ''));
   await sleep(500);
@@ -51,7 +63,7 @@ if (reset) {
   check('ONE tap refunds nothing', Object.values(afterOne).reduce((a, b) => a + b, 0) === spent, JSON.stringify(afterOne));
   check('and it asks first, naming the cost', armed.armed === '1' && /Refund all \d+ point/.test(armed.text), armed.text);
 
-  await (await page.$('#tpReset')).click();
+  await tap('#tpReset', 'the armed refund control is still there for the confirming tap');
   await sleep(1600);
   const afterTwo = await alloc();
   console.log('after the confirm:', JSON.stringify(afterTwo));
@@ -83,8 +95,9 @@ if (reset) {
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1700);
 await page.evaluate(() => document.querySelector('.dw')?.remove());
-const pit = await page.$('#pitBtn');
-if (pit) { await pit.click(); await sleep(1800); }
+/* was a silent `if (pit)`: a missing Pit button skipped the click and the three
+   checks below then failed with no word about why. */
+if (await tap('#pitBtn', 'the Pit is still reachable from Today')) await sleep(1800);
 const fought = await page.evaluate(async () => {
   const b = [...document.querySelectorAll('button')].find(x => /^fight$/i.test(x.textContent.trim()));
   if (b) b.click();

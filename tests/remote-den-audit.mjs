@@ -50,7 +50,19 @@ ok('the Pit offers a remote den to fight', before.hasFightBtn && !!before.text, 
    the row rendered a bare "· · free" for months. */
 ok('and it says what it pays', !/·\s*·/.test(before.text || '') && /coins|XP|Crate|Egg/i.test(before.text || ''), before.text);
 
-await page.evaluate(() => document.getElementById('remoteDenBtn').click());
+/* A MISSING FIGHT BUTTON IS THIS AUDIT'S FINDING, NOT A CRASH. The bare
+   `.click()` threw a TypeError exactly when #remoteDenBtn was absent, and took
+   the ceiling / beaten / tomorrow checks (the whole point of the file) with it,
+   unrun and unreported. Name it, and stop with a non-zero exit rather than
+   grading a state we never reached. */
+const tapped = await page.evaluate(() => { const b = document.getElementById('remoteDenBtn'); if (b) b.click(); return !!b; });
+ok('the remote den FIGHT button can be pressed', tapped, tapped ? '' : '#remoteDenBtn is not on the page');
+if (!tapped) {
+  ok('the checks after the win could not run', false, 'no fight was started, so the ceiling / beaten / tomorrow state was never reached');
+  await browser.close();
+  console.log(`\n${fails.length} FAILED: ${fails.join(', ')}`);
+  process.exit(1);
+}
 await sleep(2000);
 await finishFight(page, 'p');
 await sleep(3500);
