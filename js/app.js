@@ -6196,8 +6196,13 @@ async function renderFriends(el) {
       const f = fanFriend(id);
       const eq = (f.profile && f.profile.outfit) || {};
       const sk = BH_BY_ID[eq.SK] || BH_BY_ID['SK0-1'];
-      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><img src="${bhAsset(sk)}" alt="${esc(f.name)}"></button>`;
+      /* Trimmed canvas, not a hand-nudged <img>: the skull PNG is mostly
+         transparent air and every skull's ink sits somewhere different on its
+         canvas, so a fixed 150%/-25%/-12% zoom left the ink small and off
+         centre (Tom, 2026-08-11). Align on INK (figure contract rule 3). */
+      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><canvas width="80" height="80" data-art="${esc(bhAsset(sk))}" data-pad="0.12" role="img" aria-label="${esc(f.name)}"></canvas></button>`;
     }).join('') + '<small>FAVES</small>';
+    hydratePackArt(row, '.cfan-fv canvas[data-art]');
     $$('[data-jump]', row).forEach(b => b.addEventListener('click', () => { centerId = b.dataset.jump; applyFan(); }));
     row.hidden = false;
   };
