@@ -7029,14 +7029,18 @@ body::before {
 .breed-waiting .bw-say small { font-size: 11px; color: var(--text-3); line-height: 1.2; }
 .breed-waiting .bw-cancel { flex: 0 0 auto; width: auto; padding: 6px 11px; font-size: 11px; }
 .chip-btn { cursor: pointer; border: 1px solid rgba(242,233,215,.22); background: rgba(242,233,215,.05); display: inline-flex; align-items: center; gap: 5px; }
-/* the picked pet must look like it does in the real breed bar: those rules are
-   all scoped to .breed-trade, so without this it rendered as a bare image next to
-   a fully styled slot */
-  background: rgba(242,233,215,.06); border: 2px solid rgba(242,233,215,.18); overflow: hidden; }
-  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
-  border: 2px dashed rgba(242,233,215,.32); color: var(--text-3);
-  font-family: var(--display); font-size: 20px;
-}
+/* THE PICKED-PET RULES ARE GONE ON PURPOSE, DO NOT PUT THEM BACK. Two orphaned
+   declaration bodies sat here from 61dd854, which replaced the .breed-waitrow row
+   (picked pet, arrow, empty .bw-slot) with the sticky .breed-waiting banner above
+   and deleted only the selector lines of `.breed-waitrow .bt-pet` and
+   `.breed-waitrow .bw-slot`. Their markup went with them: nothing in js/ emits
+   .breed-waitrow, .bw-slot or .bw-arrow any more, so restoring the selectors would
+   only add CSS that matches nothing. The picked pet is .breed-waiting .bw-pet
+   directly above, and the real bar's slots keep their own .breed-trade rules
+   (~line 5604). The bodies were not harmless while they sat here: a declaration at
+   depth zero makes the parser consume everything up to the next `{` as a selector,
+   so `.pets-help section { margin: 0 0 14px; }` below was swallowed with them and
+   the pets explainer ran with no gap between its five sections. */
 
 /* the pets explainer. Four questions, four answers: readable at a glance, not a
    wall. Section headings carry the question so the body can stay short. */
