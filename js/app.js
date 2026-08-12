@@ -7752,6 +7752,18 @@ function openProfileSheet() {
    body silently. Every step is a funnel event: launch lives or dies here. */
 function renderOnboarding(step = 0, ctx = {}) {
   const el = $('#screen');
+  /* THE CONTAINER HIDE IS OPT-OUT, AND THIS PATH NEVER OPTED OUT.
+     app.css: `.screen:not(.screen-in) { opacity: 0 }`. Only route() adds
+     screen-in (see revealWhenReady at the top of this file), and onboarding
+     does not route: it writes innerHTML straight into #screen. So a brand new
+     player got the onboarding laid out perfectly, styled, full height, cream
+     text on the dark background, at opacity 0. A blank screen with only the
+     gear painted, because the gear lives outside #screen.
+     This is the TestFlight "blank screen on first open" and it is not a
+     network bug: reproduced in the simulator on wifi, with zero JS errors and
+     #screen measured at opacity 0 while .onb inside it measured opacity 1.
+     Anti-regression rule 8: whatever hides content must own un-hiding it. */
+  el.classList.add('screen-in');
   $('#tabbar').style.display = 'none';
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
