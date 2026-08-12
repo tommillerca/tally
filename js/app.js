@@ -8793,8 +8793,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </label>`;
         }).join('') + `</details>`;
       })()}`;
-    $('.melt-fold', content)?.addEventListener('toggle', e => {
-      if (e.target.open) e.target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    /* Scroll only when the USER opens the fold. The fold renders with `open`
+       whenever spares exist, and a <details> born open fires 'toggle' on
+       parse, so a toggle-driven scroll yanked every Backpack render (fresh
+       open, and the re-render after a crate) down to the bench. The summary
+       click is the user's own act, so the scroll hangs there instead; the
+       open state is read after the click's default action has toggled it. */
+    $('.melt-fold > summary', content)?.addEventListener('click', e => {
+      const fold = e.currentTarget.parentElement;
+      setTimeout(() => { if (fold.open) fold.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 0);
     });
     $$('.loot-pending', content).forEach(scope => {
       wireLootChoice(scope, gid => claimDenLoot(scope.dataset.lootkey, gid), picked => {
