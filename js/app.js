@@ -14185,10 +14185,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
         });
       }
       $('#fightDone', body).addEventListener('click', () => {
-        // Glutton win: pop BOTH the fight sheet AND the (now stale) glutton
+        // Glutton win: close BOTH the fight sheet AND the (now stale) glutton
         // sheet so you land back on the map with him gone, never on a re-fight
         // prompt. A loss just backs out one level so you can try again.
-        if (foeCfg.mode === 'glutton' && won) { history.go(-2); maybeCelebrate(); return; }
+        // This was history.go(-2), which rewinds two entries but fires ONE
+        // popstate, and the popstate handler closes ONE sheet: the glutton
+        // sheet stayed on screen and had to be closed by hand (Tom,
+        // 2026-08-11). Rewind history past every open sheet, then close them
+        // all now; the popstate arrives to an empty stack and no-ops.
+        if (foeCfg.mode === 'glutton' && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
         history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
       });
     }, fast ? 80 : 750);

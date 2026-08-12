@@ -95,6 +95,22 @@ const second = await page.evaluate(async () => ({
 console.log('re-fight attempt:', refought, JSON.stringify(second));
 check('a second Glutton fight cannot be started', refought === 'no button' || !second.inFight, `${refought} / ${JSON.stringify(second)}`);
 
+/* THE RETURN TRIP. Tom, 2026-08-11: "after beating the glutton you should just
+ * be back on the boneyard and not need to close the popup". The Done button did
+ * history.go(-2), which rewinds two entries but fires ONE popstate, and the
+ * popstate handler closes ONE sheet: the fight sheet went, the stale glutton
+ * sheet stayed up and had to be closed by hand. Tap Done for real and assert
+ * BOTH sheets are gone. A celebration sheet on top is the app-wide post-win
+ * pattern and is not counted against this. */
+await page.evaluate(() => document.getElementById('fightDone')?.click());
+await sleep(1600);
+const landed = await page.evaluate(() => ({
+  fightGone: !document.getElementById('fightBody'),
+  gluttonGone: !document.querySelector('.glutton-card'),
+}));
+console.log('after tapping Done on the victory screen:', JSON.stringify(landed));
+check('winning + Done closes the fight AND the glutton sheet, no manual close', landed.fightGone && landed.gluttonGone, JSON.stringify(landed));
+
 // reopening in the same window must read as cleansed
 s = await openSheet();
 console.log('sheet reopened after the win:', JSON.stringify(s));
