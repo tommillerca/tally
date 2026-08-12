@@ -76,6 +76,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    minutes of browser time on a build whose pure logic is already broken. */
 const PURE = ['unit.test.js', 'pit.test.js'];
 const BROWSER = [
+  'arrival-audit.mjs',       // nothing pops onto the Boneyard after the reveal (FULL-only is how this shipped twice)
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
