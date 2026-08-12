@@ -242,7 +242,7 @@ if (partial.anythingWritten) {
    directly reach the isNative() branch. Confirms the shape of the finding
    Gwart flagged: on iOS/Android the visible export button does not run
    exportAll and produces no file. */
-const appSrc = fs.readFileSync(path.join(new URL('..', import.meta.url).pathname, 'js/app.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'js/app.js'), 'utf8');
 const idx = appSrc.indexOf("$('#exportBtn').addEventListener");
 const handler = appSrc.slice(idx, appSrc.indexOf('$', idx + 200) + 0); // rough handler body
 const nativeSkip = /if\s*\(\s*isNative\(\)\s*\)\s*\{[^}]*toast\([^}]*return\s*;/s.test(handler);
