@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 370, date: '2026-08-12', title: 'The first screen was invisible', items: [
+    "<b>If you were brand new and the app opened blank, this was why.</b> The welcome screen was being built correctly and then drawn at zero opacity, so there was nothing to tap and no way past it. It is visible now.",
+    'The app could also open blank on a weak connection, for anyone. Three files it needs to start were missing from the list it saves for offline use, and one of them failing to arrive stopped everything. All of them are saved now, and a check refuses to let the list fall behind again.',
+  ] },
   /* The v367 entry originally claimed the shared-pet-names-and-hearts bug was
      fixed. Telemetry says the repair we shipped has never once run on any device,
      so it addresses something nobody actually has, and the real cause is still
