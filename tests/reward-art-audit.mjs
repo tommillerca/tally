@@ -2,7 +2,12 @@
  * pass on the bug, so this reads the canvas PIXELS: a hydrated card has non-blank
  * pixels, an unhydrated one is fully transparent. */
 import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+/* repo-relative and self-creating: the old absolute path pointed at one dead
+   session's scratchpad, so the evidence shot threw on any other machine. */
+const DIR = fileURLToPath(new URL('./shots', import.meta.url));
+mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -28,9 +33,18 @@ const live = await page.evaluate(() => !!window.__bhFight);
 check('a fight is running', live);
 // force a WIN through the engine's own settle, or the screen shows the loss branch
 // (which awards no gear at all, so the check would test nothing)
-await page.evaluate(() => window.__bhFight.finish('p'));
+/* THE SEAM IS RE-READ EVERY TIME, AND A MISSING SEAM IS THE FINDING.
+   `window.__bhFight.finish('p')` was called twice with no re-read: if the hook
+   was gone the second call threw a TypeError, and every pixel assertion below
+   (the entire point of this file) died unrun. */
+const forceWin = async n => {
+  const hit = await page.evaluate(() => { if (!window.__bhFight) return false; window.__bhFight.finish('p'); return true; });
+  check(`the fight hook is there to force the win (settle ${n})`, hit, hit ? '' : 'window.__bhFight is gone, so no victory screen was reached');
+  return hit;
+};
+await forceWin(1);
 await sleep(3400);
-await page.evaluate(() => window.__bhFight.finish('p'));
+await forceWin(2);
 await sleep(3200);
 
 const cards = await page.evaluate(() => {
@@ -65,8 +79,10 @@ if (cards.canvases > 0) {
   }
 }
 const el = await page.$('.fight-over');
-await el.screenshot({ path: `${DIR}/victory-cards.png` });
-console.log('shot victory-cards');
+/* the evidence shot must not be able to kill the run: a missing victory screen
+   is already a named FAIL above, not a reason to throw here. */
+if (el) { await el.screenshot({ path: `${DIR}/victory-cards.png` }); console.log('shot victory-cards'); }
+else { console.log('note: no .fight-over to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nVICTORY REWARD ART PAINTS');
 process.exit(bad ? 1 : 0);

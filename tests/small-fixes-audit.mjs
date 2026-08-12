@@ -1,6 +1,11 @@
 /* The three small fixes, operated rather than eyeballed. */
 import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+/* repo-relative and self-creating: the old absolute path pointed at one dead
+   session's scratchpad, so every screenshot here threw on any other machine. */
+const DIR = fileURLToPath(new URL('./shots', import.meta.url));
+mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -48,9 +53,20 @@ await page.evaluate(async () => {
 });
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1700);
-await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]').click());
+/* A MISSING TAB OR FOLD IS THE FINDING, NOT A CRASH. Both used to be bare
+   `.click()` calls, so a missing crates tab or melt fold threw a TypeError and
+   took every melt assertion below down with it, unrun and unreported. */
+const tabbed = await page.evaluate(() => { const t = document.querySelector('#chTabs .ch-tab[data-tab="crates"]'); if (t) t.click(); return !!t; });
+check('the Crates tab is there to open', tabbed, tabbed ? '' : '#chTabs .ch-tab[data-tab="crates"] is not on the page');
 await sleep(1700);
-await page.evaluate(() => { const sum = document.querySelector('.melt-fold > summary'); sum.scrollIntoView({ block: 'start' }); sum.click(); });
+const folded = await page.evaluate(() => {
+  const sum = document.querySelector('.melt-fold > summary');
+  if (!sum) return false;
+  sum.scrollIntoView({ block: 'start' });
+  sum.click();
+  return true;
+});
+check('the melt fold is there to open', folded, folded ? '' : '.melt-fold > summary is not on the page');
 await sleep(900);
 const list = await page.evaluate(() => ({
   rows: document.querySelectorAll('.melt-row').length,

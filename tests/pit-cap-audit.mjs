@@ -1,7 +1,12 @@
 /* Hitting the Gauntlet ceiling must be OBVIOUS. Failure = the cap only readable in
  * body text, or the section summary still claiming a rank you cannot fight. */
 import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+/* repo-relative and self-creating: the old absolute path pointed at one dead
+   session's scratchpad, so this file wrote its evidence nowhere on any other machine. */
+const DIR = fileURLToPath(new URL('./shots', import.meta.url));
+mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -10,6 +15,22 @@ const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Edit
 const { browser, page } = await boot(process.argv[2] || process.env.URL);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
+/* A CONTROL THAT IS NOT THERE IS THIS AUDIT'S FINDING, NOT A CRASH.
+   `(await page.$('#pitBtn')).click()` and `querySelector('#endlessGate').click()`
+   both threw a TypeError exactly when the control had gone missing, which is the
+   bug being hunted, and the throw killed every check below. Name the missing
+   control as a FAIL, skip only the click, and let the assertions below report. */
+const tap = async (sel, what) => {
+  const h = await page.$(sel);
+  check(what, !!h, h ? '' : `${sel} is not on the page`);
+  if (h) await h.click();
+  return !!h;
+};
+const tapInPage = async (sel, what) => {
+  const hit = await page.evaluate(s => { const el = document.querySelector(s); if (el) el.click(); return !!el; }, sel);
+  check(what, hit, hit ? '' : `${sel} is not on the page`);
+  return hit;
+};
 
 // reach the capped state honestly: champion beaten, zero world bosses, and enough
 // endless wins to sit on the ceiling
@@ -33,7 +54,7 @@ console.log('seeded to the cap:', JSON.stringify(seeded));
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1700);
 await page.evaluate(() => document.querySelector('.dw')?.remove());
-await (await page.$('#pitBtn')).click();
+await tap('#pitBtn', 'the Pit opens from Today (capped state)');
 await sleep(2200);
 
 const st = await page.evaluate(() => {
@@ -84,7 +105,7 @@ check('the way out is a real button, not fine print', st.ctaIsButton && !st.ctaI
 check('the fight row admits it is a rematch only', st.rowSaysRematchOnly && /Rematch/i.test(st.fightBtn || ''), `${st.fightBtn} / ${st.rowSaysRematchOnly}`);
 
 // and the CTA actually goes to the map
-await page.evaluate(() => document.querySelector('#endlessGate').click());
+await tapInPage('#endlessGate', 'the gate CTA is there to be pressed');
 await sleep(1800);
 const went = await page.evaluate(() => location.hash);
 check('the button lands you on the Boneyard', went === '#/boneyard', went);
@@ -97,7 +118,7 @@ await page.evaluate(async () => {
 });
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1600);
-await (await page.$('#pitBtn')).click();
+await tap('#pitBtn', 'the Pit opens from Today (uncapped state)');
 await sleep(2000);
 const un = await page.evaluate(() => {
   /* same re-anchor as above: header + following siblings, no summary, nothing to open */
@@ -121,7 +142,7 @@ await sleep(400);
 /* the shot used to query the dead `.pit-sect` and skip in silence, so a moved
    anchor cost the evidence too. */
 const el = await page.$('.t3-sect');
-if (el) { const { mkdirSync } = await import('node:fs'); mkdirSync(DIR, { recursive: true }); await el.screenshot({ path: `${DIR}/pit-uncapped.png` }); }
+if (el) { await el.screenshot({ path: `${DIR}/pit-uncapped.png` }); }
 else { console.log('note: no .t3-sect to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nPIT CEILING IS UNMISSABLE');

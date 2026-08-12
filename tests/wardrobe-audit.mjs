@@ -4,7 +4,12 @@
  *             if it survives.
  *   BACKDROP -> is the background inside the element carrying the idle animation? */
 import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+/* repo-relative and self-creating: the old absolute path pointed at one dead
+   session's scratchpad, so the evidence shot threw on any other machine. */
+const DIR = fileURLToPath(new URL('./shots', import.meta.url));
+mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -98,7 +103,10 @@ check('the character still has its layers', after.stageLayers > 0, `${after.stag
 check('and is NOT hidden mid-swap (no flash)', after.stageComposing === false);
 check('the backdrop stayed outside the animation', after.backdropStillOutside);
 const st = await page.$('.bh-stage.lg');
-await st.screenshot({ path: `${DIR}/wardrobe-stage.png` });
+/* the evidence shot must not be able to kill the run: a missing stage is already
+   a named FAIL above ("the character still has its layers"), not a throw here. */
+if (st) { await st.screenshot({ path: `${DIR}/wardrobe-stage.png` }); }
+else { console.log('note: no .bh-stage.lg to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nWARDROBE: NO FLASH, BACKDROP HELD STILL');
 process.exit(bad ? 1 : 0);
