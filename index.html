@@ -65,5 +65,43 @@
 </div>
 <noscript><p style="padding:2rem;font-family:system-ui">Boneheadz Gym needs JavaScript enabled.</p></noscript>
 <script type="module" src="js/app.js"></script>
+<!-- THE DEAD SHELL, AND THE ONE THING THAT CAN SAVE IT.
+     2026-08-12: a TestFlight user opened the app for the first time on one bar
+     of LTE and got this exact page with nothing in it. app.js is a module, and
+     a module whose import graph loses ONE file never executes at all, so the
+     static markup above (gear, tab bar) paints and #screen stays empty forever.
+     Precaching the missing files fixed it for anyone who has loaded once, but
+     it CANNOT help a first-ever open: there is no service worker yet, and if
+     the connection is bad enough the worker's own install fails too (measured
+     against live: worker never took control, app never came up, reload did not
+     help).
+     So this is the last line of defence and it is deliberately dumb: plain
+     classic script, no imports, nothing that can fail the way app.js just did.
+     If the app has not put anything on screen after a while, reload ONCE with a
+     cache-busting query so the retry cannot be answered by the same broken
+     response. Once only, tracked in sessionStorage, because a reload loop is a
+     worse bug than a blank screen: it would burn battery and data and never
+     recover on a connection that is genuinely down.
+     Costs nothing when the app is healthy: one timer that finds content and
+     clears itself. -->
+<script>
+(function () {
+  var KEY = 'bhg-shell-retry';
+  // a module error is the specific symptom, but do not depend on catching it:
+  // the check below is about the OUTCOME (nothing rendered), which is true no
+  // matter which module died or why.
+  setTimeout(function () {
+    try {
+      var screenEl = document.getElementById('screen');
+      var alive = screenEl && screenEl.children.length > 0;
+      if (alive) { sessionStorage.removeItem(KEY); return; }
+      if (sessionStorage.getItem(KEY)) return;      // already tried once this session
+      sessionStorage.setItem(KEY, '1');
+      var u = location.href.split('#')[0];
+      location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
+    } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+  }, 8000);
+})();
+</script>
 </body>
 </html>

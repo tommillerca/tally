@@ -76,6 +76,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    minutes of browser time on a build whose pure logic is already broken. */
 const PURE = ['unit.test.js', 'pit.test.js'];
 const BROWSER = [
+  'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
