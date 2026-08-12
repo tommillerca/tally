@@ -116,6 +116,47 @@ s = await openSheet();
 console.log('sheet reopened after the win:', JSON.stringify(s));
 check('reopening shows Cleansed, not the fight button', s.cleansed && !s.cta, JSON.stringify(s));
 
+/* THE MONEY, WHICH NOTHING ABOVE LOOKS AT.
+ * Every check in this file until now is about a BUTTON and a SHEET. That is the
+ * entry point, and closing the entry point is only half of the rewarded-actions
+ * SOP: the other half is "prove the second attempt pays nothing". A reward
+ * reachable by any route other than #gluttonFight would sail straight past
+ * everything above, and this farm has been fixed three times already, twice by
+ * closing an entry point that turned out not to be the only one.
+ * So call the payout function directly, twice more, in the already-satisfied
+ * state, and assert the ledger and the wallet do not move. Measured on a clean
+ * tree 2026-08-12: attempt 1 paid +140 coins and +70 xp, attempts 2 and 3 paid
+ * +0 and +0, with the ledger stuck at one row. The guard is at js/poi.js:600,
+ * where claimGluttonWin returns null the moment its award yields 0 xp, before
+ * coins, before gear, before the dust consolation.
+ * PROVE-RED: delete that `if (xp === 0) return null;` line and the deltas below
+ * go non-zero on the repeat attempts. */
+const wallet = () => page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  const game = await import('./js/game.js');
+  const db = await import('./js/db.js');
+  const rows = await db.db.all('xp');
+  return { coins: await loot.coins(), xp: await game.totalXp(), gluttonRows: rows.filter(r => r.type === 'glutton').length };
+});
+const purseBefore = await wallet();
+const repeat = await page.evaluate(async () => {
+  const poi = await import('./js/poi.js');
+  const out = [];
+  for (let i = 0; i < 2; i++) out.push(await poi.claimGluttonWin());
+  return out.map(r => (r === null ? 'null' : JSON.stringify(r)));
+});
+const purseAfter = await wallet();
+console.log('re-claim attempts in the already-won state:', repeat.join(' | '));
+console.log('wallet before:', JSON.stringify(purseBefore), "after:", JSON.stringify(purseAfter));
+/* An empty sample would make the deltas trivially zero, so require that the win
+   above actually banked something first. */
+check('SETUP the win actually paid, so a zero delta below means something', purseBefore.gluttonRows === 1 && purseBefore.coins > 0,
+  JSON.stringify(purseBefore));
+check('PAYOUT a repeat claim pays no coins', purseAfter.coins - purseBefore.coins === 0, `delta=${purseAfter.coins - purseBefore.coins}`);
+check('PAYOUT a repeat claim pays no XP', purseAfter.xp - purseBefore.xp === 0, `delta=${purseAfter.xp - purseBefore.xp}`);
+check('PAYOUT and mints no second ledger row', purseAfter.gluttonRows === purseBefore.gluttonRows, `${purseBefore.gluttonRows} -> ${purseAfter.gluttonRows}`);
+check('PAYOUT the repeat calls returned null, not a reward', repeat.every(r => r === 'null'), repeat.join(' | '));
+
 // the combat art: is it decoded when the fight starts, on a COLD cache?
 await browser.close();
 console.log(bad ? `\n${bad} FAILED (the exploit is real)` : '\nGLUTTON IS NOT FARMABLE');
