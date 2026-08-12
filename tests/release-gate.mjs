@@ -89,6 +89,7 @@ const BROWSER = [
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
+  'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'db-upgrade-audit.mjs',    // a real v1->3 and v2->3 migration: no player row is lost
   'screen-sweep.mjs',        // no screen renders blank or throws
