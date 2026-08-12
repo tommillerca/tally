@@ -69,8 +69,17 @@ check('the server can re-arm and clear a siege', r.reArmed && r.clearedRemotely)
 check('an EXPIRED siege never reads as live', r.expiredIsIgnored);
 check('a siege for a tower we do not hold is ignored', r.unknownIgnored === 0);
 
-// the banner must LEAD with the siege, not bury it
-const banner = await page.evaluate(async () => {
+// the banner must LEAD with the siege, not bury it. Real DOM, not source grep:
+// seed a siege on sp-1-1 AND stale coins on sp-2-2, route to Today, then read
+// what the player actually sees in the rendered .spire-banner. Assert the
+// visible headline is the siege line (contains the besieger's name and a live
+// clock in h/m format), NOT the "N coins waiting" line. The old check was
+// `body.indexOf('sieged.length ?') < body.indexOf('owed ?')` on source text;
+// -1 for either would satisfy the inequality vacuously, so deleting the
+// siege branch entirely would still pass. This one fails when the banner is
+// not on screen, when it does not carry .under-siege, when the siege-tag row
+// is missing, or when the headline names coins instead of the besieger.
+await page.evaluate(async () => {
   const sp = await import('./js/spires.js');
   const db = await import('./js/db.js');
   const now = Date.now();
@@ -78,31 +87,82 @@ const banner = await page.evaluate(async () => {
   st['sp-1-1'].siege = { until: now + 30 * 3600000, name: 'Marrowjaw' };
   st['sp-2-2'].collectedAt = now - 5 * 86400000;      // lots of coins owed elsewhere
   await db.kvSet('spires', st);
-  const src = await (await fetch('./js/app.js')).text();
-  const i = src.indexOf('function spireBannerHtml');
-  const body = src.slice(i, src.indexOf('\nfunction ', i + 10));
+  location.hash = '#/today';
+});
+/* wait for the banner: the spire card is one of several banners on Today and
+   arrives with the screen's reveal, not before it. Cap at 15s, and treat a
+   never-appearing banner as a FAIL below (an empty sample is a failure). */
+const bannerReady = await page.waitForFunction(
+  () => !!document.querySelector('.spire-banner'),
+  { timeout: 15000, polling: 100 }
+).then(() => true).catch(() => false);
+const banner = await page.evaluate(() => {
+  const el = document.querySelector('.spire-banner');
+  if (!el) return { rendered: false };
+  const summary = el.querySelector('summary') || el;
+  const headline = summary.innerText.replace(/\s+/g, ' ').trim();
+  const rows = [...el.querySelectorAll('.spire-row')];
+  const rowNames = rows.map(r => (r.querySelector('b')?.textContent || '').trim());
+  const iSiege = rowNames.findIndex(n => /Ashen Fang/i.test(n));
+  const iOwed  = rowNames.findIndex(n => /Pale Gate/i.test(n));
   return {
-    siegeFirst: body.indexOf('sieged.length ?') < body.indexOf('owed ?'),
-    tagsBanner: /under-siege/.test(body),
-    rowShowsSiege: /spire-siege-tag/.test(body),
+    rendered: true,
+    underSiege: el.classList.contains('under-siege'),
+    siegeTagInDom: !!el.querySelector('.spire-siege-tag'),
+    headline,
+    namesBesieger: /Marrowjaw/.test(headline),
+    hasClockUnits: /\d+\s*[hm]/.test(headline),
+    mentionsCoins: /\bcoins?\b/i.test(headline),
+    rowNames, iSiege, iOwed,
+    siegedRowFirst: iSiege !== -1 && iOwed !== -1 && iSiege < iOwed,
   };
 });
 console.log('banner:', JSON.stringify(banner));
-check('the banner leads with the siege, ahead of coins owed', banner.siegeFirst, JSON.stringify(banner));
-check('and marks itself as under siege', banner.tagsBanner && banner.rowShowsSiege);
+check('the spire banner RENDERS on Today (an empty banner is a FAILURE)',
+  bannerReady && banner.rendered, JSON.stringify(banner).slice(0, 200));
+check('the banner headline LEADS with the siege, not coins owed',
+  banner.rendered && banner.namesBesieger && banner.hasClockUnits && !banner.mentionsCoins,
+  banner.headline);
+check('the sieged spire row appears before the coins-owed row',
+  banner.rendered && banner.siegedRowFirst,
+  `Ashen Fang at ${banner.iSiege}, Pale Gate at ${banner.iOwed}: ${JSON.stringify(banner.rowNames)}`);
+check('the banner marks itself under siege and shows the siege tag on the row',
+  banner.rendered && banner.underSiege && banner.siegeTagInDom);
 
-// the map button must offer DEFEND before tend/collect
+// the map button must offer DEFEND before tend/collect. HARDENED, not fully
+// rewritten: fully driving the #mapSpire click requires the map screen to
+// populate `spireInRange` (app.js:11696), which is a closure local in the
+// render scope with no test hook; setting it from outside means either
+// simulating geolocation + POI generation for a spire in range, or exposing
+// a hook on window. Both are app-side plumbing that belongs on a separate
+// branch. In the meantime, this block previously used two unguarded
+// indexOf<indexOf pairs, either of which passed at -1 (delete either token
+// and the check went green anyway). Guards below assert both tokens EXIST
+// in the handler body before comparing order, so deletion goes red instead
+// of silent-pass. Full runtime rewrite filed with the same test-hook
+// follow-up as the spire-phase3 refused-claim block.
 const btn = await page.evaluate(async () => {
   const src = await (await fetch('./js/app.js')).text();
   const i = src.indexOf("$('#mapSpire', body).addEventListener");
   const body = src.slice(i, i + 1200);
+  const iSiege = body.indexOf('openSiegeSheet');
+  const iSheet = body.indexOf('openSpireSheet');
+  const iColl  = body.indexOf('collectTribute');
   return {
-    defendFirst: body.indexOf('openSiegeSheet') < body.indexOf('collectTribute'),
-    beforeRival: body.indexOf('openSiegeSheet') < body.indexOf('openSpireSheet'),
+    handlerFound: i > -1,
+    hasSiegeCall:  iSiege > -1,
+    hasSheetCall:  iSheet > -1,
+    hasCollectCall: iColl > -1,
+    defendBeforeCollect: iSiege > -1 && iColl  > -1 && iSiege < iColl,
+    defendBeforeRival:   iSiege > -1 && iSheet > -1 && iSiege < iSheet,
   };
 });
 console.log('map button:', JSON.stringify(btn));
-check('a besieged tower offers DEFEND before collect or tend', btn.defendFirst && btn.beforeRival, JSON.stringify(btn));
+check('the mapSpire click handler was located', btn.handlerFound);
+check('the handler calls all three branches (siege, rival-sheet, collect)', btn.hasSiegeCall && btn.hasSheetCall && btn.hasCollectCall,
+      `siege=${btn.hasSiegeCall} sheet=${btn.hasSheetCall} collect=${btn.hasCollectCall}`);
+check('a besieged tower offers DEFEND before collect', btn.defendBeforeCollect, JSON.stringify(btn));
+check('a besieged tower offers DEFEND before opening the rival sheet', btn.defendBeforeRival, JSON.stringify(btn));
 
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nSIEGE CLIENT VERIFIED');
