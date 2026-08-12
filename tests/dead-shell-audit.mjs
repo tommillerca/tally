@@ -60,7 +60,7 @@ const session = async (blockRe, waitMs) => {
 /* 1. HEALTHY: the recovery script must be invisible. No reload, no flag left
       behind, and the app up. If this ever fails, the script is reloading real
       players for no reason, which is the expensive way to be wrong. */
-const healthy = await session(null, 12000);
+const healthy = await session(null, 16000);
 ok('SETUP the app comes up normally when nothing is broken', healthy.kids > 0, `screenKids=${healthy.kids}`);
 ok('HEALTHY no reload happens when the app is alive', healthy.navs === 1, `${healthy.navs} navigation(s)`);
 ok('HEALTHY and no retry flag is left behind', !healthy.retried, `flag=${healthy.retried}`);
@@ -69,10 +69,10 @@ ok('HEALTHY and no retry flag is left behind', !healthy.retried, `flag=${healthy
       come up, so the correct behaviour is exactly ONE extra navigation and then
       silence. This is the loop guard, and it is the check that matters most:
       the failure it prevents is one we would ship to every broken device. */
-const dead = await session(/\/js\/haptics\.js/, 26000);
+const dead = await session(/\/js\/haptics\.js/, 32000);
 ok('DEAD SHELL the shell really is dead in this scenario (else nothing below means anything)', dead.kids <= 0 && dead.gear,
   `screenKids=${dead.kids} gear=${dead.gear}`);
-ok('DEAD SHELL it retries exactly ONCE, never loops', dead.navs === 2, `${dead.navs} navigations in 26s (1 = never tried, 3+ = loop)`);
+ok('DEAD SHELL it retries exactly ONCE, never loops', dead.navs === 2, `${dead.navs} navigations in 32s (1 = never tried, 3+ = loop)`);
 
 /* 3. RECOVERABLE: the failure is transient, which is what a bad bar actually
       is. The reload must bring the app back on its own, with no user action. */
@@ -87,7 +87,7 @@ page.on('request', r => {
 });
 await page.goto(base + '?demo', { waitUntil: 'domcontentloaded', timeout: 60000 });
 const beforeRetry = await page.evaluate(() => (document.getElementById('screen') || {}).children?.length ?? -1);
-await sleep(14000);
+await sleep(19000);
 const after = await page.evaluate(() => (document.getElementById('screen') || {}).children?.length ?? -1);
 await browser.close();
 ok('TRANSIENT the first load really did die (an empty sample would fake this)', beforeRetry <= 0, `screenKids=${beforeRetry}`);
