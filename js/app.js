@@ -8362,14 +8362,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
-            <img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(i))}" role="img" aria-label="${esc(i.name)}"></canvas>
           </button>`).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
-            <img src="${bhAsset(art)}" alt="${esc(g.name)}" loading="lazy">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(art))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
@@ -8421,9 +8421,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<img src="${bhAsset(ownArt)}" alt="" loading="lazy"><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(ownArt))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy">${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(i))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -8491,7 +8491,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
        <img> rendered them as specks in a 66px slot. Runs AFTER content.innerHTML,
        which is where the slots actually live (#chContent, not #chBody). */
-    hydratePackArt(content, '.pd-art[data-art]');
+    /* .ward-art too: the picker tiles used to render the raw <img>, so an item
+       was a ~20px speck in an ~80px tile while the doll drew it 4-5x larger
+       (Tom, 2026-08-11: "they should be a larger size so you can see what you
+       are transmogging"). Same trim as the doll slots. */
+    hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
     $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
