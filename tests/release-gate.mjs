@@ -153,11 +153,20 @@ const DECLARED = {
   'v279-audit.mjs': ['skip', 'the v279 bug batch, one check per reported bug, kept as the record of that release.'],
   'newart-audit.mjs': ['skip', 'needs a <base> argument and a mode (see tally/CLAUDE.md), so it cannot join a URL-only run list.'],
   'siege-client-audit.mjs': ['skip', 'drives sieges against a stubbed server payload; the demo profile has no online crew.'],
-  'glutton-audit.mjs': ['skip', 'the Glutton farm, closed. unit.test.js carries the generalised rewarded-actions guard now.'],
+  /* PROMOTED OUT OF SKIP, 2026-08-12. The skip's claim was true (the farm is
+     closed; re-claims measured at +0 coins, +0 xp, ledger stuck at one row) but
+     its REASONING was not: unit.test.js's generalised guard is a static source
+     scan, and that scan was proven blindable by an ordinary destructuring
+     refactor (it passed 175/175 on a tree where it analysed nothing). Skipping a
+     green, one-minute, genuinely BEHAVIOURAL guard because a static scan covers
+     the same ground is backwards. It now also asserts the payout deltas, which
+     is the half no source scan can do. */
+  'glutton-audit.mjs': ['full', 'the Glutton farm stays closed, proven by fighting him and then re-claiming: no coins, no XP, no second ledger row.'],
 
   'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
   'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
+  'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
