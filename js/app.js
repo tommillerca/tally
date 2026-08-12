@@ -593,6 +593,7 @@ async function boot() {
   maybeShowBossIntro();
   maybeShowMageIntro();
   maybeShowRaceIntro();
+  maybeShowRaceFinale();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -1061,6 +1062,88 @@ async function maybeShowRaceIntro() {
       openRaceIntro();
     };
     setTimeout(tick, 3200);
+  } catch { /* never block boot */ }
+}
+
+/* THE STEP RACE FINALE. Tom, 2026-08-11: "let everyone know the players in the
+ * top 5 and let them know how much time is left in the contest."
+ * Same etiquette as every announcement above: never over the splash, the wheel
+ * or an open sheet, never twice (a kv flag), and it lives on in the News tab so
+ * a player who swipes it away can still find the standings.
+ * NOTHING on the card is hard-coded: the standings are the same /steps/week
+ * response the Crew board renders, drawn by the same raceLanesHtml, and the
+ * clock is the same raceClock the board quotes. The poster and the board
+ * cannot disagree (the mixed-messaging rule from race-audit.mjs). */
+const RACE_FINALE_SEEN_KEY = 'raceFinaleSeen';
+
+async function openRaceFinale(prefetched) {
+  const wk = raceWeekKey(dateKey());
+  const { clock } = raceClock(wk);
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil race-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <p class="drop-eyebrow">${clock.toUpperCase()}</p>
+      <h1 class="drop-title">The Step <em>Race</em></h1>
+      <p class="drop-sub"><b>The final stretch.</b> The purse pays the top ${RACE_PURSE.length} when it settles, and every step until then still counts.</p>
+      <div class="race-finale-board" style="text-align:left;margin:14px 2px 16px"><p class="note" style="margin:0">Checking the board&hellip;</p></div>
+      <button class="drop-cta" id="raceFinaleGo">SEE THE BOARD</button>
+      <button class="drop-later" id="raceFinaleLater">Not now</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#raceFinaleLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#raceFinaleGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
+  /* The standings land when the fetch does; the card never waits on the network.
+     An unreachable server degrades to a line naming where the live board is,
+     never to a blank box (anti-regression rule 8). */
+  const race = prefetched || await social.fetchStepRace(wk);
+  const box = $('.race-finale-board', veil);
+  if (!box || !box.isConnected) return;
+  const rows = ((race && race.players) || []).slice().sort((a, b) => (b.steps || 0) - (a.steps || 0)).slice(0, RACE_PURSE.length);
+  rows.forEach((p, i) => { p.rank = i + 1; });
+  /* No reachable standings still shows YOU on the start line (the intro
+     poster's own art block), so the card never opens artless. */
+  box.innerHTML = rows.length ? raceLanesHtml(rows)
+    : `<div class="race-intro-art">
+        <span class="startline"></span>
+        <span class="bh-stage lg">${avatarLayersHtml(await equipped(), { noYard: true, skip: ['BG', 'C'] })}</span>
+      </div>
+      <p class="note" style="margin:0">Could not reach the Crew server for the standings. The board on the Crew tab has them live.</p>`;
+  composeAvatars(veil);
+}
+
+// Test hook (webdriver only), same reasoning as __raceIntro above.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__raceFinale = race => openRaceFinale(race);
+}
+
+async function maybeShowRaceFinale() {
+  try {
+    if (!RACE_LIVE) return;
+    if ((navigator.webdriver && !window.__raceFinaleForce) || !S.settings) return;
+    if (await kvGet(RACE_FINALE_SEEN_KEY, false)) return;
+    const wk = raceWeekKey(dateKey());
+    /* Only the final stretch: it waits until the race has 3 days or fewer on
+       the clock, so the copy can never call a race that just started "almost
+       over". Until then it simply checks again next boot. */
+    if (raceClock(wk).daysLeft > 3) return;
+    /* No standings, no poster. Offline, unreachable or an empty board would
+       announce nothing, so the seen flag is NOT consumed and it tries again
+       next boot. The News tab carries the card regardless. */
+    const race = await social.fetchStepRace(wk);
+    if (!race || !(race.players || []).length) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(RACE_FINALE_SEEN_KEY, true);
+      openRaceFinale(race);
+    };
+    setTimeout(tick, 3600);
   } catch { /* never block boot */ }
 }
 
@@ -6571,9 +6654,7 @@ async function renderFriends(el) {
       card.hidden = false;
       return;
     }
-    const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
-    const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
-    const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+    const { clock } = raceClock(wk);
     /* YOU ARE ALWAYS ON YOUR OWN BOARD.
        Tom, 2026-08-07: "ship the fix to the step race before you do anything else
        right now it shows no leaders." The server can legitimately leave you off:
@@ -6617,20 +6698,7 @@ async function renderFriends(el) {
       <div class="gbn-body">
         ${race.champion ? `<div class="race-champ">${bhIcon('badge-trophy', 22)}
           <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
-        ${rows.length ? `<div class="race-lanes">
-          ${rows.map(p => {
-            const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
-            return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
-              <span class="rk">${p.rank}</span>
-              <div class="bd">
-                <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
-                <div class="track"><i style="width:${pct}%"></i>
-                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
-                </div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
+        ${rows.length ? raceLanesHtml(rows) : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
         ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
@@ -7097,6 +7165,13 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  /* The finale card stays honest forever: it fetches the CURRENT standings and
+     derives the clock every time it opens, so reading it after the race settles
+     shows whatever race is running then, never a stale top 5. */
+  { id: 'race-finale', date: 'Aug 12', title: 'The final stretch',
+    blurb: 'The step race is nearly over. See who leads and what the clock says.',
+    thumb: () => `<span class="nw-ico">${bhIcon('badge-footprint', 34)}</span>`,
+    open: () => openRaceFinale() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
     thumb: () => `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`,
@@ -12514,6 +12589,36 @@ function raceWeekDates(weekKey) {
      earlier date into period one, so there is nothing left for the padding to
      protect against. */
   return Array.from({ length: RACE_DAYS }, (_, i) => dateKey(new Date(t0 + i * 86400000)));
+}
+
+/* The race countdown, computed in ONE place. The Crew board and the finale
+   poster both quote it; a clock that exists twice will disagree twice. */
+function raceClock(weekKey) {
+  const endsMs = Date.parse(weekKey + 'T00:00:00') + RACE_DAYS * 86400000;
+  const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
+  return { daysLeft, clock: daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` };
+}
+
+/* The board's lanes, shared by the Crew card and the finale poster. It is a
+   TRACK, not a table: the fill is each racer's distance relative to the leader
+   and their own Bonehead is the marker, so the GAP is what you read. Rows must
+   already be sorted best-first with .rank set. */
+function raceLanesHtml(rows) {
+  const lead = rows.length ? rows[0].steps : 0;
+  return `<div class="race-lanes">
+          ${rows.map(p => {
+            const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
+            return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
+              <span class="rk">${p.rank}</span>
+              <div class="bd">
+                <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
+                <div class="track"><i style="width:${pct}%"></i>
+                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
 }
 
 async function weekStepsNow(date = dateKey()) {
