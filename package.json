@@ -6,6 +6,7 @@
   "description": "Fast private calorie + macro tracker PWA",
   "scripts": {
     "test": "node tests/unit.test.js && node tests/pit.test.js",
+    "balance": "node tests/balance-audit.js",
     "gate": "node tests/release-gate.mjs",
     "gate:all": "node tests/release-gate.mjs --all"
   },
