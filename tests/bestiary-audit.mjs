@@ -20,7 +20,17 @@ const teaser = await page.evaluate(() => {
   const cells = [...veil.querySelectorAll('.boss-cell')];
   return {
     cells: cells.length,
-    named: [...veil.querySelectorAll('.bst-name, .bst-label')].length,
+    /* NAMING IS TEXT, NOT A CLASS NAME. This looked for `.bst-name, .bst-label`,
+       both of which went out with the v350 roster in v352, so "it names none of
+       them" asserted against markup the app can no longer emit and passed for
+       free. A teaser cell today (js/app.js, openBossIntro) is a `.bh-stage
+       .boss-cell` holding image layers and NO text node at all, so the rule Tom
+       actually stated is checkable directly: any text in a cell, in any class,
+       is a name. Alt/aria text counts too, because a monster named to a screen
+       reader is still named. */
+    named: cells.filter(c => (c.textContent || '').trim()
+      || [...c.querySelectorAll('[alt], [aria-label], [title]')]
+        .some(e => (e.getAttribute('alt') || e.getAttribute('aria-label') || e.getAttribute('title') || '').trim())).length,
     scrolls: veil.scrollHeight > veil.clientHeight + 4,
     cta: veil.querySelector('#bossIntroGo')?.textContent.trim(),
   };
@@ -32,13 +42,22 @@ ok('it sends you hunting', /HUNT/i.test(teaser.cta || ''), teaser.cta);
 
 /* ---- and nothing anywhere opens a browsable roster ---- */
 await page.evaluate(() => document.querySelector('.boss-veil')?.remove());
+/* NO NAMED ENTRY POINT, RATHER THAN NO NAMED GHOST. This asked for
+   `window.openBestiary` and `#bestiaryOpen`, both deleted with the v350 roster
+   in v352, so it could only ever answer false: the roster could come back under
+   any other name and this would still pass. There is nothing left to pin to, so
+   it enumerates instead: any global function or element id that offers to open
+   a bestiary/roster fails, whatever it is called. `#bestiaryToMap` and
+   `.bestiary-banner` are the teaser row and are matched on id only, so the row
+   itself cannot trip it. */
 const spoiler = await page.evaluate(() => ({
-  hasOpener: typeof window.openBestiary === 'function',
-  seeWholeBtn: !!document.getElementById('bestiaryOpen'),
+  openers: Object.keys(window).filter(k => /bestiary|roster/i.test(k) && typeof window[k] === 'function'),
+  openIds: [...document.querySelectorAll('[id]')].map(e => e.id)
+    .filter(id => /(bestiary|roster).*(open|all|browse|list)|^(open|all|browse|list).*(bestiary|roster)/i.test(id)),
   rosterCta: [...document.querySelectorAll('button, a')]
     .filter(b => /whole bestiary|all monsters|see them all/i.test(b.textContent || '')).length,
 }));
-ok('there is no roster to open', !spoiler.hasOpener && !spoiler.seeWholeBtn, JSON.stringify(spoiler));
+ok('there is no roster to open', !spoiler.openers.length && !spoiler.openIds.length, JSON.stringify(spoiler));
 ok('nothing offers to show them all', spoiler.rosterCta === 0, `${spoiler.rosterCta} buttons`);
 
 /* ---- the Today row: today's hunt, and a way to go find it ---- */
