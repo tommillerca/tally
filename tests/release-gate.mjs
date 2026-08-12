@@ -88,6 +88,7 @@ const BROWSER = [
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
+  'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
