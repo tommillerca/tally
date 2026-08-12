@@ -593,6 +593,7 @@ async function boot() {
   maybeShowBossIntro();
   maybeShowMageIntro();
   maybeShowRaceIntro();
+  maybeShowCommunityIntro();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -1061,6 +1062,66 @@ async function maybeShowRaceIntro() {
       openRaceIntro();
     };
     setTimeout(tick, 3200);
+  } catch { /* never block boot */ }
+}
+
+/* THE COMMUNITY. Tom, 2026-08-11: the Discord is where beta feedback
+ * consolidates and "where all future feature discussions etc will take place",
+ * and it has to be OBVIOUS: "there's a lot of non-real-gamers playing and this
+ * may seem intimidating to them". So the card explains what Discord IS in
+ * plain words before it asks anyone to join, and the invite lives on in two
+ * permanent homes (News, Settings) for anyone who dismisses the popup.
+ * The invite URL exists in exactly ONE constant; a link that exists three
+ * times will rot in two of them when it changes. */
+const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
+const COMMUNITY_SEEN_KEY = 'discordIntroSeen';
+
+function openCommunityCard() {
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil race-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <span class="drop-count">NEW</span>
+      <p class="drop-eyebrow">THE CLUBHOUSE IS OPEN</p>
+      <h1 class="drop-title">Join the <em>Bone Boiz</em></h1>
+      <p class="drop-sub">Boneheadz now has a home outside the app: a Discord server called <b>Bone Boiz</b>, where the people playing this game talk with the people making it.</p>
+      <ul class="spire-terms">
+        <li><b>New to Discord?</b> It is a free chat app: like a group text, with separate rooms for different topics. Tap the invite, pick a name, you are in. Nothing to learn first.</li>
+        <li><b>Why join?</b> Every future feature gets talked over there before it is built. If you want a say in what this game becomes, that is the room.</li>
+        <li><b>Found a bug? Have an idea?</b> Post it there and it lands where it actually gets read, all in one place.</li>
+      </ul>
+      <a class="drop-cta" id="communityGo" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none;display:block;text-align:center">JOIN THE BONE BOIZ</a>
+      <button class="drop-later" id="communityLater">Maybe later</button>
+      <p class="note" style="text-align:center;margin:10px 0 0">The invite also lives in <b>News</b> and <b>Settings</b>, whenever you are ready.</p>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#communityLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  // the join is an <a> so the OS handles it (app or browser); the card closes
+  // behind it so returning players are not stuck under a stale veil
+  $('#communityGo', veil).addEventListener('click', () => setTimeout(close, 400));
+}
+
+// Test hook (webdriver only), same reasoning as __raceIntro above.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__community = () => openCommunityCard();
+}
+
+async function maybeShowCommunityIntro() {
+  try {
+    if ((navigator.webdriver && !window.__communityForce) || !S.settings) return;
+    if (await kvGet(COMMUNITY_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(COMMUNITY_SEEN_KEY, true);
+      openCommunityCard();
+    };
+    setTimeout(tick, 4000);
   } catch { /* never block boot */ }
 }
 
@@ -7097,6 +7158,10 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
+    blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
+    thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">💬</span>`,
+    open: () => openCommunityCard() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
     thumb: () => `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`,
@@ -7453,6 +7518,7 @@ async function renderSettings(el) {
 
   <div class="card">
     <div class="card-title">ABOUT</div>
+    <div class="settings-row"><div class="lab"><b>Join the community</b><span>Bone Boiz on Discord: where feedback lands and future features get decided</span></div><a class="btn small" id="communityBtn" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none">Join</a></div>
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
