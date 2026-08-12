@@ -77,6 +77,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 const PURE = ['unit.test.js', 'pit.test.js'];
 const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
+  'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
