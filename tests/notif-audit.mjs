@@ -173,7 +173,7 @@ check('TEST  #notifTest button toasts success (not "Could not send")',
    a browser permission prompt no test could dismiss. Read the source
    directly and pin the exact shape; if a future edit widens the guard
    or drops the return, this check goes red naming the drift. */
-const appSrc = fs.readFileSync(path.join(new URL('..', import.meta.url).pathname, 'js/app.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'js/app.js'), 'utf8');
 const idx = appSrc.indexOf('async function maybeRequestNotifPermission');
 const body = appSrc.slice(idx, appSrc.indexOf('\nasync function ', idx + 10));
 const webdriverGuard = /if\s*\(\s*navigator\.webdriver\s*\)\s*return\s*;/.test(body);
