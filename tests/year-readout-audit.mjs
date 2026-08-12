@@ -24,7 +24,7 @@
  *
  * Run: node tests/year-readout-audit.mjs <baseUrl>   (or via npm run gate)
  */
-import { boot, settle, dismissOverlays } from './godmode.js';
+import { boot, settle, dismissOverlays, retryOnDetach } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -132,35 +132,30 @@ const yearReady = await page.waitForFunction(() => document.querySelectorAll('.s
 ok('the Year panel rebuilt with twelve buckets', yearReady, yearReady ? '' : `${await page.evaluate(() => document.querySelectorAll('.sheet-trend .bc-hit').length)} tap targets after 30s, expected 12`);
 await settle(page, 250);
 
-/* HARDENING against the recorded gate-load failure text
-   "Attempted to use detached Frame" at THIS page.evaluate (CHAT-HANDOFF.md line
-   918: 3 green : 1 red in-gate, unreproduced solo; d9529a1's own body already
-   flagged that four consecutive gate runs never got certified because that mac
-   was at load-avg 24 on 16 cores). Under that kind of contention Chrome's CDP
-   can flip the frame's execution-context id between waitForFunction resolving
-   and the very next evaluate landing, and puppeteer throws detached-Frame even
-   though nothing here navigated (the panel and its twelve .bc-hit rows are
-   idempotent across the re-render, so re-doing the read is safe). ONE bounded
-   retry: catch ONLY that specific error text, re-wait for the twelve buckets,
-   evaluate once more. A second detach, or ANY OTHER error, is a real failure
-   and propagates: never a blanket try/catch, or the DISTINCT guard downstream
-   would go silent on the very bug this audit exists to catch. */
+/* Bounded retry on the recorded "Attempted to use detached Frame" text at this
+   page.evaluate, delegated to godmode's shared retryOnDetach so this file and
+   the wardrobe wrap share ONE implementation rather than two that can drift.
+   Original context: CHAT-HANDOFF.md line 918, 3 green : 1 red in-gate + 156
+   clean solo runs before it reproduced twice on 2026-08-12 at load-avg 13,
+   once at wardrobe-audit's post-click evaluate and once in a newart run
+   during boot. Same string, different files, so the retry belongs at the
+   harness layer. The resync mirrors the wait-for-condition my previous local
+   retry ran (twelve .bc-hit rows plus one settle); the panel is idempotent
+   across wireBarChart's re-render so a re-read is safe. All the properties
+   of the local retry are preserved: only the specific text is caught,
+   exactly one retry, a second detach propagates, and any non-detach error
+   propagates immediately, so the DISTINCT guard downstream cannot go silent
+   on the very bug this audit exists to catch. */
 const readHits = () => page.evaluate(() => [...document.querySelectorAll('.sheet-trend .bc-hit')].map(h => {
   const r = h.getBoundingClientRect();
   return { i: h.dataset.i, label: h.dataset.label, val: h.dataset.val,
            x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }));
-let hits;
-try {
-  hits = await readHits();
-} catch (e) {
-  if (!/Attempted to use detached Frame/i.test(String(e))) throw e;
-  console.log(`RETRY  bar-position read hit "${String(e).split('\n')[0]}"; re-waiting for twelve buckets and retrying once.`);
+const hits = await retryOnDetach(readHits, async () => {
   await page.waitForFunction(() => document.querySelectorAll('.sheet-trend .bc-hit').length === 12,
     { timeout: 30000, polling: 100 });
   await settle(page, 250);
-  hits = await readHits();
-}
+});
 /* AN EMPTY SAMPLE IS A FAILURE. Zero bars examined means the sheet never opened
    and every assertion below would be vacuously true. */
 ok('the year view drew twelve monthly bars', hits.length === 12, `${hits.length} tap targets`);

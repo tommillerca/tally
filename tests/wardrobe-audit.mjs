@@ -3,11 +3,14 @@
  *   FLASH  -> is unrelated DOM being destroyed on each tap? Stamp a marker and see
  *             if it survives.
  *   BACKDROP -> is the background inside the element carrying the idle animation? */
-import { boot, sleep } from './godmode.js';
+/* MERGE NOTE (pre-flight, 2026-08-12): two branches improved this header and
+   each dropped the other's improvement. ext/audit-hardening made DIR
+   repo-relative and self-creating (the old absolute path pointed into a dead
+   session's scratchpad and threw on any other machine); ext/detach-guard-adoption
+   added the shared retryOnDetach import. Both are wanted, so both are here. */
+import { boot, sleep, retryOnDetach } from './godmode.js';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-/* repo-relative and self-creating: the old absolute path pointed at one dead
-   session's scratchpad, so the evidence shot threw on any other machine. */
 const DIR = fileURLToPath(new URL('./shots', import.meta.url));
 mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
@@ -48,7 +51,17 @@ await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="ward
 await sleep(2200);
 
 // ---- the BACKDROP ----
-const bgInfo = await page.evaluate(() => {
+/* This page.evaluate is the exact site that reproduced "Attempted to use
+   detached Frame" under load-avg 13 on 2026-08-12: a plain post-click read
+   of the just-rendered wardrobe stage, with nothing navigating between the
+   tab click at line 32 and this evaluate. Under CDP starvation the frame's
+   execution-context id flips out from under puppeteer between the sleep
+   and this call, and the audit dies naming this line. Wrapped in the
+   harness-level retryOnDetach (godmode.js): only the specific detach text
+   is caught, exactly one retry, and the resync re-waits for .bh-stage.lg
+   before the second read so the retry reads a settled page rather than
+   guessing. A second detach or any other error propagates untouched. */
+const readBgInfo = () => page.evaluate(() => {
   const stage = document.querySelector('.bh-stage.lg');
   if (!stage) return null;
   const back = stage.querySelector('.bh-backdrop');
@@ -61,6 +74,9 @@ const bgInfo = await page.evaluate(() => {
     backdropAnimation: back ? getComputedStyle(back).animationName : null,
   };
 });
+const bgInfo = await retryOnDetach(readBgInfo, () =>
+  page.waitForFunction(() => !!document.querySelector('.bh-stage.lg'),
+    { timeout: 15000, polling: 100 }));
 console.log('backdrop:', JSON.stringify(bgInfo));
 check('the stage renders a static backdrop element', !!bgInfo?.hasBackdrop);
 check('the backdrop is NOT inside the animated stack', bgInfo && bgInfo.backdropInsideAnimated === false);
