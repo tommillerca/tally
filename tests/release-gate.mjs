@@ -89,6 +89,7 @@ const BROWSER = [
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
+  'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
