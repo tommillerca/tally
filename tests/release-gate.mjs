@@ -89,6 +89,7 @@ const BROWSER = [
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'screen-sweep.mjs',        // no screen renders blank or throws
+  'sheet-history-audit.mjs', // closeAllSheetsViaHistory leaves no sheet standing
 ];
 
 function run(file, args) {
