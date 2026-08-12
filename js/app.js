@@ -1076,19 +1076,32 @@ async function maybeShowRaceIntro() {
  * cannot disagree (the mixed-messaging rule from race-audit.mjs). */
 const RACE_FINALE_SEEN_KEY = 'raceFinaleSeen';
 
+/* THE RACE THAT FINISHED, NOT THE ONE THAT IS ENDING. Tom, 2026-08-12:
+   post it "at the end of the week when the step challenge completes", make it
+   fun, "show how close the race was with step progress bars", "give a shoutout
+   to the winner", and say another one runs next week with the format possibly
+   changing.
+   So this reads the week that has SETTLED, not the live one. On the Saturday
+   after a race the current week key is the new race, and its board is empty or
+   nearly so; the standings people care about belong to the week before. */
+function lastSettledWeekKey(today = dateKey()) {
+  const cur = raceWeekKey(today);
+  // one day before this period started is, by definition, inside the previous one
+  const dayBefore = addDays(cur, -1);
+  return raceWeekKey(dayBefore);
+}
+
 async function openRaceFinale(prefetched) {
-  const wk = raceWeekKey(dateKey());
-  const { clock } = raceClock(wk);
+  const wk = lastSettledWeekKey();
   const veil = document.createElement('div');
   veil.className = 'drop-veil race-veil';
   veil.innerHTML = `
     <div class="drop-card">
-      <p class="drop-eyebrow">${clock.toUpperCase()}</p>
-      <h1 class="drop-title">The Step <em>Race</em></h1>
-      <p class="drop-sub"><b>The final stretch.</b> The purse pays the top ${RACE_PURSE.length} when it settles, and every step until then still counts.</p>
-      <div class="race-finale-board" style="text-align:left;margin:14px 2px 16px"><p class="note" style="margin:0">Checking the board&hellip;</p></div>
+      <p class="drop-eyebrow">THAT IS A WRAP</p>
+      <h1 class="drop-title">The Step Race <em>Results</em></h1>
+      <div class="race-finale-board" style="text-align:left;margin:12px 2px 14px"><p class="note" style="margin:0">Counting the steps&hellip;</p></div>
       <button class="drop-cta" id="raceFinaleGo">SEE THE BOARD</button>
-      <button class="drop-later" id="raceFinaleLater">Not now</button>
+      <button class="drop-later" id="raceFinaleLater">Nice one</button>
     </div>`;
   document.body.appendChild(veil);
   const close = () => veil.remove();
@@ -1103,14 +1116,25 @@ async function openRaceFinale(prefetched) {
   if (!box || !box.isConnected) return;
   const rows = ((race && race.players) || []).slice().sort((a, b) => (b.steps || 0) - (a.steps || 0)).slice(0, RACE_PURSE.length);
   rows.forEach((p, i) => { p.rank = i + 1; });
-  /* No reachable standings still shows YOU on the start line (the intro
-     poster's own art block), so the card never opens artless. */
-  box.innerHTML = rows.length ? raceLanesHtml(rows)
-    : `<div class="race-intro-art">
-        <span class="startline"></span>
-        <span class="bh-stage lg">${avatarLayersHtml(await equipped(), { noYard: true, skip: ['BG', 'C'] })}</span>
-      </div>
-      <p class="note" style="margin:0">Could not reach the Crew server for the standings. The board on the Crew tab has them live.</p>`;
+  if (!rows.length) {
+    box.innerHTML = `<p class="note" style="margin:0">Could not reach the Crew server for the final board. The Crew tab has it.</p>`;
+    return;
+  }
+  /* THE SHOUTOUT, AND THE GAP THAT MAKES IT MEAN SOMETHING. A winner's name on
+     its own is a fact; the margin is the story, and it is the thing that makes
+     second place feel like a race rather than a list. Same raceLanesHtml the
+     Crew board uses, so the bars a player already knows are the bars they see
+     here: the fill is each racer's distance relative to the winner. */
+  const win = rows[0];
+  const gap = rows.length > 1 ? win.steps - rows[1].steps : 0;
+  const margin = rows.length < 2 ? ''
+    : gap <= 0 ? ' It came down to a dead heat.'
+    : gap < 1000 ? ` Won by <b>${gap.toLocaleString()} steps</b>, which is about a lap of the block.`
+    : ` Won by <b>${gap.toLocaleString()} steps</b>.`;
+  box.innerHTML = `
+    <p class="drop-sub" style="margin:0 0 10px">${win.you ? '<b>You took it.</b>' : `<b>${esc(win.name)}</b> took it`} with <b>${win.steps.toLocaleString()} steps</b>.${margin}</p>
+    ${raceLanesHtml(rows)}
+    <p class="note" style="margin:10px 2px 0">The purse pays the top ${RACE_PURSE.length}. A new race starts next week, and we may switch up the challenge from time to time, so keep an eye on the Crew tab.</p>`;
   composeAvatars(veil);
 }
 
@@ -1123,12 +1147,15 @@ async function maybeShowRaceFinale() {
   try {
     if (!RACE_LIVE) return;
     if ((navigator.webdriver && !window.__raceFinaleForce) || !S.settings) return;
-    if (await kvGet(RACE_FINALE_SEEN_KEY, false)) return;
-    const wk = raceWeekKey(dateKey());
-    /* Only the final stretch: it waits until the race has 3 days or fewer on
-       the clock, so the copy can never call a race that just started "almost
-       over". Until then it simply checks again next boot. */
-    if (raceClock(wk).daysLeft > 3) return;
+    /* ONE CARD PER RACE, NOT ONE EVER. The seen flag carries the week it was
+       shown for, so next week's result announces itself instead of being
+       swallowed by a boolean set in August. */
+    const wk = lastSettledWeekKey();
+    if (await kvGet(RACE_FINALE_SEEN_KEY, '') === wk) return;
+    /* WAIT FOR A REAL RESULT. Before the first race has ever settled there is
+       nothing to announce, so the previous-week key resolves to the epoch's own
+       period and the board comes back empty; the guard below catches that. */
+    if (wk === raceWeekKey(dateKey())) return;          // no completed race yet
     /* No standings, no poster. Offline, unreachable or an empty board would
        announce nothing, so the seen flag is NOT consumed and it tries again
        next boot. The News tab carries the card regardless. */
@@ -1140,7 +1167,7 @@ async function maybeShowRaceFinale() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      await kvSet(RACE_FINALE_SEEN_KEY, true);
+      await kvSet(RACE_FINALE_SEEN_KEY, wk);
       openRaceFinale(race);
     };
     setTimeout(tick, 3600);
@@ -7168,8 +7195,11 @@ const NEWS = [
   /* The finale card stays honest forever: it fetches the CURRENT standings and
      derives the clock every time it opens, so reading it after the race settles
      shows whatever race is running then, never a stale top 5. */
-  { id: 'race-finale', date: 'Aug 12', title: 'The final stretch',
-    blurb: 'The step race is nearly over. See who leads and what the clock says.',
+  /* Dated to the settlement, not to the day it was written. The card itself
+     re-reads the last completed race every time it opens, so this row keeps
+     telling the truth after the next race settles too. */
+  { id: 'race-finale', date: 'Aug 14', title: 'The step race results',
+    blurb: 'The race is done. See who took it and by how much.',
     thumb: () => `<span class="nw-ico">${bhIcon('badge-footprint', 34)}</span>`,
     open: () => openRaceFinale() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',

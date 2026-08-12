@@ -16,7 +16,7 @@
  *           racers; the 6th must NOT appear), in standings order, by name.
  *           An empty lane list is a FAILURE, never a pass.
  *   PIXELS  every lane draws its racer's Bonehead with decoded pixels.
- *   OPERATE "Not now" (a real mouse click) dismisses it and the app underneath
+ *   OPERATE the dismiss button (a real mouse click) dismisses it and the app underneath
  *           is usable: the tab bar owns its own hit point again.
  *   ONCE    a full reload with the force flag still set shows NO poster: the
  *           seen flag, not the webdriver gate, is what stops the second showing.
@@ -100,7 +100,29 @@ page.on('request', req => {
 /* The boot path skips announcements under webdriver unless forced, same as
    __raceForce for the intro. Registered before the reload so it exists when
    maybeShowRaceFinale runs. */
-await page.evaluateOnNewDocument(() => { window.__raceFinaleForce = true; });
+/* SHIFT THE CLOCK PAST SETTLEMENT, because a results card cannot be tested
+   during the race it reports on. Run on 2026-08-12 the app is CORRECT to show
+   nothing: the first race settles on the 14th, so there is no completed race
+   to announce and the boot gate declines by design. Faking the date is the
+   only way to exercise the state this card exists for.
+   It also makes this audit date-independent, which is the lesson race-you.mjs
+   learned the hard way: an audit that only passes on certain days trains
+   people to ignore red. The shim moves the whole app, not just this check, so
+   the week keys the app derives are the ones a player would have after the
+   race ends. */
+const AFTER_SETTLEMENT = '2026-08-16T10:00:00';
+await page.evaluateOnNewDocument(when => {
+  window.__raceFinaleForce = true;
+  const Real = Date;
+  const fixed = new Real(when).getTime();
+  // only "now" moves; every other Date behaviour is left alone, so date maths
+  // inside the app still works normally
+  function Shim(...a) { return a.length ? new Real(...a) : new Real(fixed); }
+  Shim.prototype = Real.prototype;
+  Shim.now = () => fixed;
+  Shim.parse = Real.parse; Shim.UTC = Real.UTC;
+  window.Date = Shim;
+}, AFTER_SETTLEMENT);
 
 await seed(page, { level: 12 });
 // the race fetch gates on isOnline(): kv social present, exactly as race-you seeds it
@@ -141,7 +163,11 @@ const card = await page.evaluate(async () => {
   await Promise.all(imgs.map(i => i.decode().catch(() => {})));
   return {
     eyebrow: v.querySelector('.drop-eyebrow')?.textContent.trim(),
-    sub: v.querySelector('.drop-sub')?.textContent.replace(/\s+/g, ' ').trim(),
+    /* The winner shoutout renders inside the board, which hydrates after the
+       fetch, so read EVERY .drop-sub rather than the first one: reading only
+       the first would silently grade the headline and never the result. */
+    sub: [...v.querySelectorAll('.drop-sub')].map(e => e.textContent.replace(/\s+/g, ' ').trim()).join(' '),
+    body: v.textContent.replace(/\s+/g, ' ').trim(),
     lanes: [...v.querySelectorAll('.race-lane')].map(l => ({
       rank: l.querySelector('.rk')?.textContent.trim(),
       name: l.querySelector('.nm b')?.textContent.trim(),
@@ -155,10 +181,23 @@ const card = await page.evaluate(async () => {
 });
 ok('CARD the poster is up and readable at all', !!card, card ? '' : 'no drop-card to inspect');
 
-/* ---------- CLOCK: against the independent countdown ---------- */
-ok('CLOCK the eyebrow quotes the derived time left, not a hard-coded date',
-  !!card && card.eyebrow === expClock.toUpperCase(), `expected "${expClock.toUpperCase()}", poster says "${card && card.eyebrow}"`);
-ok('CLOCK the body names the moment', !!card && /final stretch/i.test(card.sub || ''), `sub: "${card && card.sub}"`);
+/* ---------- RESULT: it announces a race that FINISHED ----------
+   Tom, 2026-08-12: post it when the challenge completes, name the winner, show
+   how close it was, and say another runs next week. So the card must read as a
+   result, never as a countdown: a card that says "2 days left" after the race
+   settled is worse than no card, because it is wrong rather than late. */
+ok('RESULT the eyebrow reads as a finished race, not a countdown',
+  !!card && /wrap|result/i.test(card.eyebrow || '') && !/left|settles/i.test(card.eyebrow || ''),
+  `eyebrow: "${card && card.eyebrow}"`);
+ok('RESULT the winner is named with their step total',
+  !!card && new RegExp(RACERS[0].name).test(card.sub || '') && /steps/i.test(card.sub || ''),
+  `sub: "${card && card.sub}"`);
+ok('RESULT the margin over second place is stated, so the closeness is the story',
+  !!card && new RegExp(String(RACERS[0].steps - RACERS[1].steps).replace(/\B(?=(\d{3})+(?!\d))/g, ',')).test(card.sub || ''),
+  `sub: "${card && card.sub}"`);
+ok('RESULT it promises another race and admits the format may change',
+  !!card && /next week/i.test(card.body || '') && /switch up|change/i.test(card.body || ''),
+  `body: "${(card && card.body || '').slice(0, 120)}"`);
 
 /* ---------- TOP5: the paid places, in order, and nobody else ---------- */
 const want = RACERS.slice(0, Math.min(5, PURSE_N));
@@ -177,7 +216,11 @@ ok('PIXELS every lane marker decoded real art',
   card ? `${card.decoded}/${card.imgCount} decoded` : '');
 
 /* ---------- OPERATE: dismiss with the real control, app stays usable ---------- */
-const dismissed = await click(page, /^not now$/);
+/* The dismiss label changed with the results rework ("Not now" made sense on a
+   countdown, "Nice one" on a result). Match the id's label, and accept either,
+   so a future copy tweak fails the COPY checks above rather than silently
+   turning this into a no-op click. */
+const dismissed = await click(page, /^(nice one|not now)$/);
 await sleep(600);
 const after = await page.evaluate(() => {
   const gone = !document.querySelector('.race-veil');
@@ -191,7 +234,7 @@ const after = await page.evaluate(() => {
   }
   return { gone, tabFound: !!tab, tabOwned };
 });
-ok('OPERATE "Not now" is clickable and closes the poster', dismissed && after.gone, JSON.stringify(after));
+ok('OPERATE the dismiss button is clickable and closes the poster', dismissed && after.gone, JSON.stringify(after));
 ok('OPERATE the app underneath owns its controls again', after.tabFound && after.tabOwned, JSON.stringify(after));
 
 /* ---------- ONCE: a reload must NOT show it again ---------- */
@@ -243,8 +286,78 @@ const reopened = await page.evaluate(async () => {
   };
 });
 ok('NEWS tapping the story opens the REAL poster even after the one-shot is spent',
-  !!reopened && reopened.lanes === want.length && reopened.eyebrow === expClock.toUpperCase(),
+  !!reopened && reopened.lanes === want.length && /wrap|result/i.test(reopened.eyebrow || ''),
   JSON.stringify(reopened));
+
+/* ---------- MID-RACE: IT MUST REFUSE, AND THE CHECK MUST BE ABLE TO SEE ONE ----------
+   The most important property of a results card is that it does not announce a
+   race still being run, and getting a check that can actually FAIL on that took
+   three attempts, each passing for a different wrong reason:
+     1. no second session at all: the suite passed 17/17 with the settlement
+        gate DELETED, because a card fed the current week looks identical.
+     2. a second session with no request intercept: it declined for want of
+        standings, not because the gate held.
+     3. a twelve second wait: other boot announcements own the veil slot first,
+        so the finale never got its turn inside the window either way.
+   So this runs the SAME session recipe twice at two dates and requires
+   OPPOSITE answers. The after-settlement run is the positive control: if it
+   does not produce a poster, the negative below proves nothing and says so. */
+const raceVeilAt = async (whenISO, waitMs) => {
+  const s2 = await (await import('./godmode.js')).boot(base);
+  await s2.page.setRequestInterception(true);
+  s2.page.on('request', req => {
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,PUT,POST,OPTIONS', 'Access-Control-Allow-Headers': '*' };
+    if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: cors, body: '' });
+    if (/\/steps\/week/.test(req.url())) {
+      return req.respond({ status: 200, contentType: 'application/json', headers: cors,
+        body: JSON.stringify({ week: null, players: RACERS, yourRank: 3, podium: [], champion: null }) });
+    }
+    if (/bonez-api|workers\.dev/.test(req.url())) return req.respond({ status: 500, headers: cors, body: '{}' });
+    return req.continue();
+  });
+  await s2.page.evaluateOnNewDocument(when => {
+    window.__raceFinaleForce = true;
+    const Real = Date;
+    const fixed = new Real(when).getTime();
+    function Shim(...a) { return a.length ? new Real(...a) : new Real(fixed); }
+    Shim.prototype = Real.prototype; Shim.now = () => fixed;
+    Shim.parse = Real.parse; Shim.UTC = Real.UTC;
+    window.Date = Shim;
+  }, whenISO);
+  /* THE SAME SEED THE MAIN SESSION USES. fetchStepRace gates on isOnline(),
+     which reads the kv social row, so without this the fetch never happens and
+     every answer is "no poster" regardless of the gate under test. This is the
+     third wrong-reason pass this block has had; it is in the helper now so both
+     dates get identical treatment and only the clock differs. */
+  await seed(s2.page, { level: 12 });
+  await s2.page.evaluate(async () => {
+    const { kvSet } = await import('./js/db.js');
+    await kvSet('social', { playerId: 'race-finale-audit', handle: 'hollow', friendCode: 'BONE-TEST-TEST', name: 'Hollow Shovel', onlineAt: Date.now() });
+  });
+  await s2.page.reload({ waitUntil: 'domcontentloaded' });
+  /* clear whatever else the boot wants to announce, otherwise the finale never
+     gets the veil slot and every answer here is "no poster" */
+  const deadline = Date.now() + waitMs;
+  let seen = false;
+  while (Date.now() < deadline) {
+    seen = await s2.page.evaluate(() => !!document.querySelector('.race-veil'));
+    if (seen) break;
+    await s2.page.evaluate(() => {
+      const other = [...document.querySelectorAll('.drop-veil')].find(v => !v.classList.contains('race-veil'));
+      if (other) other.remove();
+    });
+    await sleep(1000);
+  }
+  await s2.browser.close();
+  return seen;
+};
+
+const settledFires = await raceVeilAt('2026-08-16T10:00:00', 30000);
+ok('CONTROL a settled race DOES produce a poster in this same setup (else the check below is empty)',
+  settledFires, settledFires ? 'poster appeared' : 'no poster even after settlement: the negative below proves nothing');
+const midFires = await raceVeilAt('2026-08-10T10:00:00', 30000);
+ok('MID-RACE the poster refuses to fire while the race is still running',
+  !midFires, midFires ? 'a results card appeared for a race that has NOT finished' : 'no poster, correct');
 
 await browser.close();
 srvHandle.close();
