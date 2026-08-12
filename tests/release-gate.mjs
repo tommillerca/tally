@@ -88,6 +88,7 @@ const BROWSER = [
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
+  'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
