@@ -120,7 +120,24 @@ function failLines(out) {
    which is worse than not having written it: it reads as coverage. Anything
    deliberately out of the gate goes in SKIP with a reason, so the omission is a
    decision on the record rather than an oversight. */
-const onDisk = (await readdir(here)).filter(f => /-audit\.mjs$/.test(f)).sort();
+/* THE NET USED TO BE /-audit\.mjs$/, AND A FILENAME WAS ENOUGH TO ESCAPE IT.
+   mockup-parity.mjs sat RED on main and no one knew: it is a real guard, it
+   exits non-zero, and it was invisible here purely because it is not called
+   "-audit". Fourteen other runnable checks were in the same position, among
+   them balance.mjs (35 assertions on the exact exploit class we keep finding)
+   and race-you.mjs. The rule above says an audit may not exist without
+   running; naming it something else is not a decision, it is an accident.
+   So the net is now EVERY runnable file in tests/, and the only way out is
+   HELPERS, which is a list of modules that assert nothing and are imported by
+   the checks themselves. A new guard is covered whatever it is called. */
+const HELPERS = new Set([
+  'release-gate.mjs',  // this file
+  'godmode.js',        // the harness: boot, seed, serveTree
+  'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
+]);
+const onDisk = (await readdir(here))
+  .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
+  .sort();
 /* TWO TIERS, BECAUSE THE ALTERNATIVE IS THEATRE EITHER WAY.
    The hand-written list above was the only thing the gate ran, and 43 other
    audits sat in tests/ never executed: guards against a dust exploit, a Glutton
@@ -194,12 +211,37 @@ const DECLARED = {
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
   'wardrobe-audit.mjs': ['full', 'equipping does not flash the page; the background does not follow the character.'],
   'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
+
+  /* THE FIFTEEN THE OLD NET COULD NOT SEE. Every one of these is a real guard
+     that has never been run by the gate, only because it is not named
+     "-audit". Each was executed before being given a tier here, so none of
+     these is a guess: 7 green, 3 red only under headless 'new' (see
+     godmode.js), 1 genuinely red, 2 that need an argument, 2 tools. */
+  'balance.mjs':          ['full', '35 assertions on the exact exploit class we keep re-finding (free lives, stamina, gear-granted action economy). Ran green; belongs in the release run.'],
+  'talent-badge.mjs':     ['full', 'the talent badge updates in place after a spend. Ran green.'],
+  'gift-open.mjs':        ['full', 'opening a gift, 9 assertions. Ran green.'],
+  'lb-profile.mjs':       ['full', 'leaderboard profile cards. Ran green.'],
+  'milestones.mjs':       ['full', 'milestone awards. Ran green.'],
+  'remote-routines.mjs':  ['full', 'the remote routine calls. Ran green.'],
+  'spire-poster.mjs':     ['full', 'the spire poster art. Ran green.'],
+  'mockup-parity.mjs':    ['full', 'every approved mockup is really in the app. Was RED on main and unseen: it is the reason this net was widened.'],
+  'crew-inbox.mjs':       ['full', '15 assertions on the deliveries inbox. Green under HEADLESS_MODE=shell; its one failure under headless new is the sheet sitting un-animated, not a bug.'],
+  'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
+  'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
+  'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
+  'spire-gate.mjs':       ['full', 'the spire day-gate, which is a rewarded action and has been exploited twice. RED under BOTH headless modes, so it is not the harness. Under triage; it stays declared so it cannot be forgotten.'],
+  'balance-audit.js':     ['skip', 'takes a URL argument and is run by hand against live; it has no self-served mode to give the gate.'],
+  'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
+  'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
+  'reap-orphans.mjs':     ['skip', 'a maintenance tool that deletes dead files, not a check.'],
 };
 
 /* COVERAGE, BEFORE A SINGLE BROWSER STARTS. An undeclared audit is a one-second
    failure here or a four-minute one at the end, and the four-minute version is the
    one people stop running. */
-const undeclared = onDisk.filter(f => !BROWSER.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
+/* PURE counts as a tier too. It always did; the old net just never saw a PURE
+   file, because neither is named "-audit". */
+const undeclared = onDisk.filter(f => !BROWSER.includes(f) && !PURE.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
 if (undeclared.length) {
   console.log(`FAIL  coverage: ${undeclared.length} audit file(s) belong to no tier:`);
   for (const f of undeclared) console.log(`        ${f}`);
