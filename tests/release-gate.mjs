@@ -204,6 +204,7 @@ const DECLARED = {
   'placeholder-audit.mjs': ['full', 'nothing prints a literal template placeholder.'],
   'podium-audit.mjs': ['full', 'the Crew top three shows and still opens the full list.'],
   'race-audit.mjs': ['full', 'the step race shows one set of numbers everywhere.'],
+  'race-finale-audit.mjs': ['full', 'the finale poster: live top 5, the derived clock, once only, and reachable from News.'],
   'respec-audit.mjs': ['full', 'refund-and-respend needs two taps and really returns the points.'],
   'reward-art-audit.mjs': ['full', 'the victory gear card, read as pixels.'],
   'scout-audit.mjs': ['full', 'the world follows where you look and stays the same size.'],
