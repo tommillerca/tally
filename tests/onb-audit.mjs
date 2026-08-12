@@ -69,6 +69,33 @@ const shot = async (p, n) => { if (sh) await p.screenshot({ path: path.join(sh, 
 /* ---------- run 1: the full happy path ---------- */
 let p = await freshPage();
 ok('STEP-1 fresh install lands on onboarding', await p.evaluate(() => !!document.querySelector('.onb')));
+/* VISIBLE, NOT MERELY PRESENT. This suite passed 15/15 for days while a brand
+   new player's first screen was painted at opacity 0: #screen carries
+   `.screen:not(.screen-in) { opacity: 0 }` and renderOnboarding writes straight
+   into it without routing, so nothing ever added screen-in. Every assertion
+   here was about the onboarding's CONTENT, and content was never the problem.
+   The effective opacity of the whole ancestor chain is the thing a human sees,
+   so multiply it: an ancestor at 0 hides children that each report 1, which is
+   exactly how this hid from every check we had.
+   PROVE-RED: remove `el.classList.add('screen-in')` from renderOnboarding and
+   this fails with effectiveOpacity 0 while every other row stays green. */
+const vis = await p.evaluate(() => {
+  const el = document.querySelector('.onb');
+  if (!el) return { found: false };
+  let o = 1, n = el, chain = [];
+  while (n && n.nodeType === 1) {
+    const c = getComputedStyle(n);
+    o *= parseFloat(c.opacity);
+    if (c.visibility === 'hidden' || c.display === 'none') o = 0;
+    chain.push(`${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}=${c.opacity}`);
+    n = n.parentElement;
+  }
+  const r = el.getBoundingClientRect();
+  return { found: true, effectiveOpacity: +o.toFixed(3), w: Math.round(r.width), h: Math.round(r.height), chain: chain.join(' ') };
+});
+ok('STEP-1 the onboarding is actually VISIBLE, not just present in the DOM',
+  vis.found && vis.effectiveOpacity > 0.9 && vis.w > 100 && vis.h > 100,
+  `effectiveOpacity=${vis.effectiveOpacity} ${vis.w}x${vis.h}  chain: ${vis.chain}`);
 ok('STEP-1 the character poster renders its layers', await p.evaluate(() =>
   document.querySelectorAll('.onb-poster img.ly').length >= 5 &&
   [...document.querySelectorAll('.onb-poster img.ly')].every(i => i.naturalWidth > 0)));
