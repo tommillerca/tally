@@ -107,9 +107,18 @@ check('exportAll payload has a version integer', typeof payload?.version === 'nu
 for (const s of STORES) {
   const seededRows = seeded.rows[s.name];
   const exportedRows = payload[s.name] || [];
-  const missingIds = seededRows.filter(sr => !exportedRows.find(er => er[s.key] === sr[s.key])).map(r => r[s.key]);
-  check(`EXPORT  ${s.name}: every seeded row was exported (${seededRows.length} expected)`,
-    missingIds.length === 0, missingIds.length ? `missing keys: ${missingIds.join(',')}` : `${exportedRows.length} rows in export`);
+  /* Match by keyPath, not by count: the store total on a demo profile can
+     be in the hundreds, and printing "168 rows in export" alongside "2
+     expected" reads like a count check. It is a keyed lookup. Report
+     matched/expected explicitly so a green line names what was actually
+     verified: N of N seeded rows found by key, and the total is context. */
+  const missing = seededRows.filter(sr => !exportedRows.find(er => er[s.key] === sr[s.key])).map(r => r[s.key]);
+  const matched = seededRows.length - missing.length;
+  check(`EXPORT  ${s.name}: every seeded row was matched by key in the export`,
+    missing.length === 0,
+    missing.length
+      ? `only ${matched}/${seededRows.length} matched by key; missing: ${missing.join(',')}`
+      : `${matched}/${seededRows.length} seeded rows matched by key (store total in export: ${exportedRows.length})`);
 }
 
 /* -------- MUTATE. Clear each store completely, then put a stray row into
