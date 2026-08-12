@@ -7230,6 +7230,17 @@ async function openWhatsNew() {
         if (stillOpen) return;
         clearInterval(back);
         if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
+        /* AND A SHEET COUNTS AS "SOMEWHERE" TOO. This watched for a VEIL closing
+           and for the hash moving, which misses the case where an announcement's
+           CTA opens a SHEET and stays on the same hash: the Bone Garden row does
+           exactly that (its CTA closes the veil and calls openGardenSheet). The
+           poll then saw no veil and an unchanged hash, decided the player was
+           back where they started, and re-opened What's New ON TOP of the garden
+           sheet. Measured: closing What's New afterwards left the player looking
+           at a Bone Garden sheet they never opened, on the Crew tab.
+           If they are on a sheet, they went somewhere on purpose, same as a hash
+           change, so leave them there. */
+        if (sheetStack.length) return;
         openWhatsNew().then(() => $('[data-wntab="news"]')?.click());
       }, 300);
       setTimeout(() => clearInterval(back), 180000);
