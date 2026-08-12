@@ -69,7 +69,14 @@ const fight = await page.evaluate(async () => {
     mirrored: !!st.querySelector('.mirror-wrap'),
     flipped: im ? /matrix\(-|scaleX\(-/.test(getComputedStyle(im).transform) : false,
     w: Math.round(b.width), h: Math.round(b.height),
-    stack: st.querySelectorAll('.bh-layer, .tz-layer').length,
+    /* WHAT A COSMETIC FIGURE ACTUALLY LOOKS LIKE. This counted `.bh-layer,
+       .tz-layer`, two class names the app has never emitted anywhere, so the
+       assertion below was a permanent pass: the Live Wire could be rebuilt out
+       of paperdoll layers tomorrow and it would still read 0. avatarLayersHtml
+       wraps every stack it renders in `.bh-anim` (js/app.js, the return), and
+       every non-drawn foe in this stage sits inside `.mirror-wrap`. Those are
+       the two things that exist, so those are what this counts. */
+    stack: st.querySelectorAll('.bh-anim, .mirror-wrap').length,
   };
 });
 ok('the fight draws the illustration', fight.plate && fight.drawn, JSON.stringify(fight));
