@@ -22,9 +22,11 @@
  * argv/env URL if given (same convention as year-readout / feel / t2 audits).
  */
 import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const argv = process.argv[2] || process.env.URL;
-const srvHandle = argv ? null : await serveTree(new URL('..', import.meta.url).pathname);
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const srv = { kill: () => srvHandle && srvHandle.close() };
 const base = argv || srvHandle.url;
 
