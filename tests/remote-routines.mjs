@@ -135,7 +135,11 @@ const routine = await page.evaluate(async () => {
 });
 ok('ROUTINE you can write your own tasks', routine.n === 4 && routine.names[0] === 'Stretch', JSON.stringify(routine.names));
 ok('ROUTINE a blank one is refused', routine.emptyRejected, String(routine.emptyRejected));
-ok('ROUTINE the first few pay XP', routine.xps.slice(0, routine.cap).every(x => x > 0), JSON.stringify(routine.xps));
+// every() is true on an empty slice, so a cap of 0 (or fewer marks than the cap)
+// would grade green having examined nothing. Assert the sample size first.
+ok('ROUTINE the first few pay XP',
+  routine.cap > 0 && routine.xps.length >= routine.cap && routine.xps.slice(0, routine.cap).every(x => x > 0),
+  JSON.stringify({ cap: routine.cap, xps: routine.xps }));
 ok('ROUTINE beyond the daily cap they still tick but stop paying',
   routine.xps.length > routine.cap && routine.xps[routine.cap] === 0, JSON.stringify(routine.xps));
 ok('ROUTINE ticking the same one twice pays nothing', routine.repeatXp === 0, String(routine.repeatXp));
