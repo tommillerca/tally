@@ -23,34 +23,28 @@
  * `${` in the selector string), same as selector-sweep does for js/, because
  * the concrete class is built at runtime and cannot be judged statically.
  *
- * KNOWN FALSE-NEGATIVE SHAPES. This lint proves a token is EMITTED SOMEWHERE
- * IN THE SOURCE. It does not prove the emitting code is REACHED at runtime.
- * Two ways a real dead token still reads as alive here, both flagged by Gwart
- * at review time and worth naming honestly:
+ * CSS IS CORROBORATION, NOT EVIDENCE. app.css is excluded from the corpus
+ * (only js/, data/, index.html and js/mjs/css files under vendor/ feed the
+ * alive-check) and passed separately as cssText. When a dead token still has
+ * rules in app.css, those rules are almost always the rename residue itself,
+ * so the finding line prints `css-rules:N (rename residue?)` beside the
+ * token, the same shape selector-sweep uses. This is the .pit-sect lesson,
+ * one level up: a class the app never mounts still keeps its stylesheet
+ * rules until someone prunes them, and reading those rules as "alive"
+ * silences the exact bug this lint exists to catch. Vendor CSS is kept in
+ * the corpus because vendored bundles ship their emissions in their own
+ * stylesheets and the rename-residue hazard does not apply to them.
  *
- *   1. CSS-only tokens. `.plot-card` has ~11 rules in app.css but no
- *      emission in js/ or index.html. Under this lint's corpus (which
- *      includes app.css) it reads as alive; under selector-sweep's own
- *      doctrine, established after the .pit-sect bug, "CSS is not evidence
- *      of life, because dead CSS is precisely what a rename leaves behind."
- *      selector-sweep treats app.css as corroboration only (a cssRules
- *      count on findings, never as alive-evidence). This lint currently
- *      does not; a proper fix would exclude app.css from the corpus and
- *      report the extra reds that surface, and is a straightforward
- *      follow-up rather than a sprint-hour edit.
- *
- *   2. Orphaned emissions. `#gardenRow` is emitted at js/app.js:3265 inside
- *      `function gardenRowHtml(...)`, whose call sites number ZERO on the
- *      current tree (v304 orphaned it). The id lives in source but never
- *      renders in the app, so a test querying it silently gets null. A
- *      source-text corpus cannot tell this from a live emission; the
- *      distinguishing signal is reachability, which is a call-graph pass
- *      and a separate piece of work. Filed as a follow-up here for the
- *      record, deliberately not started under sprint time.
- *
- * Both shapes have the same class of blind spot: the corpus proves the
- * TOKEN exists in source, not that the CODE emitting it runs. When either
- * follow-up lands, the lint's exit-1 finding count will go up, not down.
+ * KNOWN FALSE-NEGATIVE, DELIBERATELY UN-FIXED HERE. This lint proves a
+ * token is EMITTED SOMEWHERE IN THE SOURCE. It does not prove the emitting
+ * code is REACHED at runtime. `#gardenRow` is emitted at js/app.js:3265
+ * inside `function gardenRowHtml(...)`, whose call sites number ZERO on
+ * the current tree (v304 orphaned it). The id lives in source but never
+ * renders in the app, so a test querying it silently gets null and the
+ * lint currently reads it as alive. The distinguishing signal is
+ * reachability, which is a call-graph pass and a separate piece of work,
+ * filed as a follow-up rather than done under sprint time. When it lands,
+ * the exit-1 finding count will go up, not down.
  *
  * WHY THE PRIMITIVES ARE INLINE, NOT IMPORTED. selector-sweep.mjs (Gwart's
  * upstream, ext/selector-sweep) runs its full sweep at module top level and
@@ -63,15 +57,17 @@
  * independent.
  *
  * PROVE-RED. Ships in the commit body. Against 0240e7f (main tip when written)
- * the lint exits 1 with 18 dead tokens across 30 sites, including
- * #gardenActBtn from the garden pair whose rewrite is in flight. Neuter the
- * corpus (feed an empty string) and the lint reads 480 tokens as dead across
- * 1256 sites, which proves the corpus is what makes it discerning rather than
- * a rubber stamp; restore the corpus and it goes back to naming only the real
- * ones. Two tokens Gwart named at review, #gardenRow and .plot-card, do NOT
- * appear in the 18 because both fall on the false-negative shapes above (see
- * KNOWN FALSE-NEGATIVE SHAPES). Both are dead in the app; the lint currently
- * cannot see it. Filed honestly here rather than papered over.
+ * the lint exits 1 with 21 dead tokens across 34 sites, including
+ * #gardenActBtn from the garden pair whose rewrite is in flight. .plot-card,
+ * .plot-flag and .shop-fold all surface with the css-rules:N (rename
+ * residue?) note attached, which is exactly the class of finding the app.css-
+ * as-corroboration rule is written to make visible. Neuter the corpus (feed
+ * an empty string) and the lint reads hundreds of tokens as dead, which
+ * proves the corpus is what makes it discerning rather than a rubber stamp;
+ * restore the corpus and it goes back to naming only the real ones.
+ * #gardenRow still does NOT appear here because it falls on the reachability
+ * blind spot above (emitted inside an unreachable function), which is not
+ * fixable without a call-graph pass and is filed honestly.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -127,10 +123,17 @@ const countWord = (hay, tok) => {
 };
 const camel = tok => tok.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
-/* --- build the APP CORPUS: js/, data/, index.html, app.css, and vendored
-   libraries under vendor/ (maplibre-gl.js emits .maplibregl-marker at runtime,
-   and a test checking that class would false-positive without the vendor
-   files in the corpus). Comments stripped. */
+/* --- build the APP CORPUS: js/, data/, index.html, and vendored libraries
+   under vendor/ (maplibre-gl.js emits .maplibregl-marker at runtime, and a
+   test checking that class would false-positive without vendor CSS/JS in the
+   corpus). Vendor CSS stays in the corpus because vendored libraries carry
+   their emissions in their own CSS shipped as-is; the "dead CSS after a
+   rename" hazard applies to app.css, not to third-party bundles.
+   app.css is DELIBERATELY EXCLUDED here and passed separately as cssText:
+   selector-sweep's doctrine, established after the .pit-sect miss, is
+   "CSS is not evidence of life, because dead CSS is precisely what a rename
+   leaves behind." A finding whose token also has a rule in app.css is
+   corroborated (rename residue), never rescued. Comments stripped. */
 const app = [];
 for (const dir of ['js', 'data']) {
   const p = path.join(ROOT, dir);
@@ -148,9 +151,9 @@ if (fs.existsSync(vendor)) {
   }
 }
 if (fs.existsSync(path.join(ROOT, 'index.html'))) app.push(['index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')]);
-if (fs.existsSync(path.join(ROOT, 'app.css'))) app.push(['app.css', fs.readFileSync(path.join(ROOT, 'app.css'), 'utf8')]);
 if (app.length < 5) { console.log(`FAIL  test-selector-lint: SETUP app corpus is too small (${app.length} files). Aborting.`); process.exit(2); }
 const corpus = app.map(([, src]) => stripComments(src)).join('\n');
+const cssText = fs.existsSync(path.join(ROOT, 'app.css')) ? fs.readFileSync(path.join(ROOT, 'app.css'), 'utf8') : '';
 
 /* --- extract literal query sites from tests/*.mjs. */
 const testFiles = fs.readdirSync(path.join(ROOT, 'tests')).filter(f => f.endsWith('.mjs')).sort();
@@ -199,7 +202,14 @@ for (const e of byTok.values()) {
     if (new RegExp(`(?<![\\w-])${esc(e.tok.slice(0, i + 1))}\\$\\{`).test(corpus)) dyn = true;
     if (new RegExp(`\\}${esc(e.tok.slice(i))}(?![\\w-])`).test(corpus)) dyn = true;
   }
-  if (total === 0 && !dyn) dead.push(e);
+  if (total === 0 && !dyn) {
+    /* CORROBORATION, NOT LIFE. app.css presence never rescues a finding, but
+       when a dead token still has rules in app.css those rules are almost
+       always the rename residue itself, so name them on the finding line
+       (same shape as selector-sweep's dead.cssRules field). */
+    e.cssRules = cssText ? countWord(cssText, e.tok) : 0;
+    dead.push(e);
+  }
 }
 dead.sort((a, b) => b.sites.length - a.sites.length || a.tok.localeCompare(b.tok));
 
@@ -208,7 +218,8 @@ if (dead.length) {
   console.log(`FAIL  test-selector-lint: ${dead.length} token${dead.length === 1 ? '' : 's'} queried by tests/*.mjs but emitted nowhere in the app (${bySites} site${bySites === 1 ? '' : 's'})`);
   for (const d of dead) {
     const marker = d.kind === 'class' ? '.' : d.kind === 'id' ? '#' : '[';
-    console.log(`      ${marker}${d.tok}`);
+    const cssNote = d.cssRules ? `  css-rules:${d.cssRules} (rename residue?)` : '';
+    console.log(`      ${marker}${d.tok}${cssNote}`);
     for (const s of d.sites) console.log(`        ${s.file}:${s.line} '${s.sel}'`);
   }
   process.exit(1);
