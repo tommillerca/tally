@@ -4281,6 +4281,11 @@ body::before {
   border: 1px solid var(--line-strong); color: var(--gold); font-size: 11px; font-weight: 700;
   letter-spacing: 0.08em; border-radius: 99px; padding: 6px 10px; }
 .drop-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent); margin: 0 0 8px; }
+/* The Discord mark rides the eyebrow's own colour, sized to its cap height. A
+   row, not an inline glyph: the eyebrow carries 0.22em of tracking, so an
+   inline mark pushed the line over 390px and wrapped onto its own row. */
+.dc-eyebrow { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.dc-eyebrow .dc-mark { flex: 0 0 auto; }
 .drop-title { font-family: var(--display); font-size: 44px; line-height: 0.95; color: var(--text);
   margin: 0; text-transform: uppercase; font-weight: 400; }
 .drop-title em { font-style: normal; color: var(--accent); }
