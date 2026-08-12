@@ -14,14 +14,19 @@ const coins = () => page.evaluate(async () => (await import('./js/loot.js')).coi
 await page.evaluate(async () => { await (await import('./js/loot.js')).coinsAdd(20000); });
 
 // ---- THE CAULDRON: the actual accident ----
-const openKitchen = async () => {
+// v304: the Kitchen opens on two doors and the cauldrons sit behind COOK, so
+// reaching #buyPot and #forageBtn takes a real tap on that door first.
+const openCook = async () => {
   for (let i = 0; i < 6; i++) { if (!await page.evaluate(() => !!document.querySelector('#sheets > div'))) break; await page.evaluate(() => history.back()); await sleep(400); }
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(1600);
   await page.evaluate(() => document.querySelector('.dw')?.remove());
   const b = await page.$('#kitchenActBtn'); await b.click(); await sleep(1700);
+  const door = await page.$('#doorCook');
+  if (!door) throw new Error('the Kitchen has no COOK door');
+  await door.click(); await sleep(1200);
 };
-await openKitchen();
+await openCook();
 const before = await coins();
 const label0 = await page.evaluate(() => document.getElementById('buyPot')?.textContent.replace(/\s+/g, ' ').trim());
 check('the extra cauldron button is there', !!label0, label0);
@@ -43,7 +48,7 @@ console.log('after the confirm:', afterTwo);
 check('the second tap buys it', afterTwo === before - 1000, `${before} -> ${afterTwo}`);
 
 // ---- it must FORGET, so a stray tap minutes later cannot buy ----
-await openKitchen();
+await openCook();
 const c0 = await coins();
 const btn2 = await page.$('#buyPot');
 if (btn2) {
@@ -63,7 +68,7 @@ if (btn2) {
 }
 
 // ---- FORAGE ----
-await openKitchen();
+await openCook();
 const f0 = await coins();
 await page.evaluate(() => document.getElementById('forageBtn').click());
 await sleep(600);

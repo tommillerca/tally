@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { boot, sleep, seed, finishFight } = await import(path.join(ROOT, 'tests/godmode.js'));
+const { boot, sleep, seed, finishFight, serveTree } = await import(path.join(ROOT, 'tests/godmode.js'));
 const sh = process.env.SHOTS ? path.resolve(process.env.SHOTS) : null;
 
 const results = [];

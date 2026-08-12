@@ -1,8 +1,13 @@
 /* Drive the garden through the REAL controls: compost a spare ingredient, plant
  * the seed, water it, fast-forward the clock in the database, harvest, and assert
  * the ingredient count actually moved. Calling garden.js directly would prove the
- * model and nothing about whether the Kitchen ever calls it. */
-import { boot, sleep, click } from './godmode.js';
+ * model and nothing about whether the Kitchen ever calls it.
+ *
+ * v304 flow (commit 7565bbd): the Kitchen opens on TWO DOORS, COOK and GROW, with
+ * the shared ingredient grid on the landing. The cauldrons are one tap behind
+ * COOK; the beds are behind GROW and render as .t3-bed. Every entrance here is a
+ * real tap on a door, never a query for a class standing in for one. */
+import { boot, sleep } from './godmode.js';
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -29,13 +34,13 @@ const openKitchen = async () => {
   await kb.click();
   await sleep(1700);
 };
-// the beds moved out of the Kitchen into their own screen: the Kitchen keeps one
-// row, so every bed interaction goes through it now
+// the beds live behind the GROW door now, so every bed interaction goes through
+// a real tap on that door
 const openGarden = async () => {
   await openKitchen();
-  const row = await page.$('#gardenRow');
-  if (!row) throw new Error('the Kitchen has no garden row');
-  await row.click();
+  const door = await page.$('#doorGrow');
+  if (!door) throw new Error('the Kitchen has no GROW door');
+  await door.click();
   await sleep(1600);
 };
 
@@ -46,32 +51,51 @@ await page.evaluate(async () => {
 });
 
 await openKitchen();
-const kitchenFirst = await page.evaluate(() => ({
-  firstSection: document.querySelector('#kitchenBody .sect-h')?.textContent.trim().split('\n')[0].trim(),
-  bedsInKitchen: document.querySelectorAll('#kitchenBody .t3-bed:not(.buy)').length,
-  row: !!document.getElementById('gardenRow'),
+const landing = await page.evaluate(() => ({
+  doorCook: !!document.getElementById('doorCook'),
+  doorGrow: !!document.getElementById('doorGrow'),
+  bedsOnLanding: document.querySelectorAll('#kitchenBody .t3-bed').length,
+  potsOnLanding: !!document.querySelector('#kitchenBody .pot-row'),
+  ingredientGrid: document.querySelectorAll('#kitchenBody .ingredient-grid .ing-cell').length,
 }));
-console.log('kitchen:', JSON.stringify(kitchenFirst));
-check('the Kitchen still opens on the Cauldrons', /Cauldrons/i.test(kitchenFirst.firstSection || ''), kitchenFirst.firstSection);
-check('with no bed grid in it', kitchenFirst.bedsInKitchen === 0, `${kitchenFirst.bedsInKitchen} beds`);
-check('and one row into the garden', kitchenFirst.row);
-await page.evaluate(() => document.getElementById('gardenRow').click());
+console.log('kitchen landing:', JSON.stringify(landing));
+check('the Kitchen opens on the two doors', landing.doorCook && landing.doorGrow);
+check('with no bed grid on the landing', landing.bedsOnLanding === 0, `${landing.bedsOnLanding} beds`);
+check('and no cauldrons on the landing (cooking is one tap deeper)', !landing.potsOnLanding);
+check('the shared ingredient grid is on the landing', landing.ingredientGrid >= 7, `${landing.ingredientGrid} cells`);
+
+// COOK: a real tap on the door must land on the cauldrons, untouched
+await page.evaluate(() => document.getElementById('doorCook').click());
+await sleep(1200);
+const cookView = await page.evaluate(() => ({
+  firstSection: document.querySelector('#kitchenBody .sect-h')?.textContent.trim().split('\n')[0].trim(),
+  pots: !!document.querySelector('#kitchenBody .pot-row'),
+  shopIntact: document.querySelectorAll('[data-cook]').length,
+  back: !!document.getElementById('kdBack'),
+}));
+console.log('cook view:', JSON.stringify(cookView));
+check('COOK lands on the Cauldrons', /Cauldrons/i.test(cookView.firstSection || '') && cookView.pots, cookView.firstSection);
+check('the recipes are untouched behind the door', cookView.shopIntact >= 7, `${cookView.shopIntact} cook buttons`);
+check('and there is a way back to the doors', cookView.back);
+await page.evaluate(() => document.getElementById('kdBack').click());
+await sleep(1000);
+check('back returns to the doors', await page.evaluate(() => !!document.getElementById('doorGrow')));
+
+// GROW: a real tap on the door must land on the beds
+await page.evaluate(() => document.getElementById('doorGrow').click());
 await sleep(1600);
 const first = await page.evaluate(() => ({
-  hasGarden: /BONE GARDEN|Bone Garden/.test(document.body.textContent),
-  beds: document.querySelectorAll('.t3-bed:not(.buy)').length,
+  title: [...document.querySelectorAll('#sheets .sheet h2')].slice(-1)[0]?.textContent.trim(),
+  beds: document.querySelectorAll('#gardenBody .t3-bed:not(.buy)').length,
   buyBed: !!document.getElementById('buyBed'),
-  empty: document.querySelectorAll('.t3-bed.empty').length,
+  empty: document.querySelectorAll('#gardenBody .t3-bed.empty').length,
   compostBtn: document.getElementById('compostBtn')?.textContent.trim(),
-  cauldronsStillThere: /Cauldrons/.test(document.body.textContent),
-  shopIntact: document.querySelectorAll('[data-cook]').length,
 }));
-console.log('kitchen:', JSON.stringify(first));
-check('the garden is in the Kitchen', first.hasGarden);
+console.log('garden:', JSON.stringify(first));
+check('GROW opens the Bone Garden', first.title === 'The Bone Garden', String(first.title));
 check('three free beds, all empty', first.beds === 3 && first.empty === 3, `${first.beds} beds / ${first.empty} empty`);
 check('a fourth bed is on offer for coins', first.buyBed);
 check('the compost button shows the daily allowance', /3 left/.test(first.compostBtn || ''), first.compostBtn);
-check('the cauldrons and recipes are untouched', first.cauldronsStillThere && first.shopIntact >= 7, `${first.shopIntact} cook buttons`);
 
 // compost: the heap sheet, a real tap
 await page.evaluate(() => document.getElementById('compostBtn').click());
@@ -123,7 +147,6 @@ await sleep(1600);
 
 const planted = await page.evaluate(() => ({
   growing: document.querySelectorAll('.t3-bed.thirsty, .t3-bed.growing').length,
-  thirstyFlag: !!document.querySelector('.plot-flag'),
   waterBtn: !!document.querySelector('[data-water]'),
   empty: document.querySelectorAll('.t3-bed.empty').length,
 }));
@@ -169,7 +192,7 @@ const reveal = await page.evaluate(() => ({
   iconPainted: !!document.querySelector('.hv-ico svg'),
 }));
 console.log('reveal:', JSON.stringify(reveal));
-check('the harvest reveal shows what you got', /HARVEST|BUMPER CROP/.test(reveal.kick || '') && /Graveroot ×[234]/.test(reveal.name || ''), `${reveal.kick} / ${reveal.name}`);
+check('the harvest reveal shows what you got', /HARVEST|BUMPER CROP/.test(reveal.kick || '') && /Graveroot ×[34]/.test(reveal.name || ''), `${reveal.kick} / ${reveal.name}`);
 check('the reveal actually draws its crop', reveal.iconPainted);
 
 const done = await page.evaluate(async () => {
