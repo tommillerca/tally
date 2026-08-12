@@ -19,19 +19,29 @@ const { browser, page } = await boot(process.argv[2] || process.env.URL);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
-// own a background so there IS one to misbehave
-await page.evaluate(async () => {
+/* own a background so there IS one to misbehave.
+   grantCosmetic, NOT grantItem: there is no grantItem, and the old `?.` swallowed
+   that whole chain (grant AND the trailing .catch) to undefined. Nothing was
+   seeded, no error was raised, and every check below graded whatever the demo
+   save happened to hold. An unseeded fixture is an empty sample, so it fails the
+   run here rather than quietly grading nothing. */
+const seeded = await page.evaluate(async () => {
   const loot = await import('./js/loot.js');
   const { BH_ITEMS } = await import('./data/boneheadz.js');
-  const bg = BH_ITEMS.filter(i => i.slot === 'BG').slice(0, 2);
-  for (const b of bg) await loot.grantItem?.(b.id, 'test').catch(() => {});
+  const bg = BH_ITEMS.filter(i => i.slot === 'BG').slice(0, 2).map(b => b.id);
+  const hats = BH_ITEMS.filter(i => i.slot === 'H').slice(0, 5).map(h => h.id);
+  for (const id of [...bg, ...hats]) await loot.grantCosmetic(id, 'test');
   const db = await import('./js/db.js');
-  if (bg[0]) { const eq = await db.kvGet('equipped', {}); eq.BG = bg[0].id; await db.kvSet('equipped', eq); }
-  // several hats, so there is genuinely something else to try on
-  const hats = BH_ITEMS.filter(i => i.slot === 'H').slice(0, 5);
-  for (const h of hats) await loot.grantItem?.(h.id, 'test').catch(() => {});
-  return { bg: bg.map(b => b.id), hats: hats.map(h => h.id) };
-});
+  if (bg[0]) { const eq = await db.kvGet('equipped', {}); eq.BG = bg[0]; await db.kvSet('equipped', eq); }
+  const owned = await loot.ownedCosmeticIds();
+  return { bg, hats, missing: [...bg, ...hats].filter(id => !owned.has(id)) };
+}).catch(e => ({ error: String(e) }));
+if (seeded.error || seeded.missing.length || !seeded.bg.length || !seeded.hats.length) {
+  console.log('SEED FAILED, nothing below would be graded against the seeded state:', JSON.stringify(seeded));
+  await browser.close();
+  process.exit(1);
+}
+console.log('seeded:', JSON.stringify({ bg: seeded.bg, hats: seeded.hats }));
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(2000);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click());
@@ -92,7 +102,9 @@ const after = await page.evaluate(() => ({
   ringsInThatGrid: document.querySelectorAll('.ward-grid[data-wslot] .equipped').length,
   stageLayers: document.querySelectorAll('.bh-stage.lg .bh-anim img').length,
   stageComposing: !!document.querySelector('.bh-stage.lg .bh-anim.bh-composing'),
-  backdropStillOutside: !document.querySelector('.bh-backdrop')?.closest('.bh-anim'),
+  // a MISSING backdrop used to satisfy this (undefined?.closest() -> undefined -> !undefined
+  // is true), so "the backdrop stayed outside" passed with the backdrop deleted.
+  backdropStillOutside: !!document.querySelector('.bh-backdrop') && !document.querySelector('.bh-backdrop').closest('.bh-anim'),
 }));
 console.log('after equipping:', JSON.stringify(after));
 check('the page was NOT rebuilt: unrelated grids survive', after.markersSurvived === after.gridCount && after.gridCount > 0, JSON.stringify(after));
