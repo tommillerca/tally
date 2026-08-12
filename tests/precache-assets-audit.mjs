@@ -43,9 +43,12 @@
  * would hit next.
  */
 import { boot, sleep, serveTree } from './godmode.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const argv = process.argv[2] || process.env.URL;
-const srvHandle = argv ? null : await serveTree(new URL('..', import.meta.url).pathname);
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const srv = { kill: () => srvHandle && srvHandle.close() };
 const base = argv || srvHandle.url;
 
@@ -134,9 +137,6 @@ async function measureWithBlocked(pattern, { then = null } = {}) {
 /* Read sw.js's PRECACHE list so I can tell whether a FATAL finding is
    ALREADY covered (report as 'ok', asset dies but the precache saves it in
    the wild) or whether it is a live outage risk (report as FAIL and stop). */
-const fs = await import('node:fs');
-const path = await import('node:path');
-const { fileURLToPath } = await import('node:url');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const swText = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const precacheArr = swText.slice(swText.indexOf('PRECACHE'), swText.indexOf('];', swText.indexOf('PRECACHE')));
