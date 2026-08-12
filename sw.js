@@ -14,6 +14,24 @@ const PRECACHE = [
   './js/ocr.js',
   './js/game.js',
   './js/fx.js',
+  /* THESE THREE WERE MISSING AND IT COST A NEW PLAYER THE WHOLE APP.
+     app.js reaches 41 modules; this list carried 38. haptics.js, bosses.js and
+     wraith-fx.js are STATIC imports of app.js, so if any one of them fails to
+     arrive the entire module graph dies and index.html's shell paints alone:
+     the gear button and the tab bar with nothing behind them. That is the
+     screenshot from a TestFlight user on one bar of LTE, 2026-08-12, who could
+     not get past it.
+     It is worse than a normal missing asset because of the fallback at the
+     bottom of this file: a js request that misses the network AND the cache is
+     answered with index.html, and a module served text/html is a hard load
+     error, so a flaky moment can persist instead of recovering.
+     Reproduced against LIVE with one module blocked on a fresh profile: 155
+     characters of screen content became 0 with the gear still painted.
+     tests/precache-audit.mjs now fails if this list ever falls behind the
+     module graph again, so the next module cannot be forgotten quietly. */
+  './js/haptics.js',
+  './js/bosses.js',
+  './js/wraith-fx.js',
   './js/crate-fx.js',
   './js/loot.js',
   './js/quests.js',
