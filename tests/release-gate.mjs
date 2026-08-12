@@ -80,6 +80,7 @@ const BROWSER = [
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'test-import-lint.mjs',    // static: no tests/*.mjs calls a godmode export it never imported (the ReferenceError-at-runtime class)
   'test-selector-lint.mjs',  // static: no tests/*.mjs queries a token the app never emits (the querySelector-returns-null class)
+  'arrival-audit.mjs',       // nothing pops onto the Boneyard after the reveal (FULL-only is how this shipped twice)
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap

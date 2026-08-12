@@ -11247,8 +11247,32 @@ async function renderBoneyard(el) {
       if (!stage || stage.classList.contains('markers-in')) return;
       requestAnimationFrame(() => stage.classList.add('markers-in'));
     };
-    const tryReveal = () => { if (placedOnce && worldPassDone) revealMarkers(); };
-    setTimeout(revealMarkers, 4000);   // the cap: never blank for longer than this
+    /* THE CAP WAS REVEALING THE MAP MID-PLACEMENT. Measured 2026-08-12 on a
+       cold, loaded machine: the reveal landed at ~15.7s and a spawn, a mini and
+       a roaming den became visible ~1.6 to 2.0s LATER, with no user action.
+       Both gates were correct; the 4s cap was not. It counted from setup, so on
+       any boot where tiles take longer than four seconds the cap fires first and
+       reveals a map that placement has not finished drawing, which is exactly
+       the trickle Tom rejected on 2026-08-08.
+       Two changes, both about WHEN, neither touching the scheduler:
+       1. The cap is armed from the map's own `load` (tiles are the thing being
+          waited on), so it stays a real ceiling rather than a race with them.
+       2. Reveal settles: once both gates pass, wait one quiet beat, and if a
+          later placement pass lands inside it, wait again. A pass that arrives
+          during the settle joins the SAME arrival instead of popping in after
+          it. The settle can only ever delay the reveal to the cap, never past
+          it, so "never blank" still holds (anti-regression rule 8). */
+    const REVEAL_SETTLE_MS = 900;
+    const REVEAL_CAP_MS = 6000;
+    let settleT = null, capped = false;
+    const armCap = () => setTimeout(() => { capped = true; clearTimeout(settleT); revealMarkers(); }, REVEAL_CAP_MS);
+    if (map.loaded()) armCap(); else map.once('load', armCap);
+    setTimeout(armCap, 12000);   // a map that never loads still must not stay blank
+    const tryReveal = () => {
+      if (!placedOnce || !worldPassDone || capped) return;
+      clearTimeout(settleT);
+      settleT = setTimeout(revealMarkers, REVEAL_SETTLE_MS);
+    };
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
