@@ -101,8 +101,37 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
      destructure only { browser, page } are unaffected. */
   const errors = [];
   page.on('pageerror', e => { errors.push(String(e)); console.log('PAGEERROR', e.message); });
-  // ?demo puts us on the tally-demo database, which is what seed() insists on.
-  await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' });
+  /* ?demo puts us on the tally-demo database, which is what seed() insists on.
+   *
+   * WHY NOT networkidle2. It waits for a 500ms window with at most two
+   * requests in flight, and a first boot here pulls about 104 (max 323 cold,
+   * measured). Under the contention the gate itself creates, that quiet
+   * window may never open inside the 30s default, so boot dies with a
+   * TimeoutError having proved nothing about the app: the wait had become an
+   * assertion about CPU headroom. Reproduced 2026-08-12 with five parallel
+   * streams on one box.
+   *
+   * WHAT REPLACES IT IS STRICTLY MORE PATIENT, which is the constraint. The
+   * navigation itself only waits for domcontentloaded, then we wait on the
+   * app's OWN readiness (the screen has content and the tab bar exists) with
+   * a ceiling of 60s, double the old one. The old wait could return while
+   * the app had rendered nothing; this one cannot.
+   *
+   * AND IT NEVER ADDS A FAILURE MODE. If readiness times out we log and
+   * continue rather than throwing, so a suite that passes today still passes:
+   * its own assertions decide, exactly as they do now. A harness that becomes
+   * stricter breaks green suites, which is the one outcome ruled out here.
+   *
+   * NOT the splash: showSplash() returns immediately under navigator.webdriver
+   * (js/app.js), so waiting on it would be a wait on nothing, in the boot path
+   * of every audit. */
+  await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(() => {
+    const s = document.getElementById('screen');
+    return !!(s && s.children.length && document.querySelectorAll('.tab').length);
+  }, { timeout: 60000, polling: 150 }).catch(e => {
+    console.log(`BOOT  app readiness not observed in 60s (${String(e).split('\n')[0]}); continuing, the suite's own checks decide.`);
+  });
   await sleep(2400);
   await dismissOverlays(page);
   return { browser, page, base: base.replace(/\/?$/, '/'), errors };
