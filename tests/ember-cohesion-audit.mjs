@@ -64,25 +64,31 @@ check('the cosmetic appears on more than one surface', lit.length >= 3, `${lit.l
 // The Crew tab shows OTHER players, who aren't wearing my eyes, so 0 layers there
 // is correct. What still needs proving is that a small avatar WOULD light up, and
 // with the reduced radius rather than the full halo.
-const small = await page.evaluate(async () => {
-  const app = await import('./js/app.js').catch(() => null);
-  const mk = cls => {
-    const d = document.createElement('div');
-    d.className = cls;
-    d.innerHTML = '<div class="bh-anim"><img class="eye-ember" src="assets/bh/E/E4.png" alt=""></div>';
-    document.body.appendChild(d);
-    const img = d.querySelector('img');
-    const cs = getComputedStyle(img);
-    return { cls, name: cs.animationName, dur: cs.animationDuration };
-  };
-  return ['lb-av', 'fl-av', 'map-you-av', 'fc-stage'].map(mk);
-});
-console.log('small/other surfaces:', JSON.stringify(small));
+/* SCOPE, be honest about it: these nodes are hand-built, so what follows proves
+   the STYLESHEET gives each small-avatar class the reduced halo. It does NOT prove
+   any screen renders that nesting. `.fc-stage` used to be in this list; it appears
+   in no js/ file and no CSS rule, so it fell through to the generic .eye-ember rule
+   and "uses the full halo" asserted the DEFAULT on a surface the app does not have.
+   Removed. Pointing the probe at a really-rendered .lb-av/.fl-av/.map-you-av is the
+   right fix and is NOT done here: in this tree the demo boot renders zero .bh-anim
+   on every screen (which is also why the surface half above is red), so a real-node
+   probe would examine nothing. */
+const CLASSES = ['lb-av', 'fl-av', 'map-you-av'];
+const small = await page.evaluate(classes => classes.map(cls => {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.innerHTML = '<div class="bh-anim"><img class="eye-ember" src="assets/bh/E/E4.png" alt=""></div>';
+  document.body.appendChild(d);
+  const cs = getComputedStyle(d.querySelector('img'));
+  const out = { cls, name: cs.animationName, dur: cs.animationDuration };
+  d.remove();
+  return out;
+}), CLASSES);
+console.log('small-avatar stylesheet:', JSON.stringify(small));
+check('every small-avatar class was measured', small.length === CLASSES.length, `${small.length}/${CLASSES.length}`);
 for (const s of small) {
-  const expectSm = ['lb-av','fl-av','map-you-av'].includes(s.cls);
-  check(`.${s.cls} lights up`, s.name && s.name !== 'none', s.name);
-  check(`.${s.cls} uses the ${expectSm ? 'small' : 'full'} halo`,
-        s.name === (expectSm ? 'eyeEmberSm' : 'eyeEmber'), s.name);
+  check(`.${s.cls} lights up`, !!s.name && s.name !== 'none', s.name);
+  check(`.${s.cls} uses the small halo`, s.name === 'eyeEmberSm', s.name);
 }
 await browser.close();
 console.log(bad?`\n${bad} FAILED`:'\nCOSMETIC IS COHERENT ACROSS SURFACES');
