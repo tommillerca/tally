@@ -46,6 +46,34 @@
  * nonsense is invisible here, as is one that dies inside page.evaluate. Green
  * means "these two rot classes are absent", not "the suite is healthy".
  *
+ * WHAT ELSE IT DOES NOT CATCH, and this belongs on the record because it will
+ * come up in review:
+ *   NEGATIVE-ASSERTION QUERIES. A test that queries a token to prove the DOM
+ *   does NOT have it is doing the right thing when the token has no emission
+ *   anywhere. garden-doors.mjs:82 is the concrete case:
+ *
+ *       gardenTile: !!document.querySelector('#gardenActBtn'),
+ *       ...
+ *       ok('TILE there is no separate Garden tile', row.gardenTile === false, ...);
+ *
+ *   That query MUST return null on a healthy build (the v304 doors landing
+ *   removed the tile) and the assertion is a negative one. From a source-only
+ *   view it looks identical to accidental rot pointing at a dead token, and
+ *   this audit cannot tell them apart without inspecting the ASSERTION context
+ *   of the query result. It does not try to. Two knock-on effects worth
+ *   knowing:
+ *     - a genuine negative-assertion probe on a token no other line in the
+ *       file mentions will read as STALE here (a false positive), and
+ *     - a genuine dead selector will read as ALIVE here if the file happens to
+ *       name the token in a comment or a label template string, because
+ *       authored() counts any mention on raw source (a false negative that
+ *       reads as absence-of-rot).
+ *   For now: cross-check a STALE row against the test's own commit message
+ *   or the surrounding assertion before calling it rot, and cross-check a
+ *   surprising GREEN by looking whether the token is only in prose. Filing
+ *   as a scope limit rather than trying to synthesise assertion context in
+ *   a static scanner.
+ *
  * Exit 1 = findings. Exit 2 = the gate below failed, meaning THIS file is
  * broken and no verdict under it is worth reading (same split as
  * figure-audit's SETUP and selector-sweep's).
