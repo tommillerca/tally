@@ -13246,7 +13246,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
-  const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
+  /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
+     one door every fight in the app walks through: the Pit ladder, the Champion,
+     the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
+     and this is their only shared floor. Deriving it per-caller would leave
+     whichever entry point a new player happens to reach first uncovered, which is
+     precisely the failure Tom is describing.
+     The ledger is the authority: a 'fight' XP row is only ever written on a WIN,
+     so an empty filter means they have never won one. Losses do not count, so a
+     player who loses their first attempt is still protected on the next. */
+  const everWon = (await db.all('xp')).some(r => r.type === 'fight');
+  const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1), tutorial: !everWon });
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;
