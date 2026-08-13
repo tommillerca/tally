@@ -49,19 +49,40 @@ await page.evaluate(async () => {
 });
 await sleep(800);
 await page.evaluate(async () => { await window.__denFight(1.6, 0); });
-await sleep(1700);
-/* THE POTIONS MOVED BEHIND A DOOR (v373, ext/fight-tray): the tray showed one
-   button per potion type, which pushed a cooking player to ten buttons and left
-   the boss 34% of the screen. They are one ITEMS button now. Open it before
-   looking for a potion, and assert the door itself is there, so "the door never
-   opened" cannot read as "potions are fine". */
+/* WAIT FOR THE PLAYER-TURN TRAY, not a fixed 1700ms sleep. renderActions()
+   at js/app.js:13964 early-returns with a "<foe> is acting..." placeholder
+   whenever `fight.active !== 'p'`, and #itemsOpen only exists inside the
+   player-turn branch (line 14077). If the foe's opening animation runs
+   longer than 1700ms on a given puppet, the audit samples during the
+   placeholder and correctly finds no #itemsOpen. That is a timing race,
+   not a bug in the tray code. Wait for the specific state we are asserting
+   about: the player-turn tray with at least jab/swing/haymaker rendered.
+   Cap at 8s so a genuinely broken renderActions still surfaces. */
+const trayWait = await page.waitForFunction(() => {
+  const f = document.getElementById('factions');
+  if (!f) return false;
+  if (/is acting/i.test(f.textContent || '')) return false;
+  return f.querySelectorAll('.fight-act').length >= 3;
+}, { timeout: 8000, polling: 50 }).then(() => 'ready').catch(() => 'timed-out');
 const door = await page.evaluate(() => {
   const d = document.getElementById('itemsOpen');
-  if (!d) return { none: true };
+  const f = document.getElementById('factions');
+  const trayText = f ? (f.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 120) : null;
+  const actCount = f ? f.querySelectorAll('.fight-act').length : 0;
+  const acting = /is acting/i.test(trayText || '');
+  if (!d) return { none: true, trayText, actCount, acting };
   d.click();
-  return { none: false, label: (d.textContent || '').trim().slice(0, 40) };
+  return { none: false, label: (d.textContent || '').trim().slice(0, 40), trayText, actCount };
 });
-ok('the ITEMS door is on the tray when potions are held', !door.none, JSON.stringify(door));
+/* Failure message distinguishes the two causes explicitly:
+     acting=true         still on foe-turn placeholder at sample time (cause 1)
+     actCount >= 3       player turn tray rendered but no ITEMS (cause 2, real)
+     trayWait=timed-out  neither condition met inside 8s */
+ok('the ITEMS door is on the tray when potions are held',
+  !door.none,
+  door.none
+    ? `tray_wait=${trayWait}  acting=${door.acting}  act_count=${door.actCount}  tray="${door.trayText}"`
+    : JSON.stringify({ label: door.label }));
 await sleep(500);
 const potion = await page.evaluate(async () => {
   const b = document.querySelector('.fight-act.potion:not([disabled])');
