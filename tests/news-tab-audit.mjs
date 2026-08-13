@@ -2,10 +2,15 @@
    announcements. Tom, 2026-08-09: "create a subtab in patch notes called news
    that just has all pop ups in there so people can catch up if they missed it."
    Proven red against v346: no tabs, no news rows. */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const { browser, page } = await boot(process.argv[2] || 'http://localhost:8765/');
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
+const { browser, page } = await boot(base);
 const errs = []; page.on('pageerror', e => errs.push(String(e)));
 
 // the Crew tab carries the What's New card; it gates on being online, so use the
@@ -206,5 +211,6 @@ ok('EVERY announcement opens with its real art', dead.length === 0, dead.join(' 
 
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
 process.exit(fails.length ? 1 : 0);

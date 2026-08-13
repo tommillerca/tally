@@ -6,10 +6,15 @@
    So this file guards the absence of what I built: no roster sheet, no way to
    browse the cast, and a Today row that names TODAY'S hunt and nothing else.
    Proven red against v351: the sheet opened 74 monsters in 10 labelled groups. */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const { browser, page } = await boot(process.argv[2] || 'http://127.0.0.1:8791/', { seed: true });
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
+const { browser, page } = await boot(base, { seed: true });
 
 /* ---- the teaser itself: a wall of monsters, no names, one screen ---- */
 await page.evaluate(() => window.__bossIntro());
@@ -109,4 +114,5 @@ ok('it is a tap, not a paragraph to expand', !row.expandable, row.tag);
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nbestiary stays a teaser');
 await browser.close();
+if (srvHandle) srvHandle.close();
 process.exit(fails.length ? 1 : 0);

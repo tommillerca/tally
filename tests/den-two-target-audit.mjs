@@ -17,9 +17,13 @@
  *
  * Usage: node tests/den-two-target-audit.mjs
  */
-import { boot, seed, sleep } from './godmode.js';
+import { boot, seed, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const base = process.argv[2] || 'http://127.0.0.1:8321/';
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
 let fails = 0;
 const ok = (label, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? '  | ' + detail : ''}`);
@@ -106,5 +110,6 @@ ok('BAR the PET\'s bar has a track with room in it', !petBar.none && petBar.trac
 ok('BAR the PET\'s fill draws inside it', !petBar.none && petBar.fill[1] >= 4 && petBar.fill[0] > 2, JSON.stringify(petBar));
 
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails ? '\nDEN TWO-TARGET AUDIT FAILED' : '\nDEN TWO-TARGET VERIFIED');
 process.exit(fails);

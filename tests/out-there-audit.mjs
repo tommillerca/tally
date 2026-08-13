@@ -11,9 +11,13 @@
  *
  * Run: node tests/out-there-audit.mjs [baseUrl]
  */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const base = process.argv[2] || 'http://localhost:8765/';
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
 const fails = [];
 const ok = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`);
@@ -92,5 +96,6 @@ ok('its strip decodes real pixels', opened.imgs > 0 && opened.decoded === opened
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
 process.exit(fails.length ? 1 : 0);

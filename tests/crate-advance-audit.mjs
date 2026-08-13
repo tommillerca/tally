@@ -12,9 +12,13 @@
  *
  * Fails if any tap in the sweep leaves the card sitting where it was.
  */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const base = process.argv[2] || 'http://127.0.0.1:8321/';
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
 let fails = 0;
 const ok = (label, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? '  | ' + detail : ''}`);
@@ -88,5 +92,6 @@ ok('TAP every realistic thumb tap advances the pack (no dead zone)',
   stuck.length ? `stuck at drift: ${stuck.map(s => `${s.dx}x${s.dy}px`).join(', ')}` : `${results.length}/${results.length} advanced`);
 
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails ? '\nCRATE ADVANCE AUDIT FAILED' : '\nCRATE ADVANCE VERIFIED');
 process.exit(fails);
