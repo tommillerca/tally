@@ -50,6 +50,19 @@ await page.evaluate(async () => {
 await sleep(800);
 await page.evaluate(async () => { await window.__denFight(1.6, 0); });
 await sleep(1700);
+/* THE POTIONS MOVED BEHIND A DOOR (v373, ext/fight-tray): the tray showed one
+   button per potion type, which pushed a cooking player to ten buttons and left
+   the boss 34% of the screen. They are one ITEMS button now. Open it before
+   looking for a potion, and assert the door itself is there, so "the door never
+   opened" cannot read as "potions are fine". */
+const door = await page.evaluate(() => {
+  const d = document.getElementById('itemsOpen');
+  if (!d) return { none: true };
+  d.click();
+  return { none: false, label: (d.textContent || '').trim().slice(0, 40) };
+});
+ok('the ITEMS door is on the tray when potions are held', !door.none, JSON.stringify(door));
+await sleep(500);
 const potion = await page.evaluate(async () => {
   const b = document.querySelector('.fight-act.potion:not([disabled])');
   if (!b) return { none: true };

@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 373, date: '2026-08-13', title: 'The leaderboard stops killing the Crew tab', items: [
+    "<b>Opening the leaderboard used to blank the Crew tab and bounce you back.</b> Every row was drawing a full-size Bonehead, a hundred of them at once, and your phone was running out of memory and killing the page. Heads now load as you scroll to them. Nothing about the board looks different, it just survives being opened.",
+    'A Crew FAVES skull that failed to load stayed blank forever. It retries now, and draws a plain plate if it still cannot.',
+    '<b>The Bone Boiz strip sits at the top of Crew</b>, so the Discord is there whenever you want it, not only in the card that pops up.',
+    'The Boneyard is quick off the mark again. Yesterday it waited for the whole map before showing you anything.',
+    "<b>You can see the boss you are fighting.</b> Potions were one button each, so a player who cooks had ten buttons and a third of a screen. They live behind one ITEMS door now.",
+  ] },
   { n: 372, date: '2026-08-13', title: 'Four things that were quietly annoying', items: [
     '<b>The Backpack opens at the top again.</b> It had been jumping straight down to the Salvage Bench every time you opened it, and again after every crate.',
     '<b>You can see what you are transmogging.</b> Wardrobe tiles drew the raw artwork, most of which is empty space, so the item itself was a speck in the corner. Your crew FAVES chips had the same problem.',
