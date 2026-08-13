@@ -93,6 +93,7 @@ const BROWSER = [
   'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
+  'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer

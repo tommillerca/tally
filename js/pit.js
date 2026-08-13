@@ -1687,7 +1687,13 @@ export function endlessFoe(rank) {
   };
 }
 // How high you may climb: 3 free ranks, then +2 per distinct world-boss den beaten.
-export function endlessCeiling(denWins) { return 5 + 3 * Math.max(0, denWins); }
+/* Base was 5. Tom, 2026-08-13: "make it so players can fight two more bosses
+   before they get capped." The ceiling is the highest Gauntlet rank you may
+   take, so +2 is literally two more fights before the cap bites, at every level
+   of den progress rather than only at the start: someone with four dens beaten
+   moves from 17 to 19 the same as a new player moves from 5 to 7. The per-den
+   step stays 3, because he asked for headroom, not a faster ramp. */
+export function endlessCeiling(denWins) { return 7 + 3 * Math.max(0, denWins); }
 
 export function scaleStats(stats, mult) {
   const out = {};
