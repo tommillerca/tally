@@ -11269,7 +11269,18 @@ async function renderBoneyard(el) {
         if (typeof refreshSecrets === 'function') refreshSecrets();
         if (typeof refreshSpires === 'function') refreshSpires();
       }
-      placedOnce = true;
+      /* THE THIRD WAVE. Measured 2026-08-12: moveend fires with the camera
+         settled but tiles still loading (map.loaded()=false), so placeWalkable
+         returns null for POIs needing a walkability snap, and this pass only
+         places 10 markers. `placedOnce` flipped anyway and the reveal fired.
+         Then `idle` arrived ~800ms later, tiles loaded, three more POIs
+         snapped and were born AFTER `markers-in`, so map.js:holdArrival held
+         them 1200ms and then popped them in on top of the settled map. 1879ms
+         after the map was on screen, with no user action, which is the same
+         complaint v294 and v295 were supposed to have closed.
+         Only count a pass as "placed" when it actually had tiles to snap
+         against. Idle guarantees that; a pre-tile moveend does not. */
+      if (map.loaded()) placedOnce = true;
       tryReveal();
     };
     map.on('moveend', rerunPlacement);
