@@ -4338,7 +4338,30 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       kcal: n.kcal, p: n.p || 0, c: n.c || 0, f: n.f || 0,
       fiber: n.fiber || 0, sugar: n.sugar || 0, sodium: n.sodium || 0,
     };
-    await db.put('log', e);
+    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
+       Measured 2026-08-13: reject this put the way a full quota does and the
+       meal vanishes with NO error, while an unrelated toast ("New talent points
+       ready") stays on screen reading like success. 166 log rows before, 166
+       after. Everything below this line is skipped, so the sheet closes and the
+       player believes the meal is in.
+       Storage really does fill: measured growth is ~2.4MB a year, and a phone
+       with 500MB free hits its origin quota in about four years of daily use.
+       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry on
+       screen so the user knows whats happening and that they have to make room
+       on the storage of their device". So the sheet STAYS OPEN with the portion
+       still selected and the button live, because a player who has just been
+       told to free up space needs somewhere to land when they come back. */
+    try {
+      await db.put('log', e);
+    } catch (err) {
+      btn.disabled = false;
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
+        : 'Could not save that meal. Tap Add to try again.', 5200);
+      trackEvent('log_write_failed', { quota: !!full });
+      return;                       // the sheet stays open, the entry stays put
+    }
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
