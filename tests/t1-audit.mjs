@@ -56,7 +56,7 @@ const ok = (name, pass, detail = '') => {
 };
 
 const browser = await puppeteer.launch({
-  headless: 'new',
+  headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   // MapLibre needs WebGL. Without these the Boneyard draws as a black rectangle,
   // attribution and all, which reads like a network failure rather than no GPU.

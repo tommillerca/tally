@@ -83,7 +83,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   if (stale.length) fail(`audited moves that no longer exist in STRIKE_FX: ${stale.join(', ')}`);
 
   const browser = await puppeteer.launch({
-    headless: 'new',
+    headless: process.env.HEADLESS_MODE || 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   });
   const page = await browser.newPage();

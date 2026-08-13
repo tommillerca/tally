@@ -53,7 +53,10 @@ const APPROVED = [
   { screen: 'Level up',      mock: 't2-levelup.html', built: true, markers: ['reveal-take', 'reveal-eyebrow'] },
   { screen: 'Fight victory', mock: 't2-victory.html', built: true, markers: ['choice-h', 'got-rows'] },
   { screen: 'Pet hatch',     mock: 't2-hatch.html',   built: true, markers: ['reveal-take cool'] },
-  { screen: 'Pack reveal',   mock: 't2-pack.html',    built: true, markers: ['pack-pips'] },
+  /* was ['pack-pips'], which 5c609fb deleted when it rebuilt the crate reveal.
+     The screen is fine: driven through __packReveal it renders .pack-reveal with
+     a card in it. Only the marker rotted. */
+  { screen: 'Pack reveal',   mock: 't2-pack.html',    built: true, markers: ['pack-reveal', 'pack-stage', 'pack-deck'] },
   { screen: 'Breed result',  mock: 't2-breed.html',   built: true, markers: ['fused-note', 'breed-trade'] },
   // The step race, approved 2026-08-08 ("art is approved")
   { screen: 'Step race banner',  mock: 'race.html',          built: true, markers: ['race-banner', 'race-art'] },
@@ -65,10 +68,24 @@ const APPROVED = [
   { screen: 'Build',      mock: 't3-build.html',    built: true, markers: ['t3-fighter', 't3-armor', 't3-faq', 't3-pm'] },
   { screen: 'Pit entry',  mock: 't3-pitentry.html', built: true, markers: ['t3-hero', 't3-energy', 't3-rung'] },
   { screen: 'Garden',     mock: 't3-garden.html',   built: true, markers: ['t3-beds', 't3-bed', 't3-pouch', 't3-seed'] },
-  { screen: 'Stable',     mock: 't3-stable.html',   built: true, markers: ['t3-petcard', 't3-steps', 't3-ghosty'] },
+  /* was the three t3-* classes, which survive in app.css (24 rules) but are
+     emitted by nothing: the Stable shipped as a carousel with its own classes.
+     Driven, it opens as "The Stable" with cards in it. Marker rot, not debt. */
+  { screen: 'Stable',     mock: 't3-stable.html',   built: true, markers: ['stableBody', 'pet-tier-lbl', 'pet-opts'] },
 ];
 
-const src = ['js/app.js', 'app.css'].map(f => readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
+/* WHERE a marker lives is the whole point, so js and css are read separately.
+   The Stable passed this audit for days on three classes that exist ONLY in
+   app.css: 24 rules of styling that no code ever emits. Concatenating the two
+   files made "we styled it" and "we shipped it" the same observation, which is
+   the hollow-check shape rule 1 is about. A marker in js/ is a screen that
+   renders; a marker in app.css alone is a stylesheet for a screen that may not
+   exist. Every js module counts, not just app.js: garden, pets and the map all
+   build their own markup. */
+const jsSrc = readdirSync(path.join(ROOT, 'js')).filter(f => f.endsWith('.js'))
+  .map(f => readFileSync(path.join(ROOT, 'js', f), 'utf8')).join('\n');
+const cssSrc = readFileSync(path.join(ROOT, 'app.css'), 'utf8');
+const src = jsSrc + '\n' + cssSrc;
 const mockFiles = new Set(readdirSync(MOCKS).filter(f => f.endsWith('.html')));
 
 const missing = [], pending = [], ghosts = [];
@@ -77,7 +94,10 @@ for (const row of APPROVED) {
   if (!row.built) { pending.push(row.screen); continue; }
   if (!row.markers.length) { missing.push(`${row.screen}: marked built with no markers to prove it`); continue; }
   const absent = row.markers.filter(m => !src.includes(m));
-  if (absent.length) missing.push(`${row.screen} (${row.mock}): missing ${absent.map(a => `"${a}"`).join(', ')}`);
+  if (absent.length) { missing.push(`${row.screen} (${row.mock}): missing ${absent.map(a => `"${a}"`).join(', ')}`); continue; }
+  if (!row.markers.some(m => jsSrc.includes(m))) {
+    missing.push(`${row.screen} (${row.mock}): every marker is CSS-only, so this is styled but never rendered — ${row.markers.map(a => `"${a}"`).join(', ')}`);
+  }
 }
 
 console.log(`mockup-parity: ${APPROVED.length} approved designs, ${APPROVED.filter(r => r.built).length} marked built`);

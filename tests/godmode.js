@@ -85,7 +85,15 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
      the only case where the sandbox was never going to come up anyway. */
   const rootArgs = process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
   const browser = await puppeteer.launch({
-    headless: 'new',
+    /* HEADLESS_MODE exists so a machine where modern headless cannot screenshot
+       can still run the pixel audits. On this Mac, Page.captureScreenshot never
+       returns under headless 'new' OR true, for any page, including a bare
+       data: URL with nothing in it: measured at 22ms under 'shell' and hung
+       past 180s under both others, four runs each. hero-flash.mjs dies on it
+       with a stack and no FAIL lines, which reads like a broken app.
+       Default is unchanged until somebody proves 'shell' does not move any
+       other result. */
+    headless: process.env.HEADLESS_MODE || 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     executablePath: chromePath(),
     ...opts,

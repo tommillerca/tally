@@ -51,7 +51,7 @@ const results = [];
 const ok = (n, pass, d = '') => { results.push({ n, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); };
 
 const browser = await puppeteer.launch({
-  headless: 'new',
+  headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 });
 const errors = [];
