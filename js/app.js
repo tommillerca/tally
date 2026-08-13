@@ -2055,7 +2055,15 @@ async function renderToday(el) {
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
   const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
-  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false) };
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
+    /* A quest list should describe a day this player can actually have. The Pit
+       appears once they have been there (win or lose: trying is the gate, not
+       winning), and the Kitchen once it has something in it. */
+    pitTried: allXp.some(r => r.type === 'fight' || r.type === 'pit'),
+    /* Real state, not a constant: the Kitchen counts once it has anything in
+       it. Hardcoding false would have hidden these from every player forever,
+       which is a worse bug than the one being fixed. */
+    kitchenReady: Object.values(await ingredients()).some(n => n > 0) };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).

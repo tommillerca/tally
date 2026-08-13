@@ -74,7 +74,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 
 /* Node-only checks first: they are seconds, and there is no point burning four
    minutes of browser time on a build whose pure logic is already broken. */
-const PURE = ['unit.test.js', 'pit.test.js'];
+const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs'];
 const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
