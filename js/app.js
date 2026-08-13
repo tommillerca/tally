@@ -13940,7 +13940,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
        the sheet is still sliding in when the first render lands. */
     const body = factions.parentElement, row = el('fendrow');
     const arena = body.querySelector('.arena');
-    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 258)
+    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 292)
              + (row ? row.offsetHeight : 56) + 12;
     for (const kid of body.children) {
       if (kid !== factions && kid !== row && kid !== arena) used += kid.offsetHeight;
@@ -14059,15 +14059,35 @@ async function openFight(pitWrap, fighter, foeCfg) {
     html += btn(get('swing'), { hint: dmgHint('swing') });
     html += btn(get('haymaker'), { hint: dmgHint('haymaker') });
     html += defenseRow();
-    // Potions: any brewed potion can be DRUNK mid-fight (1 AP), any class. This is
-    // the kitchen's "beaming potion" — separate from the Alchemist's Toxicity kit.
-    for (const p of POTIONS) {
-      const n = potionInv[p.id] || 0;
-      if (n <= 0) continue;
-      const enabled = fight.active === 'p' && fight.ap >= 1 && !fight.over;
-      html += `<button class="fight-act potion" data-potion="${p.id}" ${enabled ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${n} · ${esc(potionShort(p))}</small></button>`;
+    /* POTIONS BEHIND ONE DOOR. Tom's friend, 2026-08-13: "some players barely
+       see the boss because they have so many items and attack move buttons."
+       Measured: the tray adds one button PER POTION TYPE held, so a player who
+       cooks goes from 4 buttons to 10, the tray grows 141px -> 317px, and the
+       arena drops from 55% of the screen to 34%. At that point the boss art
+       (292px) is TALLER than its own container (289px) and runs up under the
+       HUD. lockTray was doing its job the whole time; its 258px arena floor was
+       simply set to a number the art outgrew.
+       So the six potion buttons become one. Tom chose this plus tighter rows
+       (the CSS half) over shrinking the boss, which is the right call: a
+       smaller Live Wire is the opposite of what a boss fight is for. */
+    const stocked = POTIONS.filter(p => (potionInv[p.id] || 0) > 0);
+    const held = stocked.reduce((n, p) => n + (potionInv[p.id] || 0), 0);
+    const canDrink = fight.active === 'p' && fight.ap >= 1 && !fight.over;
+    if (stocked.length) {
+      if (!fight.itemsOpen) {
+        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
+      } else {
+        /* Open: the potions AND the way back, so the tray can never strand you
+           in a state with no moves on it. */
+        html += `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        for (const p of stocked) {
+          html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
+        }
+      }
     }
     factions.innerHTML = html;
+    $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
+    $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
     lockTray(factions); renderEndTurn();
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
