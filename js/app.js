@@ -1074,7 +1074,17 @@ async function maybeShowRaceIntro() {
  * The invite URL exists in exactly ONE constant; a link that exists three
  * times will rot in two of them when it changes. */
 const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
-const COMMUNITY_SEEN_KEY = 'discordIntroSeen';
+/* WAS A BOOLEAN BURNED ON THE FIRST SHOWING. Tom, 2026-08-13: "make the popup
+   happen on the first three opens to encourage joining". So it counts instead.
+   The old key is left behind on purpose: anyone who already saw the v371 popup
+   has discordIntroSeen=true, and reading it as "already spent one" means they
+   get the remaining two rather than a fresh three. Migrating them to zero would
+   show the card to people who have already dismissed it once, which is the
+   opposite of what a counter is for. */
+const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
+const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
+const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
+const COMMUNITY_MAX_SHOWS = 3;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
    this card is written for. Drawn in currentColor so it takes the eyebrow's
@@ -1094,6 +1104,22 @@ const DISCORD_MARK = `<svg class="dc-mark" viewBox="0 0 24 18" width="16" height
    Inline for the same reason as the mark: sw.js precaches an explicit list, so
    a new file would need an entry and this needs none. */
 const DISCORD_APP_ICON = `<span class="dc-app" aria-hidden="true"><svg viewBox="0 0 24 18" width="44" height="33" fill="#fff"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg></span>`;
+
+/* THE THIN STRIP ON CREW. Tom, 2026-08-13: "make the discord be findable as a
+   thin banner at the top of crew for those that missed the popup".
+   Reg pointed at the .glutton-banner family (Glutton, Spires, Garden, teaser)
+   rather than a new component, and it is the right shape: a pinned strip that
+   states one thing and opens something. Two departures, both deliberate:
+   this is a BUTTON, not a <details>, because there is nothing to expand, it
+   opens the same card the popup opens; and it is NOT dismissible, because the
+   whole point is that it is still there for anyone who tapped past the popup. */
+function communityBannerHtml() {
+  return `<button class="glutton-banner dc-banner" id="crewDiscord">
+    <span class="gbn-ico dc-bnr-ico">${DISCORD_MARK}</span>
+    <span class="gbn-txt"><i>Bone Boiz on Discord</i><b>Talk to the people making this game</b></span>
+    <span class="gbn-chev">&rsaquo;</span>
+  </button>`;
+}
 
 async function openCommunityCard() {
   const eq = await equipped();
@@ -1130,7 +1156,14 @@ async function openCommunityCard() {
   veil.addEventListener('click', e => { if (e.target === veil) close(); });
   // the join is an <a> so the OS handles it (app or browser); the card closes
   // behind it so returning players are not stuck under a stale veil
-  $('#communityGo', veil).addEventListener('click', () => setTimeout(close, 400));
+  $('#communityGo', veil).addEventListener('click', () => {
+    /* Burn it here and now. This fires on the same tap that follows the link,
+       so it lands before the OS hands the player to Discord and before any
+       chance of the app being backgrounded mid-write. */
+    kvSet(COMMUNITY_JOINED_KEY, true).catch(() => {});
+    kvSet(COMMUNITY_SHOWN_KEY, COMMUNITY_MAX_SHOWS).catch(() => {});
+    setTimeout(close, 400);
+  });
 }
 
 // Test hook (webdriver only), same reasoning as __raceIntro above.
@@ -1141,13 +1174,24 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 async function maybeShowCommunityIntro() {
   try {
     if ((navigator.webdriver && !window.__communityForce) || !S.settings) return;
-    if (await kvGet(COMMUNITY_SEEN_KEY, false)) return;
+    /* Three strikes, and JOIN ends it early and permanently. Somebody who has
+       joined must never see this again; that is the one behaviour here worth
+       being careful about, so it is checked first and written the moment the
+       link is tapped rather than on the way back from wherever Discord opened. */
+    if (await kvGet(COMMUNITY_JOINED_KEY, false)) return;
+    const shown = (await kvGet(COMMUNITY_SHOWN_KEY, null)) ??
+      ((await kvGet(COMMUNITY_SEEN_KEY, false)) ? 1 : 0);   // legacy: one already spent
+    if (shown >= COMMUNITY_MAX_SHOWS) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      /* Spend the showing BEFORE opening, not after: the card is dismissed by
+         several routes (the button, the veil, history) and a counter written on
+         the way out can be skipped by any of them. */
+      await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
       await kvSet(COMMUNITY_SEEN_KEY, true);
       openCommunityCard();
     };
@@ -6036,6 +6080,7 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
+    ${communityBannerHtml()}
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
       <!-- never greet the card with an empty box: it says something before the
@@ -6662,6 +6707,7 @@ async function renderFriends(el) {
       await paint();
     }));
   };
+  $('#crewDiscord', el)?.addEventListener('click', () => openCommunityCard());
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
 

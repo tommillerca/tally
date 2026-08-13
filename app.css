@@ -7279,3 +7279,18 @@ body::before {
   border: 1px solid var(--line); border-radius: 14px; padding: 13px;
   color: var(--text-2); font-weight: 700; margin-top: 8px;
 }
+
+/* The Crew strip. Same family as the Glutton/Spires/Garden banners so it reads
+   as furniture rather than an ad, but a <button> because there is nothing to
+   expand: it opens the same card the popup opens. Not dismissible on purpose. */
+/* A <button> gets none of `.glutton-banner > summary`'s box, so it inherited
+   only the outer card and measured 96px against the family's 72. Carry the
+   summary's own flex row and padding here instead of guessing a height: the
+   strip should match its siblings because it IS one, and 72 is their number,
+   not a value I liked the look of. */
+.dc-banner {
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  display: flex; align-items: center; gap: 11px; padding: 11px 13px;
+}
+.dc-bnr-ico { color: #5865F2; display: grid; place-items: center; }
+.dc-bnr-ico svg { width: 22px; height: 17px; }
