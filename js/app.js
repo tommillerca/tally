@@ -31,7 +31,7 @@ import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
-import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
+import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -11459,6 +11459,27 @@ async function renderBoneyard(el) {
       }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
+    /* Post-interaction, holdArrival goes back to its trickle-guard regime
+       (bundled poi-arriving/poi-in). Pre-interaction, second-wave arrivals
+       fade in via the standard markers-in transition.
+       ZOOMSTART GATE: maplibre fires this event for PROGRAMMATIC camera
+       moves too (easeTo/flyTo/setZoom without user input). If anything in
+       openMap eases the camera during arrival, `interacted` would flip
+       before the player has touched anything and the initial second wave
+       would take the batched-hold branch, reintroducing the 1200ms trickle
+       on the exact load this fix is for. The `originalEvent` property is
+       present ONLY on user-gesture-driven map events, so gate on it.
+       dragstart is user-only by design but gated symmetrically so the next
+       reader does not have to remember which is which. */
+    resetMapInteracted();
+    const onFirstInteract = e => {
+      if (!e || !e.originalEvent) return;   // programmatic move, not the player
+      markMapInteracted();
+      map.off('dragstart', onFirstInteract);
+      map.off('zoomstart', onFirstInteract);
+    };
+    map.on('dragstart', onFirstInteract);
+    map.on('zoomstart', onFirstInteract);
     let worldReady = false;   // flipped once every marker layer's state exists
     /* THE SECOND WAVE. Tom, 2026-08-08: "the boneyard is still loading in POIs at
        different times ... it looks cheap when everything staggers in", and it was
@@ -11481,7 +11502,31 @@ async function renderBoneyard(el) {
       requestAnimationFrame(() => stage.classList.add('markers-in'));
     };
     const tryReveal = () => { if (placedOnce && worldPassDone) revealMarkers(); };
-    setTimeout(revealMarkers, 4000);   // the cap: never blank for longer than this
+    /* THE CAP, and now the primary reveal on slow lines.
+       Measured 2026-08-12 across fast/slow tile conditions (SLOW_TILES=800
+       simulating Tom's real-network round trip), N=5 medians per cell:
+
+         cap 1500 slow  reveal 1560ms  last 2239ms  pop 679ms
+         cap 1800 slow  reveal 1879ms  last 2401ms  pop 519ms   (chosen)
+         cap 2200 slow  reveal 2271ms  last 2275ms  pop  34ms   (same shape as v371)
+         cap 4000 slow  reveal 3176ms  last 3204ms  pop   0ms   (v371, Tom's "too slow")
+
+       On a TYPICAL fast-tile run the gate wins at ~1200ms and any cap at or
+       above 1500 is moot; 1500 and 1800 are identical on the common path and
+       neither "protects" it. The cap only ever fires when tiles are genuinely
+       slow, which is the case it exists for. Where 1800 beats 1500 is the
+       outcome when it does fire: 519ms of fade instead of 679ms, for 320ms
+       more wait. That is the trade.
+       And when 1800 fires on a fast-network hiccup (one of my N=5 fast runs
+       revealed at 2065ms rather than the median 1200ms), the player gets a
+       reveal at 1800 with a short fade, which is the DESIGNED behaviour Tom
+       signed off, not a regression: exactly the slow-line contract, applied
+       to a slow slice of the fast line.
+       Stragglers on any run where the cap fires ahead of full placement
+       fade in over 220ms via the standard markers-in opacity transition
+       (map.js:holdArrival's !interacted branch), not the 1200ms hold +
+       poiPop scale that v370 shipped. */
+    setTimeout(revealMarkers, 1800);
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
