@@ -6977,7 +6977,7 @@ body::before {
    swallowed by it. In front, the same overlap reads as the pet standing at his
    feet, which is what it is. Scoped to this arena only, so the paperdoll and
    card surfaces keep the tuck-behind they were designed with. */
-.arena.boss-mage .pet-fighter { transform: translateX(-13px); z-index: 4; }
+.arena.boss-mage .pet-fighter { transform: translateX(25px); z-index: 4; }
 .arena.boss-mage .pet-fighter > .fstage { z-index: 4; }
 .bst-fig.bst-drawn { background: #0d0f08; }
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
