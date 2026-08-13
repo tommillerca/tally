@@ -82,8 +82,22 @@ const importBlock = dbSrc.match(/function\s+importAll[\s\S]*?\n\}/);
 const importedStores = new Set();
 if (importBlock) {
   const body = importBlock[0];
+  /* Two accepted patterns:
+     (1) Literal per-store loop: `for (const _ of data.foo)` (pre-fix
+         importAll shape, kept for future rewrites that go back to it).
+     (2) Indexed loop over a STORES-like array: `for (const _ of data[s])`
+         paired with `const STORES = ['foo', 'bar', ...]` above it. This
+         is the transactional-import shape (ext/data-safety fix) and is
+         parsed by extracting the store-name literals from the STORES
+         array declaration. Either shape counts as "importAll consumes
+         this store". */
   const forRe = /for\s*\(\s*const\s+[a-zA-Z_$][\w$]*\s+of\s+data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
   for (let m; (m = forRe.exec(body)); ) importedStores.add(m[1]);
+  const storesArr = body.match(/const\s+STORES\s*=\s*\[([\s\S]*?)\]/);
+  if (storesArr) {
+    const litRe = /'([a-zA-Z_][a-zA-Z0-9_]*)'/g;
+    for (let m; (m = litRe.exec(storesArr[1])); ) importedStores.add(m[1]);
+  }
 }
 
 /* EMPTY-SAMPLE GUARDS, on all three parses. If the regexes have drifted,

@@ -47,7 +47,16 @@ const { browser, page } = await boot(base);
 
 const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
 const KEY_PATH = { foods: 'id', log: 'id', weights: 'date', kv: 'k', xp: 'key', health: 'date', inv: 'id' };
-const OLD_N = 5, NEW_N = 10;
+const OLD_N = 5;
+/* NEW_N chosen large enough that IDB's commit phase (disk write) takes
+   longer than one macrotask. Sync dispatch of ~thousand puts is fast,
+   but the commit itself is async and multi-tick. A reload scheduled at
+   setTimeout(0) fires after the current task and its microtasks, which
+   is after dispatch is done but during commit. Small NEW_N (say 10)
+   commits inside a single tick and cannot be interrupted by any timer
+   we could schedule from JS. 1000 gives enough commit-time for the
+   reload to catch it in flight. */
+const NEW_N = 1000;
 
 /* Seed helpers. OLD rows use OLD-N in the keyPath so a leftover row after
    import is immediately identifiable as pre-import; NEW rows use NEW-N. */
@@ -62,54 +71,80 @@ function makePayload(tag, count) {
 }
 
 async function seedThenInterrupt(scratchName, delayMs) {
-  return await page.evaluate(async (name, delay, oldPayload, newPayload, storeNames) => {
-    /* Reset any lingering module state, point db.js at the scratch name, seed OLD. */
-    const { useDbName, db, importAll } = await import(`./js/db.js?run=${Date.now()}-${Math.random()}`);
-    useDbName(name);
-    /* Seed via db.put so the app path creates the fresh v3 DB. */
-    for (const s of storeNames) for (const row of oldPayload[s]) await db.put(s, row);
-
-    /* Kick off importAll WITHOUT awaiting, schedule a "reload-equivalent" that
-       kills the JS ability to continue: we cannot actually navigate mid-page
-       without losing our recorder; simulate the effect with an in-flight
-       cancellation by throwing after `delay` ms via a Promise race that
-       clobbers the IndexedDB `put` chain. Puppeteer will then read the
-       committed state, which is exactly what a real reload would leave.
-       Simpler: intercept db.put after delay ms and make subsequent calls
-       reject, matching what "no more JS runs" produces at the storage layer. */
-    const dbMod = await import(`./js/db.js?intercept=${Date.now()}-${Math.random()}`);
-    dbMod.useDbName(name);
-    let killed = false;
-    const origPut = dbMod.db.put;
-    dbMod.db.put = function(store, val) {
-      if (killed) return Promise.reject(new Error('KILLED: simulated reload after N ms'));
-      return origPut.call(dbMod.db, store, val);
+  /* REAL TAB RELOAD, not a JS-layer stub. The pre-fix demonstration used a
+     killed-flag on db.put to intercept subsequent awaits, which worked
+     because the pre-fix importAll awaited each put sequentially. The fix
+     dispatches all puts synchronously inside a multi-store transaction,
+     so a JS-layer flag can never fire between puts. Only a REAL
+     interruption (tab reload, tab teardown) tests what the transaction
+     does under the platform-level abort path.
+     PROTOCOL:
+       1. Install indexedDB.open('tally') -> scratchName redirector via
+          evaluateOnNewDocument, so app.js is not needed for db-name
+          management.
+       2. Reload to a fresh page. Seed OLD data. Kick off importAll(NEW).
+          setTimeout(location.reload, delayMs).
+       3. Wait for the reload to complete. Read counts through the app
+          path (which now points at scratchName via the same redirector).
+     The counts after reload show whether the transaction committed (all
+     NEW arrived) or aborted (all OLD, no NEW). Anything in between is a
+     partial-commit finding. */
+  await page.evaluateOnNewDocument((sname) => {
+    const orig = window.indexedDB.open.bind(window.indexedDB);
+    window.indexedDB.open = function(dbName, version) {
+      if (dbName === 'tally' || dbName === 'tally-demo') return orig(sname, version);
+      return orig(dbName, version);
     };
-    const importPromise = dbMod.importAll(newPayload).catch(e => ({ interrupted: String(e).slice(0, 80) }));
-    await new Promise(r => setTimeout(r, delay));
-    killed = true;
-    await importPromise.catch(() => {});
-
-    /* Read committed state via the ORIGINAL db.js so we do not see the
-       intercepted put in the count. */
-    const counts = {};
+  }, scratchName);
+  /* Fresh navigation so the redirector takes effect. */
+  await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' });
+  await sleep(500);
+  /* Seed OLD data. */
+  await page.evaluate(async (oldPayload, storeNames) => {
+    const { db } = await import(`./js/db.js?seed=${Date.now()}-${Math.random()}`);
+    for (const s of storeNames) for (const row of oldPayload[s]) await db.put(s, row);
+  }, makePayload('OLD', OLD_N), STORES);
+  /* Kick off importAll and schedule a real tab reload. importAll is
+     fire-and-forget; the reload cuts JS execution mid-transaction. */
+  await page.evaluate((newPayload, delay) => {
+    /* Fresh module import so the transaction dispatches straight after
+       this call, not delayed by any earlier module state. */
+    import(`./js/db.js?import=${Date.now()}-${Math.random()}`).then(dbMod => {
+      dbMod.importAll(newPayload).catch(() => {});
+    });
+    /* delay = how long between the import kicking off and the reload.
+       0 means "reload right after the microtask that starts importAll",
+       which is the tightest interruption possible from JS. */
+    setTimeout(() => location.reload(), delay);
+  }, makePayload('NEW', NEW_N), delayMs);
+  /* Wait for the reload to complete. Puppeteer's waitForNavigation is
+     the reliable way here. */
+  await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+  await sleep(500);
+  /* Read the committed state through the SAME redirector. */
+  const counts = await page.evaluate(async (storeNames) => {
+    const { db } = await import(`./js/db.js?read=${Date.now()}-${Math.random()}`);
+    const out = {};
     for (const s of storeNames) {
       const all = await db.all(s);
-      counts[s] = { total: all.length, old: all.filter(r => r.tag === 'OLD').length, new: all.filter(r => r.tag === 'NEW').length };
+      out[s] = { total: all.length, old: all.filter(r => r.tag === 'OLD').length, new: all.filter(r => r.tag === 'NEW').length };
     }
-    return { counts };
-  }, scratchName, delayMs, makePayload('OLD', OLD_N), makePayload('NEW', NEW_N), STORES);
+    return out;
+  }, STORES);
+  return { counts };
 }
 
-/* Phase A: distribution across runs at the tuned delay. */
+/* Phase A: distribution across runs at delays chosen to (a) reliably bite
+   the interruption and (b) sometimes miss it (so we exercise both the
+   abort path and the commit path). */
 const RUNS = 8;
-/* DELAY_MS: local put resolution is fast (~0.2ms). 70 puts complete in ~14ms
-   on this puppet, so anything >=15ms lets the loop finish uninterrupted and
-   we see a clean all-OLD-and-all-NEW (successful import). Sweet spot for
-   catching mid-loop: 2-5ms. 3 is chosen to reliably interrupt the middle
-   stores. On slower hardware (real device), the effective delay window is
-   proportionally wider; the point of running N is exactly that. */
-const DELAY_MS = 3;
+/* DELAY_MS chosen for a REAL page reload: with the transactional fix,
+   the reload cuts the transaction before oncomplete fires, so a small
+   delay reliably aborts. With the pre-fix build, the same delay caught
+   mid-loop and produced per-run splits (see original demonstration).
+   0 is the tightest possible interruption from JS (setTimeout microtask
+   fires basically immediately after import kicks off). */
+const DELAY_MS = 0;
 const perRun = [];
 for (let i = 1; i <= RUNS; i++) {
   const name = `importall-interrupt-${Date.now()}-${i}-${Math.floor(Math.random() * 1e6)}`;
@@ -119,50 +154,64 @@ for (let i = 1; i <= RUNS; i++) {
   console.log(`  run ${i}  ${summary}`);
 }
 
-/* Classify by IMPORT PROGRESS per store, since importAll is additive (OLD
-   rows survive because put does not clear the store first). Categories:
-     SUCCESS      all 10 NEW rows arrived (this store's loop finished)
-     NOT_REACHED  0 NEW rows arrived  (this store's loop never started)
-     PARTIAL      1..9 NEW rows arrived (interrupted mid-store)
-   PER-RUN SPLIT = a run that has BOTH SUCCESS and NOT_REACHED stores in it,
-   which is Finding C's shape: some stores got the new data, others didn't. */
-const classify = c => c.new === NEW_N ? 'SUCCESS' : (c.new === 0 ? 'NOT_REACHED' : 'PARTIAL');
+/* Per-store classification:
+     COMMITTED    all NEW_N rows arrived
+     NOT_STARTED  0 NEW rows (transaction never landed for this store)
+     PARTIAL      1..NEW_N-1 NEW rows (per-store mid-commit, IMPOSSIBLE
+                  under a correct multi-store transaction)
+   Per-RUN classification:
+     FULLY_COMMITTED  all seven stores COMMITTED
+     FULLY_ABORTED    all seven stores NOT_STARTED (transaction aborted)
+     INCONSISTENT     anything else (partial store OR store-split): the
+                      exact shape the fix must forbid */
+const classify = c => c.new === NEW_N ? 'COMMITTED' : (c.new === 0 ? 'NOT_STARTED' : 'PARTIAL');
+const runShape = r => {
+  const cs = STORES.map(s => classify(r.counts[s]));
+  if (cs.every(x => x === 'COMMITTED')) return 'FULLY_COMMITTED';
+  if (cs.every(x => x === 'NOT_STARTED')) return 'FULLY_ABORTED';
+  return 'INCONSISTENT';
+};
 const dist = {};
-for (const s of STORES) dist[s] = { SUCCESS: 0, PARTIAL: 0, NOT_REACHED: 0 };
+for (const s of STORES) dist[s] = { COMMITTED: 0, PARTIAL: 0, NOT_STARTED: 0 };
 for (const r of perRun) for (const s of STORES) dist[s][classify(r.counts[s])]++;
+const shapes = { FULLY_COMMITTED: 0, FULLY_ABORTED: 0, INCONSISTENT: 0 };
+for (const r of perRun) shapes[runShape(r)]++;
 console.log('\n=== DISTRIBUTION over ' + RUNS + ' runs at delay=' + DELAY_MS + 'ms ===');
-console.log('store    SUCCESS  PARTIAL  NOT_REACHED');
-for (const s of STORES) console.log(`${s.padEnd(8)} ${String(dist[s].SUCCESS).padStart(7)}  ${String(dist[s].PARTIAL).padStart(7)}  ${String(dist[s].NOT_REACHED).padStart(11)}`);
-const perRunSplit = perRun.filter(r => {
-  const cs = STORES.map(s => classify(r.counts[s]));
-  return cs.includes('SUCCESS') && cs.includes('NOT_REACHED');
-}).length;
-const anyPartial = perRun.some(r => STORES.some(s => classify(r.counts[s]) === 'PARTIAL'));
+console.log('store    COMMITTED  PARTIAL  NOT_STARTED');
+for (const s of STORES) console.log(`${s.padEnd(8)} ${String(dist[s].COMMITTED).padStart(9)}  ${String(dist[s].PARTIAL).padStart(7)}  ${String(dist[s].NOT_STARTED).padStart(11)}`);
+console.log(`\nPER-RUN SHAPES: FULLY_COMMITTED=${shapes.FULLY_COMMITTED}  FULLY_ABORTED=${shapes.FULLY_ABORTED}  INCONSISTENT=${shapes.INCONSISTENT}`);
 
-ok('MECHANISM  at least one run split ACROSS stores (some SUCCESS + some NOT_REACHED in the same run) OR left a store PARTIAL',
-  perRunSplit > 0 || anyPartial,
-  `per-run splits: ${perRunSplit}/${RUNS}, partial-store runs: ${perRun.filter(r => STORES.some(s => classify(r.counts[s]) === 'PARTIAL')).length}/${RUNS}`);
+/* THE FIX'S CONTRACT: no run may end INCONSISTENT. Every run must be
+   FULLY_COMMITTED or FULLY_ABORTED. INCONSISTENT means either a per-run
+   split (some stores committed, others didn't) or a per-store PARTIAL
+   (some rows within one store committed but not all): both are the shape
+   the multi-store transaction is designed to make impossible. */
+ok('ATOMICITY  every run is FULLY_COMMITTED or FULLY_ABORTED, never INCONSISTENT (the transactional-import contract)',
+  shapes.INCONSISTENT === 0,
+  shapes.INCONSISTENT ? `${shapes.INCONSISTENT}/${RUNS} runs left the DB in a mixed state (some stores committed, some did not). This is Finding C.` : `${RUNS} runs, ${shapes.FULLY_COMMITTED} fully committed, ${shapes.FULLY_ABORTED} fully aborted, 0 inconsistent`);
+/* Empty-sample guard on the interruption itself: if every run FULLY_COMMITTED,
+   the reload never actually interrupted anything and the atomicity assertion
+   above is vacuous. At delay=0 the reload should be tight enough to abort
+   at least one run; if not, the test is not exercising the abort path. */
+ok('INTERRUPTION  at least one run had its transaction aborted by the reload (empty-sample guard: otherwise ATOMICITY passes vacuously)',
+  shapes.FULLY_ABORTED > 0,
+  shapes.FULLY_ABORTED ? `${shapes.FULLY_ABORTED}/${RUNS} runs aborted` : 'all runs committed fully; reload did not interrupt; increase delay tightness');
 
-/* Phase B: assert the end of the chain. Boot the app onto one of the
-   interrupted DBs, navigate to Today, record what the player sees.
-   Pick the first run that showed a per-run split; if none did (all clean
-   in this sample), skip Phase B with a note. */
-const splitRun = perRun.findIndex(r => {
-  const cs = STORES.map(s => classify(r.counts[s]));
-  return cs.includes('SUCCESS') && cs.includes('NOT_REACHED');
-});
-if (splitRun === -1) {
-  ok('PLAYER  Phase B skipped: none of the ' + RUNS + ' runs produced a per-run split, so there is no realistic mixed DB to boot the app on',
-    false, 'consider raising RUNS or tuning DELAY_MS');
+/* Phase B: END OF CHAIN. Boot the real app on a FULLY_ABORTED DB and
+   verify it is byte-identical to the pre-import state: OLD rows only,
+   zero NEW rows across every store. This is the "did the player keep
+   their game" question in Gwart's words. If the sample had no
+   FULLY_ABORTED runs (interruption did not bite), skip with a hard fail
+   for the same reason as the INTERRUPTION assertion above. */
+const abortedRun = perRun.findIndex(r => runShape(r) === 'FULLY_ABORTED');
+if (abortedRun === -1) {
+  ok('PLAYER  Phase B needs a FULLY_ABORTED run to verify the post-abort DB IS the original save; the sample had none',
+    false, 'increase RUNS or tighten DELAY_MS; ATOMICITY assertion cannot verify the recovery half without one');
 } else {
-  /* Redo one interruption with a NAMED scratch DB, then boot the app onto
-     that DB and read the top of the app. useDbName is set from evaluate,
-     but a real fresh boot would open the default 'tally' DB, so the app
-     path here uses useDbName from within the eval too. */
-  const name = `importall-interrupt-playerview-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const name = `importall-abort-playerview-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await seedThenInterrupt(name, DELAY_MS);
-  /* Recount from the mixed DB so we know what a boot would actually find. */
-  const preBootCounts = await page.evaluate(async (dbNameArg) => {
+  /* Recount THIS DB so we know what a boot would actually find. */
+  const postAbortCounts = await page.evaluate(async (dbNameArg) => {
     const { useDbName, db } = await import(`./js/db.js?playerview=${Date.now()}`);
     useDbName(dbNameArg);
     const counts = {};
@@ -172,14 +221,7 @@ if (splitRun === -1) {
     }
     return counts;
   }, name);
-  /* ACTUAL end-of-chain assertion: reload the app so it opens THIS mixed DB
-     instead of the default 'tally'. Trick is to install an indexedDB.open
-     redirector via evaluateOnNewDocument BEFORE the app's own JS runs, so
-     every `indexedDB.open('tally', ...)` inside app.js actually hits our
-     scratch name. Then let the demo-boot flow happen and observe:
-       - did the app boot at all (no white screen, no top-level throw)
-       - what does the top of the app look like (screen text)
-       - is there any indicator that the last restore did not finish */
+  /* Real boot on the post-abort DB via evaluateOnNewDocument redirector. */
   await page.evaluateOnNewDocument((scratchName) => {
     const orig = window.indexedDB.open.bind(window.indexedDB);
     window.indexedDB.open = function(dbName, version) {
@@ -195,41 +237,38 @@ if (splitRun === -1) {
     const screen = document.querySelector('#screen');
     const text = (screen ? screen.innerText : document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 400);
     const hasScreen = !!screen && screen.children.length > 0;
-    const restoreWarning = /restore.*(incomplete|failed|interrupted)|import.*(incomplete|failed|interrupted)/i.test(document.body.innerText || '');
-    return { hasScreen, text, restoreWarning };
+    return { hasScreen, text };
   });
-  const c = preBootCounts;
+  const c = postAbortCounts;
+  const allOldOnly = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'].every(s => c[s].new === 0 && c[s].old === OLD_N);
   const desc = [
-    `On this interrupted DB, a boot to Today would find:`,
-    `  meals in food log:        ${c.log.new + c.log.old} rows (${c.log.new} NEW, ${c.log.old} OLD)`,
-    `  weights logged:           ${c.weights.new + c.weights.old} rows (${c.weights.new} NEW, ${c.weights.old} OLD)`,
-    `  foods library:            ${c.foods.new + c.foods.old} rows (${c.foods.new} NEW, ${c.foods.old} OLD)`,
-    `  kv (settings/prefs):      ${c.kv.new + c.kv.old} rows (${c.kv.new} NEW, ${c.kv.old} OLD)`,
-    `  xp events:                ${c.xp.new + c.xp.old} rows (${c.xp.new} NEW, ${c.xp.old} OLD)`,
-    `  health readings:          ${c.health.new + c.health.old} rows (${c.health.new} NEW, ${c.health.old} OLD)`,
-    `  inv items:                ${c.inv.new + c.inv.old} rows (${c.inv.new} NEW, ${c.inv.old} OLD)`,
+    `Post-abort DB counts (booted the app on this DB via indexedDB.open`,
+    `redirector, so the app really opened it):`,
+    `  meals in food log:        ${c.log.total} rows (${c.log.new} NEW, ${c.log.old} OLD)`,
+    `  weights logged:           ${c.weights.total} rows (${c.weights.new} NEW, ${c.weights.old} OLD)`,
+    `  foods library:            ${c.foods.total} rows (${c.foods.new} NEW, ${c.foods.old} OLD)`,
+    `  kv (settings/prefs):      ${c.kv.total} rows (${c.kv.new} NEW, ${c.kv.old} OLD)`,
+    `  xp events:                ${c.xp.total} rows (${c.xp.new} NEW, ${c.xp.old} OLD)`,
+    `  health readings:          ${c.health.total} rows (${c.health.new} NEW, ${c.health.old} OLD)`,
+    `  inv items:                ${c.inv.total} rows (${c.inv.new} NEW, ${c.inv.old} OLD)`,
     ``,
-    `WHAT THE PLAYER ACTUALLY SEES (booted the demo profile on the mixed DB via`,
-    `indexedDB.open redirection, so the app really did open this database):`,
-    `  app booted:               ${bootState.hasScreen ? 'YES, screen has content' : 'NO, blank screen'}`,
-    `  restore-incomplete note:  ${bootState.restoreWarning ? 'YES, wording found in visible text' : 'NO, nothing on screen tells the player'}`,
+    `WHAT THE PLAYER SEES:`,
+    `  app booted:               ${bootState.hasScreen ? 'YES' : 'NO'}`,
     `  top-level page errors:    ${bootErrors.length === 0 ? 'none' : JSON.stringify(bootErrors)}`,
     `  first 400 chars on screen:`,
     `    ${bootState.text}`,
     ``,
-    `The app boots. Nothing tells the player their restore did not complete. IndexedDB`,
-    `returns rows from whichever stores committed and empty results from the rest; the`,
-    `render is silent about the partial state. The success toast that would fire at the`,
-    `end of a completed importAll does not fire (the JS just stopped), but a player`,
-    `who reloaded mid-import will not associate the absent toast with anything.`,
+    allOldOnly
+      ? 'The transaction aborted cleanly. Every store holds ONLY the pre-import OLD rows. The player is looking at their original save.'
+      : 'The DB has NEW rows after an abort. The fix is not working. Investigate.',
   ].join('\n');
-  finding('FINDING C  IMPORTALL IS NOT TRANSACTIONAL, DEMONSTRATION', desc);
-  ok('PLAYER  the app can be booted onto a mid-import DB and reads it without error (no schema check refused it, no top-level exception)',
+  finding('FINDING C  FIX VERIFIED, POST-ABORT DB IS THE ORIGINAL SAVE', desc);
+  ok('PLAYER  the app boots cleanly on a post-abort DB (no schema check refused it, no top-level exception)',
     bootState.hasScreen && bootErrors.length === 0,
-    JSON.stringify({ hasScreen: bootState.hasScreen, errors: bootErrors, counts: c }));
-  ok('PLAYER  the app does NOT tell the player their restore is incomplete (silent partial state is the finding)',
-    bootState.restoreWarning === false,
-    bootState.restoreWarning ? `restore warning was visible: ${bootState.text.slice(0, 120)}` : `no restore-incomplete wording found in visible text`);
+    JSON.stringify({ hasScreen: bootState.hasScreen, errors: bootErrors }));
+  ok('PLAYER  the post-abort DB IS the pre-import save: every store has exactly OLD_N OLD rows and zero NEW rows (the transactional-import guarantee at the row level)',
+    allOldOnly,
+    JSON.stringify(c));
 }
 
 await browser.close();
