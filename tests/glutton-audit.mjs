@@ -53,9 +53,20 @@ const fin = await page.evaluate(async () => {
 await sleep(4000);
 const fstate = await page.evaluate(async () => {
   const st = await window.__bhFight.state();
-  return { over: st.over, winner: st.winner, turn: st.turn, victoryShown: !!document.querySelector('.fight-over'), doneBtn: !!document.getElementById('fightDone') };
+  /* VISIBILITY, not presence. The result card is now hidden by CSS until
+     settle() adds .fight-settled (app.css: `.fight-body > .fight-over
+     { opacity: 0 }`), and that add sits inside a 900ms timeout guarded by
+     body.isConnected. `!!querySelector` would pass on a card the player
+     cannot see, which is the exact bug that made the onboarding invisible on
+     2026-08-12. Measure the ancestor chain the way onb-audit does. */
+  const over = document.querySelector('.fight-over');
+  let eff = over ? 1 : 0;
+  for (let n = over; n && n.nodeType === 1; n = n.parentElement) eff *= parseFloat(getComputedStyle(n).opacity || '1');
+  return { over: st.over, winner: st.winner, turn: st.turn, victoryShown: !!over, victoryOpacity: eff, doneBtn: !!document.getElementById('fightDone') };
 });
 console.log('finish ->', JSON.stringify(fin), 'state ->', JSON.stringify(fstate));
+check('the victory card is VISIBLE, not merely in the DOM', fstate.victoryOpacity > 0.9,
+  `effectiveOpacity=${fstate.victoryOpacity} present=${fstate.victoryShown}`);
 check('the fight ended with a WIN (a loss proves nothing here)', !!fstate.over && fstate.over.winner === 'p', JSON.stringify(fstate));
 const won = await page.evaluate(async () => {
   const db = (await import('./js/db.js')).db;

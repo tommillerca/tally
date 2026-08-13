@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 372, date: '2026-08-13', title: 'Four things that were quietly annoying', items: [
+    '<b>The Backpack opens at the top again.</b> It had been jumping straight down to the Salvage Bench every time you opened it, and again after every crate.',
+    '<b>You can see what you are transmogging.</b> Wardrobe tiles drew the raw artwork, most of which is empty space, so the item itself was a speck in the corner. Your crew FAVES chips had the same problem.',
+    'Beating The Glutton and tapping Done puts you back on the Boneyard. You used to land under his card and have to close it by hand.',
+    'The result of a den fight now rises into place with the arena closing, instead of appearing at the bottom of the screen and lurching upward.',
+  ] },
   { n: 371, date: '2026-08-12', title: 'The Boneyard settles before you look at it', items: [
     "<b>Dens no longer appear after the map has already settled.</b> A placement pass ran before the map's tiles had loaded, so anything that needed real ground to stand on was placed late and popped in on top of a map you were already reading. The reveal now waits for ground it can actually place against.",
     'The Bone Boiz card shows the Discord app icon with your own Bonehead leaning on it, so you can tell at a glance what you are being invited to.',
