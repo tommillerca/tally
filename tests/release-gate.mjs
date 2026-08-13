@@ -88,6 +88,8 @@ const BROWSER = [
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
+  'notif-audit.mjs',         // Notification tiers do what they say (measured, not toggle-position); boot-asker webdriver-skip guard behaviourally verified
+  'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'screen-sweep.mjs',        // no screen renders blank or throws
