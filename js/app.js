@@ -2055,7 +2055,15 @@ async function renderToday(el) {
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
   const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
-  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false) };
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
+    /* A quest list should describe a day this player can actually have. The Pit
+       appears once they have been there (win or lose: trying is the gate, not
+       winning), and the Kitchen once it has something in it. */
+    pitTried: allXp.some(r => r.type === 'fight' || r.type === 'pit'),
+    /* Real state, not a constant: the Kitchen counts once it has anything in
+       it. Hardcoding false would have hidden these from every player forever,
+       which is a worse bug than the one being fixed. */
+    kitchenReady: Object.values(await ingredients()).some(n => n > 0) };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -2092,6 +2100,9 @@ async function renderToday(el) {
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
     fightWins: allXp.filter(r => r.type === 'fight').length,
+    loggedToday: entries.length,
+    everLogged: allXp.some(r => r.type === 'food') ? 1 : 0,
+    mealSkipped: await kvGet('firstMealSkipped', false),
   }) : [];
   const pitAttn = unlocks.some(u => u.hero === 'pit');
   const wardAttn = unlocks.some(u => u.hero === 'ward');
@@ -2157,6 +2168,19 @@ async function renderToday(el) {
   </div>
   </div>
 
+  ${/* THE LINE THAT EXPLAINS THE WHOLE APP, on the screen where it is needed.
+       A non-gamer played this cold on 2026-08-13 and could not answer "what is
+       the skeleton FOR". They watched the bolt go 3 to 5 after logging an egg
+       and nothing said why. The sentence that explains it already existed, two
+       screens deep INSIDE the Pit: "3 free today + 2 Vigor · log food and walk
+       to earn more". The link between eating and the game was real and hidden.
+       So it says it here, under the character, in words with no jargon in them.
+       Only while it is still news: it retires at level 3, by which point a
+       player either understands the loop or is not going to learn it from a
+       caption. `hero-why` is a caption, not a card, because Today already asks
+       for too much attention above the food. */''}
+  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Logging meals and walking earns more.</p>` : ''}
+
   <!-- FOUR DOORS. A fifth Garden tile shipped in v304 and came straight back out
        (Tom, 2026-08-07): "we dont need the garden icon on Today because if you
        click kitchen it's gonna basically take you there." He is right, the GROW
@@ -2171,11 +2195,21 @@ async function renderToday(el) {
   </div>
 
   ${isToday && topNudge ? `
+  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
   <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${topNudge.action === 'pit' ? 'Tap to enter The Pit' : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe' : 'Tap to open Build and spend it'}</small></span>
+    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
+    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
+      topNudge.action === 'logfood' ? 'Tap to log your first meal'
+      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
+      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
+      : 'Tap to open Build and spend it'}</small></span>
     <span class="ul-chev">›</span>
-  </button>` : ''}
+  </button>
+  ${/* The way out. Not a dismissal of the card: skipping falls through to
+       whatever the next nudge is, so somebody who does not want to log right
+       now still gets pointed at the fight, the crates or their gear. */''}
+  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
+  </div>` : ''}
 
   ${isToday && hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
@@ -2306,11 +2340,21 @@ async function renderToday(el) {
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* Skipping records the choice and re-renders, so the card immediately shows
+     whatever the NEXT nudge is rather than leaving a hole where it was. */
+  $('#ulSkip')?.addEventListener('click', async () => {
+    await kvSet('firstMealSkipped', true);
+    refresh();
+  });
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#unlockNudge')?.addEventListener('click', () => {
     const a = $('#unlockNudge')?.dataset.ulaction;
-    if (a === 'wardrobe') openCharacter('wardrobe');
+    /* openAdd() with the meal picked from the clock, the same entry point the
+       big green + uses, so the first meal goes through the flow the player will
+       use every day rather than a special one-time path. */
+    if (a === 'logfood') { const now = new Date(); openAdd(mealForHour(now.getHours() + now.getMinutes() / 60)); }
+    else if (a === 'wardrobe') openCharacter('wardrobe');
     else if (a === 'pit') openPit();
     else openTalents();
   });
@@ -2771,10 +2815,31 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
+  /* THE CLASS MUST LAND EVEN IF THE FRAME NEVER COMES.
+     Measured 2026-08-13: freeze the page mid-route (CDP frozen lifecycle, which
+     is what iOS does when you tap a target=_blank link, take a call, or switch
+     apps) and resume, and the screen stays at effective opacity 0 FOREVER, with
+     its content sitting right there. Reproduced at 0ms, 30ms and 120ms into a
+     route, so the window is wide, and it never recovers.
+
+     Two faults, and the second is what made it permanent:
+       requestAnimationFrame was the ONLY path that added the class, and a
+       frozen page never runs its callback.
+       `shown` latched to true BEFORE the callback ran, so it recorded the
+       INTENT to reveal rather than the reveal, and the cap timer's retry was
+       already disarmed.
+
+     So the frame is now the nicety and the timer is the guarantee. classList
+     .add is idempotent, so whichever arrives first wins and the other is a
+     no-op. This is anti-regression rule 8 at the one place in the app that
+     hides every route: whatever hides content owns un-hiding it, and owning it
+     means surviving a backgrounded tab. */
+  const apply = () => { if (root.isConnected) root.classList.add(cls); };
   const show = () => {
     if (shown || !root.isConnected) return;
     shown = true;
-    requestAnimationFrame(() => root.classList.add(cls));
+    requestAnimationFrame(apply);
+    setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
   const imgs = [...root.querySelectorAll('img')];
@@ -4317,7 +4382,30 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       kcal: n.kcal, p: n.p || 0, c: n.c || 0, f: n.f || 0,
       fiber: n.fiber || 0, sugar: n.sugar || 0, sodium: n.sodium || 0,
     };
-    await db.put('log', e);
+    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
+       Measured 2026-08-13: reject this put the way a full quota does and the
+       meal vanishes with NO error, while an unrelated toast ("New talent points
+       ready") stays on screen reading like success. 166 log rows before, 166
+       after. Everything below this line is skipped, so the sheet closes and the
+       player believes the meal is in.
+       Storage really does fill: measured growth is ~2.4MB a year, and a phone
+       with 500MB free hits its origin quota in about four years of daily use.
+       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry on
+       screen so the user knows whats happening and that they have to make room
+       on the storage of their device". So the sheet STAYS OPEN with the portion
+       still selected and the button live, because a player who has just been
+       told to free up space needs somewhere to land when they come back. */
+    try {
+      await db.put('log', e);
+    } catch (err) {
+      btn.disabled = false;
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
+        : 'Could not save that meal. Tap Add to try again.', 5200);
+      trackEvent('log_write_failed', { quota: !!full });
+      return;                       // the sheet stays open, the entry stays put
+    }
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -4329,6 +4417,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     }
     toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !editing;
+    if (!editing) game.note = `${food.name} logged · ${Math.round(n.kcal)} kcal`;
     queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -8094,6 +8183,12 @@ function queueCelebration(game) {
       levelRewards: game.levelRewards || prev.levelRewards,
       streakMilestone: game.streakMilestone || prev.streakMilestone,
       newBadges: [...(prev.newBadges || []), ...(game.newBadges || [])],
+      /* WHAT THE PLAYER ACTUALLY DID, carried through so the takeover can say
+         it. A non-gamer logged their first food on 2026-08-13, got a full-screen
+         "Badge earned" instead, and asked "did it save my egg?" The toast that
+         confirms the meal is fired 380ms before this covers the screen, so the
+         one action they came here for was the one thing never confirmed. */
+      note: game.note || prev.note || null,
     };
   }
 }
@@ -8122,7 +8217,7 @@ function maybeCelebrate() {
   setTimeout(() => openCelebration(c), 380);
 }
 
-async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null }) {
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
@@ -8146,6 +8241,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
         <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>
         ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
       </div>
+      ${note ? `<p class="cele-note">${esc(note)}</p>` : ''}
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Keep it going</button>
       </div>
@@ -9637,7 +9733,21 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
       // Two frames, so tearing .go off and putting it back really does restart
       // the entrance instead of being coalesced into no change at all.
-      const go = () => requestAnimationFrame(() => requestAnimationFrame(() => deck.classList.add('go')));
+      /* SAME SHAPE AS THE ROUTE REVEAL, FOUND BY SWEEPING FOR IT.
+         `.pc-rise` is `visibility: hidden` until `.pack-deck.go` arrives, and
+         this added that class inside a DOUBLE rAF, so a frozen page left the
+         cards permanently invisible: measured go=false, visible=0 after
+         freezing 0ms and 40ms into a reveal. A crate opening is exactly when a
+         player switches away, which makes this the worst place in the app to
+         depend on a frame arriving.
+         The double rAF stays, because the entrance animation genuinely needs
+         two frames to have a previous value to interpolate from. The timer is
+         the floor under it. classList.add is idempotent. */
+      const go = () => {
+        const add = () => deck.classList.add('go');
+        requestAnimationFrame(() => requestAnimationFrame(add));
+        setTimeout(add, 300);
+      };
       if (first) {
         // the card is behind the crate for 2.6s, so a slow decode has all the
         // runway it needs and must not hold the sequence up
@@ -12597,8 +12707,29 @@ const ECONOMY_TALENTS = new Set(['lightfeet']);
 // were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
 // deep-linking straight to the right screen. Pure fn over already-fetched data;
 // returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
-function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1 }) {
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1,
+                             loggedToday = 1, everLogged = 1, mealSkipped = false }) {
   const sig = [];
+  /* DAY ONE IS ABOUT FOOD. A non-gamer played this cold on 2026-08-13 and the
+     only glowing thing on the home screen of a food tracker was an invitation
+     to a fight, which they took, on the easiest opponent, and lost. Their words:
+     "the app never once said log your meals every day. It said Ready for your
+     first fight?"
+     So the first meal outranks the first fight. It is the thing they installed
+     this for, it is the thing that pays the energy the fight needs, and it is
+     the one action on Today that cannot be lost.
+     PRIORITY 9, above everything, but it retires the moment it stops being
+     true: as soon as they log anything today, the moment they have ever logged
+     anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
+     skippable if they dont want to then point them to other things that could
+     be of interest" — skipping does not blank the card, it falls straight
+     through to the fight/gear/talent nudges underneath, which is what the rest
+     of this function already computes. */
+  if (!loggedToday && !everLogged && !mealSkipped) sig.push({
+    key: 'food:first', hero: 'food', action: 'logfood', priority: 9,
+    nudge: 'Start with breakfast',
+    toast: 'Log what you eat and your Bonehead earns from it. Everything else here runs on that.',
+  });
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
@@ -12680,7 +12811,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v373'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v374'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -13188,7 +13319,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
-  const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1) });
+  /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
+     one door every fight in the app walks through: the Pit ladder, the Champion,
+     the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
+     and this is their only shared floor. Deriving it per-caller would leave
+     whichever entry point a new player happens to reach first uncovered, which is
+     precisely the failure Tom is describing.
+     The ledger is the authority: a 'fight' XP row is only ever written on a WIN,
+     so an empty filter means they have never won one. Losses do not count, so a
+     player who loses their first attempt is still protected on the next. */
+  const everWon = (await db.all('xp')).some(r => r.type === 'fight');
+  const fight = createFight({ player, foe, add, seed: navigator.webdriver ? (window.__pitSeed = (window.__pitSeed || 1336) + 1) : (Date.now() % 100000) + 1, aiLevel: foeCfg.aiLevel || (foeCfg.mode === 'champ' ? 3 : foeCfg.mode === 'rung' ? 2 : 1), tutorial: !everWon });
   const fast = !!navigator.webdriver;
   const beatMs = fast ? 60 : 700;
   const fxMs = fast ? 30 : 300;

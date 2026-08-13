@@ -241,7 +241,14 @@ const partial = await page.evaluate(async payload => {
   const everythingWritten = Object.values(state).every((n, i) => n === (payload[Object.keys(state)[i]] || []).length);
   return { err, state, anythingWritten, everythingWritten };
 }, payload);
-if (partial.anythingWritten) {
+/* Finding C fires only if the DB is in an actual MID-state (some stores
+   populated, others empty). With the fix on ext/data-safety, importAll
+   opens ONE multi-store transaction and commits atomically; the
+   synthetic monkey-patch on db.put does not intercept the transaction
+   layer, so on the fixed tree this audit sees everythingWritten=true
+   and correctly does NOT surface Finding C. If the fix regresses, the
+   synthetic mid-state returns and this row fires again. */
+if (partial.anythingWritten && !partial.everythingWritten) {
   finding('C (RISK)  importAll is NOT transactional across stores',
     `state after mid-import synthetic failure: ${JSON.stringify(partial.state)}  err=${partial.err}. Each row is put in its own tx (js/db.js:61 + :91), so a real mid-import failure (quota, corrupt row, tab close) leaves the DB in a state that is NEITHER the previous save NOR the restore. The Settings-YOUR-DATA toast on failure says "Import failed: <err>", and the player has no way to know their profile is now partially overwritten. Same additive-storage discipline as the rest of the app SHOULD apply, and a single readwrite tx across all stores would give it. Not fixed here per findings-only rule; sw.js/db.js is Reg's file class.`);
 }

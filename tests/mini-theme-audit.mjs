@@ -20,13 +20,17 @@
  * layers come back as the coin-flip look and this fails on "drawn layers are the
  * themed ones".
  */
-import { boot, seed, sleep, settle } from './godmode.js';
+import { boot, seed, sleep, settle, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { minisNear } from '../js/poi.js';
 import { themedLook } from '../js/bosses.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const base = process.argv[2] || 'http://localhost:8765/';
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
 
 /* poi.js is pure, so the fixture is computed here rather than scraped out of the
    page: that way the expectation comes from the generator and the page has to
@@ -129,5 +133,6 @@ if (reach.exists && reach.hidden === false) {
 
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
 process.exit(fails.length ? 1 : 0);

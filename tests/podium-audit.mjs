@@ -3,10 +3,15 @@
    collapsed now and we lost the podium art. You should still see that and then
    also click to open and see the full list."
    Proven red against the collapsed version: podium hidden, 0 figures. */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const { browser, page } = await boot(process.argv[2] || 'http://localhost:8765/');
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
+const { browser, page } = await boot(base);
 await page.evaluate(() => {
   // the Crew tab gates on being online; __testMe / __testFriends are the existing
   // webdriver fixtures for exactly that
@@ -53,5 +58,6 @@ const sheet = await page.evaluate(() => {
 ok('tapping the card opens the full list', sheet.rows === 9, `${sheet.rows} rows`);
 ok('the sheet stays ONE flat list (no podium in it)', !sheet.podiumInSheet);
 await browser.close();
+if (srvHandle) srvHandle.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');
 process.exit(fails.length ? 1 : 0);

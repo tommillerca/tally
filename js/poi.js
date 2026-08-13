@@ -400,6 +400,21 @@ export async function claimDenWin(den, day = dateKey()) {
   if (den.roaming) {
     const xp = await award(denKey(day, den), 'roamboss', r.xp || 50, `Roaming boss: ${den.name}`);
     if (xp === 0) return null;
+    /* ROAMING BOSSES NOW RAISE THE CEILING TOO. Tom, 2026-08-13, and not for
+       the first time: "fighting some of the new boss dens in the open world do
+       not increase the ceiling on pit fights. some do some dont".
+       He was exactly right, and this was the some-dont. denWinsCount() counts
+       'bossfirst' rows. The landmark branch mints one, the remote branch mints
+       one and says in its comment that it must, and this branch minted only
+       'roamboss', so every roaming boss a player beat did nothing for the
+       Gauntlet. Same claimDenWin, same kind of fight, silently different
+       progression.
+       Minted AFTER the xp===0 check, per the rewarded-actions SOP: the state
+       transition is "a roaming boss goes from never-beaten to beaten", and a
+       re-clear must not mint a second marker. The id is
+       roam-<date>-<cell>, so award()'s own dedupe keys this to one per distinct
+       boss, which is what "distinct dens ever beaten" already means. */
+    await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Roaming clear: ${den.name}`);
     if (r.crate) await grantCrate(r.crate, 'roam-boss');
     return { xp, ...r, gearChoices: null };
   }
