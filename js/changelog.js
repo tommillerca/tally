@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 374, date: '2026-08-13', title: 'Restoring a backup can no longer half-work', items: [
+    "<b>This is the important one.</b> Restoring a backup wrote your save one row at a time, so if it was interrupted partway (a reload, the app going to the background, a full phone) you were left with a mix of the old save and the new one, and nothing said so. A restore now either completes entirely or changes nothing at all, and it tells you which.",
+    '<b>The app no longer opens to a blank screen</b> if you left it in the background while it was starting. The reveal was waiting for a frame that never came.',
+    'Your first fight cannot be lost. It is the one that teaches you how fighting works, and some players were losing it and never coming back.',
+    'Beating a roaming boss raises the ceiling in The Pit, the same as any other win. It used to count for nothing.',
+    'The first session says more: what to log first, how many fights are waiting, and a word of confirmation when a meal lands.',
+  ] },
   { n: 373, date: '2026-08-13', title: 'The leaderboard stops killing the Crew tab', items: [
     "<b>Opening the leaderboard used to blank the Crew tab and bounce you back.</b> Every row was drawing a full-size Bonehead, a hundred of them at once, and your phone was running out of memory and killing the page. Heads now load as you scroll to them. Nothing about the board looks different, it just survives being opened.",
     'A Crew FAVES skull that failed to load stayed blank forever. It retries now, and draws a plain plate if it still cannot.',
