@@ -9295,7 +9295,40 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       ctx.drawImage(src, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
       res();
     };
-    img.onerror = () => res();
+    /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
+       Tom, 2026-08-13: "the faves skull icons one loads but the other doesnt".
+       Reproduced by failing ONE skull request: that chip stayed blank, the
+       other drew, and NOTHING was logged, because this handler used to be
+       `() => res()`. Every caller here paints into a canvas, so a failed load
+       is invisible rather than ugly, which is anti-regression rule 8 exactly.
+
+       Two steps, cheapest first. These are precached assets, so a failure is
+       usually a hiccup rather than an absence: retry once against the same URL
+       (no cache-buster, or an offline device would turn a warm cache miss into
+       a guaranteed miss). If it fails twice, paint a plain plate so the slot
+       reads as a gap instead of as nothing.
+
+       Deliberately neutral and deliberately silent-looking: this is shared by
+       eight call sites from an 80px crew chip to a 600px pack card, so the
+       placeholder is drawn in canvas units and carries no glyph or copy that
+       would look like a broken-image icon at one size and a billboard at
+       another. */
+    let retried = false;
+    img.onerror = () => {
+      if (!retried) { retried = true; img.src = src; return; }
+      try {
+        const ctx = canvas.getContext('2d');
+        const cw = canvas.width, ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        const m = Math.round(Math.min(cw, ch) * 0.16), r = Math.round(Math.min(cw, ch) * 0.14);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(m, m, cw - m * 2, ch - m * 2, r);
+        else ctx.rect(m, m, cw - m * 2, ch - m * 2);
+        ctx.fill();
+      } catch { /* a canvas we cannot paint is still better than a throw here */ }
+      res();
+    };
     img.src = src;
   });
 }
