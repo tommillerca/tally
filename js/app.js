@@ -6756,13 +6756,31 @@ async function renderFriends(el) {
        which is exactly the old behaviour rather than an empty board. */
     const heads = $$('[data-lbhead]', body);
     if (typeof IntersectionObserver === 'function') {
+      /* RECYCLE, do not just defer. Tom, 2026-08-13: "scrolling the leaderboard
+         still crashes it like before the fix. it's better than before when it
+         wouldn't open but that's a thing."
+
+         He is describing the exact hole in the first fix. It mounted on approach
+         and then called io.unobserve, so a head, once mounted, was never taken
+         down again. That made the cost DEFERRED rather than BOUNDED: opening the
+         board mounted only the visible handful and looked fixed, but scrolling to
+         the bottom of a full board ended with every row mounted at once, which is
+         the same decoded-RGBA total that killed the renderer in the first place.
+
+         Keeping the observer attached and clearing heads that leave the margin
+         bounds the board to roughly what is on screen, no matter how far anyone
+         scrolls. Re-entering re-mounts from the browser's image cache.
+
+         The reason this shipped: my audit measured the mount at OPEN and never
+         scrolled, so it measured the one state the player was not complaining
+         about. lb-memory-audit now scrolls to the end before it measures. */
       const io = new IntersectionObserver(entries => {
         for (const en of entries) {
-          if (!en.isIntersecting) continue;
           const el = en.target;
-          io.unobserve(el);
           const p = players[Number(el.dataset.lbhead)];
-          if (p && !el.firstChild) el.innerHTML = lbHeadInner(p, 52);
+          if (!p) continue;
+          if (en.isIntersecting) { if (!el.firstChild) el.innerHTML = lbHeadInner(p, 52); }
+          else if (el.firstChild) el.textContent = '';
         }
       }, { rootMargin: '600px 0px' });
       heads.forEach(el => io.observe(el));
