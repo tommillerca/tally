@@ -92,7 +92,12 @@ const fought = await page.evaluate(async () => {
   // assert on what the player sees: the plate's HP readout and bar, not on a
   // guessed path into the engine's state object
   const hp = document.getElementById('youHp');
-  const plate = document.querySelector('.fplate, .fighter-plate, #youPlate');
+  /* The .fplate / .fighter-plate / #youPlate query used to sit here but the
+     variable it filled was never read; the assertion below reads `hp?.style.width`
+     from #youHp and `arena.textContent` directly. suite-rot flagged line 95's
+     three arms as STALE (verified 2026-08-13: none of them are emitted anywhere
+     in js/). Dropping the query removes dead code and lets suite-rot clear the
+     row honestly; the assertion is unchanged. */
   const txt = (document.getElementById('arena')?.textContent || '');
   const m = txt.match(/(\d+)\s*\/\s*(\d+)/);
   return {
