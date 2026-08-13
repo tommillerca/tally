@@ -100,6 +100,22 @@ const POI_CLASSES = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 
 let arriving = [];
 let quietT = null;
 let capT = null;
+/* The bundled hold below is for PAN arrivals: POIs found while looking around,
+   which really do trickle and need coordinating into a beat. The initial-load
+   second wave (POIs that missed the first placement because tiles were still
+   loading) is a different animal: it lands 200-1500ms after the reveal on a
+   slow line, and holding it 1200ms then popping it in with a poiPop scale is
+   exactly the "stuff appearing on a settled map" Tom complained about in v294
+   and v295. Route those through the standard markers-in transition (a 220ms
+   opacity fade) instead. Flip on the first user gesture (dragstart/zoomstart
+   with e.originalEvent, gated in openMap): after a real pan or zoom, we're
+   back to the trickle-guard regime. Programmatic camera moves (easeTo/flyTo)
+   must NOT flip this or the initial second wave would re-enter the batched
+   hold path, which is the exact bug being fixed. */
+let interacted = false;
+export function markMapInteracted() { interacted = true; }
+export function resetMapInteracted() { interacted = false; }   // openMap teardown
+export function isMapInteracted() { return interacted; }   // audit hook, no runtime callers
 function flushArrivals() {
   clearTimeout(quietT); clearTimeout(capT); quietT = capT = null;
   /* Everything in the beat is revealed on the SAME frame, with a deliberate
@@ -121,6 +137,18 @@ function holdArrival(el) {
   // that turn up AFTER the map is on screen need holding.
   if (!stage || !stage.classList.contains('markers-in')) return;
   if (!POI_CLASSES.some(c => el.classList.contains(c))) return;   // never the player's own marker
+  if (!interacted) {
+    /* Initial-load second wave: fade in over 220ms via the standard markers-in
+       transition. `poi-arriving` forces opacity 0 for one frame so the
+       transition has a start value; the next rAF removes it and the base
+       opacity transition takes over. No batching, no poiPop scale, no 1200ms
+       hold. */
+    el.classList.add('poi-arriving');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.classList.remove('poi-arriving');
+    }));
+    return;
+  }
   el.classList.add('poi-arriving');
   arriving.push(el);
   clearTimeout(quietT);

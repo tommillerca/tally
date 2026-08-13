@@ -1213,8 +1213,15 @@ body::before {
 }
 .fight-log { min-height: 34px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 6px; }
 .fight-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+/* TIGHTER ROWS, the other half of Tom's 2026-08-13 call. 11/9 padding made a
+   ten-button tray 317px on a 393x852 phone and left the boss 34% of the screen.
+   8/7 plus a 44px floor keeps every button a legal tap target while giving the
+   arena back the room the art actually needs (the Live Wire plate is 292px and
+   its container had shrunk to 289px). Shrinking type was NOT the lever: this
+   app already has a standing complaint about tiles too small to judge. */
 .fight-act {
-  display: grid; gap: 2px; justify-items: center; padding: 11px 5px 9px;
+  min-height: 44px;
+  display: grid; gap: 2px; justify-items: center; padding: 8px 5px 7px;
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm);
 }
@@ -1240,7 +1247,13 @@ body::before {
    waste: it is where a boss stands and where every spell happens, which is the
    whole reason a Wraith at 212x190 was getting its hood cut off. */
 .fight-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.fight-body > .arena { flex: 1 1 0; min-height: 258px; }
+/* 258 WAS SET TO A NUMBER THE ART OUTGREW. The boss plate renders 292px tall,
+   so on a 375x667 phone with a stocked kitchen the arena sat pinned at this
+   floor and the figure ran 34px past its own container, up under the HUD. The
+   floor is the art's height now. lockTray already scrolls the tray on short
+   screens, so the cost lands on the button list (which scrolls) rather than on
+   the boss (which cannot). Measured 2026-08-13. */
+.fight-body > .arena { flex: 1 1 0; min-height: 292px; }
 .fight-body > .fight-hud, .fight-body > .fight-meta, .fight-body > .fight-actions,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray holds one height for the whole fight and scrolls inside itself; End
@@ -6926,7 +6939,46 @@ body::before {
   margin-bottom: 30px;                       /* the lift: he hangs, he does not stand */
   filter: drop-shadow(0 26px 16px rgba(0, 0, 0, 0.55));
 }
-.arena.boss-mage .fighterG:not(.foe-side) > .fstage { transform: scale(.92); transform-origin: bottom center; }
+/* THE TWO FIGURES WERE TOUCHING. Tom, 2026-08-13: "the live wire looks too
+   close to the bonehead". Measured off the render rather than eyeballed, and
+   he was right in the strongest sense: the ink was CONTIGUOUS, no clear column
+   between them anywhere.
+     player ink  css x88..204   (116 wide)
+     boss ink    css x124..330  (206 wide)
+     arena       css x16..377   (361 wide)
+   116 + 206 = 322 of ink in a 361 arena, so there are only 39px for two
+   gutters AND a gap. The figure contract's 6% safe margin alone wants 44, so
+   the arithmetic does not close at these sizes: something had to give. Tom
+   chose to split it, so the player steps back a little further (.92 -> .87,
+   about 6%) AND both groups move outward, instead of taking all of it out of
+   either one. The boss keeps every pixel he has: he is the subject.
+   Target, all in css px: player ink 28..138, gap 22, boss ink 159..365,
+   margins 12 each side. Verified against the render, not assumed. */
+.arena.boss-mage .fighterG:not(.foe-side) { transform: translateX(-53px); }
+.arena.boss-mage .fighterG.foe-side { transform: translateX(35px); }
+.arena.boss-mage .fighterG:not(.foe-side) > .fstage { transform: scale(.87); transform-origin: bottom center; }
+/* AND THE PET, which was bridging the gap the two moves above had just opened.
+   Measured: after separating the fighters the pet still sat at css x82..158
+   with the boss's ink starting at 159, so the ink read as contiguous exactly as
+   before and the fix looked like it had done nothing.
+   Three figures need 110 + 76 + 206 = 392px of ink in a 361px arena, so one
+   overlap is unavoidable. It belongs between the player and HIS OWN pet, who
+   are a pair, not between the pet and the boss they are both facing. So the pet
+   tucks left into the player's shoulder (it already sits behind him on
+   z-index) and the daylight goes where the drama is. */
+/* Tom, 2026-08-13: "the pet needs to be further in front than that the overlap
+   is extreme and bring the pets art forward on top of the bonehead."
+   Two things, and they pull against each other on width. The tuck comes back
+   from -27px to -13px, which halves how much of him it covers and still leaves
+   daylight to the boss (pet ink ends ~145, the Live Wire starts at 159). And it
+   comes FORWARD: `.fighterG > .fstage` sets z-index 2 with the comment "the pet
+   tucks behind", which is the right default beside a Bonehead on a card but the
+   wrong one here, where a smaller pet behind a standing figure reads as
+   swallowed by it. In front, the same overlap reads as the pet standing at his
+   feet, which is what it is. Scoped to this arena only, so the paperdoll and
+   card surfaces keep the tuck-behind they were designed with. */
+.arena.boss-mage .pet-fighter { transform: translateX(25px); z-index: 4; }
+.arena.boss-mage .pet-fighter > .fstage { z-index: 4; }
 .bst-fig.bst-drawn { background: #0d0f08; }
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
 /* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */
@@ -7279,3 +7331,21 @@ body::before {
   border: 1px solid var(--line); border-radius: 14px; padding: 13px;
   color: var(--text-2); font-weight: 700; margin-top: 8px;
 }
+
+/* The Crew strip. Same family as the Glutton/Spires/Garden banners so it reads
+   as furniture rather than an ad, but a <button> because there is nothing to
+   expand: it opens the same card the popup opens. Not dismissible on purpose. */
+/* A <button> gets none of `.glutton-banner > summary`'s box, so it inherited
+   only the outer card and measured 96px against the family's 72. Carry the
+   summary's own flex row and padding here instead of guessing a height: the
+   strip should match its siblings because it IS one, and 72 is their number,
+   not a value I liked the look of. */
+.dc-banner {
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  display: flex; align-items: center; gap: 11px; padding: 11px 13px;
+}
+.dc-bnr-ico { color: #5865F2; display: grid; place-items: center; }
+.dc-bnr-ico svg { width: 22px; height: 17px; }
+/* The one door the potions live behind, and the way back out of it. */
+.fight-act.items { border-color: rgba(139, 212, 80, .5); }
+.fight-act.items.back { border-color: var(--line); color: var(--text-2); }

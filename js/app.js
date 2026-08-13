@@ -31,7 +31,7 @@ import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
-import { loadMaplibre, createBoneyardMap, domMarker, MAP_START_ZOOM } from './map.js';
+import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -1074,7 +1074,17 @@ async function maybeShowRaceIntro() {
  * The invite URL exists in exactly ONE constant; a link that exists three
  * times will rot in two of them when it changes. */
 const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
-const COMMUNITY_SEEN_KEY = 'discordIntroSeen';
+/* WAS A BOOLEAN BURNED ON THE FIRST SHOWING. Tom, 2026-08-13: "make the popup
+   happen on the first three opens to encourage joining". So it counts instead.
+   The old key is left behind on purpose: anyone who already saw the v371 popup
+   has discordIntroSeen=true, and reading it as "already spent one" means they
+   get the remaining two rather than a fresh three. Migrating them to zero would
+   show the card to people who have already dismissed it once, which is the
+   opposite of what a counter is for. */
+const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
+const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
+const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
+const COMMUNITY_MAX_SHOWS = 3;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
    this card is written for. Drawn in currentColor so it takes the eyebrow's
@@ -1094,6 +1104,22 @@ const DISCORD_MARK = `<svg class="dc-mark" viewBox="0 0 24 18" width="16" height
    Inline for the same reason as the mark: sw.js precaches an explicit list, so
    a new file would need an entry and this needs none. */
 const DISCORD_APP_ICON = `<span class="dc-app" aria-hidden="true"><svg viewBox="0 0 24 18" width="44" height="33" fill="#fff"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg></span>`;
+
+/* THE THIN STRIP ON CREW. Tom, 2026-08-13: "make the discord be findable as a
+   thin banner at the top of crew for those that missed the popup".
+   Reg pointed at the .glutton-banner family (Glutton, Spires, Garden, teaser)
+   rather than a new component, and it is the right shape: a pinned strip that
+   states one thing and opens something. Two departures, both deliberate:
+   this is a BUTTON, not a <details>, because there is nothing to expand, it
+   opens the same card the popup opens; and it is NOT dismissible, because the
+   whole point is that it is still there for anyone who tapped past the popup. */
+function communityBannerHtml() {
+  return `<button class="glutton-banner dc-banner" id="crewDiscord">
+    <span class="gbn-ico dc-bnr-ico">${DISCORD_MARK}</span>
+    <span class="gbn-txt"><i>Bone Boiz on Discord</i><b>Talk to the people making this game</b></span>
+    <span class="gbn-chev">&rsaquo;</span>
+  </button>`;
+}
 
 async function openCommunityCard() {
   const eq = await equipped();
@@ -1130,7 +1156,14 @@ async function openCommunityCard() {
   veil.addEventListener('click', e => { if (e.target === veil) close(); });
   // the join is an <a> so the OS handles it (app or browser); the card closes
   // behind it so returning players are not stuck under a stale veil
-  $('#communityGo', veil).addEventListener('click', () => setTimeout(close, 400));
+  $('#communityGo', veil).addEventListener('click', () => {
+    /* Burn it here and now. This fires on the same tap that follows the link,
+       so it lands before the OS hands the player to Discord and before any
+       chance of the app being backgrounded mid-write. */
+    kvSet(COMMUNITY_JOINED_KEY, true).catch(() => {});
+    kvSet(COMMUNITY_SHOWN_KEY, COMMUNITY_MAX_SHOWS).catch(() => {});
+    setTimeout(close, 400);
+  });
 }
 
 // Test hook (webdriver only), same reasoning as __raceIntro above.
@@ -1141,13 +1174,24 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 async function maybeShowCommunityIntro() {
   try {
     if ((navigator.webdriver && !window.__communityForce) || !S.settings) return;
-    if (await kvGet(COMMUNITY_SEEN_KEY, false)) return;
+    /* Three strikes, and JOIN ends it early and permanently. Somebody who has
+       joined must never see this again; that is the one behaviour here worth
+       being careful about, so it is checked first and written the moment the
+       link is tapped rather than on the way back from wherever Discord opened. */
+    if (await kvGet(COMMUNITY_JOINED_KEY, false)) return;
+    const shown = (await kvGet(COMMUNITY_SHOWN_KEY, null)) ??
+      ((await kvGet(COMMUNITY_SEEN_KEY, false)) ? 1 : 0);   // legacy: one already spent
+    if (shown >= COMMUNITY_MAX_SHOWS) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      /* Spend the showing BEFORE opening, not after: the card is dismissed by
+         several routes (the button, the veil, history) and a counter written on
+         the way out can be skipped by any of them. */
+      await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
       await kvSet(COMMUNITY_SEEN_KEY, true);
       openCommunityCard();
     };
@@ -2681,10 +2725,27 @@ function lbHeadHtml(p, px) {
   const ox = px / 2 - SKULL_BOX.cx * scale;
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  return `<span class="lb-head" style="width:${px}px;height:${px}px">
-    <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
+  return `<span class="lb-head" style="width:${px}px;height:${px}px">${lbHeadInner(p, px)}</span>`;
+}
+
+/* THE INSIDE OF A HEAD, SEPARATED SO THE BOARD CAN DEFER IT.
+   Every one of these mounts a full avatarLayersHtml stack at the art's natural
+   640x640, and the leaderboard draws one PER ROW. Measured on a 100-row board
+   with only two cosmetic layers per player: 200 images, every one 640x640,
+   ~312MB of decoded RGBA in a single open. Real players wear six to eight
+   layers, so a real board is nearer 600-800 images and about a gigabyte.
+   That is what was killing the Crew tab: iOS kills the WKWebView renderer on
+   memory, and a killed renderer leaves NO javascript error, which is why the
+   board "blanked and went back to Crew" while every check we own said the
+   payload was clean. See openLeaderboard for the deferral. */
+function lbHeadInner(p, px) {
+  const scale = px / (SKULL_BOX.h * 2.05);
+  const ox = px / 2 - SKULL_BOX.cx * scale;
+  const oy = px / 2 - SKULL_BOX.cy * scale;
+  const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
+  return `<span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
       <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
-    </span></span>`;
+    </span>`;
 }
 // Test hook (webdriver only): the board renders from a server payload, so
 // "does a shiny row render shiny" was only ever checkable on a real phone.
@@ -6019,6 +6080,7 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
+    ${communityBannerHtml()}
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
       <!-- never greet the card with an empty box: it says something before the
@@ -6585,11 +6647,40 @@ async function renderFriends(el) {
         const medal = rank <= 3 ? `<span class="lb-medal m${rank}">${['1st', '2nd', '3rd'][rank - 1]}</span>` : '';
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
-          ${lbHeadHtml(p, 52)}
+          <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
           <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
+    /* FILL THE HEADS ONLY AS THEY COME INTO VIEW.
+       The rows above ship an empty 52px box, so opening the board costs the
+       layout and none of the art. This mounts the real stack when a row is
+       within a screen of the viewport and unobserves it, so each head is built
+       exactly once and a board nobody scrolls decodes about eight of them
+       instead of a hundred.
+       root is the viewport, not the sheet body: intersection accounts for
+       scrolling ancestors, and the sheet is full-screen anyway.
+       No composeAvatars here, deliberately. It hides a stack until every layer
+       decodes, and a head that never un-hides is a blank row (anti-regression
+       rule 8). These are 52px thumbnails; an un-composed one is fine.
+       If IntersectionObserver is ever missing, every head mounts immediately,
+       which is exactly the old behaviour rather than an empty board. */
+    const heads = $$('[data-lbhead]', body);
+    if (typeof IntersectionObserver === 'function') {
+      const io = new IntersectionObserver(entries => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          const el = en.target;
+          io.unobserve(el);
+          const p = players[Number(el.dataset.lbhead)];
+          if (p && !el.firstChild) el.innerHTML = lbHeadInner(p, 52);
+        }
+      }, { rootMargin: '600px 0px' });
+      heads.forEach(el => io.observe(el));
+    } else {
+      heads.forEach(el => { const p = players[Number(el.dataset.lbhead)]; if (p) el.innerHTML = lbHeadInner(p, 52); });
+    }
+
     /* Tapping a row opens their profile. The leaderboard payload already carries
        everything the profile sheet renders from (outfit, pet, level, badges), so
        this is a reader, not a new request. Friend-only actions are hidden for
@@ -6616,6 +6707,7 @@ async function renderFriends(el) {
       await paint();
     }));
   };
+  $('#crewDiscord', el)?.addEventListener('click', () => openCommunityCard());
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
 
@@ -9249,7 +9341,40 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       ctx.drawImage(src, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
       res();
     };
-    img.onerror = () => res();
+    /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
+       Tom, 2026-08-13: "the faves skull icons one loads but the other doesnt".
+       Reproduced by failing ONE skull request: that chip stayed blank, the
+       other drew, and NOTHING was logged, because this handler used to be
+       `() => res()`. Every caller here paints into a canvas, so a failed load
+       is invisible rather than ugly, which is anti-regression rule 8 exactly.
+
+       Two steps, cheapest first. These are precached assets, so a failure is
+       usually a hiccup rather than an absence: retry once against the same URL
+       (no cache-buster, or an offline device would turn a warm cache miss into
+       a guaranteed miss). If it fails twice, paint a plain plate so the slot
+       reads as a gap instead of as nothing.
+
+       Deliberately neutral and deliberately silent-looking: this is shared by
+       eight call sites from an 80px crew chip to a 600px pack card, so the
+       placeholder is drawn in canvas units and carries no glyph or copy that
+       would look like a broken-image icon at one size and a billboard at
+       another. */
+    let retried = false;
+    img.onerror = () => {
+      if (!retried) { retried = true; img.src = src; return; }
+      try {
+        const ctx = canvas.getContext('2d');
+        const cw = canvas.width, ch = canvas.height;
+        ctx.clearRect(0, 0, cw, ch);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        const m = Math.round(Math.min(cw, ch) * 0.16), r = Math.round(Math.min(cw, ch) * 0.14);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(m, m, cw - m * 2, ch - m * 2, r);
+        else ctx.rect(m, m, cw - m * 2, ch - m * 2);
+        ctx.fill();
+      } catch { /* a canvas we cannot paint is still better than a throw here */ }
+      res();
+    };
     img.src = src;
   });
 }
@@ -11334,6 +11459,27 @@ async function renderBoneyard(el) {
       }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
+    /* Post-interaction, holdArrival goes back to its trickle-guard regime
+       (bundled poi-arriving/poi-in). Pre-interaction, second-wave arrivals
+       fade in via the standard markers-in transition.
+       ZOOMSTART GATE: maplibre fires this event for PROGRAMMATIC camera
+       moves too (easeTo/flyTo/setZoom without user input). If anything in
+       openMap eases the camera during arrival, `interacted` would flip
+       before the player has touched anything and the initial second wave
+       would take the batched-hold branch, reintroducing the 1200ms trickle
+       on the exact load this fix is for. The `originalEvent` property is
+       present ONLY on user-gesture-driven map events, so gate on it.
+       dragstart is user-only by design but gated symmetrically so the next
+       reader does not have to remember which is which. */
+    resetMapInteracted();
+    const onFirstInteract = e => {
+      if (!e || !e.originalEvent) return;   // programmatic move, not the player
+      markMapInteracted();
+      map.off('dragstart', onFirstInteract);
+      map.off('zoomstart', onFirstInteract);
+    };
+    map.on('dragstart', onFirstInteract);
+    map.on('zoomstart', onFirstInteract);
     let worldReady = false;   // flipped once every marker layer's state exists
     /* THE SECOND WAVE. Tom, 2026-08-08: "the boneyard is still loading in POIs at
        different times ... it looks cheap when everything staggers in", and it was
@@ -11356,7 +11502,31 @@ async function renderBoneyard(el) {
       requestAnimationFrame(() => stage.classList.add('markers-in'));
     };
     const tryReveal = () => { if (placedOnce && worldPassDone) revealMarkers(); };
-    setTimeout(revealMarkers, 4000);   // the cap: never blank for longer than this
+    /* THE CAP, and now the primary reveal on slow lines.
+       Measured 2026-08-12 across fast/slow tile conditions (SLOW_TILES=800
+       simulating Tom's real-network round trip), N=5 medians per cell:
+
+         cap 1500 slow  reveal 1560ms  last 2239ms  pop 679ms
+         cap 1800 slow  reveal 1879ms  last 2401ms  pop 519ms   (chosen)
+         cap 2200 slow  reveal 2271ms  last 2275ms  pop  34ms   (same shape as v371)
+         cap 4000 slow  reveal 3176ms  last 3204ms  pop   0ms   (v371, Tom's "too slow")
+
+       On a TYPICAL fast-tile run the gate wins at ~1200ms and any cap at or
+       above 1500 is moot; 1500 and 1800 are identical on the common path and
+       neither "protects" it. The cap only ever fires when tiles are genuinely
+       slow, which is the case it exists for. Where 1800 beats 1500 is the
+       outcome when it does fire: 519ms of fade instead of 679ms, for 320ms
+       more wait. That is the trade.
+       And when 1800 fires on a fast-network hiccup (one of my N=5 fast runs
+       revealed at 2065ms rather than the median 1200ms), the player gets a
+       reveal at 1800 with a short fade, which is the DESIGNED behaviour Tom
+       signed off, not a regression: exactly the slow-line contract, applied
+       to a slow slice of the fast line.
+       Stragglers on any run where the cap fires ahead of full placement
+       fade in over 220ms via the standard markers-in opacity transition
+       (map.js:holdArrival's !interacted branch), not the 1200ms hold +
+       poiPop scale that v370 shipped. */
+    setTimeout(revealMarkers, 1800);
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
@@ -12510,7 +12680,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v372'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v373'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -13770,7 +13940,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
        the sheet is still sliding in when the first render lands. */
     const body = factions.parentElement, row = el('fendrow');
     const arena = body.querySelector('.arena');
-    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 258)
+    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 292)
              + (row ? row.offsetHeight : 56) + 12;
     for (const kid of body.children) {
       if (kid !== factions && kid !== row && kid !== arena) used += kid.offsetHeight;
@@ -13889,15 +14059,35 @@ async function openFight(pitWrap, fighter, foeCfg) {
     html += btn(get('swing'), { hint: dmgHint('swing') });
     html += btn(get('haymaker'), { hint: dmgHint('haymaker') });
     html += defenseRow();
-    // Potions: any brewed potion can be DRUNK mid-fight (1 AP), any class. This is
-    // the kitchen's "beaming potion" — separate from the Alchemist's Toxicity kit.
-    for (const p of POTIONS) {
-      const n = potionInv[p.id] || 0;
-      if (n <= 0) continue;
-      const enabled = fight.active === 'p' && fight.ap >= 1 && !fight.over;
-      html += `<button class="fight-act potion" data-potion="${p.id}" ${enabled ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${n} · ${esc(potionShort(p))}</small></button>`;
+    /* POTIONS BEHIND ONE DOOR. Tom's friend, 2026-08-13: "some players barely
+       see the boss because they have so many items and attack move buttons."
+       Measured: the tray adds one button PER POTION TYPE held, so a player who
+       cooks goes from 4 buttons to 10, the tray grows 141px -> 317px, and the
+       arena drops from 55% of the screen to 34%. At that point the boss art
+       (292px) is TALLER than its own container (289px) and runs up under the
+       HUD. lockTray was doing its job the whole time; its 258px arena floor was
+       simply set to a number the art outgrew.
+       So the six potion buttons become one. Tom chose this plus tighter rows
+       (the CSS half) over shrinking the boss, which is the right call: a
+       smaller Live Wire is the opposite of what a boss fight is for. */
+    const stocked = POTIONS.filter(p => (potionInv[p.id] || 0) > 0);
+    const held = stocked.reduce((n, p) => n + (potionInv[p.id] || 0), 0);
+    const canDrink = fight.active === 'p' && fight.ap >= 1 && !fight.over;
+    if (stocked.length) {
+      if (!fight.itemsOpen) {
+        html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
+      } else {
+        /* Open: the potions AND the way back, so the tray can never strand you
+           in a state with no moves on it. */
+        html += `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        for (const p of stocked) {
+          html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
+        }
+      }
     }
     factions.innerHTML = html;
+    $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
+    $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
     lockTray(factions); renderEndTurn();
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
