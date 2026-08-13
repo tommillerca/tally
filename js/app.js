@@ -2157,6 +2157,19 @@ async function renderToday(el) {
   </div>
   </div>
 
+  ${/* THE LINE THAT EXPLAINS THE WHOLE APP, on the screen where it is needed.
+       A non-gamer played this cold on 2026-08-13 and could not answer "what is
+       the skeleton FOR". They watched the bolt go 3 to 5 after logging an egg
+       and nothing said why. The sentence that explains it already existed, two
+       screens deep INSIDE the Pit: "3 free today + 2 Vigor · log food and walk
+       to earn more". The link between eating and the game was real and hidden.
+       So it says it here, under the character, in words with no jargon in them.
+       Only while it is still news: it retires at level 3, by which point a
+       player either understands the loop or is not going to learn it from a
+       caption. `hero-why` is a caption, not a card, because Today already asks
+       for too much attention above the food. */''}
+  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Logging meals and walking earns more.</p>` : ''}
+
   <!-- FOUR DOORS. A fifth Garden tile shipped in v304 and came straight back out
        (Tom, 2026-08-07): "we dont need the garden icon on Today because if you
        click kitchen it's gonna basically take you there." He is right, the GROW

@@ -7349,3 +7349,14 @@ body::before {
 /* The one door the potions live behind, and the way back out of it. */
 .fight-act.items { border-color: rgba(139, 212, 80, .5); }
 .fight-act.items.back { border-color: var(--line); color: var(--text-2); }
+
+/* The one-line explainer under the hero: what the bolt is and how you get more.
+   Caption weight on purpose. Today already competes for attention above the
+   food, so this states the loop without becoming another card shouting on a
+   screen that has plenty. */
+.hero-why {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: 8px 2px 2px; font-size: 12.5px; color: var(--text-2);
+}
+.hero-why b { color: var(--text); font-weight: 800; }
+.hero-why svg { flex: 0 0 auto; color: var(--gold); }
