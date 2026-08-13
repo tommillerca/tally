@@ -53,9 +53,20 @@ const fin = await page.evaluate(async () => {
 await sleep(4000);
 const fstate = await page.evaluate(async () => {
   const st = await window.__bhFight.state();
-  return { over: st.over, winner: st.winner, turn: st.turn, victoryShown: !!document.querySelector('.fight-over'), doneBtn: !!document.getElementById('fightDone') };
+  /* VISIBILITY, not presence. The result card is now hidden by CSS until
+     settle() adds .fight-settled (app.css: `.fight-body > .fight-over
+     { opacity: 0 }`), and that add sits inside a 900ms timeout guarded by
+     body.isConnected. `!!querySelector` would pass on a card the player
+     cannot see, which is the exact bug that made the onboarding invisible on
+     2026-08-12. Measure the ancestor chain the way onb-audit does. */
+  const over = document.querySelector('.fight-over');
+  let eff = over ? 1 : 0;
+  for (let n = over; n && n.nodeType === 1; n = n.parentElement) eff *= parseFloat(getComputedStyle(n).opacity || '1');
+  return { over: st.over, winner: st.winner, turn: st.turn, victoryShown: !!over, victoryOpacity: eff, doneBtn: !!document.getElementById('fightDone') };
 });
 console.log('finish ->', JSON.stringify(fin), 'state ->', JSON.stringify(fstate));
+check('the victory card is VISIBLE, not merely in the DOM', fstate.victoryOpacity > 0.9,
+  `effectiveOpacity=${fstate.victoryOpacity} present=${fstate.victoryShown}`);
 check('the fight ended with a WIN (a loss proves nothing here)', !!fstate.over && fstate.over.winner === 'p', JSON.stringify(fstate));
 const won = await page.evaluate(async () => {
   const db = (await import('./js/db.js')).db;
@@ -94,6 +105,22 @@ const second = await page.evaluate(async () => ({
 }));
 console.log('re-fight attempt:', refought, JSON.stringify(second));
 check('a second Glutton fight cannot be started', refought === 'no button' || !second.inFight, `${refought} / ${JSON.stringify(second)}`);
+
+/* THE RETURN TRIP. Tom, 2026-08-11: "after beating the glutton you should just
+ * be back on the boneyard and not need to close the popup". The Done button did
+ * history.go(-2), which rewinds two entries but fires ONE popstate, and the
+ * popstate handler closes ONE sheet: the fight sheet went, the stale glutton
+ * sheet stayed up and had to be closed by hand. Tap Done for real and assert
+ * BOTH sheets are gone. A celebration sheet on top is the app-wide post-win
+ * pattern and is not counted against this. */
+await page.evaluate(() => document.getElementById('fightDone')?.click());
+await sleep(1600);
+const landed = await page.evaluate(() => ({
+  fightGone: !document.getElementById('fightBody'),
+  gluttonGone: !document.querySelector('.glutton-card'),
+}));
+console.log('after tapping Done on the victory screen:', JSON.stringify(landed));
+check('winning + Done closes the fight AND the glutton sheet, no manual close', landed.fightGone && landed.gluttonGone, JSON.stringify(landed));
 
 // reopening in the same window must read as cleansed
 s = await openSheet();
