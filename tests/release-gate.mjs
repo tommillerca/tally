@@ -217,6 +217,11 @@ const DECLARED = {
      "-audit". Each was executed before being given a tier here, so none of
      these is a guess: 7 green, 3 red only under headless 'new' (see
      godmode.js), 1 genuinely red, 2 that need an argument, 2 tools. */
+  /* Arrives with ext/godmode-detach-guard. Declared HERE rather than there
+     because this branch is what widened the net to see it at all: the old
+     /-audit\.mjs$/ filter was blind to a *.test.mjs, so the two branches are
+     green apart and red together. Landing them in either order now works. */
+  'detach-guard.test.mjs': ['full', 'the harness-wide detached-frame retry, with its prove-red trio. Not FAST: it deliberately induces detaches and is slow.'],
   'balance.mjs':          ['full', '35 assertions on the exact exploit class we keep re-finding (free lives, stamina, gear-granted action economy). Ran green; belongs in the release run.'],
   'talent-badge.mjs':     ['full', 'the talent badge updates in place after a spend. Ran green.'],
   'gift-open.mjs':        ['full', 'opening a gift, 9 assertions. Ran green.'],
