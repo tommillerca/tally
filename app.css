@@ -6966,7 +6966,19 @@ body::before {
    are a pair, not between the pet and the boss they are both facing. So the pet
    tucks left into the player's shoulder (it already sits behind him on
    z-index) and the daylight goes where the drama is. */
-.arena.boss-mage .pet-fighter { transform: translateX(-27px); }
+/* Tom, 2026-08-13: "the pet needs to be further in front than that the overlap
+   is extreme and bring the pets art forward on top of the bonehead."
+   Two things, and they pull against each other on width. The tuck comes back
+   from -27px to -13px, which halves how much of him it covers and still leaves
+   daylight to the boss (pet ink ends ~145, the Live Wire starts at 159). And it
+   comes FORWARD: `.fighterG > .fstage` sets z-index 2 with the comment "the pet
+   tucks behind", which is the right default beside a Bonehead on a card but the
+   wrong one here, where a smaller pet behind a standing figure reads as
+   swallowed by it. In front, the same overlap reads as the pet standing at his
+   feet, which is what it is. Scoped to this arena only, so the paperdoll and
+   card surfaces keep the tuck-behind they were designed with. */
+.arena.boss-mage .pet-fighter { transform: translateX(-13px); z-index: 4; }
+.arena.boss-mage .pet-fighter > .fstage { z-index: 4; }
 .bst-fig.bst-drawn { background: #0d0f08; }
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
 /* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */
