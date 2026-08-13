@@ -1083,13 +1083,32 @@ const COMMUNITY_SEEN_KEY = 'discordIntroSeen';
    precaches an explicit list and a new asset file would need an entry. */
 const DISCORD_MARK = `<svg class="dc-mark" viewBox="0 0 24 18" width="16" height="12" aria-hidden="true" fill="currentColor"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg>`;
 
-function openCommunityCard() {
+/* THE APP ICON, not just the mark. Tom, 2026-08-12: "add the discord app icon
+   in the popup so people know. maybe the discord icon with a bonehead chillin
+   next to it or something to really grab the attention".
+   The eyebrow mark above is deliberately monochrome so an in-house
+   announcement does not read as an ad. This is the opposite job: the blurple
+   rounded square IS what the app looks like on a home screen, and recognising
+   it is the whole point for the non-gamers this card is written for. So the
+   hero gets the real thing and the eyebrow keeps its restraint.
+   Inline for the same reason as the mark: sw.js precaches an explicit list, so
+   a new file would need an entry and this needs none. */
+const DISCORD_APP_ICON = `<span class="dc-app" aria-hidden="true"><svg viewBox="0 0 24 18" width="44" height="33" fill="#fff"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg></span>`;
+
+async function openCommunityCard() {
+  const eq = await equipped();
   const veil = document.createElement('div');
-  veil.className = 'drop-veil race-veil';
+  veil.className = 'drop-veil race-veil dc-veil';
   veil.innerHTML = `
     <div class="drop-card">
       <span class="drop-count">NEW</span>
-      <p class="drop-eyebrow dc-eyebrow">${DISCORD_MARK}<span>THE CLUBHOUSE IS OPEN</span></p>
+      <p class="drop-eyebrow dc-eyebrow">${DISCORD_MARK}<span>THE CLUBHOUSE</span></p>
+      ${/* YOUR bonehead, not a stock one: it is already loaded, it costs no new
+           precache entry, and "that is my guy" is a stronger reason to look
+           than any illustration we could ship. skip BG/C for the same reason
+           every other small stage does: a backdrop would box him in and the
+           pet belongs to petAsideHtml, not to a hand-placed row. */''}
+      <div class="dc-hero">${DISCORD_APP_ICON}<span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
       <h1 class="drop-title">Join the <em>Bone Boiz</em></h1>
       <p class="drop-sub">Boneheadz now has a home outside the app: a Discord server called <b>Bone Boiz</b>, where the people playing this game talk with the people making it.</p>
       ${/* TWO bullets, not three. Reg, 2026-08-12: three fills the whole 390px
@@ -1102,7 +1121,7 @@ function openCommunityCard() {
         <li><b>Why join?</b> Every future feature gets talked over there before it is built, and bugs and ideas land where they actually get read. If you want a say in what this game becomes, that is the room.</li>
       </ul>
       <a class="drop-cta" id="communityGo" href="${DISCORD_URL}" target="_blank" rel="noopener" style="text-decoration:none;display:block;text-align:center">JOIN THE BONE BOIZ</a>
-      <button class="drop-later" id="communityLater">Maybe later</button>
+      <button class="drop-later dc-close" id="communityLater">Not right now</button>
       <p class="note" style="text-align:center;margin:10px 0 0">The invite also lives in <b>News</b> and <b>Settings</b>, whenever you are ready.</p>
     </div>`;
   document.body.appendChild(veil);
