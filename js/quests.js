@@ -123,9 +123,13 @@ export const DAILY_POOL = [
     progress: c => clamp(c.entries.filter(e => e.foodId && !c.priorFoodIds.has(e.foodId)).length, 1) },
   { id: 'q-weigh', name: 'Data point', desc: 'Log a weigh-in', coins: 40,
     progress: c => clamp(c.weighedToday ? 1 : 0, 1) },
-  { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50, ingredient: 'salt',
+  /* Same class, found in the same playtest: the Kitchen on day one is a dead
+     room ("Not enough ingredients yet", "Nothing planted yet", seven ingredient
+     slots all reading 0). Asking somebody to cook in it is asking for something
+     the app will not let them do. */
+  { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50, ingredient: 'salt', need: 'kitchen',
     progress: c => clamp(c.cookedToday ? 1 : 0, 1) },
-  { id: 'q-harvest', name: 'Bring in a crop', desc: 'Harvest a bed in the Bone Garden', coins: 45,
+  { id: 'q-harvest', name: 'Bring in a crop', desc: 'Harvest a bed in the Bone Garden', coins: 45, need: 'kitchen',
     progress: c => clamp(c.harvestedToday ? 1 : 0, 1) },
   { id: 'q-water', name: 'Stay watered', desc: 'Drink 8 cups of water', coins: 45,
     progress: c => clamp(c.waterToday ? 1 : 0, 1) },
@@ -133,9 +137,21 @@ export const DAILY_POOL = [
     progress: c => clamp(c.bedToday ? 1 : 0, 1) },
   { id: 'q-sleep', name: 'Rest up', desc: 'Log a good night of sleep', coins: 55,
     progress: c => clamp(c.sleepToday ? 1 : 0, 1) },
-  { id: 'q-pit1', name: 'Pit scrap', desc: 'Win a Pit fight', coins: 60,
+  /* GATED ON HAVING ACTUALLY FOUGHT. A non-gamer played this cold on
+     2026-08-13, was pushed into the Pit by the day-one card, LOST on rung 1 of
+     8, and then found that two of their three daily quests were "Win a Pit
+     fight" and "Win 3 Pit fights today". Their words: "on day one I am already
+     failing most of the day's list at a thing I did not download this app to
+     do."
+     A quest list is a statement about what today should look like. Handing a
+     brand-new player two impossible ones on their first morning is the same
+     mistake as pointing the day-one card at a fight, and it is the same fix:
+     the Pit shows up once they have been there. `need` already exists here for
+     exactly this shape (hk, hunt, social), so this is that mechanism, not a
+     new one. */
+  { id: 'q-pit1', name: 'Pit scrap', desc: 'Win a Pit fight', coins: 60, need: 'pit',
     progress: c => clamp(c.pitWins, 1) },
-  { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80, item: 'vigor',
+  { id: 'q-pit3', name: 'Pit run', desc: 'Win 3 Pit fights today', coins: 80, item: 'vigor', need: 'pit',
     progress: c => clamp(c.pitWins, 3) },
   { id: 'q-hunt', name: 'Boneyard sweep', desc: 'Collect 2 spawns on the map', coins: 70, need: 'hunt',
     progress: c => clamp(c.spawns, 2) },
@@ -185,8 +201,13 @@ export const MONTHLY_POOL = [
     progress: c => clamp(c.proteinDays, 20) },
 ];
 
-function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn } = {}) {
-  const avail = pool.filter(q => (q.need !== 'hk' || hkConnected) && (q.need !== 'hunt' || huntEnabled) && (q.need !== 'social' || socialOn));
+function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, kitchenReady } = {}) {
+  /* Callers that predate a gate must not silently lose quests, so an undefined
+     flag means "no opinion, keep it". Only an explicit false hides one. */
+  const off = (flag) => flag === false;
+  const avail = pool.filter(q =>
+    (q.need !== 'hk' || hkConnected) && (q.need !== 'hunt' || huntEnabled) && (q.need !== 'social' || socialOn)
+    && !(q.need === 'pit' && off(pitTried)) && !(q.need === 'kitchen' && off(kitchenReady)));
   const rand = mulberry32(hashStr(seedStr));
   const out = [], used = new Set();
   while (out.length < n && used.size < avail.length) {

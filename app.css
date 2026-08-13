@@ -7349,3 +7349,26 @@ body::before {
 /* The one door the potions live behind, and the way back out of it. */
 .fight-act.items { border-color: rgba(139, 212, 80, .5); }
 .fight-act.items.back { border-color: var(--line); color: var(--text-2); }
+
+/* The one-line explainer under the hero: what the bolt is and how you get more.
+   Caption weight on purpose. Today already competes for attention above the
+   food, so this states the loop without becoming another card shouting on a
+   screen that has plenty. */
+.hero-why {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: 8px 2px 2px; font-size: 12.5px; color: var(--text-2);
+}
+.hero-why b { color: var(--text); font-weight: 800; }
+.hero-why svg { flex: 0 0 auto; color: var(--gold); }
+
+/* The first-meal nudge and its way out. The skip is quiet on purpose: it is an
+   escape hatch, not a second call to action competing with the first. */
+.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; }
+.ul-skip {
+  align-self: center; background: none; border: 0; padding: 7px 12px 2px;
+  color: var(--text-3); font-size: 12.5px; font-weight: 700;
+}
+
+/* The takeover celebrates a badge; this line says what the player actually did,
+   because the toast that confirms it is covered 380ms later by this screen. */
+.cele-note { margin: 14px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
