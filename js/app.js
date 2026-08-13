@@ -4365,6 +4365,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     }
     toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !editing;
+    if (!editing) game.note = `${food.name} logged · ${Math.round(n.kcal)} kcal`;
     queueCelebration(game);
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -8130,6 +8131,12 @@ function queueCelebration(game) {
       levelRewards: game.levelRewards || prev.levelRewards,
       streakMilestone: game.streakMilestone || prev.streakMilestone,
       newBadges: [...(prev.newBadges || []), ...(game.newBadges || [])],
+      /* WHAT THE PLAYER ACTUALLY DID, carried through so the takeover can say
+         it. A non-gamer logged their first food on 2026-08-13, got a full-screen
+         "Badge earned" instead, and asked "did it save my egg?" The toast that
+         confirms the meal is fired 380ms before this covers the screen, so the
+         one action they came here for was the one thing never confirmed. */
+      note: game.note || prev.note || null,
     };
   }
 }
@@ -8158,7 +8165,7 @@ function maybeCelebrate() {
   setTimeout(() => openCelebration(c), 380);
 }
 
-async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null }) {
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
@@ -8182,6 +8189,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
         <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>
         ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
       </div>
+      ${note ? `<p class="cele-note">${esc(note)}</p>` : ''}
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Keep it going</button>
       </div>
