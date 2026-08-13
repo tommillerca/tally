@@ -1,8 +1,12 @@
 /* Every catalogue row must point at a file that EXISTS, DECODES and is 640px.
    A row with no file renders an empty box on a paperdoll, and nothing else in
    the app notices. Run: node tests/newart-audit.mjs [base] [ids,csv|all] */
-import { boot } from './godmode.js';
-const base = process.argv[2] || 'http://localhost:8765/';
+import { boot, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
 const arg = process.argv[3] || 'all';
 const { browser, page } = await boot(base);
 const rows = await page.evaluate(async which => {
@@ -110,6 +114,7 @@ console.log(`  duplicate art (same slot)  : ${dupes.length}${dupes.length ? ' ->
 }
 
 await browser.close();
+if (srvHandle) srvHandle.close();
 if (missing.length || odd.length) { console.log('FAIL'); process.exit(1); }
 console.log('all catalogue art present, decoded and 640px');
 process.exit(0);

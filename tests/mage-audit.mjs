@@ -7,10 +7,15 @@
    to actually decode (a broken <img> measures perfectly).
    Proven red against v352: no mage theme existed at all. */
 import { MAGE_CELL_SHARE } from '../js/poi.js';
-import { boot, sleep, settle } from './godmode.js';
+import { boot, sleep, settle, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
-const { browser, page } = await boot(process.argv[2] || 'http://127.0.0.1:8791/', { seed: true });
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const base = argv || srvHandle.url;
+const { browser, page } = await boot(base, { seed: true });
 await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 
 /* ---- his dens are his, and they do not rotate ---- */
@@ -320,4 +325,5 @@ ok('the log names what each move did', combat.lines >= 4, `${combat.lines} disti
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nthe Live Wire is live');
 await browser.close();
+if (srvHandle) srvHandle.close();
 process.exit(fails.length ? 1 : 0);
