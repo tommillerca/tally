@@ -2771,10 +2771,31 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
+  /* THE CLASS MUST LAND EVEN IF THE FRAME NEVER COMES.
+     Measured 2026-08-13: freeze the page mid-route (CDP frozen lifecycle, which
+     is what iOS does when you tap a target=_blank link, take a call, or switch
+     apps) and resume, and the screen stays at effective opacity 0 FOREVER, with
+     its content sitting right there. Reproduced at 0ms, 30ms and 120ms into a
+     route, so the window is wide, and it never recovers.
+
+     Two faults, and the second is what made it permanent:
+       requestAnimationFrame was the ONLY path that added the class, and a
+       frozen page never runs its callback.
+       `shown` latched to true BEFORE the callback ran, so it recorded the
+       INTENT to reveal rather than the reveal, and the cap timer's retry was
+       already disarmed.
+
+     So the frame is now the nicety and the timer is the guarantee. classList
+     .add is idempotent, so whichever arrives first wins and the other is a
+     no-op. This is anti-regression rule 8 at the one place in the app that
+     hides every route: whatever hides content owns un-hiding it, and owning it
+     means surviving a backgrounded tab. */
+  const apply = () => { if (root.isConnected) root.classList.add(cls); };
   const show = () => {
     if (shown || !root.isConnected) return;
     shown = true;
-    requestAnimationFrame(() => root.classList.add(cls));
+    requestAnimationFrame(apply);
+    setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
   const imgs = [...root.querySelectorAll('img')];
