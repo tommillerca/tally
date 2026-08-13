@@ -90,7 +90,6 @@ const BROWSER = [
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
-  'suite-rot-audit.mjs',     // audits that never run, and audits aimed at deleted UI
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
@@ -195,6 +194,12 @@ const DECLARED = {
   't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
   'wardrobe-audit.mjs': ['full', 'equipping does not flash the page; the background does not follow the character.'],
+  /* REPORTS PRE-EXISTING ROT, so it exits 1 on a healthy tree and cannot sit in
+     FAST. This project's own rule is that a gate people skip is worse than no
+     gate, and a FAST tier that is permanently red is the fastest way to teach
+     everyone to ignore it. It runs under --all, where a non-zero exit reads as
+     the worklist it is, until the rot it names is cleared. */
+  'suite-rot-audit.mjs': ['full', 'audits that never run, and audits aimed at deleted UI. Exits 1 by design on a tree that still has rot; see gwart/dead-audits for the first two.'],
   'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
 };
 
