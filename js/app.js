@@ -2681,10 +2681,27 @@ function lbHeadHtml(p, px) {
   const ox = px / 2 - SKULL_BOX.cx * scale;
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  return `<span class="lb-head" style="width:${px}px;height:${px}px">
-    <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
+  return `<span class="lb-head" style="width:${px}px;height:${px}px">${lbHeadInner(p, px)}</span>`;
+}
+
+/* THE INSIDE OF A HEAD, SEPARATED SO THE BOARD CAN DEFER IT.
+   Every one of these mounts a full avatarLayersHtml stack at the art's natural
+   640x640, and the leaderboard draws one PER ROW. Measured on a 100-row board
+   with only two cosmetic layers per player: 200 images, every one 640x640,
+   ~312MB of decoded RGBA in a single open. Real players wear six to eight
+   layers, so a real board is nearer 600-800 images and about a gigabyte.
+   That is what was killing the Crew tab: iOS kills the WKWebView renderer on
+   memory, and a killed renderer leaves NO javascript error, which is why the
+   board "blanked and went back to Crew" while every check we own said the
+   payload was clean. See openLeaderboard for the deferral. */
+function lbHeadInner(p, px) {
+  const scale = px / (SKULL_BOX.h * 2.05);
+  const ox = px / 2 - SKULL_BOX.cx * scale;
+  const oy = px / 2 - SKULL_BOX.cy * scale;
+  const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
+  return `<span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
       <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
-    </span></span>`;
+    </span>`;
 }
 // Test hook (webdriver only): the board renders from a server payload, so
 // "does a shiny row render shiny" was only ever checkable on a real phone.
@@ -6585,11 +6602,40 @@ async function renderFriends(el) {
         const medal = rank <= 3 ? `<span class="lb-medal m${rank}">${['1st', '2nd', '3rd'][rank - 1]}</span>` : '';
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
-          ${lbHeadHtml(p, 52)}
+          <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
           <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
+    /* FILL THE HEADS ONLY AS THEY COME INTO VIEW.
+       The rows above ship an empty 52px box, so opening the board costs the
+       layout and none of the art. This mounts the real stack when a row is
+       within a screen of the viewport and unobserves it, so each head is built
+       exactly once and a board nobody scrolls decodes about eight of them
+       instead of a hundred.
+       root is the viewport, not the sheet body: intersection accounts for
+       scrolling ancestors, and the sheet is full-screen anyway.
+       No composeAvatars here, deliberately. It hides a stack until every layer
+       decodes, and a head that never un-hides is a blank row (anti-regression
+       rule 8). These are 52px thumbnails; an un-composed one is fine.
+       If IntersectionObserver is ever missing, every head mounts immediately,
+       which is exactly the old behaviour rather than an empty board. */
+    const heads = $$('[data-lbhead]', body);
+    if (typeof IntersectionObserver === 'function') {
+      const io = new IntersectionObserver(entries => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          const el = en.target;
+          io.unobserve(el);
+          const p = players[Number(el.dataset.lbhead)];
+          if (p && !el.firstChild) el.innerHTML = lbHeadInner(p, 52);
+        }
+      }, { rootMargin: '600px 0px' });
+      heads.forEach(el => io.observe(el));
+    } else {
+      heads.forEach(el => { const p = players[Number(el.dataset.lbhead)]; if (p) el.innerHTML = lbHeadInner(p, 52); });
+    }
+
     /* Tapping a row opens their profile. The leaderboard payload already carries
        everything the profile sheet renders from (outfit, pet, level, badges), so
        this is a reader, not a new request. Friend-only actions are hidden for

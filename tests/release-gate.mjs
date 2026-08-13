@@ -95,6 +95,7 @@ const BROWSER = [
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
+  'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
