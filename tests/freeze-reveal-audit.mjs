@@ -67,6 +67,36 @@ for (const delayMs of [0, 30, 120]) {
   ok(`RESUME the screen still has its content after a freeze ${delayMs}ms in (empty is a FAILURE)`,
     s.chars > 100, `${s.chars} chars`);
 }
+
+/* ---- THE SAME SHAPE, FOUND BY SWEEPING FOR IT (A2) ----
+   `.pc-rise` is `visibility: hidden` until `.pack-deck.go` arrives, and that
+   class was added inside a DOUBLE requestAnimationFrame. A crate reveal is
+   exactly when a player switches away, so it is the worst place in the app to
+   depend on a frame arriving. */
+for (const delayMs of [0, 40]) {
+  await page.evaluate(() => { document.querySelectorAll('#sheets > div').forEach(d => d.remove()); });
+  await page.evaluate(d => {
+    window.__packReveal([{ iconHtml: '<b>a</b>', name: 'Card A', rarity: 'rare', kind: 'GEAR', stats: 'x' }], { coins: 5 });
+    return new Promise(r => setTimeout(r, d));
+  }, delayMs);
+  try {
+    await client.send('Page.setWebLifecycleState', { state: 'frozen' });
+    await sleep(2200);
+    await client.send('Page.setWebLifecycleState', { state: 'active' });
+  } catch { /* lifecycle unsupported: the rows below will say so by failing */ }
+  await sleep(3000);
+  const c = await page.evaluate(() => {
+    const deck = document.querySelector('.pack-deck');
+    const cards = [...document.querySelectorAll('.pc-rise')];
+    return { go: deck ? deck.classList.contains('go') : null, cards: cards.length,
+      visible: cards.filter(x => getComputedStyle(x).visibility === 'visible').length };
+  });
+  ok(`CRATE the reveal drew cards at all after a freeze ${delayMs}ms in (zero cards proves nothing)`,
+    c.cards > 0, JSON.stringify(c));
+  ok(`CRATE the cards are VISIBLE after a freeze ${delayMs}ms into the reveal`,
+    c.cards > 0 && c.visible === c.cards, JSON.stringify(c));
+}
+
 await browser.close(); srv.close?.();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nthe app survives being backgrounded');
 process.exit(fails.length ? 1 : 0);

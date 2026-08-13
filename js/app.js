@@ -9658,7 +9658,21 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
       // Two frames, so tearing .go off and putting it back really does restart
       // the entrance instead of being coalesced into no change at all.
-      const go = () => requestAnimationFrame(() => requestAnimationFrame(() => deck.classList.add('go')));
+      /* SAME SHAPE AS THE ROUTE REVEAL, FOUND BY SWEEPING FOR IT.
+         `.pc-rise` is `visibility: hidden` until `.pack-deck.go` arrives, and
+         this added that class inside a DOUBLE rAF, so a frozen page left the
+         cards permanently invisible: measured go=false, visible=0 after
+         freezing 0ms and 40ms into a reveal. A crate opening is exactly when a
+         player switches away, which makes this the worst place in the app to
+         depend on a frame arriving.
+         The double rAF stays, because the entrance animation genuinely needs
+         two frames to have a previous value to interpolate from. The timer is
+         the floor under it. classList.add is idempotent. */
+      const go = () => {
+        const add = () => deck.classList.add('go');
+        requestAnimationFrame(() => requestAnimationFrame(add));
+        setTimeout(add, 300);
+      };
       if (first) {
         // the card is behind the crate for 2.6s, so a slow decode has all the
         // runway it needs and must not hold the sequence up
