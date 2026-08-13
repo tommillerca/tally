@@ -2811,6 +2811,43 @@ test('paddock: nothing emits a .pd- class', () => {
   assert.deepEqual([...new Set(bad)], [], 'the Paddock must not use the paperdoll namespace');
 });
 
+/* EVERY GEAR STAT IS A FINITE NUMBER.
+ *
+ * GEAR_BUDGET (js/gear.js:39) has entries for uncommon, rare and legendary and
+ * NO 'common'. statSplit does Math.max(1, Math.round(GEAR_BUDGET[tier] * w)),
+ * and Math.max(1, NaN) is NaN, so a common tier would produce { power: NaN },
+ * hasStats() would report true on the key count, and gearLabel() would render
+ * "+NaN POW" at the player.
+ *
+ * A handoff reported that as LIVE ON MAIN. It is not, and the difference
+ * matters because the "fix" would have touched gear balance. Nothing can reach
+ * that branch: variant() is only ever called with tierOfArt(), which returns
+ * legendary/rare/uncommon and falls back to uncommon, or bumpTier() of it,
+ * which only ascends. Measured on the shipped catalogue: 388 items, tiers
+ * {uncommon:115, rare:146, legendary:127}, zero common, zero non-finite.
+ *
+ * So this is a landmine, not a bug: the day somebody adds a common tier, or
+ * gives GEAR_MIN_LEVEL's existing 'common' entry a matching item, it starts
+ * rendering NaN to players silently. A comment would ask people to remember.
+ * This fails instead.
+ *
+ * PROVE-RED: add `common: 4` to GEAR_MIN_LEVEL's sibling GEAR_BUDGET and have
+ * tierOfArt return 'common' for the plain tier, or simply call
+ * statSplit(arch, 'common', slot); every stat it yields is NaN and this fails
+ * by item id. */
+test('every gear stat is a finite number (no NaN can reach a player)', async () => {
+  const g = await import('../js/gear.js');
+  const list = Object.values(g).find(v => Array.isArray(v) && v[0] && v[0].stats);
+  assert.ok(list && list.length > 50, 'gear catalogue not found: an empty scan proves nothing');
+  const bad = [];
+  for (const item of list) {
+    for (const [k, v] of Object.entries(item.stats || {})) {
+      if (!Number.isFinite(v)) bad.push(`${item.id} ${item.rarity} ${k}=${v}`);
+    }
+  }
+  assert.deepEqual(bad, [], 'gear carrying a non-finite stat would render "+NaN POW"');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

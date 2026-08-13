@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { boot, sleep } = await import(path.join(ROOT, 'tests/godmode.js'));
+const { boot, sleep, serveTree } = await import(path.join(ROOT, 'tests/godmode.js'));
 
 /* serveTree: OS-assigned port, and a hard error if python never bound. */
 const srvHandle = process.env.URL ? null : await serveTree(ROOT);

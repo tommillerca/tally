@@ -4277,6 +4277,11 @@ body::before {
   border: 1px solid var(--line-strong); color: var(--gold); font-size: 11px; font-weight: 700;
   letter-spacing: 0.08em; border-radius: 99px; padding: 6px 10px; }
 .drop-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.22em; color: var(--accent); margin: 0 0 8px; }
+/* The Discord mark rides the eyebrow's own colour, sized to its cap height. A
+   row, not an inline glyph: the eyebrow carries 0.22em of tracking, so an
+   inline mark pushed the line over 390px and wrapped onto its own row. */
+.dc-eyebrow { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.dc-eyebrow .dc-mark { flex: 0 0 auto; }
 .drop-title { font-family: var(--display); font-size: 44px; line-height: 0.95; color: var(--text);
   margin: 0; text-transform: uppercase; font-weight: 400; }
 .drop-title em { font-style: normal; color: var(--accent); }
@@ -7214,3 +7219,49 @@ body::before {
 .pdk-foot { display: flex; gap: 8px; margin-top: 14px; }
 .pdk-seg { flex: 1; font-family: Bangers, system-ui; font-size: 15px; border: 2px solid #17151d; border-radius: 13px; padding: 7px 0; background: #1d1b22; color: #8f8578; }
 .pdk-seg.on { background: #a5e847; color: #17151d; }
+
+/* ---------- Discord card hero (Tom, 2026-08-12) ----------
+   "the discord icon with a bonehead chillin next to it or something to really
+   grab the attention". Two figures on one baseline, so it reads as a pair
+   rather than two things that happen to be near each other. */
+.dc-hero { display: flex; align-items: flex-end; justify-content: center; gap: 16px; margin: 4px 0 14px; }
+/* The home-screen shape. iOS/Android round it to about 22% of the tile, which
+   is what makes it read as "the app" and not "a logo". */
+.dc-app {
+  width: 78px; height: 78px; border-radius: 22px; background: #5865F2;
+  display: grid; place-items: center; flex: none;
+  box-shadow: 0 6px 18px rgba(88, 101, 242, 0.38);
+}
+/* contain, never cover: Cam's art sits in a 640 square with a lot of
+   transparent air, and cover would crop the skull to fill the box. Aligned on
+   the drawing's own baseline via flex-end above, not by nudging margins. */
+.dc-bh { position: relative; width: 92px; height: 92px; flex: none; }
+.dc-bh img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* THE LEAN, AND THE INK CORRECTION. Measured off the actual render, not
+   guessed: the icon is 77x77 with its bottom at y=237, and his ink is 55x78
+   with its bottom at y=231, sitting 30px to the right of the icon's edge even
+   though the CSS gap is 16. The drawing carries ~22px of transparent air down
+   its left side, so the BOXES were 16 apart while the DRAWINGS were 30 apart,
+   and he read as a separate thing floating nearby instead of leaning on it.
+   margin-left closes the ink gap to ~10; translateY drops him the 6px onto the
+   icon's baseline. Both numbers come from measuring the render (figure
+   contract rule 3: align on ink, never on boxes). */
+.dc-bh { margin-left: -20px; transform: rotate(-5deg) translateY(6px); transform-origin: 60% 100%; }
+@media (prefers-reduced-motion: reduce) { .dc-bh { transform: translateY(6px); } }
+
+/* The NEW pill is absolutely positioned top-right and this eyebrow is the
+   longest one any card has, so they collided and ate the last letters.
+   Symmetric padding keeps the line centred while clearing the badge. */
+/* Shortened from "THE CLUBHOUSE IS OPEN": measured at 360 and 375px, the long
+   version ran under the absolutely-positioned NEW pill (text right 288 vs
+   badge left 276 on a 360). Padding could not save it without wrapping the
+   line, and the title underneath already says what is open. */
+.dc-veil .dc-eyebrow { padding: 0 50px; white-space: nowrap; }
+
+/* The way out has to look like a control, not like small print. Scoped to this
+   card so the drop/race/spire popups keep the quiet text version they were
+   designed with. */
+.dc-veil .dc-close {
+  border: 1px solid var(--line); border-radius: 14px; padding: 13px;
+  color: var(--text-2); font-weight: 700; margin-top: 8px;
+}

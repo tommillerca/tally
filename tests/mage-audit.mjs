@@ -69,11 +69,24 @@ const fight = await page.evaluate(async () => {
     mirrored: !!st.querySelector('.mirror-wrap'),
     flipped: im ? /matrix\(-|scaleX\(-/.test(getComputedStyle(im).transform) : false,
     w: Math.round(b.width), h: Math.round(b.height),
-    stack: st.querySelectorAll('.bh-layer, .tz-layer').length,
+    /* .bh-anim is what avatarLayersHtml actually returns (js/app.js:2564).
+       This counted '.bh-layer, .tz-layer', and NEITHER STRING EXISTS ANYWHERE
+       in the app, so the count was always 0 and "it is not built from
+       cosmetics" was always true: a check that could not fail, sitting in the
+       FAST gate. Found by tests/selector-audit.mjs, which is the entire reason
+       that sweep was written. */
+    stack: st.querySelectorAll('.bh-anim').length,
+    /* POSITIVE CONTROL, so this can never go vacuous again. If the selector
+       stops matching anything anywhere, THIS goes to 0 and the run fails,
+       instead of the absence quietly reading as success. The Bonehead on
+       Today is drawn by the same helper. */
+    controlStacks: document.querySelectorAll('.bh-anim').length,
   };
 });
 ok('the fight draws the illustration', fight.plate && fight.drawn, JSON.stringify(fight));
-ok('it is not built from cosmetics', fight.stack === 0, `${fight.stack} avatar layers`);
+ok('CONTROL the avatar-stack selector still matches real avatars somewhere',
+  fight.controlStacks > 0, `${fight.controlStacks} .bh-anim stacks in the document`);
+ok('it is not built from cosmetics', fight.stack === 0, `${fight.stack} avatar layers in the foe stage`);
 ok('it is never mirrored', !fight.mirrored && !fight.flipped, `mirror-wrap=${fight.mirrored} flipped=${fight.flipped}`);
 ok('he is big enough to read', fight.w >= 120 && fight.h >= 120, `${fight.w}x${fight.h}`);
 

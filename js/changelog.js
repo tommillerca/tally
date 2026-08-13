@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 371, date: '2026-08-12', title: 'The Boneyard settles before you look at it', items: [
+    "<b>Dens no longer appear after the map has already settled.</b> A placement pass ran before the map's tiles had loaded, so anything that needed real ground to stand on was placed late and popped in on top of a map you were already reading. The reveal now waits for ground it can actually place against.",
+    'The Bone Boiz card shows the Discord app icon with your own Bonehead leaning on it, so you can tell at a glance what you are being invited to.',
+  ] },
   { n: 370, date: '2026-08-12', title: 'The first screen was invisible', items: [
     "<b>If you were brand new and the app opened blank, this was why.</b> The welcome screen was being built correctly and then drawn at zero opacity, so there was nothing to tap and no way past it. It is visible now.",
     'The app could also open blank on a weak connection, for anyone. Three files it needs to start were missing from the list it saves for offline use, and one of them failing to arrive stopped everything. All of them are saved now, and a check refuses to let the list fall behind again.',

@@ -77,6 +77,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 const PURE = ['unit.test.js', 'pit.test.js'];
 const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
+  'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
@@ -88,7 +89,12 @@ const BROWSER = [
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
+  'notif-audit.mjs',         // Notification tiers do what they say (measured, not toggle-position); boot-asker webdriver-skip guard behaviourally verified
+  'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
+  'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
+  'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
+  'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
@@ -120,7 +126,24 @@ function failLines(out) {
    which is worse than not having written it: it reads as coverage. Anything
    deliberately out of the gate goes in SKIP with a reason, so the omission is a
    decision on the record rather than an oversight. */
-const onDisk = (await readdir(here)).filter(f => /-audit\.mjs$/.test(f)).sort();
+/* THE NET USED TO BE /-audit\.mjs$/, AND A FILENAME WAS ENOUGH TO ESCAPE IT.
+   mockup-parity.mjs sat RED on main and no one knew: it is a real guard, it
+   exits non-zero, and it was invisible here purely because it is not called
+   "-audit". Fourteen other runnable checks were in the same position, among
+   them balance.mjs (35 assertions on the exact exploit class we keep finding)
+   and race-you.mjs. The rule above says an audit may not exist without
+   running; naming it something else is not a decision, it is an accident.
+   So the net is now EVERY runnable file in tests/, and the only way out is
+   HELPERS, which is a list of modules that assert nothing and are imported by
+   the checks themselves. A new guard is covered whatever it is called. */
+const HELPERS = new Set([
+  'release-gate.mjs',  // this file
+  'godmode.js',        // the harness: boot, seed, serveTree
+  'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
+]);
+const onDisk = (await readdir(here))
+  .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
+  .sort();
 /* TWO TIERS, BECAUSE THE ALTERNATIVE IS THEATRE EITHER WAY.
    The hand-written list above was the only thing the gate ran, and 43 other
    audits sat in tests/ never executed: guards against a dust exploit, a Glutton
@@ -158,6 +181,7 @@ const DECLARED = {
 
   'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
+  'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
@@ -193,13 +217,49 @@ const DECLARED = {
   't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
   'wardrobe-audit.mjs': ['full', 'equipping does not flash the page; the background does not follow the character.'],
+  /* REPORTS PRE-EXISTING ROT, so it exits 1 on a healthy tree and cannot sit in
+     FAST. This project's own rule is that a gate people skip is worse than no
+     gate, and a FAST tier that is permanently red is the fastest way to teach
+     everyone to ignore it. It runs under --all, where a non-zero exit reads as
+     the worklist it is, until the rot it names is cleared. */
+  'suite-rot-audit.mjs': ['full', 'audits that never run, and audits aimed at deleted UI. Exits 1 by design on a tree that still has rot; see gwart/dead-audits for the first two.'],
   'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
+
+  /* THE FIFTEEN THE OLD NET COULD NOT SEE. Every one of these is a real guard
+     that has never been run by the gate, only because it is not named
+     "-audit". Each was executed before being given a tier here, so none of
+     these is a guess: 7 green, 3 red only under headless 'new' (see
+     godmode.js), 1 genuinely red, 2 that need an argument, 2 tools. */
+  /* Arrives with ext/godmode-detach-guard. Declared HERE rather than there
+     because this branch is what widened the net to see it at all: the old
+     /-audit\.mjs$/ filter was blind to a *.test.mjs, so the two branches are
+     green apart and red together. Landing them in either order now works. */
+  'detach-guard.test.mjs': ['full', 'the harness-wide detached-frame retry, with its prove-red trio. Not FAST: it deliberately induces detaches and is slow.'],
+  'balance.mjs':          ['full', '35 assertions on the exact exploit class we keep re-finding (free lives, stamina, gear-granted action economy). Ran green; belongs in the release run.'],
+  'talent-badge.mjs':     ['full', 'the talent badge updates in place after a spend. Ran green.'],
+  'gift-open.mjs':        ['full', 'opening a gift, 9 assertions. Ran green.'],
+  'lb-profile.mjs':       ['full', 'leaderboard profile cards. Ran green.'],
+  'milestones.mjs':       ['full', 'milestone awards. Ran green.'],
+  'remote-routines.mjs':  ['full', 'the remote routine calls. Ran green.'],
+  'spire-poster.mjs':     ['full', 'the spire poster art. Ran green.'],
+  'mockup-parity.mjs':    ['full', 'every approved mockup is really in the app. Was RED on main and unseen: it is the reason this net was widened.'],
+  'crew-inbox.mjs':       ['full', '15 assertions on the deliveries inbox. Green under HEADLESS_MODE=shell; its one failure under headless new is the sheet sitting un-animated, not a bug.'],
+  'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
+  'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
+  'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
+  'spire-gate.mjs':       ['full', 'the spire day-gate, which is a rewarded action and has been exploited twice. RED under BOTH headless modes, so it is not the harness. Under triage; it stays declared so it cannot be forgotten.'],
+  'balance-audit.js':     ['skip', 'takes a URL argument and is run by hand against live; it has no self-served mode to give the gate.'],
+  'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
+  'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
+  'reap-orphans.mjs':     ['skip', 'a maintenance tool that deletes dead files, not a check.'],
 };
 
 /* COVERAGE, BEFORE A SINGLE BROWSER STARTS. An undeclared audit is a one-second
    failure here or a four-minute one at the end, and the four-minute version is the
    one people stop running. */
-const undeclared = onDisk.filter(f => !BROWSER.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
+/* PURE counts as a tier too. It always did; the old net just never saw a PURE
+   file, because neither is named "-audit". */
+const undeclared = onDisk.filter(f => !BROWSER.includes(f) && !PURE.includes(f) && !(DECLARED[f] && DECLARED[f][1]));
 if (undeclared.length) {
   console.log(`FAIL  coverage: ${undeclared.length} audit file(s) belong to no tier:`);
   for (const f of undeclared) console.log(`        ${f}`);

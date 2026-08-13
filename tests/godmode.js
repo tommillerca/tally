@@ -26,6 +26,42 @@ import { fileURLToPath } from 'node:url';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* THE DETACHED-FRAME RACE IS A HARNESS FAULT, SO THE GUARD BELONGS HERE.
+ *
+ * Under CPU contention Chrome's CDP can flip a frame's execution-context id
+ * between one call and the next, and puppeteer throws "Attempted to use
+ * detached Frame" even though nothing navigated. It was first seen in the
+ * gate (3 green : 1 red) and survived 156 clean solo runs, which is why it
+ * read for weeks as year-readout's own bug. On 2026-08-12 it reproduced
+ * TWICE in one hour, at load average 13, in two unrelated audits: once at a
+ * plain post-click page.evaluate in wardrobe-audit, once during boot in a
+ * newart run. Different files, same string. So it is not any one audit's
+ * bug and no audit should have to remember it.
+ *
+ * ONE bounded retry, and the bounds are the whole point:
+ *   - ONLY this error text is caught. Anything else propagates untouched.
+ *   - EXACTLY one retry. A second detach propagates, so the guard can never
+ *     become a blindfold that hides a genuinely broken page.
+ *   - The caller passes `resync`, the wait for the condition its first call
+ *     was reading, so the retry reads a settled page rather than guessing.
+ *   - The retry LOGS. Silent recovery would hide a real regression that
+ *     started throwing this shape for some reason other than starvation.
+ *
+ * Proven with synthetic injection (a real one cannot be summoned on demand):
+ * one injected detach retries and passes, two exit non-zero, and a guard
+ * downstream of the wrapped call still goes red on the bug it watches.
+ */
+export async function retryOnDetach(fn, resync) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!/Attempted to use detached Frame/i.test(String(e))) throw e;
+    console.log(`RETRY  detached frame: "${String(e).split('\n')[0]}"; resyncing and retrying ONCE.`);
+    if (resync) await resync();
+    return await fn();
+  }
+}
+
 /* PUPPETEER MUST BE RESOLVABLE ON A MACHINE THAT IS NOT TOM'S.
  *
  * This used to be one hardcoded path:
@@ -85,7 +121,15 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
      the only case where the sandbox was never going to come up anyway. */
   const rootArgs = process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
   const browser = await puppeteer.launch({
-    headless: 'new',
+    /* HEADLESS_MODE exists so a machine where modern headless cannot screenshot
+       can still run the pixel audits. On this Mac, Page.captureScreenshot never
+       returns under headless 'new' OR true, for any page, including a bare
+       data: URL with nothing in it: measured at 22ms under 'shell' and hung
+       past 180s under both others, four runs each. hero-flash.mjs dies on it
+       with a stack and no FAIL lines, which reads like a broken app.
+       Default is unchanged until somebody proves 'shell' does not move any
+       other result. */
+    headless: process.env.HEADLESS_MODE || 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     executablePath: chromePath(),
     ...opts,
