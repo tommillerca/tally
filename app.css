@@ -1254,6 +1254,17 @@ body::before {
    screens, so the cost lands on the button list (which scrolls) rather than on
    the boss (which cannot). Measured 2026-08-13. */
 .fight-body > .arena { flex: 1 1 0; min-height: 292px; }
+/* SHORT PHONES GET THE TRAY'S SPACE BACK. The 292px above was raised from 258
+   to give the Live Wire room after Tom's "players barely see the boss" report.
+   On a 375x667 phone that extra height pushes the action tray's own contents out
+   of its clip: measured 28px hidden, and the Vital Tonic button's centre
+   hit-tests to DIV.sheet-body rather than the button, so a potion cannot be
+   tapped at all. Worse, the tray scrolls but there is NO scroll position that
+   shows every control: scroll to reach the potions and JAB/SWING/HAYMAKER go
+   unreachable instead.
+   An unreachable control beats a smaller boss, so on short viewports the arena
+   gives back more than the 28px it took. Anything taller keeps the full 292. */
+@media (max-height: 700px) { .fight-body > .arena { min-height: 250px; } }
 .fight-body > .fight-hud, .fight-body > .fight-meta, .fight-body > .fight-actions,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray holds one height for the whole fight and scrolls inside itself; End
