@@ -6939,7 +6939,34 @@ body::before {
   margin-bottom: 30px;                       /* the lift: he hangs, he does not stand */
   filter: drop-shadow(0 26px 16px rgba(0, 0, 0, 0.55));
 }
-.arena.boss-mage .fighterG:not(.foe-side) > .fstage { transform: scale(.92); transform-origin: bottom center; }
+/* THE TWO FIGURES WERE TOUCHING. Tom, 2026-08-13: "the live wire looks too
+   close to the bonehead". Measured off the render rather than eyeballed, and
+   he was right in the strongest sense: the ink was CONTIGUOUS, no clear column
+   between them anywhere.
+     player ink  css x88..204   (116 wide)
+     boss ink    css x124..330  (206 wide)
+     arena       css x16..377   (361 wide)
+   116 + 206 = 322 of ink in a 361 arena, so there are only 39px for two
+   gutters AND a gap. The figure contract's 6% safe margin alone wants 44, so
+   the arithmetic does not close at these sizes: something had to give. Tom
+   chose to split it, so the player steps back a little further (.92 -> .87,
+   about 6%) AND both groups move outward, instead of taking all of it out of
+   either one. The boss keeps every pixel he has: he is the subject.
+   Target, all in css px: player ink 28..138, gap 22, boss ink 159..365,
+   margins 12 each side. Verified against the render, not assumed. */
+.arena.boss-mage .fighterG:not(.foe-side) { transform: translateX(-53px); }
+.arena.boss-mage .fighterG.foe-side { transform: translateX(35px); }
+.arena.boss-mage .fighterG:not(.foe-side) > .fstage { transform: scale(.87); transform-origin: bottom center; }
+/* AND THE PET, which was bridging the gap the two moves above had just opened.
+   Measured: after separating the fighters the pet still sat at css x82..158
+   with the boss's ink starting at 159, so the ink read as contiguous exactly as
+   before and the fix looked like it had done nothing.
+   Three figures need 110 + 76 + 206 = 392px of ink in a 361px arena, so one
+   overlap is unavoidable. It belongs between the player and HIS OWN pet, who
+   are a pair, not between the pet and the boss they are both facing. So the pet
+   tucks left into the player's shoulder (it already sits behind him on
+   z-index) and the daylight goes where the drama is. */
+.arena.boss-mage .pet-fighter { transform: translateX(-27px); }
 .bst-fig.bst-drawn { background: #0d0f08; }
 .mage-poster { display: block; width: 100%; max-width: 320px; margin: 10px auto 8px; }
 /* the NEW pill sits top-right over the card, so the eyebrow keeps out of its lane */
