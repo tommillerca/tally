@@ -89,15 +89,19 @@ const fought = await page.evaluate(async () => {
   const b = [...document.querySelectorAll('button')].find(x => /^fight$/i.test(x.textContent.trim()));
   if (b) b.click();
   await new Promise(r => setTimeout(r, 2600));
-  // assert on what the player sees: the plate's HP readout and bar, not on a
-  // guessed path into the engine's state object
+  /* Read what the player sees. The bar width on #youHp and the number of
+     .fight-act moves are the assertion inputs below (lines 113-116). The
+     original strategy note here talked about "the plate's HP readout AND
+     bar", implying two checks; only the bar was ever wired up. The
+     older plate-based readout (.fplate / .fighter-plate / #youPlate) was
+     retired from the UI (suite-rot 2026-08-13: none of those tokens are
+     emitted in js/) and the arena does not print numeric HP (see line 118),
+     so no plate-readout check is possible against current UI. The strategy
+     note is corrected here rather than left promising a check that does
+     not exist. Coverage gap flagged in gwart/REG-BATCH.md: respec-audit
+     does not cover an HP readout because there is no HP readout to cover;
+     if that changes, add the check here. */
   const hp = document.getElementById('youHp');
-  /* The .fplate / .fighter-plate / #youPlate query used to sit here but the
-     variable it filled was never read; the assertion below reads `hp?.style.width`
-     from #youHp and `arena.textContent` directly. suite-rot flagged line 95's
-     three arms as STALE (verified 2026-08-13: none of them are emitted anywhere
-     in js/). Dropping the query removes dead code and lets suite-rot clear the
-     row honestly; the assertion is unchanged. */
   const txt = (document.getElementById('arena')?.textContent || '');
   const m = txt.match(/(\d+)\s*\/\s*(\d+)/);
   return {
