@@ -90,6 +90,7 @@ const BROWSER = [
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
+  'suite-rot-audit.mjs',     // audits that never run, and audits aimed at deleted UI
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
