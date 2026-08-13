@@ -7360,3 +7360,11 @@ body::before {
 }
 .hero-why b { color: var(--text); font-weight: 800; }
 .hero-why svg { flex: 0 0 auto; color: var(--gold); }
+
+/* The first-meal nudge and its way out. The skip is quiet on purpose: it is an
+   escape hatch, not a second call to action competing with the first. */
+.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; }
+.ul-skip {
+  align-self: center; background: none; border: 0; padding: 7px 12px 2px;
+  color: var(--text-3); font-size: 12.5px; font-weight: 700;
+}

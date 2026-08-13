@@ -2092,6 +2092,9 @@ async function renderToday(el) {
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
     fightWins: allXp.filter(r => r.type === 'fight').length,
+    loggedToday: entries.length,
+    everLogged: allXp.some(r => r.type === 'food') ? 1 : 0,
+    mealSkipped: await kvGet('firstMealSkipped', false),
   }) : [];
   const pitAttn = unlocks.some(u => u.hero === 'pit');
   const wardAttn = unlocks.some(u => u.hero === 'ward');
@@ -2184,11 +2187,21 @@ async function renderToday(el) {
   </div>
 
   ${isToday && topNudge ? `
+  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
   <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${topNudge.action === 'pit' ? 'Tap to enter The Pit' : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe' : 'Tap to open Build and spend it'}</small></span>
+    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
+    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
+      topNudge.action === 'logfood' ? 'Tap to log your first meal'
+      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
+      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
+      : 'Tap to open Build and spend it'}</small></span>
     <span class="ul-chev">›</span>
-  </button>` : ''}
+  </button>
+  ${/* The way out. Not a dismissal of the card: skipping falls through to
+       whatever the next nudge is, so somebody who does not want to log right
+       now still gets pointed at the fight, the crates or their gear. */''}
+  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
+  </div>` : ''}
 
   ${isToday && hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
@@ -2319,11 +2332,21 @@ async function renderToday(el) {
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* Skipping records the choice and re-renders, so the card immediately shows
+     whatever the NEXT nudge is rather than leaving a hole where it was. */
+  $('#ulSkip')?.addEventListener('click', async () => {
+    await kvSet('firstMealSkipped', true);
+    refresh();
+  });
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#unlockNudge')?.addEventListener('click', () => {
     const a = $('#unlockNudge')?.dataset.ulaction;
-    if (a === 'wardrobe') openCharacter('wardrobe');
+    /* openAdd() with the meal picked from the clock, the same entry point the
+       big green + uses, so the first meal goes through the flow the player will
+       use every day rather than a special one-time path. */
+    if (a === 'logfood') { const now = new Date(); openAdd(mealForHour(now.getHours() + now.getMinutes() / 60)); }
+    else if (a === 'wardrobe') openCharacter('wardrobe');
     else if (a === 'pit') openPit();
     else openTalents();
   });
@@ -12610,8 +12633,29 @@ const ECONOMY_TALENTS = new Set(['lightfeet']);
 // were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
 // deep-linking straight to the right screen. Pure fn over already-fetched data;
 // returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
-function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1 }) {
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1,
+                             loggedToday = 1, everLogged = 1, mealSkipped = false }) {
   const sig = [];
+  /* DAY ONE IS ABOUT FOOD. A non-gamer played this cold on 2026-08-13 and the
+     only glowing thing on the home screen of a food tracker was an invitation
+     to a fight, which they took, on the easiest opponent, and lost. Their words:
+     "the app never once said log your meals every day. It said Ready for your
+     first fight?"
+     So the first meal outranks the first fight. It is the thing they installed
+     this for, it is the thing that pays the energy the fight needs, and it is
+     the one action on Today that cannot be lost.
+     PRIORITY 9, above everything, but it retires the moment it stops being
+     true: as soon as they log anything today, the moment they have ever logged
+     anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
+     skippable if they dont want to then point them to other things that could
+     be of interest" — skipping does not blank the card, it falls straight
+     through to the fight/gear/talent nudges underneath, which is what the rest
+     of this function already computes. */
+  if (!loggedToday && !everLogged && !mealSkipped) sig.push({
+    key: 'food:first', hero: 'food', action: 'logfood', priority: 9,
+    nudge: 'Start with breakfast',
+    toast: 'Log what you eat and your Bonehead earns from it. Everything else here runs on that.',
+  });
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
