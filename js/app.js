@@ -2771,10 +2771,31 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
+  /* THE CLASS MUST LAND EVEN IF THE FRAME NEVER COMES.
+     Measured 2026-08-13: freeze the page mid-route (CDP frozen lifecycle, which
+     is what iOS does when you tap a target=_blank link, take a call, or switch
+     apps) and resume, and the screen stays at effective opacity 0 FOREVER, with
+     its content sitting right there. Reproduced at 0ms, 30ms and 120ms into a
+     route, so the window is wide, and it never recovers.
+
+     Two faults, and the second is what made it permanent:
+       requestAnimationFrame was the ONLY path that added the class, and a
+       frozen page never runs its callback.
+       `shown` latched to true BEFORE the callback ran, so it recorded the
+       INTENT to reveal rather than the reveal, and the cap timer's retry was
+       already disarmed.
+
+     So the frame is now the nicety and the timer is the guarantee. classList
+     .add is idempotent, so whichever arrives first wins and the other is a
+     no-op. This is anti-regression rule 8 at the one place in the app that
+     hides every route: whatever hides content owns un-hiding it, and owning it
+     means surviving a backgrounded tab. */
+  const apply = () => { if (root.isConnected) root.classList.add(cls); };
   const show = () => {
     if (shown || !root.isConnected) return;
     shown = true;
-    requestAnimationFrame(() => root.classList.add(cls));
+    requestAnimationFrame(apply);
+    setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
   const imgs = [...root.querySelectorAll('img')];
@@ -4317,7 +4338,30 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       kcal: n.kcal, p: n.p || 0, c: n.c || 0, f: n.f || 0,
       fiber: n.fiber || 0, sugar: n.sugar || 0, sodium: n.sodium || 0,
     };
-    await db.put('log', e);
+    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
+       Measured 2026-08-13: reject this put the way a full quota does and the
+       meal vanishes with NO error, while an unrelated toast ("New talent points
+       ready") stays on screen reading like success. 166 log rows before, 166
+       after. Everything below this line is skipped, so the sheet closes and the
+       player believes the meal is in.
+       Storage really does fill: measured growth is ~2.4MB a year, and a phone
+       with 500MB free hits its origin quota in about four years of daily use.
+       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry on
+       screen so the user knows whats happening and that they have to make room
+       on the storage of their device". So the sheet STAYS OPEN with the portion
+       still selected and the button live, because a player who has just been
+       told to free up space needs somewhere to land when they come back. */
+    try {
+      await db.put('log', e);
+    } catch (err) {
+      btn.disabled = false;
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
+        : 'Could not save that meal. Tap Add to try again.', 5200);
+      trackEvent('log_write_failed', { quota: !!full });
+      return;                       // the sheet stays open, the entry stays put
+    }
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -9637,7 +9681,21 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
       // Two frames, so tearing .go off and putting it back really does restart
       // the entrance instead of being coalesced into no change at all.
-      const go = () => requestAnimationFrame(() => requestAnimationFrame(() => deck.classList.add('go')));
+      /* SAME SHAPE AS THE ROUTE REVEAL, FOUND BY SWEEPING FOR IT.
+         `.pc-rise` is `visibility: hidden` until `.pack-deck.go` arrives, and
+         this added that class inside a DOUBLE rAF, so a frozen page left the
+         cards permanently invisible: measured go=false, visible=0 after
+         freezing 0ms and 40ms into a reveal. A crate opening is exactly when a
+         player switches away, which makes this the worst place in the app to
+         depend on a frame arriving.
+         The double rAF stays, because the entrance animation genuinely needs
+         two frames to have a previous value to interpolate from. The timer is
+         the floor under it. classList.add is idempotent. */
+      const go = () => {
+        const add = () => deck.classList.add('go');
+        requestAnimationFrame(() => requestAnimationFrame(add));
+        setTimeout(add, 300);
+      };
       if (first) {
         // the card is behind the crate for 2.6s, so a slow decode has all the
         // runway it needs and must not hold the sequence up

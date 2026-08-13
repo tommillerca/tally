@@ -96,6 +96,8 @@ const BROWSER = [
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
+  'log-write-failure-audit.mjs', // a failed save must not look like a saved meal
+  'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
 ];
 
