@@ -697,7 +697,7 @@ export function makePetBody(petDescriptor, owner) {
   return body;
 }
 
-export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) {
+export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1, tutorial = false }) {
   const pAux = player.pet ? makePetBody(player.pet, player) : null;
   if (pAux) pAux.owner = player;
   player.side = 'p'; foe.side = 'f';
@@ -712,6 +712,7 @@ export function createFight({ player, foe, add = null, seed = 1, aiLevel = 1 }) 
     ap: player.d.ap,
     rng: mulberry32(seed),
     aiLevel,
+    tutorial,          // the player's first-ever fight: cannot be lost (see checkOver)
     log: [],
     over: null,        // {winner: 'p'|'f'|'draw'}
   };
@@ -837,8 +838,19 @@ export function targetWhoFor(fight, who) {
 
 // Fight ends only when a whole SIDE's captains-and-adds are down. A downed pet is
 // NOT a loss (it just faints and drops its aura).
+/* THE FIRST FIGHT CANNOT BE LOST. Tom, 2026-08-13: "getting dunked on in a
+   tutorial fight is crazy that should be a 100% win rate for them to have a
+   positive first experience." A fresh-eyes playtester quit at exactly this
+   moment, killed by a signature move for more than half their health.
+
+   The guard lives HERE rather than in the Pit screen because checkOver is the
+   only place a loss is decided (three call sites route through it) and the turn
+   cap below is the other way a first fight fails to be a win. Clamping at 1 HP
+   rather than making the player invincible keeps the fight readable: the health
+   bar still drops, the hits still land, they just cannot be finished. */
 export function checkOver(fight) {
   if (fight.over) return;
+  if (fight.tutorial && fight.p.hp <= 0) fight.p.hp = 1;
   const pDown = fight.p.hp <= 0;
   const fDown = fight.f.hp <= 0 && (!fight.fAux || fight.fAux.hp <= 0);
   if (pDown && fDown) fight.over = { winner: 'draw' };
@@ -1343,7 +1355,10 @@ export function endTurn(fight) {
   if (me.offBalance) { ap = Math.max(1, ap - 1); me.offBalance = false; }
   fight.ap = ap;
   if (next === 'p') fight.turn += 1;
-  if (fight.turn > TURN_CAP) fight.over = { winner: 'draw' };
+  /* the tutorial fight's OTHER way of not being a win: an unlosable player who
+     cannot out-damage the foe inside the cap would time out to a draw, which is
+     the same bad first experience wearing a different word. */
+  if (fight.turn > TURN_CAP) fight.over = { winner: fight.tutorial ? 'p' : 'draw' };
   return fight;
 }
 
@@ -1514,11 +1529,11 @@ export function aiTakeTurn(fight) {
 /* ================= simulation (tests + tuning) ================= */
 
 // simple player policy for pacing sims: mirrors the spec's §9 fight style
-export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapon = 'starter' }) {
+export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapon = 'starter', tutorial = false, aiLevel = 1 }) {
   const fight = createFight({
     player: makeFighter({ name: 'A', stats: pStats, weaponId: pWeapon }),
     foe: makeFighter({ name: 'B', stats: fStats, weaponId: fWeapon }),
-    seed,
+    seed, tutorial, aiLevel,
   });
   let guard = 0;
   while (!fight.over && guard++ < 200) {
