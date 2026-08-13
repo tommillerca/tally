@@ -786,7 +786,18 @@ export async function bootSync() {
     }
     if (await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
     const res = await pullBackup();
-    await kvSet('bootRestored', true);
+    /* DO NOT BURN THE ONE-SHOT ON A FAILURE. This used to set bootRestored
+       unconditionally, so a transient 500 or a dropped connection on the very
+       first boot permanently forfeited the automatic cloud restore: the flag said
+       "already restored" forever after, and the player silently kept an empty
+       save with a perfectly good backup sitting on the server.
+
+       The flag is a guard against restoring TWICE, so it should only be set once
+       there is nothing left to restore: a success, or a definitive answer that no
+       backup exists. Everything else (http-*, offline, a decrypt or import throw)
+       is a maybe, and a maybe must be retried on the next boot. Retrying costs
+       one GET at boot. */
+    if (res.restored || res.reason === 'none' || res.reason === 'empty') await kvSet('bootRestored', true);
     return res;
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
