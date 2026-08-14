@@ -56,6 +56,21 @@ The checks were the problem, not the effort. These rules are about the checks.
 10. **Report the diagnosis only after measuring it.** The gear/next-day bug was
     first "fixed" by padding the currency chips, which fixed nothing and created a
     new collision, because the cause was assumed rather than measured.
+11. **Know which DIRECTION is failure, not just that failure is possible.** Added
+    2026-08-13. The leaderboard's lazy-mount audit scrolled partway and asserted
+    `mountedImages > mountedImagesBefore`: it REQUIRED the count to grow and
+    graded growth as a pass. Unbounded growth was the crash. So the check did not
+    merely fail to catch the bug, it passed *because* the app was broken, and it
+    would have gone red on the fix. Rule 1 does not catch this: I could have said
+    what a failing result looked like and been confidently wrong about which way
+    was down. State the direction and the BOUND: not "more heads mount as you
+    scroll" but "no more than N are ever mounted at once". A check on a resource
+    that can exhaust needs a ceiling, never a trend.
+12. **Measure in the state the player is complaining about.** Same bug: the memory
+    budget was only ever sampled at OPEN, where the board is cheap, and never at
+    the end of a scroll, where it dies. Opening was not the reported symptom.
+    Before trusting a measurement, say out loud which user action it was taken
+    during, and confirm that is the one in the report.
 
 ## The figure contract (non-negotiable, added 2026-08-07)
 

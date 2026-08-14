@@ -84,13 +84,37 @@ ok('HEADS the top rows show decoded art, whatever the mechanism',
 ok('BUDGET one open decodes well under what kills a WKWebView renderer',
   a.mb < 90 && a.decoded > 0, `${a.mb} MB across ${a.imgs} images (the crash was 312.5 MB / 200)`);
 
-await page.evaluate(() => { const b = document.getElementById('lbBody'); if (b) b.scrollTop = b.scrollHeight * 0.6; });
-await sleep(2500);
+/* THE BUG THIS FILE SHIPPED. Tom, 2026-08-13: "scrolling the leaderboard still
+   crashes it like before the fix."
+
+   The version of these two rows that shipped scrolled to 60% and then asserted
+   `b2.imgs > a.imgs`: it REQUIRED the image count to grow on scroll and called
+   that a pass. Unbounded growth is precisely the crash, so the check was not
+   merely blind to the bug, it demanded it. The budget row above only ever ran
+   before any scrolling, so the one number that mattered was never taken in the
+   state the player was in.
+
+   Corrected: scroll to the very END, the worst case a real player reaches, and
+   hold the SAME budget there. Deferral is still asserted, but as a property of
+   the OPEN (not everything mounted up front) rather than as a demand for growth. */
+ok('DEFER the board did not draw every head up front',
+  a.imgs < a.rows, `${a.imgs} images mounted for ${a.rows} rows on open`);
+
+let peak = a;
+for (const frac of [0.25, 0.5, 0.75, 1]) {
+  await page.evaluate(f => { const b = document.getElementById('lbBody'); if (b) b.scrollTop = b.scrollHeight * f; }, frac);
+  await sleep(1200);
+  const s = await shot();
+  if (s.mb > peak.mb) peak = s;
+}
+await sleep(1300);
 const b2 = await shot();
-ok('DEFER the board did not draw every head up front: scrolling adds more',
-  b2.imgs > a.imgs, `${a.imgs} -> ${b2.imgs} images after scrolling`);
-ok('DEFER the heads mounted on scroll actually decode',
-  b2.decoded > a.decoded, `${a.decoded} -> ${b2.decoded} decoded`);
+ok('RECYCLE scrolling the whole board never mounts every head at once',
+  peak.imgs < b2.rows, `peak ${peak.imgs} images mounted across the full scroll, ${b2.rows} rows total`);
+ok('BUDGET the budget still holds at the far end of the scroll (this is the row that was missing)',
+  peak.mb < 90, `peak ${peak.mb} MB while scrolling (the crash was 312.5 MB / 200)`);
+ok('HEADS art is still decoded after scrolling, so recycling did not empty the board',
+  b2.decoded > 0, `${b2.decoded} decoded at the bottom`);
 ok('NO page errors', errs.length === 0, errs.slice(0, 2).join(' ; '));
 
 await browser.close(); srv.close?.();
