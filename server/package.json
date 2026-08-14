@@ -6,7 +6,7 @@
     "db:local": "wrangler d1 execute bonez --local --file=schema.sql",
     "dev": "wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken",
     "test": "node test/api.test.mjs",
-    "deploy": "wrangler deploy"
+    "deploy": "./deploy.sh"
   },
   "devDependencies": {
     "wrangler": "^3.99.0"
