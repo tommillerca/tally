@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 378, date: '2026-08-14', title: 'A failed cloud restore no longer costs you the restore', items: [
+    "<b>If restoring your save from the cloud failed, the app said nothing and never tried again.</b> One bad moment on the network was enough to use up your only automatic restore while a perfectly good backup sat on the server. It now tells you when a restore fails, and it will try again next time you open the app.",
+  ] },
   { n: 377, date: '2026-08-14', title: 'The results card, where you can actually see it', items: [
     'The step race result now shows on your first two opens instead of one, because it was easy to miss it entirely behind the other cards.',
     'It also stops saying a new race starts next week. The next race is already running and you are already in it.',
