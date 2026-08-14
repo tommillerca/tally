@@ -1053,8 +1053,18 @@ function openRaceIntro() {
  * paid on. A poster built on it announces the wrong winners, silently, and only
  * in some weeks, which is the worst version of wrong.
  */
-const RACE_RESULT_SEEN = 'raceResultSeen';   // the week whose poster has been shown
+const RACE_RESULT_SEEN = 'raceResultSeen';   // v376's flag, kept only to migrate off
 const raceResultKey = wk => 'raceResult:' + wk;
+const raceOpensKey = wk => 'raceResultShown:' + wk;
+/* TWO OPENS, not one. Tom, 2026-08-14: "i didnt see the pop up? maybe make it
+   happen on first two opens because i didnt see it at all."
+   He saw the banner, which proves the podium had been fetched and cached, so
+   the poster did not fail on data. It failed in the boot gate: the gate waits
+   for a clear screen and gives up after 30s, and v376 also shipped a What's New
+   card, so anything that held the screen through that window swallowed the only
+   showing there was. A single chance at a moment you do not control is the bug;
+   two chances is the fix, and the second one reads from a warm cache. */
+const RACE_RESULT_OPENS = 1;
 
 /* The week that has just finished, or null before the first one ever has. */
 function lastSettledWeek() {
@@ -1126,8 +1136,8 @@ function openRaceResults(podium) {
         <div class="rr-haul">${racePrizeHtml(w)}</div>
         <span class="rr-sect">How close it was</span>
         ${raceLanesHtml(podium)}
-        <p class="note" style="margin-top:3px">Every prize is already paid. A new race
-        starts next week, and the challenge may change.</p>
+        <p class="note" style="margin-top:3px">Every prize is already paid, and the
+        next race is already running. You are in it.</p>
       </div>
       <div class="rr-foot">
         <button class="drop-cta" id="rrGo">SEE THE BOARD</button>
@@ -1152,7 +1162,14 @@ async function maybeShowRaceResults() {
     if (navigator.webdriver && !window.__raceResultForce) return;
     const wk = lastSettledWeek();
     if (!wk) return;
-    if ((await kvGet(RACE_RESULT_SEEN, '')) === wk) return;
+    // migrate v376's boolean-ish flag: somebody who already saw it once has
+    // spent one of their two showings, not none and not both.
+    let opens = (await kvGet(raceOpensKey(wk), null));
+    if (opens === null) {
+      opens = (await kvGet(RACE_RESULT_SEEN, '')) === wk ? 1 : 0;
+      await kvSet(raceOpensKey(wk), opens);
+    }
+    if (opens >= RACE_RESULT_OPENS) return;
     const podium = await settledPodium(wk);
     if (!podium || !podium.length) return;   // nothing settled: say nothing
     let tries = 0;
@@ -1161,7 +1178,10 @@ async function maybeShowRaceResults() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      await kvSet(RACE_RESULT_SEEN, wk);
+      /* SPENT BEFORE IT IS DRAWN, so a crash inside the render cannot put a
+         player in a loop. A showing is spent by being shown, not by being
+         read: closing it with "Nice one" costs this one open and no more. */
+      await kvSet(raceOpensKey(wk), opens + 1);
       openRaceResults(podium);
     };
     setTimeout(tick, 3200);
@@ -1190,8 +1210,8 @@ async function hydrateRaceResult(el) {
     </summary>
     <div class="gbn-body">
       ${raceLanesHtml(podium, { prizes: true })}
-      <p class="note">A new race starts next week, and the challenge may change.
-      The Crew tab has the live board.</p>
+      <p class="note">The next race is already running and you are in it. The Crew
+      tab has the live board.</p>
     </div>`;
   card.hidden = false;
   composeAvatars(card);
@@ -1217,8 +1237,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   };
   window.__raceResultForget = async () => {
     await kvSet(RACE_RESULT_SEEN, '');
+    await kvSet(raceOpensKey(lastSettledWeek()), null);
     await kvSet(raceResultKey(lastSettledWeek()), null);
   };
+  window.__raceResultOpens = async () => await kvGet(raceOpensKey(lastSettledWeek()), null);
 }
 
 let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
@@ -13009,7 +13031,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v376'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v377'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
