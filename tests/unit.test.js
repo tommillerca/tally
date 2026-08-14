@@ -1852,9 +1852,11 @@ test('NO-OP every paying remote call branches on the answer BEFORE it pays', () 
      a check that cannot fail (tally/CLAUDE.md rule 1). */
   const code = lines.map(l => l.replace(/\/\/[^\n]*$/, ''));
   const findings = [];
+  let analysed = 0;
   code.forEach((ln, i) => {
     const m = ln.match(/const\s+(\w+)\s*=\s*await\s+social\.(\w+Remote)\s*\(/);
     if (!m) return;
+    analysed++;
     const [, resp, fn] = m;
     const block = code.slice(i, i + 34);
     const payAt = block.findIndex(l => /\bcoins\s*=\s*\d|extraCards\.push|\bxp\s*\+=|await award\(/.test(l));
@@ -1864,7 +1866,16 @@ test('NO-OP every paying remote call branches on the answer BEFORE it pays', () 
     const consulted = block.slice(0, payAt).some(l => new RegExp(`\\b${resp}\\s*(&&|\\.|\\))`).test(l) && !l.includes('await social.'));
     if (!consulted) findings.push(`js/app.js:${i + 1}  ${fn} pays at +${payAt} lines without reading ${resp} first`);
   });
-  assert.ok(code.join('\n').includes('social.claimSpireRemote'), 'no remote grant calls found at all: an empty sample is a failure, not a pass');
+  /* THE EMPTY-SAMPLE GUARD HAS TO COUNT WHAT WAS ACTUALLY EXAMINED. This
+     asserted that the STRING 'social.claimSpireRemote' appears in app.js, which
+     is a fact about the file, not about this check: the matcher above only sees
+     `const X = await social.YRemote(`, so one refactor to a destructured
+     `const { ok } = await social.claimSpireRemote(...)` takes the analysed count
+     to zero while the string is still there, and the whole guard passes having
+     read nothing. Measured 2026-08-12: it analyses 2 call sites today, both
+     paying, so it is honest right now; this pins that it stays honest. Count the
+     sites, not the string (tally/CLAUDE.md rule 3). */
+  assert.ok(analysed > 0, `no paying remote call sites were ANALYSED (matcher saw ${analysed}): an empty sample is a failure, not a pass`);
   assert.deepEqual(findings, [], '\n      ' + findings.join('\n      '));
 });
 
