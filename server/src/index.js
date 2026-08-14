@@ -748,6 +748,13 @@ export default {
                   coins: prize.coins,
                   ...(prize.crate ? { crate: prize.crate } : {}),
                   ...(prize.dust ? { dust: prize.dust } : {}),
+                  /* place and steps as NUMBERS, not only inside the note. The
+                     first settlement (2026-08-07) wrote them into English prose
+                     alone, so /steps/settled has to parse a sentence to read
+                     back its own result. applyPayload ignores keys it does not
+                     know, so these are free to the client. */
+                  place: i + 1,
+                  steps: p.steps,
                   note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
                 }), Date.now()).run();
             }
@@ -776,6 +783,50 @@ export default {
             you: r.id === auth.playerId,
           })),
         });
+      }
+
+      /* THE SETTLED RESULT, read back from what was actually PAID.
+       *
+       * /steps/week CANNOT answer this and never could. Its board filters on
+       * each player's CURRENT profile weekKey, so a racer vanishes from last
+       * week's board the moment they take a step in the new one. Measured
+       * against production on 2026-08-14, seven days after the only race that
+       * has settled: three of the five players who were PAID had already
+       * rolled over, and querying that week returned three players who never
+       * placed, promoted 5th to 2nd, and reported the winner's steps 90 higher
+       * than the total he was paid on (that board is a live counter, not a
+       * result). A poster built on it would have announced the wrong winners.
+       *
+       * The grants rows ARE the receipt. They are written once at settlement,
+       * never rewritten, and they carry the player id, so the name and the
+       * outfit stay joinable forever. Nothing here decays.
+       */
+      if (path === '/steps/settled' && request.method === 'GET') {
+        const auth = await verifySigned(request, env, '');
+        if (auth.err) return json({ error: auth.err }, 401);
+        const wk = String(url.searchParams.get('week') || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return json({ error: 'bad week' }, 400);
+        const paid = (await env.DB.prepare(
+          `SELECT g.payload, p.name, p.handle, json_extract(p.profile,'$.outfit') outfit
+             FROM grants g LEFT JOIN players p ON p.id = g.player_id
+            WHERE g.key = ?`).bind(`stepweek-${wk}`).all()).results || [];
+        const podium = paid.map(r => {
+          let pl = {};
+          try { pl = JSON.parse(r.payload || '{}'); } catch { /* a torn row is one missing place, not a 500 */ }
+          // Fallback for the August 2026 settlement, whose place and steps live
+          // only in the note. Newer rows carry both as fields (see above).
+          const m = /^(\d+)\D\D in the step race with ([\d,]+) steps/.exec(pl.note || '');
+          return {
+            place: Number(pl.place) || (m ? Number(m[1]) : 0),
+            steps: Number(pl.steps) || (m ? Number(m[2].replace(/,/g, '')) : 0),
+            name: r.name || r.handle || 'A Bonehead',
+            outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(),
+            coins: pl.coins || 0,
+            crate: pl.crate || null,
+            dust: pl.dust || 0,
+          };
+        }).filter(x => x.place > 0 && x.steps > 0).sort((a, b) => a.place - b.place);
+        return json({ week: wk, podium });
       }
 
       // Signed: send a gift to an accepted friend. mode 'free' = one server-rolled

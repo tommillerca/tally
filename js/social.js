@@ -422,6 +422,22 @@ export async function fetchStepRace(weekKey) {
   } catch { return null; }
 }
 
+/* THE PODIUM THAT WAS PAID, for a week that has already settled.
+   Deliberately NOT fetchStepRace: that board filters on each player's CURRENT
+   week, so a racer drops out of the week they won the moment they walk again.
+   Measured on production 2026-08-14, seven days after the only settled race:
+   three of the five players who were PAID had already vanished from it, and it
+   returned three who never placed. This route reads the grant rows instead,
+   which are the receipt and are never rewritten. */
+export async function fetchSettledRace(weekKey) {
+  try {
+    if (!(await isOnline())) return null;
+    const r = await signedFetch('GET', `/steps/settled?week=${encodeURIComponent(weekKey)}`);
+    if (!r.ok) return null;
+    return (await r.json()).podium || [];
+  } catch { return null; }
+}
+
 export async function fetchMySpires() {
   try {
     if (!(await isOnline())) return null;

@@ -593,6 +593,7 @@ async function boot() {
   maybeShowBossIntro();
   maybeShowMageIntro();
   maybeShowRaceIntro();
+  maybeShowRaceResults();
   maybeShowCommunityIntro();
   maybePromptRecovery();
   maybePromptName();
@@ -1037,12 +1038,187 @@ function openRaceIntro() {
   $('#raceIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
 }
 
+/* ======================= THE RESULTS, AFTER IT SETTLES =======================
+ *
+ * THE PODIUM IS READ ONCE AND THEN KEPT. Everything below reads kv, never the
+ * network, and the single fetch that fills kv comes from /steps/settled, which
+ * reads the grant rows that were actually PAID.
+ *
+ * That is not a preference, it is the only correct source. /steps/week filters
+ * on each player's CURRENT week, so a racer leaves the week they won the moment
+ * they walk again. Measured against production on 2026-08-14, seven days after
+ * the only race that has settled: three of the five players who were PAID had
+ * already rolled over, and that board returned three players who never placed,
+ * promoted 5th to 2nd, and reported the winner 90 steps above the total he was
+ * paid on. A poster built on it announces the wrong winners, silently, and only
+ * in some weeks, which is the worst version of wrong.
+ */
+const RACE_RESULT_SEEN = 'raceResultSeen';   // the week whose poster has been shown
+const raceResultKey = wk => 'raceResult:' + wk;
+
+/* The week that has just finished, or null before the first one ever has. */
+function lastSettledWeek() {
+  const wk = raceWeekKey(dateKey());
+  const prev = dateKey(new Date(Date.parse(wk + 'T00:00:00') - RACE_DAYS * 86400000));
+  return prev < RACE_EPOCH ? null : prev;
+}
+
+/* Fetch at most once per week, then serve from kv forever. A settled result
+   cannot change, so a second request could only ever make it worse. */
+async function settledPodium(wk) {
+  const cached = await kvGet(raceResultKey(wk), null);
+  if (cached && cached.length) return cached;
+  if (navigator.webdriver && !window.__raceResults) return null;
+  const podium = window.__raceResults ? window.__raceResults() : await social.fetchSettledRace(wk);
+  if (podium && podium.length) { await kvSet(raceResultKey(wk), podium); return podium; }
+  return null;
+}
+
+const raceLanesHtml = (podium, { prizes = false } = {}) => {
+  const lead = podium[0].steps || 1;
+  return `<div class="race-lanes">${podium.map(p => {
+    const pct = Math.max(8, Math.round(p.steps / lead * 100));
+    return `<div class="race-lane r${p.place}">
+      <span class="rk">${p.place}</span>
+      <div class="bd">
+        <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
+        <div class="track"><i style="width:${pct}%"></i>
+          <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+        </div>
+        ${prizes ? racePrizeHtml(p) : ''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+};
+
+const racePrizeHtml = p => `<span class="rr-prize">
+  <span class="pz">${ICONS.coin(13)}${(p.coins || 0).toLocaleString()}</span>
+  ${p.crate ? `<span class="pz">${crateIcon(p.crate, 14)}${p.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+  ${p.dust ? `<span class="pz">${ICONS.dust(12)}${p.dust}</span>` : ''}
+</span>`;
+
+/* THE POSTER. It fires once, the first open after the race settles, and then it
+   is gone; the Today banner is where the result lives on. The order of the card
+   is the argument: who won, by how much, what they took, then how close it was.
+   NO PURSE COLUMN on the lanes: measured at 375x667, five lanes each carrying a
+   prize row ran past the card and pushed 4th and 5th below the fold. The poster
+   spends its height on the winner and the gaps; the banner carries every purse
+   (Tom, 2026-08-14: "that's fine 4th and 5th can find out from the banner"). */
+function openRaceResults(podium) {
+  const w = podium[0];
+  const margin = podium.length > 1 ? w.steps - podium[1].steps : 0;
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil rr-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <div class="rr-scroll">
+        <p class="drop-eyebrow">THAT IS A WRAP</p>
+        <h1 class="drop-title">Step Race <em>Results</em></h1>
+        <div class="rr-hero">
+          <span class="rr-fig">${avatarLayersHtml(w.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+          <div class="rr-who">
+            <span class="rr-crown">${bhIcon('badge-trophy', 13)} 1ST</span>
+            <b>${esc(w.name)}</b>
+            <span class="rr-steps">${w.steps.toLocaleString()} <i>STEPS</i></span>
+          </div>
+        </div>
+        ${margin ? `<p class="rr-shout">Nobody got within <b>${margin.toLocaleString()} steps</b>. Take a bow.</p>` : ''}
+        <div class="rr-haul">${racePrizeHtml(w)}</div>
+        <span class="rr-sect">How close it was</span>
+        ${raceLanesHtml(podium)}
+        <p class="note" style="margin-top:3px">Every prize is already paid. A new race
+        starts next week, and the challenge may change.</p>
+      </div>
+      <div class="rr-foot">
+        <button class="drop-cta" id="rrGo">SEE THE BOARD</button>
+        <button class="drop-later" id="rrLater">Nice one</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+  composeAvatars(veil);
+  const close = () => veil.remove();
+  $('#rrLater', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#rrGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
+}
+
+/* ONE SHOWING, and the flag burns before the poster is drawn rather than after,
+   so a crash inside the render cannot leave a player being shown last week's
+   results every time they open the app. Same boot etiquette as the race intro:
+   after the other first-run cards, never on top of a sheet or another veil. */
+async function maybeShowRaceResults() {
+  try {
+    if (!RACE_LIVE || !S.settings) return;
+    if (navigator.webdriver && !window.__raceResultForce) return;
+    const wk = lastSettledWeek();
+    if (!wk) return;
+    if ((await kvGet(RACE_RESULT_SEEN, '')) === wk) return;
+    const podium = await settledPodium(wk);
+    if (!podium || !podium.length) return;   // nothing settled: say nothing
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      await kvSet(RACE_RESULT_SEEN, wk);
+      openRaceResults(podium);
+    };
+    setTimeout(tick, 3200);
+  } catch { /* never block boot */ }
+}
+
+/* THE TODAY BANNER. The permanent home for the result, for everyone who tapped
+   past the poster, and the surface that carries every place's full purse. */
+async function hydrateRaceResult(el) {
+  if (!RACE_LIVE) return;
+  const wk = lastSettledWeek();
+  if (!wk) return;
+  const podium = await settledPodium(wk);
+  const card = el.querySelector('#raceResultCard');
+  if (!card || !card.isConnected || !podium || !podium.length) return;
+  const w = podium[0];
+  card.innerHTML = `
+    <summary>
+      <span class="gbn-ico rr-ico">${bhIcon('badge-trophy', 21)}</span>
+      <span class="gbn-txt">
+        <i>THE STEP RACE · SETTLED</i>
+        <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
+        <small><b>${w.steps.toLocaleString()}</b> steps. Prizes are paid.</small>
+      </span>
+      <span class="gbn-chev">›</span>
+    </summary>
+    <div class="gbn-body">
+      ${raceLanesHtml(podium, { prizes: true })}
+      <p class="note">A new race starts next week, and the challenge may change.
+      The Crew tab has the live board.</p>
+    </div>`;
+  card.hidden = false;
+  composeAvatars(card);
+}
+
 /* Test hook (webdriver only), same pattern as __openFriendProfile. The poster is
    fired from the boot path behind a one-shot kv flag, so by the time a test can
    set anything the gate has already returned: without this the only way to check
    the announcement renders is to watch a real phone on release day. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__raceIntro = async () => { raceIntroFit = await equipped(); openRaceIntro(); };
+  window.__raceResultShow = async () => {
+    const podium = await settledPodium(lastSettledWeek());
+    if (podium && podium.length) openRaceResults(podium);
+    return !!(podium && podium.length);
+  };
+  /* Drives the REAL boot gate, flag-burning and all, rather than the shortcut
+     above. The once-only promise lives in maybeShowRaceResults, so a test that
+     asserts it against __raceResultShow would be checking nothing. */
+  window.__raceResultBoot = async () => {
+    window.__raceResultForce = true;
+    await maybeShowRaceResults();
+  };
+  window.__raceResultForget = async () => {
+    await kvSet(RACE_RESULT_SEEN, '');
+    await kvSet(raceResultKey(lastSettledWeek()), null);
+  };
 }
 
 let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
@@ -2217,6 +2393,8 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
+  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
+
   ${isToday ? outThereHtml({ held: heldSpiresNow, cropsRipe }) : ''}
 
   ${isToday ? `
@@ -2493,6 +2671,8 @@ async function renderToday(el) {
     if (last) queueCelebration(last);
     refresh();
   }));
+
+  if (isToday) hydrateRaceResult(el);
 }
 
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
@@ -12829,7 +13009,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v375'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v376'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
