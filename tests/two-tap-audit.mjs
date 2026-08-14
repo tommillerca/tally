@@ -80,7 +80,15 @@ await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1700);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]')?.click());
 await sleep(1800);
-await page.evaluate(() => { document.querySelector('.shop-fold')?.setAttribute('open', ''); });
+/* The shop used to render its merchant behind a <details class="shop-fold">
+   that needed opening after the tab click. Current shape (js/app.js merchantHtml
+   at ~line 4780) renders the merchant rows and [data-buyweapon] buttons
+   directly under the shop tab, no fold. suite-rot flagged this line's
+   .shop-fold query as STALE (verified 2026-08-13: no js/ file emits
+   .shop-fold anymore; app.css has an orphaned rule block that is dead too).
+   The setAttribute was a no-op even before this cleanup; dropping the line
+   removes the dead selector and does not change the subsequent
+   [data-buyweapon] read the assertion actually depends on. */
 await sleep(500);
 const w0 = await coins();
 const wInfo = await page.evaluate(() => {

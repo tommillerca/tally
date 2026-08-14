@@ -539,6 +539,20 @@ async function boot() {
     S.settings = await kvGet('settings');
     S.userFoods = await db.all('foods');
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
+  } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
+    /* A FAILED CLOUD RESTORE MUST SAY SO. The file-import path already gets this
+       right ("Import failed: your old data is unchanged"); the cloud path said
+       nothing at all, so a player whose backup failed to come down saw an empty
+       save and no reason for it. That is the worst possible reading of the
+       situation: it looks like the backup never existed.
+
+       Only DEFINITE failures speak. 'none' and 'empty' (no backup on the server)
+       and 'already' (restored on an earlier boot) are the normal quiet paths and
+       must stay silent, or every returning player gets an alarming toast. The
+       wording promises a retry because bootSync now genuinely retries: it no
+       longer marks the restore done unless it succeeded or there was nothing to
+       fetch. */
+    setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
   }
 
   if (!S.settings) { renderOnboarding(); return; }
@@ -13031,7 +13045,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v377'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v378'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

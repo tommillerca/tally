@@ -111,7 +111,14 @@ if (reach.exists && reach.hidden === false) {
     if (!stage) return { why: 'no foe stage' };
     const imgs = [...stage.querySelectorAll('img')];
     return {
-      name: (document.querySelector('.hud-side.foe .hud-name, .hud-side:last-child .hud-name') || {}).textContent?.trim() || null,
+      /* Foe name selector: the app emits `<div class="fname">${esc(foe.name)}</div>`
+         at js/app.js:13356 inside the fight sheet. The older `.hud-side .hud-name`
+         markup this line used to query was retired; no js/ file emits it now
+         (verified by grep 2026-08-13). suite-rot flagged this at line 114 as
+         a STALE selector; this replaces both arms with the shape the fight
+         actually renders. Kept as a bare .fname query rather than a scoped
+         one because there is a single fname in the fight sheet at a time. */
+      name: document.querySelector('.fname')?.textContent?.trim() || null,
       /* ids off the asset paths, because that is what the player is looking at:
          assets/bh/<slot>/<id>.png */
       ids: imgs.map(i => (i.getAttribute('src') || '').replace(/^.*\/bh\/[^/]+\//, '').replace(/\.png.*$/, '')),

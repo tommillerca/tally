@@ -88,6 +88,12 @@ const dupes = await page.evaluate(async () => {
   return out;
 });
 console.log(`  duplicate art (same slot)  : ${dupes.length}${dupes.length ? ' -> ' + dupes.map(d => d.join('=')).join(', ') : ''}`);
+/* ASSERT it. Printing the count and exiting 0 is how MS1=MS6 stayed in the
+   catalogue after this very check found it. */
+if (dupes.length) {
+  console.log(`FAIL  ${dupes.length} pair(s) of rows share one image -> ${dupes.slice(0, 6).map(d => d.join('=')).join(', ')}`);
+  process.exitCode = 1;
+}
 
 /* A DANGLING DECLARATION SWALLOWS THE NEXT RULE. Deleting a selector line with a
    regex left `font-size: 10px; ... }` on its own; the CSS parser ate the rule
@@ -96,8 +102,11 @@ console.log(`  duplicate art (same slot)  : ${dupes.length}${dupes.length ? ' ->
    noise) and diffing selectors cannot either (the same defect breaks the source
    scan symmetrically). The defect IS a brace at depth zero, so look for that. */
 {
+  /* blank the comments out IN PLACE, keeping their newlines: deleting them
+     outright shifted every reported line number up by the comment body (this
+     check pointed at 6141 for a defect on 7035). */
   const raw = (await import('node:fs')).readFileSync(new URL('../app.css', import.meta.url), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
+    .replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, ' '));
   let depth = 0, line = 1, bad = 0, where = 0;
   for (const ch of raw) {
     if (ch === '\n') line++;
@@ -115,6 +124,13 @@ console.log(`  duplicate art (same slot)  : ${dupes.length}${dupes.length ? ' ->
 
 await browser.close();
 if (srvHandle) srvHandle.close();
-if (missing.length || odd.length) { console.log('FAIL'); process.exit(1); }
-console.log('all catalogue art present, decoded and 640px');
-process.exit(0);
+if (missing.length || odd.length) { console.log('FAIL'); process.exitCode = 1; }
+else console.log('all catalogue art present, decoded and 640px');
+/* HONOUR EVERY FAILURE. This was `process.exit(0)`, which discards process.exitCode
+   outright (`node -e 'process.exitCode=1; process.exit(0)'` exits 0), so placeholder
+   names, duplicate names, duplicate art and a broken app.css all reported green.
+   Bare process.exit() exits with process.exitCode; it is spelled out here because
+   that is the exact detail this line got wrong.
+   The srvHandle close above is kept from the other side of this merge: BOTH were
+   wanted, the cleanup and the honest exit code. */
+process.exit(process.exitCode || 0);
