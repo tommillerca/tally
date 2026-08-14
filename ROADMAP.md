@@ -1461,3 +1461,38 @@ Tom, playing v348. Logged, none investigated yet beyond what is written here.
 
 Ordering suggestion: 3 first (it is a bug), then 4 (cheap, high feel), then 1
 (needs a decision), then 2 (wants a mockup, and has one proposed already).
+
+
+## Playtest findings, fresh-eyes non-gamer, 2026-08-13 (Gwart)
+
+From the new-player playtest agent. The unwinnable first fight from this list is
+FIXED and shipped in v374 (tutorial fight cannot be lost, measured 7.8% of
+day-one accounts were losing it). These four are still open. Logged per process:
+investigate, log, plan, WAIT for approval before building.
+
+1. WARDROBE COUNT vs CRATE REVEAL. Tester opened a crate, saw 3 cards, then
+   found the wardrobe reading "1/362 collected", with the coin total also not
+   matching what the reveal showed.
+   INVESTIGATED, NOT YET DIAGNOSED. collectedLooks() (js/loot.js:973) unions
+   three sources (kv 'looks', ownedCosmeticIds, gear artIds) and looks correct on
+   reading. The denominator is BH_ITEMS.filter(i => !i.default) (js/app.js:8511).
+   THE LIKELY INNOCENT EXPLANATION, which must be ruled out FIRST: a crate pays
+   coins and dust as cards too, so "3 cards" is not "3 cosmetics", and 1/362 may
+   be correct while being unreadable to a player. If so this is a COPY/UX bug,
+   not a counting bug, and the fix is different.
+   NEXT STEP: drive a real crate open headless, record what each card actually
+   is, and compare against the count delta. Do not fix from the code, measure it.
+   Do not assume it is a counting bug because the tester read it as one.
+
+2. START TRACKING error pill renders on top of the button's own label. Small,
+   visual, needs a render at the failing state to fix honestly.
+
+3. KITCHEN IS A DEAD ROOM ON DAY ONE, and the bottom tabs are unreachable behind
+   it. The second half is the serious part: a screen that traps a new player with
+   no way back to the tabs. Needs a hit-test at the smallest viewport (the
+   375x667 sweep now running may already have caught it; check that report first
+   before re-investigating).
+
+4. "Four questions" in onboarding is actually seven fields. Either the copy is
+   wrong or the form grew past its promise. Trivial, but it is the first thing
+   the app ever tells a player and it is false.
