@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 375, date: '2026-08-14', title: 'The leaderboard crash, properly this time', items: [
+    "<b>Scrolling the leaderboard still crashed the Crew tab, and the fix two days ago was only half of one.</b> Heads loaded as you reached them but never unloaded, so opening the board looked fine and scrolling to the bottom ended up drawing every player at once, which is the thing that was killing the page. The board now only ever holds the handful of heads you can actually see.",
+  ] },
   { n: 374, date: '2026-08-13', title: 'Restoring a backup can no longer half-work', items: [
     "<b>This is the important one.</b> Restoring a backup wrote your save one row at a time, so if it was interrupted partway (a reload, the app going to the background, a full phone) you were left with a mix of the old save and the new one, and nothing said so. A restore now either completes entirely or changes nothing at all, and it tells you which.",
     '<b>The app no longer opens to a blank screen</b> if you left it in the background while it was starting. The reveal was waiting for a frame that never came.',
