@@ -137,24 +137,27 @@ ok('FITS the whole podium is on a 375x667 phone WITHOUT scrolling the popup',
 await page.evaluate(() => { document.querySelector('#rrLater')?.click(); });
 ok('"Nice one" closes it', await page.evaluate(() => !document.querySelector('.rr-veil')));
 
-/* ONCE, driven through the REAL boot gate rather than the shortcut hook, since
-   the once-only promise lives in maybeShowRaceResults and nowhere else. Two
-   consecutive boots: the first must show the poster, the second must not. */
+/* TWICE THEN STOP, driven through the REAL boot gate rather than the shortcut
+   hook, because the counter lives in maybeShowRaceResults and nowhere else.
+   Tom missed the single v376 showing entirely, so "it appears at all" is now a
+   two-boot promise and the third boot is what proves it is not a nag. */
 await page.evaluate(() => window.__raceResultForget());
-await page.evaluate(() => window.__raceResultBoot());
-await new Promise(r => setTimeout(r, 4200));           // the gate waits 3.2s for a clear screen
-const first = await page.evaluate(() => !!document.querySelector('.rr-veil'));
-ok('ONCE the real boot gate shows it the first time', first);
-await page.evaluate(() => { document.querySelector('#rrLater')?.click(); });
+const bootOnce = async () => {
+  await page.evaluate(() => window.__raceResultBoot());
+  await new Promise(r => setTimeout(r, 4200));         // the gate waits 3.2s for a clear screen
+  const up = await page.evaluate(() => !!document.querySelector('.rr-veil'));
+  await page.evaluate(() => { document.querySelector('#rrLater')?.click(); });
+  return up;
+};
+ok('TWICE the real boot gate shows it on the first open', await bootOnce());
+ok('TWICE it shows again on the second open, which is the whole point',
+  await bootOnce(), 'Tom saw zero of one showing on v376');
+ok('THEN STOP the third open does not show it: a result is not a nag',
+  (await bootOnce()) === false);
 
-const seenAfter = await page.evaluate(async () => (await import('./js/db.js')).kvGet('raceResultSeen', ''));
-ok('ONCE the showing is recorded against the WEEK, not a bare boolean',
-  /^\d{4}-\d{2}-\d{2}$/.test(seenAfter || ''), `raceResultSeen = ${JSON.stringify(seenAfter)}`);
-
-await page.evaluate(() => window.__raceResultBoot());
-await new Promise(r => setTimeout(r, 4200));
-ok('ONCE a second boot does not show it again',
-  await page.evaluate(() => !document.querySelector('.rr-veil')));
+const opens = await page.evaluate(() => window.__raceResultOpens());
+ok('the count is kept against the WEEK, so next race gets its own two showings',
+  opens === 2, `raceResultShown = ${JSON.stringify(opens)}`);
 
 /* EMPTY. No settled result must produce NO poster, not an empty frame. The
    cache is cleared first, or this would read back the podium above and prove
@@ -195,6 +198,18 @@ ok('BANNER it names the winner in the summary, so it reads collapsed',
 ok('BANNER every place carries its full purse, including 5th',
   !banner.none && banner.purses === 5 && /400/.test(banner.lastPurse || ''),
   `${banner.purses} purses, 5th: ${JSON.stringify(banner.lastPurse)}`);
+
+/* COPY. Tom, 2026-08-14: "there is already another step challenge going it
+   should reflect that." A results card that says a race "starts next week" is
+   wrong the moment it is read, because the next race began the day this one
+   settled. Asserted as an absence, since that is the sentence that was wrong. */
+const copy = await page.evaluate(() => {
+  const b = document.querySelector('#raceResultCard');
+  return { banner: (b ? b.textContent : '') || '' };
+});
+ok('COPY the banner says the next race is already running, not that one starts later',
+  /already running/i.test(copy.banner) && !/starts next week/i.test(copy.banner),
+  JSON.stringify(copy.banner.slice(-120)));
 
 ok('NO page errors', errs.length === 0, errs.join(' | '));
 

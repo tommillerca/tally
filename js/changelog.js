@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 377, date: '2026-08-14', title: 'The results card, where you can actually see it', items: [
+    'The step race result now shows on your first two opens instead of one, because it was easy to miss it entirely behind the other cards.',
+    'It also stops saying a new race starts next week. The next race is already running and you are already in it.',
+  ] },
   { n: 376, date: '2026-08-14', title: 'The first step race has a winner', items: [
     "<b>Bony Wrecker took the first step race with 115,084 steps.</b> The full result is on Today: all five places, what each of them walked, and exactly what they were paid. Nobody got within eleven thousand steps of first.",
     'Every prize was already in your Deliveries the day it settled. This is the announcement, not the payout.',
