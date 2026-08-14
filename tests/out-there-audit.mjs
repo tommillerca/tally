@@ -66,8 +66,18 @@ await setCrops(page, 0);
 let card = await readCard(page);
 ok('the Out there card renders', !card.missing);
 const dry = card.rows.map(r => r.cls).join(' | ');
-ok('no Glutton row', !card.rows.some(r => /glutton-banner$/.test(r.cls.trim()) && /Glutton/i.test(r.text)), dry);
-ok('no Puffer Pack row', !card.rows.some(r => /drop-banner/.test(r.cls) || /Puffer/i.test(r.text)), dry);
+/* MATCH A CLASS TOKEN, NEVER THE TAIL OF THE ATTRIBUTE. `/glutton-banner$/` on the
+   trimmed className demanded that token come LAST, and every banner in js/app.js
+   emits it FIRST as the shared base class ("glutton-banner garden-banner",
+   "...teaser-banner", "...spire-banner"), so this could not go red on any row the
+   app is capable of rendering. `glutton-banner` on its own says nothing about the
+   Glutton; the summary text is what identifies the row Tom asked to be gone. */
+const hasCls = (r, c) => r.cls.trim().split(/\s+/).includes(c);
+ok('no Glutton row', !card.rows.some(r => hasCls(r, 'glutton-banner') && /glutton/i.test(r.text)), dry);
+/* `drop-banner` was the Puffer row's second class until it was deleted in v342, so
+   querying it now matches nothing in js/, data/, index.html or app.css. Its title
+   is the part that survives a re-add under any class name. */
+ok('no Puffer Pack row', !card.rows.some(r => /puffer/i.test(r.text)), dry);
 ok('the cosmetics drop row is there (nothing ripe)', card.rows.some(r => /teaser-banner/.test(r.cls)), dry);
 
 /* ---- 2. with crops RIPE: BOTH the garden row and the drop row show ----
