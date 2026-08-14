@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 376, date: '2026-08-14', title: 'The first step race has a winner', items: [
+    "<b>Bony Wrecker took the first step race with 115,084 steps.</b> The full result is on Today: all five places, what each of them walked, and exactly what they were paid. Nobody got within eleven thousand steps of first.",
+    'Every prize was already in your Deliveries the day it settled. This is the announcement, not the payout.',
+    'The rank bars now get quieter as you go down the podium, so the winner reads as the winner.',
+  ] },
   { n: 375, date: '2026-08-14', title: 'The leaderboard crash, properly this time', items: [
     "<b>Scrolling the leaderboard still crashed the Crew tab, and the fix two days ago was only half of one.</b> Heads loaded as you reached them but never unloaded, so opening the board looked fine and scrolling to the bottom ended up drawing every player at once, which is the thing that was killing the page. The board now only ever holds the handful of heads you can actually see.",
   ] },

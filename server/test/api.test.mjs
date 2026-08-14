@@ -357,6 +357,43 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);
   const g2 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
   assert.equal((g2.grants || []).filter(x => x.key === `stepweek-${prev}`).length, 1, 'settling is idempotent');
+
+  /* THE SETTLED RESULT SURVIVES THE WINNER WALKING AGAIN.
+     This is the whole reason /steps/settled exists, so it is asserted here
+     rather than in isolation: the race above has just settled and paid
+     `stale`, and the next thing a real winner does is take a step in the new
+     week. Measured on production 2026-08-14: three of the five players PAID
+     for 2026-08-07 had already rolled over, and querying that week returned
+     three players who never placed. A results poster reading /steps/week
+     announces the wrong winners, silently, and only some weeks. */
+  const settled1 = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/settled?week=${prev}`)).json();
+  assert.equal(settled1.podium.length, 1, 'the settled week reports exactly the racer who was paid');
+  assert.equal(settled1.podium[0].place, 1, 'place is a number, not a sentence');
+  assert.equal(settled1.podium[0].steps, 999999, 'the steps are the total that was PAID, not a live count');
+  assert.ok(settled1.podium[0].outfit, 'the winner carries art, so a poster can draw them');
+
+  // roll the winner into the new week, exactly as their phone would
+  const rolled = JSON.stringify({ snapshot: { level: 5, outfit: { SK: 'SK0-1' }, gear: [], weekKey: wk, weekSteps: 12, raceV: RACE_V }, appV: 'test' });
+  assert.equal((await signedFetch(stale.k.kp, stale.p.playerId, 'PUT', '/profile', rolled)).status, 200);
+
+  const gone = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/week?week=${prev}`)).json();
+  assert.ok(!gone.players.some(x => x.playerId === stale.p.playerId),
+    'PRECONDITION: the winner really has vanished from the live board for the week they won');
+
+  const settled2 = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/settled?week=${prev}`)).json();
+  assert.equal(settled2.podium.length, 1, 'the paid result is unchanged by the winner walking again');
+  assert.equal(settled2.podium[0].steps, 999999, 'and still reports the total they were paid on');
+  assert.deepEqual(settled2.podium[0].name, settled1.podium[0].name, 'and still names the same player');
+});
+
+await test('settled result: an unsettled week is empty, and empty is not an error', async () => {
+  const k = await makeKeys();
+  const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+  const r = await signedFetch(k.kp, p.playerId, 'GET', '/steps/settled?week=2029-01-01');
+  assert.equal(r.status, 200, 'a week nobody raced answers cleanly');
+  assert.deepEqual((await r.json()).podium, [], 'and reports no podium rather than inventing one');
+  const bad = await signedFetch(k.kp, p.playerId, 'GET', '/steps/settled?week=nonsense');
+  assert.equal(bad.status, 400, 'a malformed week is refused, not parsed into a key');
 });
 
 /* NAMES ARE UNIQUE. Tom, 2026-08-08: "How did you allow two people to pick the
