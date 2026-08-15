@@ -211,6 +211,7 @@ const DECLARED = {
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
   'melt-ui-audit.mjs': ['full', 'the Salvage Bench: entrance visible without a tap, every row actionable, melt pays exactly once (SOP), every rarity meltable, and transmog on a stat-less slot is offered AND free AND actually changes the look.'],
+  'offline-boot-audit.mjs': ['full', "the other half of v197's network-first shell: the app has to boot with no network. RED on main today, and the red is the finding, not a flake: js/haptics.js and js/bosses.js are static imports of js/app.js that are not in sw.js PRECACHE, so a worker that has only precached serves index.html for them and the app is a dead shell. A returning visitor is fine, they get runtime-cached. Owns its server (it has to stop it), so it takes ~90s."],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
   'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen.'],
