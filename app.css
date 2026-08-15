@@ -6421,14 +6421,39 @@ body::before {
 
 /* The breed panel is a CHECKOUT BAR: it follows you down the pet list instead of
    sitting at the top where selecting your second pet pushed it off-screen. */
-/* A STICKY FOOTER NEEDS ITS OWN SCROLL ROOM. Tom, 2026-08-10: "the breeding popup
-   is good but it covers the breed button when you swipe to another pet."
-   Measured: the bar sat over .cf-acts by 15px, and the BREED button is in that
-   row, so the control you are being TOLD to press was under the thing telling you
-   to press it. A sticky element pinned to bottom:0 overlays whatever is behind it
-   whenever its own flow position is below the fold, so the fix is scroll room:
-   #stableBody gets a padding-bottom the size of the bar (set from JS, since the
-   bar's height varies), which lets the row above always rise clear of it. */
+/* A STICKY FOOTER MUST NOT BE ABLE TO RISE OVER THE ROW IT IS TALKING ABOUT.
+   Tom, 2026-08-10: "the breeding popup is good but it covers the breed button
+   when you swipe to another pet." Measured then: the bar sat over .cf-acts by
+   15px, and BREED is in that row, so the control you were being TOLD to press
+   was under the thing telling you to press it.
+
+   TWO FIXES FOR THIS ALREADY SHIPPED AND NEITHER ONE HELD, so the mechanism is
+   worth stating exactly. A `position: sticky; bottom: 0` element is clamped by
+   its CONTAINING BLOCK, and this bar's containing block was #stableBody, i.e.
+   the whole sheet. That let it rise all the way to the top of the sheet, which
+   is why it kept ending up over the carousel:
+     v317  gave the sheet a padding-bottom the size of the bar. Padding is
+           OUTSIDE the sticky containing block, so the bar un-stuck at the end of
+           the content and that padding became Brock's grey gutter (2026-08-14).
+     v379  moved the same room to the sibling ABOVE the bar as a margin. That
+           kept the bar stuck, but it only bought an ESCAPE: you could scroll the
+           action row out from under the bar, you were not stopped from putting
+           it back. Measured on v380 at 375x667 with a precious pair flagged:
+           the bar is 387px of a 578px sheet, [data-destroy] hit-tested to
+           li / span.bt-in / div.breed-trade at 42 of the 76 scroll offsets where
+           it is on screen at all, including the one an ordinary scroll toward it
+           lands on. That button MELTS A PET PERMANENTLY.
+
+   So the room is gone and the clamp is real: .breed-dock (js/app.js, in
+   openStable's render) wraps everything that FOLLOWS the carousel, and the bar
+   sticks inside THAT. It can still float down the talent tree, which is what
+   Tom asked for; it can no longer reach .cf-acts, because .cf is outside its
+   containing block. Measured after: [data-destroy] tappable at every on-screen
+   offset at 375x667, 430x932 AND 320x568, #doBreed unchanged at all three, the
+   bar showing exactly the same content (the shiny warning still 100% visible),
+   and the sheet 387px shorter because the 401px of room is not needed at all.
+   DO NOT re-add scroll room here. Room is what you need when the bar can reach
+   the row; it cannot. */
 .breed-bar.sticky {
   position: sticky; bottom: 0; z-index: 4; margin-top: 14px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius);
