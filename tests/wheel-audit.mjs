@@ -76,8 +76,11 @@ async function cleanState() {
 async function detectGate() {
   return page.evaluate(async () => {
     const db = await import('./js/db.js');
+    const nut = await import('./js/nutrition.js');
     const preview = location.search.includes('wheel=1');
-    const today = new Date().toISOString().slice(0, 10);
+    /* Use the app's dateKey() (local) not toISOString().slice(0,10) (UTC),
+       so this matches what maybeShowDailyWheel reads. See PAYOUT-1 comment. */
+    const today = nut.dateKey();
     if (navigator.webdriver && !window.__wheelForce && !preview) return 'webdriver';
     if (!preview && (await db.kvGet('wheelLastDate', null)) === today) return 'wheelLastDate';
     /* waitForSplash is a wait, not a decline; but a splash that never leaves
@@ -109,6 +112,15 @@ check('WHEEL SHOWS  the wheel arrives after force-show on a clean state', shown1
 const spin1 = await page.evaluate(async () => {
   const db = await import('./js/db.js');
   const loot = await import('./js/loot.js');
+  /* The wheel stamps wheelLastDate using nutrition.dateKey() which is LOCAL
+     (getFullYear/getMonth/getDate), not UTC. The old audit computed today via
+     new Date().toISOString().slice(0,10) which is UTC and disagrees with the
+     app for the ~7h window between local midnight and UTC midnight in PDT.
+     That mismatch made the census's overnight runs (02:00-08:00 UTC = 19:00-
+     01:00 PDT the previous day) FAIL PAYOUT-1 spuriously while the actual
+     guard was working fine. Use the SAME dateKey() the app uses so the
+     assertion measures what the guard measures. */
+  const nut = await import('./js/nutrition.js');
   const beforeCoins = await loot.coins();
   const beforeDate  = await db.kvGet('wheelLastDate', null);
   /* Fire the SPIN button the way a player would: real .click(), not a call
@@ -122,11 +134,11 @@ const spin1 = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 400));
   const afterCoins = await loot.coins();
   const afterDate  = await db.kvGet('wheelLastDate', null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = nut.dateKey();
   const prize = window.__dw?.prize;
   return {
     prize, beforeCoins, afterCoins, coinDelta: afterCoins - beforeCoins,
-    beforeDate, afterDate, dateStampedToday: afterDate === today,
+    beforeDate, afterDate, dateStampedToday: afterDate === today, today,
   };
 });
 check('PAYOUT-1  the first spin completes without error', !spin1.error, spin1.error || '');
@@ -206,7 +218,10 @@ await reboot({ wheelForce: true });
 await cleanState();
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
-  const today = new Date().toISOString().slice(0, 10);
+  const nut = await import('./js/nutrition.js');
+  /* Same local-vs-UTC reason as PAYOUT-1: wheel.js compares wheelLastDate
+     against dateKey() (local), so stamp using the same computation. */
+  const today = nut.dateKey();
   await db.kvSet('wheelLastDate', today);
 });
 const g3b = await detectGate();
