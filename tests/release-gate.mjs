@@ -79,6 +79,7 @@ const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'news-tab-audit.mjs',      // every announcement still opens with its art
+  'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
   'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
