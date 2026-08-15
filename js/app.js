@@ -609,6 +609,7 @@ async function boot() {
   maybeShowRaceIntro();
   maybeShowRaceResults();
   maybeShowCommunityIntro();
+  maybeShowThanksCard();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -1414,6 +1415,113 @@ async function maybeShowCommunityIntro() {
       openCommunityCard();
     };
     setTimeout(tick, 4000);
+  } catch { /* never block boot */ }
+}
+
+/* THE BETA THANK-YOU. Tom, 2026-08-15: thank the people playing so far, ask
+ * them to pass the link on, and tell Android players to say hello in the
+ * Discord because that track is enrolled by hand.
+ * EVERYONE, ONCE. Tom decided the audience knowingly: no "has played before
+ * this build" check, no first-seen comparison, no second copy branch for new
+ * installs. One card, one audience. The cost is that somebody who installed a
+ * minute ago gets thanked too, and he judged that harmless next to putting the
+ * link in front of the most people. The copy carries that decision: it thanks
+ * people for being HERE and being EARLY, and asserts nothing about how long
+ * anyone has played or what they have sent, because for a fresh install every
+ * one of those sentences would be a lie.
+ * Built on the community card's bones on purpose: one-shot boot veil, a
+ * permanent Crew strip for anyone who taps past it, and a News row so it is
+ * never lost. Same reasons apply, so the same shape applies.
+ * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
+ * and the Discord link here IS DISCORD_URL: a second copy would rot. */
+const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
+const THANKS_SEEN_KEY = 'betaThanksSeen';
+/* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
+   list, so an asset file would need an entry there and this needs none.
+   currentColor so it takes the eyebrow's accent and the strip's own tint. */
+const THANKS_MARK = `<svg class="bt-mark" viewBox="0 0 24 22" width="16" height="15" aria-hidden="true" fill="currentColor"><path d="M12 21.4 3.2 12.9A5.9 5.9 0 0 1 12 5.1a5.9 5.9 0 0 1 8.8 7.8z"/></svg>`;
+
+/* The Crew strip, sibling of the Discord one. Not dismissible, same reason:
+   it is the way back for everyone who tapped past the popup. */
+function thanksBannerHtml() {
+  return `<button class="glutton-banner dc-banner bt-banner" id="crewThanks">
+    <span class="gbn-ico bt-bnr-ico">${THANKS_MARK}</span>
+    <span class="gbn-txt"><i>Thanks for being early</i><b>Send a friend the invite link</b></span>
+    <span class="gbn-chev">&rsaquo;</span>
+  </button>`;
+}
+
+async function openThanksCard() {
+  const eq = await equipped();
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil race-veil bt-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <p class="drop-eyebrow dc-eyebrow">${THANKS_MARK}<span>THANK YOU</span></p>
+      ${/* YOUR bonehead. Already loaded, no new precache entry, and "that is my
+           guy" beats any stock illustration. skip BG/C for the same reason the
+           Discord hero does: a backdrop would box him in. */''}
+      <div class="bt-hero"><span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
+      <h1 class="drop-title">Thanks for being <em>early</em></h1>
+      <p class="drop-sub">Boneheadz is still in beta: rough in places, and fixed in public. The people playing it now are the reason it gets better. Thank you for being one of them.</p>
+      ${/* TWO bullets, not three, and every line of this card is measured.
+            The Discord card learned the first half of that (three bullets fill
+            a 390px screen and this is an unprompted boot interruption); this
+            one learned the second half the hard way. The first draft came out
+            715px tall against an iPhone SE's 667 and pushed its own Close
+            button off the bottom of the screen. The audit now measures the
+            card at 375x667 and goes red if it stops fitting, so a longer
+            rewrite is caught by a check rather than by a player who cannot
+            shut the thing. */''}
+      <ul class="spire-terms">
+        <li><b>Know someone who would play it?</b> Send them the link. It installs through TestFlight, Apple's app for trying apps before they reach the App Store. Free, and about a minute.</li>
+        <li><b>On Android?</b> TestFlight is iPhone only. Message me in the <a href="${DISCORD_URL}" target="_blank" rel="noopener">Discord</a> and I will add you to the Android build by hand.</li>
+      </ul>
+      <button class="drop-cta" id="thanksShare">SEND A FRIEND THE LINK</button>
+      <p class="note bt-url" style="text-align:center;margin:10px 0 0">or copy it yourself: <a href="${TESTFLIGHT_URL}" target="_blank" rel="noopener" id="thanksLink">testflight.apple.com/join/rtZ6Uyxc</a></p>
+      <button class="drop-later dc-close" id="thanksClose">Close</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#thanksClose', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  /* The same share path the friend code already uses: the OS sheet when there
+     is one, clipboard when there is not, the raw string when even that is
+     refused. Nothing new invented for a link. */
+  $('#thanksShare', veil).addEventListener('click', async () => {
+    const text = `Boneheadz Gym is in beta. Come play: ${TESTFLIGHT_URL}`;
+    try { if (navigator.share) { await navigator.share({ title: 'Boneheadz Gym', text }); return; } } catch { return; /* cancelled */ }
+    try { await navigator.clipboard.writeText(TESTFLIGHT_URL); toast('Invite link copied. Send it to a friend!'); }
+    catch { toast(TESTFLIGHT_URL, 4000); }
+  });
+}
+
+// Test hook (webdriver only), same reasoning as __community above.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__betaThanks = () => openThanksCard();
+}
+
+async function maybeShowThanksCard() {
+  try {
+    if ((navigator.webdriver && !window.__thanksForce) || !S.settings) return;
+    if (await kvGet(THANKS_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      /* Spend it BEFORE opening, not after: the card is dismissed by several
+         routes (the button, the veil, history) and a flag written on the way
+         out can be skipped by any of them. It is only spent once the overlay
+         check above has passed, so it is never burned on a card that did not
+         get to render. */
+      await kvSet(THANKS_SEEN_KEY, true);
+      openThanksCard();
+    };
+    // behind the community card's 4000ms: if that one is up, the veil check
+    // above holds this one back rather than stacking two popups on a boot.
+    setTimeout(tick, 4600);
   } catch { /* never block boot */ }
 }
 
@@ -6539,6 +6647,7 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
+    ${thanksBannerHtml()}
     ${communityBannerHtml()}
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
@@ -7205,6 +7314,7 @@ async function renderFriends(el) {
       await paint();
     }));
   };
+  $('#crewThanks', el)?.addEventListener('click', () => openThanksCard());
   $('#crewDiscord', el)?.addEventListener('click', () => openCommunityCard());
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
@@ -7783,6 +7893,10 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
+    blurb: 'The invite link to pass on, and how Android players get added.',
+    thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">🙏</span>`,
+    open: () => openThanksCard() },
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
     thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">💬</span>`,

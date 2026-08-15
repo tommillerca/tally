@@ -7450,10 +7450,35 @@ body::before {
 /* The way out has to look like a control, not like small print. Scoped to this
    card so the drop/race/spire popups keep the quiet text version they were
    designed with. */
-.dc-veil .dc-close {
+.dc-veil .dc-close, .bt-veil .dc-close {
   border: 1px solid var(--line); border-radius: 14px; padding: 13px;
   color: var(--text-2); font-weight: 700; margin-top: 8px;
 }
+
+/* ---------- Beta thank-you card (Tom, 2026-08-15) ----------
+   One figure, so it centres rather than leaning: .dc-bh carries a -20px
+   margin and a 5deg lean that exist only to close the ink gap against the
+   Discord app icon, and with nothing to lean on both read as a wonky crop. */
+/* THE ONE CARD THAT CAN OUTGROW THE PHONE. .drop-veil centres its card and
+   does not scroll, which is fine for every popup that fits; this one is 684px
+   of thank-you, link and Android instruction against an iPhone SE's 667, so
+   centring alone clipped the eyebrow off the top and put the card out of
+   reach. align-items:center also CLIPS an overflowing flex item rather than
+   letting it scroll into view, so the item takes auto margins instead: it
+   still centres wherever there is room, and it scrolls where there is not.
+   Scoped to this veil so every other popup keeps the geometry it was drawn
+   with. The audit measures reachability at 375x667, not just height. */
+.bt-veil { overflow-y: auto; align-items: flex-start; }
+.bt-veil .drop-card { margin: auto 0; }
+.bt-hero { display: flex; justify-content: center; margin: 6px 0 12px; }
+.bt-hero .dc-bh { width: 92px; height: 92px; margin-left: 0; transform: none; }
+/* The strip inherits .dc-banner's row (same family, same 72px height); only
+   the tint differs, because a blurple heart would read as Discord's. */
+.bt-bnr-ico { color: var(--accent); }
+.bt-bnr-ico svg { width: 20px; height: 18px; }
+/* The link under the CTA is a fallback, not a second button: it stays note
+   weight, but it has to survive a 375px screen without wrapping mid-URL. */
+.bt-url a { color: var(--accent); word-break: break-word; }
 
 /* The Crew strip. Same family as the Glutton/Spires/Garden banners so it reads
    as furniture rather than an ad, but a <button> because there is nothing to
