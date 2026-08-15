@@ -102,6 +102,7 @@ const BROWSER = [
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
   'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
   'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep
+  'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
