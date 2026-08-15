@@ -578,7 +578,7 @@ async function boot() {
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
 
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
@@ -1995,6 +1995,29 @@ function currentTab() {
 // watch) registers a teardown here. Leaving the screen must release it, or the
 // map keeps running and draining battery behind whatever you opened next.
 let screenCleanup = null;
+
+/* THE MAP ONLY ASKS FOR LOCATION WHEN THE PLAYER ASKED FOR THE MAP.
+ *
+ * The Boneyard used to auto-start the map for anyone who had ever opened it
+ * (kv 'map-seen'), on every render of the screen. That is fine when the player
+ * just tapped the Boneyard tab, and wrong every other way you can land there:
+ * a new build makes the app reload ITSELF (controllerchange -> location.reload,
+ * ~line 515), a reload KEEPS THE HASH, so a player last seen on #/boneyard is
+ * dropped back onto the map by a navigation they did not perform, and the iOS
+ * location prompt fires seconds after opening with nothing tapped.
+ *
+ * This flag is the difference between the two. It is set by a hashchange (the
+ * only way a player navigates) and by the #mapStart tap itself, which is what
+ * keeps the map alive across an in-place refresh() once it is running. It is
+ * plain page state, so a reload clears it: exactly the case we want gated.
+ * Not persisted, and deliberately not read from the Permissions API: Safari
+ * does not answer permissions.query for geolocation, which is the only browser
+ * this bug happens in. */
+let mapWanted = false;
+function routeFromHash() {
+  if (currentTab() === 'boneyard') mapWanted = true;
+  route();
+}
 
 function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
@@ -8570,7 +8593,7 @@ async function saveInitialSettings(np) {
     social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   $('#tabbar').style.display = '';
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   initAnalytics(APP_SOCIAL_V); // start analytics from the first session too (boot's init is skipped by the onboarding return)
   location.hash = '#/today';
@@ -13053,9 +13076,12 @@ async function renderBoneyard(el) {
       refreshWorld();
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
-  $('#mapStart', wrap).addEventListener('click', () => { kvSet('map-seen', true); startMap(); });
-  // been here before + location already allowed: go straight to the map
-  if (await kvGet('map-seen', false)) startMap();
+  $('#mapStart', wrap).addEventListener('click', () => { mapWanted = true; kvSet('map-seen', true); startMap(); });
+  // been here before + the player came here on purpose this session: go straight
+  // to the map. mapWanted is false on a page the player did not navigate to (the
+  // self-reload on a new build restores this hash), and those get the button, so
+  // location is never asked for out of nowhere. See mapWanted's note by route().
+  if (mapWanted && await kvGet('map-seen', false)) startMap();
 }
 
 
