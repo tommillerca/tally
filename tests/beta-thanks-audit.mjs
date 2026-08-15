@@ -9,7 +9,7 @@
    for a literal fails LINK-DC; the Android bullet removed fails ANDROID; the
    hero replaced with an empty span fails PIXELS; kvSet dropped from the boot
    path fails ONCE; the crewThanks listener removed fails BANNER-OPENS. */
-import { boot, sleep, serveTree } from './godmode.js';
+import { boot, sleep, serveTree, setWidth } from './godmode.js';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
@@ -23,7 +23,12 @@ const errs = []; page.on('pageerror', e => errs.push(String(e)));
    iPhone SE, and every layout failure this card has actually had showed up
    there and nowhere else. Set once, up front: a resize mid-run re-renders the
    route and takes any open veil with it, which cost one confusing red. */
-await page.setViewport({ width: 375, height: 667, deviceScaleFactor: 2 });
+/* setWidth, not a bare setViewport. puppeteer reads a missing isMobile/hasTouch
+   as false, so `{width, height, deviceScaleFactor}` flips both off boot's true
+   and SILENTLY RELOADS the page: a fresh 10-13s seeded boot mid-suite whose
+   route() closes every open sheet, surfacing as an unrelated flake somewhere
+   else. unit.test.js pins this and caught it here. */
+await setWidth(page, 375, 667);
 await sleep(400);
 
 /* ---- the card itself, via the real test hook ---- */
