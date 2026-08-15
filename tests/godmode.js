@@ -135,21 +135,39 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
     ...opts,
     args: [...rootArgs, ...(opts.args || [])],
   });
-  const page = await browser.newPage();
-  /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
-     attaches its own pageerror listener after boot() returns cannot see anything
-     thrown during the very first load, which is exactly where a broken module
-     import or a bad top-level await lands: the app comes up empty, every later
-     assertion fails for its own reason, and the actual cause is nowhere in the
-     output. Returned so callers can assert on it. Additive: callers that
-     destructure only { browser, page } are unaffected. */
-  const errors = [];
-  page.on('pageerror', e => { errors.push(String(e)); console.log('PAGEERROR', e.message); });
-  // ?demo puts us on the tally-demo database, which is what seed() insists on.
-  await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' });
-  await sleep(2400);
-  await dismissOverlays(page);
-  return { browser, page, base: base.replace(/\/?$/, '/'), errors };
+  /* TRACK THE BROWSER BEFORE ANYTHING ELSE CAN THROW.
+   * A boot that throws AFTER launch is exactly the leak Gwart found on Tom's
+   * machine on 2026-08-14: 16 orphaned Chrome parents + 176 helpers, one alive
+   * 15 hours, from 39 audits that time out at page.goto every run. The audit's
+   * code cannot close a browser it never received a reference to, so cleanup
+   * belongs here, not there. Track NOW so the process-exit backstop covers
+   * even the throw-inside-boot path, and set an internal try so we can close
+   * synchronously and rethrow with the browser already gone. */
+  _trackBrowser(browser);
+  try {
+    const page = await browser.newPage();
+    /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that
+       attaches its own pageerror listener after boot() returns cannot see anything
+       thrown during the very first load, which is exactly where a broken module
+       import or a bad top-level await lands: the app comes up empty, every later
+       assertion fails for its own reason, and the actual cause is nowhere in the
+       output. Returned so callers can assert on it. Additive: callers that
+       destructure only { browser, page } are unaffected. */
+    const errors = [];
+    page.on('pageerror', e => { errors.push(String(e)); console.log('PAGEERROR', e.message); });
+    // ?demo puts us on the tally-demo database, which is what seed() insists on.
+    await page.goto(base.replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' });
+    await sleep(2400);
+    await dismissOverlays(page);
+    return { browser, page, base: base.replace(/\/?$/, '/'), errors };
+  } catch (e) {
+    /* Close in the same throw so the caller does not have to. `catch (e) close;
+       throw e` is enough: no try/finally in the caller can save a browser they
+       never received a reference to. Swallow close errors, the caller cares
+       about the ORIGINAL throw, not that cleanup also complained. */
+    await browser.close().catch(() => {});
+    throw e;
+  }
 }
 
 /* The demo profile opens with a daily spin and assorted first-run cards. They are
@@ -374,6 +392,9 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
   });
   const srv = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  /* Track BEFORE anything downstream can throw, same reason as boot(): the caller
+     never saw this child, so cleanup on parent-throw belongs here. */
+  _trackServer(srv);
   let err = '';
   srv.stderr.on('data', d => { err += d; });
   srv.stdout.on('data', () => {});
@@ -389,4 +410,103 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
     await new Promise(r => setTimeout(r, 100));
   }
   return { url, port, close: () => { try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
+}
+
+/* PROCESS-EXIT SAFETY NET for browsers and serveTree children.
+ *
+ * The observed leak Gwart found on 2026-08-14: 16 orphaned Chrome parents + 176
+ * helpers on Tom's machine, one alive 15 HOURS, flattening his battery. It came
+ * from the 39 census audits that time out at page.goto every run: boot() throws
+ * INSIDE itself so the audit never gets a browser reference to close, and any
+ * try/finally in the audit body cannot save what it never received. The
+ * post-launch try/catch in boot() covers the specific throw-inside-boot leak.
+ * This handles the wider class:
+ *   - the audit gets its browser fine, then throws before browser.close().
+ *   - the audit runs to completion but exits without calling close() at all.
+ *   - the audit is interrupted (Ctrl-C, harness SIGTERM).
+ *   - an unhandledRejection or uncaughtException tears the process down.
+ *
+ * What is deliberately NOT covered here: a timeout SIGKILL from the harness.
+ * `process.on('exit')` does not fire when the OS kills the process, so nothing
+ * inside node can clean up in that case. That's the census's job, and its
+ * cwd-scoped reap between iterations handles it.
+ *
+ * Sync-only in the 'exit' handler (node does not await inside 'exit'); async
+ * cleanup happens in the signal / uncaught handlers, with a sync SIGKILL fallback
+ * afterwards. `Browser.process()` returns the Chrome parent ChildProcess so we can
+ * send SIGKILL from the synchronous path; a graceful browser.close() reaps helper
+ * processes properly and is preferred when we can await. Missing helper reaping is
+ * exactly the "176 orphaned helpers" story, so both paths matter.
+ */
+const _browsers = new Set();
+const _servers = new Set();
+
+function _trackBrowser(browser) {
+  _installExitHandlers();
+  _browsers.add(browser);
+  browser.once('disconnected', () => _browsers.delete(browser));
+}
+function _trackServer(srv) {
+  _installExitHandlers();
+  _servers.add(srv);
+  srv.once('exit', () => _servers.delete(srv));
+}
+
+let _handlersInstalled = false;
+function _installExitHandlers() {
+  if (_handlersInstalled) return;
+  _handlersInstalled = true;
+  const syncReap = () => {
+    for (const b of _browsers) { try { b.process()?.kill('SIGKILL'); } catch { /* already dead */ } }
+    for (const s of _servers)  { try { s.kill('SIGKILL'); } catch { /* already dead */ } }
+    _browsers.clear();
+    _servers.clear();
+  };
+  process.once('exit', syncReap);
+  /* async cleanup for signal / crash paths: graceful browser.close() reaps
+     helpers properly, but bounded so a stuck close cannot hang the process. */
+  const asyncReap = async (exitCode) => {
+    await Promise.race([
+      Promise.allSettled([
+        ...[..._browsers].map(b => b.close().catch(() => {})),
+        ...[..._servers].map(s => new Promise(res => {
+          if (s.exitCode != null || s.killed) return res();
+          s.once('exit', res);
+          try { s.kill('SIGTERM'); } catch { res(); }
+          setTimeout(() => { try { s.kill('SIGKILL'); } catch {} res(); }, 500);
+        })),
+      ]),
+      new Promise(r => setTimeout(r, 3000)),
+    ]);
+    syncReap();
+    process.exit(exitCode);
+  };
+  process.once('SIGINT',  () => asyncReap(130));
+  process.once('SIGTERM', () => asyncReap(143));
+  /* uncaughtException / unhandledRejection are the audit-throws-before-close
+     path. Node's default is print+exit(1) which fires 'exit' where syncReap
+     runs, but graceful close is better if we can arrange it. Print first so
+     the error is not lost to our own logic. */
+  process.once('uncaughtException', e => {
+    console.error(e && e.stack || e);
+    asyncReap(1);
+  });
+  process.once('unhandledRejection', e => {
+    console.error(e && (e.stack || e) || 'unhandledRejection');
+    asyncReap(1);
+  });
+}
+
+/* Opt-in try/finally wrapper for new audits.
+ *
+ * Existing audits already do this pattern by hand and are fine. New audits get
+ * one-line correctness: withBoot(base, async ({browser, page}) => {...}) always
+ * calls browser.close() on any exit path, even a throw. The process-exit safety
+ * net above catches everyone else; this makes the pattern obvious for the next
+ * person writing an audit.
+ */
+export async function withBoot(base, fn, opts = {}) {
+  const b = await boot(base, opts);
+  try { return await fn(b); }
+  finally { await b.browser.close().catch(() => {}); }
 }
