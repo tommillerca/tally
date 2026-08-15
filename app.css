@@ -6438,6 +6438,17 @@ body::before {
   max-height: 58vh; overflow-y: auto; overscroll-behavior: contain;
 }
 
+/* THE ACTION STAYS INSIDE ITS OWN CLIP. Brock, 2026-08-14: "when you select a
+   non-shiny in the breeding pair, the warning that pops up makes the breed button
+   dip out of the window so you have to scroll to get to it." The panel above is
+   capped at 58vh and scrolls, so the warning growing pushes #doBreed past the
+   bottom of that cap: measured at 375x667 it was drawn at y598 while the panel's
+   clip ended at 492, i.e. a tap at the button's centre hit #stableBody. Pinning
+   it to the bottom of its own scroller keeps it on screen at any content height,
+   which matters more here than anywhere else in the app: the button destroys a
+   pet permanently, so it must never be reached by a blind scroll. */
+.breed-bar.sticky #doBreed { position: sticky; bottom: 0; z-index: 1; }
+
 /* the multi-bed harvest list: one row per bed picked, under the summary card */
 .hv-list { display: grid; gap: 6px; margin: 12px 18px 0; }
 
