@@ -200,6 +200,7 @@ const DECLARED = {
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
+  'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
   'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],

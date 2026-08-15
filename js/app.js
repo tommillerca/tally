@@ -7561,8 +7561,19 @@ async function openGiftSheet(f) {
     } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
   });
 
-  $('.gift-amts', wrap).addEventListener('click', async e => {
-    const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return;
+  /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
+     still could. armToConfirm's own header records why it exists (a player
+     bought a 1,000-coin cauldron by accident), and these chips were sending up
+     to 500 coins to ANOTHER PLAYER on a single tap, which is worse than a
+     mis-buy: the refund below only runs when the send FAILS, so a successful
+     send to the wrong friend, or a thumb landing on 500 instead of 250, is
+     final. The helper rather than a hand-rolled dataset.armed dance, because
+     there are already ten hand-rolled copies in this file drifted across eight
+     different cooloff windows, and that drift is what the helper was written to
+     stop. The label stays short: the sheet header already names who this is
+     going to, and a long label reflows the chip row on a small phone. */
+  $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
+    if (b.disabled) return;
     const amt = +b.dataset.amt;
     const have = await coins();
     if (amt > have) { toast("You don't have that many coins."); return; }
@@ -7579,7 +7590,7 @@ async function openGiftSheet(f) {
       b.disabled = false;
       toast(r.status === 429 ? "That's the daily coin-gift limit for this friend." : 'Could not send. Your coins were not spent.', 3400);
     }
-  });
+  }));
 }
 
 // Send-a-cheer sheet: preset emoji + phrase, no free text.
