@@ -5890,9 +5890,15 @@ async function openMetricDetail(metricKey) {
 // deep %, REM % and efficiency when the watch logged stages. A manual "hours
 // slept" entry has no stages, so it scores on duration alone. Returns null if
 // there's no usable sleep on record.
+/* A NAP IS NOT A NIGHT. The floor was 30 minutes, so a 35-minute doze scored
+   40 out of 100 and was fed to readiness as if it were a night's sleep, which
+   drags the score down for someone who simply never wore the watch to bed. The
+   read window starts at 6pm, so an evening nap lands in it. Under three hours
+   we do not know how you slept, and null (no sleep term at all) is the honest
+   answer rather than a bad number. */
 function sleepScore(r) {
   const asleep = r && r.sleepMin;
-  if (asleep == null || asleep < 30) return null;
+  if (asleep == null || asleep < 180) return null;
   const durFrac = asleep >= 420 && asleep <= 540 ? 1
     : asleep < 420 ? Math.max(0, (asleep - 180) / 240)
       : Math.max(0.8, 1 - (asleep - 540) / 600); // long lie-ins get a mild trim
@@ -5908,28 +5914,63 @@ function sleepScore(r) {
 
 // Daily readiness: blend resting HR + HRV + sleep vs their baselines into a 0-100
 // score. Returns null if there's no heart data to read.
+/* HOW MANY PRIOR READINGS BEFORE THIS NUMBER MEANS ANYTHING. Every published
+   method front-loads the baseline: Oura says up to two weeks to learn you,
+   Garmin says wear it three weeks before it trusts an HRV baseline. We were
+   printing a confident 72 on day one. Seven is the floor, not the ideal. */
+const READY_MIN_DAYS = 7;
+const READY_WINDOW = 28;   // recent enough to be YOUR normal, long enough to be stable
+
 function readinessScore(days) {
+  /* THE LATEST READING MUST NOT BE IN ITS OWN BASELINE.
+     The mean was taken over all 56 days INCLUDING today, so today's value was
+     being compared against a set containing itself: every delta is pulled
+     toward zero, hardest exactly when readings are sparse and the same value
+     repeats. Split the window: `prior` is what "normal" means, `latest` is
+     what is being judged, and they never overlap. Also 28 days rather than 56,
+     because eight weeks of a changing body is not one baseline. */
   const col = k => days.map(d => d[k]).filter(v => v != null && v > 0);
-  const rhrs = col('restingHr'), hrvs = col('hrv'), sleeps = col('sleepHours');
-  if (!rhrs.length && !hrvs.length) return null;
-  const last = a => a.length ? a[a.length - 1] : null;
+  const split = k => {
+    /* Carry the DATE with the value. The tiles rendered these undated, so a
+       reading from last week looked exactly like this morning's, which is how
+       a broken auto-read hides for days (the sleep tile already learned this
+       lesson and says which night it is showing). */
+    const rows = days.filter(d => d[k] != null && d[k] > 0);
+    const last = rows.length ? rows[rows.length - 1] : null;
+    const prior = rows.slice(0, -1).slice(-READY_WINDOW).map(d => d[k]);
+    return { latest: last ? last[k] : null, date: last ? last.date : null, prior };
+  };
+  const rhr = split('restingHr'), hrv = split('hrv'), sleeps = col('sleepHours');
+  if (rhr.latest == null && hrv.latest == null) return null;
+  /* CALIBRATING IS AN HONEST ANSWER; 72 IS NOT. With too few prior readings
+     there is no baseline to be relative to, and a made-up middle reads to a
+     player as a real verdict about their body. Say we are still learning. */
+  const priorDays = Math.max(rhr.prior.length, hrv.prior.length);
+  if (priorDays < READY_MIN_DAYS) return { calibrating: true, have: priorDays, need: READY_MIN_DAYS };
   const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
   let score = 72;
-  const rhrL = last(rhrs), rhrB = mean(rhrs);
-  if (rhrL != null) score += Math.max(-16, Math.min(14, (rhrB - rhrL) * 2.5)); // lower resting HR = better
-  const hrvL = last(hrvs), hrvB = mean(hrvs);
-  if (hrvL != null) score += Math.max(-15, Math.min(15, (hrvL - hrvB) * 0.6));   // higher HRV = better
+  const rhrL = rhr.latest, rhrB = mean(rhr.prior);
+  if (rhrL != null && rhrB != null) score += Math.max(-16, Math.min(14, (rhrB - rhrL) * 2.5)); // lower resting HR = better
+  const hrvL = hrv.latest, hrvB = mean(hrv.prior);
+  if (hrvL != null && hrvB != null) score += Math.max(-15, Math.min(15, (hrvL - hrvB) * 0.6));   // higher HRV = better
   // Sleep: prefer the richer sleep score (stages) when we have it; fall back to
   // raw hours otherwise. `sl` is the most recent day carrying any sleep data.
   const slDays = days.filter(d => (d.sleepMin != null && d.sleepMin > 0) || (d.sleepHours != null && d.sleepHours > 0));
   const sl = slDays.length ? slDays[slDays.length - 1] : null;
   const slScore = sl ? sleepScore(sl) : null;
-  const slHours = sl ? (sl.sleepMin != null ? sl.sleepMin / 60 : sl.sleepHours) : last(sleeps);
+  const slHours = sl ? (sl.sleepMin != null ? sl.sleepMin / 60 : sl.sleepHours) : (sleeps.length ? sleeps[sleeps.length - 1] : null);
+  /* THE HOURS FALLBACK NEEDS THE SAME FLOOR AS THE SCORE. Raising the floor
+     inside sleepScore only redirected a nap down this path: 35 minutes became
+     0.58 hours, (0.58 - 7) * 6 clamps to -14, and the nap still cost 14 points
+     of readiness. Caught by tests/readiness-audit.mjs, which measured the nap
+     case at 58 against a flat 72 while sleepScore was already returning null.
+     Below three hours there is no honest sleep term either way. */
+  const SLEEP_MIN_H = 3;
   if (slScore != null) score += Math.max(-15, Math.min(13, (slScore - 65) * 0.4));
-  else if (slHours != null) score += Math.max(-14, Math.min(12, (slHours - 7) * 6));
+  else if (slHours != null && slHours >= SLEEP_MIN_H) score += Math.max(-14, Math.min(12, (slHours - 7) * 6));
   return {
     score: Math.round(Math.max(5, Math.min(99, score))),
-    rhrL, rhrB, hrvL, hrvB,
+    rhrL, rhrB, hrvL, hrvB, rhrDate: rhr.date, hrvDate: hrv.date, priorDays,
     // slDate: WHICH night slL/slScore actually came from. `sl` is the most recent
     // day in the window that has any sleep, which is not necessarily last night,
     // and the tile used to render it undated. So a stale entry looked exactly
@@ -5942,6 +5983,16 @@ function readinessScore(days) {
 }
 
 function readinessHtml(r) {
+  /* STILL LEARNING YOU. Rendering a gauge here would be the same lie in a
+     prettier form, so the card says what it is doing and what it is waiting
+     for, and shows no number at all. */
+  if (r.calibrating) {
+    return `<div class="card rd-card rd-calibrating">
+      <div class="rd-eyebrow">DAILY READINESS</div>
+      <p class="rd-cal-big">Learning your normal</p>
+      <p class="note" style="margin:6px 2px 0">Readiness compares today against YOUR baseline, so it needs a few days of resting heart rate and HRV before it can say anything true. ${r.have} of ${r.need} days so far. Wear your watch overnight and it will start on its own.</p>
+    </div>`;
+  }
   const s = r.score;
   const band = s >= 80 ? { lab: 'PRIMED TO TRAIN', sub: 'Recovered and rested. Good day to push in the Pit or a long walk.', col: '#a5e847' }
     : s >= 62 ? { lab: 'READY', sub: 'In good shape. Train as normal today.', col: '#a5e847' }
@@ -5968,9 +6019,13 @@ function readinessHtml(r) {
     : r.slL != null
       ? `<button class="rd-tile" data-sleepdetail="1"><span class="rl">Sleep${slStale ? ` · ${r.slDate.slice(5)}` : ''}</span><span class="rv">${hm(r.slL)}</span>${slStale ? '<i class="warn">not last night</i>' : ''}</button>`
       : `<button class="rd-tile static"><span class="rl">Sleep</span><span class="rv">&mdash;</span></button>`;
+  /* Same rule as the sleep tile above: if the newest reading is not from today,
+     say which day it is from instead of passing it off as current. An undated
+     tile is how a broken heart read hides in plain sight. */
+  const dayTag = d => (d && d !== dateKey()) ? ` · ${d.slice(5)}` : '';
   const tiles = [
-    r.rhrL != null ? tile('restingHr', 'Resting HR', Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
-    r.hrvL != null ? tile('hrv', 'HRV', Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
+    r.rhrL != null ? tile('restingHr', `Resting HR${dayTag(r.rhrDate)}`, Math.round(r.rhrL), 'bpm', arrow(r.rhrL - r.rhrB, true)) : '',
+    r.hrvL != null ? tile('hrv', `HRV${dayTag(r.hrvDate)}`, Math.round(r.hrvL), 'ms', arrow(r.hrvL - r.hrvB, false)) : '',
     sleepTile,
   ].filter(Boolean).join('');
   return `<div class="card rd-card">
