@@ -3518,7 +3518,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     <div class="sheet-head">
       <div class="hd">
         <h2>${esc(s.name || 'Dark Spire')}</h2>
-        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : rival ? 'Rival territory' : 'Unclaimed'}</div>
+        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -12605,7 +12605,13 @@ async function renderBoneyard(el) {
         const besieged = !!(siegeUntil && siegeUntil > Date.now());
         // How long it has stood, from whoever's claim it is. A rival's tower shows
         // its age too, which is exactly the point: an old tower looks worth taking.
-        const heldSince = rival ? (rival.claimedAt || 0) : (held ? (spireState_[s.id]?.claimedAt || 0) : 0);
+        // NOTE 2026-08-15: this used to gate on `held`, which flips false the
+        // moment a tower goes dormant, so the sheet said "Never been taken" for
+        // a tower the player HAD claimed. dormant=true requires a local record
+        // to exist (spires.js:102), so if we have one, read claimedAt from it
+        // regardless of held. This preserves the app's own promise: "never lost,
+        // just quiet".
+        const heldSince = rival ? (rival.claimedAt || 0) : (spireState_[s.id]?.claimedAt || 0);
         const ageTier = heldSince ? wardenTier(Math.floor((Date.now() - heldSince) / 86400000)).tier : 0;
         rec.el.dataset.age = String(ageTier);
         rec.el.classList.toggle('besieged', besieged);
