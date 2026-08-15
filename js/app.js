@@ -7906,7 +7906,11 @@ function richLine(str) {
 const NEWS = [
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
     blurb: 'The invite link to pass on, and how Android players get added.',
-    thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">🙏</span>`,
+    /* An ICON, not an emoji. news-tab-audit requires every row to draw a real
+       box (a decoded <img> or an <svg>), and an emoji in a span is neither: it
+       is the exact thing ext/news-discord-art removed from the row below, so
+       shipping it here would have put it straight back. */
+    thumb: () => bhIcon('badge-crown', 34),
     open: () => openThanksCard() },
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
