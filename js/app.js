@@ -11314,22 +11314,29 @@ async function openStable(opts = {}) {
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
-    /* SCROLL ROOM FOR THE STICKY BAR, ON THE RIGHT SIDE OF IT. Measured before
-       this: the bar overlapped .cf-acts by 15px, and BREED lives in that row, so
-       the button the bar was telling you to press was underneath the bar. The
-       height varies with which bar is showing, so it is measured rather than
-       guessed.
-       The room used to be `body.style.paddingBottom`, i.e. AFTER the bar, and
-       that was Brock's bug (2026-08-14): "I can only scroll up on it from the
-       grey area under the window." A `position:sticky; bottom:0` element only
-       stays pinned while something of its container is still below it, so 401px
-       of padding after the LAST child un-stuck the bar, let it scroll away with
-       the content, and turned that padding into the grey gutter that was the only
-       thing left scrolling. Same amount of room, moved to the sibling ABOVE the
-       bar, so .cf-acts still rises clear and nothing follows the bar. */
+    /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
+       .breed-bar.sticky in app.css for the two fixes that came before this.
+       Short version: `position: sticky; bottom: 0` is clamped by its containing
+       block, and the bar's was #stableBody, i.e. the entire sheet, so it could
+       rise all the way over .cf-acts. Both previous fixes bought room to escape
+       it; neither stopped it happening. Measured on v380 at 375x667 with a
+       precious pair flagged: [data-destroy] hit li / span.bt-in / div.breed-trade
+       at 42 of the 76 offsets where it is on screen, and that button melts a pet
+       permanently.
+       Wrapping everything AFTER the carousel in one div makes that div the
+       containing block, so the bar still floats down the talent tree (Tom,
+       2026-08-08: the decision follows you down the page) and can no longer reach
+       the row it is telling you about. Done here rather than in the template
+       because the bar and the tree are rendered by two separate branches of it. */
     const stickyBar = $('.breed-bar.sticky', body);
     body.style.paddingBottom = '';
-    if (stickyBar?.previousElementSibling) stickyBar.previousElementSibling.style.marginBottom = (stickyBar.offsetHeight + 14) + 'px';
+    const cfEl = $('.cf', body);
+    if (stickyBar && cfEl) {
+      const dock = document.createElement('div');
+      dock.className = 'breed-dock';
+      cfEl.after(dock);
+      while (dock.nextSibling) dock.appendChild(dock.nextSibling);
+    }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
@@ -14642,9 +14649,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (!fight.itemsOpen) {
         html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
       } else {
-        /* Open: the potions AND the way back, so the tray can never strand you
-           in a state with no moves on it. */
-        html += `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        /* Open: the potions AND the way back, AND NOTHING ELSE.
+           The door halved the CLOSED tray and left the OPEN one exactly as it
+           was: every move button still rendered above the potions. Measured at
+           375x667 with all six kinds held, ITEMS open: 11 buttons, scrollHeight
+           274 inside the 174px lockTray gives it, so the first potion row was
+           half clipped and the second was entirely below the fold. All six
+           potion centres hit #fightBody or #endTurn at every offset the SHEET
+           can reach; only dragging the tray's own nested scroller to 64+ of 100
+           brought them out, and nothing on a phone advertises that scroller.
+           The label already promised this: it says BACK TO MOVES, so the moves
+           were never meant to still be on screen. Dropping them leaves BACK plus
+           two rows of potions = 148px, inside the same 174px, so every potion is
+           tappable with no scrolling at all.
+           This changes only WHAT the tray draws, never how tall it is: lockTray
+           still measures its height from the arena floor, the End Turn row and
+           the HUD, so the boss art is untouched. That is the whole reason the
+           door exists and it stays intact. */
+        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
         for (const p of stocked) {
           html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
         }

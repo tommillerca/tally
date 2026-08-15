@@ -452,6 +452,27 @@ for (const s of SHEETS) {
       !!setup.reached, JSON.stringify(setup));
     if (!setup.reached) continue;
 
+    /* A TOAST IS NOT A CONTENT STATE, AND IT IS NOT AN EXCUSE EITHER.
+       backupNudge (js/app.js:1969) fires ONCE a session, 4 seconds late, for
+       3.4s, at `bottom: calc(var(--sab) + 96px)` — which is the middle of the
+       fight tray on a 375x667 phone. It landed on the bottom potion row here and
+       it would land on whatever any other sheet draws at that height, on a timer
+       set by how long the suite took to reach this row. That is a flake
+       generator, not the "clipped out of its own container" bug this file
+       grades, and it belongs in front of EVERY row rather than special-cased
+       into the one that noticed it.
+       It is waited out, never ignored, and the wait is bounded: a toast still
+       standing after 6s is not transient, so the row is failed rather than
+       measured through. `getBoundingClientRect` rather than presence, because
+       the element lingers at 0x0 after its exit animation and a presence check
+       would time out on a clean screen. */
+    const toastGone = await page.waitForFunction(
+      () => ![...document.querySelectorAll('.toast')].some(n => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0; }),
+      { timeout: 6000, polling: 100 }).then(() => true).catch(() => false);
+    ok(`SAMPLE ${tag}: no transient toast is standing over the sheet when it is measured`,
+      toastGone, toastGone ? '' : await page.evaluate(() => [...document.querySelectorAll('.toast')].map(n => (n.textContent || '').slice(0, 60)).join(' | ')));
+    if (!toastGone) continue;
+
     const asShipped = await reach(s.action);
     const r = asShipped.missing ? asShipped : await reachAfterBodyScroll(s.action);
     seen[s.id][mode] = { ...r, asShipped };
