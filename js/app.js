@@ -7785,7 +7785,14 @@ function richLine(str) {
 const NEWS = [
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
-    thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">💬</span>`,
+    /* THE SAME APP ICON THE POPUP LEADS WITH, which is what this list's own rule
+       asks for ("the thumbnail is a small piece of that same popup's art"). It
+       was a raw 💬 emoji with hardcoded inline styles, the only row of eight
+       with no art, and news-tab-audit has been red on that row on main.
+       No wrapper: .dc-app is 78px and .nw-thumb is a 56px flex box with
+       overflow:hidden and a 12px radius, so the tile is clipped to the thumb's
+       own rounded square and reads as an app icon, measured on the render. */
+    thumb: () => DISCORD_APP_ICON,
     open: () => openCommunityCard() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
