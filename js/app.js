@@ -1084,7 +1084,7 @@ const raceOpensKey = wk => 'raceResultShown:' + wk;
    card, so anything that held the screen through that window swallowed the only
    showing there was. A single chance at a moment you do not control is the bug;
    two chances is the fix, and the second one reads from a warm cache. */
-const RACE_RESULT_OPENS = 1;
+const RACE_RESULT_OPENS = 2;
 
 /* The week that has just finished, or null before the first one ever has. */
 function lastSettledWeek() {
@@ -13235,7 +13235,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v379'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v380'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

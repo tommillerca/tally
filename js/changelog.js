@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 380, date: '2026-08-15', title: 'The step race result really does show twice now', items: [
+    "The last update said the results card would appear on your first two opens. It shipped showing once, which is the thing it was meant to fix. It shows twice now.",
+  ] },
   { n: 379, date: '2026-08-15', title: 'The Crew tab stops running your phone out of memory', items: [
     "<b>Opening Crew with a lot of friends could kill the app outright.</b> Every friend's Bonehead was being drawn at full size, so a big crew was asking your phone for well over a gigabyte of image data before you had even scrolled. Everything now uses art sized for the space it is drawn in. Nothing looks different; it just survives.",
     'The same fix reaches the Collection shelf, the melt bench, the wardrobe, the leaderboard and Today.',
