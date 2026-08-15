@@ -31,14 +31,33 @@
  *
  * EVERY NUMBER HERE IS A FLOOR, NOT A CEILING. querySelectorAll('img') cannot
  * see a CSS background-image and cannot see an off-DOM `new Image()`, and both
- * exist in this app (Today carries 5 of the former; hydratePackArt holds 135 of
- * the latter at once on the Wardrobe's hat slot). A screen passing here is
- * "not caught by this instrument", not "proven clean".
+ * exist in this app. A screen passing here is "not caught by this instrument",
+ * not "proven clean". BOTH HOLES ARE NOW SIZED rather than left open-ended
+ * (2026-08-15, at 393x852 DPR 2, each measured with a control background that
+ * had to move the number by exactly 1.5625 MB or the run reported nothing):
+ *   - CSS background-image is effectively EMPTY. Zero file-backed sources on
+ *     Today, Crew and the Boneyard; one 192px thumb (0.14 MB) on the
+ *     Collection. The one data: source per screen is the --grain texture, and
+ *     it is `150px 150px / repeat` everywhere it appears, so it is one tile the
+ *     compositor rasterises once (~0.34 MB), not the painted area.
+ *   - The off-DOM pile is real but small since the thumbnail tiers landed:
+ *     242 Images are constructed on the Wardrobe's hat slot and every one is
+ *     192x192, not the 640x640 the first census measured, so the ceiling if
+ *     none were released is 34.03 MB and what stays reachable is 10.8-18.7 MB.
+ *     That is what the OFF-DOM row below grades.
  *
  * NOT COVERED, and none of it may be read as safe:
- *   - Boneyard map. Headless Chrome has no working WebGL, so MapLibre never
- *     starts and renderBoneyard's per-marker art never mounts. UNKNOWN, and it
- *     is the most likely remaining offender. Needs a device.
+ *   - Boneyard map. NOT a WebGL limitation: this file simply does not launch
+ *     with `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader
+ *     --ignore-gpu-blocklist`, and with those four flags MapLibre starts here
+ *     and the screen measures 19.34 MB at open and 28.05 MB at MAP_MIN_ZOOM
+ *     with 17 dens and 3 spires on screen (measured twice, 2026-08-14 and
+ *     2026-08-15). It is CLEAN, it needs no device to clear this census, and
+ *     the earlier "needs a device" note in this header was wrong. It is still
+ *     not a ROW here because its tiles come from openfreemap over the network,
+ *     and a row that goes green when tiles fail to load is a hollow check while
+ *     a row that goes red is a network outage failing the gate. Which of those
+ *     to accept is a product call, not this file's to make.
  *   - Stable / paddock. Another lane's unmerged work; deliberately not driven.
  *
  * AN EMPTY SCREEN IS A FAILURE, NEVER A PASS (rule 3). Every row asserts the
