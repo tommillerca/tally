@@ -3,6 +3,15 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 381, date: '2026-08-15', title: 'A door into the Paddock, and eight things you told us about', items: [
+    "<b>The Stable now opens with a window onto the Paddock.</b> Your own Bonehead is standing at the fence with your two rarest pets, and tapping it takes you out to the field. This was picked, built and then quietly lost in the queue for twelve builds.",
+    "<b>Sending coins takes two taps now.</b> One tap used to send up to 500 coins to another player with no undo and no confirmation.",
+    'The Bonehead tab is headed with your name, which you have had since the start and never saw anywhere.',
+    'Gauntlet fights past rank 50 use the real monster art. Above rank 50 it was drawing none of it.',
+    'Beating the Glutton raises the ceiling in The Pit, the same as any other win.',
+    "The mage's creature stops hanging off the edge of the arena on a small phone, and the fighters stop resizing when the buttons change.",
+    'The Discord row in News draws its art instead of an emoji, and there is a thank-you card for everyone playing early, with the invite link to pass on.',
+  ] },
   { n: 380, date: '2026-08-15', title: 'The step race result really does show twice now', items: [
     "The last update said the results card would appear on your first two opens. It shipped showing once, which is the thing it was meant to fix. It shows twice now.",
   ] },
