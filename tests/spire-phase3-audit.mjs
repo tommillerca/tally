@@ -36,6 +36,18 @@ const refusal = await page.evaluate(async () => {
   return { before };
 });
 console.log('clean slate:', JSON.stringify(refusal));
+/* VLAD note (sprint-2 attempt, reverted): the runtime rewrite of this block
+   requires signed-in state (kv 'social' + kv-cached signingKey) to reach the
+   409 path in signedFetch; without it, claimSpireRemote returns
+   {ok:false, reason:'offline'} and my stub for the spires-claim endpoint
+   never fires. Faking that state properly is a longer piece of work than a
+   sprint can hold, and the smart move is to add a signed-in test hook to
+   social.js (either an exposed installTestIdentity for suites, or a
+   ?test-id query parameter alongside the existing ?api one), then invoke
+   this test through it. Filed. The parse and settle-order blocks below
+   still source-grep the parsing and the local-write ordering, which is
+   what has been guarding this path in the meantime. The proven-red NO-OP
+   pair in tests/unit.test.js is the real payout guard here. */
 
 const parse = await page.evaluate(async () => {
   const src = await (await fetch('./js/social.js')).text();
@@ -129,16 +141,26 @@ const shown = await page.evaluate(async () => {
   const src = await (await fetch('./js/app.js')).text();
   const i = src.indexOf('function presentGrantDelivery');
   const body = src.slice(i, src.indexOf('\nfunction ', i + 10));
+  const iPush = body.indexOf('spireNews.push');
+  const iRev  = body.indexOf('if (cards.length)');
   return {
     hasBranch: /g\.type === 'spire'/.test(body),
     pushesCard: /spireNews\.push/.test(body) && /name: 'Spire Lost'/.test(body),
-    // the card must be built BEFORE the reveal, inside this function
-    beforeReveal: body.indexOf('spireNews.push') < body.indexOf('if (cards.length)'),
+    hasPush: iPush > -1,
+    hasReveal: iRev > -1,
+    // the card must be built BEFORE the reveal, inside this function.
+    // Both anchors must EXIST before comparing indices; the old check was
+    // `iPush < iRev`, which passes at -1 (either token deleted from the
+    // function body silently satisfies the inequality and the "built before
+    // reveal" assertion goes green on a broken build).
+    beforeReveal: iPush > -1 && iRev > -1 && iPush < iRev,
     usesTheNote: /p\.note/.test(body),
   };
 });
 console.log('spire grant branch:', JSON.stringify(shown));
 check('presentGrantDelivery now handles type spire', shown.hasBranch && shown.pushesCard, JSON.stringify(shown));
+check('both anchors (spireNews.push and the reveal) still exist in the function body',
+  shown.hasPush && shown.hasReveal, `push=${shown.hasPush} reveal=${shown.hasReveal}`);
 check('the card is built before the reveal fires', shown.beforeReveal);
 check("and it shows the server's own note", shown.usesTheNote);
 
