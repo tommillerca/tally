@@ -82,6 +82,7 @@ const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-f
 const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
+  'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
