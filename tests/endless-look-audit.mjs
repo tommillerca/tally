@@ -37,6 +37,8 @@ const ok = (label, pass, detail = '') => {
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
 const { browser, page } = await boot(base);
+const errs = [];
+page.on('pageerror', e => errs.push(String(e)));
 
 try {
   /* Ranks chosen to straddle the boundary rather than to flatter the fix: the
@@ -103,7 +105,7 @@ try {
   ok('the deep cast (rank 51+) is covered, which is where it was 0%', deep.length >= 6 && deep.every(r => r.approvedFace),
     `${deep.filter(r => r.approvedFace).length}/${deep.length} deep ranks approved`);
 
-  ok('NO page errors', true);
+  ok('NO page errors', errs.length === 0, errs.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

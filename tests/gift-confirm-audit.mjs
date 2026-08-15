@@ -42,6 +42,8 @@ const ok = (label, pass, detail = '') => {
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
 const { browser, page } = await boot(base);
+const errs = [];
+page.on('pageerror', e => errs.push(String(e)));
 
 try {
   await seed(page, { level: 20, coins: 5000 });
@@ -109,7 +111,7 @@ try {
     (!armedNow || armedNow.armed) && (!disarmed || !disarmed.armed) && balEnd === afterTwo,
     `armed ${armedNow && armedNow.armed} -> ${disarmed && disarmed.armed}, balance ${afterTwo} -> ${balEnd}`);
 
-  ok('NO page errors', true);
+  ok('NO page errors', errs.length === 0, errs.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();

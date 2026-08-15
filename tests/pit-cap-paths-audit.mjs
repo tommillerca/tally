@@ -42,6 +42,8 @@ const MUST_NOT_RAISE = {
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
 const { browser, page } = await boot(base);
+const errs = [];
+page.on('pageerror', e => errs.push(String(e)));
 
 try {
   await seed(page, { level: 30, coins: 5000 });
@@ -107,7 +109,7 @@ try {
   ok('EXCLUDED a Boneyard mini does not raise the ceiling', afterExcluded.ceiling === beforeExcluded.ceiling,
     `${beforeExcluded.ceiling} -> ${afterExcluded.ceiling} (mini claim ran: ${spireRan})`);
 
-  ok('NO page errors', true);
+  ok('NO page errors', errs.length === 0, errs.join(' | '));
 } finally {
   await browser.close();
   srv?.close?.();
