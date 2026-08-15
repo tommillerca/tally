@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sheet-action-overflow fixture</title>
+<!--
+  THE CHECK ON THE CHECK, for tests/sheet-action-reachable-audit.mjs.
+
+  This is the `.breed-bar.sticky` rule from app.css (max-height: 58vh, overflow-y:
+  auto) with a primary action at the bottom of it and enough content above the
+  action to overflow that height. Nothing here imports the app: the point is to
+  show that document.elementFromPoint at the button's centre goes RED when the
+  content grows and GREEN when it does not, on a page where the answer is known,
+  BEFORE the same measure is pointed at a real sheet.
+
+  `body.collapsed` drops the filler, which is the green half.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; background: #14121a; color: #eee; font: 15px/1.4 system-ui, sans-serif; }
+  .bar {
+    /* copied from app.css .breed-bar.sticky — the shape under test */
+    position: sticky; bottom: 0; z-index: 4; margin-top: 14px;
+    background: #1c1a24; border: 2px solid #0d0c11; border-radius: 14px;
+    padding: 10px 12px;
+    max-height: 58vh; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .filler p { margin: 0 0 10px; }
+  body.collapsed .filler { display: none; }
+  #fixtureAction { display: block; width: 100%; padding: 13px; font-size: 15px; font-weight: 800;
+    background: #fd6857; color: #1a0f26; border: 0; border-radius: 12px; }
+</style>
+<div class="bar">
+  <div class="filler">
+    <p><b>What breeding does</b></p>
+    <p>You keep Emberling. Same pet, same name, same level and look.</p>
+    <p>It reaches lineage 1: +5% to every stat.</p>
+    <p>Cloudpup is destroyed and does not come back.</p>
+    <p><b>You are about to destroy a SHINY.</b> Shinies are about a 1 in 30 hatch and its colour will NOT carry over. Feed a plain spare in instead unless you are sure.</p>
+    <p>Which one are you keeping?</p>
+    <p>Cost 40</p>
+    <p>Walk 2,400 more steps before breeding again.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+  </div>
+  <button id="fixtureAction" type="button">Feed Cloudpup in</button>
+</div>

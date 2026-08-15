@@ -11134,12 +11134,22 @@ async function openStable(opts = {}) {
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
-    /* SCROLL ROOM FOR THE STICKY BAR. Measured before this: the bar overlapped
-       .cf-acts by 15px, and BREED lives in that row, so the button the bar was
-       telling you to press was underneath the bar. The height varies with which
-       bar is showing, so it is measured rather than guessed. */
+    /* SCROLL ROOM FOR THE STICKY BAR, ON THE RIGHT SIDE OF IT. Measured before
+       this: the bar overlapped .cf-acts by 15px, and BREED lives in that row, so
+       the button the bar was telling you to press was underneath the bar. The
+       height varies with which bar is showing, so it is measured rather than
+       guessed.
+       The room used to be `body.style.paddingBottom`, i.e. AFTER the bar, and
+       that was Brock's bug (2026-08-14): "I can only scroll up on it from the
+       grey area under the window." A `position:sticky; bottom:0` element only
+       stays pinned while something of its container is still below it, so 401px
+       of padding after the LAST child un-stuck the bar, let it scroll away with
+       the content, and turned that padding into the grey gutter that was the only
+       thing left scrolling. Same amount of room, moved to the sibling ABOVE the
+       bar, so .cf-acts still rises clear and nothing follows the bar. */
     const stickyBar = $('.breed-bar.sticky', body);
-    body.style.paddingBottom = stickyBar ? (stickyBar.offsetHeight + 14) + 'px' : '';
+    body.style.paddingBottom = '';
+    if (stickyBar?.previousElementSibling) stickyBar.previousElementSibling.style.marginBottom = (stickyBar.offsetHeight + 14) + 'px';
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
