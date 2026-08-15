@@ -170,6 +170,34 @@ const SITES = [
   },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
+    /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder
+       button on 2026-08-11). A 150x94 window onto the field: your own Bonehead at the
+       gate via the same avatarLayersHtml call the scene makes, and your TWO rarest
+       species beside it through petAsideHtml(petFrom(null, sp), px). Two, not three:
+       petAsideHtml mass-normalises, so three sprites measured 116px against 72px of
+       usable scene and the third was clipped. DRIVEN, not
+       excused: it is a new paired surface, so the two rules that exist because a pet
+       once got exiled to a corner and once floated off the baseline are measured here
+       on the real screen. The scene is small and the figures are deliberately close, so
+       NEAR is comfortable; PLANE gets the flat tolerance because everything in the
+       panel bottom-aligns to one ground line, and a hovering species is the only thing
+       that should read above it.
+       KNOWN EDGE, deliberately not engineered around (Reggie's call, 2026-08-11): the
+       two slots are filled in RARITY order, so a player whose two rarest species BOTH
+       hover can graze the shared -6px lower bound (measured -5px with one hoverer).
+       If that goes red, LOOK at the screen before widening anything: a species-aware
+       bound is bookkeeping that drifts, and the red is a prompt for human eyes. */
+    key: 'stable-door', claim: 'pdk-door-pet', paired: true,
+    bh: '.pdk-door-keeper', pet: '.pdk-door-pet:first-child',
+    planeTol: 34,
+    drive: async page => {
+      await page.evaluate(() => { location.hash = '#/pets'; });
+      await sleep(900);
+      await page.evaluate(() => document.getElementById('stableBtn')?.click());
+      await sleep(1600);
+    },
+  },
+  {
     /* THE PADDOCK herd (Lane R scene, 2026-08-11). One petSpriteHtml call
        renders every owned COPY; shiny comes off the INSTANCE row from
        paddockRoster (contract rule 1), and placement runs through

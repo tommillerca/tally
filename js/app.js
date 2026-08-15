@@ -609,6 +609,7 @@ async function boot() {
   maybeShowRaceIntro();
   maybeShowRaceResults();
   maybeShowCommunityIntro();
+  maybeShowThanksCard();
   maybePromptRecovery();
   maybePromptName();
   maybeRequestNotifPermission();
@@ -1414,6 +1415,113 @@ async function maybeShowCommunityIntro() {
       openCommunityCard();
     };
     setTimeout(tick, 4000);
+  } catch { /* never block boot */ }
+}
+
+/* THE BETA THANK-YOU. Tom, 2026-08-15: thank the people playing so far, ask
+ * them to pass the link on, and tell Android players to say hello in the
+ * Discord because that track is enrolled by hand.
+ * EVERYONE, ONCE. Tom decided the audience knowingly: no "has played before
+ * this build" check, no first-seen comparison, no second copy branch for new
+ * installs. One card, one audience. The cost is that somebody who installed a
+ * minute ago gets thanked too, and he judged that harmless next to putting the
+ * link in front of the most people. The copy carries that decision: it thanks
+ * people for being HERE and being EARLY, and asserts nothing about how long
+ * anyone has played or what they have sent, because for a fresh install every
+ * one of those sentences would be a lie.
+ * Built on the community card's bones on purpose: one-shot boot veil, a
+ * permanent Crew strip for anyone who taps past it, and a News row so it is
+ * never lost. Same reasons apply, so the same shape applies.
+ * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
+ * and the Discord link here IS DISCORD_URL: a second copy would rot. */
+const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
+const THANKS_SEEN_KEY = 'betaThanksSeen';
+/* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
+   list, so an asset file would need an entry there and this needs none.
+   currentColor so it takes the eyebrow's accent and the strip's own tint. */
+const THANKS_MARK = `<svg class="bt-mark" viewBox="0 0 24 22" width="16" height="15" aria-hidden="true" fill="currentColor"><path d="M12 21.4 3.2 12.9A5.9 5.9 0 0 1 12 5.1a5.9 5.9 0 0 1 8.8 7.8z"/></svg>`;
+
+/* The Crew strip, sibling of the Discord one. Not dismissible, same reason:
+   it is the way back for everyone who tapped past the popup. */
+function thanksBannerHtml() {
+  return `<button class="glutton-banner dc-banner bt-banner" id="crewThanks">
+    <span class="gbn-ico bt-bnr-ico">${THANKS_MARK}</span>
+    <span class="gbn-txt"><i>Thanks for being early</i><b>Send a friend the invite link</b></span>
+    <span class="gbn-chev">&rsaquo;</span>
+  </button>`;
+}
+
+async function openThanksCard() {
+  const eq = await equipped();
+  const veil = document.createElement('div');
+  veil.className = 'drop-veil race-veil bt-veil';
+  veil.innerHTML = `
+    <div class="drop-card">
+      <p class="drop-eyebrow dc-eyebrow">${THANKS_MARK}<span>THANK YOU</span></p>
+      ${/* YOUR bonehead. Already loaded, no new precache entry, and "that is my
+           guy" beats any stock illustration. skip BG/C for the same reason the
+           Discord hero does: a backdrop would box him in. */''}
+      <div class="bt-hero"><span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
+      <h1 class="drop-title">Thanks for being <em>early</em></h1>
+      <p class="drop-sub">Boneheadz is still in beta: rough in places, and fixed in public. The people playing it now are the reason it gets better. Thank you for being one of them.</p>
+      ${/* TWO bullets, not three, and every line of this card is measured.
+            The Discord card learned the first half of that (three bullets fill
+            a 390px screen and this is an unprompted boot interruption); this
+            one learned the second half the hard way. The first draft came out
+            715px tall against an iPhone SE's 667 and pushed its own Close
+            button off the bottom of the screen. The audit now measures the
+            card at 375x667 and goes red if it stops fitting, so a longer
+            rewrite is caught by a check rather than by a player who cannot
+            shut the thing. */''}
+      <ul class="spire-terms">
+        <li><b>Know someone who would play it?</b> Send them the link. It installs through TestFlight, Apple's app for trying apps before they reach the App Store. Free, and about a minute.</li>
+        <li><b>On Android?</b> TestFlight is iPhone only. Message me in the <a href="${DISCORD_URL}" target="_blank" rel="noopener">Discord</a> and I will add you to the Android build by hand.</li>
+      </ul>
+      <button class="drop-cta" id="thanksShare">SEND A FRIEND THE LINK</button>
+      <p class="note bt-url" style="text-align:center;margin:10px 0 0">or copy it yourself: <a href="${TESTFLIGHT_URL}" target="_blank" rel="noopener" id="thanksLink">testflight.apple.com/join/rtZ6Uyxc</a></p>
+      <button class="drop-later dc-close" id="thanksClose">Close</button>
+    </div>`;
+  document.body.appendChild(veil);
+  const close = () => veil.remove();
+  $('#thanksClose', veil).addEventListener('click', close);
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  /* The same share path the friend code already uses: the OS sheet when there
+     is one, clipboard when there is not, the raw string when even that is
+     refused. Nothing new invented for a link. */
+  $('#thanksShare', veil).addEventListener('click', async () => {
+    const text = `Boneheadz Gym is in beta. Come play: ${TESTFLIGHT_URL}`;
+    try { if (navigator.share) { await navigator.share({ title: 'Boneheadz Gym', text }); return; } } catch { return; /* cancelled */ }
+    try { await navigator.clipboard.writeText(TESTFLIGHT_URL); toast('Invite link copied. Send it to a friend!'); }
+    catch { toast(TESTFLIGHT_URL, 4000); }
+  });
+}
+
+// Test hook (webdriver only), same reasoning as __community above.
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__betaThanks = () => openThanksCard();
+}
+
+async function maybeShowThanksCard() {
+  try {
+    if ((navigator.webdriver && !window.__thanksForce) || !S.settings) return;
+    if (await kvGet(THANKS_SEEN_KEY, false)) return;
+    let tries = 0;
+    const tick = async () => {
+      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
+        if (tries++ < 60) setTimeout(tick, 500);
+        return;
+      }
+      /* Spend it BEFORE opening, not after: the card is dismissed by several
+         routes (the button, the veil, history) and a flag written on the way
+         out can be skipped by any of them. It is only spent once the overlay
+         check above has passed, so it is never burned on a card that did not
+         get to render. */
+      await kvSet(THANKS_SEEN_KEY, true);
+      openThanksCard();
+    };
+    // behind the community card's 4000ms: if that one is up, the veil check
+    // above holds this one back rather than stacking two popups on a boot.
+    setTimeout(tick, 4600);
   } catch { /* never block boot */ }
 }
 
@@ -6539,6 +6647,7 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
+    ${thanksBannerHtml()}
     ${communityBannerHtml()}
     <button class="card lb-open" id="crewLeaderboard">
       <div class="card-title">LEADERBOARD</div>
@@ -7205,6 +7314,7 @@ async function renderFriends(el) {
       await paint();
     }));
   };
+  $('#crewThanks', el)?.addEventListener('click', () => openThanksCard());
   $('#crewDiscord', el)?.addEventListener('click', () => openCommunityCard());
   $('#crewLeaderboard', el)?.addEventListener('click', openLeaderboard);
   hydratePodium(); // fire-and-forget: fills the top-3 tile when the fetch lands
@@ -7561,8 +7671,19 @@ async function openGiftSheet(f) {
     } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
   });
 
-  $('.gift-amts', wrap).addEventListener('click', async e => {
-    const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return;
+  /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
+     still could. armToConfirm's own header records why it exists (a player
+     bought a 1,000-coin cauldron by accident), and these chips were sending up
+     to 500 coins to ANOTHER PLAYER on a single tap, which is worse than a
+     mis-buy: the refund below only runs when the send FAILS, so a successful
+     send to the wrong friend, or a thumb landing on 500 instead of 250, is
+     final. The helper rather than a hand-rolled dataset.armed dance, because
+     there are already ten hand-rolled copies in this file drifted across eight
+     different cooloff windows, and that drift is what the helper was written to
+     stop. The label stays short: the sheet header already names who this is
+     going to, and a long label reflows the chip row on a small phone. */
+  $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
+    if (b.disabled) return;
     const amt = +b.dataset.amt;
     const have = await coins();
     if (amt > have) { toast("You don't have that many coins."); return; }
@@ -7579,7 +7700,7 @@ async function openGiftSheet(f) {
       b.disabled = false;
       toast(r.status === 429 ? "That's the daily coin-gift limit for this friend." : 'Could not send. Your coins were not spent.', 3400);
     }
-  });
+  }));
 }
 
 // Send-a-cheer sheet: preset emoji + phrase, no free text.
@@ -7783,9 +7904,24 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
+    blurb: 'The invite link to pass on, and how Android players get added.',
+    /* An ICON, not an emoji. news-tab-audit requires every row to draw a real
+       box (a decoded <img> or an <svg>), and an emoji in a span is neither: it
+       is the exact thing ext/news-discord-art removed from the row below, so
+       shipping it here would have put it straight back. */
+    thumb: () => bhIcon('badge-crown', 34),
+    open: () => openThanksCard() },
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
-    thumb: () => `<span style="display:inline-block;width:100%;font-size:30px;line-height:52px;text-align:center">💬</span>`,
+    /* THE SAME APP ICON THE POPUP LEADS WITH, which is what this list's own rule
+       asks for ("the thumbnail is a small piece of that same popup's art"). It
+       was a raw 💬 emoji with hardcoded inline styles, the only row of eight
+       with no art, and news-tab-audit has been red on that row on main.
+       No wrapper: .dc-app is 78px and .nw-thumb is a 56px flex box with
+       overflow:hidden and a 12px radius, so the tile is clipped to the thumb's
+       own rounded square and reads as an app icon, measured on the render. */
+    thumb: () => DISCORD_APP_ICON,
     open: () => openCommunityCard() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
@@ -8816,7 +8952,20 @@ let pendingHubTab = null;
 async function renderBonehead(el) {
   const tab = pendingHubTab || 'wardrobe';
   pendingHubTab = null;
-  el.innerHTML = `<h1 class="page-h1 hub-title">Your Bonehead</h1><div id="chBody"></div>`;
+  /* THE HEADING IS THE PLAYER'S OWN NAME, not "Your Bonehead" (Tom, 2026-08-15,
+     relaying his friends: whose bonehead it is was never in doubt). Both sources
+     are LOCAL reads, so this costs no network and has no empty state on a fresh
+     install: onboarding makes everyone build a name before an account exists
+     (kvSet('onbName') at the end of the onboarding flow), and social.socialMe()
+     is a kvGet. The literal survives as the last rung because a save from before
+     'onbName' existed has neither, and a blank heading is worse than the old
+     one. esc() because me.name arrives from the server. */
+  const me = await social.socialMe();
+  const pick = me && me.name ? null : await kvGet('onbName', null);
+  const title = (me && me.name)
+    || (pick && buildDisplayName(pick.adj, pick.noun, pick.num))
+    || 'Your Bonehead';
+  el.innerHTML = `<h1 class="page-h1 hub-title">${esc(title)}</h1><div id="chBody"></div>`;
   await renderCharacter(el, tab);
 }
 
@@ -10706,7 +10855,9 @@ async function openStable(opts = {}) {
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
-    const [insts, eqIid, bank, st] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus()]);
+    /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
+       below draws your own Bonehead at the gate, the same way the scene does. */
+    const [insts, eqIid, bank, st, eqOwn] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     // expanded talent tree: default to the active pet so it's visible right away
     /* Default CLOSED (v317). The list layout opened the active pet's tree on
@@ -10834,7 +10985,70 @@ async function openStable(opts = {}) {
     const spChips = pair ? [a, b]
       .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
 
+    /* THE WAY IN. Tom, 2026-08-11: the Paddock's entry was the FOURTH CHIP in the row
+       below, `chip chip-btn`, measured 134x38 and therefore the same class and the same
+       size as "How pets work". The newest place in the game looked like a help link and
+       read as less important than a sentence about levelling. Mocked both ways first
+       (market-quality-mockups/paddock-entry/) and Tom picked the door, above the
+       carousel, counting PETS.
+       It is a DOOR, not a louder label: the Paddock's pitch is "not a list, a place", so
+       the entry shows the place with your own animals standing in it. Figure contract in
+       full, because this is a new figure surface:
+         - the Bonehead goes through the same avatar layer stack the scene uses, with
+           BG and the C slot skipped, so your outfit at the gate matches your outfit in
+           the field and the pet slot is skipped rather than passed (STACK's two honest
+           paths are about drawing a pet INSIDE the stack; here the pets are beside it).
+         - each pet goes through petAsideHtml, given a pet from petFrom with a bare
+           species so shiny is left UNDEFINED and S.shinyPets answers, which is the only
+           correct source for your OWN pet. That helper seats it, mass-normalises it and
+           keeps it on the character's baseline. No raw image tags here: the mock used
+           them, shipping code does not.
+         - PROSE IN THIS COMMENT AVOIDS CALL SHAPES ON PURPOSE. COVERAGE and STACK are
+           line greps for `name` followed by an open paren, and they skip only lines
+           starting with function, // or *. The first draft of this comment described
+           both calls in their real syntax and was itself reported as an unregistered
+           pet call site and an avatar that never says whose shiny it is.
+         - PLANE by construction: every figure is bottom-aligned to one ground line, so
+           a hovering species floats off the same baseline the others stand on.
+       Registered as `stable-door` in tests/figure-audit.mjs. Keeps the id
+       `stableToPaddock` so the existing handler and every audit that clicks it are
+       untouched. */
+    /* TWO pets, not three, and laid out by FLEX rather than by hand-placed slots.
+       Measured, not guessed: petAsideHtml mass-normalises, so the px asked for is not
+       the px drawn (a 34px duck renders 48 wide), and there is only 72px of scene to
+       the right of the keeper. Three sprites measured 48 + 29 + 39 = 116px and the
+       third one's box ended at 161 inside a 150px panel, so it was clipped and all
+       three overlapped. Per-species tuning is not available either: `order` is
+       rarity-sorted, so which species land here changes per player. A flex row anchored
+       to the safe box holds whatever two species turn up, at any normalised size, and
+       two animals beside you reads as a field with company rather than a contact sheet.
+       Your two RAREST, because that is the collection worth walking out to see. */
+    const doorSp = order.slice(0, 2);
+    const doorPx = 28;
     body.innerHTML = `
+      <button class="pdk-door" id="stableToPaddock" type="button">
+        <span class="pdk-door-scene" aria-hidden="true">
+          <i class="pdk-door-moon"></i>
+          <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
+          <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
+          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}</span>
+          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx)}</span>`).join('')}</span>
+          <i class="pdk-door-vig"></i>
+        </span>
+        <span class="pdk-door-tx">
+          <b>THE PADDOCK</b>
+          <small>${insts.length} pet${insts.length === 1 ? '' : 's'} out in the field</small>
+        </span>
+        <!-- the house disclosure arrow: a plain glyph in a span, as in .gbn-chev,
+             .gd-arrow and .ul-chev. No ICONS ternary fallback here, per the note in
+             the chip row below: a ternary hides a missing icon from readers and ships
+             a bare "?" glyph.
+             NO BACKTICKS IN THIS COMMENT EITHER. The first draft of this very comment
+             quoted the ternary in backticks, closed the template literal it sits
+             inside, and broke the app on the spot: "Unexpected identifier ICONS". The
+             warning below is not decoration, it is a rake, and I stepped on it. -->
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chip">${ICONS.dust(14)} ${st.dust.toLocaleString()}</span>
         <span class="chip" style="font-size:11px">Only the active pet levels as you walk</span>
@@ -10846,9 +11060,11 @@ async function openStable(opts = {}) {
              NO BACKTICKS IN THIS COMMENT: it sits inside a template literal, and
              the first draft quoted the ternary in backticks, which closed the
              string and took the whole app down. Every browser suite failed in
-             four seconds and the gate said so immediately. -->
+             four seconds and the gate said so immediately.
+             THE PADDOCK CHIP IS GONE FROM THIS ROW: it is the door above now. It
+             moved rather than being duplicated, so there is still exactly one way
+             in and it still carries the id every handler and audit clicks. -->
         <button class="chip chip-btn" id="petsHelp" type="button">How pets work</button>
-        <button class="chip chip-btn" id="stableToPaddock" type="button">\u{1F43E} The Paddock</button>
       </div>
       <!-- WAITING FOR THE SECOND PICK, AT THE TOP. Tom, 2026-08-10: "the breeding
            popup is good but it covers the breed button when you swipe to another
@@ -11314,22 +11530,29 @@ async function openStable(opts = {}) {
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
-    /* SCROLL ROOM FOR THE STICKY BAR, ON THE RIGHT SIDE OF IT. Measured before
-       this: the bar overlapped .cf-acts by 15px, and BREED lives in that row, so
-       the button the bar was telling you to press was underneath the bar. The
-       height varies with which bar is showing, so it is measured rather than
-       guessed.
-       The room used to be `body.style.paddingBottom`, i.e. AFTER the bar, and
-       that was Brock's bug (2026-08-14): "I can only scroll up on it from the
-       grey area under the window." A `position:sticky; bottom:0` element only
-       stays pinned while something of its container is still below it, so 401px
-       of padding after the LAST child un-stuck the bar, let it scroll away with
-       the content, and turned that padding into the grey gutter that was the only
-       thing left scrolling. Same amount of room, moved to the sibling ABOVE the
-       bar, so .cf-acts still rises clear and nothing follows the bar. */
+    /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
+       .breed-bar.sticky in app.css for the two fixes that came before this.
+       Short version: `position: sticky; bottom: 0` is clamped by its containing
+       block, and the bar's was #stableBody, i.e. the entire sheet, so it could
+       rise all the way over .cf-acts. Both previous fixes bought room to escape
+       it; neither stopped it happening. Measured on v380 at 375x667 with a
+       precious pair flagged: [data-destroy] hit li / span.bt-in / div.breed-trade
+       at 42 of the 76 offsets where it is on screen, and that button melts a pet
+       permanently.
+       Wrapping everything AFTER the carousel in one div makes that div the
+       containing block, so the bar still floats down the talent tree (Tom,
+       2026-08-08: the decision follows you down the page) and can no longer reach
+       the row it is telling you about. Done here rather than in the template
+       because the bar and the tree are rendered by two separate branches of it. */
     const stickyBar = $('.breed-bar.sticky', body);
     body.style.paddingBottom = '';
-    if (stickyBar?.previousElementSibling) stickyBar.previousElementSibling.style.marginBottom = (stickyBar.offsetHeight + 14) + 'px';
+    const cfEl = $('.cf', body);
+    if (stickyBar && cfEl) {
+      const dock = document.createElement('div');
+      dock.className = 'breed-dock';
+      cfEl.after(dock);
+      while (dock.nextSibling) dock.appendChild(dock.nextSibling);
+    }
     $$('[data-destroy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
@@ -13235,7 +13458,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v380'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v381'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -13657,6 +13880,18 @@ function endlessFightCfg(f) {
     mode: 'endless', rank: f.rank, name: f.name, mult: f.mult, talents: f.talents,
     weaponId: f.weaponId, aiLevel: f.aiLevel, coins: f.coins, repeatCoins: f.repeatCoins,
     xp: f.xp, venue: 'The Gauntlet',
+    /* CARRY THE FACE. pit.js computes a roster look for EVERY rank (bossLook ||
+       ladderLook, js/pit.js:1679) and this mapper listed its fields by hand and
+       never copied it, so openFight fell through to the coin-flip generator and
+       dressed the enemy in a starter body plus random catalogue items. Measured
+       before the fix: ranks 1-48 were 100% approved monsters and rank 51 up was
+       0%, because rank 51 is the first ordinary rank on the deep cast. Tom saw
+       exactly that ("high enough up the ladder the pit bosses are still random").
+       The 2026-08-10 fix that computed ladderLook was real; nothing read it,
+       because ladderLook is not imported into this file. A hand-listed mapper
+       dropping one new field is the boring failure, so it is the one to check
+       first. */
+    foeOutfit: f.look,
     glutton: !!f.glutton, mage: !!f.mage,
   };
 }
@@ -14642,9 +14877,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (!fight.itemsOpen) {
         html += `<button class="fight-act items" id="itemsOpen" ${canDrink ? '' : 'disabled'} style="grid-column:1/-1"><b>ITEMS x${held}</b><small>${stocked.length} kind${stocked.length === 1 ? '' : 's'} brewed · 1 AP to drink</small></button>`;
       } else {
-        /* Open: the potions AND the way back, so the tray can never strand you
-           in a state with no moves on it. */
-        html += `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
+        /* Open: the potions AND the way back, AND NOTHING ELSE.
+           The door halved the CLOSED tray and left the OPEN one exactly as it
+           was: every move button still rendered above the potions. Measured at
+           375x667 with all six kinds held, ITEMS open: 11 buttons, scrollHeight
+           274 inside the 174px lockTray gives it, so the first potion row was
+           half clipped and the second was entirely below the fold. All six
+           potion centres hit #fightBody or #endTurn at every offset the SHEET
+           can reach; only dragging the tray's own nested scroller to 64+ of 100
+           brought them out, and nothing on a phone advertises that scroller.
+           The label already promised this: it says BACK TO MOVES, so the moves
+           were never meant to still be on screen. Dropping them leaves BACK plus
+           two rows of potions = 148px, inside the same 174px, so every potion is
+           tappable with no scrolling at all.
+           This changes only WHAT the tray draws, never how tall it is: lockTray
+           still measures its height from the arena floor, the End Turn row and
+           the HUD, so the boss art is untouched. That is the whole reason the
+           door exists and it stays intact. */
+        html = `<button class="fight-act items back" id="itemsBack" style="grid-column:1/-1"><b>&lsaquo; BACK TO MOVES</b><small>${held} item${held === 1 ? '' : 's'}</small></button>`;
         for (const p of stocked) {
           html += `<button class="fight-act potion" data-potion="${p.id}" ${canDrink ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><small>x${potionInv[p.id]} · ${esc(potionShort(p))}</small></button>`;
         }

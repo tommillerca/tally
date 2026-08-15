@@ -74,11 +74,19 @@ if (own) console.log(`serving this repo at ${base}\n`);
 
 /* Node-only checks first: they are seconds, and there is no point burning four
    minutes of browser time on a build whose pure logic is already broken. */
-const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs'];
+/* first-fight-audit is here and not in BROWSER because it boots nothing: it
+   imports ../js/pit.js and runs 400 seeded sims, exactly quest-daymore's shape,
+   and BROWSER hands every entry a URL it would ignore. ~1s, 4/4 green on main,
+   and it carries its own CONTROL row so it cannot pass vacuously. */
+const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
 const BROWSER = [
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
+  'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
+  'recovery-audit.mjs',      // a FAILED restore must never destroy the save it was meant to replace
+  'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
   'news-tab-audit.mjs',      // every announcement still opens with its art
+  'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
   'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
@@ -94,6 +102,9 @@ const BROWSER = [
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
   'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
+  'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep
+  'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
+  'weight-edit-audit.mjs',   // Log weight (kg + lb conversion) + entry edit/delete: real UI clicks, deep read-back
   'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
@@ -193,7 +204,11 @@ const DECLARED = {
 
   'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
+  'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
+  'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
+  'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
+  'beta-thanks-audit.mjs': ['full', 'the beta thank-you card: real TestFlight and Discord links, the Android instruction, a hero with real pixels, once from boot, and the Crew strip opens it.'],
   'crate-advance-audit.mjs': ['full', 'tap-to-advance inside the crate reveal.'],
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
@@ -274,6 +289,21 @@ const DECLARED = {
   'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
   'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
   'reap-orphans.mjs':     ['skip', 'a maintenance tool that deletes dead files, not a check.'],
+
+  /* THE NINE THAT LANDED ON MAIN WITHOUT A TIER, 2026-08-15. Every one of these
+     is a real guard that arrived on its own branch, and none of them touched
+     this file on the way in, so the coverage assertion above was failing by name
+     before a browser started: `npm run gate` and `gate:all` both exited 1 on a
+     clean checkout of main. The assertion did its job. Nobody had done theirs.
+     (first-fight-audit.mjs is the tenth; it is node-only and went into PURE.) */
+  'breed-sheet-scroll-audit.mjs': ['full', "the breeding sheet can be SCROLLED where its content is, at 375x667 with the precious-pet warning mounted. The other half of sheet-action-reachable's report, which grades whether the action can be TAPPED and cannot see scroll room: Brock could only swipe the grey area under the window. Proven red at 19c3a99 (401px of padding AFTER the sticky bar un-sticks it; a swipe on the sheet moved #stableBody 0 -> 0). Boots a real Stable and drives the breed picker, so it is not FAST-shaped."],
+  'cloud-restore-silent-audit.mjs': ['full', 'a failed cloud restore must SPEAK and must be RETRIED: stubs the vault at 500 / 404 / empty / already-restored and reads the bootRestored flag out of IndexedDB plus the toast off the screen. Behavioural, not a source parse (REG-PLAN 2D calls this rewrite the template). Boots WITHOUT ?demo with navigator.webdriver spoofed, because app.js NOSOCIAL skips bootSync entirely otherwise, and spends nine seconds per scenario watching for a toast that must not come. Prove-red is a worktree at 17a977f^.'],
+  'fav-skull-audit.mjs': ['full', "a fave chip whose skull never arrives must not be an empty canvas (anti-regression rule 8). Has to read the alpha channel: the <canvas> exists either way, so every presence-based assertion passes on the bug. Two full boots, healthy then request-blocked, so it costs double a one-boot audit."],
+  'memory-census.mjs': ['full', 'the eight-layer memory ceiling on every screen that mounts art in a loop, sampled at the PEAK after a full scroll of every scroller, twice (tally/CLAUDE.md rules 11 and 12) - lb-memory-audit budgets ONE screen against a two-layer fixture, and that is how six more screens with the same defect stayed invisible. Drives and scrolls most of the app, so it is among the longest suites here. Its own header names what it cannot see (CSS backgrounds, off-DOM Images, the Boneyard map: no WebGL headless), so a pass is "not caught by this instrument", not "clean".'],
+  'newcomers-audit.mjs': ['full', 'all six branches of hydrateNewcomers, so "the new player section of the Crew tab is gone" is answered by measurement instead of by picking one of three explanations. Six sequential seeded scenarios at ~3s of settle each; prove-red inverts playing() and rows A and E go red while B, C, D and F stay green.'],
+  'race-results-audit.mjs': ['full', 'the settled step-race podium shown is the one that was PAID, which is why it reads /steps/settled and not /steps/week: measured on production 2026-08-14, three of the five paid players had already rolled into the new week and vanished from the live board, promoting 5th to 2nd. Plus VISIBLE-not-merely-present (three opacity-0 bugs in eight days), shows once, and never renders an empty podium. The fixture is the real production result byte for byte, so row 1 cannot be decorative.'],
+  'selector-sweep.mjs': ['skip', 'a byte-for-byte duplicate of selector-audit.mjs, which is already in FAST: same 236 lines, differing only in em-dashes vs hyphens and its own Usage line. It landed twice under two names (4a13e5c on ext/selector-sweep, then again inside the v371 batch as selector-audit.mjs). Running it would sweep the same 752 sites a second time and report the same 0 dead, so it is a second NAME, not a second guard. This is suite-rot-audit territory: it wants deleting, and that is not this file\'s call to make.'],
+  'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above."],
 };
 
 /* COVERAGE, BEFORE A SINGLE BROWSER STARTS. An undeclared audit is a one-second
@@ -419,8 +449,9 @@ if (own) own.server.close();
 if (!runAll && FULL.length) {
   console.log(`\n${FULL.length} audit(s) not in FAST were skipped (everything not named in FAST lands here).`);
   console.log('Run them before a release:  node tests/release-gate.mjs --all');
-  console.log('NOTE: this is a tally, not a guard. A new audit is swept in here silently;');
-  console.log('      the check that would flag it is Walt\'s W1b, not yet landed.');
+  console.log('NOTE: this is a tally, not a guard, but a new audit can no longer be swept');
+  console.log('      in here silently: the COVERAGE assertion above refuses to start a');
+  console.log('      browser until every file on disk is DECLARED with a reason.');
 }
 const bad = results.filter(r => r.code !== 0);
 console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
