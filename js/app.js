@@ -13657,6 +13657,18 @@ function endlessFightCfg(f) {
     mode: 'endless', rank: f.rank, name: f.name, mult: f.mult, talents: f.talents,
     weaponId: f.weaponId, aiLevel: f.aiLevel, coins: f.coins, repeatCoins: f.repeatCoins,
     xp: f.xp, venue: 'The Gauntlet',
+    /* CARRY THE FACE. pit.js computes a roster look for EVERY rank (bossLook ||
+       ladderLook, js/pit.js:1679) and this mapper listed its fields by hand and
+       never copied it, so openFight fell through to the coin-flip generator and
+       dressed the enemy in a starter body plus random catalogue items. Measured
+       before the fix: ranks 1-48 were 100% approved monsters and rank 51 up was
+       0%, because rank 51 is the first ordinary rank on the deep cast. Tom saw
+       exactly that ("high enough up the ladder the pit bosses are still random").
+       The 2026-08-10 fix that computed ladderLook was real; nothing read it,
+       because ladderLook is not imported into this file. A hand-listed mapper
+       dropping one new field is the boring failure, so it is the one to check
+       first. */
+    foeOutfit: f.look,
     glutton: !!f.glutton, mage: !!f.mage,
   };
 }
