@@ -1649,7 +1649,7 @@ function openGardenPopup() {
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openGardenSheet(() => refresh());
+    openHollow(() => refresh());
   });
 }
 
@@ -2751,7 +2751,7 @@ async function renderToday(el) {
   $('details.garden-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
   });
-  $('#gardenToKitchen')?.addEventListener('click', () => openGardenSheet(() => refresh()));
+  $('#gardenToKitchen')?.addEventListener('click', () => openHollow(() => refresh()));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -3916,6 +3916,253 @@ function gardenRowHtml(garden, seedTotal) {
   </button>`;
 }
 
+/* ---- The Hollow (WIP v1): the garden as a diorama your bonehead tends. ----
+ * Design: ~/Downloads/home-page-avatar-showcase (The Hollow.dc.html), approved
+ * 2026-08-15. Economy untouched: this is presentation over the intact garden.js
+ * state; every action routes through the same plantSeed/waterPlot/harvestPlot/
+ * compost/buy-bed calls the list sheet used. Apothecary half NOT built yet.
+ * UNVERIFIED: needs the full verification pass (fire controls, decoded pixels,
+ * ui-audit + figure-audit rows) before this can ship. */
+const HLW_SPOTS = [[68, 256], [132, 256], [68, 352], [132, 352], [68, 447]]; // bed centers, 390-wide stage
+const HLW_BUY = [300, 360];
+
+function hlwBedArt(p) {
+  // soil mound is the base of every owned bed; growth stage sits on top
+  const mound = `<span style="position:absolute;left:2px;top:6px;width:80px;height:50px;border-radius:50%;background:#5b4632;border:2px solid #17151d"></span>
+    <span style="position:absolute;left:10px;top:12px;width:64px;height:34px;border-radius:50%;background:#6d5540"></span>`;
+  if (p.empty) return mound;
+  if (p.ready) return `${mound}<svg viewBox="0 0 44 52" style="position:absolute;left:22px;top:-14px;width:42px;height:50px;overflow:visible">
+      <path d="M22 50 V18" stroke="#5f8a44" stroke-width="4.5" stroke-linecap="round" fill="none"></path>
+      <path d="M22 40 q-10 -2 -13 -11 q10 0 13 11 z M22 34 q10 -3 12 -12 q-10 1 -12 12 z" fill="#7fae57" stroke="#3a5426" stroke-width="1.4"></path>
+      <g style="animation:hlwReady 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%">
+        <circle cx="22" cy="14" r="10" fill="${p.rare ? '#9fe3cf' : '#fd6857'}" stroke="#17151d" stroke-width="2.5"></circle>
+        <ellipse cx="18.5" cy="10.5" rx="3.4" ry="2.4" fill="#ffd9c9" opacity=".85"></ellipse>
+        <path d="M22 4 q5 -5 9 -4" stroke="#5f8a44" stroke-width="3.5" fill="none" stroke-linecap="round"></path>
+      </g></svg>`;
+  // growing: young plant, wilting slightly if it still wants its watering
+  return `${mound}<svg viewBox="0 0 36 40" style="position:absolute;left:26px;top:-2px;width:34px;height:38px;transform-origin:50% 100%">
+      <g ${p.canWater ? 'style="animation:hlwSway 3.4s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 100%"' : ''}>
+      <path d="M18 38 V16" stroke="#5f8a44" stroke-width="4" stroke-linecap="round" fill="none"></path>
+      <path d="M18 30 q-9 -2 -12 -10 q9 0 12 10 z M18 26 q9 -3 11 -11 q-9 1 -11 11 z" fill="${p.canWater ? '#9fae6a' : '#7fae57'}" stroke="#3a5426" stroke-width="1.4"></path></g></svg>`;
+}
+
+function openHollow(after) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`, { cls: '', onClose: () => after?.() });
+  const body = $('#hollowBody', wrap);
+  const av = { x: 112, y: 560, facing: 1, moving: false, dur: 1.4 };
+  let busy = false;        // a ritual in flight: hold re-renders so animations run whole
+  let pouchOpen = false;
+  let walkT = null;
+
+  const bandNow = () => { const h = new Date().getHours(); return (h >= 7 && h < 17) ? 'day' : ((h >= 17 && h < 20) || (h >= 5 && h < 7)) ? 'dusk' : 'night'; };
+
+  function walkTo(cx, cy, then) {
+    const x = Math.max(-14, Math.min(214, cx - 95));
+    const y = Math.max(140, Math.min(700, cy - 158));
+    const dx = x - av.x, dy = y - av.y, dist = Math.hypot(dx, dy);
+    if (dist < 4) { then?.(); return; }
+    av.dur = Math.max(0.9, Math.min(2.4, dist / 140));
+    if (dx !== 0) av.facing = dx > 0 ? 1 : -1;
+    av.x = x; av.y = y; av.moving = true;
+    const fig = $('#hlwAv', body);
+    if (fig) {
+      fig.style.transition = `left ${av.dur}s ease-in-out,top ${av.dur}s ease-in-out`;
+      fig.style.left = x + 'px'; fig.style.top = y + 'px';
+      const flip = $('#hlwFlip', body); if (flip) flip.style.transform = `scaleX(${av.facing})`;
+      const anim = $('#hlwAnim', body); if (anim) anim.style.animation = 'hlwWalk .38s ease-in-out infinite alternate';
+    }
+    clearTimeout(walkT);
+    walkT = setTimeout(() => {
+      av.moving = false;
+      const anim = $('#hlwAnim', body); if (anim) anim.style.animation = 'hlwIdle 4s ease-in-out infinite';
+      then?.();
+    }, av.dur * 1000);
+  }
+
+  function waterFx(cx, cy) {
+    const st = $('#hlwStage', body); if (!st) return;
+    const d = document.createElement('div');
+    d.style.cssText = `position:absolute;left:${cx}px;top:${cy}px;width:0;height:0;z-index:7;pointer-events:none`;
+    d.innerHTML = `<svg viewBox="0 0 64 48" style="position:absolute;left:-36px;top:-60px;width:64px;height:48px;overflow:visible;animation:hlwPour 2.4s ease-in-out infinite;transform-origin:40% 70%">
+        <g fill="#9aa5b1" stroke="#17151d" stroke-width="2.5" stroke-linejoin="round">
+          <path d="M10 16 q-9 5 -5 15" fill="none" stroke-width="4"></path>
+          <rect x="12" y="14" width="24" height="22" rx="5"></rect>
+          <path d="M36 18 L56 31 L51 38 L34 27 z"></path></g>
+        <ellipse cx="24" cy="14" rx="8" ry="3" fill="#7f8c99" stroke="#17151d" stroke-width="2"></ellipse></svg>
+      <span style="position:absolute;left:14px;top:-22px;width:5px;height:9px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in infinite"></span>
+      <span style="position:absolute;left:20px;top:-20px;width:4px;height:8px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in .22s infinite"></span>
+      <span style="position:absolute;left:26px;top:-18px;width:4px;height:8px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in .44s infinite"></span>`;
+    st.appendChild(d);
+    setTimeout(() => d.remove(), 2400);
+  }
+
+  function toastAt(cx, cy, msg) {
+    const st = $('#hlwStage', body); if (!st) return;
+    const t = document.createElement('span');
+    t.className = 'hlw-toast';
+    t.style.left = (cx - 50) + 'px'; t.style.top = (cy - 48) + 'px';
+    t.textContent = msg;
+    st.appendChild(t);
+    setTimeout(() => t.remove(), 2400);
+  }
+
+  async function render() {
+    if (!body.isConnected || busy) return;
+    const [garden, compost, eq, coin] = await Promise.all([gardenState(), compostStatus(), equipped(), coins()]);
+    const bedPrice = plotPrice(garden.plotsOwned);
+    const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
+    const band = bandNow();
+    const beds = garden.plots.map((p, i) => ({ ...p, cx: HLW_SPOTS[i][0], cy: HLW_SPOTS[i][1] }));
+    body.innerHTML = `
+    <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
+      <div style="position:absolute;inset:0;background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.14),transparent 70%)"></div>
+      <svg viewBox="0 0 390 900" style="position:absolute;inset:0;width:100%;height:100%;display:block">
+        <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#44532f" stroke-width="46" fill="none" stroke-linecap="round" opacity=".45"></path>
+        <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#7d7257" stroke-width="38" fill="none" stroke-linecap="round" opacity=".85"></path>
+        <g fill="#b3a68e" stroke="#17151d" stroke-width="1.8">
+          ${[172, 216, 260, 304, 350, 396, 442, 488, 534, 580, 626, 672, 718, 764, 810, 854].map((y, i) => `<ellipse cx="${[196, 200, 196, 200, 195, 199, 196, 200, 196, 191, 196, 198, 195, 197, 196, 195][i]}" cy="${y}" rx="${i % 2 ? 17 : 21}" ry="${i % 2 ? 7 : 8.5}"></ellipse>`).join('')}
+        </g>
+        <g fill="#ece0c6" stroke="#17151d" stroke-width="2" stroke-linejoin="round">
+          ${[14, 38, 62, 86, 110, 254, 278].map(x => `<path d="M${x} 160 v-36 l6 -9 l6 9 v36 z"></path>`).join('')}
+        </g>
+        <g fill="#d9cbae" stroke="#17151d" stroke-width="2">
+          <rect x="8" y="127" width="130" height="7" rx="2.5"></rect><rect x="8" y="143" width="130" height="7" rx="2.5"></rect>
+          <rect x="252" y="127" width="44" height="7" rx="2.5"></rect><rect x="252" y="143" width="44" height="7" rx="2.5"></rect>
+        </g>
+        <g fill="#8a5a3a" stroke="#17151d" stroke-width="2.5" stroke-linejoin="round">
+          <rect x="140" y="58" width="15" height="106" rx="4"></rect><rect x="140" y="58" width="108" height="12" rx="5"></rect>
+        </g>
+        <g transform="rotate(-2 205 102)">
+          <rect x="146" y="84" width="118" height="38" rx="7" fill="#3a2f26" stroke="#17151d" stroke-width="4"></rect>
+          <text x="205" y="110" text-anchor="middle" font-family="Bangers, sans-serif" font-size="23" letter-spacing="2" fill="#f2e9d7">THE HOLLOW</text>
+        </g>
+        <g transform="translate(292 44)">
+          <rect x="6" y="50" width="76" height="66" rx="3" fill="#6d4a2c" stroke="#17151d" stroke-width="3"></rect>
+          <path d="M-8 56 L44 10 L96 56 z" fill="#8a5a3a" stroke="#17151d" stroke-width="3" stroke-linejoin="round"></path>
+          <rect x="31" y="70" width="26" height="46" rx="3" fill="#4c3b2b" stroke="#17151d" stroke-width="2.5"></rect>
+          <circle cx="52" cy="94" r="2.4" fill="#f2e9d7"></circle>
+        </g>
+        ${bedPrice != null ? `<g transform="translate(${HLW_BUY[0] - 42} ${HLW_BUY[1] - 30})">
+          <ellipse cx="42" cy="30" rx="36" ry="24" fill="#5c6e3e"></ellipse>
+          <ellipse cx="42" cy="30" rx="36" ry="24" fill="none" stroke="#48562f" stroke-width="2" stroke-dasharray="6 6"></ellipse>
+          <path d="M63 54 V12" stroke="#8a5a3a" stroke-width="7" stroke-linecap="round"></path>
+          <g transform="rotate(-3 64 5)">
+            <rect x="35" y="-10" width="58" height="30" rx="6" fill="#f2e9d7" stroke="#17151d" stroke-width="3"></rect>
+            <text x="64" y="10" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${bedPrice.toLocaleString()}</text>
+          </g></g>` : ''}
+        <g transform="translate(26 640)">
+          <ellipse cx="30" cy="50" rx="22" ry="5" fill="rgba(23,21,29,.3)"></ellipse>
+          <path d="M14 48 l4 -16 h24 l4 16 z" fill="#8a6f52" stroke="#17151d" stroke-width="2.5"></path>
+          <g style="animation:hlwCrowBob 5s ease-in-out infinite;transform-origin:32px 20px">
+            <ellipse cx="32" cy="16" rx="13" ry="9" fill="#1d1b22" stroke="#17151d" stroke-width="2"></ellipse>
+            <circle cx="43" cy="10" r="6" fill="#1d1b22" stroke="#17151d" stroke-width="2"></circle>
+            <path d="M48 10 l8 2 -8 3 z" fill="#ffb454" stroke="#17151d" stroke-width="1.6"></path>
+            <circle cx="44.5" cy="8.5" r="1.4" fill="#f2e9d7"></circle>
+          </g></g>
+        <g stroke="#4c5c33" stroke-width="3.5" fill="none" stroke-linecap="round">
+          <g style="animation:hlwSway 3.2s ease-in-out infinite;transform-origin:50% 100%;transform-box:fill-box"><path d="M36 680 q-2 -12 -6 -16 M40 680 q0 -14 0 -18 M44 680 q3 -11 7 -15"></path></g>
+          <g style="animation:hlwSway 3.8s ease-in-out .6s infinite;transform-origin:50% 100%;transform-box:fill-box"><path d="M336 660 q-2 -12 -6 -16 M340 660 q0 -14 0 -18 M344 660 q3 -11 7 -15"></path></g>
+        </g>
+      </svg>
+      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      ${beds.map((p, i) => `
+        <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
+        ${!p.empty && !p.ready ? `<span class="hlw-chip" style="left:${p.cx - 34}px;top:${p.cy - 52}px"><svg width="9" height="11" viewBox="0 0 10 12"><path d="M5 0 Q9 6 9 8.5 A4 4 0 0 1 1 8.5 Q1 6 5 0 z" fill="#9fd0e8"></path></svg>${fmtCookTime(p.remainingMs)}</span>` : ''}
+        <button class="hlw-bed" data-bed="${i}" aria-label="Garden bed" style="left:${p.cx - 42}px;top:${p.cy - 30}px"></button>`).join('')}
+      ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed" style="left:${HLW_BUY[0] - 42}px;top:${HLW_BUY[1] - 30}px"></button>` : ''}
+      <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
+      <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:26px;top:630px;width:70px;height:66px"></button>
+      <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
+        <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>
+        <span id="hlwFlip" style="position:absolute;inset:0;display:block;transform:scaleX(${av.facing});transition:transform .18s ease-in-out">
+          <span id="hlwAnim" style="position:absolute;inset:0;display:block;animation:hlwIdle 4s ease-in-out infinite;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35))">
+            <span class="bh-stage" style="position:absolute;inset:0">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>
+          </span></span>
+      </div>
+      ${pouchOpen ? `<button id="hlwPouch" style="position:absolute;left:96px;top:190px;width:210px;z-index:30;background:#1d1b22;border:2.5px solid #17151d;border-radius:16px;box-shadow:4px 5px 0 rgba(0,0,0,.45);padding:12px 14px;display:grid;gap:9px;cursor:pointer;text-align:left">
+        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:10px;font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
+        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:11px;font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
+        <i style="font-size:10px;font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
+      </button>` : ''}
+      ${band === 'dusk' ? '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(201,127,90,.16),rgba(60,40,70,.18));pointer-events:none;z-index:8"></div>' : ''}
+      ${band === 'night' ? '<div style="position:absolute;inset:0;background:rgba(22,28,58,.42);pointer-events:none;z-index:8"></div>' : ''}
+      ${band !== 'day' ? `<div style="position:absolute;inset:0;pointer-events:none;z-index:9">
+        ${[[60, 540, 6, 0], [300, 480, 7, 1.4], [140, 680, 5.4, 2.6], [330, 780, 6.6, .8]].map(([x, y, d, dl]) => `<span style="position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${dl}s infinite"></span>`).join('')}
+      </div>` : ''}
+    </div></div>
+    <p class="note" style="margin:10px 2px 4px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies.</p>`;
+
+    // scale the 390-wide stage to the sheet width
+    const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
+    const s = vp.clientWidth / 390;
+    st.style.transform = `scale(${s})`;
+    vp.style.height = Math.round(900 * s) + 'px';
+
+    $$('[data-bed]', body).forEach(btn => btn.addEventListener('click', () => {
+      if (busy) return;
+      const i = Number(btn.dataset.bed);
+      const p = beds[i];
+      busy = true;
+      walkTo(p.cx, p.cy, async () => {
+        if (p.empty) { busy = false; openPlantSheet(p.index, render); return; }
+        if (p.ready) {
+          const res = await harvestPlot(p.index);
+          busy = false;
+          if (!res.ok) { render(); return; }
+          await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
+          levelSound(S.sounds);
+          const art = $(`#hlwBedArt${i} g`, body);
+          if (art) art.style.animation = 'hlwPluck .9s ease-out forwards';
+          toastAt(p.cx, p.cy, `+${res.n} ${res.name}`);
+          setTimeout(render, 1200);
+          return;
+        }
+        if (p.canWater) {
+          waterFx(p.cx, p.cy);
+          setTimeout(async () => {
+            const res = await waterPlot(p.index);
+            busy = false;
+            if (res.ok) { popSound(S.sounds); toastAt(p.cx, p.cy, 'Watered!'); }
+            render();
+          }, 2000);
+          return;
+        }
+        busy = false;   // growing and already watered: the walk over IS the interaction
+      });
+    }));
+    $('#hlwShed', body)?.addEventListener('click', () => {
+      if (busy) return;
+      busy = true;
+      walkTo(310, 200, () => { busy = false; pouchOpen = true; render(); });
+    });
+    $('#hlwPouch', body)?.addEventListener('click', () => { pouchOpen = false; render(); });
+    $('#hlwCrow', body)?.addEventListener('click', () => {
+      if (busy) return;
+      busy = true;
+      walkTo(60, 660, () => { busy = false; openCompostSheet(render); });
+    });
+    {
+      const price = plotPrice(garden.plotsOwned);
+      armToConfirm($('#hlwBuy', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
+        if (price == null) return;
+        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
+        await coinsAdd(-price);
+        await addPlot();
+        popSound(S.sounds);
+        render();
+      });
+    }
+  }
+  render();
+  const timer = setInterval(() => {
+    if (!body.isConnected) { clearInterval(timer); return; }
+    if (busy || body.querySelector('.arming')) return;
+    render();
+  }, 30000);   // ponytail: 30s tick (timer chips only need minute granularity here)
+}
+
 function openGardenSheet(after) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Bone Garden</h2><button class="sheet-close">Done</button></div>
@@ -4278,7 +4525,7 @@ async function openKitchen() {
         </div>
         <p class="note" style="margin:10px 2px 0">GROW makes them, COOK spends them.</p>`;
       $('#doorCook', body)?.addEventListener('click', () => { view = 'cook'; render(); });
-      $('#doorGrow', body)?.addEventListener('click', () => openGardenSheet(render));
+      $('#doorGrow', body)?.addEventListener('click', () => openHollow(render));
       $('#compostBtn2', body)?.addEventListener('click', () => openCompostSheet(render));
       return;
     }

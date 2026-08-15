@@ -7619,3 +7619,23 @@ body::before {
 /* The takeover celebrates a badge; this line says what the player actually did,
    because the toast that confirms it is covered 380ms later by this screen. */
 .cele-note { margin: 14px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
+
+/* ---- The Hollow (v1 WIP): garden diorama. Namespaced .hlw-* ---- */
+@keyframes hlwIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes hlwWalk{0%{transform:translateY(0) rotate(-1.2deg)}100%{transform:translateY(-5px) rotate(1.2deg)}}
+@keyframes hlwSway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(5deg)}}
+@keyframes hlwReady{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+@keyframes hlwGlow{0%,100%{opacity:.5}50%{opacity:.9}}
+@keyframes hlwFirefly{0%,100%{transform:translate(0,0);opacity:.15}25%{opacity:.9}50%{transform:translate(14px,-18px);opacity:.3}75%{opacity:.85}}
+@keyframes hlwPour{0%,100%{transform:rotate(-2deg)}25%,75%{transform:rotate(-14deg)}}
+@keyframes hlwDrop{0%{transform:translateY(0);opacity:0}15%{opacity:.9}100%{transform:translateY(30px);opacity:0}}
+@keyframes hlwPluck{0%{transform:translate(0,0) scale(1);opacity:1}60%{transform:translate(-14px,-44px) scale(1.15)}100%{transform:translate(-22px,-64px) scale(.9);opacity:0}}
+@keyframes hlwToast{0%{transform:translateY(6px);opacity:0}15%,80%{transform:translateY(0);opacity:1}100%{transform:translateY(-8px);opacity:0}}
+@keyframes hlwSprout{0%{transform:scale(0);opacity:0}70%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
+@keyframes hlwSteam{0%{transform:translateY(0);opacity:.55}100%{transform:translateY(-14px);opacity:0}}
+@keyframes hlwCrowBob{0%,86%,100%{transform:translateY(0) rotate(0deg)}90%{transform:translateY(-3px) rotate(-6deg)}94%{transform:translateY(0) rotate(3deg)}}
+.hlw-vp{width:100%;overflow:hidden;border-radius:18px;position:relative}
+.hlw-stage{width:390px;height:900px;position:relative;transform-origin:0 0;background:linear-gradient(180deg,#55673a 0%,#617442 38%,#5d7040 66%,#4f6138 100%);overflow:hidden}
+.hlw-bed{position:absolute;width:84px;height:60px;background:none;border:none;cursor:pointer;z-index:6;padding:0}
+.hlw-chip{position:absolute;display:inline-flex;align-items:center;gap:4px;background:rgba(13,12,18,.6);border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:12px;letter-spacing:.06em;color:#f2e9d7;pointer-events:none;z-index:5}
+.hlw-toast{position:absolute;white-space:nowrap;background:rgba(13,12,18,.72);border-radius:999px;padding:4px 10px;font-family:var(--display),Bangers,sans-serif;font-size:12.5px;letter-spacing:.06em;color:var(--accent);animation:hlwToast 2.4s ease-out forwards;z-index:12}
