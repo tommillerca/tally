@@ -8816,7 +8816,20 @@ let pendingHubTab = null;
 async function renderBonehead(el) {
   const tab = pendingHubTab || 'wardrobe';
   pendingHubTab = null;
-  el.innerHTML = `<h1 class="page-h1 hub-title">Your Bonehead</h1><div id="chBody"></div>`;
+  /* THE HEADING IS THE PLAYER'S OWN NAME, not "Your Bonehead" (Tom, 2026-08-15,
+     relaying his friends: whose bonehead it is was never in doubt). Both sources
+     are LOCAL reads, so this costs no network and has no empty state on a fresh
+     install: onboarding makes everyone build a name before an account exists
+     (kvSet('onbName') at the end of the onboarding flow), and social.socialMe()
+     is a kvGet. The literal survives as the last rung because a save from before
+     'onbName' existed has neither, and a blank heading is worse than the old
+     one. esc() because me.name arrives from the server. */
+  const me = await social.socialMe();
+  const pick = me && me.name ? null : await kvGet('onbName', null);
+  const title = (me && me.name)
+    || (pick && buildDisplayName(pick.adj, pick.noun, pick.num))
+    || 'Your Bonehead';
+  el.innerHTML = `<h1 class="page-h1 hub-title">${esc(title)}</h1><div id="chBody"></div>`;
   await renderCharacter(el, tab);
 }
 
