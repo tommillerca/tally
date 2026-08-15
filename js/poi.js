@@ -614,6 +614,26 @@ export const GLUTTON_SLIME_CHANCE = 0.25;
 export async function claimGluttonWin(day = dateKey(), slot = 0) {
   const xp = await award(gluttonKey(day, slot), 'glutton', 70, 'Cleansed the Glutton');
   if (xp === 0) return null;                       // already cleared this window
+  /* THE GLUTTON RAISES THE GAUNTLET CEILING (Tom, 2026-08-15: "the glutton can
+     not spires"). He is a real boss fight that reads as a den on the map, and
+     until now only claimDenWin minted the marker denWinsCount looks for, so
+     beating him did nothing for the Pit.
+     ONE MARKER, EVER, not one per appearance. The key is deliberately NOT
+     keyed by day or slot: he is repeatable across windows by design, and the
+     rule written above denWinsCount is that daily re-clears must never inflate
+     progression. A `bossfirst-glutton-<day>` would have made the Gauntlet
+     ceiling farmable at +3 a day, which is the opposite of what the ledger's
+     own doctrine says.
+     Minted AFTER the xp===0 check, per the rewarded-actions SOP: the state
+     transition is "the Glutton goes from never-beaten to beaten", and a
+     re-clear must not mint a second one. award()'s dedupe on the fixed key
+     makes that true whichever caller gets here.
+     Spires and Boneyard minis deliberately still do NOT mint one. Spires are
+     Tom's call above; minis are documented as "far below a weekly world-boss
+     den" and were never meant to gate progression. That exclusion is asserted
+     by name in tests/pit-cap-paths-audit.mjs so it stays a decision rather
+     than an oversight. */
+  await award('bossfirst-glutton', 'bossfirst', 0, 'First cleansing of the Glutton');
   await coinsAdd(140);
   const owned = await ownedGearIds();
   const lvl = levelFor(await totalXp()).level;
