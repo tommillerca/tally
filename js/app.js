@@ -14481,37 +14481,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     return '';
   }
 
-  /* HOLD THE TRAY STILL. Tom, 2026-08-09, mid world boss: "the pit height was
-     changing nonstop the buttons were moving up and down based on the menu that
-     was available really sloppy ui."
-     He is describing the arena being elastic (flex:1) against a tray whose row
-     count changes every single re-render: the foe's turn collapses it to one
-     line, your pet's turn swaps in four different moves, a potion runs out, the
-     signature gets spent. Every one of those moved End Turn under his thumb.
-     So the tray keeps the tallest height this fight has ever needed. Worst case
-     it looks like its own busiest turn, which was always a reachable layout, so
-     nothing new can overflow. */
-  function lockTray(factions) {
-    factions.style.height = '';
-    fight.trayH = Math.max(fight.trayH || 0, factions.scrollHeight);
-    /* never past the bottom of the phone: End Turn sits under this and must stay
-       reachable without scrolling, so a huge spell list scrolls inside the tray
-       rather than pushing the fight off screen. */
-    /* Room is measured from terms that do NOT depend on the tray: the arena's CSS
-       floor, the pinned End Turn row, and the fixed HUD strips. Measuring the
-       arena's CURRENT height instead is circular (the arena is flex:1, so it is
-       whatever the tray left it) and settles 13px away on the first turn, which
-       is the jitter all over again. Layout space, never getBoundingClientRect:
-       the sheet is still sliding in when the first render lands. */
-    const body = factions.parentElement, row = el('fendrow');
-    const arena = body.querySelector('.arena');
-    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 292)
-             + (row ? row.offsetHeight : 56) + 12;
-    for (const kid of body.children) {
-      if (kid !== factions && kid !== row && kid !== arena) used += kid.offsetHeight;
-    }
-    factions.style.height = Math.max(96, Math.min(fight.trayH, body.clientHeight - used)) + 'px';
-  }
+  /* lockTray is GONE, and its absence is the fix, not a casualty of it.
+     It existed to hold the tray still against an ELASTIC arena (flex:1 1 0):
+     the tray ratcheted to the tallest height the fight had ever needed so End
+     Turn would stop sliding under Tom's thumb. That fought the symptom from the
+     wrong side, and it could not win: every ratchet step came out of the boss,
+     which is the resize Tom reported on 2026-08-15. The arena is now a fixed,
+     viewport-derived height in CSS and the tray is the flex:1 1 0 element, so
+     the tray is the SAME box on every turn by construction. Nothing in JS has
+     to measure or remember it. */
   /* End Turn never moves and is never off screen: it lives below the tray, not
      inside the grid that reflows every turn. */
   function renderEndTurn() {
@@ -14531,7 +14509,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const playerTurn = fight.active === 'p' && !fight.over;
     if (!playerTurn) {
       factions.innerHTML = `<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">${fight.over ? '' : esc(foe.name) + ' is acting...'}</p>`;
-      lockTray(factions); renderEndTurn();
+      renderEndTurn();
       return;
     }
     if (petPhase) {           // your pet's turn: pick one of its moves
@@ -14541,7 +14519,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <b>${a.name}</b><small>${a.enabled ? esc(a.desc) : `ready in ${a.cd}`}</small></button>`).join('');
       factions.innerHTML = ph;
       $$('[data-petmove]', factions).forEach(b => b.addEventListener('click', () => petAct(b.dataset.petmove)));
-      lockTray(factions); renderEndTurn();
+      renderEndTurn();
       return;
     }
     const legal = actionsFor(fight);
@@ -14651,9 +14629,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
       }
     }
     factions.innerHTML = html;
+    /* OPENING THE DOOR SHOWS THE SHELF. The open tray is the tallest state the
+       fight has (4 moves + BACK + up to 6 potions = 274px of content) and the
+       tray is a fixed box now, so on every phone the last potion row starts
+       below the fold: measured 274 of content in a 199px tray at 430x932 and a
+       134px tray at 375x667, with 'Spectral Fury' landing on End Turn under an
+       elementFromPoint hit test. Parking the tray at its bottom puts all six
+       potions on screen at once at every supported width. Not scrollIntoView:
+       that walks up and scrolls the sheet too. */
+    if (fight.itemsOpen) factions.scrollTop = factions.scrollHeight;
     $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
     $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
-    lockTray(factions); renderEndTurn();
+    renderEndTurn();
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
        hit it by accident." A potion is a one-shot consumable sitting in the same
