@@ -1,4 +1,4 @@
-import { buildBattlePet } from '/Users/tommiller/Documents/Hyperframes Editor/tally/js/pets.js';
+import { buildBattlePet } from '../js/pets.js';
 import { escalateDen } from '../js/poi.js';
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {

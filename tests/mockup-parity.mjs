@@ -20,12 +20,26 @@
  *
  * Usage: node tests/mockup-parity.mjs
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MOCKS = path.resolve(ROOT, '../market-quality-mockups');
+const MOCKS = process.env.MOCKUP_PARITY_DIR
+  ? path.resolve(process.env.MOCKUP_PARITY_DIR)
+  : path.resolve(ROOT, '../market-quality-mockups');
+
+/* The mockups live in a sibling directory OUTSIDE the repo, so most checkouts
+   do not have them. Without this guard readdirSync threw before the first
+   assertion: the file read as coverage while being unrunnable anywhere but one
+   machine. Skip loudly on exit 3 (1 = a built:true claim is a lie, 2 = approved
+   work still owed, 3 = the audit could not run at all). */
+if (!existsSync(MOCKS)) {
+  console.log('mockup-parity SKIPPED: no mockups directory at ' + MOCKS);
+  console.log('  This audit checked NOTHING. It needs the market-quality-mockups');
+  console.log('  sibling directory (set MOCKUP_PARITY_DIR to point elsewhere).');
+  process.exit(3);
+}
 
 /* Every mockup Tom has signed off, with the markers that prove it shipped.
    `built: false` means approved but NOT implemented: real, tracked debt. */
