@@ -18,18 +18,43 @@
  * SO THE MEASURE IS THE PLAYER'S THUMB, NOT A RECTANGLE. `getBoundingClientRect`
  * says a clipped button is 132x44 at a fine position; it does not know the button
  * is behind its own scroller's edge. `document.elementFromPoint` at the button's
- * centre is what a tap actually resolves to, so that is what is asserted, WITHOUT
- * scrolling first: "you can reach it if you scroll" is the bug, not the pass.
+ * centre is what a tap actually resolves to, so that is what is measured.
+ *
+ * TWO READINGS, AND ONLY ONE OF THEM FAILS THE RUN. The first version asserted the
+ * hit test with NO scrolling at all, on the reasoning that "you can reach it if you
+ * scroll" is the bug. Extending the file to more sheets disproved that rule on its
+ * own control: `[data-destroy]` came up unreachable in its DEFAULT state simply
+ * because the Stable's action row sits below the fold of #stableBody, and dragging
+ * a sheet is something every player does. Rather than explain that away, the rule
+ * changed to the one that is actually true:
+ *   REPORTED  the hit test as shipped, with no scrolling. Rides along in every
+ *             detail line, so "you have to scroll to your own confirm button"
+ *             stays visible.
+ *   ASSERTED  the hit test after scrolling THE SHEET'S OWN BODY toward the action,
+ *             the one scroll surface a player knows about. Red here means ordinary
+ *             scrolling does not help, which happens for exactly two reasons and
+ *             both are real bugs: the control lives in a NESTED scroller (a
+ *             max-height panel pinned inside the sheet, which is `.breed-bar.sticky`
+ *             at app.css:6432), or something is drawn OVER it.
  *
  * COVERAGE IS PRINTED, INCLUDING WHAT IS NOT COVERED. An unlisted sheet must not
  * read as a passing sheet, so the roster at the bottom names every sheet this file
- * drives AND every one it deliberately does not, with the reason.
+ * drives AND every one it deliberately does not, with the reason. The risk surface
+ * itself is not guessed: every destructive-or-paying control goes through
+ * `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm(' js/*.js` IS the list,
+ * and every line of it is accounted for down there.
  *
- * PROVE-RED: see tests/fixtures/sheet-action-overflow.html, an inert fixture built
- * from the real `.breed-bar.sticky` rule. Run this file with
- * `FIXTURE=1 node tests/sheet-action-reachable-audit.mjs`: the fixture row goes red
- * with the grown content and green with it collapsed, so the hit test is proven to
- * discriminate before any app sheet is graded by it.
+ * AND THE WORST CASE HAS TO BE MEASURABLY WORSE. A driver that claims a worst state
+ * but leaves the clipping container the same height has graded the default twice.
+ * The WORSE row asserts the scroller's scrollHeight actually grew.
+ *
+ * PROVE-RED: see tests/fixtures/sheet-action-overflow.html, an inert fixture with
+ * both scrollers in it: an outer body standing in for `.sheet-body`, and inside it
+ * the real `.breed-bar.sticky` rule. Run
+ * `FIXTURE=1 node tests/sheet-action-reachable-audit.mjs`: the fixture goes red with
+ * the grown content EVEN THOUGH the outer scroller was scrolled, and green with it
+ * collapsed. So the measure is proven to discriminate, and proven not to be
+ * satisfiable by scrolling, before any app sheet is graded by it.
  *
  * Usage: node tests/sheet-action-reachable-audit.mjs
  */
@@ -64,14 +89,62 @@ const reach = sel => page.evaluate(s => {
     const nr = n.getBoundingClientRect();
     if (cy > nr.bottom + 0.5 || cy < nr.top - 0.5 || cx > nr.right + 0.5 || cx < nr.left - 0.5) clipper = name(n) + ` (${Math.round(nr.top)}..${Math.round(nr.bottom)})`;
   }
+  /* The nearest scrollable ancestor, whether or not it is currently clipping.
+     Its scrollHeight is how the WORSE row below proves the worst-case driver
+     really made the container taller. */
+  let scroller = null;
+  for (let n = b.parentElement; n && n !== document.body && !scroller; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if (/auto|scroll/.test(cs.overflowY)) scroller = { sel: name(n), scrollH: n.scrollHeight, clientH: n.clientHeight };
+  }
   return {
     missing: false, w: Math.round(r.width), h: Math.round(r.height),
     cx: Math.round(cx), cy: Math.round(cy), vh: innerHeight, vw: innerWidth,
     onScreen: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
     hit: name(hit), reachable: !!hit && (hit === b || b.contains(hit)),
-    disabled: !!b.disabled, clipper,
+    disabled: !!b.disabled, clipper, scroller,
   };
 }, sel);
+
+/* THE SECOND MEASURE, AND THE ONE THAT IS ASSERTED.
+ *
+ * The first run of the extended file forced this distinction and I am not going to
+ * paper over it. `[data-destroy]` measured unreachable in its DEFAULT state, which
+ * by this file's own control rule would mean the measurement is wrong. It was not
+ * wrong; the rule was too crude. In the default Stable the action row is simply
+ * BELOW THE FOLD of #stableBody, and scrolling a sheet is something every player
+ * does. That is not the bug.
+ *
+ * The bug is when ordinary scrolling does not help:
+ *   - the control sits in a NESTED scroller (`.breed-bar.sticky` is
+ *     `max-height:58vh; overflow-y:auto` and pinned `bottom:0`, so dragging the
+ *     sheet moves nothing and the second scroll surface is invisible), or
+ *   - something is drawn OVER it, so the tap lands on the overlay.
+ *
+ * So: scroll the sheet's OWN body as far as it goes toward the action, the one
+ * scroll surface a player knows about, and hit-test there. The no-scroll reading
+ * is still taken and still printed, because "you have to scroll to your own
+ * confirm button" is worth seeing, but it is not what fails the run.
+ */
+const reachAfterBodyScroll = async sel => {
+  await page.evaluate(s => {
+    const b = document.querySelector(s);
+    if (!b) return;
+    /* the OUTERMOST scroller inside the sheet, i.e. the sheet body: the innermost
+       one is the nested panel this check exists to refuse to use */
+    let outer = null;
+    for (let n = b.parentElement; n && n !== document.body; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (/auto|scroll/.test(cs.overflowY) && n.scrollHeight > n.clientHeight) outer = n;
+    }
+    if (!outer) return;
+    const orect = outer.getBoundingClientRect(), brect = b.getBoundingClientRect();
+    const delta = (brect.top + brect.height / 2) - (orect.top + orect.height / 2);
+    outer.scrollTop = Math.max(0, Math.min(outer.scrollHeight - outer.clientHeight, outer.scrollTop + delta));
+  }, sel);
+  await sleep(400);
+  return reach(sel);
+};
 
 /* Close the top sheet the way a thumb does. NEVER a bare history.back(): with no
    sheet open that walks the BROWSER back off the app, and the next page.evaluate
@@ -99,12 +172,12 @@ if (process.env.FIXTURE) {
   await setWidth(page, VW, VH);
   await page.goto(srv.url + 'tests/fixtures/sheet-action-overflow.html', { waitUntil: 'networkidle2' });
   await sleep(400);
-  const grown = await reach('#fixtureAction');
-  ok('FIXTURE the guard goes RED when grown content pushes the action out of its own clip',
+  const grown = await reachAfterBodyScroll('#fixtureAction');
+  ok('FIXTURE the guard goes RED when grown content pushes the action into a NESTED clip that scrolling the sheet cannot reach',
     !grown.reachable, JSON.stringify(grown));
   await page.evaluate(() => document.body.classList.add('collapsed'));
   await sleep(300);
-  const small = await reach('#fixtureAction');
+  const small = await reachAfterBodyScroll('#fixtureAction');
   ok('FIXTURE the guard goes GREEN on the same page with the content collapsed (so it is not just always red)',
     small.reachable, JSON.stringify(small));
   await browser.close(); srv.close?.();
@@ -119,62 +192,213 @@ if (process.env.FIXTURE) {
    (see godmode.settle), so a red row with no green companion could be the rig
    rather than the app. Default green + worst red is a content-state bug and
    nothing else. `drive` must report `reached`; a driver that could not build its
-   state is a FAILURE, never a pass. */
+   state is a FAILURE, never a pass.
+
+   PRIORITISED BY DAMAGE, not by how easy the sheet is to open. The complete list
+   of destructive-or-paying actions in this app is not a guess: every one of them
+   is wired through `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm('
+   js/*.js` enumerates them exactly. That inventory is printed in the COVERAGE
+   block at the bottom, each line either covered here or given a reason. */
+
+/* Open the Kitchen and step through the v304 COOK door. `#buyPot` and
+   `#forageBtn` are BEHIND that door; a driver that stops at the landing reads
+   null and dies, which is exactly what two-tap-audit has been doing since v304. */
+const openCook = async () => {
+  await closeAll();
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1500);
+  await page.evaluate(() => document.querySelector('.dw')?.remove());
+  await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
+  await sleep(1700);
+  const door = await page.evaluate(() => { const d = document.getElementById('doorCook'); if (!d) return false; d.click(); return true; });
+  await sleep(1400);
+  await settle(page);
+  return door;
+};
+
+/* Stock or strip everything the Kitchen's COOK body renders. The body grows with
+   the pantry, the potion satchel and the ingredient grid, and #forageBtn is the
+   LAST thing in it, which is the shape this whole file is about. */
+const stockKitchen = worst => page.evaluate(async w => {
+  const { kvSet } = await import('./js/db.js');
+  const { POTIONS, RECIPES } = await import('./js/cooking.js');
+  const { INGREDIENT_IDS } = await import('./js/cooking.js');
+  await kvSet('potions', w ? Object.fromEntries(POTIONS.map(p => [p.id, 3])) : {});
+  await kvSet('ingredients', w ? Object.fromEntries((INGREDIENT_IDS || []).map(i => [i, 9])) : {});
+  await kvSet('pantry', w
+    ? (RECIPES || []).slice(0, 8).map(r => ({ recipeId: r.id, name: r.name, icon: r.icon, cookedAt: Date.now() }))
+    : []);
+  return { potions: w, recipes: (RECIPES || []).length, ings: (INGREDIENT_IDS || []).length };
+}, worst);
+
+/* The Stable, driven to the state a pair is flagged in. Shared by the two actions
+   that live in that sheet, because they are clipped by the same container. */
+const openStablePair = async (mode, { pair = true } = {}) => {
+  await closeAll();
+  /* Grant three pets once, then set every instance's shiny/level for the mode.
+     Written straight to the `petInst` rows the game reads, because WHICH of the
+     pair becomes the spare depends on flag order and rarity sort, and I refuse to
+     encode that: making them all precious (or all plain) removes the question.
+     Dust and cooldown are satisfied so the button is ENABLED in both modes, i.e.
+     a real tap here really would destroy a pet. */
+  await page.evaluate(async worst => {
+    const l = await import('./js/loot.js');
+    const { kvSet } = await import('./js/db.js');
+    /* top up to three, do not assume zero: the demo profile can already own a
+       pet, and "grant only if empty" left a one-card ring the coverflow cannot
+       make a pair from (picked 0, which this driver correctly called a failure
+       rather than a pass). */
+    for (const sp of ['C1', 'C4', 'CX']) if ((await l.petInstances()).length < 3) await l.addPetInstance(sp, {});
+    const list = await l.petInstances();
+    await kvSet('petInst', list.map(x => ({ ...x, shiny: worst, lineage: 0 })));
+    await kvSet('petLvlSteps', Object.fromEntries(list.map(x => [x.iid, worst ? 500000 : 0])));
+    await l.boneDustAdd(5000);
+  }, mode === 'worst');
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1500);
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await sleep(2200);
+  /* flag one, spin the ring, flag the next: the coverflow shows exactly one BREED
+     button at a time, so clicking "two buttons" would test nothing. (Same recipe
+     as tests/t2-audit.mjs, and the same reason.) */
+  const picked = pair ? await page.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const flag = () => document.querySelector('[data-breedsel]')?.click();
+    const spin = () => {
+      const dots = [...document.querySelectorAll('.cf-dots i')];
+      const on = dots.findIndex(d => d.classList.contains('on'));
+      dots[(on + 1) % Math.max(1, dots.length)]?.click();
+    };
+    if (document.querySelectorAll('.cf-card').length < 2) return 0;
+    flag(); await wait(700);
+    spin(); await wait(800);
+    flag(); await wait(1100);
+    return document.querySelectorAll('.cf-card.picked').length;
+  }) : 0;
+  await settle(page);
+  const warn = await page.evaluate(() => !!document.querySelector('.breed-warn'));
+  return { picked, warn };
+};
+
 const SHEETS = [
   {
     id: 'stable-breed',
     what: 'The Stable, a pair flagged for breeding',
+    risk: 'DESTRUCTIVE: destroys one of the two pets, permanently',
     states: {
       default: 'two plain spares flagged: no warning, the panel at its shortest',
       worst: 'the "you are about to destroy a SHINY" warning showing, the panel at its tallest',
     },
     action: '#doBreed',
     async drive(mode) {
+      const r = await openStablePair(mode);
+      return { ...r, reached: r.picked === 2 && r.warn === (mode === 'worst') };
+    },
+  },
+  {
+    id: 'stable-destroy',
+    what: 'The Stable, DESTROY on the focused pet',
+    risk: 'DESTRUCTIVE: melts a pet down for dust, permanently',
+    states: {
+      default: 'nothing flagged: the action row sits under the ring with the whole sheet to itself',
+      worst: 'a precious pair flagged, so the sticky breed panel is at full height under the same action row',
+    },
+    /* DESTROY shares `.cf-acts` with BREED, and `.breed-bar.sticky` is the thing
+       that once "sat over .cf-acts by 15px" (app.css:6425). So the tall panel is
+       the worst case for BOTH buttons in that row, and this one melts a pet. */
+    action: '[data-destroy]',
+    async drive(mode) {
+      const r = await openStablePair(mode, { pair: mode === 'worst' });
+      const cards = await page.evaluate(() => document.querySelectorAll('.cf-card').length);
+      return { ...r, cards, reached: cards >= 2 && r.warn === (mode === 'worst') && r.picked === (mode === 'worst' ? 2 : 0) };
+    },
+  },
+  {
+    id: 'kitchen-forage',
+    what: 'The Kitchen behind the COOK door, Forage',
+    risk: 'PAYS: 45 coins on the confirm',
+    states: {
+      default: 'nothing stocked: no pantry rows, no potion satchel, empty ingredient grid',
+      worst: 'eight dishes banked, every potion held and every ingredient stocked',
+    },
+    /* #forageBtn is the LAST section of #kitchenBody and everything above it
+       grows with what the player owns. Textbook shape for this file. */
+    action: '#forageBtn',
+    async drive(mode) {
+      const stock = await stockKitchen(mode === 'worst');
+      const door = await openCook();
+      const seen = await page.evaluate(() => ({
+        forage: !!document.getElementById('forageBtn'),
+        pantryRows: document.querySelectorAll('#kitchenBody [data-eat]').length,
+        satchel: !!document.querySelector('#kitchenBody .ing-name'),
+      }));
+      return { door, stock, ...seen,
+        reached: door && seen.forage && (mode === 'worst' ? seen.pantryRows > 0 : seen.pantryRows === 0) };
+    },
+  },
+  {
+    id: 'kitchen-buypot',
+    what: 'The Kitchen behind the COOK door, Extra pot',
+    risk: 'PAYS: 1,000 coins on the confirm',
+    states: {
+      default: 'nothing stocked, so the body is at its shortest',
+      worst: 'eight dishes banked, every potion held and every ingredient stocked',
+    },
+    action: '#buyPot',
+    async drive(mode) {
+      await page.evaluate(async () => { await (await import('./js/loot.js')).coinsAdd(20000); });
+      const stock = await stockKitchen(mode === 'worst');
+      const door = await openCook();
+      const seen = await page.evaluate(() => ({
+        buyPot: !!document.getElementById('buyPot'),
+        pantryRows: document.querySelectorAll('#kitchenBody [data-eat]').length,
+      }));
+      return { door, stock, ...seen,
+        reached: door && seen.buyPot && (mode === 'worst' ? seen.pantryRows > 0 : seen.pantryRows === 0) };
+    },
+  },
+  {
+    id: 'garden-buybed',
+    what: 'The Bone Garden, dig a new bed',
+    risk: 'PAYS: coins on the confirm',
+    states: {
+      default: 'beds empty, nothing growing',
+      worst: 'every bed planted and the compost heap full, so the sheet carries its longest body',
+    },
+    action: '#buyBed',
+    async drive(mode) {
       await closeAll();
-      /* Grant three pets once, then set every instance's shiny/level for the mode.
-         Written straight to the `petInst` rows the game reads, because WHICH of
-         the pair becomes the spare depends on flag order and rarity sort, and I
-         refuse to encode that: making them all precious (or all plain) removes the
-         question. Dust and cooldown are satisfied so the button is ENABLED in both
-         modes, i.e. a real tap here really would destroy a pet. */
-      await page.evaluate(async worst => {
-        const l = await import('./js/loot.js');
-        const { kvGet, kvSet } = await import('./js/db.js');
-        /* top up to three, do not assume zero: the demo profile can already own a
-           pet, and "grant only if empty" left a one-card ring the coverflow cannot
-           make a pair from (picked 0, which this driver correctly called a
-           failure rather than a pass). */
-        for (const sp of ['C1', 'C4', 'CX']) if ((await l.petInstances()).length < 3) await l.addPetInstance(sp, {});
-        const list = await l.petInstances();
-        await kvSet('petInst', list.map(x => ({ ...x, shiny: worst, lineage: 0 })));
-        await kvSet('petLvlSteps', Object.fromEntries(list.map(x => [x.iid, worst ? 500000 : 0])));
-        await l.boneDustAdd(5000);
-        await kvGet('petInst');
+      /* Through garden.js's own API, not by clicking the plant sheet: plantSeed is
+         the function the UI calls, so the state is the real one and the driver
+         does not depend on a second sheet's markup. */
+      const setup = await page.evaluate(async w => {
+        const g = await import('./js/garden.js');
+        const { kvSet } = await import('./js/db.js');
+        await kvSet('garden', { seeds: {}, plots: [], plotsOwned: g.PLOTS_FREE, composts: { date: '', used: 0 } });
+        if (!w) return { planted: 0 };
+        let planted = 0;
+        for (const id of g.SEED_IDS.slice(0, 3)) {
+          await g.grantSeed(id, 2);
+          const r = await g.plantSeed(id);
+          if (r && r.ok) planted++;
+        }
+        return { planted, seeds: await g.seeds() };
       }, mode === 'worst');
+      await page.evaluate(async () => { await (await import('./js/loot.js')).coinsAdd(20000); });
       await page.evaluate(() => { location.hash = '#/today'; });
       await sleep(1500);
-      await page.evaluate(() => document.getElementById('stableBtn')?.click());
-      await sleep(2200);
-      /* flag one, spin the ring, flag the next: the coverflow shows exactly one
-         BREED button at a time, so clicking "two buttons" would test nothing.
-         (Same recipe as tests/t2-audit.mjs, and the same reason.) */
-      const picked = await page.evaluate(async () => {
-        const wait = ms => new Promise(r => setTimeout(r, ms));
-        const flag = () => document.querySelector('[data-breedsel]')?.click();
-        const spin = () => {
-          const dots = [...document.querySelectorAll('.cf-dots i')];
-          const on = dots.findIndex(d => d.classList.contains('on'));
-          dots[(on + 1) % Math.max(1, dots.length)]?.click();
-        };
-        if (document.querySelectorAll('.cf-card').length < 2) return 0;
-        flag(); await wait(700);
-        spin(); await wait(800);
-        flag(); await wait(1100);
-        return document.querySelectorAll('.cf-card.picked').length;
-      });
+      await page.evaluate(() => document.querySelector('.dw')?.remove());
+      await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
+      await sleep(1700);
+      const door = await page.evaluate(() => { const d = document.getElementById('doorGrow'); if (!d) return false; d.click(); return true; });
+      await sleep(1800);
       await settle(page);
-      const warn = await page.evaluate(() => !!document.querySelector('.breed-warn'));
-      return { picked, warn, reached: picked === 2 && warn === (mode === 'worst') };
+      const seen = await page.evaluate(() => ({
+        buyBed: !!document.getElementById('buyBed'),
+        growing: document.querySelectorAll('.t3-bed.growing, .t3-bed.thirsty').length,
+        empty: document.querySelectorAll('.t3-bed.empty').length,
+      }));
+      return { door, setup, ...seen, reached: door && seen.buyBed && (mode === 'worst' ? seen.growing > 0 : seen.growing === 0) };
     },
   },
   {
@@ -210,7 +434,10 @@ const SHEETS = [
   },
 ];
 
+const seen = {};   // id -> { default: reachResult, worst: reachResult }
+
 for (const s of SHEETS) {
+  seen[s.id] = {};
   for (const mode of ['default', 'worst']) {
     await setWidth(page, VW, VH);
     await sleep(400);
@@ -225,15 +452,20 @@ for (const s of SHEETS) {
       !!setup.reached, JSON.stringify(setup));
     if (!setup.reached) continue;
 
-    const r = await reach(s.action);
-    ok(`REACH ${tag}: the primary action ${s.action} exists`, !r.missing, JSON.stringify(r));
+    const asShipped = await reach(s.action);
+    const r = asShipped.missing ? asShipped : await reachAfterBodyScroll(s.action);
+    seen[s.id][mode] = { ...r, asShipped };
+    ok(`REACH ${tag}: the primary action ${s.action} exists`, !r.missing, JSON.stringify(asShipped));
     if (!r.missing) {
-      /* ONE assertion, the hit test. `onScreen` is REPORTED, never asserted: a
-         healthy #endTurn measures bottom 667.5 on a 667 screen, so a
-         rect-in-viewport rule goes red on shipped, working code, and this project
-         has already learned what a guard that is red on healthy code is worth. */
-      ok(`REACH ${tag}: a tap at the centre of ${s.action} lands ON it${mode === 'default' ? ' (CONTROL: red here means the measurement is wrong, not the app)' : ''}`,
-        r.reachable, `hit=${r.hit} at ${r.cx},${r.cy} of ${r.vw}x${r.vh}  onScreen=${r.onScreen}${r.clipper ? `  CLIPPED BY ${r.clipper}` : ''}`);
+      /* ONE assertion, the hit test after an ordinary sheet scroll. `onScreen` is
+         REPORTED, never asserted: a healthy #endTurn measures bottom 667.5 on a
+         667 screen, so a rect-in-viewport rule goes red on shipped, working code,
+         and this project has already learned what that is worth. The unscrolled
+         reading rides along in the detail so the "you had to scroll to your own
+         confirm button" cases stay visible without failing the run. */
+      ok(`REACH ${tag}: a tap at the centre of ${s.action} lands ON it after scrolling the SHEET (not a nested panel)${mode === 'default' ? ' (CONTROL: red here means the measurement is wrong, not the app)' : ''}`,
+        r.reachable, `hit=${r.hit} at ${r.cx},${r.cy} of ${r.vw}x${r.vh}  onScreen=${r.onScreen}${r.clipper ? `  CLIPPED BY ${r.clipper}` : ''}`
+          + `  |  before any scroll: hit=${asShipped.hit} at ${asShipped.cx},${asShipped.cy} reachable=${asShipped.reachable}`);
     }
 
     if (s.also && mode === 'worst') {
@@ -252,18 +484,54 @@ for (const s of SHEETS) {
       }
     }
   }
+
+  /* ---- THE WORST CASE HAS TO ACTUALLY BE WORSE ----
+     A driver that claims a worst-case state but leaves the clipping container the
+     same height has graded the DEFAULT twice and would report a clean sheet on a
+     sheet nobody stressed. That is the exact failure this whole file exists to
+     stop, so it is an assertion, not a note: the container that scrolls the
+     primary action must be measurably taller in `worst` than in `default`. */
+  const d = seen[s.id].default, w = seen[s.id].worst;
+  if (d && w && !d.missing && !w.missing) {
+    const dh = d.scroller?.scrollH ?? 0, wh = w.scroller?.scrollH ?? 0;
+    ok(`WORSE ${s.id}: the worst state really grows the container that scrolls ${s.action} (UNPROVEN if it does not)`,
+      !!d.scroller && !!w.scroller && wh > dh,
+      d.scroller ? `${d.scroller.sel} scrollHeight ${dh} -> ${wh} (clientHeight ${d.scroller.clientH} -> ${w.scroller.clientH})`
+        : 'no scrollable ancestor found, so there is no clip to overflow');
+  } else {
+    ok(`WORSE ${s.id}: UNPROVEN, both states were needed and at least one was never measured`, false,
+      `default=${d ? (d.missing ? 'action missing' : 'ok') : 'not built'} worst=${w ? (w.missing ? 'action missing' : 'ok') : 'not built'}`);
+  }
 }
 
 await closeAll();
 await browser.close(); srv.close?.();
 
-/* ---- COVERAGE, stated so an unlisted sheet cannot read as a passing sheet ---- */
+/* ---- COVERAGE, stated so an unlisted sheet cannot read as a passing sheet ----
+   The risk surface is not guessed. Every destructive-or-paying control in this app
+   goes through `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm(' js/*.js`
+   IS the list, and every line of it appears below with a verdict. */
 console.log(`\nCOVERAGE at ${VW}x${VH}`);
-for (const s of SHEETS) console.log(`  covered      ${s.id.padEnd(20)} ${s.what} — worst case: ${s.states.worst}`);
-for (const [id, why] of [
-  ['paddock-*', 'js/paddock.js and js/paddock-cards.js are off limits and five unmerged branches are rewriting them; driving them here would encode markup that is about to change'],
-  ['the other ~49 openSheet call sites in js/app.js', 'NOT COVERED. Most have no bottom-anchored primary action inside a clipping container; none has been graded here, so none of them is proven by this file'],
-]) console.log(`  NOT covered  ${String(id).padEnd(20)} ${why}`);
+for (const s of SHEETS) {
+  const d = seen[s.id]?.default, w = seen[s.id]?.worst;
+  const state = (d && w && !d.missing && !w.missing) ? 'covered   ' : 'UNPROVEN  ';
+  console.log(`  ${state}  ${s.id.padEnd(18)} ${s.risk || ''}\n${' '.repeat(14)}${s.what} — worst: ${s.states.worst}`);
+}
+console.log('\n  NOT COVERED, and therefore NOT PROVEN by this file:');
+for (const [what, why] of [
+  ['[data-buyweapon] / [data-buy] / [data-dustbuy]',
+    'NOT IN THIS CLASS. The shop renders into #screen as a main tab, so its scroller is the page. A button below the page fold is normal scrolling, not a control clipped out of its own container.'],
+  ['[data-look-apply] (wardrobe, spends dust)',
+    'NOT IN THIS CLASS for the same reason: #chTabs wardrobe is a main-tab render, not a .sheet.'],
+  ['#vaultAdoptBtn ("Replace this save?")',
+    'THE HIGHEST-STAKES TAP IN THE APP AND IT IS UNPROVEN. It needs a readable cloud vault holding a DIFFERENT save to render at all, which this harness cannot fabricate yet. Worth a driver next.'],
+  ['[data-routinedel] (removes a routine)',
+    'UNPROVEN. Needs seeded routines; not driven here.'],
+  ['paddock-*',
+    'OFF LIMITS. js/paddock.js and js/paddock-cards.js are owned elsewhere and five unmerged branches are rewriting them.'],
+  ['the other ~45 openSheet call sites in js/app.js',
+    'UNPROVEN. Not graded here, in any state. An unlisted sheet is not a clean sheet.'],
+]) console.log(`    - ${what}\n        ${why}`);
 
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nevery graded primary action is tappable where it is drawn');
 process.exit(fails.length ? 1 : 0);
