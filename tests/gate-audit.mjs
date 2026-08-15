@@ -16,6 +16,16 @@
  * PROVE-RED (confirmed 2026-08-07): change app.js:2066 back to `if (!spent)` and
  * this exits 1 naming spendPitFight.
  *
+ * PROVE-RED (confirmed 2026-08-15, the audit's OWN blind spot): rewrite
+ * js/app.js:13632 to `const { ok } = await spendPitFight();` and drop the guard.
+ * The version before this commit exits 0 "clean: 4 call site(s)" on that exploit,
+ * because it counted the site before analysing it and its matcher could not see a
+ * `{`. This version exits 1 naming spendPitFight. The same refactor WITH `if (!ok)`
+ * still exits 0, so it is not simply failing on everything. Measured at the same
+ * time: on shipped main the old matcher understood 3 of the 4 sites, and the one
+ * it understood NOTHING about was js/app.js:14922, the spire claim, which is the
+ * exact exploit this file exists for.
+ *
  * Usage: node tests/gate-audit.mjs
  */
 import { readFileSync, readdirSync } from 'node:fs';
@@ -50,7 +60,9 @@ for (const fn of OK_HELPERS) {
 }
 
 // 1. every call site must reach for .ok
-let sites = 0;
+/* `sites` is what was SEEN, `analysed` is what this audit actually understood.
+   Only the second one is evidence (see the empty-sample guard at the bottom). */
+let sites = 0, analysed = 0;
 for (const [file, text] of src) {
   const lines = text.split('\n');
   lines.forEach((line, i) => {
@@ -58,32 +70,70 @@ for (const [file, text] of src) {
       if (!line.includes(`${fn}(`)) continue;
       if (line.includes(`function ${fn}`)) continue;   // the definition itself
       sites++;
-      const m = line.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+/);
-      if (m) {
-        // assigned: the guard is on a following line, so look ahead a little
-        const name = m[1];
-        const near = lines.slice(i, i + 4).join('\n');
-        const bare = new RegExp(`if\\s*\\(\\s*!\\s*${name}\\s*\\)`);
-        const dotOk = new RegExp(`${name}\\s*(?:\\?\\.)?\\.ok`);
-        if (bare.test(near) && !dotOk.test(near)) {
-          problems.push(`${file}:${i + 1} guards \`${name}\` (from ${fn}) for truthiness; an {ok:false} object is truthy. Use \`!${name}.ok\`.`);
-        } else if (!dotOk.test(near)) {
-          problems.push(`${file}:${i + 1} takes ${fn}() into \`${name}\` and never reads \`${name}.ok\` nearby.`);
+      const where = `${file}:${i + 1}`;
+      /* Look-ahead window MEASURED, not guessed: the spire claim declares its
+         result at js/app.js:14922 and reads `r.ok` at :14933, eleven lines down,
+         so the old 4-line window would have called that site a failure the
+         moment the matcher grew wide enough to see it. */
+      const near = lines.slice(i, i + 14).join('\n');
+      const after = lines.slice(i + 1, i + 14).join('\n');
+      /* NOT `=\s*await`: that character class has no `{` in it, so a refactor to
+         `const { ok } = await spendPitFight()` fell out of BOTH branches below
+         and was analysed by neither, while still counting as a site. */
+      const decl = line.match(/(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=[^=]/);
+      if (decl && /\bawait\b/.test(line)) {
+        analysed++;
+        const target = decl[1];
+        if (target.startsWith('{')) {
+          // Destructured: the BINDING is the answer, so follow the binding.
+          const key = target.match(/\bok\b\s*(?::\s*([A-Za-z_$][\w$]*))?/);
+          if (!key) {
+            problems.push(`${where} destructures ${fn}() without taking \`ok\`; the answer is thrown away.`);
+            continue;
+          }
+          const name = key[1] || 'ok';
+          /* "consulted" is the same idiom as the NO-OP guard in
+             tests/unit.test.js: the name has to appear in a CONDITION, because
+             binding it and never testing it is exactly the shipped exploit. */
+          if (!new RegExp(`\\b${name}\\s*(?:&&|\\|\\||\\)|\\?)`).test(after)) {
+            problems.push(`${where} destructures \`${name}\` out of ${fn}() and never tests it.`);
+          }
+          continue;
         }
-      } else if (/if\s*\(\s*!?\s*await\s/.test(line) && !/\.ok/.test(line)) {
-        problems.push(`${file}:${i + 1} awaits ${fn}() straight into a condition without \`.ok\`.`);
+        const bare = new RegExp(`if\\s*\\(\\s*!\\s*${target}\\s*\\)`);
+        const dotOk = new RegExp(`${target}\\s*(?:\\?\\.)?\\.ok`);
+        if (bare.test(near) && !dotOk.test(near)) {
+          problems.push(`${where} guards \`${target}\` (from ${fn}) for truthiness; an {ok:false} object is truthy. Use \`!${target}.ok\`.`);
+        } else if (!dotOk.test(near)) {
+          problems.push(`${where} takes ${fn}() into \`${target}\` and never reads \`${target}.ok\` nearby.`);
+        }
+        continue;
       }
+      if (/if\s*\(\s*!?\s*await\s/.test(line)) {
+        analysed++;
+        if (!/\.ok/.test(line)) problems.push(`${where} awaits ${fn}() straight into a condition without \`.ok\`.`);
+        continue;
+      }
+      /* UNKNOWN SHAPES FAIL, THEY DO NOT FALL THROUGH. A call site this audit
+         cannot classify has been checked by nothing, and "checked by nothing" is
+         indistinguishable from "safe" only to an audit that stays quiet about
+         it. Widen a matcher above, do not delete this. */
+      problems.push(`${where} calls ${fn}() in a shape this audit cannot classify, so NOTHING checked it: ${line.trim().slice(0, 120)}`);
     }
   });
 }
 
-// An empty sample set is a FAILURE, never a pass: zero call sites means the
-// pattern moved and this audit is checking nothing.
-if (!sites) problems.push('no call sites found for any OK_HELPERS; this audit checked nothing');
+/* An empty sample set is a FAILURE, never a pass, and it has to count what was
+   ANALYSED rather than what was seen. The old version incremented `sites` before
+   any analysis and then asked `if (!sites)`, so a destructured refactor took the
+   understood count to zero while the seen count stayed healthy: the guard read
+   "clean" having examined nothing. Count the analysis, not the string
+   (tally/CLAUDE.md rule 3, and tests/unit.test.js:1869 for the same fix). */
+if (!analysed) problems.push(`no OK_HELPERS call site was ANALYSED (${sites} seen, 0 understood); this audit checked nothing`);
 
 if (problems.length) {
-  console.log(`gate-audit: ${problems.length} problem(s) across ${sites} call site(s)\n`);
+  console.log(`gate-audit: ${problems.length} problem(s) across ${analysed}/${sites} analysed call site(s)\n`);
   for (const p of problems) console.log('  FAIL  ' + p);
   process.exit(1);
 }
-console.log(`gate-audit clean: ${sites} call site(s), ${OK_HELPERS.length} helpers verified`);
+console.log(`gate-audit clean: ${analysed}/${sites} call site(s) analysed, ${OK_HELPERS.length} helpers verified`);
