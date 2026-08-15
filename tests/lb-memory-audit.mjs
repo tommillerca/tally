@@ -46,15 +46,25 @@ await seed(page, { level: 12 });
 /* The board only exists for an online player: under webdriver `social` is off,
    the Crew tab renders "Go online", and #crewLeaderboard is never emitted. Without
    this seam the whole file measures nothing. */
-await page.evaluate(() => {
+/* EIGHT LAYERS, NOT TWO. The budget below is 90 MB and it used to be asserted
+   against a fixture wearing a body and a skull. Real players wear body, skull,
+   hat, eyes, top, right hand, pants and footwear, and that 4x changes the
+   verdict: gwart re-measured this same board at 137.5 MB on open with eight
+   layers, so the BUDGET row would have gone red on a working implementation
+   while reading green on the thin fixture in front of it.
+   The number did NOT move to make it pass. The fixture was corrected and the
+   thumbnail sheet (js/app.js bhThumb) brought the real figure down under it:
+   22.5 MB at the end of the scroll, measured, on the same 100 rows. */
+const FIT8 = { B: 'B0-1', SK: 'SK0-1', H: 'H1', E: 'E1', T: 'T1', IR: 'IR1', P: 'P1', FW: 'FW1' };
+await page.evaluate(fit => {
   window.__testMe = { playerId: 'me', name: 'H', friendCode: 'BONE-1', handle: 'h' };
   window.__testFriends = { friends: [], incoming: [], outgoing: [] };
   window.__testLb = Array.from({ length: 100 }, (_, i) => ({
     playerId: 'p' + i, name: 'Bonehead ' + i, level: 60 - Math.floor(i / 2), badges: 0,
-    outfit: { B: 'B0-1', SK: 'SK0-1' }, pet: null, friendCode: 'BONE-' + i,
+    outfit: fit, pet: null, friendCode: 'BONE-' + i,
     lastSeen: Date.now(), joinedAt: Date.now(), spires: 0, spireDays: 0, you: false }));
   location.hash = '#/friends';
-});
+}, FIT8);
 await sleep(1800);
 await page.evaluate(() => document.getElementById('crewLeaderboard')?.click());
 await sleep(3000);

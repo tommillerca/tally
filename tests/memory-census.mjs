@@ -1,0 +1,356 @@
+/* THE MEMORY CENSUS: every screen that mounts art in a loop, at EIGHT layers,
+ * measured at the END OF A SCROLL.
+ *
+ * WHY THIS FILE EXISTS. tests/lb-memory-audit.mjs put a 90 MB budget on ONE
+ * screen against a fixture wearing TWO cosmetic layers. Real players wear eight.
+ * That single-screen, thin-fixture budget is exactly how six more screens with
+ * the identical defect stayed invisible while we fixed the seventh
+ * (gwart/MEMORY-CENSUS.md, 2026-08-13):
+ *
+ *     Crew tab, 120 friends   984 imgs   1537.5 MB   (no scrolling needed)
+ *     Collection / Looks      371 imgs     579.7 MB
+ *     Backpack melt bench     129 imgs     201.6 MB
+ *     Crew tab, 8 friends     128 imgs     200.0 MB   (over the line AT OPEN)
+ *     Today                    91 imgs     129.1 MB
+ *
+ * iOS kills the WKWebView renderer on memory and leaves NO javascript error:
+ * the tab blanks and the app returns to the last route. Nothing throws, so
+ * every check we owned said these screens were fine.
+ *
+ * THE TWO RULES THIS FILE IS BUILT ON (tally/CLAUDE.md 11 and 12):
+ *   - A resource that can EXHAUST needs a CEILING, never a trend. The row this
+ *     replaces asserted the mounted-image count GREW on scroll, so it passed
+ *     BECAUSE the app was broken and would have gone red on the fix.
+ *   - Measure in the state the player is complaining about. Every number here
+ *     is the PEAK across open plus a full scroll of every scrollable container,
+ *     twice, not the number at open.
+ *
+ * THE METRIC. Decoded RGBA actually resident in the document: every <img> with
+ * naturalWidth > 0 counted as naturalWidth * naturalHeight * 4, plus every
+ * <canvas> backing store as width * height * 4. That is what the renderer pays.
+ *
+ * EVERY NUMBER HERE IS A FLOOR, NOT A CEILING. querySelectorAll('img') cannot
+ * see a CSS background-image and cannot see an off-DOM `new Image()`, and both
+ * exist in this app (Today carries 5 of the former; hydratePackArt holds 135 of
+ * the latter at once on the Wardrobe's hat slot). A screen passing here is
+ * "not caught by this instrument", not "proven clean".
+ *
+ * NOT COVERED, and none of it may be read as safe:
+ *   - Boneyard map. Headless Chrome has no working WebGL, so MapLibre never
+ *     starts and renderBoneyard's per-marker art never mounts. UNKNOWN, and it
+ *     is the most likely remaining offender. Needs a device.
+ *   - Stable / paddock. Another lane's unmerged work; deliberately not driven.
+ *
+ * AN EMPTY SCREEN IS A FAILURE, NEVER A PASS (rule 3). Every row asserts the
+ * screen rendered (markup length + the art the screen is about) before it
+ * grades the budget, because "mounts nothing" satisfies a budget on its own.
+ *
+ * PROVE-RED: revert any one of the three fixes it guards and the matching row
+ * goes red --
+ *   1A  drop `thumb: true` from crewCardHtml / lbAvatar / the Collection cell
+ *       / the melt bench and CREW, LOOKS and BACKPACK all blow their ceiling.
+ *   1B  make applyFan mount every card instead of only the seated ones (or
+ *       never clear an `off` card) and CREW blows its ceiling on a 30-friend
+ *       crew.
+ *   1C  build teaserWallHtml eagerly in cosmeticTeaserBannerHtml instead of on
+ *       first open and TODAY blows its ceiling.
+ *
+ * Usage: node tests/memory-census.mjs [url]      (self-serves this checkout)
+ *        DIAG=1 node tests/memory-census.mjs     (per-screen breakdown)
+ */
+
+import { boot, seed, sleep, serveTree, retryOnDetach } from './godmode.js';
+
+const CEILING_MB = 90;   // the same line lb-memory-audit draws, now on every screen
+
+/* EIGHT LAYERS, because that is what a real player wears: body, skull, hat,
+   eyes, top, right hand, pants, footwear. The two-layer fixture this suite used
+   before is worth 4x and it changes verdicts. */
+const FIT8 = { B: 'B0-1', SK: 'SK0-1', H: 'H1', E: 'E1', T: 'T1', IR: 'IR1', P: 'P1', FW: 'FW1' };
+
+const base = process.argv[2] || process.env.URL;
+const srv = base ? null : await serveTree(process.cwd());
+/* A THROWN AUDIT MUST NOT STRAND A BROWSER. The harness leaks one on any run
+   that throws (16 orphaned Chromes and 176 helpers were found on this machine
+   on 2026-08-14, one alive for 15 hours). Until that lands in godmode.js, this
+   file closes its own: everything below runs inside try/finally. */
+let browser = null, page = null;
+try {
+  ({ browser, page } = await retryOnDetach(
+    () => boot(base || srv.url, { headless: process.env.HEADLESS_MODE || 'shell' }),
+    () => sleep(1500)));
+  await run();
+} finally {
+  try { await browser?.close(); } catch { /* already gone */ }
+  srv?.close?.();
+}
+
+async function run() {
+const errs = [];
+page.on('pageerror', e => errs.push(String(e).split('\n')[0]));
+const fails = [];
+const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
+
+/* ---- the instrument ----------------------------------------------------- */
+
+/* Every evaluate goes through the harness's ONE bounded detach retry. Under CPU
+   contention CDP flips a frame's execution-context id and puppeteer throws
+   "Attempted to use detached Frame" with nothing having navigated; a census that
+   drives six screens hits it often enough to matter. */
+const pe = (...a) => retryOnDetach(() => page.evaluate(...a), () => sleep(1200));
+
+const shot = () => pe(() => {
+  const imgs = [...document.querySelectorAll('img')];
+  let bytes = 0, decoded = 0;
+  for (const i of imgs) if (i.naturalWidth) { bytes += i.naturalWidth * i.naturalHeight * 4; decoded++; }
+  const cvs = [...document.querySelectorAll('canvas')];
+  for (const c of cvs) bytes += c.width * c.height * 4;
+  const scr = document.getElementById('screen');
+  const sheet = [...document.querySelectorAll('#sheets .sheet')].pop();
+  return {
+    mb: +(bytes / 1048576).toFixed(1),
+    imgs: imgs.length, decoded, canvases: cvs.length,
+    chars: (sheet ? sheet.innerHTML.length : 0) + (scr ? scr.innerHTML.length : 0),
+    // the biggest single contributors, for DIAG
+    top: Object.entries(imgs.filter(i => i.naturalWidth).reduce((a, i) => {
+      const r = i.getBoundingClientRect();
+      const k = `${i.naturalWidth}px source -> ${Math.round(r.width)}px box  (${(i.parentElement?.className || i.className || '?').toString().split(' ')[0] || '?'})`;
+      a[k] = (a[k] || 0) + 1; return a;
+    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8),
+  };
+});
+
+/* SCROLL EVERY CONTAINER TO ITS VERY END, TWICE, and keep the PEAK. The end of
+   the scroll is where the leaderboard died and where the Collection dies; open
+   is the one state nobody was complaining about. */
+async function peakOf(label) {
+  let peak = await shot();
+  const at = { open: peak.mb };
+  for (let pass = 0; pass < 2; pass++) {
+    for (const f of [0.25, 0.5, 0.75, 1, 0]) {
+      await pe(frac => {
+        const boxes = [document.scrollingElement, ...document.querySelectorAll('*')]
+          .filter(e => e && e.scrollHeight > e.clientHeight + 8);
+        for (const b of boxes) b.scrollTop = (b.scrollHeight - b.clientHeight) * frac;
+      }, f);
+      await sleep(650);
+      const s = await shot();
+      if (s.mb > peak.mb) peak = s;
+    }
+  }
+  peak.openMb = at.open;
+  if (process.env.DIAG) {
+    console.log(`\n  DIAG ${label}: open ${at.open} MB, peak ${peak.mb} MB over ${peak.imgs} imgs / ${peak.canvases} canvases`);
+    for (const [k, n] of peak.top) console.log(`       ${String(n).padStart(4)} x  ${k}`);
+    console.log('');
+  }
+  return peak;
+}
+
+/* A FRESH DOCUMENT PER SCREEN. Without this, one screen's DOM inflates the
+   next one's total: the census's first pass reported the Crew fan's 480 images
+   inside the leaderboard's number. */
+async function fresh() {
+  await retryOnDetach(() => page.goto((base || srv.url).replace(/\/?$/, '/') + '?demo', { waitUntil: 'networkidle2' }), () => sleep(1200));
+  await sleep(2200);
+  await pe(() => {
+    for (const b of document.querySelectorAll('button')) {
+      const t = (b.textContent || '').trim().toLowerCase();
+      if (/^(spin|nice|done|collect|claim|continue|ok|got it|next|skip)$/.test(t)) { b.click(); break; }
+    }
+  });
+  await sleep(900);
+}
+
+const friendFixture = n => Array.from({ length: n }, (_, i) => ({
+  playerId: 'cf' + i, name: 'Bonehead ' + i, alias: null, lastSeen: Date.now() - (i % 3) * 90000,
+  profile: { level: 40 - (i % 30), levelName: 'Bonehead', badges: i % 9, gearCount: i % 12,
+    outfit: { ...FIT8, BG: 'BG1' }, pet: null },
+}));
+
+/* ---- the account: a completionist hoarder, which is the worst case --------
+   364 cosmetics owned and 120 gear pieces is the account gwart measured. The
+   Collection and the melt bench are loops over exactly these two numbers. */
+await seed(page, { level: 40, coins: 99999, dust: 99999 });
+const account = await pe(async () => {
+  const loot = await import('./js/loot.js');
+  const { GEAR_ITEMS } = await import('./js/gear.js');
+  const { BH_ITEMS } = await import('./data/boneheadz.js');
+  let looks = 0, gear = 0;
+  for (const i of BH_ITEMS) { try { await loot.grantCosmetic(i.id, 'census'); looks++; } catch { /* not grantable */ } }
+  for (const g of GEAR_ITEMS.slice(0, 120)) { try { await loot.grantGear(g.id, 'census'); gear++; } catch { /* not grantable */ } }
+  return { looks, gear };
+});
+console.log(`account seeded: ${account.looks} cosmetics granted, ${account.gear} gear pieces\n`);
+ok('ACCOUNT the fixture really is a hoarder (an empty account measures nothing)',
+  account.looks > 300 && account.gear > 100, `${account.looks} cosmetics, ${account.gear} gear`);
+
+/* ---- the screens --------------------------------------------------------- */
+
+const results = {};
+
+async function screen(name, drive, { art, minChars = 400 } = {}) {
+  await fresh();
+  await drive();
+  const p = await peakOf(name);
+  results[name] = p;
+  const rendered = p.chars > minChars;
+  const hasArt = art == null ? true : await pe(sel => document.querySelectorAll(sel).length, art);
+  ok(`RENDERED ${name} actually drew something (an empty sample is a FAILURE)`,
+    rendered && !!hasArt, `${p.chars} chars of markup, ${hasArt} x "${art || '-'}"`);
+  ok(`CEILING  ${name} stays under ${CEILING_MB} MB at the END OF THE SCROLL`,
+    p.mb < CEILING_MB, `${p.mb} MB peak (${p.openMb} MB at open) across ${p.imgs} imgs / ${p.canvases} canvases`);
+}
+
+await screen('today', async () => {
+  await pe(() => { location.hash = '#/today'; });
+  await sleep(2000);
+}, { art: '#bhStage img' });
+
+const crewDrive = n => async () => {
+  await pe(f => {
+    window.__testMe = { playerId: 'me', name: 'Census', handle: 'c', friendCode: 'BONE-0' };
+    window.__testFriends = { friends: f, incoming: [], outgoing: [] };
+    location.hash = '#/friends';
+  }, friendFixture(n));
+  await sleep(2600);
+  /* WALK THE FAN THE WHOLE WAY ROUND. A bound that only holds at open is a
+     defer: the leaderboard's first fix looked perfect until the end of a
+     scroll. Every friend has to pass through a seat. */
+  for (let i = 0; i < n + 4; i++) {
+    await pe(() => document.getElementById('cfanNext')?.click());
+    await sleep(70);
+  }
+  await sleep(700);
+};
+await screen('crew fan, 30 friends', crewDrive(30), { art: '.cfan-card' });
+await screen('crew fan, 120 friends', crewDrive(120), { art: '.cfan-card' });
+
+/* THE CEILING, STATED AS A CEILING (rule 11). Not "the fan mounts fewer than it
+   used to" and never "more mount as you go", which is the shape of check that
+   passed BECAUSE the leaderboard was broken. Quadrupling the crew must not move
+   the mounted-image count at all: the fan seats seven cards whatever its size,
+   so the only thing that may grow is the number of empty card shells.
+   PROVE-RED: delete the `if (off) stage.textContent = ''` branch in applyFan and
+   this goes red at 120 friends (every card that has ever been seated stays
+   mounted, which is the v373 leaderboard bug exactly). */
+ok('BOUND    the crew fan mounts the same handful of stacks at 120 friends as at 30',
+  results['crew fan, 120 friends'].imgs <= results['crew fan, 30 friends'].imgs + 4,
+  `${results['crew fan, 30 friends'].imgs} imgs at 30 friends, ${results['crew fan, 120 friends'].imgs} at 120 (the census measured 984 / 1537.5 MB)`);
+
+await screen('leaderboard, 100 rows', async () => {
+  await pe(fit => {
+    window.__testMe = { playerId: 'me', name: 'Census', handle: 'c', friendCode: 'BONE-0' };
+    window.__testFriends = { friends: [], incoming: [], outgoing: [] };
+    window.__testLb = Array.from({ length: 100 }, (_, i) => ({
+      playerId: 'p' + i, name: 'Bonehead ' + i, level: 60 - Math.floor(i / 2), badges: 0,
+      outfit: fit, pet: null, friendCode: 'BONE-' + i, lastSeen: Date.now(),
+      joinedAt: Date.now(), spires: 0, spireDays: 0, you: false }));
+    location.hash = '#/friends';
+  }, FIT8);
+  await sleep(2200);
+  await pe(() => document.getElementById('crewLeaderboard')?.click());
+  await sleep(2600);
+}, { art: '.lb-row' });
+
+await screen('collection / looks shelf', async () => {
+  await pe(() => { location.hash = '#/bonehead'; });
+  await sleep(2200);
+  await pe(() => document.querySelector('.looks-card')?.click());
+  await sleep(2400);
+}, { art: '.col-cell img' });
+
+await screen('backpack melt bench', async () => {
+  await pe(() => { location.hash = '#/bonehead'; });
+  await sleep(2200);
+  await pe(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
+  await sleep(2400);
+}, { art: '.melt-row' });
+
+await screen('wardrobe, hat slot', async () => {
+  /* THE ONE NUMBER querySelectorAll('img') CANNOT SEE. The Wardrobe's DOM is
+     genuinely cheap (135 canvases at 200x200 is 20.6 MB) and the damage is
+     entirely OFF-DOM: hydratePackArt fires every canvas through Promise.all and
+     drawTrimmedArt builds a `new Image()` per canvas at the SOURCE's natural
+     size, so 135 bitmaps decode and are alive at the same instant. gwart
+     measured 210.9 MB there and this instrument reproduces it: hook the Image
+     constructor, hold each one from construction until its load handlers have
+     run, and sample the sum at every load. */
+  await pe(() => {
+    window.__imgPeakMB = 0;
+    const Native = window.Image;
+    const live = new Set();
+    const sample = () => {
+      let b = 0;
+      for (const im of live) if (im.naturalWidth) b += im.naturalWidth * im.naturalHeight * 4;
+      window.__imgPeakMB = Math.max(window.__imgPeakMB, +(b / 1048576).toFixed(1));
+    };
+    window.Image = function (w, h) {
+      const im = new Native(w, h);
+      live.add(im);
+      // registered at construction, so it runs BEFORE the caller's own onload;
+      // the double microtask lets that handler finish before the image is released
+      const done = () => queueMicrotask(() => queueMicrotask(() => live.delete(im)));
+      im.addEventListener('load', () => { sample(); done(); }, { once: true });
+      im.addEventListener('error', done, { once: true });
+      return im;
+    };
+  });
+  await pe(() => { location.hash = '#/bonehead'; });
+  await sleep(2200);
+  // 'H' is the wardrobe's default slot, so opening the tab IS the hat slot.
+  await pe(() => document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click());
+  await sleep(3000);
+}, { art: '.ward-grid canvas' });
+
+/* READ THE OFF-DOM PEAK NOW, while the page that recorded it is still loaded:
+   the tier checks below reload, and window.__imgPeakMB does not survive that. */
+const offDom = await pe(() => window.__imgPeakMB);
+ok('OFF-DOM  the Wardrobe\'s concurrent source bitmaps stay under 90 MB too',
+  offDom > 0 && offDom < CEILING_MB, `${offDom} MB peak concurrent off-DOM (gwart measured 210.9 MB on 640px sources)`);
+
+/* THE SHEET REALLY IS BEING SERVED, tier by tier. avatarLayersHtml falls back to
+   the 640px art when a thumbnail 404s (rule 8: degrade to ugly, never to
+   invisible), which is right for a player and WRONG for a check: a whole missing
+   thumbnail directory would look like a clean pass with quietly restored memory.
+   So assert the decoded width, on the screen, per tier.
+   PROVE-RED: `rm -rf assets/bh/thumb/384` and the crew row goes red at 640.
+   An empty sample is a FAILURE: zero images means the screen never rendered. */
+await fresh();
+await crewDrive(8)();
+const tiers = await pe(() => {
+  const w = sel => [...document.querySelectorAll(sel)].filter(i => i.naturalWidth).map(i => i.naturalWidth);
+  return { card: w('.cfan-stage .bh-anim img'), bg: w('.cfan-bg') };
+});
+ok('TIER     the crew card figure is served from the 384 sheet, not the 640px art',
+  tiers.card.length > 8 && tiers.card.every(n => n === 384),
+  `${tiers.card.length} layers, widths ${[...new Set(tiers.card)].join('/') || 'NONE'}`);
+ok('TIER     the crew card backdrop is served from the 192 sheet',
+  tiers.bg.length > 0 && tiers.bg.every(n => n === 192),
+  `${tiers.bg.length} backdrops, widths ${[...new Set(tiers.bg)].join('/') || 'NONE'}`);
+
+await fresh();
+await pe(() => { location.hash = '#/bonehead'; });
+await sleep(2200);
+await pe(() => document.querySelector('.looks-card')?.click());
+await sleep(2400);
+const colTier = await pe(() => [...document.querySelectorAll('.col-cell img')].filter(i => i.naturalWidth).map(i => i.naturalWidth));
+ok('TIER     the Collection\'s tiles are served from the 192 sheet',
+  colTier.length > 100 && colTier.every(n => n === 192),
+  `${colTier.length} tiles, widths ${[...new Set(colTier)].join('/') || 'NONE'}`);
+
+/* PROVE-RED: revert the .ward-art / .pd-art canvases to bhAsset() and this row
+   reports ~210 MB, the number gwart measured, because every one of those 135
+   concurrent source bitmaps goes back to 640x640. An empty sample (nothing
+   constructed) is a FAILURE here, not a pass: it would mean the hook never saw
+   the render it exists to measure. */
+ok('NO page errors anywhere in the census', errs.length === 0, errs.slice(0, 3).join(' ; '));
+
+console.log('\n  screen                       open MB    peak MB    imgs');
+for (const [k, v] of Object.entries(results)) {
+  console.log(`  ${k.padEnd(28)}${String(v.openMb).padStart(7)}${String(v.mb).padStart(11)}${String(v.imgs).padStart(8)}`);
+}
+
+console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nmemory census clean');
+process.exitCode = fails.length ? 1 : 0;
+}

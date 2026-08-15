@@ -989,7 +989,13 @@ function openBossIntro() {
       <p class="drop-eyebrow">MEET THE LOCALS</p>
       <h1 class="drop-title">The <em>Bestiary</em></h1>
       <div class="boss-wall">
-        ${wall.map((eq, i) => `<span class="bh-stage boss-cell" style="--d:${(i % 4) * 40 + Math.floor(i / 4) * 70}ms">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>`).join('')}
+        ${/* 19 stacked figures in a veil that sits ON TOP of Today's own art, so
+              this one stays on the small tier deliberately: 152 images on the 384
+              tier would be 85.5 MB before Today's is counted. The cells are ~85px
+              in a 4-column grid, which the 192 tier serves at the same device
+              density the leaderboard's heads do, and those measured identical to
+              the 640px art side by side at 3x. */ ''}
+        ${wall.map((eq, i) => `<span class="bh-stage boss-cell" style="--d:${(i % 4) * 40 + Math.floor(i / 4) * 70}ms">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 192 })}</span>`).join('')}
       </div>
       <p class="drop-sub">Fifty-six of them are out there. What you meet depends on where you dig, and it is never the same one twice.</p>
       <button class="drop-cta" id="bossIntroGo">GO HUNTING</button>
@@ -1713,9 +1719,13 @@ function headshotHtml(eq, px, cls = '') {
   const scale = px / (SKULL_BOX.h * 1.30);
   const ox = px / 2 - SKULL_BOX.cx * scale;
   const oy = px / 2 - SKULL_BOX.cy * scale;
+  /* The stage inside is a full 640px canvas scaled by `scale`, so THAT is the
+     size the art is drawn at, not the px window it shows through. A 62px teaser
+     head draws a 154px canvas; asking for the 192 tier there merged the skull's
+     teeth into a grey row at 3x, measured side by side. */
   return `<span class="tz-head ${cls}" style="width:${px}px;height:${px}px">
     <span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
-      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>
+      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: bhTierFor(640 * scale) })}</span>
     </span></span>`;
 }
 
@@ -1766,7 +1776,10 @@ function cosmeticTeaserBannerHtml() {
       <span class="gbn-chev">›</span>
     </summary>
     <div class="gbn-body">
-      <div class="tz-strip">${teaserWallHtml(18, 62)}</div>
+      ${/* EMPTY ON PURPOSE. Filled by the 'toggle' handler on first open (1C):
+            this <details> is closed by default and its 18 heads were 107.8 MB of
+            Today's 129.1 MB. The strip keeps its box so nothing shifts. */ ''}
+      <div class="tz-strip"></div>
       <div class="tz-tally">
         <span><b>${bySlot('H')}</b> lids</span><span><b>${bySlot('E')}</b> eyes</span>
         <span><b>${bySlot('M')}</b> mouths</span><span><b>${bySlot('G')}</b> grillz</span>
@@ -2591,11 +2604,18 @@ async function renderToday(el) {
      (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
   const bestRow = $('.bestiary-banner');
   if (bestRow) composeAvatars(bestRow);
-  /* The teaser strip lives inside a <details>. Its heads are only composed when
-     the section is opened: compositing 18 layered stacks on every Today render,
-     for a row most people never expand, is work nobody sees. */
+  /* NEVER BUILD ART FOR A CLOSED PANEL (1C). The strip lives inside a <details>
+     that is CLOSED by default, and it used to ship its 18 stacked heads in the
+     markup: 69 images and 107.8 MB of the 129.1 MB Today measured, for something
+     the player sees as one line of text. Composing was already deferred to the
+     open; the DECODING was not, and decoding is what the renderer pays for.
+     The wall is built on the first open and then left alone, so re-opening is
+     free and a player who never taps it never pays. */
   $('details.teaser-banner')?.addEventListener('toggle', e => {
-    if (e.target.open) composeAvatars(e.target);
+    if (!e.target.open) return;
+    const strip = $('.tz-strip', e.target);
+    if (strip && !strip.firstChild) strip.innerHTML = teaserWallHtml(18, 62);
+    composeAvatars(e.target);
   });
   $('details.garden-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
@@ -2912,6 +2932,66 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * once Tom decides they should breathe too. */
 const EMBER_EYES = new Set(['E4']);
 
+/* ================= THE THUMBNAIL SHEET (1A) =================
+   STOP HANDING A 27px TILE A 640px BITMAP.
+
+   Every cosmetic in assets/bh/<slot>/ is 640x640, so ONE mounted layer costs
+   640*640*4 = 1.5625 MB of decoded RGBA no matter how small it is drawn. That
+   is the single line of thinking behind six separate screens dying (measured,
+   gwart/MEMORY-CENSUS.md and tests/memory-census.mjs on this tree):
+
+       Collection / Looks     362 tiles at 90px    579.7 MB
+       Crew fan, 30 friends   270 layers           428.0 MB
+       Leaderboard, 100 rows  160 layers           250.0 MB
+       Backpack melt bench    120 tiles at 27px    201.6 MB
+       Today                   91 layers           135.2 MB
+
+   iOS kills the WKWebView renderer at those numbers and leaves NO javascript
+   error: the tab blanks and the app comes back on the last route, which is why
+   every check we owned said these screens were fine.
+
+   scripts/build-bh-thumbs.py writes downscaled copies to
+   assets/bh/thumb/<px>/<same path>, in TWO tiers, because these surfaces differ
+   by more than 4x in size and one tier cannot serve both:
+
+     192  0.1406 MB/layer, 11.1x.  TILES: the melt bench's 27px icon, the
+          Collection's 90px cell, the 42px leaderboard avatar, the podium, the
+          friend rows, the teaser heads.
+     384  0.5625 MB/layer, 2.8x.   CARDS: the Crew fan, which draws the figure
+          at 175 CSS px inside a 194px card. MEASURED, not guessed: at 192 the
+          skull's teeth merge into a grey row and the chain links lose their
+          holes, side by side at deviceScaleFactor 3. The fan is bounded to
+          seven seated cards, so this tier costs 31.5 MB at any crew size.
+
+   OPT-IN, never automatic. The hero stages, the Wardrobe's big preview and the
+   fight arena draw the figure at 380-440 CSS px and keep the 640px art. A
+   surface asks by passing `thumb: 192` (or `thumb: true`, same thing) or
+   `thumb: 384`, which is also what makes this greppable when somebody wonders
+   why a tile looks soft.
+
+   The regex mirrors the generator's KEEP rule exactly; a path it does not match
+   (fx frames, glutton plates, the mage) has no thumbnail and is returned
+   untouched. And a thumbnail that 404s falls back to the full-size art rather
+   than vanishing -- anti-regression rule 8, degrade to ugly, never to invisible. */
+const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|C|E|FW|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
+const BH_THUMB_TIERS = [192, 384];
+function bhThumb(src, px = 192) {
+  const m = BH_THUMB_RE.exec(src || '');
+  return m && BH_THUMB_TIERS.includes(px) ? `assets/bh/thumb/${px}/${m[1]}` : src;
+}
+/* PICK THE TIER FROM THE GEOMETRY, not from taste. `css` is the width the WHOLE
+   640 canvas ends up occupying in CSS pixels, which for a cropped surface is the
+   post-transform figure, not the window it peeps through: a 62px teaser head is
+   a 154px canvas behind a 62px hole, and treating it as 62 is exactly how the
+   first pass shipped visibly blurred teeth. Doubling for device pixels is the
+   compromise: it is exact on a 2x phone and leaves a 3x phone a mild 0.75
+   upscale on the big tier, which measured as indistinguishable. Anything a tier
+   cannot serve gets the full 640px art. */
+const bhTierFor = css => BH_THUMB_TIERS.find(t => t >= css * 2) || 640;
+/* The fallback, as an attribute so it survives innerHTML: swap to the full-size
+   art once, then give up and remove the layer (the old behaviour). */
+const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
+
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
@@ -2923,8 +3003,9 @@ function avatarLayersHtml(eq, opts = {}) {
     // opts.shinyPetId: the ONE renderer that keeps the pet inside the stack
     // (the leaderboard) needs the shiny recolour swapped in; the shiny PNG
     // shares the base art's canvas geometry so it stacks identically
-    const src = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
+    const full = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
       ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
+    const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     const cls = [
@@ -2943,8 +3024,10 @@ function avatarLayersHtml(eq, opts = {}) {
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
     // onerror removes the node: a failed layer (cold cache, flaky network)
-    // must degrade to a missing garment, never iOS's blue "?" box over the body
-    return `<img${glow} src="${src}" alt="" onerror="this.remove()">`;
+    // must degrade to a missing garment, never iOS's blue "?" box over the body.
+    // On a THUMBNAILED layer it first retries the full-size art, so a missing
+    // thumbnail costs memory rather than the garment.
+    return `<img${glow} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -2965,7 +3048,7 @@ function avatarLayersHtml(eq, opts = {}) {
 // (how Brock's shiny lizard rendered base-purple on the board).
 const lbAvatar = (p, cls = 'lb-av') =>
   `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
-    { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
+    { noYard: true, skip: ['BG'], thumb: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
 /* THE BOARD SHOWS THE BONEHEAD, NOT A THUMBNAIL. Tom, 2026-08-08: "make the
    leaderboard look cooler, maybe the number is on top of the bonehead art? right
    now the art is soooo small in the list" and "show the art proudly over 1. 2. 3.
@@ -3004,7 +3087,7 @@ function lbHeadInner(p, px) {
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   return `<span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
-      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
+      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: bhTierFor(640 * scale), shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
     </span>`;
 }
 // Test hook (webdriver only): the board renders from a server payload, so
@@ -6252,7 +6335,7 @@ const CHEERS = [
 
 function friendRowAvatar(f) {
   const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
-  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
+  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: true, shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
 }
 
 /* A NICKNAME IS A NOTE, NOT A RENAME. Tom, 2026-08-07: "When you set a note for a
@@ -6267,13 +6350,29 @@ function nameWithAlias(f) {
    market-quality-mockups/crew-fan-HANDOFF.md. Backdrop is their equipped BG, the
    Bonehead holds the centre (figure contract), the pet sits on the plate's top
    edge at the right tension line. cfan-pet is a registered figure-audit site. */
-function crewCardHtml(f) {
+/* THE ART OF ONE CARD, split out so a seat can mount and UNMOUNT it (see
+   applyFan). The FIGURE takes the 384 tier, not 192: it draws at 175 CSS px
+   inside a 194px card, which is 525 device px on a 3x phone, and 192 visibly
+   softened it (the skull's teeth merged into a grey row, the chain links lost
+   their holes) in a side-by-side capture at deviceScaleFactor 3. The BACKDROP
+   stays on 192: it is a flat painted plate behind the figure with no line work
+   to lose, and it is drawn with object-fit:cover. */
+function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true })}</div>` : '';
+  return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
+    + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
+}
+function crewCardHtml(f) {
+  const p = f.profile || {};
   const ol = onlineLabel(f.lastSeen);
+  /* THE STAGE SHIPS EMPTY. paintFan built every friend's full layered stack
+     through innerHTML, so a crew of 30 mounted 270 images and 428 MB before
+     anybody touched anything, and 120 friends reached 1537.5 MB. applyFan fills
+     the seven seated stages and clears the rest. */
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
-    <div class="cfan-stage">${eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}${pet}</div>
+    <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
     <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small>${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}<span class="lv">LV ${p.level || 1}</span></small></div>
@@ -6598,6 +6697,26 @@ async function renderFriends(el) {
          stops paying for them. */
       card.classList.toggle('off', off);
       card.classList.toggle('feat', card.dataset.fan === centerId);
+      /* MOUNT AND UNMOUNT, DO NOT DEFER (1B). The leaderboard's first fix
+         mounted a head on approach and then called io.unobserve, so nothing was
+         ever taken down: the cost was DEFERRED, not BOUNDED, it looked fixed at
+         open and still killed the renderer at the end of a scroll. That is one
+         line and it is the whole lesson.
+         The fan needs no IntersectionObserver to avoid it. Every card is
+         absolutely positioned in the same deck (an observer would call all of
+         them visible), and this function already knows which seven are seated:
+         `off` is the same flag that makes the rest visibility:hidden. So the
+         seat IS the bound -- 7 stacks at any crew size, from 4 friends to 400.
+         applyFan runs once per seat change, which during a drag is once per
+         96px of travel, the same rate the leaderboard's observer fires at. */
+      const stage = $('.cfan-stage', card);
+      if (stage) {
+        if (off) { if (stage.firstChild) stage.textContent = ''; }
+        else if (!stage.firstChild) {
+          const f = fanFriend(card.dataset.fan);
+          if (f) { stage.innerHTML = crewCardArtHtml(f); composeAvatars(stage); }
+        }
+      }
       const star = $('.cfan-fstar', card);
       if (star) star.hidden = !favs.has(card.dataset.fan);
     });
@@ -6658,7 +6777,7 @@ async function renderFriends(el) {
          transparent air and every skull's ink sits somewhere different on its
          canvas, so a fixed 150%/-25%/-12% zoom left the ink small and off
          centre (Tom, 2026-08-11). Align on INK (figure contract rule 3). */
-      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><canvas width="80" height="80" data-art="${esc(bhAsset(sk))}" data-pad="0.12" role="img" aria-label="${esc(f.name)}"></canvas></button>`;
+      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><canvas width="80" height="80" data-art="${esc(bhThumb(bhAsset(sk)))}" data-pad="0.12" role="img" aria-label="${esc(f.name)}"></canvas></button>`;
     }).join('') + '<small>FAVES</small>';
     hydratePackArt(row, '.cfan-fv canvas[data-art]');
     $$('[data-jump]', row).forEach(b => b.addEventListener('click', () => { centerId = b.dataset.jump; applyFan(); }));
@@ -6693,8 +6812,9 @@ async function renderFriends(el) {
       onBtn.classList.toggle('on', fanOnlineOnly);
       onBtn.setAttribute('aria-pressed', String(fanOnlineOnly));
     }
+    // The cards ship with EMPTY stages; applyFan (below) mounts the art for the
+    // seven seated ones and composes each stack as it lands.
     deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
-    composeAvatars(deck);   // decode the layered art; never fan out blank cards
 
     /* A search that matches nobody must SAY so. Hiding the deck and leaving the
        space blank would read as the crew having vanished, which is the same
@@ -8821,10 +8941,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       return `<button class="pd-slot ${slot === code ? 'sel' : ''} ${g ? 'gear-on r-' + g.rarity : ''}" data-pd="${code}" title="${esc(label)}${mog ? ' (look changed)' : ''}">
         ${art
           ? (code === 'BG'
-              ? `<span class="pd-swatch" style="background-image:url('${esc(bhAsset(art))}')"></span>`
+              ? `<span class="pd-swatch" style="background-image:url('${esc(bhThumb(bhAsset(art)))}')"></span>`
               // trim-normalize makes a compact skull render as big as a whole
               // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhAsset(art))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -8897,14 +9017,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(i))}" role="img" aria-label="${esc(i.name)}"></canvas>
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}"></canvas>
           </button>`).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(art))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
@@ -8956,9 +9076,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(ownArt))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhAsset(i))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -9144,7 +9264,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       return `
         <div class="col-head"><span>${esc(label)}</span><em>${have.length} of ${all.length}${tease ? ` · ${esc(tease)} out there` : ''}</em></div>
         <div class="col-grid">
-          ${sorted.map(i => `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhAsset(i)}" alt="${esc(i.name)}" loading="lazy"></button>`).join('')}
+          ${/* 90px tiles, one per owned piece, 362 of them on a completionist:
+                579.7 MB at the end of a scroll on the 640px art. `loading=lazy`
+                was already here and it is why open was cheaper than the end --
+                lazy DEFERS, it does not BOUND, and nothing is ever released. */
+            ''}
+          ${sorted.map(i => `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"></button>`).join('')}
           ${missing.map(() => '<button class="col-cell locked" data-look-locked="1" title="Not collected yet"><span class="lock-q">?</span></button>').join('')}
         </div>
         ${(() => {
@@ -9313,7 +9438,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           // wearing to a stray tap is not a mistake worth allowing.
           return `<label class="crate-row melt-row${worn ? ' worn' : ''}">
             <input type="checkbox" class="melt-pick" data-meltsel="${g.id}" data-dust="${gearDustValue(g)}" data-junk="${JUNK_RARITIES.has(g.rarity) ? '1' : '0'}"${worn ? ' disabled' : ''}>
-            <span class="crate-ico"><img src="${bhAsset(BH_BY_ID[g.artId])}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+            <span class="crate-ico"><img src="${bhThumb(bhAsset(BH_BY_ID[g.artId]))}" alt="" style="width:27px;height:27px;object-fit:contain"></span>
             <div style="flex:1"><b>${esc(g.name)}</b><small>${RARITIES[g.rarity].label} · ${esc(GEAR_SLOT_LABELS[g.slot] || g.slot)}${worn ? ' · <b>worn, tap to melt on its own</b>' : ''}</small><small>${
               /* "no stats · looks only" read as a REASON TO KEEP something. It is
                  a fact about the piece, not advice, so it states what melting
