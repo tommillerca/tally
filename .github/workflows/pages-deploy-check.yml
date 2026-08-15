@@ -1,0 +1,18 @@
+# Runs scripts/pages-deploy-check.sh after every push to main, so a Pages
+# build that silently failed to publish becomes a red workflow run. See the
+# script header for the incident this exists for. Not a deployer; only a
+# reporter. Adds no permissions, no secrets, no state.
+name: Pages deploy check
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Poll live sw.js for the expected VERSION
+        run: ./scripts/pages-deploy-check.sh

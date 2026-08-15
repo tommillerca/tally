@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sheet-action-overflow fixture</title>
+<!--
+  THE CHECK ON THE CHECK, for tests/sheet-action-reachable-audit.mjs.
+
+  This is the real shape, both halves of it: an outer scroller standing in for
+  `.sheet-body`, and inside it the `.breed-bar.sticky` rule from app.css
+  (max-height: 58vh, overflow-y: auto, pinned bottom: 0) with a primary action at
+  the bottom and enough content above to overflow that inner height.
+
+  BOTH scrollers matter, and that is the point of the fixture. The audit scrolls
+  the OUTER one, because that is the surface a player drags, and then hit-tests.
+  A control that only the INNER scroller can bring into view is the bug. So this
+  page must go RED even though something on it could technically be scrolled.
+
+  Nothing here imports the app. `body.collapsed` drops the filler, which is the
+  green half.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; background: #14121a; color: #eee; font: 15px/1.4 system-ui, sans-serif; }
+  /* NO FLEX HERE. The first draft made .body a flex column and the pinned panel
+     got squeezed to a 20px client height, so BOTH halves went red and the fixture
+     was measuring its own layout rather than the shape under test. A plain block
+     scroller is what a .sheet-body is. */
+  .body { height: 100vh; overflow-y: auto; padding: 0 12px; }
+  .pad { height: 900px; }   /* so the OUTER scroller really scrolls */
+  .bar {
+    /* copied from app.css .breed-bar.sticky — the shape under test */
+    position: sticky; bottom: 0; z-index: 4; margin-top: 14px;
+    background: #1c1a24; border: 2px solid #0d0c11; border-radius: 14px;
+    padding: 10px 12px;
+    max-height: 58vh; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .filler p { margin: 0 0 10px; }
+  body.collapsed .filler { display: none; }
+  #fixtureAction { display: block; width: 100%; padding: 13px; font-size: 15px; font-weight: 800;
+    background: #fd6857; color: #1a0f26; border: 0; border-radius: 12px; }
+</style>
+<div class="body">
+<div class="pad">Scrollable sheet body above the pinned panel.</div>
+<div class="bar">
+  <div class="filler">
+    <p><b>What breeding does</b></p>
+    <p>You keep Emberling. Same pet, same name, same level and look.</p>
+    <p>It reaches lineage 1: +5% to every stat.</p>
+    <p>Cloudpup is destroyed and does not come back.</p>
+    <p><b>You are about to destroy a SHINY.</b> Shinies are about a 1 in 30 hatch and its colour will NOT carry over. Feed a plain spare in instead unless you are sure.</p>
+    <p>Which one are you keeping?</p>
+    <p>Cost 40</p>
+    <p>Walk 2,400 more steps before breeding again.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+    <p>Filler so the panel is unambiguously taller than 58vh at 375x667.</p>
+  </div>
+  <button id="fixtureAction" type="button">Feed Cloudpup in</button>
+</div>
+</div>

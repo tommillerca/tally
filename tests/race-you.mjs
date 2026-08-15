@@ -18,6 +18,15 @@
  * block from hydrateRace and both LANE checks fail with your lane missing and the
  * banner reading "Nobody has walked a step yet".
  *
+ * EXPECTATIONS ARE COMPUTED, NEVER HARD-CODED (2026-08-11): the demo profile
+ * this page boots on seeds its own health rows for the last 14 days, and every
+ * one dated inside the current race week counts alongside the steps seeded
+ * below. Which days land in the week depends on what day of the race week you
+ * run this, so a hard-coded "4,200, rank 2" went red on a calendar schedule
+ * (green on the race week's first day, red the other six). An audit that fails
+ * by date trains people to ignore red. The expected count is summed from the
+ * same health rows over the same week window the app itself reads.
+ *
  * Usage: node tests/race-you.mjs
  */
 import path from 'node:path';
@@ -88,6 +97,25 @@ await page.evaluate(async () => {
   await kvSet('social', { playerId: 'race-you', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: 'Audit Bones', onlineAt: Date.now() });
 });
 
+/* What the board SHOULD say for you: the 4,200 above plus whatever demo-seeded
+   rows fall inside the current race week, summed exactly the way weekStepsNow
+   does (same rows, same window, via the webdriver-only __raceWeek/__raceDays
+   hooks). todaySteps proves the 4,200 actually landed: without it, a failed
+   seed would make this expectation match a board that never saw local truth. */
+const expected = await page.evaluate(async () => {
+  const { db } = await import('./js/db.js');
+  const days = new Set(window.__raceDays(window.__raceWeek()));
+  const d = new Date();
+  const todayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const rows = await db.all('health');
+  const steps = rows.reduce((a, r) => a + (days.has(r.date) ? (r.steps || 0) : 0), 0);
+  return { steps, text: steps.toLocaleString(), todaySteps: rows.find(r => r.date === todayKey)?.steps ?? 0 };
+});
+/* Rank against the two mocked racers (9000 and 1200 above). >= because the app
+   pushes your lane last and Array.sort is stable, so a tied server row outranks
+   you. */
+const expRank = String(1 + [9000, 1200].filter(s => s >= expected.steps).length);
+
 await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(3000);
 
@@ -113,13 +141,13 @@ ok('BOARD the race card renders at all (an absent card is a FAILURE)', board.pre
   JSON.stringify({ present: board.present, hidden: board.hidden }));
 ok('BOARD the server\'s own racers are still there', board.lanes.length >= 2,
   `${board.lanes.length} lanes: ${board.lanes.map(l => l.name).join(', ')}`);
-/* THE POINT: your 4,200 steps came from this device, not the response. */
+/* THE POINT: your steps came from this device, not the response. */
 const you = board.lanes.find(l => l.you);
 ok('LANE you are on the board even though the server left you off', !!you,
   JSON.stringify(board.lanes));
 ok('LANE with your real local count, ranked against the rest',
-  !!you && /4,200/.test(you.steps || '') && you.rank === '2',
-  JSON.stringify(you));
+  !!you && expected.todaySteps === 4200 && you.steps === expected.text && you.rank === expRank,
+  JSON.stringify({ lane: you, expected, expRank }));
 ok('LANE the banner does not tell a walker nobody has walked',
   board.emptyCopy === false && /behind|in front|leads/i.test(board.line || ''), String(board.line));
 
