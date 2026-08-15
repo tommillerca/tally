@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 379, date: '2026-08-15', title: 'The Crew tab stops running your phone out of memory', items: [
+    "<b>Opening Crew with a lot of friends could kill the app outright.</b> Every friend's Bonehead was being drawn at full size, so a big crew was asking your phone for well over a gigabyte of image data before you had even scrolled. Everything now uses art sized for the space it is drawn in. Nothing looks different; it just survives.",
+    'The same fix reaches the Collection shelf, the melt bench, the wardrobe, the leaderboard and Today.',
+    "<b>Breeding is reachable again.</b> The breed button sat under a bar you could not scroll past, and swiping the panel did nothing. That was our own doing: a fix for a different problem put the extra room on the wrong side of the bar.",
+    'Three mouth items were drawn against the wrong part of the skull, so they sat off the teeth. Re-registered against Cam\'s originals.',
+  ] },
   { n: 378, date: '2026-08-14', title: 'A failed cloud restore no longer costs you the restore', items: [
     "<b>If restoring your save from the cloud failed, the app said nothing and never tried again.</b> One bad moment on the network was enough to use up your only automatic restore while a perfectly good backup sat on the server. It now tells you when a restore fails, and it will try again next time you open the app.",
   ] },
