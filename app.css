@@ -7146,9 +7146,16 @@ body::before {
    320, 47px at 390). Overlapping the boss reads as depth; overlapping you reads
    as a broken layout. `right` counts from the right edge of the foe side, so a
    SMALLER value pulls the add back towards him and away from you.
-   This does not touch how big he is, which is a separate question. */
+   This does not touch how big he is, which is a separate question.
+   18px was too far out: it left the creature hanging 5.9px off the RIGHT edge of
+   the arena at 320 and 1.1px at 360, and only 0.7px inside at 375, the width the
+   suite calls the smallest supported phone. Swept 18/22/24/26/30 at four widths:
+   24 is the threshold with no margin at all, 26 is the first value with real
+   clearance (320 +2.1, 360 +6.9, 375 +8.7, 390 +10.5). Overlap with the PLAYER,
+   the thing this rule exists to prevent, stays 0px of a 76px figure at every
+   width and every value swept, so pulling it in costs nothing it was buying. */
 @media (max-width: 400px) {
-  .arena.boss-mage .foe-side .pet-fighter.add { right: 18px; }
+  .arena.boss-mage .foe-side .pet-fighter.add { right: 26px; }
 }
 
 /* NO BESPOKE POSITION. I moved the add out from under his robe and made it worse
