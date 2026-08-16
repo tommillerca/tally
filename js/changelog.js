@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 385, date: '2026-08-16', title: 'The Hollow opens, and five items stop covering your face', items: [
+    "<b>The garden is a place now.</b> Two plots with real beds, a keeper who walks over and does the work, a shed with your seeds in it, a lantern and fireflies after dark, and a crow. He talks, he knows what is growing, and he uses your name.",
+    "<b>Five held items were covering your Bonehead's face.</b> One banner covered nearly three quarters of it, so anyone who equipped it lost their head. All five moved, and every held item in the game is now checked so it cannot happen again.",
+    "<b>You can line up a second cook.</b> The Kitchen used to allow one start per pot per visit, which meant most of what you grew had nowhere to go. Composting is also sorted by what your recipes are short of.",
+    'New players start with a few seeds in the pouch, and everyone who already plays gets the same handful.',
+  ] },
   { n: 384, date: '2026-08-16', title: 'The fight buttons hold their own words again', items: [
     "<b>Move buttons were cutting their own text off.</b> A button with two lines of description was being squashed to one line's height, so the rest of the sentence fell out the bottom and landed on the row below. It came in with yesterday's change that stopped the fighters resizing, and it hit four of the nine buttons on most phones and six of nine on a small one.",
     "<b>The ITEMS button could not be tapped at all.</b> It was sitting below the bottom of the button area, and nothing on screen said that area could scroll. There is a soft fade at the bottom edge now whenever there is more below, so you can see there is somewhere to go.",
