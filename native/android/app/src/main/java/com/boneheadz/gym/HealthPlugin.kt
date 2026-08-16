@@ -214,9 +214,9 @@ class HealthPlugin : Plugin() {
                 // finds nothing. Look back 10 days and take the most recent reading.
                 val recent = TimeRangeFilter.between(now.minus(Duration.ofDays(10)), now)
                 val rhr = hc.readRecords(ReadRecordsRequest(RestingHeartRateRecord::class, recent)).records
-                if (rhr.isNotEmpty()) res.put("restingHr", rhr.maxByOrNull { it.time }!!.beatsPerMinute.toInt())
+                rhr.maxByOrNull { it.time }?.let { res.put("restingHr", it.beatsPerMinute.toInt()) }
                 val hrvRecs = hc.readRecords(ReadRecordsRequest(HeartRateVariabilityRmssdRecord::class, recent)).records
-                if (hrvRecs.isNotEmpty()) res.put("hrv", Math.round(hrvRecs.maxByOrNull { it.time }!!.heartRateVariabilityMillis).toInt())
+                hrvRecs.maxByOrNull { it.time }?.let { res.put("hrv", Math.round(it.heartRateVariabilityMillis).toInt()) }
 
                 // Last night's sleep (auto, with stages), anchored to THE NIGHT rather
                 // than rolled back from "now". A rolling 18h window broke evening

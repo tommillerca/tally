@@ -86,8 +86,12 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
     private func latestSleep(_ done: @escaping ([String: Int]?, [String: Any]) -> Void) {
         let cal = Calendar.current
         let now = Date()
-        let noonToday = cal.date(bySettingHour: 12, minute: 0, second: 0, of: now)!
-        let start = cal.date(byAdding: .hour, value: -18, to: noonToday)!  // 6pm yesterday
+        // Calendar returns nil when a zone skips the wall-clock time asked for, so
+        // fall back to plain arithmetic instead of trapping on the sleep read path.
+        let noonToday = cal.date(bySettingHour: 12, minute: 0, second: 0, of: now)
+            ?? cal.startOfDay(for: now).addingTimeInterval(12 * 3600)
+        let start = cal.date(byAdding: .hour, value: -18, to: noonToday)
+            ?? noonToday.addingTimeInterval(-18 * 3600)                    // 6pm yesterday
         let end = min(now, noonToday)                                     // noon today at the latest
         let pred = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let wf = DateFormatter(); wf.dateFormat = "MMM d HH:mm"
