@@ -14937,6 +14937,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
        potions on screen at once at every supported width. Not scrollIntoView:
        that walks up and scrolls the sheet too. */
     if (fight.itemsOpen) factions.scrollTop = factions.scrollHeight;
+    /* TELL THE PLAYER THERE IS MORE. Measured on live v383: the tray hid 43px at
+       390x844 and 68px at 375x667, and the ITEMS door lived entirely inside that
+       band with all nine of its hit probes answering #endTurn or the sheet body.
+       The scroll worked; nothing on screen said it existed. `scrolls` drives the
+       fade, `at-end` removes it once you have seen the bottom, and both are
+       recomputed on scroll because the tray's content changes every turn. */
+    const markScroll = () => {
+      const more = factions.scrollHeight - factions.clientHeight;
+      factions.classList.toggle('scrolls', more > 2);
+      factions.classList.toggle('at-end', more <= 2 || factions.scrollTop >= more - 2);
+    };
+    /* AND AGAIN AFTER LAYOUT SETTLES. Measured at 430x932: markScroll ran while
+       the tray still reported its pre-layout height, so a tray hiding 48px was
+       marked as not scrolling and drew no fade. Once per render is not enough
+       when the row heights depend on text that has only just been written. */
+    markScroll();
+    requestAnimationFrame(() => { if (factions.isConnected) markScroll(); });
+    factions.addEventListener('scroll', markScroll, { passive: true });
     $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
     $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
     renderEndTurn();

@@ -1272,7 +1272,32 @@ body::before {
    ITEMS door all leave End Turn in one place and the boss at one size.
    Tom, 2026-08-09: "the buttons were moving up and down based on the menu". */
 .fight-body > .fight-actions { flex: 1 1 0; min-height: 96px; }
-.fight-actions { overflow-y: auto; align-content: start; }
+/* ROWS SIZE TO THEIR CONTENT, ALWAYS. This is the v383 regression Tom hit:
+   "the buttons now have text falling off and are hard to see and press".
+   Mechanism, measured against the commit before the arena change (cc3a9d6 vs
+   b5dd3af): a grid auto row takes its BASE size from min-content and only grows
+   toward max-content if the container has room. A <button> carrying
+   min-height:44px contributes 44px of min-content. The old build put an inline
+   height:284px on this tray, above its 202px of content, so every row grew to
+   68.3px and nothing clipped. Making the tray flex:1 1 0 lands it at 159.2px,
+   BELOW the 202px it needs, so no row grew past 44 and every two-line subtitle
+   spilled 17px, 13.8px of it painted ink outside the button's own border box.
+   Measured on 4 of 9 buttons at 390x844 and 430x932, 6 of 9 at 375x667.
+   max-content sets both the base AND the growth limit from the content, so the
+   row fits the text whatever height the tray gets, and the overflow lands where
+   it belongs: on the tray, which scrolls. */
+.fight-actions { overflow-y: auto; align-content: start; grid-auto-rows: max-content; }
+
+/* AND THE SCROLL HAS TO BE VISIBLE. The tray hid 43px of content at 390x844 and
+   68px at 375x667 with NOTHING to say so: offsetWidth - clientWidth measured 0
+   (macOS overlay scrollbars), no mask, no shadow, no gutter. The ITEMS door sat
+   in that hidden band, and all nine hit probes on it answered #endTurn or the
+   sheet body, at every viewport. A control you cannot see, cannot reach, and are
+   never told about is not a control.
+   The fade is driven by a class the render sets, not by :hover or a media query,
+   so it is honest on a touch screen. */
+.fight-actions.scrolls { mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 26px), transparent); }
+.fight-actions.scrolls.at-end { mask-image: none; -webkit-mask-image: none; }
 .fight-endrow { margin-top: 8px; }
 .fight-endrow .fight-act { width: 100%; }
 .arena {

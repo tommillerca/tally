@@ -80,6 +80,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    and it carries its own CONTROL row so it cannot pass vacuously. */
 const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
 const BROWSER = [
+  'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
