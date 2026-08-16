@@ -116,11 +116,21 @@ if (same) {
 }
 
 /* ------ 3. Merged prefs include siege from DEFAULTS ------ */
-const merged = await page.evaluate(async () => (await import('./js/notify.js')).notifPrefs());
-console.log('merged prefs after ESS click:', JSON.stringify(merged));
-check('MERGE  notifPrefs merges stored-over-DEFAULTS so siege reads true even though the button did not write it',
+/* Seed a payload that OMITS siege rather than clicking a button for it: both
+   presets write siege explicitly now (that is what makes them different tiers,
+   see notif-tier-audit.mjs), so the buttons can no longer demonstrate the merge.
+   The property being pinned is unchanged: a stored payload missing a key leaves
+   the DEFAULT in play, which is what carries an existing save across an upgrade
+   that adds a new kind. */
+const merged = await page.evaluate(async () => {
+  const { kvSet } = await import('./js/db.js');
+  await kvSet('notifPrefs', { enabled: true, reminder: true, streak: true, friends: true });
+  return (await import('./js/notify.js')).notifPrefs();
+});
+console.log('merged prefs over a stored payload with no siege key:', JSON.stringify(merged));
+check('MERGE  notifPrefs merges stored-over-DEFAULTS so an omitted siege reads true',
   merged?.siege === true,
-  `merged.siege=${merged?.siege}, stored.siege=${afterEss?.siege}`);
+  `merged.siege=${merged?.siege}`);
 
 /* ------ 4. #notifTest fires notifyNow ------ */
 /* Stub Notification.requestPermission to always return 'granted' so
