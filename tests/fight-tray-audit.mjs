@@ -20,6 +20,25 @@
  * ANY button, at ANY supported width. A healthy button measures 44/40. The
  * shipped bug measured 57/40.
  *
+ * THE SECOND THING THIS FILE GUARDS, added 2026-08-16: THE TRAY'S SIZE. The two
+ * checks that used to carry that job, CLIP and AFFORDANCE, could not fail. Both
+ * were shaped `X === 0 || (tray.scrolls && tray.masked)`, and js/app.js
+ * markScroll() sets `.scrolls` from `scrollHeight - clientHeight > 2`, the same
+ * expression on the same element that the audit then measured as `hidden`. The
+ * app therefore satisfied the right branch of the OR exactly whenever the left
+ * branch failed. Squashing the tray to 50px, so it hid 184px and every one of
+ * its 8 buttons sat past the edge, left both of them printing PASS and the
+ * suite reporting 22/22 with exit 0.
+ *
+ * They are REST and BUDGET now, a floor and a ceiling, both proven red:
+ *   REST   at least one complete row (3) of move buttons is fully inside the
+ *          tray at scrollTop 0 and answers all 9 of its own hit probes there,
+ *          and anything past the edge is still announced. Main: 6, 3, 6.
+ *   BUDGET hidden <= clientHeight, at least half the content on screen at once.
+ *          Main: ratio 0.472, 0.746, 0.390 against a bound of 1.000.
+ * Per-check derivations sit with the checks. A 60px steal from the tray, which
+ * the old pair graded 22/22, takes BUDGET to 1.36 and fails all three widths.
+ *
  * Usage: node tests/fight-tray-audit.mjs            (self-serves this tree)
  *        node tests/fight-tray-audit.mjs <url>
  */
@@ -158,16 +177,83 @@ for (const [W, H] of SIZES) {
   ok(`REACH ${W}x${H}: every move button answers its own hit probes`, unreachable.length === 0,
     unreachable.length ? unreachable.map(b => `"${b.label}" ${b.n}/9 -> ${b.bad.join('/')}`).join(', ') : `9 probes x ${m.btns.length}, each scrolled into view first`);
 
-  /* 3. NOTHING SITS BELOW THE TRAY'S CLIP UNANNOUNCED. */
-  const cut = m.btns.filter(b => b.belowTray > 1);
-  ok(`CLIP ${W}x${H}: any button past the tray's edge is announced as scrollable`,
-    cut.length === 0 || (m.scrolls && m.masked),
-    cut.length ? `${cut.length} past the edge (${cut.map(b => b.label).join(', ')}), scrolls=${m.scrolls} masked=${m.masked}` : 'nothing past the edge');
+  /* 3. A WHOLE ROW OF MOVES IS USABLE WITHOUT SCROLLING, AND ANYTHING PAST THE
+     EDGE IS ANNOUNCED.
 
-  /* 4. IF IT SCROLLS, IT SAYS SO. */
-  ok(`AFFORDANCE ${W}x${H}: a scrolling tray is visibly a scrolling tray`,
-    m.hidden <= 2 || (m.scrolls && m.masked),
-    `hides ${m.hidden}px, scrolls=${m.scrolls}, masked=${m.masked}`);
+     THIS REPLACES A CHECK THAT COULD NOT FAIL. The old CLIP read
+     `cut.length === 0 || (m.scrolls && m.masked)`, and js/app.js markScroll()
+     sets `.scrolls` from `factions.scrollHeight - factions.clientHeight > 2`,
+     the SAME EXPRESSION ON THE SAME ELEMENT that puts buttons past the edge in
+     the first place. So the right branch of that OR was guaranteed by the app
+     whenever the left branch was false. Proven, not assumed: forcing the tray
+     to 50px so all 8 buttons sat past the edge and 184px hid, the old CLIP and
+     AFFORDANCE both still printed PASS.
+
+     The announcement clause is kept, because it can still fail on its own (drop
+     app.css:1324 and `masked` goes false while `scrolls` stays true), but it is
+     now an AND, never an escape hatch from the floor below it.
+
+     DIRECTION AND BOUND (anti-regression rule 11): failure is the resting tray
+     holding FEWER complete controls, floor of 3, one full row of the 3-column
+     grid. Measured on unmodified main at 56c5058: 6 resting at 390x844, 3 at
+     375x667, 6 at 430x932. The count moves in steps of 3 because a grid row's
+     buttons share a row height, so it cannot drift to 2; it goes under only
+     when the tray is shorter than one button row (81.8px at 390x844 and
+     375x667, 68.3px at 430x932) against 134-159px of tray today.
+
+     AND IT PROBES AT scrollTop 0, which nothing else here does. REACH calls
+     scrollIntoView first, deliberately, so it says nothing about the tray as
+     the player first sees it (anti-regression rule 12). These are the `hits`
+     and `answered` probes measured above, which until now were computed and
+     never read. Main answers SELF on all 9 probes of all 15 resting buttons. */
+  const resting = m.btns.filter(b => b.belowTray <= 1);
+  const blocked = resting.filter(b => b.hits > 0);
+  const cut = m.btns.filter(b => b.belowTray > 1);
+  const announced = cut.length === 0 || (m.scrolls && m.masked);
+  ok(`REST ${W}x${H}: a full row of moves is usable at rest, and anything past the edge is announced`,
+    resting.length >= 3 && blocked.length === 0 && announced,
+    [resting.length >= 3 ? null : `only ${resting.length} button(s) fully inside the tray at scrollTop 0, floor is 3`,
+     blocked.length ? `blocked at rest: ${blocked.map(b => `"${b.label}" ${b.hits}/9 -> ${b.answered.join('/')}`).join(', ')}` : null,
+     announced ? null : `${cut.length} past the edge unannounced, scrolls=${m.scrolls} masked=${m.masked}`,
+    ].filter(Boolean).join('; ')
+    || `${resting.length} resting buttons, 9/9 probes each, ${cut.length} past the edge announced (scrolls=${m.scrolls} masked=${m.masked})`);
+
+  /* 4. THE TRAY NEVER HIDES MORE THAN IT SHOWS.
+
+     THE MISSING CEILING. The old AFFORDANCE was `m.hidden <= 2 || (m.scrolls &&
+     m.masked)`, the same tautology as above, and it was the only check in this
+     file that looked at `hidden` at all. Nothing anywhere bounded that number.
+     A layout change that stole 60px from the tray took hidden from 75px to
+     135px and this suite still reported 22/22 with exit 0.
+
+     THE BOUND IS NOT ZERO, because this tray is DESIGNED to scroll. Tom asked
+     for a static arena and an elastic tray ("the buttons below can change as
+     needed to fit on screen"), so a healthy main hides 62px to 100px and
+     demanding zero would push the fix back onto the arena he asked to keep.
+
+     DIRECTION AND BOUND: failure is `hidden` RISING relative to the tray, and
+     the bound is hidden <= clientHeight, that is, at least half the tray's
+     content is on screen at once. Measured on unmodified main at 56c5058:
+
+       390x844   hides  75px of 234px content in a 159px tray   ratio 0.472
+       375x667   hides 100px of 234px content in a 134px tray   ratio 0.746
+       430x932   hides  62px of 221px content in a 159px tray   ratio 0.390
+
+     so the worst supported viewport sits at 75% of the budget and main keeps
+     25% headroom. In pixels the guard trips once the tray falls under half its
+     content: below 117px at 390x844 and 375x667, below 110.5px at 430x932.
+
+     WHY A RATIO AND NOT A ROUND PIXEL CEILING. Healthy `hidden` already spans
+     62px to 100px and the content itself differs by viewport (234px vs 221px),
+     so any single px number is either loose at 430x932 or has no room at
+     375x667. Tying the ceiling to the tray's own height scales with both.
+
+     PROVEN RED: the 60px steal above lands at ratio 1.36, 1.36 and 1.23, and
+     this check goes red at all three widths. */
+  ok(`BUDGET ${W}x${H}: the tray never hides more than it shows`,
+    m.hidden <= m.trayH,
+    `hides ${m.hidden}px against ${m.trayH}px on screen, ratio ${(m.hidden / m.trayH).toFixed(3)} of the 1.000 budget` +
+    `${m.hidden > m.trayH ? `, over by ${+(m.hidden - m.trayH).toFixed(1)}px` : ''} (content ${m.contentH}px)`);
 
   /* 5. TAP TARGETS. */
   const small = m.btns.filter(b => b.h < 44 || b.w < 44);
