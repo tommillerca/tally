@@ -90,6 +90,74 @@
  *   broken or blink-and-gone animation fails and normal jitter does not.
  * ---------------------------------------------------------------------------
  *
+ * ---------------------------------------------------------------------------
+ * THE THROTTLE GRADED THE SERVER'S CACHE HEADERS (2026-08-16, second fix)
+ *
+ * The network throttle added below to make the v245 race possible turned a
+ * HEALTHY tree RED, with the v245 message, purely on the basis of the header the
+ * static server sends. Same tree, same audit, three runs, exit codes read from a
+ * file and not through a pipe:
+ *
+ *   serveTree (python http.server)          throttle on    PASS, life 112/132ms, exit 0
+ *   a server sending cache-control:no-store throttle on    FAIL both moves, exit 1
+ *   that same no-store server               throttle off   PASS-ish, exit 1 on one
+ *                                                          late frame (see below)
+ *
+ * MECHANISM. warmStrikeFx (js/app.js:16096) fetches all six frames when the fight
+ * opens. Under `cache-control: no-store` the browser may not reuse them, so the
+ * <img> tags strikeFx builds at js/app.js:15117 go back to the network for 112KB
+ * per frame. With 400ms of emulated latency and a 200KB/s pipe that is about
+ * 950ms, while strikeFx's own safety net (js/app.js:15152-15158) gives up waiting
+ * after 400ms and plays anyway. So the animation runs over undecoded images and
+ * the audit reports the v245 bug against an app that does not have it. python's
+ * http.server sends no cache-control at all, so Chrome heuristically caches from
+ * Last-Modified and the same tree passes. tests/release-gate.mjs:53-54 sends
+ * exactly the no-store header, and so do most dev static servers.
+ *
+ * That is the same class of defect as the flake above and worse in one way: the
+ * thing it was keyed on was invisible in the output, so nobody reading the red
+ * would have suspected a response header.
+ *
+ * THE FIX, in three parts.
+ *
+ *   1. STOP DEPENDING ON THE SERVER. The audit now controls this property of its
+ *      own fixture instead of inheriting it: a CDP Fetch interceptor rewrites the
+ *      cache-control on the FX frames only (assets/bh/fx/**) to a normal
+ *      cacheable value, at the RESPONSE stage, so bytes still travel the real
+ *      network stack and the throttle still applies to them. This is not hiding
+ *      anything: production (GitHub Pages) serves these with max-age, so a warm
+ *      cache is the state a player is actually in (rule 12), and no-store is the
+ *      dev server's artifact. The v245 race is untouched, because an app that
+ *      never warms has nothing in that cache to hit.
+ *   2. ASSERT THE PRECONDITION, AND FAIL AS SETUP IF IT DOES NOT HOLD. Before the
+ *      first strike, with the throttle already on, the audit loads one FX-shaped
+ *      URL of its OWN twice (a ?fxaudit-cacheprobe query string, so the app's own
+ *      cache entries are never touched or warmed by the probe) and times both:
+ *        DIRECTION cold must be SLOW, BOUND >= 200ms   (proves the throttle is on,
+ *                                                       measured ~900ms)
+ *        DIRECTION warm must be FAST, BOUND < 250ms    (proves a cacheable
+ *                                                       response is reusable here,
+ *                                                       measured single digits)
+ *      If either bound is missed the audit exits 2, SETUP, printing that no FX
+ *      claim was made. Exit 1 stays reserved for a finding about the app. The
+ *      probe deliberately uses a URL the audit warms itself, never one the app is
+ *      responsible for warming, so a real v245 tree (which warms nothing) still
+ *      passes the probe and then goes red as a FINDING, which is the whole point.
+ *   3. LIFT THE THROTTLE after the FX loop, and drop the interceptor with it.
+ *      Everything after the loop used to run at 400ms/200KB for no reason.
+ *
+ * WHILE PROVING THIS, a second false red fell out of the control run: with the
+ * throttle OFF and no-store on, swing failed 1/18 with naturalWidths
+ * [985,985,0]. The predicate was `imgs.every(naturalWidth > 0)`, i.e. it blamed
+ * v245 when frame 3 was still in flight during a sample where frame 1 was the one
+ * on screen and fully decoded. That is not the bug: v245 is A FRAME BEING SHOWN
+ * WITH NO PIXELS IN IT. The predicate is now the shown frame's own naturalWidth,
+ * which is exactly the v245 statement, loses no coverage (the sampler runs the
+ * whole life at 8ms, so a frame that is still blank when its turn comes is caught
+ * in the sample where it is shown) and cannot be tripped by a later frame that is
+ * merely late. The all-frames count is still printed as a diagnostic.
+ * ---------------------------------------------------------------------------
+ *
  * Usage:
  *   node tests/fx-audit.js                     # audit the LIVE site
  *   node tests/fx-audit.js http://localhost:8765/   # audit a local build
@@ -169,6 +237,62 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   const page = await browser.newPage();
   const pageErrors = [];
   page.on('pageerror', e => pageErrors.push(e.message));
+
+  /* SETUP failures exit 2, findings exit 1. A harness that cannot establish its
+     own preconditions has not checked the app, and saying so with the same exit
+     code as "the punch is invisible" is how a false red gets believed. */
+  const EXIT_SETUP = 2;
+  const bailSetup = async (msg) => {
+    console.error(`\nFX AUDIT CANNOT RUN (setup, not a failing check):\n  ${msg}\n  No claim has been made about the FX.`);
+    try { await browser.close(); } catch { /* already gone */ }
+    if (srvHandle) srvHandle.close();
+    process.exit(EXIT_SETUP);
+  };
+
+  const cdp = await page.createCDPSession();
+  await cdp.send('Network.enable');
+
+  /* OWN THE CACHE HEADERS ON THE FX FRAMES. See the header: with the throttle on,
+     a server that says `cache-control: no-store` (tests/release-gate.mjs:53-54,
+     and most dev static servers) forces strikeFx's <img> tags back onto the wire
+     for 112KB per frame and produces a v245 red on a healthy app. The response
+     stage is deliberate: the bytes still come from the real network through the
+     emulated pipe, only the storage policy is rewritten, so an unwarmed frame
+     still cannot win the race. Scoped to the FX frames alone. */
+  const FX_ASSET_RE = /\/assets\/bh\/fx\//;
+  const rewrite = { ok: 0, failed: 0, lastError: '' };
+  cdp.on('Fetch.requestPaused', async (ev) => {
+    const headers = (ev.responseHeaders || []).filter(h => !/^(cache-control|pragma|expires)$/i.test(h.name));
+    headers.push({ name: 'cache-control', value: 'public, max-age=600' });
+    try {
+      /* responseCode is NOT optional here even though only the headers are being
+         changed: "Cannot override only status or headers, both should be
+         provided". The first version of this omitted it, every rewrite threw, and
+         the only reason it was not a silent no-op is the probe below, which
+         caught it and exited 2 rather than blaming the app. */
+      await cdp.send('Fetch.continueResponse', {
+        requestId: ev.requestId,
+        responseCode: ev.responseStatusCode,
+        responsePhrase: ev.responseStatusText || 'OK',
+        responseHeaders: headers,
+      });
+      rewrite.ok++;
+    } catch (e) {
+      rewrite.failed++; rewrite.lastError = e.message;
+      try { await cdp.send('Fetch.continueRequest', { requestId: ev.requestId }); } catch { /* request already gone */ }
+    }
+  });
+  await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/assets/bh/fx/*', requestStage: 'Response' }] });
+
+  /* Diagnostic only, never an assertion: which FX frames the app pulled over the
+     network before the first strike. On a healthy tree this is 6 (warmStrikeFx);
+     on a v245 tree it is 0, which is the line a human wants in the red. */
+  const fxWarmed = new Set();
+  cdp.on('Network.responseReceived', (e) => {
+    const url = (e.response && e.response.url) || '';
+    if (FX_ASSET_RE.test(url) && !url.includes('fxaudit-cacheprobe')) fxWarmed.add(url.split('?')[0]);
+  });
+
   await page.goto(BASE + '?demo', { waitUntil: 'networkidle2' });
   await sleep(2500);
 
@@ -241,7 +365,15 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
       samples.push({
         t: Math.round(now - bornAt),
         shown: sel,
-        decoded: imgs.length > 0 && imgs.every(i => i.naturalWidth > 0),
+        /* THE v245 STATEMENT, exactly: the frame the app says it is showing has
+           no pixels in it. Not `imgs.every(...)`: that also went red when a LATER
+           frame was still in flight while a decoded frame was on screen, which is
+           lateness, not invisibility, and it fired on a healthy tree the moment
+           the frames came off the wire instead of out of the cache. A frame that
+           is still blank when its own turn comes is caught here in the sample
+           where IT is the shown one, because the sampler runs the whole life. */
+        decoded: !!(im && im.naturalWidth > 0),
+        allDecoded: imgs.length > 0 && imgs.every(i => i.naturalWidth > 0),   // diagnostic
         naturalWidths: imgs.map(i => i.naturalWidth),
         boxed: !!(im && im.offsetWidth > 0 && im.offsetHeight > 0),
         painted: !!(im && ws.display !== 'none' && ws.visibility !== 'hidden'
@@ -281,12 +413,40 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
      touches this pipe, while an app that fetches frames at strike time has to drag
      112KB across 400ms of latency against a 117ms animation and cannot win.
      Verified both ways: green 14/14 with this on, and red on the v245 tree. */
-  const cdp = await page.createCDPSession();
-  await cdp.send('Network.enable');
-  await cdp.send('Network.emulateNetworkConditions', {
-    offline: false, latency: 400, downloadThroughput: 200 * 1024, uploadThroughput: 200 * 1024,
-  });
-  console.log('network throttled to 400ms latency / 200KB.s so an unwarmed frame cannot win the race');
+  const THROTTLE = { offline: false, latency: 400, downloadThroughput: 200 * 1024, uploadThroughput: 200 * 1024 };
+  await cdp.send('Network.emulateNetworkConditions', THROTTLE);
+  console.log(`network throttled to 400ms latency / 200KB.s so an unwarmed frame cannot win the race`);
+  console.log(`  FX frames the app pulled before the first strike (diagnostic): ${fxWarmed.size}`);
+  console.log(`  FX cache-control rewritten on ${rewrite.ok} responses, ${rewrite.failed} failed${rewrite.failed ? ` (${rewrite.lastError})` : ''}`);
+
+  /* THE THROTTLE'S OWN PRECONDITION, ASSERTED BEFORE IT CAN ACCUSE ANYONE.
+     The pipe above only proves something about the APP if a frame the app already
+     warmed can be re-read without touching the pipe. That is a property of the
+     SERVER's response headers, and when it was left to chance a no-store server
+     turned this audit red on a healthy tree with the v245 message (see header).
+     So it is measured, here, through the same mechanism strikeFx uses (a fresh
+     Image element), under the same throttle the loop will run under, on a URL the
+     audit warms ITSELF: the ?fxaudit-cacheprobe query is a distinct cache key, so
+     the app's own frames are neither read nor warmed by this, and a genuinely
+     unwarmed app still fails as a FINDING rather than being excused as setup.
+       DIRECTION: cold SLOW, BOUND >= 200ms   (the throttle is really on)
+       DIRECTION: warm FAST, BOUND < 250ms    (a cacheable response is reusable)
+     Missing either bound is a SETUP failure, exit 2, never a v245 finding. */
+  const timeImageLoad = (url) => page.evaluate(u => new Promise(resolve => {
+    const t0 = performance.now();
+    const im = new Image();
+    const done = () => resolve({ ms: Math.round(performance.now() - t0), w: im.naturalWidth });
+    im.onload = done; im.onerror = done;
+    im.src = u;
+  }), url);
+  const PROBE_URL = BASE + 'assets/bh/fx/jab/basic1.png?fxaudit-cacheprobe';
+  const COLD_FLOOR_MS = 200, WARM_CEILING_MS = 250;
+  const cold = await timeImageLoad(PROBE_URL);
+  const warm = await timeImageLoad(PROBE_URL);
+  console.log(`  cache probe: cold ${cold.ms}ms (floor ${COLD_FLOOR_MS}ms), warm ${warm.ms}ms (ceiling ${WARM_CEILING_MS}ms), decoded ${cold.w}x`);
+  if (!cold.w || !warm.w) await bailSetup(`the cache probe could not even load ${PROBE_URL} (naturalWidth ${cold.w}/${warm.w}). The fixture is not serving the FX frames.`);
+  if (cold.ms < COLD_FLOOR_MS) await bailSetup(`a cold 112KB frame took ${cold.ms}ms through a pipe that should cost about 900ms, so the network throttle is NOT in effect and the v245 race cannot happen here. This audit would pass no matter how broken the FX are, which is not a check (anti-regression rule 1).`);
+  if (warm.ms >= WARM_CEILING_MS) await bailSetup(`a frame this audit had just loaded took ${warm.ms}ms to load AGAIN, so nothing is being cached and every re-read pays the throttled network. Under that, even a correct app plays over undecoded frames and this audit would report the v245 bug against a healthy tree. Almost always the server: check for 'cache-control: no-store' (tests/release-gate.mjs:53-54 sends it) and for the FX header rewrite above still being installed.`);
 
   /* FLOORS AND THE ONE REMAINING CEILING, all justified from measurement.
      Across 38 traced strikes on this tree: on-screen life 96 to 139ms at
@@ -338,12 +498,13 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
     const unpaintedWhileShown = shown.filter(s => !s.painted);
     const offVictim = shown.filter(s => s.decoded && s.boxed && !s.onVictim);
     const litSamples = samples.filter(s => s.wrapLit);
-    console.log(`  showing a frame: ${shown.length}/${samples.length}   undecoded while showing: ${undecodedWhileShown.length}   off-victim: ${offVictim.length}`);
+    console.log(`  showing a frame: ${shown.length}/${samples.length}   SHOWN frame undecoded: ${undecodedWhileShown.length}   off-victim: ${offVictim.length}`);
+    console.log(`  some other frame still undecoded (diagnostic, not asserted): ${shown.filter(s => !s.allDecoded).length}/${shown.length} samples`);
     console.log(`  crossfade seen (diagnostic, not asserted): ${samples.filter(s => s.crossfade.some(o => o !== '0')).length}/${samples.length} samples`);
 
     // CEILING, bound 0. This is the v245 bug and the reason this file exists.
     if (undecodedWhileShown.length) {
-      fail(`${move.id}: ${undecodedWhileShown.length}/${shown.length} samples had the animation SHOWING a frame while images were UNDECODED (naturalWidth ${JSON.stringify(undecodedWhileShown[0].naturalWidths)}), so nothing was on screen. This is the v245 bug.`);
+      fail(`${move.id}: ${undecodedWhileShown.length}/${shown.length} samples had the animation SHOWING a frame that was UNDECODED (frame ${undecodedWhileShown[0].shown} of naturalWidths ${JSON.stringify(undecodedWhileShown[0].naturalWidths)}), so nothing was on screen. This is the v245 bug.`);
       continue;
     }
     // CEILING, bound 0: shown but with no layout box, or removed from rendering.
@@ -364,6 +525,17 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
 
     console.log(`  OK: ${shown.length} decoded frames on the victim across ${lifeMs}ms`);
   }
+
+  /* LIFT IT. The throttle exists for the strike loop and nothing else, and it was
+     never taken off: every teardown read, every screenshot and anything added
+     below this line used to run at 400ms/200KB, which is slow at best and a
+     mystery timeout at worst. Same for the header rewrite. Cleanup, so a failure
+     here must not become a finding. */
+  try {
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await cdp.send('Fetch.disable');
+    console.log('\nnetwork throttle lifted, FX header rewrite removed');
+  } catch (e) { console.log(`\n(could not lift the throttle: ${e.message})`); }
 
   if (pageErrors.length) fail(`page errors during the audit: ${pageErrors.slice(0, 3).join(' | ')}`);
 
