@@ -9695,12 +9695,9 @@ function openHatchReveal(res, charWrap) {
     <div class="hatch-stage${reduced ? ' egg-burst' : ''}" id="hatchStage">
       <div class="hatch-glow"></div>
       <div class="hatch-flash"></div>
-      <div class="bone-egg" id="boneEgg">
-        <svg class="egg-cracks" viewBox="0 0 100 130" preserveAspectRatio="none" aria-hidden="true">
-          <path class="ec" pathLength="1" d="M50 8 L45 36 L55 58 L46 82"/>
-          <path class="ec" pathLength="1" d="M50 8 L59 32 L49 54"/>
-          <path class="ec" pathLength="1" d="M28 62 L46 68 L38 88 L54 100"/>
-        </svg>
+      <div class="bone-egg pix" id="boneEgg">
+        <span class="egg-seq" id="eggSeq">${Array.from({ length: EGG_SEQ_FRAMES },
+          (_, i) => `<img src="assets/eggs/step/f${i + 1}.png" alt="" class="${i === 0 ? 'on' : ''}" decoding="sync">`).join('')}</span>
         ${shards}
       </div>
     </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
@@ -9737,16 +9734,51 @@ function openHatchReveal(res, charWrap) {
     finish();
   } else {
     const egg = $('#boneEgg', wrap2);
-    const cracks = $$('.egg-cracks .ec', wrap2);
+    /* THE WIND-UP. Tom, 2026-08-16: "it seemed like it just went super quick
+       cracking ... there needs to be a little fun lead up/wind up as it's
+       hatching and then releases the pet to the player this is a fun moment
+       theyve worked hard to have happen by walking a lot it should feel
+       rewarding."
+       The old schedule was 2.35s end to end and its whole crack phase was
+       880ms. The authored frames make that worse, not better: the break-in is
+       267ms of real motion and the burst is 183ms, so nearly all of a straight
+       playback is standing still. Reward is not frames, it is ANTICIPATION,
+       so the beats below spend their time BEFORE the payoff, not after.
+       Three phases: a strain nobody asked for (something moves while the egg
+       is still whole), an escalating crack, then a dwell on the eye where the
+       player is looked at, and only then the burst.
+       Frame numbers are the authored keys: 1 whole, 2-5 break-in, 6 and 10 the
+       eye, 7-9 the blink, 11-14 the burst, 15 the smoke rest pose. */
+    const seq = $('#eggSeq', wrap2);
+    const frames = seq ? [...seq.children] : [];
+    const show = n => {
+      if (!seq || !seq.isConnected) return;
+      for (const f of frames) f.classList.remove('on');
+      frames[n - 1]?.classList.add('on');
+    };
+    const wob = () => { if (!egg.isConnected) return; egg.classList.remove('wob'); void egg.offsetWidth; egg.classList.add('wob'); };
     hitSound(S.sounds, 'thud');
-    [[520, 0], [960, 1], [1400, 2]].forEach(([t, i]) => setTimeout(() => {
-      if (!egg.isConnected) return;
-      egg.classList.remove('wob'); void egg.offsetWidth; egg.classList.add('wob');
-      cracks[i]?.classList.add('draw');
-      hitSound(S.sounds, 'thud');
-    }, t));
-    setTimeout(() => { if (stage.isConnected) { stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 1800);
-    setTimeout(() => { if (revealEl.isConnected) finish(); }, 2350);
+    const BEATS = [
+      [700,  1, true,  'thud'],   // it moves, and it is still whole. the tell.
+      [1500, 2, true,  'thud'],   // first crack
+      [2000, 3, true,  'thud'],
+      [2450, 4, true,  'thud'],
+      [2850, 5, true,  'thud'],
+      [3200, 6, true,  'zap'],    // the eye. it is looking at you.
+      [3900, 7, false, null],     // blink, no shake: the shell is not moving, IT is
+      [4000, 8, false, null],
+      [4100, 9, false, null],
+      [4200, 10, false, null],
+      [4900, 11, true, 'thud'],   // the burst, accelerating
+      [5000, 12, true, 'thud'],
+      [5070, 13, true, 'zap'],
+      [5130, 14, false, null],
+    ];
+    for (const [t, n, shake, snd] of BEATS) {
+      setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t);
+    }
+    setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200);
+    setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750);
   }
   $('#hatchOk', wrap2).addEventListener('click', () => history.back());
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
@@ -10808,6 +10840,7 @@ const CRATE_LID = { golden: 38, daily: 36, egg: 44 };
    144px, not the 148 the icon path uses, because the art is 48px and pixel art
    only survives INTEGER scaling. 148 would resample it to mush. */
 const CRATE_SEQ_FRAMES = 9;
+const EGG_SEQ_FRAMES = 15;
 function crateSeqHtml() {
   const f = i => `<img src="assets/crates/common/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
   return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
