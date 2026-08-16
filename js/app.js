@@ -516,7 +516,7 @@ async function boot() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first-ever install
       if (!sheetStack.length) location.reload();   // apply the new build as soon as no sheet is open
-      else toast('Update ready — leave this screen to apply', 3600);
+      else toast('Update ready. Leave this screen to apply', 3600);
     });
   }
   requestPersistence();
@@ -579,7 +579,7 @@ async function boot() {
   onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges); flushAnalytics(); refreshNotifSchedules(); });
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
-  initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
+  initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
 
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -623,7 +623,7 @@ async function boot() {
 /* DAY ROLLOVER (v224).
    The native shell is a long-lived WebView: iOS suspends and resumes it rather
    than relaunching, so boot() can go days without running. Everything
-   day-shaped used to roll over ONLY in boot() — S.date, the day close-out,
+   day-shaped used to roll over ONLY in boot(). S.date, the day close-out,
    yesterday's close-out crate, the daily wheel, quests, Pit energy. So the
    second morning you opened the app it was still on yesterday's date, and
    because renders compare S.date against a live dateKey() (`isToday`), the app
@@ -664,7 +664,7 @@ async function maybeShowWhatsNew() {
     if (navigator.webdriver || !S.settings) return;
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
-    if ($('#sheets')?.children.length) return;   // something already open — try again next launch
+    if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
     openWhatsNew();
   } catch { /* never block boot */ }
 }
@@ -1316,7 +1316,7 @@ const COMMUNITY_MAX_SHOWS = 3;
 const DISCORD_MARK = `<svg class="dc-mark" viewBox="0 0 24 18" width="16" height="12" aria-hidden="true" fill="currentColor"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg>`;
 
 /* THE APP ICON, not just the mark. Tom, 2026-08-12: "add the discord app icon
-   in the popup so people know. maybe the discord icon with a bonehead chillin
+   in the popup so people know. Maybe the discord icon with a bonehead chillin
    next to it or something to really grab the attention".
    The eyebrow mark above is deliberately monochrome so an in-house
    announcement does not read as an ad. This is the opposite job: the blurple
@@ -1353,7 +1353,7 @@ async function openCommunityCard() {
       <p class="drop-eyebrow dc-eyebrow">${DISCORD_MARK}<span>THE CLUBHOUSE</span></p>
       ${/* YOUR bonehead, not a stock one: it is already loaded, it costs no new
            precache entry, and "that is my guy" is a stronger reason to look
-           than any illustration we could ship. skip BG/C for the same reason
+           than any illustration we could ship. Skip BG/C for the same reason
            every other small stage does: a backdrop would box him in and the
            pet belongs to petAsideHtml, not to a hand-placed row. */''}
       <div class="dc-hero">${DISCORD_APP_ICON}<span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
@@ -1462,7 +1462,7 @@ async function openThanksCard() {
     <div class="drop-card">
       <p class="drop-eyebrow dc-eyebrow">${THANKS_MARK}<span>THANK YOU</span></p>
       ${/* YOUR bonehead. Already loaded, no new precache entry, and "that is my
-           guy" beats any stock illustration. skip BG/C for the same reason the
+           guy" beats any stock illustration. Skip BG/C for the same reason the
            Discord hero does: a backdrop would box him in. */''}
       <div class="bt-hero"><span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
       <h1 class="drop-title">Thanks for being <em>early</em></h1>
@@ -2525,7 +2525,7 @@ async function renderToday(el) {
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet — your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
+    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
   }
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
@@ -2629,7 +2629,7 @@ async function renderToday(el) {
   ${isToday && hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
   ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
@@ -3522,7 +3522,7 @@ function gluttonLoreHtml() {
 function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   const eq = themedLook(den.theme && den.theme.key, den.id);
   /* SHOW THE MONSTER. Tom, 2026-08-09: "you have a drop down banner that says
-     some shit about the bouncer below. it should have this type of art in there"
+     some shit about the bouncer below. It should have this type of art in there"
      next to a screenshot of the teaser wall. Right: the row was a 52px head, a
      chevron and a paragraph you had to open to read. A whole figure on a dark
      tile, exactly as the teaser draws them, IS the row. Nothing to expand, and
@@ -3987,11 +3987,31 @@ function gardenRowHtml(garden, seedTotal) {
    drawn at left 20, top 186, 150x349). Row three is a single CENTRED slot: the
    handoff notes call that deliberate rather than vacant, and it is what makes a
    five-bed garden read as designed instead of as a gap. */
+/* TWO PLOTS, which is the comp's own layout and Tom's call on 2026-08-16.
+   Both reviewers measured the right half as dead: 60.4% flat ground at 390x844
+   and a 157 x 223 region with 0.0% drawn content. They disagreed on the fix (set
+   dressing versus the second frame) and Tom picked the frame, so the empty half
+   now earns its space as you progress instead of being scenery you never touch.
+   Comp coordinates verbatim: left 20/186, right 220/242, both 150 x 349. The
+   right frame ends at y591 on a 740 stage, clear of the compost heap at y676. */
 const HLW_FRAME = { x: 20, y: 186, w: 150, h: 349 };
+const HLW_FRAME_R = { x: 220, y: 242, w: 150, h: 349 };
 /* The keeper's fixed gardening fit: Charcoal Bones, Charcoal Skull, Sun Boater.
    All three are real catalogue items, verified against data/boneheadz.js. */
 const HLW_FIT = { B: 'B0-1', SK: 'SK0-1', H: 'H9' };
-const HLW_SPOTS = [[67, 251], [130, 251], [67, 346], [130, 346], [99, 441]];
+/* Three in the left frame, two in the right. The three you start with stay
+   together so a new player's garden reads as one place, and the two you buy open
+   the second frame, which is what gives the right side a reason to exist. Bed art
+   is 84 wide, so the right pair at 264 and 327 spans x222 to x369 inside a frame
+   running 220 to 370. Measured, not estimated. */
+/* ONE COLUMN PER FRAME. Two columns never actually fitted: bed art is 84 wide
+   and a frame is 150, so a pair at 67 and 130 spanned x25 to x172 and pushed past
+   the frame's own right edge at 170 while overlapping each other. Measured in the
+   render after the second frame went in, both frames were also half empty, with
+   the beds bunched at the top and 135 units of bare soil below them.
+   Left frame x20-170 centres on 95, right frame x220-370 centres on 295, and the
+   three plus two are spread down their frames instead of huddled. */
+const HLW_SPOTS = [[95, 252], [95, 357], [95, 462], [295, 312], [295, 447]];
 /* 740, not 900. The bottom 160 units held nothing: the lowest object the keeper
    can reach is the compost heap at y 502 and he is 190 tall, so 692 is the real
    floor. Those empty units were pure scroll cost on a screen whose instruction and
@@ -4224,7 +4244,7 @@ function openHollow(after) {
        hlwSeen during the FIRST render, so the 30s tick, or any action at all,
        flipped it false and replaced the welcome line about 30 seconds in. The
        one line written specifically for somebody who has never been here was the
-       line least likely to be read. hlwSeen is written on CLOSE now, and
+       line least likely to be read. HlwSeen is written on CLOSE now, and
        firstEver is captured once when the sheet opens. */
     const firstEver = !seenAt;
     const say = hlwLine({ ripe: ripeN, growing: growN, planted: ripeN + growN,
@@ -4246,11 +4266,17 @@ function openHollow(after) {
       ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
+      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME_R.x, y: HLW_FRAME_R.y, w: HLW_FRAME_R.w, h: HLW_FRAME_R.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
         <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
         ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}
         <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
-      ${bedPrice != null ? `<div style="position:absolute;left:${hlwBuySpot(garden.plotsOwned)[0] - 42}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>` : ''}
+      ${/* Every slot you do not own gets its ghost, not only the one on sale. With
+            the second frame in, drawing just the purchasable one left the last
+            slot as bare soil inside a wooden frame, which reads as a gap in the
+            build rather than as a bed you have not bought. */''}
+      ${HLW_SPOTS.slice(garden.plotsOwned).map(([gx, gy]) =>
+        `<div style="position:absolute;left:${gx - 42}px;top:${gy - 30}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>`).join('')}
       ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice, coin)}</span>` : ''}
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
@@ -4742,7 +4768,7 @@ async function openKitchen() {
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
-  let view = 'doors';   // 'doors' | 'cook' — the Kitchen opens on its two doors
+  let view = 'doors';   // 'doors' | 'cook'. the Kitchen opens on its two doors
   async function render() {
     if (!body.isConnected) return;
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
@@ -6139,8 +6165,8 @@ async function renderTrends(el) {
     <div class="card-title">STEPS${stepsHasData ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
     <div class="trend-stats" style="margin:2px 0 12px">
       <div class="st"><div class="l">Today</div><div class="v">${stepsToday.toLocaleString()}</div></div>
-      <div class="st"><div class="l">7-day avg${s7.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
-      <div class="st"><div class="l">30-day avg${s30.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">7-day avg${s7.partial ? '<i class="st-note">incl. Today</i>' : ''}</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">30-day avg${s30.partial ? '<i class="st-note">incl. Today</i>' : ''}</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
     </div>
     <div class="chart" id="stepsChart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}
       <p class="bc-readout note">${stepsHasData ? 'Tap any bar for that day\'s exact steps.' : ''}</p></div>
@@ -7070,7 +7096,7 @@ function nameWithAlias(f) {
    Approved mockup: market-quality-mockups/crew-fan.html; spec + acceptance:
    market-quality-mockups/crew-fan-HANDOFF.md. Backdrop is their equipped BG, the
    Bonehead holds the centre (figure contract), the pet sits on the plate's top
-   edge at the right tension line. cfan-pet is a registered figure-audit site. */
+   edge at the right tension line. Cfan-pet is a registered figure-audit site. */
 /* THE ART OF ONE CARD, split out so a seat can mount and UNMOUNT it (see
    applyFan). The FIGURE takes the 384 tier, not 192: it draws at 175 CSS px
    inside a 194px card, which is 525 device px on a 3x phone, and 192 visibly
@@ -7278,7 +7304,7 @@ async function renderFriends(el) {
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
     /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
-       fanfare or credit to the sender. otherwise deliveries reads like a receipt
+       fanfare or credit to the sender. Otherwise deliveries reads like a receipt
        you'd get at a store." A gift you have not opened is the only thing on
        this card that is not history, so it sits on top, closed, with the sender's
        name on it. */
@@ -7593,7 +7619,7 @@ async function renderFriends(el) {
 
   /* Two ways to advance: TAP a card (a side card centres it, the centre card
      opens their profile), or DRAG the fan: it follows the finger, settles home,
-     and advances past the threshold. dragstart MUST die or the browser lifts a
+     and advances past the threshold. Dragstart MUST die or the browser lifts a
      single gear PNG off the Bonehead as a ghost image (Tom hit this on the
      mockup); the click suppressor is ONE-SHOT so only the click born from this
      drag's release is eaten, never the next legitimate tap. */
@@ -7724,12 +7750,12 @@ async function renderFriends(el) {
     if (wait) wait.hidden = true;
     /* THE PODIUM IS THE TILE, NOT THE LIST. Two notes from Tom that read as
        opposites but are not:
-         2026-08-08 "I just want it to include all players in the main list" —
+         2026-08-08 "I just want it to include all players in the main list" . 
            about the SHEET, where a podium pulled three people out of the ranking
            and made everyone else a footnote. The sheet is still one flat list.
          2026-08-09 "I don't like that the leaderboard is fully collapsed now and
            we lost the podium art. You should still see that and then also click
-           to open and see the full list." — about the CREW TAB, where removing
+           to open and see the full list.". about the CREW TAB, where removing
            the podium left a card with a sentence on it and nothing to look at.
        So: podium art here as the preview, single list in the sheet. The whole
        card is already a button, so the tap-through he asked for already works;
@@ -7815,7 +7841,7 @@ async function renderFriends(el) {
     const heads = $$('[data-lbhead]', body);
     if (typeof IntersectionObserver === 'function') {
       /* RECYCLE, do not just defer. Tom, 2026-08-13: "scrolling the leaderboard
-         still crashes it like before the fix. it's better than before when it
+         still crashes it like before the fix. It's better than before when it
          wouldn't open but that's a thing."
 
          He is describing the exact hole in the first fix. It mounted on approach
@@ -7831,7 +7857,7 @@ async function renderFriends(el) {
 
          The reason this shipped: my audit measured the mount at OPEN and never
          scrolled, so it measured the one state the player was not complaining
-         about. lb-memory-audit now scrolls to the end before it measures. */
+         about. Lb-memory-audit now scrolls to the end before it measures. */
       const io = new IntersectionObserver(entries => {
         for (const en of entries) {
           const el = en.target;
@@ -7893,7 +7919,7 @@ async function renderFriends(el) {
     const myFit = await equipped();
     const wk = raceWeekKey(dateKey());
     /* PUSH BEFORE YOU PULL. Tom, 2026-08-08: "how often is the step race
-       challenge checking? ive walked since then and dont see myself in 1st. this
+       challenge checking? ive walked since then and dont see myself in 1st. This
        should updating frequently."
        The board reads weekSteps out of the profile snapshot, and that snapshot
        only ever reached the server from autoSync at boot/resume, behind a 5
@@ -8230,7 +8256,7 @@ async function openGiftSheet(f) {
   });
 
   /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
-     still could. armToConfirm's own header records why it exists (a player
+     still could. ArmToConfirm's own header records why it exists (a player
      bought a 1,000-coin cauldron by accident), and these chips were sending up
      to 500 coins to ANOTHER PLAYER on a single tap, which is worse than a
      mis-buy: the refund below only runs when the send FAILS, so a successful
@@ -8301,7 +8327,7 @@ function openFeedbackSheet() {
     btn.disabled = true; if (st) st.textContent = 'Sending...';
     const r = await sendReport('feedback', { note });
     trackEvent('feedback_send');
-    if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks — every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
+    if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks. Every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
     else { if (st) st.textContent = 'Could not send. Try again when you are online.'; btn.disabled = false; }
   });
 }
@@ -8955,7 +8981,7 @@ async function renderSettings(el) {
     }
     confettiBurst(innerWidth / 2, innerHeight * 0.35, 24); levelSound(S.sounds);
     toast(res.pet ? `${res.pet.name} unlocked! Equip it in your Wardrobe.${res.coins ? ` +${res.coins} coins.` : ''}`
-      : `Code redeemed!${res.dupe ? ' (pet already owned — coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
+      : `Code redeemed!${res.dupe ? ' (pet already owned, coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
     renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());
@@ -9366,8 +9392,8 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
 
 
 /* The level-up MOMENT. A breathing lime glow bursts behind the player's own
-   Bonehead — never a stock figure, this surface is under the figure contract and
-   carries the pet and its shiny — the character pops in, the chips step, and the
+   Bonehead. Never a stock figure, this surface is under the figure contract and
+   carries the pet and its shiny. The character pops in, the chips step, and the
    XP bar speed-ramps to full, builds a glow, releases it in a flash and is
    revealed at the carry-over for the NEW level. It is never shown draining: the
    snap to the real remainder happens under the full flash. Beats live in
@@ -9476,7 +9502,7 @@ function startLevelGlow(el) {
   };
   /* Automation gets the resting simmer so screenshots stay deterministic — but a
      motion effect that can ONLY run outside automation is one no test can ever
-     see, which makes every future change to it a guess. window.__motionForce
+     see, which makes every future change to it a guess. Window.__motionForce
      turns it back on, same idiom as __spireForce / __raceForce / __gardenForce. */
   if (reducedMotion || (navigator.webdriver && !window.__motionForce)) { paint(0.16); return () => {}; }
   let raf = 0;
@@ -9528,7 +9554,7 @@ async function renderBonehead(el) {
      (kvSet('onbName') at the end of the onboarding flow), and social.socialMe()
      is a kvGet. The literal survives as the last rung because a save from before
      'onbName' existed has neither, and a blank heading is worse than the old
-     one. esc() because me.name arrives from the server. */
+     one. Esc() because me.name arrives from the server. */
   const me = await social.socialMe();
   const pick = me && me.name ? null : await kvGet('onbName', null);
   const title = (me && me.name)
@@ -10436,7 +10462,7 @@ function openProgressSheet() { return openCharacter('progress'); }
 // what each gear-granted talent actually DOES (so loot can be compared, not just named)
 const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
 /* The player-facing three-letter stat codes. Mirrors the KEY table inside
-   gearLabel() in js/gear.js, which is the only other place they exist —
+   gearLabel() in js/gear.js, which is the only other place they exist . 
    STAT_META carries the long names and prose labels, not these. If a third
    caller ever needs them, export one table from gear.js and drop this. */
 const STAT_CODE = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hype: 'HYP' };
@@ -10448,7 +10474,7 @@ const STAT_CODE = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hyp
 function gearToCard(g) {
   /* Two things about g.stats worth knowing before you touch this. Its keys are
      the long internal names (power/marrow/wind/reflex/hype), not the three-letter
-     codes players read — gearLabel() maps them, and STAT_CODE mirrors that table.
+     codes players read. GearLabel() maps them, and STAT_CODE mirrors that table.
      And GEAR_BUDGET has no `common` entry, so statSplit() hands a common back
      {power: NaN}: commons are plain armour with no stats by design, so filter on
      the values rather than trusting the map to be empty. */
@@ -10619,7 +10645,7 @@ function packCardHtml(c, { selectable = false } = {}) {
     : '';
   /* The BAND under the plate is where a drop says what it does: real stat chips
      when it rolled some, the talent affix on top of them, and an explicit
-     "no stats" line for pure cosmetics — an empty shelf under a legendary's
+     "no stats" line for pure cosmetics. An empty shelf under a legendary's
      nameplate reads as a bug, not as "this one is looks-only". `stats` stays the
      free-form HTML slot every older call site already fills. */
   const chips = (c.statList || []).map(([k, v]) =>
@@ -10670,7 +10696,7 @@ function crateOpenHtml(kind) {
 }
 
 /* What the light does per tier. The ladder is deliberately WIDE: a common gets
-   haze and nothing else, a legendary gets the full fan — the two must not look
+   haze and nothing else, a legendary gets the full fan. The two must not look
    alike. `light` is the burst tint, which is warmer than the frame colour on a
    common (a cream fan on a cream card disappears). */
 const BURST = {
@@ -10706,7 +10732,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
      second target at all"). It needs 5 den wins AND standing inside a den's
      radius, which no audit can arrange, so it went untested and I kept saying it
      was fixed. Same idiom as __crateForce / __spireForce: nothing changes unless a
-     test opts in. pitWrap is only used to re-render the Pit on close, so null is
+     test opts in. PitWrap is only used to re-render the Pit on close, so null is
      safe here. */
   /* Open a real den sheet for a real den, so a test can look at what a player
      looks at rather than at the data behind it. */
@@ -10874,7 +10900,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          depend on a frame arriving.
          The double rAF stays, because the entrance animation genuinely needs
          two frames to have a previous value to interpolate from. The timer is
-         the floor under it. classList.add is idempotent. */
+         the floor under it. ClassList.add is idempotent. */
       const go = () => {
         const add = () => deck.classList.add('go');
         requestAnimationFrame(() => requestAnimationFrame(add));
@@ -11136,7 +11162,7 @@ async function checkPetLevelUp() {
   const petName = (BH_BY_ID[inst.sp] && BH_BY_ID[inst.sp].name) || 'Your pet';
   // if something is already on screen (a fight, another sheet) don't hijack it
   if (sheetStack.length) {
-    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent — pick it in the Stable!`, 4600); }
+    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent. Pick it in the Stable!`, 4600); }
     else { popSound(S.sounds); toast(`🐾 ${petName} reached Lv ${cur}!`, 3000); }
     return;
   }
@@ -11189,7 +11215,7 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 /* WHAT PETS ARE FOR. Tom, 2026-08-10: "there should also be a tapable sheet at
    the top of the stable... that explains the pets feature of the game - how
    breeding works, why do it and where does it stop paying off? how do pet talents
-   work, what are shinies etc. keep it concise though not too verbose or
+   work, what are shinies etc. Keep it concise though not too verbose or
    rambling."
    Every number here is read from the code that enforces it (pets.js, loot.js)
    rather than typed in, so this sheet cannot drift from the game the way a
@@ -11503,7 +11529,7 @@ async function openStable(opts = {}) {
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
-             have animations for. that is the cloud, the orange liz and the purple
+             have animations for. That is the cloud, the orange liz and the purple
              liz." That is ANIMATED_PETS = C1, C4, CX exactly.
              petSpriteHtml rather than petPortraitHtml: it prefers the animated
              build where one exists and falls back to the cropped still otherwise,
@@ -12102,7 +12128,7 @@ async function openStable(opts = {}) {
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
        Short version: `position: sticky; bottom: 0` is clamped by its containing
-       block, and the bar's was #stableBody, i.e. the entire sheet, so it could
+       block, and the bar's was #stableBody, i.e. The entire sheet, so it could
        rise all the way over .cf-acts. Both previous fixes bought room to escape
        it; neither stopped it happening. Measured on v380 at 375x667 with a
        precious pair flagged: [data-destroy] hit li / span.bt-in / div.breed-trade
@@ -12396,7 +12422,7 @@ async function openRecoverySheet({ firstRun = false } = {}) {
       <p class="note" style="margin:2px 2px 14px">${intro}</p>
       <div class="field">
         <label>Recovery ID <span class="rc-hint">the name you look yourself up by</span></label>
-        <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. tom-bones" value="${esc(existingId || '')}">
+        <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. Tom-bones" value="${esc(existingId || '')}">
         <p class="rc-note" id="rcIdState"></p>
       </div>
       <div class="field">
@@ -13045,7 +13071,7 @@ async function renderBoneyard(el) {
     // unreachable" (private property, etc.); on empty ground -> "nominate this
     // landmark for a boss den". Both send a private note to the devs.
     let lpTimer = null, lpStart = null, lpPointer = null, reportOpen = false;
-    const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold — not an accidental brush
+    const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold. Not an accidental brush
     function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; lpPointer = null; }
     function markerAt(target) {
       const el = target && target.closest && target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
@@ -13117,7 +13143,7 @@ async function renderBoneyard(el) {
       if (el) {
         /* A SPIRE IS SOMEBODY'S TURF. Tom, 2026-08-08: "why cant i click a Spire
            on the map in boneyard and see somethign cool like who has it right
-           now etc. it should be like pokemon go where youre proud to rep your
+           now etc. It should be like pokemon go where youre proud to rep your
            gym and flex on other players." It was not even in this selector, so
            tapping one did nothing at all. Every fact below already arrives with
            the /spires poll; nothing new is fetched. */
@@ -13163,7 +13189,7 @@ async function renderBoneyard(el) {
       const lead = isDen
         ? 'Know a spot that would make a great boss den? A landmark, a park, somewhere with meaning. Tell the devs why it belongs on the map.'
         : `Can't reach <b>${esc(ctx.label || 'this spot')}</b>? If it's on private property or otherwise off-limits, let the devs know and they'll review it.`;
-      const ph = isDen ? 'Why here? (e.g. the old lighthouse, the town square...)' : "What's wrong? (e.g. this is on private property)";
+      const ph = isDen ? 'Why here? (e.g. The old lighthouse, the town square...)' : "What's wrong? (e.g. This is on private property)";
       openSheet(`
         <h2>${title}</h2>
         <p class="muted" style="margin:0 0 12px">${lead}</p>
@@ -13507,7 +13533,7 @@ async function renderBoneyard(el) {
       // would sit blank forever behind opacity 0
       await Promise.race([refreshSpires(), new Promise(r => setTimeout(r, 2500))]);
       /* ONE ARRIVAL, NOT FIVE. Tom, 2026-08-08: "it seems like the spires load in
-         after other icons. all the icons should be appearing at the same time it
+         after other icons. All the icons should be appearing at the same time it
          looks cheap when everything staggers in."
          Everything above paints synchronously from local data; spires alone wait
          on a network round trip, so they always landed last. The marker layer
@@ -13947,7 +13973,7 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
      true: as soon as they log anything today, the moment they have ever logged
      anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
      skippable if they dont want to then point them to other things that could
-     be of interest" — skipping does not blank the card, it falls straight
+     be of interest". skipping does not blank the card, it falls straight
      through to the fight/gear/talent nudges underneath, which is what the rest
      of this function already computes. */
   if (!loggedToday && !everLogged && !mealSkipped) sig.push({
@@ -15283,14 +15309,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : (WRAITH_MOVE_LABEL[ev.move] || 'swing').toLowerCase()}... and hit nothing but air` : `${who} whiffed the haymaker`;
-    if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep — ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
+    if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep. ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
     /* THE LIVE WIRE. Each line names what the move actually did, because his
        whole point is that his moves check things nothing else checks. */
     if (ev.t === 'wraith') return {
-      bolt: `${esc(ev.name)} throws a hollow bolt — straight through armour`,
+      bolt: `${esc(ev.name)} throws a hollow bolt. Straight through armour`,
       wail: `${esc(ev.name)} WAILS. Your wounds will not close as fast.`,
       rise: `${esc(ev.name)} calls something up out of the floor`,
-      reap: `${esc(ev.name)} reaps — and the fuller your lungs, the deeper it cuts`,
+      reap: `${esc(ev.name)} reaps. And the fuller your lungs, the deeper it cuts`,
       grasp: `${esc(ev.name)} reaches out and takes the wind out of you`,
     }[ev.cast] || '';
     if (ev.t === 'drain') return `${esc(ev.name)} drains ${ev.amount} stamina${ev.healed ? ` and heals ${ev.healed}` : ''}`;
@@ -15481,7 +15507,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
        grid as the attack buttons, so a mis-tap costs a brewed item AND an AP.
        Same armToConfirm every spend and destroy in the app already uses: first
        tap arms and relabels, 3.2s cooloff, second tap commits with a heavy
-       haptic. renderActions() rebuilds this grid every refresh, which disarms
+       haptic. RenderActions() rebuilds this grid every refresh, which disarms
        anything left armed, exactly as it should. */
     $$('[data-potion]', factions).forEach(b => {
       if (b.disabled) return;
@@ -15906,7 +15932,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            that rendered before the fight, so after a win that sheet still
            offers the fight you just won. The Glutton got a fix; the spire did
            not, because the fix was written for the path the ticket named rather
-           than for the shared function. settle() has already claimed the tower
+           than for the shared function. Settle() has already claimed the tower
            by the time this runs, so openSpireSheet's "Face the Warden" button
            is not merely stale, it is a live control for an act that is done.
            STALE_LAUNCHER is the list of modes whose launcher cannot survive a
