@@ -21,30 +21,76 @@ const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? ' 
    responsible for, shadows and glows included, so it needs no knowledge of the
    asset, the layer stack or the object-fit maths. Animations are paused first,
    or a torch flickering between the two frames reads as figure ink. */
-async function inkOf(page, hideSel) {
-  const clip = await page.evaluate(() => { const r = document.querySelector('.arena').getBoundingClientRect();
-    return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; });
-  /* MEASURE THE FIGURE WITH THE LID OFF, THEN ASK WHAT THE LID COVERS.
-     Hiding the HUD for both frames is the whole trick, and leaving it out cost
-     this audit its only reason to exist. A diff of visible pixels cannot see ink
-     that is UNDER an opaque panel: with the HUD painted over the boss, hiding
-     the boss changes nothing in the covered band, so the measured ink box stops
-     exactly at the HUD's lower edge and the figure reads as perfectly composed.
-     Proven, not reasoned: against the pre-move tree this check passed on the
-     boss while 110.4px of him was behind the bars. Hidden with visibility, never
-     display, so nothing reflows between the two frames.
-     #floats goes too: damage numbers appear and vanish on their own schedule and
-     would otherwise diff as figure ink wherever they happened to land. */
-  const unmask = '.fight-hud, #floats';
-  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = 'hidden'), unmask);
-  await sleep(120);
+async function inkOf(page, targetSel) {
+  /* MEASURE THE FIGURE, NOT THE HOLE IT IS ALLOWED TO PAINT IN.
+     Two earlier forms of this were wrong, and both were wrong in the direction
+     that grades a broken screen green, so the history is worth keeping.
+
+     v1 clipped the screenshot to the arena's own rect. That made "the ink is
+     inside the arena" true by construction, because ink outside the clip is not
+     ink the diff can see, and .arena carries overflow:hidden so a figure shoved
+     past the edge does not spill, it VANISHES. Measured: with the boss
+     translated 130px up so his head is cut off, v1 read his ink at 1636px
+     against a healthy 38395 and printed PASS, 2.1px of clearance. That is
+     exactly the decapitation case this file exists to catch.
+
+     v2 lifted overflow and grew the clip past the arena, which fixed the
+     blindness and introduced a different lie: the bigger region now included
+     the meta row and the move tray, and those change on their own between the
+     two frames, so unrelated UI churn was attributed to the figure. It invented
+     195.1px of boss ink below the arena at 430x932 where the DOM shows nothing
+     below it at all.
+
+     v3, this one, removes the ambiguity instead of chasing it. Everything in
+     the fight body is hidden, then ONLY the target subtree is made visible.
+     Frame A is the figure alone on the page background; frame B is the same
+     page with the figure hidden too. It is document.body that gets hidden, not
+     the fight body: toasts and damage floats live OUTSIDE the fight body, they
+     appear and vanish on their own schedule, and hiding only the fight body
+     left them free to diff. That mistake invented a steady 189px of boss ink
+     below the arena at two viewports at once, which is what a toast low on the
+     screen looks like when it is credited to a figure. The only thing that can differ between
+     them is the figure, so no other element can contribute a pixel, and the
+     arena's clip is lifted for both frames so the figure is measured at its
+     true extent rather than at the edge that was cutting it. */
+  const clip = await page.evaluate(sel => {
+    const a = document.querySelector('.arena');
+    const body = document.body;   /* the WHOLE page, so a toast or a damage float cannot differ between frames */
+    const tgt = document.querySelector(sel);
+    if (!a || !body || !tgt) return null;
+    a.dataset.inkPrevOverflow = a.style.overflow || '';
+    body.dataset.inkPrevVis = body.style.visibility || '';
+    tgt.dataset.inkPrevVis = tgt.style.visibility || '';
+    a.style.overflow = 'visible';
+    body.style.visibility = 'hidden';      /* inherited by everything inside */
+    tgt.style.visibility = 'visible';      /* except the one subtree we measure */
+    const r = a.getBoundingClientRect();
+    const M = 260;
+    const x = Math.max(0, Math.round(r.left) - M), y = Math.max(0, Math.round(r.top) - M);
+    return { x, y, width: Math.min(innerWidth - x, Math.round(r.width) + M * 2),
+             height: Math.min(innerHeight - y, Math.round(r.height) + M * 2) };
+  }, targetSel);
+  if (!clip) return { px: 0, box: null };
+  await sleep(140);
   const before = await page.screenshot({ clip, encoding: 'base64' });
-  const n = await page.evaluate(sel => { const els = document.querySelectorAll(sel);
-    els.forEach(e => e.style.visibility = 'hidden'); return els.length; }, hideSel);
-  await sleep(150);
+  await page.evaluate(sel => { document.querySelector(sel).style.visibility = 'hidden'; }, targetSel);
+  await sleep(140);
   const after = await page.screenshot({ clip, encoding: 'base64' });
-  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = ''), hideSel);
-  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = ''), unmask);
+  await page.evaluate(sel => {
+    /* RESTORE WHAT WAS ACTUALLY HIDDEN. The setup stashes and hides
+       document.body; this block used to restore document.querySelector
+       ('.fight-body') from a dataset key that element never carried, so
+       document.body was left at visibility:hidden for the rest of the run and
+       .fight-body had its visibility set to the string "undefined". Nothing
+       downstream screenshots, so it graded green, but every later check was
+       reading a page that had been invisible since the first measurement, and
+       the next inkOf call re-stashed 'hidden' as the value to restore to. */
+    const a = document.querySelector('.arena'), body = document.body,
+          tgt = document.querySelector(sel);
+    a.style.overflow = a.dataset.inkPrevOverflow || ''; delete a.dataset.inkPrevOverflow;
+    body.style.visibility = body.dataset.inkPrevVis || ''; delete body.dataset.inkPrevVis;
+    if (tgt) { tgt.style.visibility = tgt.dataset.inkPrevVis || ''; delete tgt.dataset.inkPrevVis; }
+  }, targetSel);
   const raw = await page.evaluate(async (a, b, thr) => {
     const load = s => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = 'data:image/png;base64,' + s; });
     const [ia, ib] = await Promise.all([load(a), load(b)]);
@@ -63,11 +109,11 @@ async function inkOf(page, hideSel) {
         px++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       }
     }
-    return { px, cw: c.width, ch: c.height, x0, y0, x1, y1 };
+    return { px, cw: c.width, x0, y0, x1, y1 };
   }, before, after, 30);
-  if (!raw.px) return { hidden: n, px: 0, box: null };          /* empty sample, the caller must fail on it */
-  const dpr = raw.cw / clip.width;                              /* device px per css px */
-  return { hidden: n, px: raw.px, box: {
+  if (!raw.px) return { px: 0, box: null };
+  const dpr = raw.cw / clip.width;
+  return { px: raw.px, box: {
     top: +(clip.y + raw.y0 / dpr).toFixed(1), bottom: +(clip.y + (raw.y1 + 1) / dpr).toFixed(1),
     left: +(clip.x + raw.x0 / dpr).toFixed(1), right: +(clip.x + (raw.x1 + 1) / dpr).toFixed(1) } };
 }
@@ -152,7 +198,7 @@ for (const [W, H] of COMPOSE) {
     /* an empty sample is a FAILURE, not a pass: no ink means either the figure
        never rendered or the diff is broken, and both must be loud. */
     ok(`SETUP ${W}x${H}: the ${who} put ink on the screen to measure`, ink.px > 0 && !!ink.box,
-      `${ink.px} px changed across ${ink.hidden} hidden element(s)`);
+      `${ink.px} px of ink`);
     if (!ink.box) continue;
     const over = { top: +(frame.arena.top - ink.box.top).toFixed(1), bottom: +(ink.box.bottom - frame.arena.bottom).toFixed(1),
                    left: +(frame.arena.left - ink.box.left).toFixed(1), right: +(ink.box.right - frame.arena.right).toFixed(1) };
