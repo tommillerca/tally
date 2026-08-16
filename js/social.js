@@ -519,7 +519,16 @@ export async function pullBackup() {
     const data = await r.json();
     if (!data.blob) return { restored: false, reason: 'empty' };
     const snapshot = await decryptBackup(data.blob);
-    const counts = await importAll(snapshot);
+    /* `replace: false` PINS TODAY'S BEHAVIOUR HERE ON PURPOSE. importAll now
+       defaults to a true restore (it clears each declared store first) so the
+       Settings Import button cannot be farmed for coins. This path is not that
+       button. It runs once per install from bootSync on a device that has
+       nothing to clear, and from adoptIdentity on a device that may have a
+       local save the cloud snapshot has never seen. Turning that one into a
+       replace would delete local-only progress, which is a product call about
+       account recovery and not a security fix. Left as the documented merge
+       until Reg rules on it. */
+    const counts = await importAll(snapshot, { replace: false });
     return { restored: true, counts, updatedAt: data.updatedAt };
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
