@@ -9,6 +9,70 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
+/* ---- INK, not boxes ----
+   A stage box is not a figure. .fstage is a square with object-fit:contain
+   inside it, so a box can sit clear of the HUD while the drawing inside it does
+   not, and it can also overlap while nothing visible does. The old assertion in
+   this section dodged the problem by measuring the ARENA instead of anything
+   drawn in it, which is why it survived a build where the boss was rendering
+   with his head cut off.
+   This measures what is actually painted: screenshot the arena, hide one side,
+   screenshot again, and diff. Every pixel that changed is a pixel that side was
+   responsible for, shadows and glows included, so it needs no knowledge of the
+   asset, the layer stack or the object-fit maths. Animations are paused first,
+   or a torch flickering between the two frames reads as figure ink. */
+async function inkOf(page, hideSel) {
+  const clip = await page.evaluate(() => { const r = document.querySelector('.arena').getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }; });
+  /* MEASURE THE FIGURE WITH THE LID OFF, THEN ASK WHAT THE LID COVERS.
+     Hiding the HUD for both frames is the whole trick, and leaving it out cost
+     this audit its only reason to exist. A diff of visible pixels cannot see ink
+     that is UNDER an opaque panel: with the HUD painted over the boss, hiding
+     the boss changes nothing in the covered band, so the measured ink box stops
+     exactly at the HUD's lower edge and the figure reads as perfectly composed.
+     Proven, not reasoned: against the pre-move tree this check passed on the
+     boss while 110.4px of him was behind the bars. Hidden with visibility, never
+     display, so nothing reflows between the two frames.
+     #floats goes too: damage numbers appear and vanish on their own schedule and
+     would otherwise diff as figure ink wherever they happened to land. */
+  const unmask = '.fight-hud, #floats';
+  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = 'hidden'), unmask);
+  await sleep(120);
+  const before = await page.screenshot({ clip, encoding: 'base64' });
+  const n = await page.evaluate(sel => { const els = document.querySelectorAll(sel);
+    els.forEach(e => e.style.visibility = 'hidden'); return els.length; }, hideSel);
+  await sleep(150);
+  const after = await page.screenshot({ clip, encoding: 'base64' });
+  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = ''), hideSel);
+  await page.evaluate(sel => document.querySelectorAll(sel).forEach(e => e.style.visibility = ''), unmask);
+  const raw = await page.evaluate(async (a, b, thr) => {
+    const load = s => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = 'data:image/png;base64,' + s; });
+    const [ia, ib] = await Promise.all([load(a), load(b)]);
+    const c = document.createElement('canvas'); c.width = ia.width; c.height = ia.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(ia, 0, 0); const da = g.getImageData(0, 0, c.width, c.height).data;
+    g.clearRect(0, 0, c.width, c.height); g.drawImage(ib, 0, 0);
+    const db = g.getImageData(0, 0, c.width, c.height).data;
+    let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, px = 0;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      /* 30 of summed RGB distance. Tuned against the real render: it keeps the
+         figure and its drop shadow and drops the compression noise that makes
+         two screenshots of an identical frame differ by 1 or 2 per channel. */
+      if (Math.abs(da[i] - db[i]) + Math.abs(da[i+1] - db[i+1]) + Math.abs(da[i+2] - db[i+2]) > thr) {
+        px++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    return { px, cw: c.width, ch: c.height, x0, y0, x1, y1 };
+  }, before, after, 30);
+  if (!raw.px) return { hidden: n, px: 0, box: null };          /* empty sample, the caller must fail on it */
+  const dpr = raw.cw / clip.width;                              /* device px per css px */
+  return { hidden: n, px: raw.px, box: {
+    top: +(clip.y + raw.y0 / dpr).toFixed(1), bottom: +(clip.y + (raw.y1 + 1) / dpr).toFixed(1),
+    left: +(clip.x + raw.x0 / dpr).toFixed(1), right: +(clip.x + (raw.x1 + 1) / dpr).toFixed(1) } };
+}
+const overlap = (a, b) => (!a || !b) ? 0 : +Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)).toFixed(1);
+
 const argv = process.argv[2] || process.env.URL;
 const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const base = argv || srvHandle.url;
@@ -23,10 +87,19 @@ const tall = await page.evaluate(() => {
   const a = document.querySelector('.arena').getBoundingClientRect();
   /* End Turn lives BELOW the tray now, so the bottom of the fight is its row. */
   const act = (document.getElementById('fendrow') || document.querySelector('.fight-actions')).getBoundingClientRect();
-  return { vh: innerHeight, arenaH: Math.round(a.height), pct: Math.round(a.height / innerHeight * 100),
+  const hud = document.querySelector('.fight-hud')?.getBoundingClientRect();
+  const hudH = hud ? hud.height : 0;
+  const pictH = a.height + hudH;
+  return { vh: innerHeight, arenaH: Math.round(a.height), hudH: Math.round(hudH), pictH: Math.round(pictH),
+           pct: Math.round(a.height / innerHeight * 100), pictPct: Math.round(pictH / innerHeight * 100),
            actionsBottom: Math.round(act.bottom), belowActions: Math.round(innerHeight - act.bottom) };
 });
-ok('the arena uses at least half the screen', tall.pct >= 50, `${tall.arenaH}px = ${tall.pct}% of ${tall.vh}`);
+/* THE PICTURE, NOT ONE BOX OF IT. This read .arena alone, which was right only
+   while the HUD lived inside the arena. The HUD is a sibling row now, so the
+   same layout scores 47% measured that way and 57% measured honestly, and the
+   assertion would have failed a change that took nothing away from the player. */
+ok('the fight picture uses at least half the screen', tall.pictPct >= 50,
+  `arena ${tall.arenaH} + hud ${tall.hudH} = ${tall.pictH}px = ${tall.pictPct}% of ${tall.vh}`);
 ok('the action buttons are on screen', tall.actionsBottom <= tall.vh, `bottom ${tall.actionsBottom} / ${tall.vh}`);
 ok('no dead band under the buttons', tall.belowActions < 60, `${tall.belowActions}px`);
 
@@ -41,7 +114,60 @@ const short = await page.evaluate(() => {
   return { vh: innerHeight, arenaH: Math.round(a.height), actionsBottom: Math.round(act.bottom),
            endTurnVisible: end ? end.bottom <= innerHeight + 1 && end.top >= 0 : false };
 });
-ok('the arena never goes below its 258 floor', short.arenaH >= 258, `${short.arenaH}px on a ${short.vh} screen`);
+/* THE 258 FLOOR IS GONE, AND ITS REPLACEMENT MEASURES THE PICTURE.
+   258 was a proxy: it asserted a container size and hoped the figures inside
+   were therefore fine. It stopped tracking anything real twice over. The
+   fighter rules were re-based onto the arena, so the arena's height no longer
+   implies a figure height; and the HUD moved out of the arena, so the number
+   the old check read is not the number it used to read. Worse, a proxy this
+   loose passed a build in which the boss was rendering with his head cut off:
+   at 375x667 against a mage den, 110.4px of a 262px figure was BEHIND an
+   opaque HUD, and the arena was 292px, comfortably over 258, so this line was
+   green while the screen was broken.
+   What the check is FOR is composition: the fighters are inside the picture and
+   nothing covers them. So that is what it asserts now, on measured ink rather
+   than on stage boxes, at all three phone sizes. */
+const COMPOSE = [[390, 844], [375, 667], [430, 932]];
+for (const [W, H] of COMPOSE) {
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(500); await settle(page);
+  /* the mage is the tall boss, and the tall boss is the whole point: an
+     ordinary foe fits everywhere and would prove nothing about clipping. */
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await sleep(500);
+  await page.evaluate(async () => { await window.__denFight(1.4, 0, { mage: true }); });
+  await sleep(1800); await settle(page); await sleep(400);
+  await page.addStyleTag({ content: '*,*::before,*::after{animation-play-state:paused !important;transition:none !important}' });
+  await sleep(200);
+  const frame = await page.evaluate(() => {
+    const g = s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect();
+      return { top: +r.top.toFixed(1), bottom: +r.bottom.toFixed(1), left: +r.left.toFixed(1), right: +r.right.toFixed(1) }; };
+    return { arena: g('.arena'), hud: g('.fight-hud') };
+  });
+  ok(`SETUP ${W}x${H}: there is an arena and a HUD to compose`, !!frame.arena && !!frame.hud,
+    JSON.stringify(frame));
+  if (!frame.arena || !frame.hud) continue;
+  for (const [who, sel] of [['boss', '.fighterG.foe-side'], ['player', '.fighterG.you-side']]) {
+    const ink = await inkOf(page, sel);
+    /* an empty sample is a FAILURE, not a pass: no ink means either the figure
+       never rendered or the diff is broken, and both must be loud. */
+    ok(`SETUP ${W}x${H}: the ${who} put ink on the screen to measure`, ink.px > 0 && !!ink.box,
+      `${ink.px} px changed across ${ink.hidden} hidden element(s)`);
+    if (!ink.box) continue;
+    const over = { top: +(frame.arena.top - ink.box.top).toFixed(1), bottom: +(ink.box.bottom - frame.arena.bottom).toFixed(1),
+                   left: +(frame.arena.left - ink.box.left).toFixed(1), right: +(ink.box.right - frame.arena.right).toFixed(1) };
+    const worst = Math.max(over.top, over.bottom, over.left, over.right);
+    ok(`COMPOSE ${W}x${H}: the ${who}'s ink is fully inside the arena`, worst <= 0,
+      worst > 0 ? `${worst}px outside (${JSON.stringify(over)})`
+                : `${Math.abs(worst)}px is the tightest clearance (${JSON.stringify(over)})`);
+    const hid = overlap(ink.box, frame.hud);
+    ok(`COMPOSE ${W}x${H}: no part of the ${who} is behind the HUD`, hid === 0,
+      hid > 0 ? `${hid}px of ink overlaps the HUD band (ink ${ink.box.top}..${ink.box.bottom}, hud ${frame.hud.top}..${frame.hud.bottom})`
+              : `ink ${ink.box.top}..${ink.box.bottom}, hud ends ${frame.hud.bottom}`);
+  }
+}
+await page.setViewport({ width: 375, height: 667, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await sleep(600); await settle(page);
 ok('End Turn is still reachable on a short phone', short.endTurnVisible, JSON.stringify(short));
 
 /* ---- 3. a potion takes TWO taps ---- */
