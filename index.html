@@ -65,5 +65,56 @@
 </div>
 <noscript><p style="padding:2rem;font-family:system-ui">Boneheadz Gym needs JavaScript enabled.</p></noscript>
 <script type="module" src="js/app.js"></script>
+<!-- THE DEAD SHELL, AND THE ONE THING THAT CAN SAVE IT.
+     2026-08-12: a TestFlight user opened the app for the first time on one bar
+     of LTE and got this exact page with nothing in it. app.js is a module, and
+     a module whose import graph loses ONE file never executes at all, so the
+     static markup above (gear, tab bar) paints and #screen stays empty forever.
+     Precaching the missing files fixed it for anyone who has loaded once, but
+     it CANNOT help a first-ever open: there is no service worker yet, and if
+     the connection is bad enough the worker's own install fails too (measured
+     against live: worker never took control, app never came up, reload did not
+     help).
+     So this is the last line of defence and it is deliberately dumb: plain
+     classic script, no imports, nothing that can fail the way app.js just did.
+     If the app has not put anything on screen after a while, reload ONCE with a
+     cache-busting query so the retry cannot be answered by the same broken
+     response. Once only, tracked in sessionStorage, because a reload loop is a
+     worse bug than a blank screen: it would burn battery and data and never
+     recover on a connection that is genuinely down.
+     Costs nothing when the app is healthy: one timer that finds content and
+     clears itself.
+
+     THE DELAY IS MEASURED, NOT GUESSED. It shipped as 8s on judgement, so it
+     got measured: cold cache, CPU throttled, time until #screen has content.
+         x1   427ms      x20  4,372ms
+         x4   818ms      x30  7,723ms
+         x6  1,207ms     x40  9,968ms
+         x10 1,964ms     x50 12,748ms
+     8s covered a device about 30x slower than this machine and no more, so a
+     40x device would have been reloaded at 8s while its content was arriving
+     at 10s: a wasted reload, and worse than useless because the reload is slow
+     too. 12s covers past 40x with the same behaviour everywhere else. The cost
+     of the extra four seconds falls only on a genuinely dead shell, which is
+     already broken and waiting either way. -->
+<script>
+(function () {
+  var KEY = 'bhg-shell-retry';
+  // a module error is the specific symptom, but do not depend on catching it:
+  // the check below is about the OUTCOME (nothing rendered), which is true no
+  // matter which module died or why.
+  setTimeout(function () {
+    try {
+      var screenEl = document.getElementById('screen');
+      var alive = screenEl && screenEl.children.length > 0;
+      if (alive) { sessionStorage.removeItem(KEY); return; }
+      if (sessionStorage.getItem(KEY)) return;      // already tried once this session
+      sessionStorage.setItem(KEY, '1');
+      var u = location.href.split('#')[0];
+      location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
+    } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+  }, 12000);
+})();
+</script>
 </body>
 </html>

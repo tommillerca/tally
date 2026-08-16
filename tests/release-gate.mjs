@@ -85,6 +85,7 @@ const BROWSER = [
   'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
   'recovery-audit.mjs',      // a FAILED restore must never destroy the save it was meant to replace
   'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
+  'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
