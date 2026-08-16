@@ -78,7 +78,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    imports ../js/pit.js and runs 400 seeded sims, exactly quest-daymore's shape,
    and BROWSER hands every entry a URL it would ignore. ~1s, 4/4 green on main,
    and it carries its own CONTROL row so it cannot pass vacuously. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
