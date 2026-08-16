@@ -138,6 +138,17 @@ export function addDays(key, n) {
   const x = new Date(y, m - 1, d + n);
   return dateKey(x);
 }
+/* Whole days from aKey to bKey, both 'YYYY-MM-DD'. Negative when b is earlier.
+   Built from LOCAL midnights and rounded, NOT from a subtraction of epoch millis:
+   a DST boundary makes a real day 23 or 25 hours long, and a plain /86400000
+   then floors a whole day away. Rounding local midnights is exact either way.
+   Used by the retention rows in js/analytics.js (install age, gap since the last
+   active day), where being one day out silently misfiles a whole cohort. */
+export function daysBetween(aKey, bKey) {
+  const [ay, am, ad] = String(aKey).split('-').map(Number);
+  const [by, bm, bd] = String(bKey).split('-').map(Number);
+  return Math.round((new Date(by, bm - 1, bd) - new Date(ay, am - 1, ad)) / 86400000);
+}
 export function mealForHour(h) {
   if (h >= 4 && h < 10.5) return 0;       // breakfast
   if (h >= 10.5 && h < 15) return 1;      // lunch

@@ -31,7 +31,7 @@ import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
-import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
+import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey, trackDayFirstOpen } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
@@ -589,6 +589,7 @@ async function boot() {
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
+  noteDayFirstOpen(); // RETENTION site 1 of 2: a cold boot. See noteDayFirstOpen.
 
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -639,6 +640,43 @@ async function boot() {
    treated your own Today screen as a PAST day and suppressed the wellness card.
    Now the day is re-checked on every resume, and once a minute so an app left
    open across midnight rolls over on its own. */
+/* RETENTION: the first open of a new local day (day_first_open in analytics.js).
+ *
+ * TWO call sites, and each covers a case the other cannot:
+ *   1. boot(), immediately after initAnalytics. `_dayAnchor` below is MODULE
+ *      level, so it re-initialises to TODAY on every reload: a player who force
+ *      quits at night and relaunches in the morning gets a fresh module whose
+ *      anchor is already the new day, the rollover branch in rollDayIfNeeded
+ *      never runs, and site 2 alone would never see them. This is the site that
+ *      catches most people.
+ *   2. rollDayIfNeeded, for the long-lived native WebView, which iOS suspends
+ *      and resumes rather than relaunching. There boot() can go days without
+ *      running, so site 1 alone would never see them.
+ * Firing at most once a day is NOT a property of these sites being mutually
+ * exclusive (they are not, a resume can race a boot). It is the kv gate inside
+ * trackDayFirstOpen, which reads and writes the day on one serialized chain.
+ *
+ * KNOWN GAP, deliberately not covered here: boot() returns early at
+ * `if (!S.settings)` for a player who has not finished onboarding, so an install
+ * emits its first day_first_open on its SECOND open, not its first. Install day
+ * is therefore counted from settings.createdAt (which onboarding writes), not
+ * from the first row, and docs/RETENTION-QUERIES.md builds the cohort
+ * denominator from first-seen device rather than from day_first_open for exactly
+ * this reason. Adding a third site in the onboarding path would emit the row but
+ * would NOT make an install that bounces before finishing onboarding visible,
+ * so it would buy less than it looks like it buys.
+ *
+ * The streak is the same number the Today hero shows (renderToday computes it
+ * this way), not game.js's streakDateSet, which also honours retired Streak
+ * Freeze markers. Deliberate: `s` should match what the player was looking at. */
+async function noteDayFirstOpen() {
+  try {
+    const log = await db.all('log');
+    const streak = streakFrom([...new Set(log.map(e => e.date))], dateKey());
+    await trackDayFirstOpen({ streak });
+  } catch { /* analytics never breaks boot */ }
+}
+
 let _dayAnchor = dateKey();
 let _rolling = false;
 async function rollDayIfNeeded() {
@@ -652,6 +690,7 @@ async function rollDayIfNeeded() {
     const wasOnToday = S.date === _dayAnchor;
     _dayAnchor = today;
     if (wasOnToday) S.date = today;
+    noteDayFirstOpen(); // RETENTION site 2 of 2: a suspended WebView crossing midnight.
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 1400);

@@ -537,7 +537,22 @@ export async function awardDayCloseIfDue(targets) {
   const meals = new Set(es.map(e => e.meal));
   if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${y}`, 'meals', 20, 'All meals logged', y);
   await evaluateBadges();
-  return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
+  const out = closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
+  /* RETENTION: day_closed, the activity floor under the return curve (coming
+     back and finishing a day are different things, and only one of them is the
+     habit). It fires on the ONE branch where this function returns non-null.
+     IDEMPOTENCY IS THE LEDGER'S, NOT A FLAG OF OURS, and that is checkable
+     rather than hopeful: `closed`/`consoled` are set only where award() returned
+     truthy, and award() (line 55) reads db.get('xp', key) first and returns 0 the
+     moment the key exists. Both keys are date scoped (`dayclose-${y}`,
+     `dayeffort-${y}`) and both carry positive xp (50 and 25), so a truthy return
+     can only mean THIS call minted the row. boot() and rollDayIfNeeded both call
+     this function on the same day: the second call re-reads the same keys, gets
+     0 from both, falls through to null, and emits nothing.
+     Dynamic import because analytics.js -> social.js -> game.js is already a
+     cycle; this is the same idiom social.js:146 and loot.js:477 use. */
+  if (out) import('./analytics.js').then(a => a.trackDayClosed(closed ? 'close' : 'effort')).catch(() => { /* analytics never breaks the day close */ });
+  return out;
 }
 
 // One-time retroactive backfill so existing users start with their history honored.
