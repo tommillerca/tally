@@ -107,11 +107,18 @@ const QUERY_RE = [
 const BYID_RE = /\.getElementById\(\s*(['"`])((?:(?!\1)[^\\]|\\.)*?)\1/g;
 const NONLIT_RE = /(?<![\w$.])\$\$?\(\s*[^'"`)\s]|\.(?:querySelector(?:All)?|getElementById)\(\s*[^'"`)\s]/g;
 
+/* DEDUPED per site, and that is load-bearing. inQueries below adds
+   countWord(sel, tok) once per entry returned here, so a selector that names
+   the same token more than once (`#s svg, #s .x, #s [y]`) used to be counted
+   squared: 3 entries x 3 occurrences = 9 against 3 real ones. That pushed
+   inQueries past the corpus total and reported a LIVE id as dead. Returning
+   each token once per site makes the two sides count the same thing. */
 const tokensOf = sel => {
-  const t = [];
-  for (const m of sel.matchAll(/\.([A-Za-z_][\w-]*)/g)) t.push({ kind: 'class', tok: m[1] });
-  for (const m of sel.matchAll(/#([A-Za-z_][\w-]*)/g)) t.push({ kind: 'id', tok: m[1] });
-  for (const m of sel.matchAll(/\[([A-Za-z_][\w-]*)/g)) t.push({ kind: 'attr', tok: m[1] });
+  const seen = new Set(), t = [];
+  const add = (kind, tok) => { const k = `${kind}:${tok}`; if (!seen.has(k)) { seen.add(k); t.push({ kind, tok }); } };
+  for (const m of sel.matchAll(/\.([A-Za-z_][\w-]*)/g)) add('class', m[1]);
+  for (const m of sel.matchAll(/#([A-Za-z_][\w-]*)/g)) add('id', m[1]);
+  for (const m of sel.matchAll(/\[([A-Za-z_][\w-]*)/g)) add('attr', m[1]);
   return t;
 };
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
