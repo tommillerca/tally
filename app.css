@@ -77,8 +77,17 @@ svg { display: block; }
 
 /* Flex column: the SCREEN scrolls, the tab bar is an in-flow child pinned at the
    bottom. This avoids the iOS quirk where a position:fixed bottom bar (with
-   backdrop-filter) detaches and floats mid-screen during momentum scroll. */
-#app { max-width: 600px; margin: 0 auto; height: 100dvh; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+   backdrop-filter) detaches and floats mid-screen during momentum scroll.
+
+   THE vh LINE IS LOAD-BEARING, NOT NOISE. An unknown unit makes a declaration
+   invalid at parse time, so a browser that predates dvh (Chrome below 108,
+   iOS below 15.4) dropped `height: 100dvh` and left #app with no height at
+   all. .tabbar is an in-flow flex child, so it sank to the bottom of the
+   document: measured on Today at 390x844, #app 3083px and the tab bar 2173px
+   below the fold, with no tabs, no FAB and no way off the screen. An old
+   parser keeps the first line and a modern one takes the second.
+   See tests/dvh-fallback-audit.mjs. */
+#app { max-width: 600px; margin: 0 auto; height: 100vh; height: 100dvh; position: relative; display: flex; flex-direction: column; overflow: hidden; }
 
 .screen {
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -230,11 +239,11 @@ svg { display: block; }
   width: 100%; max-width: 600px;
   background: var(--surface); border-radius: 22px 22px 0 0;
   border-top: 1px solid var(--line-strong);
-  max-height: calc(100dvh - var(--sat) - 24px);
+  max-height: calc(100vh - var(--sat) - 24px);
   display: flex; flex-direction: column;
   animation: slideup 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.sheet.full { height: calc(100dvh - var(--sat) - 24px); }
+.sheet.full { height: calc(100vh - var(--sat) - 24px); }
 .sheet-grab { width: 38px; height: 4.5px; background: var(--line-strong); border-radius: 3px; margin: 9px auto 2px; flex: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px var(--pad) 10px; flex: none; }
 .sheet-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -247,7 +256,7 @@ svg { display: block; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- founding-player survey sheet (amethyst, prize-led) ---------- */
-.sheet-survey { --amethyst: #b96cf0; max-height: calc(100dvh - var(--sat) - 24px); }
+.sheet-survey { --amethyst: #b96cf0; max-height: calc(100vh - var(--sat) - 24px); }
 .sheet-survey .survey { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 2px var(--pad) calc(var(--sab) + 18px); }
 .survey-hero { position: relative; display: grid; place-items: center; height: 148px; margin: 2px 0 4px; }
 .survey-hero.big { height: 186px; }
@@ -282,7 +291,25 @@ svg { display: block; }
 .sheet-survey .btn:not(.ghost) { background: var(--amethyst); color: #1a0f26; }
 
 /* scanner sheet */
-.sheet.scanner { background: #000; height: calc(100dvh - var(--sat) - 24px); }
+.sheet.scanner { background: #000; height: calc(100vh - var(--sat) - 24px); }
+
+/* @supports, NOT A SECOND DECLARATION, AND THE DIFFERENCE IS MEASURED. The four
+   sheet heights above are the conventional fallback pattern's blind spot: a
+   value containing var() is assumed valid at parse time and only fails at
+   computed-value time, after substitution, and per CSS Variables that makes the
+   declaration UNSET rather than ignored. The earlier declaration is discarded
+   with it. Verified in Chromium with a made-up unit standing in for dvh:
+     max-height: calc(100vh - var(--sat) - 24px);
+     max-height: calc(100xyz - var(--sat) - 24px);   computes to `none`
+   which is a sheet with no ceiling at all, worse than the vh it replaced. So
+   the dvh versions live behind a condition an old browser answers false, and
+   the vh versions above are what it keeps. See tests/dvh-fallback-audit.mjs. */
+@supports (height: 100dvh) {
+  .sheet { max-height: calc(100dvh - var(--sat) - 24px); }
+  .sheet.full { height: calc(100dvh - var(--sat) - 24px); }
+  .sheet-survey { max-height: calc(100dvh - var(--sat) - 24px); }
+  .sheet.scanner { height: calc(100dvh - var(--sat) - 24px); }
+}
 .scan-stage { position: relative; flex: 1; overflow: hidden; border-radius: 0 0 0 0; }
 .scan-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .reticle {
@@ -411,7 +438,7 @@ svg { display: block; }
 .progress i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }
 
 /* onboarding */
-.onb { min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--sat) + 40px) 22px calc(var(--sab) + 26px); max-width: 600px; margin: 0 auto; }
+.onb { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--sat) + 40px) 22px calc(var(--sab) + 26px); max-width: 600px; margin: 0 auto; }
 .onb .logo { width: 76px; height: 76px; border-radius: 22px; margin-bottom: 22px; }
 .onb h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 .onb .tag { color: var(--text-2); font-size: 16.5px; margin: 12px 0 26px; line-height: 1.45; }
@@ -1301,7 +1328,7 @@ body::before {
    That is 14.6px less box than the 197.6 of scene the old arena left, and the
    boss still gains, because 183 of arena the figure can stand in beats 197.6
    with 110.4 of the figure behind the bars. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100svh - 492px), 600px); }
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - 492px), 600px); height: clamp(183px, calc(100svh - 492px), 600px); }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
@@ -3639,6 +3666,7 @@ body::before {
   animation: slideupFlat .28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes slideupFlat { from { transform: translateY(60%); } to { transform: translateY(0); } }
+.sheet.takeover { height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310; }
 .sheet.takeover ~ .sheet-backdrop, .sheet.takeover + .sheet-backdrop { z-index: 309; }
 .sheet.takeover .sheet-grab { display: none; }
 /* TAKEOVER. A reveal fills the sheet and paints its own ground, so nothing of
@@ -3700,7 +3728,13 @@ body::before {
 .pack-reveal {
   /* the card is the unit of the whole scene. The third term keeps a tall card
      off the headline on a short phone. */
-  --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61));
+  /* vh here, dvh in the @supports below. A custom property accepts any token
+     sequence at parse time, so an old browser stores this line happily and only
+     fails when it is substituted, at which point the property using it is unset
+     rather than falling back: `width: var(--pc-w)` computed to `auto` in the
+     measurement, not to the previous declaration. A second --pc-w line would be
+     inert for the same reason. See tests/dvh-fallback-audit.mjs. */
+  --pc-w: min(61vw, 264px, calc((100vh - 300px) * .61));
   --rar: var(--text-2);
   --rar-rgb: 185, 172, 151;
   /* FASTER OFF THE MARK. Tom, 2026-08-08: "the initial open needs to happen a bit
@@ -3744,6 +3778,9 @@ body::before {
 /* .55s, not .9s. The crate has done its job by the time the card is up and a
    long tail is what read as "fading too slowly as the card takes it over". */
 .co-sink.pix { animation-duration: .2s; }   /* it has 200ms to clear, see --b-sink above */
+@supports (height: 100dvh) {
+  .pack-reveal { --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61)); }
+}
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
 .pack-reveal.r-epic { --rar: var(--violet); --rar-rgb: 155, 146, 232; }
@@ -6164,7 +6201,7 @@ body::before {
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
 .onb {
-  position: relative; min-height: 100dvh; display: flex; flex-direction: column;
+  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
   align-items: center; padding: calc(var(--sat) + 22px) 22px calc(var(--sab) + 24px);
   max-width: 600px; margin: 0 auto;
 }
