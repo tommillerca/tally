@@ -7,6 +7,8 @@ export const CHANGES = [
     "<b>Move buttons were cutting their own text off.</b> A button with two lines of description was being squashed to one line's height, so the rest of the sentence fell out the bottom and landed on the row below. It came in with yesterday's change that stopped the fighters resizing, and it hit four of the nine buttons on most phones and six of nine on a small one.",
     "<b>The ITEMS button could not be tapped at all.</b> It was sitting below the bottom of the button area, and nothing on screen said that area could scroll. There is a soft fade at the bottom edge now whenever there is more below, so you can see there is somewhere to go.",
     'The fighters still hold their size. That part was the point of the original change and it has not moved.',
+    "<b>A bad link can no longer leave you on a blank screen.</b> A stray % in the address could stop the app starting at all, and because the address stuck around, reloading did not help. It now shrugs it off.",
+    "<b>Saving a new name no longer freezes the button</b> if your connection drops halfway. It tells you it failed and lets you try again.",
   ] },
   { n: 383, date: '2026-08-16', title: 'Beating a spire takes you to the spire', items: [
     "<b>Winning a tower used to hand you back the button that starts the fight.</b> You beat the warden, tapped Done, and landed on a sheet still offering you the warden, because that sheet was drawn before you won. The same thing had already been fixed once for the Glutton and only for the Glutton. It is fixed for every kind of fight now, in the one place they all pass through, and a new kind of fight cannot be added without saying where a win puts you.",
