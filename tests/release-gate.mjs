@@ -80,6 +80,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    and it carries its own CONTROL row so it cannot pass vacuously. */
 const PURE = ['unit.test.js', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
 const BROWSER = [
+  'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
@@ -188,6 +189,7 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
   'ledger-voice-audit.mjs': ['skip', 'shoots the ledger copy for reading, into a fixed scratch dir; asserts nothing about layout.'],
   'small-fixes-audit.mjs': ['skip', 'a one-off batch for three named fixes, kept as the record of how they were verified.'],
