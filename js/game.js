@@ -547,8 +547,14 @@ export async function initLootIfNeeded() {
   if (await kvGet('loot-init')) return null;
   await grantCrate('golden', 'welcome');
   await grantCrate('daily', 'welcome');
+  /* A Draught in the kit, because logging stopped earning Vigor on 2026-08-15.
+     An established player buys fights at 90 coins for 3; a brand new player who
+     cannot walk has neither coins nor crates, so day one would be the free
+     three and nothing else. This covers exactly that gap without paying anybody
+     for what they type into their food diary. */
+  await grantConsumable('vigor', 'welcome');
   await kvSet('loot-init', true);
-  return { crates: 2 };
+  return { crates: 2, draught: true };
 }
 
 // XP rows for a given date (for the progress sheet).

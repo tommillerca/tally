@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 382, date: '2026-08-15', title: 'Logging your food no longer earns you fights', items: [
+    "<b>Logging a meal used to give you Pit energy.</b> It shouldn't have. It put a reward on what your food diary looks like rather than on what you actually ate, and this app should never have an opinion about that. Energy now comes from walking, from Vigor Draughts, and from the three free fights everyone gets every day.",
+    'New players now find a Vigor Draught in their welcome kit, so a first day without a walk is still a first day with fights.',
+    'Any Vigor you have already banked is untouched.',
+  ] },
   { n: 381, date: '2026-08-15', title: 'A door into the Paddock, and eight things you told us about', items: [
     "<b>The Stable now opens with a window onto the Paddock.</b> Your own Bonehead is standing at the fence with your two rarest pets, and tapping it takes you out to the field. This was picked, built and then quietly lost in the queue for twelve builds.",
     "<b>Sending coins takes two taps now.</b> One tap used to send up to 500 coins to another player with no undo and no confirmation.",
