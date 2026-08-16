@@ -230,6 +230,7 @@ const DECLARED = {
   'garden-intro-audit.mjs': ['full', 'the garden intro popup, its retirement, and the Kitchen landing.'],
   'garden-reach-audit.mjs': ['full', 'the reach batch: the Today banner reaching players who never planted, the starter pouch (and its second-grant no-op), seed labels, the bumper reveal, and the food-log boundary line under the diary. Self-serves this checkout when given no URL.'],
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
+  'kitchen-queue-audit.mjs': ['full', 'the cook queue fired from the real Cook button (a SECOND cook really starts with one pot in one visit, and the queued one takes the pot on its own with the dish time untouched), the compost sheet ordered by what the cookbook is shortest of, and the starter-pouch backfill including its second-run no-op (rewarded-actions SOP). Self-serves this checkout when given no URL.'],
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
   'melt-ui-audit.mjs': ['full', 'the Salvage Bench: entrance visible without a tap, every row actionable, melt pays exactly once (SOP), every rarity meltable, and transmog on a stat-less slot is offered AND free AND actually changes the look.'],

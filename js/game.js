@@ -5,7 +5,7 @@
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
 import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
-import { grantSeed } from './garden.js';
+import { grantSeed, gardenState } from './garden.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days a Streak Freeze protected back when the
@@ -568,6 +568,41 @@ export async function initLootIfNeeded() {
   await grantSeed('salt', 1);
   await kvSet('loot-init', true);
   return { crates: 2, draught: true, seeds: 3 };
+}
+
+/* THE STARTER POUCH, BACKFILLED TO INSTALLS THAT ALREADY EXIST.
+ *
+ * The pouch above sits inside the 'loot-init' guard, which is correct for a new
+ * player and reaches nobody else: every install made before it shipped already
+ * has that flag set, so Tom's beta testers would never see a seed. Clearing or
+ * re-running 'loot-init' is not the fix. That flag guards two crates and a
+ * Draught as well, and it is the ONLY thing standing between the welcome kit and
+ * a farm, so it gets its own key instead.
+ *
+ * Rewarded-actions SOP:
+ *  1. THE STATE TRANSITION: "this install has never been handed a starter pouch"
+ *     becomes "it has". There is exactly one such transition per install, so
+ *     there is exactly one payment. Nothing about play can put it back.
+ *  2. ASK THE AUTHORITY FIRST. The ledger here is the 'seedpouch-backfill' key,
+ *     and it is both read and WRITTEN before a single seed is granted. grantSeed
+ *     is purely additive and would happily pay twice; writing the key first means
+ *     a failure halfway through costs the player a pouch, never pays them two.
+ *  3. THE RULE ON WHO GETS IT: only a player with no seeds in the pouch and
+ *     nothing in a bed. Anyone holding a seed, or growing one, found their own
+ *     way into the garden and does not need a first errand. They still get the
+ *     key written, so we never look again and the check can never become a farm.
+ *     A player who has already harvested everything and spent every seed reads as
+ *     empty and is paid; that is three seeds once, and the alternative is asking
+ *     the ledger a question it does not store.
+ */
+export async function backfillStarterSeedsIfNeeded() {
+  if (await kvGet('seedpouch-backfill')) return null;
+  await kvSet('seedpouch-backfill', true);
+  const g = await gardenState();
+  if (Object.values(g.seeds).some(n => n > 0) || g.plots.some(p => !p.empty)) return null;
+  await grantSeed('marrow', 2);
+  await grantSeed('salt', 1);
+  return { seeds: 3 };
 }
 
 // XP rows for a given date (for the progress sheet).

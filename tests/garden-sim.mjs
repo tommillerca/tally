@@ -57,11 +57,17 @@ const combatDishes = list => list.filter(r => r.buff?.kind === 'combat' && isCom
 
 /* ---------- one player, DAYS days ---------- */
 /* `queue` is lever 5: how many cooks one visit can line up behind a single pot.
-   Modelled as pots x queue parallel slots. ponytail: that is exact at 1 to 2 opens
-   a day (24h and 12h gaps dwarf a 15 to 120 minute cook, so sequential and
-   parallel finish in the same visit anyway) and slightly generous at 4 opens a
-   day. Model a real per-pot FIFO if the 4-open row ever becomes the decision. */
-function run({ opens, beds, pots, recipes, potions = [], stack = false, waters = true, queue = 1, compostPolicy = 'abundant', fightsPerDay = FREE_FIGHTS, walk = WALK, seed = 1 }) {
+   `queueMode: 'parallel'` models it as pots x queue parallel slots. That is exact
+   at 1 to 2 opens a day (24h and 12h gaps dwarf a 15 to 120 minute cook, so
+   sequential and parallel finish in the same visit anyway) and slightly generous
+   at 4 opens a day.
+
+   `queueMode: 'fifo'` is the SHIPPED mechanism, added when the queue was actually
+   built: `pots` real pans plus a flat `queue - 1` line of paid-for cooks behind
+   them, and a cook only starts when the pan ahead of it finishes, at the moment
+   it finished. That is strictly less throughput than 'parallel', so the two rows
+   sitting on top of each other is the claim being tested, not an assumption. */
+function run({ opens, beds, pots, recipes, potions = [], stack = false, waters = true, queue = 1, queueMode = 'parallel', compostPolicy = 'abundant', fightsPerDay = FREE_FIGHTS, walk = WALK, seed = 1 }) {
   const rnd = mulberry32(seed * 7919);
   const dishes = combatDishes(recipes);
   const brews = potions.filter(isCommonOnly);
@@ -70,7 +76,10 @@ function run({ opens, beds, pots, recipes, potions = [], stack = false, waters =
   const inv = {};                       // ingredients
   const pouch = {};                     // seeds
   const plots = new Array(beds).fill(null);
-  const pans = new Array(pots * queue).fill(null);
+  const fifo = queueMode === 'fifo';
+  const pans = new Array(fifo ? pots : pots * queue).fill(null);
+  const qcap = fifo ? queue - 1 : 0;    // paid-for cooks waiting behind the pans
+  const queued = [];
   const pantry = [];                    // cooked dishes waiting to be eaten
   let buffs = [];                       // { id, fightsLeft }
   let potionsHeld = 0;
@@ -143,6 +152,23 @@ function run({ opens, beds, pots, recipes, potions = [], stack = false, waters =
          switch so the cost of NOT knowing about the tap can be measured. */
       if (waters) plots.forEach(p => { if (p && now < p.readyAt && !p.watered) p.watered = true; });
 
+      /* 5a. ADVANCE THE QUEUE, on the clock, exactly as advanceQueue() in
+         js/cooking.js does: a pan that finished while the app was closed hands its
+         dish over AT THE MOMENT IT FINISHED and the next paid-for cook starts
+         there, not at the moment the player happened to look. Nothing is charged
+         here; the ingredients went when the cook was queued. */
+      while (queued.length) {
+        let i = pans.indexOf(null), at = now;
+        if (i < 0) {
+          const done = pans.map((c, j) => ({ j, t: c.readyAt })).filter(x => x.t <= now).sort((a, b) => a.t - b.t)[0];
+          if (!done) break;
+          i = done.j; at = done.t;
+          if (pans[i].potion) potionsHeld++; else pantry.push({ id: pans[i].id, fights: pans[i].fights });
+        }
+        const c = queued.shift();
+        pans[i] = { ...c, readyAt: at + c.cookMin };
+      }
+
       // 5. the pots: collect what is done, then start what we can afford
       pans.forEach((c, i) => {
         if (!c || now < c.readyAt) return;
@@ -155,17 +181,19 @@ function run({ opens, beds, pots, recipes, potions = [], stack = false, waters =
 
       const afford = r => Object.entries(r.needs).every(([id, n]) => total(id) >= n);
       const pay = r => { for (const [id, n] of Object.entries(r.needs)) { inv[id] -= n; spent += n; } cooked++; };
-      for (let i = 0; i < pans.length; i++) {
-        if (pans[i]) continue;
+      // a free pan, or a place in the queue behind them: both are a cook this
+      // visit can START, which is the quantity the whole model turns on
+      const canStart = () => pans.some(c => !c) || queued.length < qcap;
+      while (canStart()) {
         // a rational player cooks toward coverage, not toward a hoard: one buff
         // running under the single policy, every distinct dish under the stack
         // policy, and never more than a day of spare charges in the pantry.
-        const held = new Set([...buffs.map(b => b.id), ...pantry.map(d => d.id), ...pans.filter(Boolean).map(c => c.id)]);
+        const held = new Set([...buffs.map(b => b.id), ...pantry.map(d => d.id), ...pans.filter(Boolean).map(c => c.id), ...queued.map(c => c.id)]);
         let r = null;
         if (stack) r = dishes.filter(d => !held.has(d.id) && afford(d)).sort((a, b) => cost(a) - cost(b))[0];
         else {
           const cover = buffs.reduce((a, b) => a + b.fightsLeft, 0) + pantry.reduce((a, d) => a + d.fights, 0)
-            + pans.filter(Boolean).reduce((a, c) => a + (c.fights || 0), 0);
+            + [...pans.filter(Boolean), ...queued].reduce((a, c) => a + (c.fights || 0), 0);
           if (cover < fightsPerDay) r = dishes.filter(afford).sort((a, b) => cost(a) / a.buff.fights - cost(b) / b.buff.fights)[0];
         }
         // potions are a second sink and are only brewed once the dishes are set
@@ -179,7 +207,10 @@ function run({ opens, beds, pots, recipes, potions = [], stack = false, waters =
           break;
         }
         pay(r);
-        pans[i] = { id: r.id, potion: !!r.potion, fights: r.buff?.fights || 0, readyAt: now + r.cookMin };
+        const i = pans.indexOf(null);
+        const c = { id: r.id, potion: !!r.potion, fights: r.buff?.fights || 0, cookMin: r.cookMin };
+        if (i >= 0) pans[i] = { ...c, readyAt: now + r.cookMin };
+        else queued.push(c);
       }
 
       // 6. fight
@@ -317,6 +348,8 @@ if (isMain) {
     ['+ 3 pots (buyable now)', { pots: 3 }],
     ['+ cook queue x3', { queue: 3 }],
     ['+ queue x3 & smart compost', { queue: 3, compostPolicy: 'needed' }],
+    ['+ SHIPPED fifo queue x3', { queue: 3, queueMode: 'fifo' }],
+    ['+ SHIPPED fifo & smart cmp', { queue: 3, queueMode: 'fifo', compostPolicy: 'needed' }],
     ['+ 9 fights/day (walker)', { fightsPerDay: 9 }],
     ['+ 9 fights & 3 pots', { fightsPerDay: 9, pots: 3 }],
     ['+ 9 fights, 3 pots, smart', { fightsPerDay: 9, pots: 3, compostPolicy: 'needed' }],

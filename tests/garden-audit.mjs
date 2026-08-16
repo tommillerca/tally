@@ -142,7 +142,12 @@ const sow = await page.evaluate(() => ({ options: document.querySelectorAll('#pl
 console.log('plant sheet:', JSON.stringify(sow));
 check('the plant sheet offers the seeds you hold', sow.options >= 1, `${sow.options} options`);
 check('it states the grow time and the yield', /3h · yields 2 to 4/.test(sow.label || ''), sow.label);
-await page.evaluate(() => document.querySelector('[data-sow]').click());
+/* NAME THE SEED, do not take whichever row is first. Everything downstream
+   asserts a Graveroot harvest because Graveroot is what this run composted, and
+   the pouch holds other seeds too: the starter pouch put Marrow at the top of
+   the list and turned a healthy tree red on a row order this audit never meant
+   to pin. Clicking the seed by id is what the check was always about. */
+await page.evaluate(() => document.querySelector('[data-sow="graveroot"]').click());
 await sleep(1600);
 
 const planted = await page.evaluate(() => ({
