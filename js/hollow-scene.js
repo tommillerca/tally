@@ -158,7 +158,15 @@ export function hollowBackdropHtml({ band } = {}) {
         under the coin chip, which is where the comp puts them. */''}
   ${band === 'dusk' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(201,127,90,.2);mix-blend-mode:soft-light"></div>
   <div style="position:absolute;inset:0;z-index:8;${NONE};background:linear-gradient(180deg,rgba(201,127,90,.16),rgba(60,40,70,.18))"></div>` : ''}
-  ${band === 'night' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(22,28,58,.42)"></div>` : ''}
+  ${/* .22, not the handoff's .42. Tom's call, 2026-08-16, and the reason is worth
+        keeping: at .42 the grass measured (64,78,62) against a spec of (97,116,66),
+        a 27% luminance cut, and his first reaction to a night render was "why does
+        it look like there is a dark overlay on top of the hollow". A time-of-day
+        effect that reads as a defect is failing at its job whatever the spec says.
+        At .22 the lantern, the shed glow and the fireflies carry the nighttime
+        instead of the wash doing all of it. Day is untouched and measures within
+        2 luma of spec. */''}
+  ${band === 'night' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(22,28,58,.22)"></div>` : ''}
   ${lit ? `<div style="position:absolute;inset:0;z-index:9;${NONE}">
     ${FLIES.map(([x, y, s, d, dl]) => `<span class="hlw-fly" style="position:absolute;left:${x}px;top:${y}px;width:${s}px;height:${s}px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${stagger(dl)}s infinite"></span>`).join('')}
   </div>` : ''}`;
