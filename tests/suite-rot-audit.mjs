@@ -46,11 +46,10 @@
  * nonsense is invisible here, as is one that dies inside page.evaluate. Green
  * means "these two rot classes are absent", not "the suite is healthy".
  *
- * WHAT ELSE IT DOES NOT CATCH, and this belongs on the record because it will
- * come up in review:
- *   NEGATIVE-ASSERTION QUERIES. A test that queries a token to prove the DOM
- *   does NOT have it is doing the right thing when the token has no emission
- *   anywhere. garden-doors.mjs:82 is the concrete case:
+ * NEGATIVE-ASSERTION QUERIES, and why they are now DECLARED rather than guessed.
+ *   A test that queries a token to prove the DOM does NOT have it is doing the
+ *   right thing when the token has no emission anywhere. garden-doors.mjs:82 is
+ *   the original case:
  *
  *       gardenTile: !!document.querySelector('#gardenActBtn'),
  *       ...
@@ -58,21 +57,40 @@
  *
  *   That query MUST return null on a healthy build (the v304 doors landing
  *   removed the tile) and the assertion is a negative one. From a source-only
- *   view it looks identical to accidental rot pointing at a dead token, and
- *   this audit cannot tell them apart without inspecting the ASSERTION context
- *   of the query result. It does not try to. Two knock-on effects worth
- *   knowing:
- *     - a genuine negative-assertion probe on a token no other line in the
- *       file mentions will read as STALE here (a false positive), and
- *     - a genuine dead selector will read as ALIVE here if the file happens to
- *       name the token in a comment or a label template string, because
- *       authored() counts any mention on raw source (a false negative that
- *       reads as absence-of-rot).
- *   For now: cross-check a STALE row against the test's own commit message
- *   or the surrounding assertion before calling it rot, and cross-check a
- *   surprising GREEN by looking whether the token is only in prose. Filing
- *   as a scope limit rather than trying to synthesise assertion context in
- *   a static scanner.
+ *   view it looks identical to accidental rot pointing at a dead token, and a
+ *   static scanner cannot tell them apart without the ASSERTION context of the
+ *   query result. This file shipped 2026-08-12 filing that as a scope limit and
+ *   telling the reader to cross-check by hand.
+ *
+ *   THAT WAS NOT GOOD ENOUGH, because the scope limit fails the build. On
+ *   2026-08-16 two of the three STALE rows on main were exactly this shape:
+ *   bestiary-audit.mjs:28 '.bst-name, .bst-label' and :42 '#bestiaryOpen'. Both
+ *   name markup that v350 (974e98f, 2026-08-09) shipped and v352 (9d6d2c6, same
+ *   day) deleted on Tom's instruction, and that commit says so in as many words:
+ *   "tests/bestiary-audit.mjs now guards the ABSENCE of a catalogue". Reproduced
+ *   in a throwaway tree by putting the v350 markup back: both rows go red, 16
+ *   labels and seeWholeBtn true. They are live checks, and this file was the one
+ *   that was wrong. A gate that cries wolf gets muted, and then it is one more
+ *   thing that is not a check.
+ *
+ *   So a negative-assertion query DECLARES itself, on its own line or the line
+ *   above, and must give a reason:
+ *
+ *       rot-audit: negative  v352 deleted the roster, this proves it stayed gone
+ *
+ *   Declared rows are demoted out of STALE into their own advisory section and
+ *   PRINTED on every run with the reason, so they stay on the record instead of
+ *   going quiet. A bare marker with no reason is ignored and still fails, so the
+ *   marker cannot be used as a blanket mute. Write the reason without naming the
+ *   token, or authored() counts the mention and the row reads ALIVE for the
+ *   wrong reason.
+ *
+ * WHAT IT STILL DOES NOT CATCH:
+ *     - a genuine dead selector reads as ALIVE here if the file happens to name
+ *       the token in a comment or a label template string, because authored()
+ *       counts any mention on raw source (a false negative that reads as
+ *       absence-of-rot). Cross-check a surprising GREEN by looking whether the
+ *       token is only in prose.
  *
  * Exit 1 = findings. Exit 2 = the gate below failed, meaning THIS file is
  * broken and no verdict under it is worth reading (same split as
@@ -173,6 +191,27 @@ const tokensOf = sel => {
 const has = (hay, tok) => new RegExp(`(?<![\\w-])${esc(tok)}(?![\\w-])`).test(hay);
 const camel = tok => tok.replace(/^data-/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
+/* THE EMISSION-ONLY CORPUS: the insides of class= and id= attributes, plus the
+   classList and className/id assignment sites. Used ONLY by the indexed-template
+   rule below, which needs a much narrower haystack than the whole app source,
+   because its prefixes can be a single letter and a single letter matches
+   everything in 30k lines. Cached on the corpus string, since the runner passes
+   the same one for all 135 files. */
+const EMIT_RE = [
+  /\b(?:class|id)\s*=\s*(["'])([\s\S]*?)\1/g,
+  /\bclassList\s*\.\s*(?:add|remove|toggle|replace)\(([^)]*)\)/g,
+  /\.(?:className|id)\s*=\s*([^;\n]*)/g,
+  /\bsetAttribute\(\s*(["'])(?:class|id)\1\s*,([^)]*)\)/g,
+];
+let emitCacheKey = null, emitCacheVal = '';
+export function emissionCorpus(appCorpus) {
+  if (appCorpus === emitCacheKey) return emitCacheVal;
+  const parts = [];
+  for (const re of EMIT_RE) for (const m of appCorpus.matchAll(re)) parts.push(m[m.length - 1]);
+  emitCacheKey = appCorpus; emitCacheVal = parts.join('\n');
+  return emitCacheVal;
+}
+
 /* `src` is the RAW test source: selector literals live in strings, so this one
    reads strings, unlike the IMPORT half. `appCorpus` is app source + vendor.
  *
@@ -212,10 +251,48 @@ export function staleRot(src, appCorpus) {
       if (new RegExp(`(?<![\\w-])${esc(tok.slice(0, i + 1))}\\$\\{`).test(appCorpus)) return true;
       if (new RegExp(`\\}${esc(tok.slice(i))}(?![\\w-])`).test(appCorpus)) return true;
     }
+    /* THE INDEXED FORM, which the hyphen loop above cannot see. The rank classes
+       are written `class="race-lane r${p.place}"` (js/app.js:1123), so '.r5' has
+       no hyphen to split on and read as rot while the browser answered it every
+       time: race-results-audit.mjs:188 queries '.race-lane.r5 .rr-prize' and gets
+       the real 5th purse back.
+       NARROW ON PURPOSE, TWICE, because both looser versions were measured wrong.
+       1. Splitting at every digit BOUNDARY silenced a real row: '#t1Search'
+          (token t1Search, log-write-failure-audit.mjs:57) split to prefix 't',
+          and some template somewhere writes `t${`, so a name nothing emits read
+          as alive. Only name + TRAILING index qualifies now, which is the pattern
+          that actually exists here, and t1Search does not match it.
+       2. Searching the WHOLE corpus for the prefix was still too loose: prefix
+          'r' matches js/wellness.js:88, which mints routine ids as
+          `r${Date.now().toString(36)}`. Nothing there is a class, so a renamed
+          rank class would have gone on reading alive off an unrelated id. The
+          prefix is looked up in emissionCorpus() instead, which is class= and
+          id= attributes and the classList/className sites and nothing else.
+       Prefix only, never the suffix: `}5` matches all over minified vendor code
+       and would turn real rot green, the expensive direction to be wrong in.
+       app.css stays out of the corpus (styling a class is not evidence anything
+       emits it), so this is the js-side answer to a js-side naming pattern. */
+    const indexed = /^(.*[^0-9])[0-9]+$/.exec(tok);
+    if (indexed && new RegExp(`(?<![\\w-])${esc(indexed[1])}\\$\\{`).test(emissionCorpus(appCorpus))) return true;
     return false;
   };
 
-  const dead = [], residue = [];
+  /* A DECLARED negative assertion, on the query's own line or the one above it.
+     The reason is mandatory and at least 4 characters: a bare marker is treated
+     as no marker at all, so this cannot be pasted around as a mute switch. */
+  const srcLines = src.split('\n');
+  const NEG_RE = /rot-audit:\s*negative\b[ \t]*([^\n]*)/;
+  const declaredNegative = line => {
+    for (const L of [srcLines[line - 1], srcLines[line - 2]]) {
+      const m = L === undefined ? null : NEG_RE.exec(L);
+      if (!m) continue;
+      const why = m[1].replace(/\*\/\s*$/, '').replace(/[,;]\s*$/, '').trim();
+      if (why.length >= 4) return why;
+    }
+    return null;
+  };
+
+  const dead = [], residue = [], negative = [];
   for (const { sel, index } of sels) {
     const arms = sel.split(',').map(a => a.trim()).filter(Boolean);
     const graded = arms.map(a => {
@@ -227,10 +304,14 @@ export function staleRot(src, appCorpus) {
     const deadToks = [...new Map(graded.flatMap(g => g.dead).map(t => [t.tok, t])).values()];
     if (!deadToks.length) continue;
     const rec = { sel, line: lineOf(src, index), toks: deadToks };
+    if (!anyLive) {
+      const why = declaredNegative(rec.line);
+      if (why) { negative.push({ ...rec, why }); continue; }
+    }
     (anyLive ? residue : dead).push(rec);
   }
   const uniq = list => [...new Map(list.map(r => [r.sel + r.line, r])).values()];
-  return { dead: uniq(dead), residue: uniq(residue) };
+  return { dead: uniq(dead), residue: uniq(residue), negative: uniq(negative) };
 }
 
 /* -------------------------------------------------------------- SETUP GATE -- */
@@ -252,11 +333,23 @@ export function staleRot(src, appCorpus) {
     st.id = 'freeze-idle';                                         // authored here
     document.getElementById('freeze-idle')?.remove();
     document.querySelector('.t3-bed, .old-arm');                   // live + dead arm
+    document.querySelector('.race-lane.r5');                       // indexed, emitted
+    document.querySelector('.k7');                                 // indexed, NOT emitted
+    /* rot-audit: negative the roster button was deleted on purpose */
+    const goneFx = document.getElementById('rosterOpenFx');        // declared negative
+    /* rot-audit: negative */
+    const bareFx = document.getElementById('unreasonedFx');        // no reason: still rot
   `;
-  const app = 'html += `<div class="t3-bed"></div><span class="pc-${r}"></span>`;';
+  const app = 'html += `<div class="t3-bed"></div><span class="pc-${r}"></span>`;'
+    + '\nhtml += `<div class="race-lane r${p.place}"></div>`;'
+    /* the wellness.js shape: an indexed template that is NOT a class or an id,
+       so '.k7' must stay a finding. This is the row that failed before the
+       prefix lookup was moved onto emissionCorpus(). */
+    + '\nlist.push({ id: `k${Date.now()}`, name: clean });';
   const S = staleRot(fxStale, app);
   const r2 = S.dead.flatMap(d => d.toks.map(t => t.tok)).sort();
   const res = S.residue.flatMap(d => d.toks.map(t => t.tok));
+  const neg = S.negative.flatMap(d => d.toks.map(t => t.tok));
   const checks = [
     ['IMPORT flags the unbound call', r1.length === 1 && r1[0].name === 'serveTree'],
     ['IMPORT ignores prose inside a label string', !r1.some(x => x.name === 'state')],
@@ -267,6 +360,11 @@ export function staleRot(src, appCorpus) {
     ['STALE spares a template-constructible class', !r2.includes('pc-common')],
     ['STALE spares a probe the test authors itself', !r2.includes('freeze-idle')],
     ['STALE demotes a dead arm of a live fallback to residue', r2.includes('old-arm') === false && res.includes('old-arm')],
+    ['STALE spares an indexed class an r${n} template builds', !r2.includes('r5') && !res.includes('r5')],
+    ['STALE still flags an indexed name no class= site builds', r2.includes('k7')],
+    ['STALE demotes a DECLARED negative assertion out of the failing set',
+      !r2.includes('rosterOpenFx') && neg.includes('rosterOpenFx')],
+    ['STALE ignores a negative marker that gives no reason', r2.includes('unreasonedFx')],
   ];
   const bad = checks.filter(([, p]) => !p);
   if (bad.length) die(`gate fixtures failed: ${bad.map(([n]) => n).join('; ')}`,
@@ -302,7 +400,7 @@ const files = readdirSync(path.join(ROOT, 'tests'))
 if (!files.length) die('no audit files found');
 
 const mark = t => `${t.kind === 'class' ? '.' : t.kind === 'id' ? '#' : '['}${t.tok}`;
-const dead = [], stale = [], residue = [];
+const dead = [], stale = [], residue = [], negative = [];
 let scanned = 0;
 for (const f of files) {
   const src = readFileSync(path.join(ROOT, 'tests', f), 'utf8');
@@ -319,6 +417,7 @@ for (const f of files) {
   const S = staleRot(src, appCorpus);
   for (const hit of S.dead) stale.push({ file: f, ...hit });
   for (const hit of S.residue) residue.push({ file: f, ...hit });
+  for (const hit of S.negative) negative.push({ file: f, ...hit });
 }
 
 console.log(`\n--- DEAD ON ARRIVAL: calls a godmode helper it never bound (${dead.length}) ---`);
@@ -327,6 +426,11 @@ console.log(`\n--- STALE: every arm dead, so the query can only return null (${s
 for (const s of stale) console.log(`ROT   tests/${s.file}:${s.line}  ${s.toks.map(mark).join(' ')}  in ${JSON.stringify(s.sel)}`);
 console.log(`\n--- RESIDUE (advisory, does not fail): a dead arm of a fallback that still works (${residue.length}) ---`);
 for (const s of residue) console.log(`      tests/${s.file}:${s.line}  ${s.toks.map(mark).join(' ')}  in ${JSON.stringify(s.sel)}`);
+/* PRINTED, NOT SWALLOWED. These must return null on a healthy build, so they do
+   not fail, but they are the rows most likely to be a real rename hiding behind
+   a stale reason. Reading them is the review job this section exists to enable. */
+console.log(`\n--- DECLARED NEGATIVE (advisory, does not fail): queried to prove ABSENCE (${negative.length}) ---`);
+for (const s of negative) console.log(`      tests/${s.file}:${s.line}  ${s.toks.map(mark).join(' ')}  in ${JSON.stringify(s.sel)}  because: ${s.why}`);
 
 ok('IMPORT every audit binds the helpers it calls', dead.length === 0, `${dead.length} file(s) die at first call`);
 ok('STALE every query has at least one arm the app can answer', stale.length === 0, `${stale.length} dead selector(s) across ${new Set(stale.map(s => s.file)).size} file(s)`);

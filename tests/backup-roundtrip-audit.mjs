@@ -31,6 +31,29 @@
  *      profile HALF-RESTORED with no visible warning. Measured by simulating
  *      a mid-run failure inside our own eval and reading the resulting DB.
  *
+ * ADDED 2026-08-16, gwart/dbimport: THE RESTORE GUARDS.
+ * importAll used to be upsert-only, which made Settings -> Export -> spend ->
+ * Import an unlimited item and currency duplication loop: the kv coin row came
+ * back at its pre-spend value and the inv row the purchase minted was never
+ * removed. Four guard families now hold the fix down, each proven red against a
+ * deliberately broken tree before being trusted:
+ *   SPEND      export, buy a real drop piece through loot.buyDropItem, import
+ *              the pre-spend backup. The piece must be gone, not just paid for
+ *              twice. Red against upsert-only importAll.
+ *   MALFORMED  the risk the fix introduces. A backup with an unkeyable row must
+ *              be rejected AND leave every store byte-identical, because the
+ *              clear runs inside the same transaction as the puts. Red against
+ *              a tree with the t.abort() removed from importAll's catch, where
+ *              the sync DataError commits the clear and empties three stores.
+ *   OMITTED    a store the backup does not mention is NOT cleared (no put would
+ *              restore it); a store it declares empty IS. Red against a tree
+ *              that clears every store unconditionally.
+ *   IDENTITY   kv holds the account key as well as the coin balance. A backup
+ *              taken before this device registered must not sign it out. Red
+ *              against upsert-only for the kv half of the loop.
+ * The per-store RESTORE rows below replaced an informational note that reported
+ * the additive shape as a design question. It was the bug.
+ *
  * Run: node tests/backup-roundtrip-audit.mjs [baseUrl]
  */
 import { boot, sleep, serveTree } from './godmode.js';
@@ -201,11 +224,20 @@ for (const s of STORES) {
   const equal = JSON.stringify(original) === JSON.stringify(backNoStray);
   check(`ROUND-TRIP  ${s.name}: every original row came back byte-equal (${original.length} rows)`, equal,
     equal ? '' : `diff (${original.length} original vs ${backNoStray.length} back):\n        original: ${original.join('\n        ')}\n        back:     ${backNoStray.join('\n        ')}`);
-  /* Additive-writer property, informational, not a pass/fail: importAll is
-     purely additive (each row put over its key), so unrelated rows survive.
-     Whether that is the intended contract of a "restore" is a design question. */
+  /* A RESTORE REMOVES WHAT THE BACKUP DOES NOT CONTAIN. This used to be an
+     informational note about importAll being purely additive. Additive is
+     the duplication bug: a row minted after the export survives the restore
+     while the currency that paid for it is refunded. The stray rows were
+     written during MUTATE and appear nowhere in the payload, so the ONLY
+     correct count of them after the restore is zero.
+     DIRECTION: failure is the stray still being there, i.e. more rows than
+     the backup carried. BOUND: exactly the payload's row count, never more. */
   const strayStillThere = back.some(c => c.includes(strayKey));
-  console.log(`      note  ${s.name}: unrelated stray row ${strayStillThere ? 'SURVIVED' : 'was overwritten by'} the import`);
+  check(`RESTORE  ${s.name}: a row the backup does not contain is gone after the restore (BOUND: ${original.length} rows, the payload count, never more)`,
+    !strayStillThere && back.length === original.length,
+    strayStillThere
+      ? `stray row ${strayKey} SURVIVED the restore; store holds ${back.length} rows where the backup carried ${original.length}. An upsert-only import cannot remove a row, so anything minted after the export is kept for free while the kv currency that paid for it is restored.`
+      : `${back.length} rows, matches the payload`);
 }
 
 /* -------- FINDING C: partial import (no transactional wrap).
@@ -252,6 +284,159 @@ if (partial.anythingWritten && !partial.everythingWritten) {
   finding('C (RISK)  importAll is NOT transactional across stores',
     `state after mid-import synthetic failure: ${JSON.stringify(partial.state)}  err=${partial.err}. Each row is put in its own tx (js/db.js:61 + :91), so a real mid-import failure (quota, corrupt row, tab close) leaves the DB in a state that is NEITHER the previous save NOR the restore. The Settings-YOUR-DATA toast on failure says "Import failed: <err>", and the player has no way to know their profile is now partially overwritten. Same additive-storage discipline as the rest of the app SHOULD apply, and a single readwrite tx across all stores would give it. Not fixed here per findings-only rule; sw.js/db.js is Reg's file class.`);
 }
+
+/* ============================================================================
+   GUARD 1: A SPEND CANNOT BE UNDONE BY A RESTORE.
+   The highest-severity thing this file protects. Export, spend real coins on a
+   real drop piece through the shop's own buyDropItem, then import the backup
+   that was taken BEFORE the spend. The restore refunds the coins because the
+   file carries the kv row. It must ALSO take the piece back, because the file
+   does not carry the inv row the purchase minted. Coins and goods move
+   together or the player nets a free item on every lap.
+   DIRECTION: failure is ending up with the pre-spend coin balance AND the
+   piece. BOUND: owned drop pieces after the restore is exactly the 0 the
+   backup carried, never 1.  */
+const spendGuard = await page.evaluate(async () => {
+  const { db, exportAll, importAll, kvSet } = await import('./js/db.js');
+  const loot = await import('./js/loot.js');
+  for (const s of ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv']) await db.clear(s);
+  await kvSet('coins', 6500);
+  await db.put('log', { id: 'L_guard', date: '2026-02-01', kcal: 10, name: 'guard' });  // importAll needs a log array
+  const ITEM = 'T9-5';
+  const before = { coins: await loot.coins(), owns: (await loot.ownedCosmeticIds()).has(ITEM), invRows: (await db.all('inv')).length };
+  const backup = await exportAll();
+  const buy = await loot.buyDropItem(ITEM);
+  const afterSpend = { coins: await loot.coins(), owns: (await loot.ownedCosmeticIds()).has(ITEM), invRows: (await db.all('inv')).length };
+  let err = null;
+  try { await importAll(backup); } catch (e) { err = String(e); }
+  const afterRestore = { coins: await loot.coins(), owns: (await loot.ownedCosmeticIds()).has(ITEM), invRows: (await db.all('inv')).length };
+  return { buy, before, afterSpend, afterRestore, err, backupInvRows: (backup.inv || []).length };
+});
+/* Empty-sample guard: if the purchase never happened the rest of this block
+   is comparing a state to itself and would pass vacuously. */
+check('SPEND  SETUP the purchase actually went through (an unbought item makes every check below vacuous)',
+  spendGuard.buy && spendGuard.buy.ok === true && spendGuard.afterSpend.owns === true && spendGuard.afterSpend.coins < spendGuard.before.coins,
+  `buy=${JSON.stringify(spendGuard.buy)} coins ${spendGuard.before.coins} -> ${spendGuard.afterSpend.coins}, owns ${spendGuard.before.owns} -> ${spendGuard.afterSpend.owns}`);
+check('SPEND  restoring the pre-spend backup did not throw', !spendGuard.err, spendGuard.err || '');
+check('SPEND  the restore took the purchase back (BOUND: 0 owned drop pieces, exactly what the backup carried)',
+  spendGuard.afterRestore.owns === false,
+  spendGuard.afterRestore.owns
+    ? `FREE ITEM. coins ${spendGuard.before.coins} -> ${spendGuard.afterSpend.coins} (spent ${spendGuard.before.coins - spendGuard.afterSpend.coins}) -> ${spendGuard.afterRestore.coins} after the restore, and the piece is STILL OWNED. The backup carried ${spendGuard.backupInvRows} inv rows, the DB now holds ${spendGuard.afterRestore.invRows}. Export, spend, import is an unlimited duplication loop through the Settings buttons.`
+    : `coins ${spendGuard.before.coins} -> ${spendGuard.afterSpend.coins} -> ${spendGuard.afterRestore.coins}, piece gone, inv rows ${spendGuard.afterRestore.invRows} == backup ${spendGuard.backupInvRows}`);
+check('SPEND  the restored inv store holds exactly the rows the backup carried, never more',
+  spendGuard.afterRestore.invRows === spendGuard.backupInvRows,
+  `after restore ${spendGuard.afterRestore.invRows}, backup ${spendGuard.backupInvRows}, after spend ${spendGuard.afterSpend.invRows}`);
+
+/* ============================================================================
+   GUARD 2: A MALFORMED IMPORT LEAVES THE OLD SAVE INTACT.
+   This is the risk the clear introduces, so it is asserted, not assumed.
+   A row with no value at its keyPath makes os.put throw SYNCHRONOUSLY, and a
+   sync DataError does NOT abort an IndexedDB transaction on its own: left
+   alone the transaction COMMITS, clear included, and the store is emptied.
+   importAll's catch calls t.abort() for exactly this reason. Assert both the
+   rejection copy and that every store still holds its pre-import bytes. */
+const malformed = await page.evaluate(async () => {
+  const { db, exportAll, importAll, kvSet } = await import('./js/db.js');
+  const NAMES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
+  for (const s of NAMES) await db.clear(s);
+  await kvSet('coins', 4242);
+  await db.put('foods', { id: 'F_keep', name: 'keep me', kcal: 1 });
+  await db.put('log', { id: 'L_keep', date: '2026-03-01', kcal: 1, name: 'keep' });
+  await db.put('inv', { id: 'I_keep', kind: 'cos', itemId: 'H11-1' });
+  await db.put('xp', { key: 'X_keep', type: 'quest', xp: 5, date: '2026-03-01', ts: 1 });
+  const snapshot = await exportAll();
+  /* A payload that is valid at the header, would overwrite kv and foods, and
+     then hits a row with no `id` in the LAST store. Everything before it has
+     already been cleared and re-put inside the transaction by then. */
+  const bad = JSON.parse(JSON.stringify(snapshot));
+  bad.kv = [{ k: 'coins', v: 999999 }];
+  bad.foods = [{ id: 'F_evil', name: 'evil', kcal: 0 }];
+  bad.inv = [{ NO_KEYPATH_HERE: true }];
+  let err = null;
+  try { await importAll(bad); } catch (e) { err = e && e.message ? e.message : String(e); }
+  const after = {};
+  for (const s of NAMES) after[s] = await db.all(s);
+  return { err, snapshot, after };
+});
+check('MALFORMED  a backup with an unkeyable row is REJECTED, not half-applied', !!malformed.err, `err=${malformed.err}`);
+/* The copy contract. js/app.js prints `Import failed: <message>`, and that
+   sentence promises the old save is untouched. If the fix ever makes that a
+   lie the copy has to change, so pin the literal string. */
+check('MALFORMED  the rejection still promises "Your old data is unchanged" (the copy contract js/app.js prints verbatim)',
+  typeof malformed.err === 'string' && malformed.err.includes('Your old data is unchanged'),
+  `err=${malformed.err}`);
+for (const s of STORES) {
+  const before = canonSorted(malformed.snapshot[s.name] || [], s.key);
+  const after = canonSorted(malformed.after[s.name] || [], s.key);
+  const equal = JSON.stringify(before) === JSON.stringify(after);
+  check(`MALFORMED  ${s.name}: the old save is byte-identical after the failed restore (${before.length} rows)`, equal,
+    equal ? `${after.length} rows unchanged` :
+      `ROLLBACK FAILED. before: ${before.join(' | ') || '(none)'}\n        after:  ${after.join(' | ') || '(none)'}`);
+}
+
+/* ============================================================================
+   GUARD 3: A STORE THE BACKUP OMITS IS NOT WIPED.
+   Clear-then-put destroys data exactly here, because there is no put to
+   restore it. An older export that predates a store carries no key for it.
+   Absent means "no information", so leave it alone; an explicit empty array
+   means "this store held nothing", so honour it. Both directions checked. */
+const omitted = await page.evaluate(async () => {
+  const { db, exportAll, importAll } = await import('./js/db.js');
+  const NAMES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
+  for (const s of NAMES) await db.clear(s);
+  await db.put('log', { id: 'L_o', date: '2026-04-01', kcal: 1, name: 'o' });
+  await db.put('inv', { id: 'I_o1', kind: 'cos', itemId: 'H11-1' });
+  await db.put('health', { date: '2026-04-01', steps: 100 });
+  const snap = await exportAll();
+  const noInv = JSON.parse(JSON.stringify(snap));
+  delete noInv.inv;                 // key absent entirely: an older backup shape
+  const emptyHealth = { ...noInv, health: [] };  // key present, explicitly empty
+  let err = null, res = null;
+  try { res = await importAll(emptyHealth); } catch (e) { err = String(e); }
+  return { err, res, invAfter: (await db.all('inv')).map(r => r.id), healthAfter: (await db.all('health')).length };
+});
+check('OMITTED  a store the backup does not mention survives the restore untouched', !omitted.err && omitted.invAfter.length === 1,
+  `err=${omitted.err || 'none'} inv after=${JSON.stringify(omitted.invAfter)}, skipped=${JSON.stringify(omitted.res && omitted.res.skipped)}`);
+check('OMITTED  importAll reports which stores it skipped, so a support ticket can name them',
+  !!(omitted.res && Array.isArray(omitted.res.skipped) && omitted.res.skipped.includes('inv')),
+  JSON.stringify(omitted.res && omitted.res.skipped));
+check('OMITTED  a store the backup declares EMPTY is cleared, because that is what the file says it held (BOUND: 0 rows)',
+  omitted.healthAfter === 0, `health rows after restore: ${omitted.healthAfter}`);
+
+/* ============================================================================
+   GUARD 4: A RESTORE DOES NOT SIGN THE DEVICE OUT OF ITS ACCOUNT.
+   kv holds the account private key as well as the coin balance. A backup
+   taken before this device registered carries no `identity` row, so a naive
+   clear of kv would orphan the account with no put to bring it back and no
+   keychain on the web to recover from. The device rows survive; ordinary kv
+   game state the backup does not carry still goes, or the loop is back. */
+const identityGuard = await page.evaluate(async () => {
+  const { db, exportAll, importAll, kvGet, kvSet } = await import('./js/db.js');
+  const NAMES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
+  for (const s of NAMES) await db.clear(s);
+  await kvSet('coins', 100);
+  await db.put('log', { id: 'L_i', date: '2026-05-01', kcal: 1, name: 'i' });
+  const snap = await exportAll();                 // taken BEFORE the device registers
+  await kvSet('identity', { pubJwk: 'PUB', privJwk: 'PRIV' });
+  await kvSet('cloudOff', true);
+  await kvSet('someLaterGameKey', 777);           // ordinary game state, not device state
+  let err = null;
+  try { await importAll(snap); } catch (e) { err = String(e); }
+  return {
+    err,
+    identity: await kvGet('identity', null),
+    cloudOff: await kvGet('cloudOff', null),
+    laterGameKey: await kvGet('someLaterGameKey', null),
+    coins: await kvGet('coins', null),
+  };
+});
+check('IDENTITY  restoring a backup with no identity row does NOT sign the device out',
+  !identityGuard.err && identityGuard.identity && identityGuard.identity.privJwk === 'PRIV',
+  `err=${identityGuard.err || 'none'} identity=${JSON.stringify(identityGuard.identity)}`);
+check('IDENTITY  the device cloud-backup consent flag survives too', identityGuard.cloudOff === true, `cloudOff=${identityGuard.cloudOff}`);
+check('IDENTITY  ordinary kv game state the backup does not carry is still removed (or the duplication loop is back through kv)',
+  identityGuard.laterGameKey === null, `someLaterGameKey after restore = ${JSON.stringify(identityGuard.laterGameKey)}`);
+check('IDENTITY  the backup\'s own kv values still win', identityGuard.coins === 100, `coins=${identityGuard.coins}`);
 
 /* -------- FINDING A: exportBtn short-circuits on isNative().
    Static check on app.js source, since headless is not native and cannot

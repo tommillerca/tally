@@ -25,6 +25,7 @@ const teaser = await page.evaluate(() => {
   const cells = [...veil.querySelectorAll('.boss-cell')];
   return {
     cells: cells.length,
+    // rot-audit: negative v352 stripped the labels off the wall, this holds them off
     named: [...veil.querySelectorAll('.bst-name, .bst-label')].length,
     scrolls: veil.scrollHeight > veil.clientHeight + 4,
     cta: veil.querySelector('#bossIntroGo')?.textContent.trim(),
@@ -39,6 +40,7 @@ ok('it sends you hunting', /HUNT/i.test(teaser.cta || ''), teaser.cta);
 await page.evaluate(() => document.querySelector('.boss-veil')?.remove());
 const spoiler = await page.evaluate(() => ({
   hasOpener: typeof window.openBestiary === 'function',
+  // rot-audit: negative v352 deleted the roster button, this proves it stayed deleted
   seeWholeBtn: !!document.getElementById('bestiaryOpen'),
   rosterCta: [...document.querySelectorAll('button, a')]
     .filter(b => /whole bestiary|all monsters|see them all/i.test(b.textContent || '')).length,

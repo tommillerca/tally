@@ -102,7 +102,7 @@ export async function loadPuppeteer() {
    explicit CHROME_PATH, else the browsers a CI image usually already ships, else
    nothing, and nothing means puppeteer resolves it exactly as it does today, so
    a machine with its own Chrome downloaded is untouched by this. */
-const chromePath = () => {
+export const chromePath = () => {
   const tries = [process.env.CHROME_PATH, ...(process.env.PLAYWRIGHT_BROWSERS_PATH
     ? fs.existsSync(process.env.PLAYWRIGHT_BROWSERS_PATH)
       ? fs.readdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH)
@@ -113,13 +113,18 @@ const chromePath = () => {
   return tries.find(p => p && fs.existsSync(p)) || undefined;
 };
 
+/* Same reasoning as chromePath, hoisted so an audit that launches its own
+   browser instead of calling boot() cannot silently miss it. fx-audit.js did
+   exactly that and died at launch on every root container. */
+export const sandboxArgs = () => (process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []);
+
 export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
   const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
      check here dies at launch and reads as "the browser is broken". No-op on a
      normal machine: the flag is only added when we are already root, which is
      the only case where the sandbox was never going to come up anyway. */
-  const rootArgs = process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
+  const rootArgs = sandboxArgs();
   const browser = await puppeteer.launch({
     /* HEADLESS_MODE exists so a machine where modern headless cannot screenshot
        can still run the pixel audits. On this Mac, Page.captureScreenshot never
