@@ -8136,7 +8136,23 @@ async function diagnosticsLine() {
     let extra = '';
     try {
       if (id === 'LocalNotifications' && P[id].checkPermissions) extra = ':' + ((await P[id].checkPermissions()).display || '?');
-      else if (id === 'BhVault' && P[id].status) { const s = await P[id].status(); extra = ':' + (s && s.readable === false ? 'unreadable' : (s && s.present ? 'has-key' : 'empty')); }
+      /* READ THE KEYS THE PLUGINS ACTUALLY RETURN. This asked for `readable` and
+         `present`, and neither exists on either side: BhVault.status() resolves
+         { available, e2e, hasIdentity, readError } on iOS
+         (native/ios/App/App/BhVault.swift) and the same plus `reason` on Android
+         (native/android/.../BhVault.kt). So both branches fell through and this
+         printed `BhVault:ok:empty` on EVERY phone: one holding a live key, and
+         one whose vault could not be read at all.
+         That is the worst possible string to get wrong here. The rule this whole
+         subsystem is built on is that a failed vault read must never be reported
+         as an empty vault, because "empty" is what makes the app decide the
+         player is new and mint over a recoverable account. This is the
+         diagnostic that exists to catch that, and it would have said "empty"
+         during the incident it was written for. */
+      else if (id === 'BhVault' && P[id].status) {
+        const s = await P[id].status();
+        extra = ':' + (s && (s.readError || s.available === false) ? 'unreadable' : (s && s.hasIdentity ? 'has-key' : 'empty'));
+      }
       else if (id === 'Haptics') extra = ':no-readback';
       else if (id === 'Health') extra = ':auth-not-probed';
     } catch { extra = ':probe-failed'; }
@@ -11680,7 +11696,19 @@ function openPetBreedResult(off) {
 async function ingestHkFromUrl() {
   const h = location.hash || '';
   if (!h.startsWith('#/hk')) return;
-  const payload = parseHkPayload(decodeURIComponent(h));
+  /* THE HASH IS PLAYER-SUPPLIED, SO THE DECODE HAS TO SURVIVE GARBAGE.
+     decodeURIComponent throws URIError on any stray '%' ("#/hk%", "#/hk?n=100%"),
+     this runs inside boot() BEFORE route() and bindTabs(), and boot() is called
+     bare at the bottom of this file. So one bad character left #screen EMPTY with
+     a working tab bar that did nothing, and the hash survives a reload, so the
+     app stayed dead until the player edited the URL. Measured, not reasoned:
+     "URIError: URI malformed", screen innerHTML length 0.
+     Falling back to the raw hash is right rather than merely safe: parseHkPayload
+     reads plain `k=v` pairs and never needed the decode to have succeeded. If it
+     genuinely cannot read it, the existing toast still says so. */
+  let decoded = h;
+  try { decoded = decodeURIComponent(h); } catch { /* malformed escape: parse it raw */ }
+  const payload = parseHkPayload(decoded);
   history.replaceState(null, '', location.pathname + location.search + '#/today');
   if (payload) await ingestHealth(payload, { celebrate: true });
   else toast('Could not read the Health sync link');

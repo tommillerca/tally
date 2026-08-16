@@ -115,6 +115,7 @@ const BROWSER = [
   'log-write-failure-audit.mjs', // a failed save must not look like a saved meal
   'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
+  'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
 ];
 
 function run(file, args) {

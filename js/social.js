@@ -290,22 +290,37 @@ export async function displayName() {
 
 /* ---------------- friends + name ---------------- */
 // Set the curated display name from word-list indices (no free text uploaded).
+/* THE ONLY signedFetch CALLER IN THIS FILE THAT DID NOT CATCH.
+   signedFetch REJECTS on no network (and throws 'offline' with no account), so on
+   a dropped connection this threw straight out of the Save handler in
+   openNameBuilder, which had already set the button to "Saving..." and disabled
+   it. Nothing re-enabled it: the player was left holding a dead button with no
+   toast and no explanation until they closed the sheet. Measured against a dead
+   API port: unhandled rejection "Failed to fetch" at signedFetch, button stuck at
+   Saving/disabled, zero toasts.
+   The caller already has the right copy for a returned failure ("Could not save
+   your name. Try again in a bit."), so the fix is to make the failure a RETURN
+   like every sibling here rather than to teach one handler about throws. The
+   whole body is inside it on purpose: an unreadable 200 body or a failed kvSet is
+   also a name that did not save, and must not leave the button dead either. */
 export async function setName(adj, noun, num) {
-  const r = await signedFetch('POST', '/name', { adj, noun, num });
-  // A 409 is a NAMED outcome (somebody already has this name), not a failure to
-  // reach the server. Pass it through with the free number the server suggested
-  // so the sheet can offer it, instead of a generic "could not save".
-  if (r.status === 409) {
-    const d = await r.json().catch(() => ({}));
-    return { ok: false, reason: 'taken', name: d.name, suggestNum: d.suggestNum ?? null };
-  }
-  if (!r.ok) return { ok: false };
-  const data = await r.json();
-  const me = (await kvGet('social', null)) || {};
-  me.name = data.name; await kvSet('social', me);
-  // a rename we asked for is now satisfied; never ask again
-  await kvSet('renameRequired', null);
-  return { ok: true, name: data.name };
+  try {
+    const r = await signedFetch('POST', '/name', { adj, noun, num });
+    // A 409 is a NAMED outcome (somebody already has this name), not a failure to
+    // reach the server. Pass it through with the free number the server suggested
+    // so the sheet can offer it, instead of a generic "could not save".
+    if (r.status === 409) {
+      const d = await r.json().catch(() => ({}));
+      return { ok: false, reason: 'taken', name: d.name, suggestNum: d.suggestNum ?? null };
+    }
+    if (!r.ok) return { ok: false };
+    const data = await r.json();
+    const me = (await kvGet('social', null)) || {};
+    me.name = data.name; await kvSet('social', me);
+    // a rename we asked for is now satisfied; never ask again
+    await kvSet('renameRequired', null);
+    return { ok: true, name: data.name };
+  } catch { return { ok: false }; }
 }
 export async function friendRequest(code) {
   try { const r = await signedFetch('POST', '/friends/request', { code }); const d = await r.json().catch(() => ({})); return { ok: r.ok, ...d }; }
