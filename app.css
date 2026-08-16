@@ -7879,8 +7879,22 @@ body::before {
      a lawn with sprites on it. Measured, not guessed: that is why the render
      looked nothing like the tile does on its own.
      A flat dark ground under the tile, in the tile's own family, so the blades
-     read as grass rather than as a pattern printed on a lawn. */
-  background-color: #1b2418;
+     read as grass rather than as a pattern printed on a lawn.
+
+     LIFTED FROM #1b2418 (luminance 33) TO #27321f (45). Tom: "it looks crunchy
+     like oversharpened, I want it to look like Stardew Valley." Measured on the
+     render, the whole scene had a median luminance of 33 with a 99th percentile
+     of 234: a 7.0x ratio, which is a picture made almost entirely of extremes
+     with no mid-tones. Stardew's outdoor ground sits in the middle of its range
+     and lets the sprites carry the contrast; ours was a near-black void that
+     every sprite had to shout over. At 45 the ratio is 5.2 and the tile's own
+     blades, which average rgb(26,37,24), finally read as grass on ground rather
+     than as light marks on black.
+     What this is NOT: the sprites were checked and cleared. All 44 carry ZERO
+     anti-aliased edge pixels (0 of 42,162 opaque px have partial alpha) and a
+     median of 29 colours each, so nothing needed cleaning up and no art was
+     touched. The crunch was the environment, and the environment was mine. */
+  background-color: #27321f;
   background-image: url('assets/hollow/pix/hollow-ground.png');
   background-repeat: repeat;
   /* ONE PIXEL SCALE FOR THE WHOLE SCENE. The tile is 96px native and was drawn
@@ -7912,13 +7926,18 @@ body::before {
      ground you see gaps rather than stones. Tom's dirt tile goes underneath, so
      the path is worn earth with stones set into it, which is what a path in a
      garden actually is. Two layers, both on the same 96px integer grid. */
-  background-image: url('assets/hollow/pix/hollow-path.png'),
-                    url('assets/hollow/pix/hollow-dirt.png');
-  background-repeat: repeat, repeat;
-  background-size: 96px 96px, 96px 96px;
+  /* DIRT ONLY. The cobble layer was the single noisiest thing on the screen and
+     it ran the full height of the scene down the middle. hollow-path.png is 60%
+     transparent scattered stones, and a 48px track cut out of a 96px tile sliced
+     every stone in half, so what should have read as set stones read as
+     structureless speckle: measured, the highest local contrast of any ground
+     region in the render. A worn earth track is what a garden path is anyway. */
+  background-image: url('assets/hollow/pix/hollow-dirt.png');
+  background-repeat: repeat;
+  background-size: 96px 96px;
   /* The tile is 96px on a 48px track, so centre it: the stones sit down the
      middle of the worn line instead of being sliced at the left edge. */
-  background-position: -24px 0, -24px 0;
+  background-position: -24px 0;
   image-rendering: pixelated;
   /* Feathered sideways so the track meets the grass instead of butting into it.
      A hard vertical edge running the full height is what read as drawn-by-a-
@@ -7943,9 +7962,12 @@ body::before {
    Neither touches a sprite; they are painted on the ground layer itself. */
 .hlw-ground::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
+  /* SOFTENED. This was rgba(8,11,8,.55) plus a .5 corner vignette, which pushed
+     both ends of the scene toward pure black and widened exactly the value range
+     that was making it read as oversharpened. Same job, a third of the weight,
+     and no radial: the vignette was doing nothing the falloff was not. */
   background:
-    linear-gradient(180deg, rgba(8,11,8,.55) 0%, rgba(8,11,8,0) 26%, rgba(8,11,8,0) 62%, rgba(8,11,8,.42) 100%),
-    radial-gradient(120% 68% at 50% 46%, rgba(8,11,8,0) 38%, rgba(8,11,8,.5) 100%);
+    linear-gradient(180deg, rgba(20,26,18,.30) 0%, rgba(20,26,18,0) 24%, rgba(20,26,18,0) 66%, rgba(20,26,18,.22) 100%);
 }
 /* THE LOCKED BED MUST NOT BE THE BRIGHTEST THING ON SCREEN. Measured: the ghost
    bed read 4.80:1 against the ground while an owned tilled bed read 1.03:1, so
