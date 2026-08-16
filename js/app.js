@@ -14089,7 +14089,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret' || foeCfg.mode === 'glutton';
+  /* SPIRE BELONGS HERE and was missing, which cost three things at once: the
+     Done button read "Back to The Pit" after a fight on the Boneyard map, the
+     flee toast said you slipped out of The Pit, and the exit handler below ran
+     renderPit() on a screen the player had never opened. A spire is a map
+     object, reached through #mapSpire, exactly like a den or a mini. */
+  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
+    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire';
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -15356,7 +15362,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // sheet stayed on screen and had to be closed by hand (Tom,
         // 2026-08-11). Rewind history past every open sheet, then close them
         // all now; the popstate arrives to an empty stack and no-ops.
-        if (foeCfg.mode === 'glutton' && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
+        /* AND THE SAME IS TRUE OF A SPIRE, which is the whole point. Tom,
+           2026-08-16: "i just beat a spire and instead of it saying take this
+           spire after my win it looped me back to fight the boss again this has
+           happened so many times with the glutton and elsewhere stop making
+           this mistake."
+           He is right that it is a class. Every fight is launched FROM a sheet
+           that rendered before the fight, so after a win that sheet still
+           offers the fight you just won. The Glutton got a fix; the spire did
+           not, because the fix was written for the path the ticket named rather
+           than for the shared function. settle() has already claimed the tower
+           by the time this runs, so openSpireSheet's "Face the Warden" button
+           is not merely stale, it is a live control for an act that is done.
+           STALE_LAUNCHER is the list of modes whose launcher cannot survive a
+           win, and tests/fight-exit-audit.mjs derives its coverage from the
+           openFight call sites, so a NEW mode that never states where a win
+           drops you FAILS instead of silently inheriting the Pit's behaviour. */
+        const STALE_LAUNCHER = ['glutton', 'spire'];
+        if (STALE_LAUNCHER.includes(foeCfg.mode) && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
         history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
       });
     }, fast ? 80 : 750);
