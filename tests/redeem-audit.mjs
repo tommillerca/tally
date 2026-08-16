@@ -4,7 +4,9 @@
  * js/loot.js:631. redeemCode is the rewarded-actions shape one more time:
  *   - unrecognised codes reject with reason 'invalid'
  *   - a code already in kv 'redeemed' rejects with reason 'used'
- *   - a fresh valid code grants pet (or +120 coins if already owned) + code.coins
+ *   - a fresh valid code grants pet (the +120 "already owned" consolation is
+ *     written but UNREACHABLE at v385, see FINDING-DUPE-UNREACHABLE below and
+ *     the decision-neutral pin in tests/redeem-dupe-audit.mjs) + code.coins
  *   - the code is appended to kv 'redeemed' AFTER the grants land
  * That last property is the money guard for this surface. A regression that
  * skips the kv 'redeemed' check turns any published code into a repeatable
@@ -75,17 +77,35 @@ await page.waitForSelector('#redeemBtn', { timeout: 10000 });
 /* Record every toast the app shows from here on. A MutationObserver is used
    rather than polling because a queued toast can come and go inside one poll
    interval, and a message the player saw but the audit slept through is
-   exactly the failure this whole file exists to catch. */
+   exactly the failure this whole file exists to catch.
+
+   READ THE RECORDS, NOT THE ELEMENT STATE, and never skip a message equal to
+   the previous one. nextToast() (js/app.js:2264) does not clear #toast between
+   messages: it hides the old one, assigns textContent and unhides, all inside
+   ONE synchronous task. A MutationObserver callback fires once per BATCH, so
+   an observer that reads el.textContent at callback time never sees the hide,
+   and a de-duplicating push then drops the second of two identical messages
+   entirely. That mattered here: the same "<Pet> unlocked!" copy is shown for a
+   first-time redeem and for an already-owned one, and the dupe section below
+   was reading the second one as the empty string. A `hidden` record whose
+   oldValue is '' means the attribute was present and has just been removed,
+   which is a SHOW, and the text is already assigned by then. */
 await page.evaluate(() => {
   window.__toastLog = [];
   const el = document.getElementById('toast');
   if (!el) return;
-  const push = () => {
-    const t = (el.textContent || '').trim();
-    if (t && window.__toastLog[window.__toastLog.length - 1] !== t) window.__toastLog.push(t);
-  };
-  push();
-  new MutationObserver(push).observe(el, { childList: true, subtree: true, characterData: true });
+  if (!el.hidden) {
+    const t0 = (el.textContent || '').trim();
+    if (t0) window.__toastLog.push(t0);
+  }
+  new MutationObserver(records => {
+    for (const r of records) {
+      if (r.type !== 'attributes' || r.attributeName !== 'hidden') continue;
+      if (r.oldValue === null) continue;            // just became hidden
+      const t = (el.textContent || '').trim();
+      if (t) window.__toastLog.push(t);
+    }
+  }).observe(el, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
 });
 
 /* Clean kv 'redeemed' so the demo profile does not have a stale burn on our
@@ -215,38 +235,58 @@ check('REDEEM-EMPTY  toast reads "Enter a code first."',
    the fresh-grant branch even with the same species already in the roster,
    the dupe branch is unreachable dead code and the finding belongs on the
    record. */
-if (pickedPetOnly && !pickedPetOnly.def.coins) {
+if (pickedPetOnly && !pickedPetOnly.def.coins && pickedPetOnly.def.pet !== 'random') {
+  /* SEED THROUGH THE APP'S OWN WRITER, AND PROVE IT TOOK. This block used to
+     push { iid, C: speciesId } into kv 'petInsts'. Both halves were wrong: the
+     real key is 'petInst' (js/loot.js:492) and the species field is `sp`
+     (js/loot.js:499), so the seed wrote to a key nothing reads and the
+     "already owned" precondition was never actually established. The finding
+     below still fired, but only because the demo profile happens to already
+     own C1, which is luck, not a measurement. addPetInstance produces the real
+     save shape, and the count is asserted before the redeem so an unseeded run
+     FAILS instead of reporting a finding it did not set up. */
   await page.evaluate(async speciesId => {
-    const { kvSet, kvGet, newId } = await import('./js/db.js');
+    const { kvSet } = await import('./js/db.js');
+    const { addPetInstance } = await import('./js/loot.js');
     await kvSet('redeemed', []);
-    /* seed the species in kv 'petInsts' so grantPet's "already owned" check
-       (if it still has one) would fire. petInsts entries are keyed by iid
-       with the species in `C`. */
-    const existing = (await kvGet('petInsts', [])) || [];
-    if (!existing.find(p => p.C === speciesId)) {
-      existing.push({ iid: newId(), C: speciesId, gotAt: Date.now(), source: 'test' });
-      await kvSet('petInsts', existing);
-    }
+    await addPetInstance(speciesId, {});
   }, pickedPetOnly.def.pet);
   const beforeD = await snapshot();
+  const ownedBefore = await page.evaluate(async sp => {
+    const { petInstances } = await import('./js/loot.js');
+    return (await petInstances()).filter(x => x.sp === sp).length;
+  }, pickedPetOnly.def.pet);
+  check(`REDEEM-DUPE  SETUP: ${pickedPetOnly.def.pet} is genuinely owned before the redeem`,
+    ownedBefore > 0, `copies of ${pickedPetOnly.def.pet} in kv 'petInst' = ${ownedBefore}`);
   await redeemViaUI(pickedPetOnly.code, /unlocked|already|coins/);
   const afterD = await snapshot();
   const dupeDelta = afterD.coins - beforeD.coins;
   const grantedNewPet = afterD.petCount > beforeD.petCount;
-  const dupeToast = /already owned|coins instead/i.test(afterD.toast);
+  /* snapshot() returns `toasts` (the whole log), never `toast`. Reading the
+     singular meant this was always undefined, so `dupeToast` was permanently
+     false and the REDEEM-DUPE pass branch below could never be taken: a check
+     that cannot go green in one direction is not a check. */
+  const newToasts = afterD.toasts.slice(beforeD.toasts.length);
+  const lastToast = newToasts[newToasts.length - 1] || '';
+  const dupeToast = /already owned|coins instead/i.test(lastToast);
   if (grantedNewPet && dupeDelta === 0) {
-    console.log(`FINDING-DUPE-UNREACHABLE  redeeming ${pickedPetOnly.code} with the pet species already in kv 'petInsts' still granted a NEW instance (pets ${beforeD.petCount} -> ${afterD.petCount}) and paid 0 coins. redeemCode's dupe branch at js/loot.js:641 tests \`if (!pet)\` from grantPet, but grantPet was updated to always return the species (see loot.js:607 comment: "owning it already is fine now (dupes stack)"). So the dupe branch is DEAD CODE. A player who redeems a pet-only code for a pet species they already own gets an extra INSTANCE of that pet, not the +120 coins the code path advertises via toast. Reg's file class; report only, do not fix.`);
-    console.log(`  measured: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${afterD.toast}"`);
+    console.log(`FINDING-DUPE-UNREACHABLE  redeeming ${pickedPetOnly.code} with ${ownedBefore} copies of ${pickedPetOnly.def.pet} already in kv 'petInst' still granted a NEW instance (pets ${beforeD.petCount} -> ${afterD.petCount}) and paid 0 coins. redeemCode's dupe branch at js/loot.js:641 tests \`if (!pet)\` from grantPet, but grantPet was updated to always return the species (see loot.js:607 comment: "owning it already is fine now (dupes stack)"). So the dupe branch is DEAD CODE, and js/app.js:9098's "(pet already owned, coins instead)" copy is dead with it. A player who redeems a pet-only code for a species they already own gets an extra INSTANCE and the same "unlocked!" toast a first-time redeem shows. tests/redeem-dupe-audit.mjs holds the decision-neutral pin for whichever behaviour is chosen; report only, do not fix here.`);
+    console.log(`  measured: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${lastToast}"`);
   } else if (dupeDelta === 120 && !grantedNewPet && dupeToast) {
     check(`REDEEM-DUPE  redeeming ${pickedPetOnly.code} with pet already owned pays the +120 dupe consolation`, true, `coins delta=${dupeDelta}`);
   } else {
-    console.log(`FINDING-DUPE  UNEXPECTED shape: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${afterD.toast}". Neither the dupe branch nor the fresh branch fully matches its own contract on this build.`);
+    console.log(`FINDING-DUPE  UNEXPECTED shape: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${lastToast}". Neither the dupe branch nor the fresh branch fully matches its own contract on this build.`);
   }
   check(`REDEEM-DUPE  the code is STILL recorded in kv 'redeemed' after this attempt`,
     afterD.redeemed.includes(pickedPetOnly.code),
     `redeemed=[${afterD.redeemed.join(',')}]`);
 } else {
-  console.log('info REDEEM-DUPE  no pet-only code in REDEEM_CODES; dupe branch not measured on this build');
+  /* An unmeasured dupe branch is an EMPTY SAMPLE SET, and this file's own rule
+     says that is a failure, not a quiet info line. 'random' is excluded on
+     purpose: its species is not knowable in advance, so no "already owned"
+     precondition could be established for it. */
+  check('REDEEM-DUPE  SETUP: a pet-only code with an explicit species exists to measure the dupe branch with',
+    false, `codes=[${codeTable.map(c => `${c.code}:${JSON.stringify(c.def)}`).join(' ')}]`);
 }
 
 await browser.close();
