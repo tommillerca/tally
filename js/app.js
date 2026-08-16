@@ -4060,6 +4060,11 @@ const HLW_FIT = { B: 'B0-1', SK: 'SK0-1', H: 'H9' };
    neighbour. 160px of vertical pitch clears the bed plus its chip; the columns
    move to 100 and 290 so a 144-wide bed sits inside the 390 stage on both
    sides (28 to 172, and 218 to 362). */
+/* The bed's TAP area, deliberately smaller than its picture. It was shrunk to
+   60 once before, on purpose, so a mistap could not arm a 1500-coin buy on the
+   neighbouring price sign. 84 keeps that intent while covering the front rail,
+   which is the part of the bed that looks most solid and was entirely dead. */
+const BED_HIT = 84;
 const HLW_SPOTS = [[92, 250], [92, 366], [92, 482], [286, 308], [286, 424]];
 /* 740, not 900. The bottom 160 units held nothing: the lowest object the keeper
    can reach is the compost heap at y 502 and he is 190 tall, so 692 is the real
@@ -4325,9 +4330,16 @@ function openHollow(after) {
             frames, so drawing a rounded brown rectangle around them put a
             second, different-language border around every plot. */''}
       ${beds.map((p, i) => `
-        <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
+        ${/* DERIVED FROM BED_BOX, never hardcoded again. This read 84x60 at
+              (cx-42, cy-30), the vector bed's size, and did not follow when
+              BED_BOX moved to 96 for the pixel art. The sprite then rendered
+              96x96 inside an 84x60 box while the button stayed 60x60, so the
+              bed a player could SEE was 2.5x the bed they could TAP, offset up
+              and left, with the whole front bone rail dead. Every value here
+              comes from BED_BOX so the three can never drift apart again. */''}
+        <div style="position:absolute;left:${p.cx - BED_BOX.w / 2}px;top:${p.cy - BED_BOX.h / 2}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
         ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}
-        <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
+        <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - BED_HIT / 2}px;top:${p.cy - BED_HIT / 2}px;width:${BED_HIT}px;height:${BED_HIT}px"></button>`).join('')}
       ${/* Every slot you do not own gets its ghost, not only the one on sale. With
             the second frame in, drawing just the purchasable one left the last
             slot as bare soil inside a wooden frame, which reads as a gap in the
@@ -4428,8 +4440,23 @@ function openHollow(after) {
       .forEach(el => el.setAttribute('aria-hidden', 'true'));
 
     const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
-    const s = vp.clientWidth / 390;
+    /* SNAP THE STAGE SCALE TO THE DEVICE-PIXEL GRID.
+       This was vp.clientWidth / 390 exactly, which is 0.7795 to 1.0615 on real
+       phones, so one 48px art pixel landed on 1.559 to 2.123 CSS px and never
+       on a whole device pixel. Every integer-snapping decision inside the scene
+       (HLW_PIX rounding to whole multiples, BED_BOX at 96, the transform ban on
+       .hlw-pix) was being spent inside a parent that resampled the lot. The
+       .hlw-pix comment says a transform on the element OR ANY ANCESTOR defeats
+       image-rendering, and this is the ancestor it meant.
+       Snapping to 1/(2*dpr) puts a 2x art pixel on a whole device pixel. The
+       stage then differs from the viewport by under half a device pixel, so it
+       is centred rather than stretched to fit. */
+    const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    const raw = vp.clientWidth / 390;
+    const step = 1 / (2 * dpr);
+    const s = Math.max(step, Math.round(raw / step) * step);
     st.style.transform = `scale(${s})`;
+    st.style.marginLeft = `${Math.round((vp.clientWidth - 390 * s) / 2)}px`;
     vp.style.height = Math.round(HLW_H * s) + 'px';
     clampSayNow = clampSay;
     requestAnimationFrame(clampSay);

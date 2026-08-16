@@ -224,9 +224,24 @@ export function hlwPriceSignHtml(price, afford = null) {
     { x: 0, y: 0, w: SIGN_BOX.w, cls: 'hlw-p-hollow-price-sign', style: PE });
   const short = afford != null && afford < price;
   const label = Number(price).toLocaleString();
-  const out = art.replace('</svg>',
-    `<g transform="rotate(-3 31 19)"><text x="41" y="24" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${label}</text>` +
-    `</g></svg>`);
+  /* THE PRICE WAS SILENTLY GONE. Both lines below used to be string surgery on
+     the SVG: `.replace('</svg>', <text>)` for the number and `.replace('<svg',
+     opacity)` for the muting. hollow-price-sign now has pixel art, so hlwArt
+     returns an <img> and NEITHER token exists: both replacements no-opped and
+     the player saw a blank signpost with no price on it, with the cannot-afford
+     muting dead as well. Measured: #hlwSign.innerHTML had no text node and
+     computed opacity 1 while the balance was 340 against a 1500 price.
+     The number now goes in a positioned span beside the art and the muting on a
+     wrapper, so both work whichever way hlwArt chose to render. */
+  const pix = !art.startsWith('<svg');
+  const out = pix
+    ? `<span style="position:relative;display:inline-block;${short ? 'opacity:.62;' : ''}">${art}`
+      + `<span style="position:absolute;left:0;right:0;top:38%;text-align:center;font-family:Bangers,sans-serif;`
+      + `font-size:13px;letter-spacing:.5px;color:#17151d;pointer-events:none">${label}</span></span>`
+    : art.replace('</svg>',
+      `<g transform="rotate(-3 31 19)"><text x="41" y="24" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${label}</text>` +
+      `</g></svg>`);
+  if (pix) return out;
   /* NO SECOND LINE ON THE BOARD. A "N SHORT" line was tried and measured: the
      board is 58 x 30 units and the text landed outside it, half over the post,
      unreadable. The muting is the signal, the balance is already on screen top
