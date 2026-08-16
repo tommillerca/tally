@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS friendships (
   ts INTEGER NOT NULL,
   PRIMARY KEY (a, b)
 );
+-- The PRIMARY KEY (a, b) can only be searched on a prefix, so it answers
+-- "a = ?" and it cannot answer "b = ?" at all. GET /friends asks
+-- "WHERE f.a = ? OR f.b = ?", which meant the OR arm nobody had an index for
+-- dragged the whole query down to a full table scan: 14.13 ms at 199,598
+-- friendships, against 0.27 ms with this index. See
+-- migrations/2026-08-16-indexes.sql for the full before/after.
+CREATE INDEX IF NOT EXISTS idx_friendships_b ON friendships (b);
 
 CREATE TABLE IF NOT EXISTS trades (
   id TEXT PRIMARY KEY,
@@ -77,6 +84,12 @@ CREATE TABLE IF NOT EXISTS grants (
   UNIQUE (player_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_grants_player ON grants (player_id, id);
+-- Two routes look a grant up by key ALONE, with no player_id to lead with:
+-- /steps/week asks "has last week been settled yet" and /steps/settled reads
+-- back the podium that was paid. Neither UNIQUE (player_id, key) nor
+-- idx_grants_player starts with `key`, so both were scanning all 1.9M rows
+-- (38.10 ms and 112.96 ms measured) to find at most five.
+CREATE INDEX IF NOT EXISTS idx_grants_key ON grants (key);
 
 -- Anonymous product analytics. Keyed to a random per-device id (NOT the player
 -- pubkey, NOT linked to identity). Event names + coarse props only; never food,
