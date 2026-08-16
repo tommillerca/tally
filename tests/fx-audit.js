@@ -34,7 +34,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { loadPuppeteer } from './godmode.js';
+import { loadPuppeteer, chromePath, sandboxArgs, serveTree } from './godmode.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /* puppeteer is a real dependency of this repo now, resolved by godmode's
@@ -48,7 +48,13 @@ let puppeteer;
 try { puppeteer = await loadPuppeteer(); }
 catch (e) { console.error(`FX AUDIT CANNOT RUN (setup, not a failing check):\n${e.message}`); process.exit(1); }
 
-const BASE = (process.argv[2] || 'https://tommillerca.github.io/tally/').replace(/\/?$/, '/');
+/* NEVER GRADE PRODUCTION. This defaulted to the live site, so a bare run of
+   this audit measured whatever is deployed and said nothing at all about the
+   working tree it was run from. A pass under that default is not evidence.
+   An explicit URL still wins, so the way anyone drove this before still works;
+   with no argument it now serves the tree this file lives in. */
+const srvHandle = process.argv[2] ? null : await serveTree(path.resolve(__dirname, '..'));
+const BASE = (process.argv[2] || srvHandle.url).replace(/\/?$/, '/');
 const APP_JS = path.join(__dirname, '..', 'js', 'app.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -65,6 +71,7 @@ function registeredMoves() {
   const block = src.match(/const STRIKE_FX = \{([\s\S]*?)\n {2}\};/);
   if (!block) {
     console.error('FAIL: could not find the STRIKE_FX table in js/app.js. If it was renamed, update this audit.');
+    if (srvHandle) srvHandle.close();
     process.exit(1);
   }
   return [...block[1].matchAll(/^\s{4}(\w+)\s*:/gm)].map(m => m[1]);
@@ -82,9 +89,16 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   const stale = covered.filter(c => !registered.includes(c));
   if (stale.length) fail(`audited moves that no longer exist in STRIKE_FX: ${stale.join(', ')}`);
 
+  /* borrow boot()'s browser resolution rather than re-deriving it: without
+     executablePath this died "Could not find Chrome" on any machine whose
+     browser is not where puppeteer looks, and without the sandbox args it died
+     as uid 0. Both read as an FX failure, which is the one thing the header of
+     this file says a setup problem must never do. */
   const browser = await puppeteer.launch({
     headless: process.env.HEADLESS_MODE || 'new',
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    executablePath: chromePath(),
+    args: sandboxArgs(),
   });
   const page = await browser.newPage();
   const pageErrors = [];
@@ -125,10 +139,10 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   }
   await clickMatching(/^the pit/i) || await page.evaluate(() => document.getElementById('pitBtn')?.click());
   await sleep(1500);
-  if (!await clickMatching(/^FIGHT$/)) { console.log('FAIL: could not start a fight'); await browser.close(); process.exit(1); }
+  if (!await clickMatching(/^FIGHT$/)) { console.log('FAIL: could not start a fight'); await browser.close(); if (srvHandle) srvHandle.close(); process.exit(1); }
   await sleep(2500);
   if (!await page.evaluate(() => !!document.querySelector('#youStage'))) {
-    console.log('FAIL: no fight on screen'); await browser.close(); process.exit(1);
+    console.log('FAIL: no fight on screen'); await browser.close(); if (srvHandle) srvHandle.close(); process.exit(1);
   }
 
   for (const move of MOVES) {
@@ -175,6 +189,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   if (pageErrors.length) fail(`page errors during the audit: ${pageErrors.slice(0, 3).join(' | ')}`);
 
   await browser.close();
+  if (srvHandle) srvHandle.close();
   console.log('');
   if (failures.length) { console.log(`FX AUDIT FAILED (${failures.length})`); process.exit(1); }
   console.log('FX AUDIT PASSED: every registered animation put decoded pixels on the victim.');
