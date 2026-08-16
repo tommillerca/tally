@@ -21,7 +21,7 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BH = join(ROOT, 'assets', 'bh');
@@ -31,10 +31,38 @@ const BH = join(ROOT, 'assets', 'bh');
 const HELD_SLOTS = ['IL', 'IR'];
 const THRESHOLD = 2.0;   // percent of face ink a held item may cover
 
-const PY = process.env.PYTHON || `${process.env.HOME}/miniconda3/bin/python3`;
-if (!existsSync(PY)) {
-  console.log(`FAIL  no python at ${PY}; set PYTHON= to run this audit`);
-  process.exit(1);
+/* A SETUP FAILURE MUST NOT WEAR A FINDING'S EXIT CODE. This resolved python as
+   $HOME/miniconda3/bin/python3 and nothing else, so it ran on exactly one
+   machine, and when that path was absent it exited 1, the same code line 92
+   uses for a real held-item violation. A reader of the gate cannot tell those
+   apart, which is how an audit stops being evidence: it looks like it has an
+   opinion when it never ran. Same defect figure-audit had with Pillow.
+   So: try the explicit override, then that conda path so nobody's setup breaks,
+   then the interpreter on PATH. And check the LIBRARIES, not just the binary,
+   because a python without PIL or numpy fails later inside the script with a
+   traceback that reads like an art problem. Every setup failure exits 2, a code
+   no held-item bug can produce. Exit 1 still means findings. */
+const pyCandidates = [process.env.PYTHON, `${process.env.HOME}/miniconda3/bin/python3`,
+  '/usr/bin/python3', '/usr/local/bin/python3', '/usr/bin/python'];
+/* An explicit PYTHON that does not exist is a typo, not a hint. Falling through
+   to some other interpreter would run the audit against a python the operator
+   did not choose and never mention it. */
+if (process.env.PYTHON && !existsSync(process.env.PYTHON)) {
+  console.log(`SETUP  PYTHON is set to ${process.env.PYTHON}, which does not exist.`);
+  console.log('  This audit CHECKED NOTHING. Fix the path or unset PYTHON to autodetect.');
+  process.exit(2);
+}
+const PY = pyCandidates.find(p => p && existsSync(p));
+if (!PY) {
+  console.log(`SETUP  no python found; tried ${pyCandidates.filter(Boolean).join(', ')}`);
+  console.log('  This audit CHECKED NOTHING. Set PYTHON= to a python with PIL and numpy.');
+  process.exit(2);
+}
+const depProbe = spawnSync(PY, ['-c', 'import PIL, numpy'], { encoding: 'utf8' });
+if (depProbe.status !== 0) {
+  console.log(`SETUP  ${PY} cannot import PIL and numpy, which this audit measures with.`);
+  console.log(`  This audit CHECKED NOTHING. ${(depProbe.stderr || '').trim().split('\n').pop()}`);
+  process.exit(2);
 }
 
 const slots = HELD_SLOTS.filter(s => existsSync(join(BH, s)));
