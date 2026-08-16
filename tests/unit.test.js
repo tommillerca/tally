@@ -2846,6 +2846,38 @@ test('paddock: nothing emits a .pd- class', () => {
  * tierOfArt return 'common' for the plain tier, or simply call
  * statSplit(arch, 'common', slot); every stat it yields is NaN and this fails
  * by item id. */
+/* NOTHING A PLAYER TYPES INTO THEIR FOOD DIARY MAY EARN A GAME REWARD.
+ *
+ * Until 2026-08-15 the Pit granted +2 Vigor per DISTINCT MEAL logged, capped at
+ * three meals. That put a prize on the SHAPE of a medical log: a player who ate
+ * twice was nudged to add a third row, and one who ate five times had no reason
+ * to record the last two. It shipped in v205 and survived ten releases because
+ * nothing in this suite ever looked at it.
+ *
+ * This reads js/energy.js as TEXT on purpose. The behavioural version would need
+ * IndexedDB and a seeded day, and the thing worth defending is not a number in a
+ * running app, it is that the CONSTANTS stay at zero and nothing re-reads the
+ * log store to award energy. If somebody puts either back, this goes red and
+ * names the line.
+ */
+test('logging a meal earns no Vigor, and energy never reads the food log', () => {
+  const src = readFileSync(join(here, '..', 'js', 'energy.js'), 'utf8');
+  const perMeal = /LOG_VIGOR_PER_MEAL\s*=\s*(\d+)/.exec(src);
+  const cap = /LOG_VIGOR_CAP\s*=\s*(\d+)/.exec(src);
+  assert.ok(perMeal && cap, 'the retired constants are still declared, so their value is checkable');
+  assert.equal(Number(perMeal[1]), 0, 'LOG_VIGOR_PER_MEAL must stay 0: meals do not buy fights');
+  assert.equal(Number(cap[1]), 0, 'LOG_VIGOR_CAP must stay 0: meals do not buy fights');
+  // the stronger half: the energy module must not touch the log store at all
+  assert.ok(!/byIndex\(\s*'log'/.test(src), "energy.js must not read the 'log' store");
+  assert.ok(!/\bmeals\b/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '')),
+    'no meal term may survive outside comments');
+  // and steps must STILL earn, or this test would pass on an app with no energy at all
+  const stepPer = /STEP_VIGOR_PER\s*=\s*(\d+)/.exec(src);
+  const stepCap = /STEP_VIGOR_CAP\s*=\s*(\d+)/.exec(src);
+  assert.ok(stepPer && Number(stepPer[1]) > 0, 'steps still earn Vigor (an empty sample is a FAILURE)');
+  assert.ok(stepCap && Number(stepCap[1]) > 0, 'the step cap is still above zero');
+});
+
 test('every gear stat is a finite number (no NaN can reach a player)', async () => {
   const g = await import('../js/gear.js');
   const list = Object.values(g).find(v => Array.isArray(v) && v[0] && v[0].stats);

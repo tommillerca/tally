@@ -2512,7 +2512,7 @@ async function renderToday(el) {
        player either understands the loop or is not going to learn it from a
        caption. `hero-why` is a caption, not a card, because Today already asks
        for too much attention above the food. */''}
-  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Logging meals and walking earns more.</p>` : ''}
+  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Walking earns more.</p>` : ''}
 
   <!-- FOUR DOORS. A fifth Garden tile shipped in v304 and came straight back out
        (Tom, 2026-08-07): "we dont need the garden icon on Today because if you
@@ -13458,7 +13458,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v381'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v382'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -13830,7 +13830,7 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · log a meal or take a walk to earn Vigor' : ' · log food and walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · take a walk to earn Vigor' : ' · walk to earn more'}</small>
       </div>
     </div>
     <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${ICONS.pit(20)}<b>Shape your build</b><small>stats, weapon &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>

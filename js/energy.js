@@ -9,8 +9,19 @@ export const FREE_FIGHTS = 3;          // free Pit fights every day, no strings 
 export const VIGOR_CAP = 12;           // most banked Vigor you can hold
 export const STEP_VIGOR_PER = 2500;    // +1 Vigor per this many steps today...
 export const STEP_VIGOR_CAP = 6;       // ...up to this many from steps per day
-export const LOG_VIGOR_PER_MEAL = 2;   // +2 Vigor per distinct meal logged today...
-export const LOG_VIGOR_CAP = 6;        // ...up to this many from logging per day
+/* LOGGING NO LONGER EARNS VIGOR. Tom, 2026-08-15: "i dont want us giving 6
+   energy for meal logging that doesnt make sense."
+   The reason is stronger than the balance. Vigor was granted per DISTINCT MEAL,
+   capped at three meals, so the reward tracked the SHAPE of the food diary
+   rather than the truth of it: somebody who ate twice was nudged to add a third
+   row, and somebody who ate five times had no reason to record the last two.
+   Attaching a game prize to the accuracy of a medical log is the one thing this
+   app must never do, and it was doing it quietly since v205.
+   Nothing replaces it: Vigor now comes from STEPS, which is the behaviour the
+   app exists to encourage, and from Draughts, which are earned or bought. The
+   free-fight floor is untouched, so no player can ever be locked out. */
+export const LOG_VIGOR_PER_MEAL = 0;   // retired 2026-08-15, see above
+export const LOG_VIGOR_CAP = 0;        // retired 2026-08-15, see above
 
 const clampVigor = v => Math.max(0, Math.min(VIGOR_CAP, v));
 
@@ -20,17 +31,15 @@ function view(st) {
   return { free, freeMax: FREE_FIGHTS, vigor, vigorCap: VIGOR_CAP, ready: free + vigor };
 }
 
-// today's healthy-behaviour signals: steps walked + distinct meals logged
+// today's healthy-behaviour signal: steps walked. Meals deliberately excluded.
 async function todaySignals() {
   const today = dateKey();
   const health = await db.all('health');
   const steps = health.filter(h => h.date === today).reduce((a, h) => a + (h.steps || 0), 0);
-  const log = await db.byIndex('log', 'date', today);
-  const meals = new Set((log || []).map(e => e.meal)).size;
-  return { steps, meals };
+  return { steps };
 }
 
-// Recompute today's energy, awarding Vigor from logging + steps IDEMPOTENTLY
+// Recompute today's energy, awarding Vigor from STEPS IDEMPOTENTLY
 // (safe to call on every Pit render / step sync). Banked Vigor carries across
 // days up to the cap; the free-fight floor resets each day.
 export async function refreshPitEnergy() {
@@ -38,9 +47,12 @@ export async function refreshPitEnergy() {
   const today = dateKey();
   if (st.date !== today) { st.date = today; st.freeUsed = 0; st.fromSteps = 0; st.fromLog = 0; }
   st.vigor = clampVigor(st.vigor || 0);
-  const { steps, meals } = await todaySignals();
+  const { steps } = await todaySignals();
   const stepTarget = Math.min(STEP_VIGOR_CAP, Math.floor(steps / STEP_VIGOR_PER));
-  const logTarget = Math.min(LOG_VIGOR_CAP, meals * LOG_VIGOR_PER_MEAL);
+  /* Kept, at zero, rather than deleted: st.fromLog carries a number on every
+     existing player's device. Leaving the term in place means their banked
+     Vigor is untouched and nothing is clawed back on the update. */
+  const logTarget = 0;
   const gain = Math.max(0, stepTarget - (st.fromSteps || 0)) + Math.max(0, logTarget - (st.fromLog || 0));
   if (gain > 0) st.vigor = clampVigor(st.vigor + gain);
   st.fromSteps = Math.max(st.fromSteps || 0, stepTarget);
