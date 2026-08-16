@@ -33,7 +33,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
-import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml } from './hollow-beds.js';
+import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
@@ -4250,7 +4250,8 @@ function openHollow(after) {
         <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
         ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}
         <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
-      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice)}</span>` : ''}
+      ${bedPrice != null ? `<div style="position:absolute;left:${hlwBuySpot(garden.plotsOwned)[0] - 42}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>` : ''}
+      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice, coin)}</span>` : ''}
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
       ${/* MEASURED IN THE RENDER, not carried over. The hand-drawn scene put the
@@ -4336,6 +4337,13 @@ function openHollow(after) {
     };
 
     // scale the 390-wide stage to the sheet width
+    /* THE SCENE IS DECORATION, and a screen reader was walking all of it: 27 inline
+       SVG pieces and two steam glyphs, with an aria-hidden count of zero inside
+       the sheet. The beds carry real labels and the keeper is a live region;
+       everything else is set dressing and should be silent. */
+    $$('#hlwStage svg, #hlwStage .hlw-signwrap, #hlwStage [class^="hlw-p-"]', body)
+      .forEach(el => el.setAttribute('aria-hidden', 'true'));
+
     const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
     const s = vp.clientWidth / 390;
     st.style.transform = `scale(${s})`;
@@ -4415,7 +4423,17 @@ function openHollow(after) {
     });
     {
       const price = plotPrice(garden.plotsOwned);
-      armToConfirm($('#hlwBuy', body), price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
+      /* REFUSE BEFORE THE COMMIT, not after it. The confirm used to arm in the
+         affirmative accent with 340 coins in the bank and only then answer
+         "Need 1,500 coins", which is the shape of a trap. If it is out of reach
+         the first tap says so and nothing arms. */
+      const buyBtn = $('#hlwBuy', body);
+      if (buyBtn && price != null && coin < price) {
+        buyBtn.addEventListener('click', () => {
+          toast(`${(price - coin).toLocaleString()} coins short. Harvest, walk, or win a fight and come back.`, 3200);
+        });
+      } else
+      armToConfirm(buyBtn, price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
         if (price == null) return;
         if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
         await coinsAdd(-price);

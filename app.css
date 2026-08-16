@@ -7712,7 +7712,16 @@ body::before {
   background: var(--bone-hi, #f2e9d7); color: var(--ink, #17151d);
   border: 2px solid var(--ink, #17151d); border-radius: 13px;
   box-shadow: 3px 4px 0 rgba(0, 0, 0, .45);
-  padding: 7px 10px; font-size: 12.5px; font-weight: 600; line-height: 1.25;
+  /* BANGERS, because this pill IS the designer's coach mark. Tom, 2026-08-16:
+     "the font for the bonehead speech bubble isnt the right one?" It was not.
+     The comp's pill is background #f2e9d7, border 2.5px #17151d, radius 16,
+     font-family Bangers, and this rule had copied every one of those except the
+     face. The result looked like the designer's component wearing a system font.
+     Sized up to 15px with a little tracking because Bangers at 12.5px on a
+     two-line sentence is genuinely hard, which is the real reason a reviewer
+     defended the system stack here. */
+  padding: 8px 12px; font-family: var(--display), Bangers, sans-serif;
+  font-size: 15px; font-weight: 400; letter-spacing: .02em; line-height: 1.22;
   text-align: center; animation: hlwSayIn .34s cubic-bezier(.34, 1.56, .64, 1) both;
 }
 .hlw-say::after {

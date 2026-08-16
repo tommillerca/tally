@@ -169,9 +169,30 @@ export function hlwChipHtml(plot) {
    (66 x 70). The text rides its own copy of the board's rotation rather than
    being spliced into the piece, so it lands on the board without editing the
    designer's markup. */
-export function hlwPriceSignHtml(price) {
+/* THE GHOST BED UNDER THE SIGN. hollow-bed-locked has shipped in HLW_ART since
+   the port and nothing ever rendered it, so the 1,500 sign hung over bare grass:
+   it priced an object that was not drawn. The designer calls this a ghost slot
+   and that is exactly what it is, a bed you can see the shape of and do not own. */
+export function hlwGhostBedHtml() {
+  return hlwArt('hollow-bed-locked', { w: BED_BOX.w, cls: 'hlw-p-hollow-bed-locked', style: PE });
+}
+
+/* `afford` is the player's balance, or null when the caller does not care. A sign
+   you cannot pay reads muted and shows the gap, instead of arming an affirmative
+   accent confirm and then refusing you after the second tap. */
+export function hlwPriceSignHtml(price, afford = null) {
   const art = hlwArt('hollow-price-sign',
     { x: 0, y: 0, w: SIGN_BOX.w, cls: 'hlw-p-hollow-price-sign', style: PE });
-  return art.replace('</svg>',
-    `<g transform="rotate(-3 31 19)"><text x="41" y="24" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${Number(price).toLocaleString()}</text></g></svg>`);
+  const short = afford != null && afford < price;
+  const label = Number(price).toLocaleString();
+  const out = art.replace('</svg>',
+    `<g transform="rotate(-3 31 19)"><text x="41" y="24" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${label}</text>` +
+    `</g></svg>`);
+  /* NO SECOND LINE ON THE BOARD. A "N SHORT" line was tried and measured: the
+     board is 58 x 30 units and the text landed outside it, half over the post,
+     unreadable. The muting is the signal, the balance is already on screen top
+     right, and the real fix for "you cannot afford this" is refusing BEFORE the
+     two-tap commit rather than after it. That lives in the caller. */
+  // muted, not disabled: it still says what it costs, it just stops shouting
+  return short ? out.replace('<svg', '<svg style="opacity:.62"') : out;
 }

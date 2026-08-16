@@ -162,8 +162,6 @@ export function hollowBackdropHtml({ band } = {}) {
   ${/* TIME OF DAY. Dusk is TWO layers (NOTES.md): a soft-light wash plus a normal
         gradient. Night is one. Both sit at z8, over the beds and the keeper and
         under the coin chip, which is where the comp puts them. */''}
-  ${band === 'dusk' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(201,127,90,.2);mix-blend-mode:soft-light"></div>
-  <div style="position:absolute;inset:0;z-index:8;${NONE};background:linear-gradient(180deg,rgba(201,127,90,.16),rgba(60,40,70,.18))"></div>` : ''}
   ${/* .22, not the handoff's .42. Tom's call, 2026-08-16, and the reason is worth
         keeping: at .42 the grass measured (64,78,62) against a spec of (97,116,66),
         a 27% luminance cut, and his first reaction to a night render was "why does
@@ -172,16 +170,17 @@ export function hollowBackdropHtml({ band } = {}) {
         At .22 the lantern, the shed glow and the fireflies carry the nighttime
         instead of the wash doing all of it. Day is untouched and measures within
         2 luma of spec. */''}
-  ${/* NIGHT IS THE LIGHT COMING FROM ONE PLACE, not the same picture dimmer.
-        Two reviewers measured this independently: night was only 16% darker than
-        day and IDENTICAL in hue, mean absolute difference [13.2, 14.0, 3.4] per
-        channel, so you could not tell the two renders apart without the
-        fireflies. Dropping .42 to .22 fixed muddiness and did nothing for that,
-        because darkness was never the dial.
-        So: keep the alpha low, COOL the ground with a hue-rotate and a small
-        saturation drop so the green shifts blue-green, and let the lantern pool
-        below push warm against it. Local contrast, not global dimming. */''}
-  ${band === 'night' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(22,28,58,.22);backdrop-filter:hue-rotate(22deg) saturate(.7) brightness(.95)"></div>` : ''}
+  ${/* NO FULL-BLEED TINT, EITHER BAND. Tom, 2026-08-16: "i think the overlay
+        youre using for afternoon and night looks bad i like the fireflies and
+        lantern but i would lose that."
+        He is right and it also settles an argument two reviewers were having
+        from the wrong end. They both measured the tint as producing almost
+        nothing (16% darker, identical hue) and both concluded it needed to be
+        BETTER. A sheet of colour laid over hand-inked art was never going to be
+        good, however it was tuned: it flattens the keylines the whole world is
+        built on. Evening is now told the way a painter tells it, with LIGHT:
+        the lantern lights, the shed window glows, the fireflies come out. The
+        ground stays the colour the designer picked, at every hour. */''}
   ${lit ? `<div style="position:absolute;inset:0;z-index:9;${NONE}">
     ${FLIES.map(([x, y, s, d, dl]) => `<span class="hlw-fly" style="position:absolute;left:${x}px;top:${y}px;width:${s}px;height:${s}px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${stagger(dl)}s infinite"></span>`).join('')}
   </div>` : ''}`;
