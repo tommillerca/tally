@@ -1291,9 +1291,16 @@ body::before {
    is the floor, not a nicety. */
 /* The subtrahend grew by the HUD's 92.4px because the HUD is a sibling row now
    rather than a lid, so it costs its own height instead of eating the arena's.
-   400 + 92 = 492. On a 390x844 and a 430x932 phone this is a wash by design:
-   scene was 349.6 and 437.6, it is 352 and 440. The short phone is where the
-   move pays. The 292 floor was never 292 of scene, it was 292 minus the HUD,
+   400 + 92 = 492, and then 504, because 492 was not quite right and the reason
+   is worth keeping. At 492 a 390x844 phone kept 352 of scene against the 349.6
+   it had before, a wash as intended, but the tray lost 11px and 11px crossed a
+   GRID ROW: the resting move buttons went from 6 to 3, with 5 of 8 below the
+   fold, on the commonest phone in the set. A row of controls is worth more than
+   12px of empty arena above a boss who already fits, so the arena gives it
+   back. 340 at 390x844 and 428 at 430x932, and the boss can afford both: he is
+   262 tall plus a 16 to 30px lift. At 375x667 this changes nothing whatsoever,
+   because the arena is pinned to its floor there and the subtrahend never
+   binds. The short phone is where the move pays. The 292 floor was never 292 of scene, it was 292 minus the HUD,
    so 197.6. The floor is 183 of REAL scene now, and it is derived rather than
    picked: a 375x667 phone gives the fight body 564.5px, and the tray's tallest
    honest state needs 152.3 of it, so
@@ -1301,7 +1308,7 @@ body::before {
    That is 14.6px less box than the 197.6 of scene the old arena left, and the
    boss still gains, because 183 of arena the figure can stand in beats 197.6
    with 110.4 of the figure behind the bars. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100svh - 492px), 600px); }
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100svh - 504px), 600px); }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
