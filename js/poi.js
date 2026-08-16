@@ -671,3 +671,48 @@ export async function claimGluttonWin(day = dateKey(), slot = 0) {
   if (!gear) await boneDustAdd(40);                // already own it all: consolation
   return { xp, coins: 140, gear };
 }
+
+/* RESTORE THE CEILING THAT THE CELL-SCOPED MARKER SWALLOWED.
+ *
+ * The fix above makes future kills count. It does nothing for the weeks a
+ * player already lost, and those are the players who are annoyed: somebody who
+ * beat a boss in the same cell for six straight weeks banked ONE marker and is
+ * owed five more. Telling them it is fixed while leaving their ceiling where
+ * the bug left it would be a half-truth.
+ *
+ * Nothing needs to be guessed to give it back. Every landmark kill ever made
+ * wrote a reward row keyed `boss-<YYYY-MM-DD>-<cell>` (claimDenWin ->
+ * denKey(dateKey(), den)), so the exact set of (week, cell) pairs the player
+ * actually beat is already on the device. Fold those dates to ISO weeks, dedupe,
+ * and mint the marker each one should have had.
+ *
+ * Deliberately narrow: only keys starting `boss-`. Remote rows are
+ * `remoteboss-<day>` and roaming rows are `roamboss-<day>-<cell>`, and both
+ * branches already minted their own correct markers at claim time, so touching
+ * them would double-count.
+ *
+ * The kv flag is written BEFORE any award, matching backfillStarterSeedsIfNeeded:
+ * a crash midway must leave a player short rather than run the whole thing twice.
+ * award() is idempotent per key anyway, so a re-run could not duplicate, but the
+ * ordering is the house rule and it costs nothing to keep.
+ */
+export async function backfillDenCeilingIfNeeded() {
+  if (await kvGet('denceil-backfill')) return null;
+  await kvSet('denceil-backfill', true);
+  const rows = await db.all('xp');
+  const owed = new Set();
+  for (const r of rows) {
+    if (r.type !== 'bossday' || !r.key.startsWith('boss-')) continue;
+    const m = r.key.slice('boss-'.length).match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if (!m) continue;
+    // midday UTC so a date string cannot land on the previous ISO week
+    owed.add(`${isoWeekKey(new Date(`${m[1]}T12:00:00Z`))}-${m[2]}`);
+  }
+  let added = 0;
+  for (const id of owed) {
+    if (await db.get('xp', `bossfirst-${id}`)) continue;
+    await award(`bossfirst-${id}`, 'bossfirst', 0, 'Past boss den clear (restored)');
+    added++;
+  }
+  return added ? { added, ranks: added * 3 } : null;
+}
