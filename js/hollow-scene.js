@@ -82,12 +82,28 @@ export function hollowBackdropHtml({ band } = {}) {
   const lit = band !== 'day';   // NOTES.md: glowOn = band !== day
 
   return `
-  ${/* THE GROUND. Tom, 2026-08-16: "the only thing cam made here is the bonehead
+  ${/* THE GROUND IS TOM'S OWN GRASS, ONE FIELD PER BAND. He authored five 136x136
+        "A field of grass in a haunted farm" panels on 2026-08-16 after saying the
+        old ground was "still way too busy", explicitly as grass at different
+        times of day. bandNow() already splits the day into day/dusk/night, so
+        the tiles are wired straight to it and the scene changes colour with the
+        clock instead of wearing a tint over the top.
+        WHAT WAS DONE TO THEM, and it is preparation, not redrawing: each panel
+        is a 100x90 field with ragged blade tips at the top and a dirt baseline
+        at the bottom, so it cannot repeat as it stands. A 92x64 core was cut
+        from the clean grass (rows 6 to 76, no tips, no dirt) and made seamless
+        with a 6px wrap blend that is SNAPPED BACK TO THE SOURCE PALETTE, so not
+        one new colour is invented: a plain cross-fade would smear the ramp and
+        that is the whole game in pixel art. Measured on the result, the join
+        across a tile boundary is 10.5 to 13.9 L against a normal adjacent-pixel
+        delta of 9.9 inside the tile, so the seam sits inside the texture's own
+        variation. The fourth panel (olive) is shipped unused as a spare. */''}
+  ${/* Tom, 2026-08-16: "the only thing cam made here is the bonehead
         and it's pet the rest needs to be swapped". Everything below this line is
         his pixel art; the vector path bezier, the ellipse stepping stones and
         the picket fence are gone rather than layered under it. Half a swap read
         as two different games sharing a screen, which is exactly what it was. */''}
-  <div class="hlw-ground"></div>
+  <div class="hlw-ground hlw-ground-${band === 'day' ? 'day' : band === 'dusk' ? 'dusk' : 'night'}"></div>
   <div class="hlw-path"></div>
   ${/* STAGE-ANCHORED PROPS. These first went inside the compost container, whose
         origin is not the stage, and landed at 534,800 and 255,1172 on a 390x740

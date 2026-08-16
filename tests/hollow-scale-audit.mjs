@@ -126,8 +126,9 @@ else {
 
   /* The tiles are backgrounds, not sprites, so they need their own row. The
      ground tile is 96px native and the path tiles are 48px native. */
-  if (probe.ground === '192px 192px') ok(`TILES ground tile at ${probe.ground} is 2x its 96px native`);
-  else bad(`TILES ground tile background-size is ${probe.ground}, not 192px 192px; it is off the scene's 2x grid`);
+  /* 184x128 is 2x the 92x64 grass field cut from Tom's panels. */
+  if (probe.ground === '184px 128px') ok(`TILES ground tile at ${probe.ground} is 2x its 92x64 native`);
+  else bad(`TILES ground tile background-size is ${probe.ground}, not 184px 128px; it is off the scene's 2x grid`);
 
   /* One layer now, not two. The cobble tile was the noisiest thing on the screen:
      60% transparent scattered stones, sliced by a 48px track out of a 96px tile,
