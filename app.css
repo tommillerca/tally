@@ -1350,7 +1350,13 @@ body::before {
    viewport instead. Measured proof it was a no-op: .fstage came out 150px at
    390x844, 375x667 AND 430x932, three different arena heights, because 24cqh of
    the viewport clears the 150px cap at every one of them. The arena is the
-   container now, so the fighters answer to the box they stand in. */
+   container now, so the fighters answer to the box they stand in.
+   One precision note, because the numbers in the rules below are derived from
+   this and someone will re-derive them later: container-type:size resolves cqh
+   against the CONTENT box, and .arena carries a 2px border, so a 352px arena
+   offers 348px of cqh. The figures therefore land a fraction under their caps,
+   149.625px rather than 150 and 261px rather than 262, not exactly on them.
+   Measured, not assumed. */
 .arena {
   container-type: size;
   position: relative; height: 258px; border-radius: var(--radius); overflow: hidden;
@@ -1440,7 +1446,8 @@ body::before {
   /* 24 -> 43 because the percentage is measured against the arena now, not the
      viewport, and the arena is the smaller box. 43cqh holds the cap exactly
      where it already was on the phones that had room (150px at a 352px arena on
-     390x844, 150px at a 440px arena on 430x932) and lets the figure step down on
+     390x844, 150px at a 440px arena on 430x932, to within the border) and lets
+     the figure step down on
      a 375x667 phone, where the HUD's own row has to come out of the column.
      The floor moved 112 -> 130 deliberately: 112 is a WIDTH limit from the old
      comment (two columns 43px apart), not a height one, and at 130 the figure
