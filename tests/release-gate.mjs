@@ -224,6 +224,7 @@ const DECLARED = {
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
+  'crate-grid-audit.mjs': ['full', "the crate's box lands on the device pixel grid at sixteen real shipping viewports. It used to take its width AND its centring offset from a percentage of a viewport unit, so every edge was fractional (393x852@3 measured left 365.906 / width 447.188, and nine more like it) and the lid and box clips of the same art did not have to round together. Tolerance is zero, and it carries a CONTROL row that deletes .pack-crate to prove an absent element goes red. Sixteen viewport changes with a reveal opened at each, so it is about a minute: not FAST-shaped."],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
   'den-two-target-audit.mjs': ['full', 'two health bars in a two-enemy den; batch-audit gates the two-enemy read every run.'],

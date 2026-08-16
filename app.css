@@ -3596,9 +3596,50 @@ body::before {
    No confetti and no seam: both were tried and both fought the art.
    --------------------------------------------------------------------------- */
 .pack-reveal {
-  /* the card is the unit of the whole scene. The third term keeps a tall card
-     off the headline on a short phone. */
-  --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61));
+  /* THE SCENE IS SIZED FROM AN INTEGER LADDER, NEVER FROM A VIEWPORT UNIT.
+   *
+   * It used to be:
+   *     --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61));
+   * and .pack-crate took its width AND its centring offset off that same value
+   * (`width: calc(var(--pc-w) * .6218)`, `margin-left: calc(var(--pc-w) * -.3109)`).
+   * A percentage of a viewport unit is a fraction at essentially every width, so
+   * the crate's box landed between device pixels on every phone we ship to.
+   * Measured on 56c5058, left edge and width in DEVICE pixels:
+   *     393x852@3   left 365.906  width 447.188
+   *     390x844@3   left 363.094  width 443.766
+   *     375x667@2   left 235.781  width 278.375
+   *     430x932@3   left 400.313  width 489.281
+   *     320x568@2   left 218.375  width 203.281
+   * Not one of the ten is whole. The art is an SVG scaled to that box, so the
+   * whole crate is resampled onto a half-pixel grid: soft edges on the lid cut,
+   * and a lid and box that do not have to round the same way.
+   *
+   * So both numbers now come from a ladder of whole CSS pixels chosen per
+   * breakpoint. --pc-w is the card unit and keeps the scene's proportions;
+   * --pc-crate is the crate's own width, and the crate is centred with
+   * `margin-left: calc(var(--pc-crate) / -2)`, which cancels the scene's own
+   * centring exactly: a centred crate's left edge is (viewport - crate) / 2
+   * whatever the scene does.
+   *
+   * WHY THE BANDS ARE WHERE THEY ARE. Two reasons, both numeric.
+   *   SIZE. Every step is within 1.1% of what the old formula measured at the
+   *   device widths inside its band (the five above plus the eleven other
+   *   profiles in tests/crate-grid-audit.mjs). The worst case is 428x926, where
+   *   162.33 becomes 164, and it is +1.03%. Nothing changes size on screen.
+   *   PARITY. A centred box lands on a whole device pixel only when
+   *   (viewport - crate) is even in DEVICE pixels. At dpr 3 that means the crate
+   *   width in CSS px must have the same parity as the viewport width in CSS px.
+   *   393 needs an odd step and 390 needs an even one, so they cannot share a
+   *   band: that is what the three-pixel band at 390..392 is for, and why 375
+   *   (odd) and 412 (even) get their own. This is arithmetic, not taste. At dpr 2
+   *   the parity is free, which is why 414 and the tablets ride even steps.
+   *
+   * The old third term, calc((100dvh - 300px) * .61), existed to keep a tall
+   * scene off the headline on a short phone. It bit when the viewport height was
+   * below (width + 300). The max-height blocks below reproduce that, and land
+   * within 1px of the old value at 320x568, 360x640 and 375x667.
+   */
+  --pc-w: 193px; --pc-crate: 120px;
   --rar: var(--text-2);
   --rar-rgb: 185, 172, 151;
   /* FASTER OFF THE MARK. Tom, 2026-08-08: "the initial open needs to happen a bit
@@ -3611,6 +3652,26 @@ body::before {
   --b-card: 1.38s; --b-count: 1.68s; --b-title: 2.3s; --b-foot: 2.5s;
   --b-sway: 2.5s; --b-spark: 2.6s;
 }
+/* THE LADDER. Width bands first, ascending, each one a whole number of CSS px.
+   The comment on each line is what the old viewport formula measured at the
+   reference device in that band, so a future edit can see the intent it has to
+   preserve. */
+@media (min-width: 360px) { .pack-reveal { --pc-w: 219px; --pc-crate: 136px; } } /* 360x740 measured 219.59 / 136.55 */
+@media (min-width: 375px) { .pack-reveal { --pc-w: 227px; --pc-crate: 141px; } } /* 375x812 measured 228.75 / 142.23 */
+@media (min-width: 390px) { .pack-reveal { --pc-w: 238px; --pc-crate: 148px; } } /* 390x844 measured 237.89 / 147.92 */
+@media (min-width: 393px) { .pack-reveal { --pc-w: 240px; --pc-crate: 149px; } } /* 393x852 measured 239.72 / 149.06 */
+@media (min-width: 402px) { .pack-reveal { --pc-w: 245px; --pc-crate: 152px; } } /* 402x874 measured 244.98 / 152.33; even step because 402 is even at dpr 3 */
+@media (min-width: 412px) { .pack-reveal { --pc-w: 251px; --pc-crate: 156px; } } /* 414x896 measured 252.53 / 157.02 */
+@media (min-width: 428px) { .pack-reveal { --pc-w: 264px; --pc-crate: 164px; } } /* 430x932 measured 262.30 / 163.09, and 264 was the old cap */
+
+/* Short screens, where the old formula's height term was the one that bound.
+   These come after the width bands on purpose: at equal specificity the last
+   matching rule wins, and a short screen must be allowed to shrink a wide one. */
+@media (max-height: 700px) and (min-width: 375px) { .pack-reveal { --pc-w: 224px; --pc-crate: 139px; } } /* 375x667 measured 223.86 / 139.19 */
+@media (max-height: 660px) and (min-width: 360px) { .pack-reveal { --pc-w: 209px; --pc-crate: 130px; } } /* 360x640 measured 207.39 / 128.95 */
+@media (max-height: 620px) { .pack-reveal { --pc-w: 164px; --pc-crate: 102px; } }                        /* 320x568 measured 163.47 / 101.64 */
+@media (max-height: 500px) { .pack-reveal { --pc-w: 112px; --pc-crate: 70px; } }                         /* 320x480 would have measured 109.80 / 68.27 */
+
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
 .pack-reveal.r-epic { --rar: var(--violet); --rar-rgb: 155, 146, 232; }
@@ -3649,9 +3710,15 @@ body::before {
 }
 
 /* ---- the crate ---- */
+/* Size and centring both come off --pc-crate, which is a whole number of CSS
+   pixels from the ladder above. NEVER put a viewport unit back in here: `width`
+   and `margin-left` are what decide whether the art is resampled onto a
+   half-pixel grid, and tests/crate-grid-audit.mjs measures exactly this element.
+   `bottom` may stay proportional; it moves the crate vertically inside a scene
+   whose own top edge is already fractional, and no assertion depends on it. */
 .pack-crate {
   position: absolute; left: 50%; bottom: calc(var(--pc-w) * .2185); z-index: 2;
-  width: calc(var(--pc-w) * .6218); margin-left: calc(var(--pc-w) * -.3109);
+  width: var(--pc-crate); margin-left: calc(var(--pc-crate) / -2);
 }
 .co-sink { animation: crSink .9s ease-in var(--b-sink) both; will-change: opacity; }
 .co-drop { animation: crDrop .85s linear both; will-change: transform; }
