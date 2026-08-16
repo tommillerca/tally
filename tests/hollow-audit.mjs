@@ -242,6 +242,159 @@ note(!shedHit.err && shedHit.hits.every(h => h === 'OFFSCREEN' || h.includes('hl
 const seenDuring = await page.evaluate(async () => (await (await import('./js/db.js')).kvGet('hlwSeen', 0)));
 note(seenDuring === 0, `firstEver SELF-DESTRUCTS: hlwSeen was written to ${seenDuring} while the sheet is still open, so the welcome line expires mid-visit`);
 
+/* ---------- 8b. THE SCREEN IN MOTION ---------------------------------------
+ * Every other section in this file measures a STILL FRAME, and a creative
+ * director found three defects none of them could ever see by firing one real
+ * harvest tap and looking 1.4s later: the keeper standing on 96% of the bed you
+ * just harvested, his speech bubble clipped 23px off the device viewport, and
+ * the reward toast landing on a neighbouring timer chip. This file passed clean
+ * through all of it. A guard that only knows the screen at rest teaches the team
+ * that "passing" means "the still frame is fine".
+ * So: tap a real ripe bed, then assert on real rects at t+400/1400/2400ms. */
+{
+  await page.evaluate(async () => {
+    const kv = await import('./js/db.js');
+    const now = Date.now();
+    await kv.kvSet('garden', { seeds: { graveroot: 4 }, plotsOwned: 3, plots: [
+      { ing: 'ember', plantedAt: now - 4 * 36e5, readyAt: now - 6e5, watered: true },
+      { ing: 'graveroot', plantedAt: now - 36e5, readyAt: now + 72 * 6e4, watered: true },
+      { ing: 'bog', plantedAt: now - 18e5, readyAt: now + 38 * 6e4, watered: false },
+    ], composts: { date: '', used: 0 } });
+    await kv.kvSet('hlwSeen', now - 2 * 864e5);
+  });
+  await page.evaluate(() => { document.querySelector('.sheet-close')?.click(); });
+  await sleep(900);
+  await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+  await sleep(2600);
+
+  const ripe = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('#hlwStage .hlw-bed[data-bed]')]
+      .find(x => /ready to harvest/i.test(x.getAttribute('aria-label') || ''));
+    if (!b) return null;
+    const i = b.dataset.bed;
+    b.click();
+    return i;
+  });
+  note(ripe != null, 'MOTION: no ripe bed to tap, so the motion checks did not run (EMPTY SAMPLE)');
+
+  if (ripe != null) {
+    const frames = [];
+    for (const t of [400, 1400, 2400]) {
+      await sleep(t - (frames.length ? [400, 1400, 2400][frames.length - 1] : 0));
+      frames.push(await page.evaluate(bed => {
+        const inter = (a, b) => {
+          if (!a || !b) return null;
+          const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          return w > 0 && h > 0 ? { w: +w.toFixed(1), h: +h.toFixed(1) } : null;
+        };
+        const r = el => el ? el.getBoundingClientRect() : null;
+        const stage = document.querySelector('#hlwStage');
+        const sr = stage.getBoundingClientRect();
+        const art = document.querySelector(`#hlwBedArt${bed}`);
+        const av = document.querySelector('#hlwAv');
+        const say = document.querySelector('#hlwSay');
+        const toast = document.querySelector('.hlw-toast');
+        const chips = [...document.querySelectorAll('#hlwStage .hlw-chip')].map(r);
+        const sayR = r(say);
+        /* INTERSECTION IS NOT OCCLUSION. Two boxes can overlap while the lower
+           one is painted ON TOP, which is exactly the fix here: the harvested bed
+           is raised above the keeper for the length of the pluck. So record who
+           actually paints above whom, and only count the overlap when the keeper
+           wins. Measured, not assumed: read both computed z-indexes. */
+        const zi = el => { if (!el) return 0; const v = parseInt(getComputedStyle(el).zIndex, 10); return Number.isFinite(v) ? v : 0; };
+        const keeperAbove = zi(av) > zi(art);
+        return {
+          artZ: zi(art), keeperZ: zi(av), keeperAbove,
+          keeperOverBed: keeperAbove ? inter(r(art), r(av)) : null,
+          keeperBoxOverlap: inter(r(art), r(av)),
+          bedBox: art ? { w: +r(art).width.toFixed(1), h: +r(art).height.toFixed(1) } : null,
+          sayClipLeft: sayR ? +Math.max(0, sr.left - sayR.left).toFixed(1) : null,
+          sayClipRight: sayR ? +Math.max(0, sayR.right - sr.right).toFixed(1) : null,
+          sayOffViewport: sayR ? +Math.max(0, -sayR.left, sayR.right - innerWidth).toFixed(1) : null,
+          toastOverChip: toast ? chips.map(c => inter(r(toast), c)).filter(Boolean) : [],
+          toastPresent: !!toast,
+        };
+      }, ripe));
+    }
+    /* SCOPE IT TO THE PAYOFF WINDOW. Walking across a bed on the way somewhere is
+       not a defect, it is a character crossing a garden. The defect is standing on
+       the bed DURING the reward, so measure only the frames where the reward is on
+       screen. Widening this to every frame made it fail on ordinary transit, which
+       would have trained everyone to ignore it. */
+    const payoff = frames.filter(f => f.toastPresent);
+    note(payoff.length > 0, 'MOTION no frame had the reward on screen, so the occlusion check proved nothing (EMPTY SAMPLE)');
+    const worstOcc = payoff.map(f => f.keeperOverBed).filter(Boolean)
+      .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0] || null;
+    const box = frames.find(f => f.bedBox)?.bedBox;
+    /* The keeper may stand NEAR the bed he is working; he may not stand ON it.
+       Failure direction and bound, not a trend: no more than a third of the bed
+       art may be hidden at any sampled moment. 96% is what shipped. */
+    const occFrac = worstOcc && box ? (worstOcc.w * worstOcc.h) / (box.w * box.h) : 0;
+    note(occFrac <= 0.34,
+      `MOTION the keeper stands ON the harvested bed: ${Math.round(occFrac * 100)}% of the art occluded (${JSON.stringify(worstOcc)} of ${JSON.stringify(box)})`);
+    /* An EMPTY sample here would make the check above trivially pass, so require
+       that the two figures really did share space and the art really did win. */
+    note(frames.some(f => f.keeperBoxOverlap),
+      'MOTION the keeper never came near the bed he harvested, so the occlusion check proved nothing (EMPTY SAMPLE)');
+    note(payoff.some(f => f.artZ > f.keeperZ),
+      `MOTION the harvested bed is never raised above the keeper, so the pluck plays behind him (artZ ${frames.map(f => f.artZ).join('/')} vs keeperZ ${frames.map(f => f.keeperZ).join('/')})`);
+    const clip = Math.max(...frames.map(f => Math.max(f.sayClipLeft || 0, f.sayClipRight || 0, f.sayOffViewport || 0)));
+    note(clip <= 0.5, `MOTION the keeper's speech bubble is clipped by ${clip}px during the harvest`);
+    const tc = frames.flatMap(f => f.toastOverChip);
+    note(tc.length === 0, `MOTION the reward toast collides with a timer chip: ${JSON.stringify(tc)}`);
+    note(frames.some(f => f.toastPresent), 'MOTION no reward toast appeared at all after a real harvest (EMPTY SAMPLE)');
+  }
+}
+
+/* ---------- 8c. IS IT ACTUALLY A MODAL ------------------------------------
+ * Measured before the fix: the tab cycle was 59 stops long and the first stop
+ * INSIDE the Hollow was stop 46. Forty-five focusable controls sat behind the
+ * overlay, invisible and tabbable, and Escape did nothing. role="dialog" was
+ * set with aria-modal null and no accessible name. */
+{
+  const modal = await page.evaluate(() => {
+    // the LAST sheet: the Hollow opens on top of the Kitchen, so the first
+    // .sheet in the document is not the one under test
+    const sheets = [...document.querySelectorAll('#sheets .sheet')];
+    const sheet = sheets[sheets.length - 1];
+    const app = document.querySelector('#app');
+    // an element inside an inert subtree is NOT reachable, so it must not count
+    const reachable = el => { for (let n = el; n; n = n.parentElement) if (n.inert) return false; return true; };
+    const focusables = root => [...root.querySelectorAll('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')]
+      .filter(el => !el.disabled && el.offsetParent !== null && reachable(el));
+    return {
+      hasSheet: !!sheet,
+      ariaModal: sheet ? sheet.getAttribute('aria-modal') : null,
+      name: sheet ? (sheet.getAttribute('aria-label') || '') : '',
+      // the background is every child of #app EXCEPT the sheet host, because
+      // #sheets lives inside #app and inerting the parent kills the sheet too
+      appInert: !!(app && [...app.children].filter(el => el.id !== 'sheets').every(el => el.inert)),
+      appHidden: app ? app.getAttribute('aria-hidden') : null,
+      bgFocusable: app ? [...app.children].filter(el => el.id !== 'sheets')
+        .reduce((n, el) => n + focusables(el).length, 0)
+        + sheets.slice(0, -1).reduce((n, el) => n + focusables(el).length, 0) : -1,
+      focusInside: !!(sheet && sheet.contains(document.activeElement)),
+    };
+  });
+  note(modal.hasSheet, 'MODAL no sheet on screen, so the modal checks did not run (EMPTY SAMPLE)');
+  note(modal.ariaModal === 'true', `MODAL role=dialog without aria-modal (got ${modal.ariaModal})`);
+  note(modal.name.length > 0, 'MODAL the dialog has no accessible name');
+  note(modal.appInert, 'MODAL the background is not inert, so every control behind the overlay is still tabbable');
+  note(modal.bgFocusable === 0, `MODAL ${modal.bgFocusable} focusable controls remain behind the overlay`);
+  note(modal.focusInside, 'MODAL focus never moved into the sheet on open');
+
+  await page.keyboard.press('Escape');
+  await sleep(800);
+  const gone = await page.evaluate(() => !document.querySelector('#hollowBody'));
+  note(gone, 'MODAL Escape does not close the sheet');
+  // reopen for whatever runs after this
+  if (gone) {
+    await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+    await sleep(2400);
+  }
+}
+
 /* ---------- 9. the only exit clears the 44px floor ------------------------- */
 const closeBox = await page.evaluate(() => {
   const b = document.querySelector('.sheet-close');

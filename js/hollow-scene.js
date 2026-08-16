@@ -148,8 +148,14 @@ export function hollowBackdropHtml({ band } = {}) {
         rides the same origin. Glass and flame are always drawn; only the glow is
         gated on the band (NOTES.md). */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-lantern-post', { x: 75, y: 589, style: `${NONE};filter:drop-shadow(0 0 5px rgba(255,217,138,.95)) drop-shadow(0 0 16px rgba(255,217,138,.6))` })}
-    ${hlwArt('hollow-lantern-flame', { x: 82.5, y: 614, style: NONE })}
+    ${/* IT BURNED AT NOON. The radial glow was gated on `lit` but the post's own
+          warm drop-shadow and the flame itself were unconditional, so the lantern
+          was alight in the day render. A lit lantern in full sun says nothing;
+          worse, it spends the one warm light source the night has. */''}
+    ${hlwArt('hollow-lantern-post', { x: 75, y: 589, style: lit
+      ? `${NONE};filter:drop-shadow(0 0 5px rgba(255,217,138,.95)) drop-shadow(0 0 16px rgba(255,217,138,.6))`
+      : NONE })}
+    ${lit ? hlwArt('hollow-lantern-flame', { x: 82.5, y: 614, style: NONE }) : ''}
     ${lit ? glow(38, 572, 96, 96, 'circle', 'rgba(255,217,138,.42)', 4) : ''}
   </div>
 
@@ -166,7 +172,16 @@ export function hollowBackdropHtml({ band } = {}) {
         At .22 the lantern, the shed glow and the fireflies carry the nighttime
         instead of the wash doing all of it. Day is untouched and measures within
         2 luma of spec. */''}
-  ${band === 'night' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(22,28,58,.22)"></div>` : ''}
+  ${/* NIGHT IS THE LIGHT COMING FROM ONE PLACE, not the same picture dimmer.
+        Two reviewers measured this independently: night was only 16% darker than
+        day and IDENTICAL in hue, mean absolute difference [13.2, 14.0, 3.4] per
+        channel, so you could not tell the two renders apart without the
+        fireflies. Dropping .42 to .22 fixed muddiness and did nothing for that,
+        because darkness was never the dial.
+        So: keep the alpha low, COOL the ground with a hue-rotate and a small
+        saturation drop so the green shifts blue-green, and let the lantern pool
+        below push warm against it. Local contrast, not global dimming. */''}
+  ${band === 'night' ? `<div style="position:absolute;inset:0;z-index:8;${NONE};background:rgba(22,28,58,.22);backdrop-filter:hue-rotate(22deg) saturate(.7) brightness(.95)"></div>` : ''}
   ${lit ? `<div style="position:absolute;inset:0;z-index:9;${NONE}">
     ${FLIES.map(([x, y, s, d, dl]) => `<span class="hlw-fly" style="position:absolute;left:${x}px;top:${y}px;width:${s}px;height:${s}px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${stagger(dl)}s infinite"></span>`).join('')}
   </div>` : ''}`;

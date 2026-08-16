@@ -2254,7 +2254,16 @@ function nextToast() {
 const sheetStack = [];
 function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog"><div class="sheet-grab"></div>${html}</div>`;
+  /* A DIALOG THAT DOES NOT TRAP FOCUS IS NOT A DIALOG. Measured on the Hollow:
+     the tab cycle was 59 stops long and the first stop INSIDE the sheet was stop
+     46. Stops 0 to 45 were the hero buttons, wallet pills, nav tabs and the
+     Kitchen sheet underneath, all invisible beneath the overlay, all focusable.
+     role="dialog" was set with aria-modal null, no accessible name, and the
+     background neither inert nor aria-hidden. Escape did nothing.
+     aria-modal plus inert on the background fixes the whole class in one place,
+     for every sheet in the app, not just this one. */
+  const label = (name || (html.match(/<h2[^>]*>([^<]{1,60})<\/h2>/) || [])[1] || 'Panel').trim();
+  wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog" aria-modal="true" aria-label="${esc(label)}"><div class="sheet-grab"></div>${html}</div>`;
   $('#sheets').appendChild(wrap);
   /* Sheets are the app's other surface, and the heaviest ones (the Stable's ring,
      the Wardrobe, a pack reveal) are exactly the ones that used to assemble
@@ -2274,12 +2283,59 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
   composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
+  /* Inert the world behind it, move focus in, and remember where focus came from
+     so closing puts it back. Only the FIRST sheet inerts #app: a sheet opened on
+     top of a sheet must not un-inert it on the way out. */
+  const prevFocus = document.activeElement;
+  /* INERT THE SIBLINGS, NOT #app. #sheets lives INSIDE #app, so inerting #app
+     inerts the sheet with it: measured, every hit probe on the Hollow came back
+     as BODY and the screen was completely dead. Inert each direct child of #app
+     except the sheet host, and remember exactly which ones we touched so a child
+     that was already inert for its own reasons is not un-inerted on close. */
+  const appEl = $('#app'), host = $('#sheets');
+  let inerted = [];
+  if (appEl && host) {
+    /* Everything behind THIS sheet: the app's other children on the first open,
+       and on every open the sheets already stacked underneath. The Hollow opens
+       on top of the Kitchen, and the Kitchen's own doors stayed tabbable through
+       the overlay. */
+    const behind = sheetStack.length === 1 ? [...appEl.children].filter(el => el !== host) : [];
+    const lower = sheetStack.slice(0, -1).map(r => r.wrap);
+    inerted = [...behind, ...lower].filter(el => el && !el.inert);
+    inerted.forEach(el => { el.inert = true; el.setAttribute('aria-hidden', 'true'); });
+  }
+  /* FOCUS THE PANEL, NOT ITS FIRST BUTTON. Focusing the Done button moved focus
+     correctly and then painted a full accent focus ring on it for every mouse and
+     touch user, on every sheet in the app: Chromium treats programmatic focus on
+     a real control as :focus-visible. Caught in the render, a lime box around
+     Done in all three band screenshots. The standard dialog answer is a
+     tabindex="-1" container: a screen reader lands on the named dialog, the next
+     Tab enters the controls in order, and nothing draws a ring nobody asked for. */
+  requestAnimationFrame(() => {
+    const panel = wrap.querySelector('.sheet');
+    if (panel) { panel.tabIndex = -1; panel.focus?.({ preventScroll: true }); }
+  });
+  rec.restoreFocus = () => {
+    inerted.forEach(el => { el.inert = false; el.removeAttribute('aria-hidden'); });
+    if (prevFocus && prevFocus.isConnected) try { prevFocus.focus(); } catch { /* gone */ }
+  };
   return wrap;
 }
+/* ESCAPE CLOSES THE TOP SHEET. It did nothing: measured with focus inside the
+   Hollow, the sheet was still present 700ms after the keypress. Bound once, at
+   the module level, so no sheet has to remember it. history.back() is used rather
+   than closeTopSheet directly, so the history stack stays in step with what the
+   backdrop tap and the Done button already do. */
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !sheetStack.length) return;
+  e.preventDefault();
+  history.back();
+});
 function closeTopSheet() {
   const rec = sheetStack.pop();
   if (!rec) return;
   try { rec.onClose?.(); } catch { /* noop */ }
+  try { rec.restoreFocus?.(); } catch { /* noop */ }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
   if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
   // slide down + backdrop fade, then remove. pointer-events off immediately so a
@@ -4110,9 +4166,12 @@ function openHollow(after) {
     walkT = setTimeout(() => {
       av.moving = false;
       const anim = $('#hlwAnim', body); if (anim) anim.style.animation = 'hlwIdle 4s ease-in-out infinite';
+      clampSayNow();
       then?.();
     }, av.dur * 1000);
   }
+
+  let clampSayNow = () => {};
 
   function waterFx(cx, cy) {
     const st = $('#hlwStage', body); if (!st) return;
@@ -4182,7 +4241,7 @@ function openHollow(after) {
           rules of the loop are only useful once they have planted something. So
           the bar REPLACES the note on the first visit and the note returns on
           the second. */''}
-    ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
+    ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed. Your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
@@ -4262,27 +4321,65 @@ function openHollow(after) {
       </div>` : ''}
     </div></div>`;
 
+    /* KEEP THE BUBBLE ON SCREEN. It is anchored to the keeper and centred on him,
+       so when he walks to a left-column bed it hangs off the edge: measured 23.0px
+       clipped at 390x844 and 22.1 at 375x667, with 15px past the device viewport
+       entirely, on three of the five bed positions. Width is not known until it is
+       laid out, so clamp after paint rather than guessing in the template. */
+    const clampSay = () => {
+      const say = $('#hlwSay', body), stg = $('#hlwStage', body);
+      if (!say || !stg) return;
+      say.style.marginLeft = '0px';
+      const s0 = say.getBoundingClientRect(), sr = stg.getBoundingClientRect();
+      const over = Math.max(0, sr.left - s0.left) - Math.max(0, s0.right - sr.right);
+      if (over) say.style.marginLeft = `${Math.round(over / (sr.width / 390))}px`;
+    };
+
     // scale the 390-wide stage to the sheet width
     const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
     const s = vp.clientWidth / 390;
     st.style.transform = `scale(${s})`;
     vp.style.height = Math.round(HLW_H * s) + 'px';
+    clampSayNow = clampSay;
+    requestAnimationFrame(clampSay);
 
     $$('[data-bed]', body).forEach(btn => btn.addEventListener('click', () => {
       if (busy) return;
       const i = Number(btn.dataset.bed);
       const p = beds[i];
       busy = true;
-      walkTo(p.cx, p.cy, async () => {
+      /* BESIDE, not on top. The designer specced a -74x stand-off for watering
+         and the build applied it to nothing. Left-column beds are approached
+         from the right and vice versa, so he never blocks the frame edge. */
+      const side = p.cx < 99 ? 74 : -74;
+      walkTo(p.cx + side, p.cy + 10, async () => {
         if (p.empty) { busy = false; openPlantSheet(p.index, render); return; }
         if (p.ready) {
           const res = await harvestPlot(p.index);
           if (!res.ok) { busy = false; render(); return; }
           await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
           levelSound(S.sounds);
+          /* THE PLUCK PLAYS IN FRONT OF HIM, not behind. Measured on a real
+             harvest tap: the keeper's box covered 80.6 x 57.5 of an 84 x 60 bed,
+             so the fruit arc, the pluck and the empty-bed reveal all happened
+             behind a skeleton. He is z-index 4; the art is 2. Raise the ONE bed
+             being harvested above him for the length of the animation. */
+          const wrap = $(`#hlwBedArt${i}`, body);
+          if (wrap) wrap.style.zIndex = '6';
           const art = $(`#hlwBedArt${i} g`, body);
           if (art) art.style.animation = 'hlwPluck .9s ease-out forwards';
-          toastAt(p.cx, p.cy, `+${res.n} ${res.name}`);
+          /* And the toast clears the chip row above the bed instead of landing on
+             it: "+3 Ember Pepper" was overlapping a neighbour's timer chip by
+             13.2 x 16. Above the bed, above the chip line. */
+          toastAt(p.cx, p.cy - 34, `+${res.n} ${res.name}${res.bumper ? '  BUMPER!' : ''}`);
+          /* THE BUMPER WAS INVISIBLE HERE. harvestPlot has always returned it and
+             the list UI fires a 26-particle burst for it; the diorama dropped the
+             flag entirely, so a 1-in-10 lucky roll looked exactly like an ordinary
+             pick. The prettier surface had the flatter payoff. */
+          if (res.bumper && wrap) {
+            const r = wrap.getBoundingClientRect();
+            confettiBurst(r.left + r.width / 2, r.top + r.height / 2, 26);
+          }
           // busy stays TRUE across the pluck: released early, the 30s tick could
           // re-render straight over the animation the harvest exists to show.
           setTimeout(() => { busy = false; render(); }, 1200);

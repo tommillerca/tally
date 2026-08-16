@@ -47,6 +47,8 @@
 import { HLW_ART, hlwArt } from './hollow-art.js';
 import { INGREDIENTS, fmtCookTime } from './cooking.js';
 import { BH_ICON_TINTS } from './icons-pack.js';
+// crop names come from INGREDIENTS, but they reach innerHTML, so they get escaped
+const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export const BED_BOX = { w: 84, h: 60 };
 
@@ -130,13 +132,30 @@ export function hlwBedArt(plot) {
    every growing bed used to wear the same droplet, so the droplet meant nothing.
    tests/hollow-audit.mjs pins this. */
 export function hlwChipHtml(plot) {
-  if (plot.locked || plot.empty || plot.ready) return '';
+  if (plot.locked || plot.empty) return '';
   /* nowrap is not decoration. The caller's anchor is an absolutely positioned
      wrapper with no width, so the chip's containing block is 0 wide and
      shrink-to-fit hands it min-content: "1h 30m" broke onto two lines in the
      render. .hlw-chip carries no white-space rule and app.css is another lane's
      file, so it rides here, where it also survives any anchor the caller picks. */
   const NW = 'white-space:nowrap;';
+  /* THE ACCENT BELONGS TO THE PAYOFF, and it was on the optional action.
+     Measured on the returning screen: the ripe fruit was 175 css px at 1.81:1
+     against grass, LAST by area and LAST by contrast, and a ready bed carried no
+     chip at all, while watering (which you can skip) wore a full accent chip.
+     Two reviewers found this independently. The accent MOVES here, it is not
+     duplicated: ready is lime, thirst drops to the muted chip that keeps the
+     droplet. Still exactly one lime object per bed state. */
+  if (plot.ready) {
+    return `<span class="hlw-chip ready" style="${NW}">READY</span>`;
+  }
+  /* CROP IDENTITY IS NOT SOLVED HERE, and pretending otherwise would be worse
+     than leaving it. Naming the crop in every chip was tried and measured: the
+     chips went from 64.7px to 127.7px and started colliding with each other and
+     with the price sign on a 63px bed pitch. Six of seven crops being one tinted
+     silhouette is an ART problem and it wants art, not a longer label. The bed
+     aria-labels already name the crop, so a screen reader is better served than
+     a sighted player, which is worth saying out loud. */
   if (plot.canWater) {
     const drop = paint('hollow-water-needs',
       { w: 9, cls: 'hlw-p-hollow-water-needs', style: 'position:static;flex:none;' },
