@@ -86,6 +86,7 @@ const BROWSER = [
   'recovery-audit.mjs',      // a FAILED restore must never destroy the save it was meant to replace
   'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
   'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
+  'newsrow-return-audit.mjs',// a news story puts you back where you were, not on a sheet you never opened
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
