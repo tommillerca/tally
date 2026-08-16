@@ -1,0 +1,53 @@
+-- The two indexes the hot read paths have always needed.
+--
+-- ADDITIVE ONLY. Two CREATE INDEXes, nothing renamed, nothing dropped, no data
+-- rewritten, no column touched. Every existing row keeps working unchanged;
+-- the only difference is which b-tree the planner is allowed to walk.
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-08-16-indexes.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-08-16-indexes.sql
+--
+-- WHY. `friendships` had no index at all beyond its PRIMARY KEY (a, b), and
+-- `grants` had only idx_grants_player (player_id, id). A composite index can
+-- only be searched on a prefix of its columns, so neither one can answer a
+-- query that knows `b` but not `a`, or `key` but not `player_id`. Three routes
+-- ask exactly those questions on every call, and all three were reading the
+-- whole table to do it.
+--
+-- MEASURED, on a rebuild of schema.sql in local SQLite populated to
+-- 10,000 players / 199,598 friendships / 1,949,799 grants, with no ANALYZE
+-- (which is the state a D1 database nobody has run ANALYZE against is in).
+-- Median of 25 runs:
+--
+--   src/index.js:470  GET /friends        WHERE f.a = ? OR f.b = ?
+--     before  SCAN f                                    14.13 ms
+--     after   MULTI-INDEX OR, SEARCH f USING idx_friendships_b (b=?)
+--                                                        0.27 ms   52x
+--
+--   src/index.js:733  GET /steps/week     WHERE key = ? LIMIT 1
+--     before  SCAN grants USING COVERING INDEX sqlite_autoindex_grants_1
+--                                                       38.10 ms
+--     after   SEARCH grants USING COVERING INDEX idx_grants_key (key=?)
+--                                                        0.003 ms  12,700x
+--
+--   src/index.js:812  GET /steps/settled  WHERE g.key = ?
+--     before  SCAN g                                   112.96 ms
+--     after   SEARCH g USING INDEX idx_grants_key (key=?)
+--                                                        0.014 ms  8,070x
+--
+-- All 78 distinct SQL statements in src/index.js were replanned before and
+-- after. Three plans changed, all three are the ones above, and no other
+-- statement got a worse plan or a slower time.
+--
+-- WHAT THEY COST. Storage, measured by page_count delta on the same fixture:
+-- idx_friendships_b 6.11 MB, idx_grants_key 97.50 MB, together 103.61 MB, which
+-- is 1.0% of D1's 10 GB per-database limit. idx_grants_key is the big one only
+-- because grant keys are long strings (gift-free-<playerId>-<date>).
+-- Writes: D1 bills one row written per index entry touched, so an INSERT into
+-- grants goes from 3 rows written (table, UNIQUE(player_id,key),
+-- idx_grants_player) to 4, and an INSERT into friendships goes from 2 to 3.
+-- Grants and friendships are both low-volume writes (a gift, a cheer, a claim,
+-- a friend request), so at 10,000 DAU that is on the order of 600k extra rows
+-- written a month, well inside the free allowance.
+CREATE INDEX IF NOT EXISTS idx_friendships_b ON friendships (b);
+CREATE INDEX IF NOT EXISTS idx_grants_key ON grants (key);
