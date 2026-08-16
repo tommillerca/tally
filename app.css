@@ -7845,3 +7845,38 @@ body::before {
 }
 @keyframes hlwSayIn { from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(.94); }
                         to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+/* PHONES UNDER 600px TALL, where the fight did not fit at all. This is not a
+   regression from the HUD move, it is older: on origin/main at 320x568 End Turn
+   rendered at 619.3 in a 568 viewport with 61px of body overflow, so the button
+   that ends your turn was off the bottom of the screen. The HUD row improved it
+   to 54px of overflow and no further, which is still broken.
+   54 is the whole debt, and Tom's call was to take it out of the picture rather
+   than let the column scroll: floor 183 - 54 = 129.
+   The FIGURE floors have to come down with it or the fix does nothing, because
+   a floor the box cannot hold is not a floor. 129 of arena minus the 14px the
+   fighter group sits above the base leaves 115, and minus the mage's 16px lift
+   The figure budget is the GROUP, not the stage. .fighterG sits 14px above the
+   arena's base, so a 129px arena allows 115px of group, and the mage's group is
+   his stage PLUS his lift. At a 108px stage and a 16px lift that is 124, and it
+   overflowed the arena's top by 11px: measured fighterG top 195.9 against arena
+   top 206.9. So the floors are 96 with a 12px lift, giving 108 of group inside
+   115, 7px clear.
+   min-height is set alongside height on the mage deliberately. .fstage carries
+   its own min-height, and min-height is a separate property, so a more specific
+   rule setting only `height` does not lower it: the mage floored at .fstage's
+   min-height rather than his own until this was added.
+   THIS BLOCK LIVES AT THE END OF THE FILE ON PURPOSE. #foeStage.mage-foe and
+   .fstage are defined thousands of lines below the arena rules, at equal
+   specificity, so a media query placed next to the arena loses to them on
+   source order. Put it back up there and the arena shrinks while the figures
+   do not, which is worse than doing nothing. The fighters are small on an SE, and
+   that is the trade Tom took: a whole fight you can finish beats a bigger one
+   you cannot.
+   Bounded by min-width too, so it cannot catch a landscape tablet that happens
+   to be short. */
+@media (max-height: 600px) and (max-width: 500px) {
+  .fight-body > .arena { height: clamp(129px, calc(100svh - 504px), 600px); }
+  .fstage { width: clamp(96px, 43cqh, 150px); height: clamp(96px, 43cqh, 150px); min-height: 96px; }
+  #foeStage.mage-foe { height: clamp(96px, 75cqh, 262px); min-height: 96px; margin-bottom: 12px; }
+}
