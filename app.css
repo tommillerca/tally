@@ -7881,7 +7881,7 @@ body::before {
      A flat dark ground under the tile, in the tile's own family, so the blades
      read as grass rather than as a pattern printed on a lawn.
 
-     LIFTED FROM #1b2418 (luminance 33) TO #27321f (45). Tom: "it looks crunchy
+     LIFTED FROM #1b2418 (luminance 33) TO #3a4f2a (70). Tom: "it looks crunchy
      like oversharpened, I want it to look like Stardew Valley." Measured on the
      render, the whole scene had a median luminance of 33 with a 99th percentile
      of 234: a 7.0x ratio, which is a picture made almost entirely of extremes
@@ -7894,7 +7894,7 @@ body::before {
      anti-aliased edge pixels (0 of 42,162 opaque px have partial alpha) and a
      median of 29 colours each, so nothing needed cleaning up and no art was
      touched. The crunch was the environment, and the environment was mine. */
-  background-color: #27321f;
+  background-color: #3a4f2a;
   background-image: url('assets/hollow/pix/hollow-ground.png');
   background-repeat: repeat;
   /* ONE PIXEL SCALE FOR THE WHOLE SCENE. The tile is 96px native and was drawn
@@ -7953,22 +7953,15 @@ body::before {
   opacity: .92;
 }
 
-/* DEPTH. A flat tile over a flat colour has no atmosphere, which is most of why
-   the scene read as objects sitting on a texture rather than as a place. Two
-   cheap painterly moves, both BEHIND every sprite so nothing composites over
-   the art (constraint: no filter or blend on .hlw-pix):
-   - a vertical falloff so the far edge sits back and the near edge comes forward
-   - a corner vignette so the eye is pushed to the middle third where the beds are
-   Neither touches a sprite; they are painted on the ground layer itself. */
-.hlw-ground::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  /* SOFTENED. This was rgba(8,11,8,.55) plus a .5 corner vignette, which pushed
-     both ends of the scene toward pure black and widened exactly the value range
-     that was making it read as oversharpened. Same job, a third of the weight,
-     and no radial: the vignette was doing nothing the falloff was not. */
-  background:
-    linear-gradient(180deg, rgba(20,26,18,.30) 0%, rgba(20,26,18,0) 24%, rgba(20,26,18,0) 66%, rgba(20,26,18,.22) 100%);
-}
+/* NO PERMANENT GRADE ON THE GROUND, at any hour.
+   There used to be a vertical falloff plus a corner vignette here, added to give
+   the scene depth. Measured against Stardew, which is the reference Tom named:
+   its drawLighting is skipped entirely whenever outdoorLight is White, so at
+   midday it composites NOTHING over the world. The falloff was doing the one
+   thing that was making this scene read as oversharpened, pulling both ends of
+   the frame toward black and widening a luminance range that was already 7x
+   from median to 99th percentile. Depth comes from the lifted ground and from
+   props overlapping, not from a grade laid over the top. */
 /* THE LOCKED BED MUST NOT BE THE BRIGHTEST THING ON SCREEN. Measured: the ghost
    bed read 4.80:1 against the ground while an owned tilled bed read 1.03:1, so
    the slot you cannot use out-shouted the harvest by 3x. Dimmed and desaturated
