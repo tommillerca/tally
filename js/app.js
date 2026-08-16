@@ -9102,8 +9102,20 @@ async function renderSettings(el) {
       return;
     }
     confettiBurst(innerWidth / 2, innerHeight * 0.35, 24); levelSound(S.sounds);
-    toast(res.pet ? `${res.pet.name} unlocked! Equip it in your Wardrobe.${res.coins ? ` +${res.coins} coins.` : ''}`
-      : `Code redeemed!${res.dupe ? ' (pet already owned, coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
+    /* A code for a species you ALREADY OWN stacks a second copy, so it must not
+     * borrow the first-unlock line: it sent the player to the Wardrobe to equip
+     * something already sitting there. res.stacked is the only read that can
+     * tell the two apart (js/loot.js redeemCode). The old already-owned-so-here-
+     * are-coins-instead parenthetical went with the consolation branch that fed
+     * it, which had been unreachable for as long as dupes have stacked. Do not
+     * quote that dead string anywhere, comments included: tests/redeem-dupe-
+     * audit.mjs PIN-3 scans this file as text and cannot tell code from prose,
+     * which is the safe direction for it to be wrong in. */
+    toast(res.pet
+      ? (res.stacked
+        ? `Another ${res.pet.name} joined your crew.${res.coins ? ` +${res.coins} coins.` : ''}`
+        : `${res.pet.name} unlocked! Equip it in your Wardrobe.${res.coins ? ` +${res.coins} coins.` : ''}`)
+      : `Code redeemed!${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
     renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());

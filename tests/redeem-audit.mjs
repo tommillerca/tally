@@ -4,9 +4,10 @@
  * js/loot.js:631. redeemCode is the rewarded-actions shape one more time:
  *   - unrecognised codes reject with reason 'invalid'
  *   - a code already in kv 'redeemed' rejects with reason 'used'
- *   - a fresh valid code grants pet (the +120 "already owned" consolation is
- *     written but UNREACHABLE at v385, see FINDING-DUPE-UNREACHABLE below and
- *     the decision-neutral pin in tests/redeem-dupe-audit.mjs) + code.coins
+ *   - a fresh valid code grants pet + code.coins. A code for a species you
+ *     ALREADY OWN stacks one more instance and pays no consolation coins
+ *     (Tom's call, 2026-08-16; section 5 below measures that payout shape, and
+ *     tests/redeem-dupe-audit.mjs pins the copy the player reads)
  *   - the code is appended to kv 'redeemed' AFTER the grants land
  * That last property is the money guard for this surface. A regression that
  * skips the kv 'redeemed' check turns any published code into a repeatable
@@ -225,16 +226,18 @@ check('REDEEM-EMPTY  toast reads "Enter a code first."',
   after4.toasts.some(t => /enter a code/i.test(t)),
   JSON.stringify(after4.toasts));
 
-/* -------- 5. DUPE BRANCH: measure whether the "already owned -> +120" path is
-   even reachable. -------- */
-/* redeemCode (js/loot.js:641) branches on `if (!pet)` where `pet = await
-   grantPet(...)`. The dupe branch grants +120 coins and sets dupe:true so the
-   toast says "pet already owned - coins instead". The rewarded-actions SOP
-   asks that this dupe consolation actually PAY when it fires.
-   Measure the behaviour and report which path fires: if the pet-code hits
-   the fresh-grant branch even with the same species already in the roster,
-   the dupe branch is unreachable dead code and the finding belongs on the
-   record. */
+/* -------- 5. ALREADY-OWNED SPECIES: measure which path actually fires. -------- */
+/* DECIDED 2026-08-16, by Tom: dupes STACK. Redeeming a pet code for a species
+   already in the roster mints one more INSTANCE and pays 0 consolation coins,
+   which is the same answer hatching and crates already give. The old
+   "already owned -> +120 coins" consolation in redeemCode was removed, not
+   fixed: it branched on `if (!pet)` from grantPet, and grantPet has returned
+   the species unconditionally for as long as dupes have stacked, so it had
+   never once run.
+   This block measures the PAYOUT SHAPE only. The COPY the player reads is
+   pinned by tests/redeem-dupe-audit.mjs, which drives the same button and
+   compares the already-owned toast against the first-time one; there is no
+   value in asserting the same string twice from two files. */
 if (pickedPetOnly && !pickedPetOnly.def.coins && pickedPetOnly.def.pet !== 'random') {
   /* SEED THROUGH THE APP'S OWN WRITER, AND PROVE IT TOOK. This block used to
      push { iid, C: speciesId } into kv 'petInsts'. Both halves were wrong: the
@@ -258,25 +261,22 @@ if (pickedPetOnly && !pickedPetOnly.def.coins && pickedPetOnly.def.pet !== 'rand
   }, pickedPetOnly.def.pet);
   check(`REDEEM-DUPE  SETUP: ${pickedPetOnly.def.pet} is genuinely owned before the redeem`,
     ownedBefore > 0, `copies of ${pickedPetOnly.def.pet} in kv 'petInst' = ${ownedBefore}`);
-  await redeemViaUI(pickedPetOnly.code, /unlocked|already|coins/);
+  await redeemViaUI(pickedPetOnly.code, /unlocked|another|joined|coins/);
   const afterD = await snapshot();
   const dupeDelta = afterD.coins - beforeD.coins;
-  const grantedNewPet = afterD.petCount > beforeD.petCount;
+  const petDelta = afterD.petCount - beforeD.petCount;
   /* snapshot() returns `toasts` (the whole log), never `toast`. Reading the
-     singular meant this was always undefined, so `dupeToast` was permanently
-     false and the REDEEM-DUPE pass branch below could never be taken: a check
-     that cannot go green in one direction is not a check. */
+     singular meant this was always undefined, so the toast test was
+     permanently false and one branch below could never be taken: a check that
+     cannot go green in one direction is not a check. */
   const newToasts = afterD.toasts.slice(beforeD.toasts.length);
   const lastToast = newToasts[newToasts.length - 1] || '';
-  const dupeToast = /already owned|coins instead/i.test(lastToast);
-  if (grantedNewPet && dupeDelta === 0) {
-    console.log(`FINDING-DUPE-UNREACHABLE  redeeming ${pickedPetOnly.code} with ${ownedBefore} copies of ${pickedPetOnly.def.pet} already in kv 'petInst' still granted a NEW instance (pets ${beforeD.petCount} -> ${afterD.petCount}) and paid 0 coins. redeemCode's dupe branch at js/loot.js:641 tests \`if (!pet)\` from grantPet, but grantPet was updated to always return the species (see loot.js:607 comment: "owning it already is fine now (dupes stack)"). So the dupe branch is DEAD CODE, and js/app.js:9098's "(pet already owned, coins instead)" copy is dead with it. A player who redeems a pet-only code for a species they already own gets an extra INSTANCE and the same "unlocked!" toast a first-time redeem shows. tests/redeem-dupe-audit.mjs holds the decision-neutral pin for whichever behaviour is chosen; report only, do not fix here.`);
-    console.log(`  measured: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${lastToast}"`);
-  } else if (dupeDelta === 120 && !grantedNewPet && dupeToast) {
-    check(`REDEEM-DUPE  redeeming ${pickedPetOnly.code} with pet already owned pays the +120 dupe consolation`, true, `coins delta=${dupeDelta}`);
-  } else {
-    console.log(`FINDING-DUPE  UNEXPECTED shape: coins delta=${dupeDelta}, petCount ${beforeD.petCount} -> ${afterD.petCount}, toast="${lastToast}". Neither the dupe branch nor the fresh branch fully matches its own contract on this build.`);
-  }
+  /* DIRECTION AND BOUND, not a trend: EXACTLY one new instance and EXACTLY
+     zero consolation coins. "at least one" would pass a runaway grant loop. */
+  check(`REDEEM-DUPE  redeeming ${pickedPetOnly.code} with ${pickedPetOnly.def.pet} already owned (${ownedBefore} copies) STACKS exactly one more instance`,
+    petDelta === 1, `petCount ${beforeD.petCount} -> ${afterD.petCount} (delta ${petDelta}), toast="${lastToast}"`);
+  check(`REDEEM-DUPE  the stacked copy pays NO consolation coins (the +120 branch is gone, not merely unreachable)`,
+    dupeDelta === 0, `coins delta=${dupeDelta}`);
   check(`REDEEM-DUPE  the code is STILL recorded in kv 'redeemed' after this attempt`,
     afterD.redeemed.includes(pickedPetOnly.code),
     `redeemed=[${afterD.redeemed.join(',')}]`);
