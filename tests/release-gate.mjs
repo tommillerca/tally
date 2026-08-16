@@ -223,6 +223,7 @@ const DECLARED = {
   'figure-audit.mjs': ['full', 'THE FIGURE CONTRACT, 32 checks. Mandatory per tally/CLAUDE.md before any figure work.'],
   'garden-audit.mjs': ['full', 'the garden driven through real controls with a clock skip.'],
   'garden-intro-audit.mjs': ['full', 'the garden intro popup, its retirement, and the Kitchen landing.'],
+  'garden-reach-audit.mjs': ['full', 'the reach batch: the Today banner reaching players who never planted, the starter pouch (and its second-grant no-op), seed labels, the bumper reveal, and the food-log boundary line under the diary. Self-serves this checkout when given no URL.'],
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
