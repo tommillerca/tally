@@ -445,6 +445,15 @@ for (const s of SHEETS) {
     try { setup = await s.drive(mode); } catch (e) { setup = { reached: false, error: String(e).split('\n')[0] }; }
     const tag = `${s.id}/${mode}`;
 
+    /* A TOAST IS NOT A CLIPPED CONTROL. Toasts float over the bottom of the
+       phone for a few seconds after a fight opens, and elementFromPoint had
+       been blaming `div.toast` for three of the six potion buttons. That is a
+       banner, not the layout defect this file grades, and the fix for it is not
+       in the tray. Wait it out, bounded: if a toast NEVER clears it is a real
+       occluder and the hit test below still reports it. */
+    await page.waitForFunction(() => ![...document.querySelectorAll('.toast')]
+      .some(t => t.getBoundingClientRect().height > 0), { timeout: 8000, polling: 100 }).catch(() => {});
+
     /* AN EMPTY SAMPLE IS A FAILURE. If the state could not be built, nothing was
        measured, and staying quiet here is how a check starts passing about a
        screen it never opened. */
@@ -475,7 +484,15 @@ for (const s of SHEETS) {
 
     const asShipped = await reach(s.action);
     const r = asShipped.missing ? asShipped : await reachAfterBodyScroll(s.action);
-    seen[s.id][mode] = { ...r, asShipped };
+    /* HOW MUCH CONTENT THE WORST CASE ADDED, anywhere in the open sheet. See the
+       WORSE block for why this is measured across every scroller and not just
+       the primary action's own. */
+    const stress = await page.evaluate(() => {
+      const sheet = document.querySelector('.sheet-body') ? document.querySelector('.sheet') || document.body : document.body;
+      const scr = [...sheet.querySelectorAll('*')].filter(n => /auto|scroll/.test(getComputedStyle(n).overflowY));
+      return { total: scr.reduce((n, e) => n + e.scrollHeight, 0), where: scr.map(e => `${e.id || e.className.toString().split(/\s+/)[0]}:${e.scrollHeight}`).join(' ') };
+    });
+    seen[s.id][mode] = { ...r, asShipped, stress };
     ok(`REACH ${tag}: the primary action ${s.action} exists`, !r.missing, JSON.stringify(asShipped));
     if (!r.missing) {
       /* ONE assertion, the hit test after an ordinary sheet scroll. `onScreen` is
@@ -510,15 +527,25 @@ for (const s of SHEETS) {
      A driver that claims a worst-case state but leaves the clipping container the
      same height has graded the DEFAULT twice and would report a clean sheet on a
      sheet nobody stressed. That is the exact failure this whole file exists to
-     stop, so it is an assertion, not a note: the container that scrolls the
-     primary action must be measurably taller in `worst` than in `default`. */
+     stop, so it is an assertion, not a note: the worst state must put
+     measurably more content inside the sheet than the default did.
+
+     IT USED TO NAME ONE CONTAINER, the primary action's own scroller, and that
+     made it go red on a FIX. On 2026-08-15 the fight arena was pinned to a
+     fixed height and the tray became the flexing element, so #endTurn stopped
+     riding the sheet's scrollHeight entirely: the sheet measured 565 -> 565
+     while the tray inside it went 134 -> 274 of content. The worst case was
+     genuinely worse, the primary action was simply no longer at risk from it,
+     and an assertion that demands otherwise is demanding the fix stay un-made.
+     So the measure is now every scroller in the open sheet. It still cannot be
+     satisfied by a driver that built the same state twice (nothing grows), and
+     the detail names which scroller moved. */
   const d = seen[s.id].default, w = seen[s.id].worst;
   if (d && w && !d.missing && !w.missing) {
-    const dh = d.scroller?.scrollH ?? 0, wh = w.scroller?.scrollH ?? 0;
-    ok(`WORSE ${s.id}: the worst state really grows the container that scrolls ${s.action} (UNPROVEN if it does not)`,
-      !!d.scroller && !!w.scroller && wh > dh,
-      d.scroller ? `${d.scroller.sel} scrollHeight ${dh} -> ${wh} (clientHeight ${d.scroller.clientH} -> ${w.scroller.clientH})`
-        : 'no scrollable ancestor found, so there is no clip to overflow');
+    const dh = d.stress?.total ?? 0, wh = w.stress?.total ?? 0;
+    ok(`WORSE ${s.id}: the worst state really puts more content in the sheet than the default (UNPROVEN if it does not)`,
+      wh > dh,
+      `sheet scroll content ${dh} -> ${wh}\n              default: ${d.stress?.where}\n              worst:   ${w.stress?.where}`);
   } else {
     ok(`WORSE ${s.id}: UNPROVEN, both states were needed and at least one was never measured`, false,
       `default=${d ? (d.missing ? 'action missing' : 'ok') : 'not built'} worst=${w ? (w.missing ? 'action missing' : 'ok') : 'not built'}`);

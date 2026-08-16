@@ -578,7 +578,7 @@ async function boot() {
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
 
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
@@ -2104,6 +2104,29 @@ function currentTab() {
 // map keeps running and draining battery behind whatever you opened next.
 let screenCleanup = null;
 
+/* THE MAP ONLY ASKS FOR LOCATION WHEN THE PLAYER ASKED FOR THE MAP.
+ *
+ * The Boneyard used to auto-start the map for anyone who had ever opened it
+ * (kv 'map-seen'), on every render of the screen. That is fine when the player
+ * just tapped the Boneyard tab, and wrong every other way you can land there:
+ * a new build makes the app reload ITSELF (controllerchange -> location.reload,
+ * ~line 515), a reload KEEPS THE HASH, so a player last seen on #/boneyard is
+ * dropped back onto the map by a navigation they did not perform, and the iOS
+ * location prompt fires seconds after opening with nothing tapped.
+ *
+ * This flag is the difference between the two. It is set by a hashchange (the
+ * only way a player navigates) and by the #mapStart tap itself, which is what
+ * keeps the map alive across an in-place refresh() once it is running. It is
+ * plain page state, so a reload clears it: exactly the case we want gated.
+ * Not persisted, and deliberately not read from the Permissions API: Safari
+ * does not answer permissions.query for geolocation, which is the only browser
+ * this bug happens in. */
+let mapWanted = false;
+function routeFromHash() {
+  if (currentTab() === 'boneyard') mapWanted = true;
+  route();
+}
+
 function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
@@ -3626,7 +3649,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     <div class="sheet-head">
       <div class="hd">
         <h2>${esc(s.name || 'Dark Spire')}</h2>
-        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : rival ? 'Rival territory' : 'Unclaimed'}</div>
+        <div class="sub">${besieged ? 'Under siege' : held ? 'Your tower' : dormant ? 'Yours, gone dormant' : rival ? 'Rival territory' : 'Unclaimed'}</div>
       </div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
     </div>
@@ -8056,6 +8079,17 @@ async function openWhatsNew() {
         if (stillOpen) return;
         clearInterval(back);
         if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
+        /* AND A SHEET COUNTS AS "SOMEWHERE" TOO. This watched for a VEIL closing
+           and for the hash moving, which misses the case where an announcement's
+           CTA opens a SHEET and stays on the same hash: the Bone Garden row does
+           exactly that (its CTA closes the veil and calls openGardenSheet). The
+           poll then saw no veil and an unchanged hash, decided the player was
+           back where they started, and re-opened What's New ON TOP of the garden
+           sheet. Measured: closing What's New afterwards left the player looking
+           at a Bone Garden sheet they never opened, on the Crew tab.
+           If they are on a sheet, they went somewhere on purpose, same as a hash
+           change, so leave them there. */
+        if (sheetStack.length) return;
         openWhatsNew().then(() => $('[data-wntab="news"]')?.click());
       }, 300);
       setTimeout(() => clearInterval(back), 180000);
@@ -8706,7 +8740,7 @@ async function saveInitialSettings(np) {
     social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   $('#tabbar').style.display = '';
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   initAnalytics(APP_SOCIAL_V); // start analytics from the first session too (boot's init is skipped by the onboarding return)
   location.hash = '#/today';
@@ -12828,7 +12862,13 @@ async function renderBoneyard(el) {
         const besieged = !!(siegeUntil && siegeUntil > Date.now());
         // How long it has stood, from whoever's claim it is. A rival's tower shows
         // its age too, which is exactly the point: an old tower looks worth taking.
-        const heldSince = rival ? (rival.claimedAt || 0) : (held ? (spireState_[s.id]?.claimedAt || 0) : 0);
+        // NOTE 2026-08-15: this used to gate on `held`, which flips false the
+        // moment a tower goes dormant, so the sheet said "Never been taken" for
+        // a tower the player HAD claimed. dormant=true requires a local record
+        // to exist (spires.js:102), so if we have one, read claimedAt from it
+        // regardless of held. This preserves the app's own promise: "never lost,
+        // just quiet".
+        const heldSince = rival ? (rival.claimedAt || 0) : (spireState_[s.id]?.claimedAt || 0);
         const ageTier = heldSince ? wardenTier(Math.floor((Date.now() - heldSince) / 86400000)).tier : 0;
         rec.el.dataset.age = String(ageTier);
         rec.el.classList.toggle('besieged', besieged);
@@ -13276,9 +13316,12 @@ async function renderBoneyard(el) {
       refreshWorld();
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
-  $('#mapStart', wrap).addEventListener('click', () => { kvSet('map-seen', true); startMap(); });
-  // been here before + location already allowed: go straight to the map
-  if (await kvGet('map-seen', false)) startMap();
+  $('#mapStart', wrap).addEventListener('click', () => { mapWanted = true; kvSet('map-seen', true); startMap(); });
+  // been here before + the player came here on purpose this session: go straight
+  // to the map. mapWanted is false on a page the player did not navigate to (the
+  // self-reload on a new build restores this hash), and those get the button, so
+  // location is never asked for out of nowhere. See mapWanted's note by route().
+  if (mapWanted && await kvGet('map-seen', false)) startMap();
 }
 
 
@@ -13458,7 +13501,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v382'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v383'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -14046,7 +14089,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   // mini + boss fights are launched from the Boneyard map, not the Pit; the
   // done/flee copy and the return target follow from that.
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret' || foeCfg.mode === 'glutton';
+  /* SPIRE BELONGS HERE and was missing, which cost three things at once: the
+     Done button read "Back to The Pit" after a fight on the Boneyard map, the
+     flee toast said you slipped out of The Pit, and the exit handler below ran
+     renderPit() on a screen the player had never opened. A spire is a map
+     object, reached through #mapSpire, exactly like a den or a mini. */
+  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
+    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire';
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -14716,37 +14765,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
     return '';
   }
 
-  /* HOLD THE TRAY STILL. Tom, 2026-08-09, mid world boss: "the pit height was
-     changing nonstop the buttons were moving up and down based on the menu that
-     was available really sloppy ui."
-     He is describing the arena being elastic (flex:1) against a tray whose row
-     count changes every single re-render: the foe's turn collapses it to one
-     line, your pet's turn swaps in four different moves, a potion runs out, the
-     signature gets spent. Every one of those moved End Turn under his thumb.
-     So the tray keeps the tallest height this fight has ever needed. Worst case
-     it looks like its own busiest turn, which was always a reachable layout, so
-     nothing new can overflow. */
-  function lockTray(factions) {
-    factions.style.height = '';
-    fight.trayH = Math.max(fight.trayH || 0, factions.scrollHeight);
-    /* never past the bottom of the phone: End Turn sits under this and must stay
-       reachable without scrolling, so a huge spell list scrolls inside the tray
-       rather than pushing the fight off screen. */
-    /* Room is measured from terms that do NOT depend on the tray: the arena's CSS
-       floor, the pinned End Turn row, and the fixed HUD strips. Measuring the
-       arena's CURRENT height instead is circular (the arena is flex:1, so it is
-       whatever the tray left it) and settles 13px away on the first turn, which
-       is the jitter all over again. Layout space, never getBoundingClientRect:
-       the sheet is still sliding in when the first render lands. */
-    const body = factions.parentElement, row = el('fendrow');
-    const arena = body.querySelector('.arena');
-    let used = (parseFloat(arena && getComputedStyle(arena).minHeight) || 292)
-             + (row ? row.offsetHeight : 56) + 12;
-    for (const kid of body.children) {
-      if (kid !== factions && kid !== row && kid !== arena) used += kid.offsetHeight;
-    }
-    factions.style.height = Math.max(96, Math.min(fight.trayH, body.clientHeight - used)) + 'px';
-  }
+  /* lockTray is GONE, and its absence is the fix, not a casualty of it.
+     It existed to hold the tray still against an ELASTIC arena (flex:1 1 0):
+     the tray ratcheted to the tallest height the fight had ever needed so End
+     Turn would stop sliding under Tom's thumb. That fought the symptom from the
+     wrong side, and it could not win: every ratchet step came out of the boss,
+     which is the resize Tom reported on 2026-08-15. The arena is now a fixed,
+     viewport-derived height in CSS and the tray is the flex:1 1 0 element, so
+     the tray is the SAME box on every turn by construction. Nothing in JS has
+     to measure or remember it. */
   /* End Turn never moves and is never off screen: it lives below the tray, not
      inside the grid that reflows every turn. */
   function renderEndTurn() {
@@ -14766,7 +14793,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const playerTurn = fight.active === 'p' && !fight.over;
     if (!playerTurn) {
       factions.innerHTML = `<p class="note" style="grid-column:1/-1;text-align:center;padding:8px">${fight.over ? '' : esc(foe.name) + ' is acting...'}</p>`;
-      lockTray(factions); renderEndTurn();
+      renderEndTurn();
       return;
     }
     if (petPhase) {           // your pet's turn: pick one of its moves
@@ -14776,7 +14803,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <b>${a.name}</b><small>${a.enabled ? esc(a.desc) : `ready in ${a.cd}`}</small></button>`).join('');
       factions.innerHTML = ph;
       $$('[data-petmove]', factions).forEach(b => b.addEventListener('click', () => petAct(b.dataset.petmove)));
-      lockTray(factions); renderEndTurn();
+      renderEndTurn();
       return;
     }
     const legal = actionsFor(fight);
@@ -14901,9 +14928,18 @@ async function openFight(pitWrap, fighter, foeCfg) {
       }
     }
     factions.innerHTML = html;
+    /* OPENING THE DOOR SHOWS THE SHELF. The open tray is the tallest state the
+       fight has (4 moves + BACK + up to 6 potions = 274px of content) and the
+       tray is a fixed box now, so on every phone the last potion row starts
+       below the fold: measured 274 of content in a 199px tray at 430x932 and a
+       134px tray at 375x667, with 'Spectral Fury' landing on End Turn under an
+       elementFromPoint hit test. Parking the tray at its bottom puts all six
+       potions on screen at once at every supported width. Not scrollIntoView:
+       that walks up and scrolls the sheet too. */
+    if (fight.itemsOpen) factions.scrollTop = factions.scrollHeight;
     $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
     $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
-    lockTray(factions); renderEndTurn();
+    renderEndTurn();
     $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
        hit it by accident." A potion is a one-shot consumable sitting in the same
@@ -15326,7 +15362,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // sheet stayed on screen and had to be closed by hand (Tom,
         // 2026-08-11). Rewind history past every open sheet, then close them
         // all now; the popstate arrives to an empty stack and no-ops.
-        if (foeCfg.mode === 'glutton' && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
+        /* AND THE SAME IS TRUE OF A SPIRE, which is the whole point. Tom,
+           2026-08-16: "i just beat a spire and instead of it saying take this
+           spire after my win it looped me back to fight the boss again this has
+           happened so many times with the glutton and elsewhere stop making
+           this mistake."
+           He is right that it is a class. Every fight is launched FROM a sheet
+           that rendered before the fight, so after a win that sheet still
+           offers the fight you just won. The Glutton got a fix; the spire did
+           not, because the fix was written for the path the ticket named rather
+           than for the shared function. settle() has already claimed the tower
+           by the time this runs, so openSpireSheet's "Face the Warden" button
+           is not merely stale, it is a live control for an act that is done.
+           STALE_LAUNCHER is the list of modes whose launcher cannot survive a
+           win, and tests/fight-exit-audit.mjs derives its coverage from the
+           openFight call sites, so a NEW mode that never states where a win
+           drops you FAILS instead of silently inheriting the Pit's behaviour. */
+        const STALE_LAUNCHER = ['glutton', 'spire'];
+        if (STALE_LAUNCHER.includes(foeCfg.mode) && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
         history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
       });
     }, fast ? 80 : 750);

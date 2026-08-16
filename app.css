@@ -1247,18 +1247,31 @@ body::before {
    waste: it is where a boss stands and where every spell happens, which is the
    whole reason a Wraith at 212x190 was getting its hood cut off. */
 .fight-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-/* 258 WAS SET TO A NUMBER THE ART OUTGREW. The boss plate renders 292px tall,
-   so on a 375x667 phone with a stocked kitchen the arena sat pinned at this
-   floor and the figure ran 34px past its own container, up under the HUD. The
-   floor is the art's height now. lockTray already scrolls the tray on short
-   screens, so the cost lands on the button list (which scrolls) rather than on
-   the boss (which cannot). Measured 2026-08-13. */
-.fight-body > .arena { flex: 1 1 0; min-height: 292px; }
-.fight-body > .fight-hud, .fight-body > .fight-meta, .fight-body > .fight-actions,
+/* THE ARENA IS THE FIXED PART NOW, THE TRAY IS THE ELASTIC PART.
+   Tom, 2026-08-15: "I don't like how the actual fighting section moved up and
+   down based on how many buttons there are ... the fighters portion should be
+   static in size and the buttons below can change as needed to fit on screen."
+   It was the exact opposite before: the arena was flex:1 1 0 and the tray took
+   its natural height, so every row the tray gained came straight out of the
+   boss. Measured on origin/main: opening the ITEMS door shrank the arena by
+   228px at 430x932 and 180px at 390x844 (it only held still at 375x667 because
+   it was already pinned at its floor).
+   Height is derived from the viewport, never from the tray, so it is the same
+   number on every turn of the fight. The 400px subtrahend is the rest of the
+   fight (sheet header 104 + meta 64 + End Turn row 64 + a ~170 tray). 440 was
+   tried first and left the mage plate only 2px clear of the HUD at 390x844;
+   400 restores 42px there and still leaves the tray more room than it needs
+   for its tallest state, the open ITEMS door.
+   258 WAS A NUMBER THE ART OUTGREW: the mage plate renders 292px tall, so that
+   is the floor, not a nicety. */
+.fight-body > .arena { flex: none; height: clamp(292px, calc(100svh - 400px), 600px); }
+.fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
-/* The tray holds one height for the whole fight and scrolls inside itself; End
-   Turn sits under it so it never moves and never falls off a short phone.
+/* The tray is what absorbs the variation: it always gets the same leftover box
+   and scrolls inside it, so a four-move turn, a ten-row spell list and the open
+   ITEMS door all leave End Turn in one place and the boss at one size.
    Tom, 2026-08-09: "the buttons were moving up and down based on the menu". */
+.fight-body > .fight-actions { flex: 1 1 0; min-height: 96px; }
 .fight-actions { overflow-y: auto; align-content: start; }
 .fight-endrow { margin-top: 8px; }
 .fight-endrow .fight-act { width: 100%; }

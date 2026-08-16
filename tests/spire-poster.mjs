@@ -144,6 +144,48 @@ ok('UNCLAIMED an unheld tower still draws something', empty.open && empty.drawn,
   JSON.stringify(empty));
 ok('UNCLAIMED and says so plainly', /nobody/i.test(empty.name || ''), String(empty.name));
 
+/* DORMANT-WITH-HISTORY: a tower the player claimed that has since gone dormant.
+   The app promises "never lost, just quiet", and the tester report of 2026-08-15
+   (QueenLene, THE BLACK WATCH) caught the plate saying "Never been taken" for
+   exactly this case. That copy is factually wrong: the tower WAS taken, and the
+   local record still knows when. The sheet must render dormant-with-history
+   honestly, not fall back to the never-been-taken branch.
+
+   The fix at js/app.js:12608 preserves heldSince from the local record even when
+   `held` flips false at dormancy; the fix at js/app.js:3521 branches the sub to
+   "Yours, gone dormant" instead of "Unclaimed" when the same condition holds.
+   PROVE-RED: revert either edit and this run goes red naming which copy line
+   broke. */
+await page.evaluate(() => history.back());
+await sleep(400);
+await page.evaluate(async info => {
+  await window.__spireSheet({
+    ...info,
+    rival: null,
+    held: false,
+    dormant: true,
+    heldSince: Date.now() - 9 * 86400000,   // claimed 9 days ago, went dormant on day 7
+  });
+}, INFO);
+await sleep(900);
+const dorm = await page.evaluate(() => {
+  const p = document.querySelector('.spp');
+  if (!p) return { open: false };
+  return {
+    open: true,
+    plateName: document.querySelector('.spp-plate b')?.textContent.trim() || null,
+    plateSub: document.querySelector('.spp-plate small')?.textContent.trim() || null,
+    sub: document.querySelector('.sheet-head .sub')?.textContent.trim() || null,
+  };
+});
+ok('DORMANT the sheet opens on a tower the player let go dormant', dorm.open);
+ok('DORMANT the plate does NOT say "Never been taken" (the tower WAS taken)',
+   !/never been taken/i.test(dorm.plateSub || ''), `plateSub="${dorm.plateSub}"`);
+ok('DORMANT the plate reports the claim history ("Standing N days")',
+   /standing \d+ day/i.test(dorm.plateSub || ''), `plateSub="${dorm.plateSub}"`);
+ok('DORMANT the sub does NOT say "Unclaimed" (the tower is still yours)',
+   !/^unclaimed$/i.test(dorm.sub || ''), `sub="${dorm.sub}"`);
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
