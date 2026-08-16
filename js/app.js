@@ -2048,8 +2048,8 @@ async function checkFriendRequests() {
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
-      if (fresh.length === 1) await notifyNow('New friend request', `${fresh[0].name || 'A Bonehead'} wants to join your Crew.`);
-      else await notifyNow('New friend requests', `${fresh.length} Boneheadz want to join your Crew.`);
+      if (fresh.length === 1) await notifyNow('New friend request', `${fresh[0].name || 'A Bonehead'} wants to join your Crew.`, 'friends');
+      else await notifyNow('New friend requests', `${fresh.length} Boneheadz want to join your Crew.`, 'friends');
     }
     toast(fresh.length === 1 ? `${fresh[0].name || 'Someone'} wants to be friends. Open The Crew to accept.` : `${fresh.length} new friend requests. Open The Crew.`, 4200);
     if (currentTab() === 'friends') renderFriends($('#screen'));
@@ -2552,7 +2552,7 @@ async function renderToday(el) {
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
+    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
   }
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
@@ -9092,7 +9092,7 @@ async function renderSettings(el) {
     await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: reminders, streak saver + friend requests.');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
-    const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
+    const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.', 'any');
     toast(fired ? (notifPlatform() === 'native' ? 'Sent. Background the app to see it.' : 'Test notification sent.') : 'Could not send. Check permission.', 3200);
   });
   $('#redeemBtn', el)?.addEventListener('click', async () => {
@@ -14268,12 +14268,12 @@ async function maybeNotifyFriendGrants(gifts, cheers) {
     if (!gifts.length && !cheers.length) return;
     const prefs = await notifPrefs();
     if (!prefs.enabled || !prefs.friends) return;
-    if (gifts.length === 1) await notifyNow('🎁 A gift arrived', `${gifts[0].from || 'A friend'} sent you ${gifts[0].label}.`);
-    else if (gifts.length > 1) await notifyNow('🎁 Gifts arrived', `Your Crew sent you ${gifts.length} gifts.`);
+    if (gifts.length === 1) await notifyNow('🎁 A gift arrived', `${gifts[0].from || 'A friend'} sent you ${gifts[0].label}.`, 'friends');
+    else if (gifts.length > 1) await notifyNow('🎁 Gifts arrived', `Your Crew sent you ${gifts.length} gifts.`, 'friends');
     if (cheers.length === 1) {
       const c = cheers[0]; const ph = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
-      await notifyNow('📣 A cheer', `${c.from || 'A friend'}: ${ph}`);
-    } else if (cheers.length > 1) await notifyNow('📣 Cheers', `${cheers.length} cheers from your Crew.`);
+      await notifyNow('📣 A cheer', `${c.from || 'A friend'}: ${ph}`, 'friends');
+    } else if (cheers.length > 1) await notifyNow('📣 Cheers', `${cheers.length} cheers from your Crew.`, 'friends');
   } catch { /* noop */ }
 }
 
@@ -14386,7 +14386,10 @@ async function socialSnapshot() {
    starts one while we are here to see it, so the full 48h is always walkable. This
    is also the only new notification in the game: announced once on discovery
    (kv 'siegeSeen' keyed by id+deadline, so a re-open never re-announces), plus a
-   single native reminder 12h out. */
+   single native reminder 12h out. Both are gated on the `siege` pref: the
+   discovery push names its kind to notifyNow, the reminder is gated inside
+   scheduleSiegeReminder. The in-app toast below is not a push and is not gated,
+   because the player is looking at the app when it appears. */
 async function checkSieges() {
   try {
     if (navigator.webdriver && !window.__siegeForce) return;
@@ -14406,7 +14409,7 @@ async function checkSieges() {
     await kvSet('siegeSeen', [...seen].slice(-40));
     const a = announce[0];
     const hrs = Math.max(1, Math.round((a.until - Date.now()) / 3600000));
-    notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`).catch(() => {});
+    notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`, 'siege').catch(() => {});
     toast(`${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to defend it.`, 5200);
     refresh();
   } catch { /* never let a siege check break a boot */ }

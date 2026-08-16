@@ -34,7 +34,9 @@ import { dateKey } from './nutrition.js';
 // {enabled:false} and keep that.
 // `siege` is the ONE notification type Dark Spires adds. The project has a hard
 // reduced-frequency rule, so it fires at most twice per siege (once on discovery,
-// once at T-12h) and a siege can only happen once a week.
+// once at T-12h) and a siege can only happen once a week. BOTH halves read this
+// pref: the discovery push through the `kind` argument to notifyNow, the T-12h
+// one in scheduleSiegeReminder. It used to be only the second half.
 const DEFAULTS = { enabled: true, reminder: true, streak: true, friends: true, siege: true };
 export async function notifPrefs() { return { ...DEFAULTS, ...((await kvGet('notifPrefs', {})) || {}) }; }
 export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
@@ -67,9 +69,38 @@ export async function notifPermissionState() {
   return 'unsupported';
 }
 
-// Fire a notification right now (test button; and foregrounded rares fall back to
-// the in-app cue elsewhere). Returns whether it dispatched.
-export async function notifyNow(title, body) {
+/* Fire a notification right now: the Settings test button, and every push the
+   app raises the moment it learns something (a siege discovered, a gift, a
+   stalled step feed). Returns whether it dispatched.
+
+   `kind` is the preference this push belongs to, and every call site passes one.
+   Until v386 this function read NO preference at all, not even `enabled`. So the
+   siege DISCOVERY push (checkSieges) was delivered to a player who had picked
+   "Just essentials", and to a player who had turned notifications fully OFF:
+   measured at 1 push queued on the device under both. Only the T-12h half was
+   gated, in scheduleSiegeReminder below, so the tier was honoured in kv and
+   nowhere else.
+
+   The gate lives HERE rather than at each call site on purpose. A call-site gate
+   fixes the two callers that are wrong today and leaves the class open, because
+   the next caller is gated only by whoever remembers. Gating here means a caller
+   added tomorrow is gated by default.
+     'any'                -> no per-kind pref of its own; the master switch alone
+                             governs it (the HealthKit stall notice, the test
+                             button).
+     a key from DEFAULTS  -> the master switch AND that key.
+   An unknown kind falls through to master-switch-only rather than vanishing
+   silently; tests/notif-tier-audit.mjs fails a call site that names one.
+
+   There is NO exemption. Off means nothing is pushed, which is what the Settings
+   copy already promises the player ("Off: nothing gets pushed to you"). The test
+   button is not an exception: renderSettings only renders it inside the
+   `${np.enabled ? ...}` block, so it is unreachable while Off and gating it
+   costs nothing. */
+export async function notifyNow(title, body, kind = 'any') {
+  const prefs = await notifPrefs();
+  if (!prefs.enabled) return false;
+  if (kind !== 'any' && prefs[kind] === false) return false;
   const p = notifPlatform();
   try {
     if (p === 'native') {
