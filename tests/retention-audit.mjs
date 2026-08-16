@@ -60,12 +60,26 @@
  *               a much tighter working ceiling so drift is caught long before
  *               it lands in D1 as unterminated JSON.
  *
- * PROVE-RED, 2026-08-16, four throwaway trees from `git archive`, one break
- * each, all four caught (see the branch handoff for the pasted output):
- *   day_first_open double: gate check removed  -> NO SECOND SAME DAY, ONCE
- *   day_first_open never:  both sites removed  -> FIRES ONCE, NEW DAY, ROLLOVER
- *   day_closed double:     fired unconditionally -> CLOSED ONCE, IDEMPOTENT, NOT DUE
- *   day_closed never:      call removed        -> CLOSED ONCE, PAYLOAD, EFFORT
+ * PROVE-RED, 2026-08-16. Four throwaway trees from `git archive`, one break in
+ * each, run separately. All four exited 1, and each went red in a DIFFERENT
+ * place, which is what a discriminating guard looks like:
+ *   1. day_first_open DOUBLE (the `last === today` gate deleted from
+ *      dayFirstOpenRow): 3 red. NO SECOND SAME DAY (2 rows), NEW DAY (3 rows),
+ *      GAP (the extra row reported g=0). Everything about day_closed stayed
+ *      green.
+ *   2. day_first_open NEVER (both trigger sites in js/app.js deleted): 14 red,
+ *      including all three BOT CONTROL rows and CONTROL, which is exactly the
+ *      job of an anti-vacuous control: with the feature dead, "no rows under
+ *      BOT" must stop counting as proof of a working gate.
+ *   3. day_closed DOUBLE (fired unconditionally instead of only on the branch
+ *      that returns non-null): 3 red. CLOSED IDEMPOTENT (2 rows), and both
+ *      CLOSED NOT DUE rows (3 rows). CLOSED ONCE stayed green, because the
+ *      first fire is still correct: it takes a second boot to see this bug.
+ *   4. day_closed NEVER (the call deleted): 7 red. Every CLOSED row, EFFORT,
+ *      and CONTROL. Every day_first_open row stayed green.
+ * Note that 1 and 3 leave ONCE / CLOSED ONCE green and 2 and 4 fail them: the
+ * two directions really do need different rows, and a guard that only owned one
+ * of them would be half a guard.
  *
  * Run: node tests/retention-audit.mjs      (no arguments, by design)
  */
