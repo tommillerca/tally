@@ -168,6 +168,15 @@ const SITES = [
     key: 'pet-card', claim: 'pet-card', paired: false, undriven:
       'petPanelHtml has no caller in js/app.js (dead render, left alone deliberately)',
   },
+  {
+    key: 'hollow-pet', claim: 'hlwPet', paired: false, undriven:
+      'the Hollow keeper is a FIXED gardening fit (HLW_FIT), not the player build, so a '
+      + 'paired Bonehead-to-pet alignment check would be asserting against a costume '
+      + 'rather than against the figure contract. The pet itself goes through '
+      + 'petAsideHtml with shiny left UNDEFINED so S.shinyPets answers, which is the '
+      + 'STATIC rule below, and tests/hollow-audit.mjs drives the surface for real: it '
+      + 'asserts the pet is absent on a first visit and present afterwards.',
+  },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
     /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder

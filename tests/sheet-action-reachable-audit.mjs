@@ -365,7 +365,9 @@ const SHEETS = [
       default: 'beds empty, nothing growing',
       worst: 'every bed planted and the compost heap full, so the sheet carries its longest body',
     },
-    action: '#buyBed',
+    // #buyBed is the old list UI's control; #doorGrow opens the Hollow now and
+    // its buy control is #hlwBuy. Both, so this survives either surface.
+    action: '#buyBed, #hlwBuy',
     async drive(mode) {
       await closeAll();
       /* Through garden.js's own API, not by clicking the plant sheet: plantSeed is
@@ -393,10 +395,19 @@ const SHEETS = [
       const door = await page.evaluate(() => { const d = document.getElementById('doorGrow'); if (!d) return false; d.click(); return true; });
       await sleep(1800);
       await settle(page);
+      /* THE GARDEN MOVED. #doorGrow used to open openGardenSheet, a list of
+         .t3-bed cards with a #buyBed button; it opens the Hollow diorama now, so
+         every selector here matched nothing and the audit reported the state was
+         never built. That is drift, not a defect: the buy control is #hlwBuy and
+         the beds are .hlw-bed. Read both so this keeps working whichever surface
+         a future build points the door at. */
       const seen = await page.evaluate(() => ({
-        buyBed: !!document.getElementById('buyBed'),
-        growing: document.querySelectorAll('.t3-bed.growing, .t3-bed.thirsty').length,
-        empty: document.querySelectorAll('.t3-bed.empty').length,
+        buyBed: !!(document.getElementById('buyBed') || document.getElementById('hlwBuy')),
+        growing: document.querySelectorAll('.t3-bed.growing, .t3-bed.thirsty').length
+          + document.querySelectorAll('#hlwStage .hlw-chip').length,
+        empty: document.querySelectorAll('.t3-bed.empty').length
+          + [...document.querySelectorAll('#hlwStage .hlw-bed[data-bed]')]
+              .filter(b => /empty/i.test(b.getAttribute('aria-label') || '')).length,
       }));
       return { door, setup, ...seen, reached: door && seen.buyBed && (mode === 'worst' ? seen.growing > 0 : seen.growing === 0) };
     },

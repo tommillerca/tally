@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="231 105 68 58">
+<g fill="#d9cbae" stroke="#17151d" stroke-width="2"><rect x="252" y="127" width="44" height="7" rx="2.5"></rect><rect x="252" y="143" width="44" height="7" rx="2.5"></rect></g>
+<g fill="#ece0c6" stroke="#17151d" stroke-width="2" stroke-linejoin="round"><path d="M254 160 v-36 l6 -9 l6 9 v36 z"></path><path d="M278 160 v-36 l6 -9 l6 9 v36 z"></path></g>
+<g id="gate-post" fill="#c9b896" stroke="#17151d" stroke-width="2.5"><rect x="236" y="112" width="14" height="50" rx="4"></rect><rect x="233" y="108" width="20" height="8" rx="3"></rect></g>
+</svg>
