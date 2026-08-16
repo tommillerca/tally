@@ -32,8 +32,96 @@ export const HLW_ART = {
   "hollow-water-needs": { vb: "0 0 10 12", p: "<path d=\"M5 0 Q9 6 9 8.5 A4 4 0 0 1 1 8.5 Q1 6 5 0 z\" fill=\"#9fd0e8\"></path>" },
 };
 
+
+/* ===================== PIXEL ART OVERRIDE =====================
+ * Tom's authored 48px sprites replace the generated SVG for every id listed
+ * here. The SVG entries above stay, untouched, so anything not in this table
+ * keeps rendering exactly as it did and a missing PNG degrades to the vector
+ * rather than to nothing.
+ *
+ * THE SNAP IS THE WHOLE POINT. Callers ask for a width in stage px that was
+ * chosen for the vector art (BED_BOX is 84, the beds are 48), and 84/48 is
+ * 1.75. Pixel art resampled off its integer grid turns to mush, which is
+ * exactly what the crate teardown measured: a 35-colour sprite reaching the
+ * screen as 1252 colours. So a pixel id IGNORES the requested width and uses
+ * the nearest whole multiple of its native size instead, staying centred on
+ * the same point. The caller keeps saying "about 84" and the renderer says
+ * "48 x 2 = 96, on the grid".
+ *
+ * Scale is floored at 1, so a small request shrinks the box rather than
+ * blurring the art.
+ *
+ * NO TRANSFORM MAY BE APPLIED TO THESE. A transform on the element or any
+ * ancestor promotes it to a composited layer and the compositor resamples it
+ * bilinearly regardless of image-rendering: pixelated. Measured on the crate:
+ * 62.8% on-palette with the sprite standing perfectly still. Animate position
+ * with left/top in whole pixels, never with translate/scale. */
+const HLW_PIX = {
+  'crop-bog-ripe': [48, 48],
+  'crop-bog-young': [48, 48],
+  'crop-ectoplasm-ripe': [48, 48],
+  'crop-ectoplasm-young': [48, 48],
+  'crop-graveroot-ripe': [48, 48],
+  'crop-graveroot-young': [48, 48],
+  'crop-marrow-ripe': [48, 48],
+  'crop-marrow-young': [48, 48],
+  'crop-salt-ripe': [48, 48],
+  'crop-salt-young': [48, 48],
+  'crop-seed': [48, 48],
+  'crop-sinew-ripe': [48, 48],
+  'crop-sinew-young': [48, 48],
+  'crop-sprout': [48, 48],
+  'hollow-barrel': [48, 48],
+  'hollow-bed-empty': [48, 48],
+  'hollow-bed-locked': [48, 48],
+  'hollow-bed-tilled': [48, 48],
+  'hollow-bed-watered': [48, 48],
+  'hollow-compost-half': [48, 48],
+  'hollow-compost-spent': [48, 48],
+  'hollow-compost': [48, 48],
+  'hollow-crate': [48, 48],
+  'hollow-crow-flap': [48, 48],
+  'hollow-crow-shut': [48, 48],
+  'hollow-crow': [48, 48],
+  'hollow-dirt': [48, 48],
+  'hollow-fence-broken': [48, 48],
+  'hollow-fence-corner': [48, 48],
+  'hollow-fence': [232, 48],
+  'hollow-grass-tuft': [48, 48],
+  'hollow-ground': [96, 96],
+  'hollow-lantern-post': [48, 88],
+  'hollow-path': [48, 48],
+  'hollow-price-sign': [48, 48],
+  'hollow-sack': [48, 48],
+  'hollow-scarecrow': [48, 48],
+  'hollow-shed': [48, 48],
+  'hollow-sign': [48, 48],
+  'hollow-spill-a': [48, 48],
+  'hollow-spill-b': [48, 48],
+  'hollow-spill-c': [48, 48],
+  'hollow-tuft-left': [48, 48],
+  'hollow-tuft-right': [48, 48]
+};
+
+/* Native size of a pixel id, or null when the id is still vector. */
+export function hlwPixSize(id) { const s = HLW_PIX[id]; return s ? { w: s[0], h: s[1] } : null; }
+
 /* Draw one piece at a position on the 390-wide stage. */
 export function hlwArt(id, { x = 0, y = 0, w, h, cls = '', style = '' } = {}) {
+  const pix = HLW_PIX[id];
+  if (pix) {
+    const [nw, nh] = pix;
+    const want = w || nw;
+    const scale = Math.max(1, Math.round(want / nw));      // integer only, never 1.75
+    const ww = nw * scale, hh = nh * scale;
+    /* Centred on the same point the caller asked for, so snapping the size
+       never shifts the piece off its spot. Rounded to whole px: a half-pixel
+       origin resamples the art just as surely as a fractional width does. */
+    const left = Math.round(x + (want - ww) / 2);
+    const top = Math.round(y + ((h || nh) - hh) / 2);
+    return `<img src="assets/hollow/pix/${id}.png" alt="" class="hlw-pix ${cls}" decoding="sync"`
+      + ` style="position:absolute;left:${left}px;top:${top}px;width:${ww}px;height:${hh}px;${style}">`;
+  }
   const a = HLW_ART[id];
   if (!a) return '';
   const [, , vw, vh] = a.vb.split(/\s+/).map(Number);

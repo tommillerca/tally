@@ -7841,3 +7841,57 @@ body::before {
   .co-seq img { opacity: 0 !important; }
   .co-seq img:last-child { opacity: 1 !important; }
 }
+
+/* THE HOLLOW'S PIXEL SPRITES.
+   image-rendering alone is NOT enough and the crate teardown measured why: a
+   transform on the element or any ancestor promotes it to a composited layer,
+   and the compositor resamples that layer bilinearly no matter what this
+   property says. The sprite measured 62.8% on-palette while standing still.
+   So the rule is structural, not cosmetic: nothing here may carry a transform,
+   a filter, or a will-change, and any motion is left/top in whole pixels. */
+.hlw-pix {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  transform: none !important;
+  will-change: auto !important;
+}
+/* The ground. A 96px tile at integer 2x, repeated. Measured against the
+   alternatives: the 192x164 "dense" tile scores a perfect 0.0 seam but carries
+   a sparkle cluster and two rocks that repeat visibly across a 390px stage,
+   so it reads as a pattern. This one scores worse on the seam (7.2/6.5) and
+   reads as ground, which is the property that actually matters. */
+.hlw-ground {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  /* THE BASE COLOUR IS PART OF THE ART. The tile is 78% TRANSPARENT and its
+     opaque pixels average rgb(26,37,24), so it was drawn as sparse grass ON
+     DARK GROUND. .hlw-stage paints a bright olive gradient (#55673a to #4f6138)
+     underneath, which showed through every gap and turned the whole scene into
+     a lawn with sprites on it. Measured, not guessed: that is why the render
+     looked nothing like the tile does on its own.
+     A flat dark ground under the tile, in the tile's own family, so the blades
+     read as grass rather than as a pattern printed on a lawn. */
+  background-color: #1b2418;
+  background-image: url('assets/hollow/pix/hollow-ground.png');
+  background-repeat: repeat;
+  background-size: 96px 96px;
+  image-rendering: pixelated;
+}
+/* THE PATH DOWN THE MIDDLE. Deleting the vector bezier left a dead column
+   straight through the centre of the scene, between the two bed columns, which
+   is why the render read as sparse rather than as a place. Tom's cobble tile is
+   seamless on BOTH axes (measured 0.0 / 0.0) and 60% transparent, so it lays
+   over the ground rather than replacing it. 96px wide is 48 x 2, on the grid. */
+.hlw-path {
+  position: absolute; top: 0; bottom: 0; left: 50%; margin-left: -48px; width: 96px;
+  z-index: 0; pointer-events: none;
+  /* Cobble ALONE read as scattered debris: it is 60% transparent, so over dark
+     ground you see gaps rather than stones. Tom's dirt tile goes underneath, so
+     the path is worn earth with stones set into it, which is what a path in a
+     garden actually is. Two layers, both on the same 96px integer grid. */
+  background-image: url('assets/hollow/pix/hollow-path.png'),
+                    url('assets/hollow/pix/hollow-dirt.png');
+  background-repeat: repeat, repeat;
+  background-size: 96px 96px, 96px 96px;
+  image-rendering: pixelated;
+  opacity: .92;
+}

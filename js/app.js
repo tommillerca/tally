@@ -4055,7 +4055,12 @@ const HLW_FIT = { B: 'B0-1', SK: 'SK0-1', H: 'H9' };
    the beds bunched at the top and 135 units of bare soil below them.
    Left frame x20-170 centres on 95, right frame x220-370 centres on 295, and the
    three plus two are spread down their frames instead of huddled. */
-const HLW_SPOTS = [[95, 252], [95, 357], [95, 462], [295, 312], [295, 447]];
+/* Respaced for 144px beds. The old spacing (105px apart, two columns at x 95
+   and 295) was built around an 84px bed and leaves a 144px bed overlapping its
+   neighbour. 160px of vertical pitch clears the bed plus its chip; the columns
+   move to 100 and 290 so a 144-wide bed sits inside the 390 stage on both
+   sides (28 to 172, and 218 to 362). */
+const HLW_SPOTS = [[92, 250], [92, 366], [92, 482], [286, 308], [286, 424]];
 /* 740, not 900. The bottom 160 units held nothing: the lowest object the keeper
    can reach is the compost heap at y 502 and he is 190 tall, so 692 is the real
    floor. Those empty units were pure scroll cost on a screen whose instruction and
@@ -4185,6 +4190,12 @@ function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, na
   return pick(HLW_SAY.idle);
 }
 
+/* TEST SEAM. The Hollow can only be reached by tapping through the Kitchen,
+   so nothing could ever screenshot it, which is how a scene full of placeholder
+   art went unlooked-at. Same idiom as __crateForce and __hatchForce: an audit
+   opts in, nothing else changes. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openHollow = () => openHollow(() => {});
+
 function openHollow(after) {
   /* Read ONCE, on the way in, and written on the way out. See the firstEver
      comment in render(): reading it per render made the welcome line expire
@@ -4309,8 +4320,10 @@ function openHollow(after) {
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
-      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
-      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME_R.x, y: HLW_FRAME_R.y, w: HLW_FRAME_R.w, h: HLW_FRAME_R.h, style: 'z-index:1;pointer-events:none' })}
+      ${/* THE TWO BROWN PLOT FRAMES ARE GONE. They were a vector device for
+            grouping vector beds, and Tom's pixel beds carry their own bone
+            frames, so drawing a rounded brown rectangle around them put a
+            second, different-language border around every plot. */''}
       ${beds.map((p, i) => `
         <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
         ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}

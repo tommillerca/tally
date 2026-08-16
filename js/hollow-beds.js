@@ -44,13 +44,18 @@
  * fruit. New crop art is NOT generated here: that art is Cam's hand and a separate
  * approval. gwart/HOLLOW-BEDS-REPORT.md lists what is missing.
  */
-import { HLW_ART, hlwArt } from './hollow-art.js';
+import { HLW_ART, hlwArt, hlwPixSize } from './hollow-art.js';
 import { INGREDIENTS, fmtCookTime } from './cooking.js';
 import { BH_ICON_TINTS } from './icons-pack.js';
 // crop names come from INGREDIENTS, but they reach innerHTML, so they get escaped
 const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-export const BED_BOX = { w: 84, h: 60 };
+/* 144, not 84. 84 was chosen for the vector bed and forces 48px art onto a 1.75
+   scale, which is exactly the off-grid resample the crate teardown measured. 144
+   is 48 x 3 and it is also the size the beds need to READ at: at 96 they sat in
+   a sea of empty ground with the plot spots 105px apart. Move the grid to fit
+   the art, never the art to fit the grid. */
+export const BED_BOX = { w: 96, h: 96 };
 
 const SIGN_BOX = { w: 66, h: 70 };
 const PE = 'pointer-events:none;'; // art never takes a tap; the caller owns the button
@@ -68,8 +73,31 @@ const STAGES = [
   { key: 'seed', id: 'crop-ember-pepper-seed', h: 17, base: [13, 19] },
   { key: 'sprout', id: 'crop-ember-pepper-sprout', h: 22, base: [12, 22] },
   { key: 'young', id: 'crop-ember-pepper-young', h: 34, base: [18, 38] },
+  /* h stays at the VECTOR heights. A pixel id snaps to the nearest whole
+     multiple of 48, so every stage lands on 1x, and that is correct: place()
+     positions the crop from these heights, so inflating ripe to 96 moved the
+     anchor and floated the crop off its soil. Readiness is carried by the READY
+     chip and by the ripe sprite being a different drawing, not by size. */
   { key: 'ripe', id: 'crop-ember-pepper-ripe', h: 54, base: [22, 50] },
 ];
+
+/* EVERY SEED USED TO GROW A PEPPER. There are seven crop types (marrow,
+   graveroot, ember, bog, sinew, salt, ectoplasm) and only one set of crop art,
+   so planting Bog Mushroom grew an Ember Pepper. That predates the pixel work;
+   it was simply never visible enough to report.
+   The pixel set fixes it for the two stages that carry identity. seed and
+   sprout stay SHARED on purpose: a seed in soil and a first shoot look the same
+   whatever they will become, so two sprites cover all seven types instead of
+   fourteen. Only young and ripe are per-type, and only ripe has to be
+   unmistakable, because that is the "can I harvest this" read.
+   Falls back to the id in STAGES when a type has no art yet, so a new
+   ingredient degrades to the pepper rather than to nothing. */
+const PIX_STAGE = { seed: 'crop-seed', sprout: 'crop-sprout' };
+function cropArtId(stageKey, ing) {
+  if (PIX_STAGE[stageKey]) return PIX_STAGE[stageKey];
+  const id = `crop-${ing}-${stageKey}`;
+  return hlwPixSize(id) ? id : null;
+}
 
 /* ponytail: colour swaps on the generated markup string, because hlwArt takes no
    fill override and js/hollow-art.js is another lane's file. Upgrade path: a
@@ -107,7 +135,12 @@ export function hlwBedArt(plot) {
     return paint('hollow-bed-locked',
       { x: (BED_BOX.w - 76) / 2, y: (BED_BOX.h - 52) / 2, w: 76, cls: 'hlw-p-hollow-bed-locked', style: PE });
   }
-  const soilId = plot.empty && !plot.tilled ? 'hollow-bed-empty' : 'hollow-bed-tilled';
+  /* WATERED IS ITS OWN LOOK NOW. It used to share the tilled art and announce
+     itself only through a chip, so the one action a player performs every day
+     changed nothing they could see in the bed. */
+  const soilId = plot.empty && !plot.tilled ? 'hollow-bed-empty'
+    : (plot.watered && hlwPixSize('hollow-bed-watered')) ? 'hollow-bed-watered'
+    : 'hollow-bed-tilled';
   // ids are stripped: up to five beds render at once and duplicate ids are a
   // trap for anything that later reaches for #rake or #fruit.
   const soil = paint(soilId, { x: 0, y: 0, w: BED_BOX.w, cls: `hlw-p-${soilId}`, style: PE },
@@ -123,6 +156,12 @@ export function hlwBedArt(plot) {
   if (plot.canWater) swaps.push(['#7fae57', '#9fae6a']);
   const style = PE + (plot.canWater
     ? 'animation:hlwSway 3.4s ease-in-out infinite;transform-origin:50% 100%;' : '');
+  /* A pixel sprite takes NO swaps and NO animation style: the swaps rewrite SVG
+     markup that an <img> does not have, and any transform-driven sway would put
+     the sprite on a composited layer and resample it. The thirst cue for a
+     pixel crop is the bed's own watered state instead. */
+  const pixId = cropArtId(st.key, plot.ing);
+  if (pixId) return soil + hlwArt(pixId, { x: pos.x, y: pos.y, w: pos.w, cls: `hlw-p-${pixId}`, style: PE });
   return soil + paint(st.id, { x: pos.x, y: pos.y, w: pos.w, cls: `hlw-p-${st.id}`, style }, swaps);
 }
 

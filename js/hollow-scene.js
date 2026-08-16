@@ -78,22 +78,35 @@ export function hollowBackdropHtml({ band } = {}) {
   const lit = band !== 'day';   // NOTES.md: glowOn = band !== day
 
   return `
-  ${/* sky glow, verbatim comp gradient */''}
-  <div style="position:absolute;inset:0;z-index:0;${NONE};background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.14),transparent 70%)"></div>
+  ${/* THE GROUND. Tom, 2026-08-16: "the only thing cam made here is the bonehead
+        and it's pet the rest needs to be swapped". Everything below this line is
+        his pixel art; the vector path bezier, the ellipse stepping stones and
+        the picket fence are gone rather than layered under it. Half a swap read
+        as two different games sharing a screen, which is exactly what it was. */''}
+  <div class="hlw-ground"></div>
+  <div class="hlw-path"></div>
+  ${/* STAGE-ANCHORED PROPS. These first went inside the compost container, whose
+        origin is not the stage, and landed at 534,800 and 255,1172 on a 390x740
+        stage: off screen entirely. Measured with a DOM probe rather than guessed
+        from the render, because an off-stage sprite looks identical to one that
+        was never drawn. */''}
+  <div style="position:absolute;inset:0;z-index:1;${NONE}">
+    ${hlwArt('hollow-scarecrow', { x: 296, y: 600, w: 96, style: NONE })}
+    ${hlwArt('hollow-barrel', { x: 6, y: 556, w: 96, style: NONE })}
+    ${/* Dirt spills ON the path's edges (it spans 147 to 243), so the straight
+          sides read as worn earth rather than as a drawn rectangle. Three
+          variants alternated so no two neighbours are the same stamp. */''}
+    ${[[100, 156, 'a'], [236, 268, 'b'], [100, 380, 'c'],
+       [236, 492, 'a'], [100, 604, 'b'], [236, 636, 'c']].map(([x, y, v]) =>
+      hlwArt(`hollow-spill-${v}`, { x, y, w: 96, style: NONE })).join('')}
+  </div>
+  <div style="position:absolute;inset:0;z-index:0;${NONE};background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.10),transparent 70%)"></div>
 
-  ${/* THE PATH BANDS. Not in HLW_ART: a 730-unit bezier is not a trimmable piece.
-        Both <path> elements are the designer's own, character for character. */''}
-  <svg viewBox="0 0 ${HLW_STAGE.w} ${HLW_STAGE.h}" style="position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;${NONE}">
-    <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#44532f" stroke-width="46" fill="none" stroke-linecap="round" opacity=".45"></path>
-    <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#7d7257" stroke-width="38" fill="none" stroke-linecap="round" opacity=".85"></path>
-  </svg>
-  <div style="position:absolute;inset:0;z-index:0;${NONE}">${STONES.map(stone).join('')}</div>
-
-  ${/* FENCE. Left run ends at the sign post, right run carries the gate post and
-        its cap; the gap between them is the gate, over the path. */''}
+  ${/* FENCE, the 232x48 extension. Measured seamless (0.0 on both axes), so it
+        runs edge to edge as one repeat instead of two hand-placed segments with
+        a gate gap invented between them. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-fence-left', { x: 6, y: 112, style: NONE })}
-    ${hlwArt('hollow-fence-right', { x: 231, y: 105, style: NONE })}
+    ${[0, 232].map(x => hlwArt('hollow-fence', { x, y: 104, w: 232, style: NONE })).join('')}
   </div>
 
   ${/* THE CROW. Comp spot (26,150) plus the piece's own viewBox origin. It stands
@@ -101,14 +114,14 @@ export function hollowBackdropHtml({ band } = {}) {
         the two things the asset pack never shipped (see the report). Bob only —
         app.css carries hlwCrowBob but no flap keyframe, and app.css is not mine. */''}
   <div style="position:absolute;left:39px;top:152px;width:45px;height:25px;z-index:0;${NONE};animation:hlwCrowBob 5s ease-in-out ${stagger(0)}s infinite;transform-origin:50% 100%">
-    ${hlwArt('hollow-crow', { style: NONE })}
+    ${hlwArt('hollow-crow', { x: 24, y: 60, w: 96, style: NONE })}
   </div>
 
   ${/* HANGING SIGN. Board top lands at y84, clear of the Dynamic Island zone
         (~y10-48) exactly as the handoff requires. The label is a text run the
         pack deliberately does not bake in; attributes are the comp's. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-sign', { x: 136, y: 54, style: NONE })}
+    ${hlwArt('hollow-sign', { x: 150, y: 30, w: 96, style: NONE })}
     <svg viewBox="136 54 133 114" style="position:absolute;left:136px;top:54px;width:133px;height:114px;overflow:visible;${NONE}">
       <g transform="rotate(-2 205 102)"><text x="205" y="110" text-anchor="middle" font-family="Bangers, sans-serif" font-size="23" letter-spacing="2" fill="#f2e9d7">THE HOLLOW</text></g>
     </svg>
@@ -120,16 +133,22 @@ export function hollowBackdropHtml({ band } = {}) {
         is the one exception: the pack redrew it taller than the comp's, so it is
         seated on the shed's ground line instead of the comp's y. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-shed', { x: 281, y: 51, style: NONE })}
-    ${hlwArt('hollow-shed-lantern', { x: 307, y: 105, style: NONE })}
-    ${hlwArt('hollow-crate', { x: 292, y: 136, style: NONE })}
-    ${hlwArt('hollow-sack', { x: 350, y: 121, style: NONE })}
+    ${hlwArt('hollow-shed', { x: 252, y: 26, w: 96, style: NONE })}
+    ${''}
+    ${hlwArt('hollow-crate', { x: 300, y: 150, w: 96, style: NONE })}
+    ${hlwArt('hollow-sack', { x: 20, y: 150, w: 96, style: NONE })}
     ${lit ? glow(301, 54, 70, 56, 'ellipse', 'rgba(255,190,130,.5)', 3) : ''}
   </div>
 
   ${/* GRASS TUFTS */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${TUFTS.map(([x, y, w, d, dl]) => hlwArt('hollow-grass-tuft', { x, y, w, style: `${NONE};animation:hlwSway ${d}s ease-in-out ${stagger(dl)}s infinite;transform-origin:50% 100%` })).join('')}
+    ${/* NO TRANSFORM SWAY ON A PIXEL TUFT. hlwSway animates transform, which
+          promotes the element to a composited layer and gets it resampled
+          bilinearly whatever image-rendering says. Tom authored swaying LEFT and
+          RIGHT frames, so the motion is a frame swap instead: same intent,
+          none of the blur. Staggered so the three tufts never move as one. */''}
+    ${TUFTS.map(([x, y, w, d, dl], i) => hlwArt(['hollow-grass-tuft', 'hollow-tuft-left', 'hollow-tuft-right'][i % 3],
+      { x, y, w: 96, style: `${NONE};z-index:1` })).join('')}
   </div>
 
   ${/* COMPOST HEAP, bottom-right per the comp. Raised 18 units from its comp y
@@ -137,6 +156,17 @@ export function hollowBackdropHtml({ band } = {}) {
         this one ends at 740. Steam glyphs are the comp's, on app.css's hlwSteam. */''}
   <div style="position:absolute;left:256px;top:676px;width:112px;height:60px;z-index:0;${NONE}">
     ${hlwArt('hollow-compost', { style: NONE })}
+    ${/* PROPS TOM MADE THAT NOTHING WAS DRAWING. The render had two dead zones,
+          mid-left under the bed column and the right margin beside it, and a
+          scarecrow, a rain barrel and a firefly cluster sitting unused. The
+          scarecrow is the scene's second focal point after the shed, so it goes
+          opposite it; the barrel sits where watering happens. */''}
+    ${/* DIRT SPILLS ALONG THE PATH EDGE. The path is a straight-sided strip, and
+          a straight edge is the thing that reads as drawn-by-a-computer. Tom made
+          three scatter variants for exactly this: alternated down both edges so
+          no two neighbours match, which was the "repeated textures need variation"
+          note from the pixel critique. */''}
+
     <span style="position:absolute;left:34px;top:-26px;color:#9fc27a;font-size:16px;animation:hlwSteam 2.6s ease-out ${stagger(0)}s infinite">〜</span>
     <span style="position:absolute;left:66px;top:-22px;color:#9fc27a;font-size:14px;animation:hlwSteam 2.6s ease-out ${stagger(1.2)}s infinite">〜</span>
   </div>
