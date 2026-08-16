@@ -131,10 +131,17 @@
  *      cache-control on the FX frames only (assets/bh/fx/**) to a normal
  *      cacheable value, at the RESPONSE stage, so bytes still travel the real
  *      network stack and the throttle still applies to them. This is not hiding
- *      anything: production (GitHub Pages) serves these with max-age, so a warm
- *      cache is the state a player is actually in (rule 12), and no-store is the
- *      dev server's artifact. The v245 race is untouched, because an app that
- *      never warms has nothing in that cache to hit.
+ *      anything, and the evidence is in this repo rather than in a claim about
+ *      the host: sw.js:55-60 precaches all six strike frames on install
+ *      (sw.js:141-144) and its fetch handler is cache-first for non-navigations
+ *      (sw.js:183-184), so a player who has opened the app once fights with these
+ *      frames already in Cache Storage. A warm cache at strike time is the state
+ *      a player is in (rule 12); no-store from a dev static server is the
+ *      artifact. It is also why this audit is exposed to the header at all: on
+ *      the fresh profile puppeteer starts with, the service worker is not yet in
+ *      control of the first load, so the HTTP cache is the only thing between
+ *      strikeFx and the wire. The v245 race is untouched either way, because an
+ *      app that never warms has nothing in that cache to hit.
  *   2. ASSERT THE PRECONDITION, AND FAIL AS SETUP IF IT DOES NOT HOLD. Before the
  *      first strike, with the throttle already on, the audit loads one FX-shaped
  *      URL of its OWN twice (a ?fxaudit-cacheprobe query string, so the app's own
