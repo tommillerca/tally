@@ -33,6 +33,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
+import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml } from './hollow-beds.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -3951,25 +3952,6 @@ const hlwBedLabel = (p, i) => `Bed ${i + 1}, ${p.empty ? 'empty, plant a seed'
   : p.ready ? `${p.name}, ready to harvest`
   : p.canWater ? `${p.name}, needs water` : `${p.name}, ${fmtCookTime(p.remainingMs)} left`}`;
 
-function hlwBedArt(p) {
-  // soil mound is the base of every owned bed; growth stage sits on top
-  const mound = `<span style="position:absolute;left:2px;top:6px;width:80px;height:50px;border-radius:50%;background:#5b4632;border:2px solid #17151d"></span>
-    <span style="position:absolute;left:10px;top:12px;width:64px;height:34px;border-radius:50%;background:#6d5540"></span>`;
-  if (p.empty) return mound;
-  if (p.ready) return `${mound}<svg viewBox="0 0 44 52" style="position:absolute;left:22px;top:-14px;width:42px;height:50px;overflow:visible">
-      <path d="M22 50 V18" stroke="#5f8a44" stroke-width="4.5" stroke-linecap="round" fill="none"></path>
-      <path d="M22 40 q-10 -2 -13 -11 q10 0 13 11 z M22 34 q10 -3 12 -12 q-10 1 -12 12 z" fill="#7fae57" stroke="#3a5426" stroke-width="1.4"></path>
-      <g style="animation:hlwReady 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%">
-        <circle cx="22" cy="14" r="10" fill="${p.rare ? '#9fe3cf' : '#fd6857'}" stroke="#17151d" stroke-width="2.5"></circle>
-        <ellipse cx="18.5" cy="10.5" rx="3.4" ry="2.4" fill="#ffd9c9" opacity=".85"></ellipse>
-        <path d="M22 4 q5 -5 9 -4" stroke="#5f8a44" stroke-width="3.5" fill="none" stroke-linecap="round"></path>
-      </g></svg>`;
-  // growing: young plant, wilting slightly if it still wants its watering
-  return `${mound}<svg viewBox="0 0 36 40" style="position:absolute;left:26px;top:-2px;width:34px;height:38px;transform-origin:50% 100%">
-      <g ${p.canWater ? 'style="animation:hlwSway 3.4s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 100%"' : ''}>
-      <path d="M18 38 V16" stroke="#5f8a44" stroke-width="4" stroke-linecap="round" fill="none"></path>
-      <path d="M18 30 q-9 -2 -12 -10 q9 0 12 10 z M18 26 q9 -3 11 -11 q-9 1 -11 11 z" fill="${p.canWater ? '#9fae6a' : '#7fae57'}" stroke="#3a5426" stroke-width="1.4"></path></g></svg>`;
-}
 
 /* THE KEEPER TALKS. Same voice as speechLine() on Today (dry, self-deprecating,
    the joke is usually that he is a skeleton doing a physical job, a small turn
@@ -4236,13 +4218,6 @@ function openHollow(after) {
           </g>`).join('')}
         ${/* The sign hangs INWARD from the slot, not outward: hung right it was clipped
               by the frame's own edge. Measured on the render, not guessed. */''}
-        ${bedPrice != null ? `<g id="hlwSign" transform="translate(${hlwBuySpot(garden.plotsOwned)[0] - 36} ${hlwBuySpot(garden.plotsOwned)[1] - 24})">
-          <path d="M36 46 V4" stroke="#8a5a3a" stroke-width="7" stroke-linecap="round"></path>
-          <g transform="rotate(-3 36 -3)">
-            <rect x="7" y="-18" width="58" height="30" rx="6" fill="#f2e9d7" stroke="#17151d" stroke-width="3"></rect>
-            <circle cx="20" cy="-3" r="6.5" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"></circle>
-            <text x="46" y="2" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${bedPrice.toLocaleString()}</text>
-          </g></g>` : ''}
         <g transform="translate(26 640)">
           <ellipse cx="30" cy="50" rx="22" ry="5" fill="rgba(23,21,29,.3)"></ellipse>
           <path d="M14 48 l4 -16 h24 l4 16 z" fill="#8a6f52" stroke="#17151d" stroke-width="2.5"></path>
@@ -4261,10 +4236,9 @@ function openHollow(after) {
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
         <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
-        ${p.empty || p.ready ? '' : p.canWater
-          ? `<span class="hlw-chip thirst" style="left:${p.cx}px;top:${p.cy - 52}px"><svg width="9" height="11" viewBox="0 0 10 12"><path d="M5 0 Q9 6 9 8.5 A4 4 0 0 1 1 8.5 Q1 6 5 0 z" fill="currentColor"></path></svg>THIRSTY</span>`
-          : `<span class="hlw-chip" style="left:${p.cx}px;top:${p.cy - 52}px">${fmtCookTime(p.remainingMs)}</span>`}
+        ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}
         <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
+      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice)}</span>` : ''}
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
       <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:26px;top:630px;width:70px;height:66px"></button>

@@ -7661,6 +7661,11 @@ body::before {
 /* -7px off the bed's centre line: at 3 beds owned the price sign hangs in the
    right half of this bed's row, and a centred chip clipped its board by 0.4px.
    Measured in the render; the audit pins the intersection at zero. */
+/* The chip module owns the markup, the scene owns the position. A zero-size
+   absolutely positioned anchor at the bed's centre x, so .hlw-chip's own
+   translateX(-50%) centres it regardless of how long the label is. */
+.hlw-chipwrap{position:absolute;width:0;height:0;z-index:5}
+.hlw-signwrap{position:absolute;width:66px;height:70px;pointer-events:none;z-index:5}
 /* FIRST VISIT. pointer-events none on the whole layer: it points at the shed,
    so it must never be the thing that catches the tap it is asking for. */
 .hlw-first{position:absolute;inset:0;pointer-events:none;z-index:11}
