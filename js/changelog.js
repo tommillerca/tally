@@ -3,6 +3,15 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 383, date: '2026-08-16', title: 'Beating a spire takes you to the spire', items: [
+    "<b>Winning a tower used to hand you back the button that starts the fight.</b> You beat the warden, tapped Done, and landed on a sheet still offering you the warden, because that sheet was drawn before you won. The same thing had already been fixed once for the Glutton and only for the Glutton. It is fixed for every kind of fight now, in the one place they all pass through, and a new kind of fight cannot be added without saying where a win puts you.",
+    'The button after a spire fight also said "Back to The Pit" when you had come from the map.',
+    "A dormant spire stops telling you it has never been taken when you are the one who took it.",
+    "The Boneyard only opens the map when you actually asked for it, instead of starting it up behind you.",
+    'A news story stops re-opening itself on top of wherever it just sent you.',
+    'The fighters stay put when the buttons under them change size.',
+    'If the app ever opens to a blank screen it now waits a little longer before deciding it is stuck, and it still only ever reloads itself once.',
+  ] },
   { n: 382, date: '2026-08-15', title: 'Logging your food no longer earns you fights', items: [
     "<b>Logging a meal used to give you Pit energy.</b> It shouldn't have. It put a reward on what your food diary looks like rather than on what you actually ate, and this app should never have an opinion about that. Energy now comes from walking, from Vigor Draughts, and from the three free fights everyone gets every day.",
     'New players now find a Vigor Draught in their welcome kit, so a first day without a walk is still a first day with fights.',
