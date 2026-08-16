@@ -287,7 +287,12 @@ class HealthPlugin : Plugin() {
                     }
                 }
             } catch (e: Exception) {
-                res.put("steps", 0); res.put("activeKcal", 0); res.put("error", e.message ?: "read-failed")
+                // Deliberately does NOT zero steps/activeKcal. The aggregate runs first
+                // and the sleep read runs last, so overwriting here threw away a good
+                // step count whenever an unrelated later query failed. Whatever was
+                // read before the throw survives; the no-SDK branch above still seeds
+                // the zeros for the case where nothing was read at all.
+                res.put("error", e.message ?: "read-failed")
             }
             call.resolve(res)
         }

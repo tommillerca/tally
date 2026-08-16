@@ -117,7 +117,11 @@ class BhVault : Plugin() {
     @PluginMethod
     fun remove(call: PluginCall) {
         val key = call.getString("key") ?: return call.reject("key required")
-        playServicesReason()?.let { return call.resolve(JSObject().put("ok", true)) }
+        // Matches set(): an unavailable vault is a failure, not a success. Resolving
+        // ok:true here reported a delete that never happened, and the caller is the
+        // "Erase ALL data" path, so the identity it thought it erased is still in
+        // Block Store waiting to re-adopt the account.
+        playServicesReason()?.let { return call.reject(it) }
         val req = DeleteBytesRequest.Builder().setKeys(listOf(key)).build()
         client().deleteBytes(req)
             .addOnSuccessListener { call.resolve(JSObject().put("ok", true)) }
