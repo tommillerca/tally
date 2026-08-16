@@ -9469,7 +9469,15 @@ async function saveInitialSettings(np) {
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
-  initAnalytics(APP_SOCIAL_V); // start analytics from the first session too (boot's init is skipped by the onboarding return)
+  /* APP_BUILD, not APP_SOCIAL_V. appV is envelope-level in analytics.js, so
+     whatever this passes tags the WHOLE batch, and this is the onboarding path,
+     which means it tagged every first session in the app's life 'v68'. That is
+     the frozen social-protocol version, not a build that exists, so day-0
+     sessions landed in a bucket no build slice can match. The call at boot
+     already says this in its own comment: tag events with the real running
+     build, not the frozen social-protocol version. This is the path that did
+     the opposite. The first session is exactly the row retention work needs. */
+  initAnalytics(APP_BUILD); // start analytics from the first session too (boot's init is skipped by the onboarding return)
   location.hash = '#/today';
   route();
 }
