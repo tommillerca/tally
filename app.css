@@ -1289,7 +1289,19 @@ body::before {
    for its tallest state, the open ITEMS door.
    258 WAS A NUMBER THE ART OUTGREW: the mage plate renders 292px tall, so that
    is the floor, not a nicety. */
-.fight-body > .arena { flex: none; height: clamp(292px, calc(100svh - 400px), 600px); }
+/* The subtrahend grew by the HUD's 92.4px because the HUD is a sibling row now
+   rather than a lid, so it costs its own height instead of eating the arena's.
+   400 + 92 = 492. On a 390x844 and a 430x932 phone this is a wash by design:
+   scene was 349.6 and 437.6, it is 352 and 440. The short phone is where the
+   move pays. The 292 floor was never 292 of scene, it was 292 minus the HUD,
+   so 197.6. The floor is 183 of REAL scene now, and it is derived rather than
+   picked: a 375x667 phone gives the fight body 564.5px, and the tray's tallest
+   honest state needs 152.3 of it, so
+   564.5 - 94.4 hud - 8 - 64 meta - 152.3 tray - 8 - 54.8 endrow = 183.
+   That is 14.6px less box than the 197.6 of scene the old arena left, and the
+   boss still gains, because 183 of arena the figure can stand in beats 197.6
+   with 110.4 of the figure behind the bars. */
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100svh - 492px), 600px); }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
@@ -1325,7 +1337,15 @@ body::before {
 .fight-actions.scrolls.at-end { mask-image: none; -webkit-mask-image: none; }
 .fight-endrow { margin-top: 8px; }
 .fight-endrow .fight-act { width: 100%; }
+/* container-type:size is what makes the cqh units below real. The figure rules
+   have said "scales with the arena" since 2026-08-09, but nothing in this sheet
+   ever declared a query container, so cqh silently resolved against the small
+   viewport instead. Measured proof it was a no-op: .fstage came out 150px at
+   390x844, 375x667 AND 430x932, three different arena heights, because 24cqh of
+   the viewport clears the 150px cap at every one of them. The arena is the
+   container now, so the fighters answer to the box they stand in. */
 .arena {
+  container-type: size;
   position: relative; height: 258px; border-radius: var(--radius); overflow: hidden;
   background: radial-gradient(ellipse at 50% 120%, #1d1a14 0%, #14120e 45%, #0e0d12 100%);
   border: 2px solid var(--ink); box-shadow: var(--sh);
@@ -1343,11 +1363,17 @@ body::before {
   display: grid; gap: 6px; justify-items: center;
 }
 /* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
+/* ITS OWN ROW. This was position:absolute top:0 INSIDE .arena with an opaque
+   background, which meant it did not sit beside the scene, it sat on top of it.
+   Measured at 375x667 against a mage den: 92.4px of HUD over a 292px arena left
+   197.6px of scene, and 110.4px of the 262px boss figure rendered behind the
+   bars. The arena's own box is the scene now, so every pixel of it is playable
+   picture and the figure cannot be occluded by chrome that outranks it. */
 .fight-hud {
-  position: absolute; top: 0; left: 0; right: 0;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-  padding: 9px 10px 8px; z-index: 6; pointer-events: none;
-  background: var(--surface); border-bottom: 2px solid var(--ink);
+  padding: 9px 10px 8px; pointer-events: none; margin-bottom: 8px;
+  background: var(--surface); border: 2px solid var(--ink);
+  border-radius: var(--radius); box-shadow: var(--sh-sm);
 }
 /* min-width:0 is load-bearing: without it a long foe name sets the flex floor,
    both sides sum past 100% and the arena's overflow:hidden eats the right HUD */
@@ -1404,7 +1430,16 @@ body::before {
      is measured, not chosen: the two columns sit 43px apart at 112px stages, and
      a stage overflows its 128px column by (stage-128)/2 each side, so 150 leaves
      21px between them. Anything past ~160 and they touch. */
-  width: clamp(112px, 24cqh, 150px); height: clamp(112px, 24cqh, 150px); min-height: 112px; border-radius: 16px;
+  /* 24 -> 43 because the percentage is measured against the arena now, not the
+     viewport, and the arena is the smaller box. 43cqh holds the cap exactly
+     where it already was on the phones that had room (150px at a 352px arena on
+     390x844, 150px at a 440px arena on 430x932) and lets the figure step down on
+     a 375x667 phone, where the HUD's own row has to come out of the column.
+     The floor moved 112 -> 130 deliberately: 112 is a WIDTH limit from the old
+     comment (two columns 43px apart), not a height one, and at 130 the figure
+     gives up 20px rather than 38 on the one phone that pays. 130 + the 14px
+     bottom offset is 144 inside a 183px arena. */
+  width: clamp(130px, 43cqh, 150px); height: clamp(130px, 43cqh, 150px); min-height: 130px; border-radius: 16px;
   background: transparent; border: none; overflow: visible;
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.5));
@@ -7151,8 +7186,20 @@ body::before {
    keeps his own shadow well below the robe. */
 .arena.boss-mage .fighterG.foe-side { width: 208px; }
 #foeStage.mage-foe {
-  width: 100%; height: clamp(196px, 46cqh, 262px); align-self: end;
-  margin-bottom: 30px;                       /* the lift: he hangs, he does not stand */
+  width: 100%; height: clamp(148px, 75cqh, 262px); align-self: end;   /* 46 -> 75: same re-basing onto the arena, and it keeps his full 262px on the
+     352px arena a 390x844 phone gives him. The 196px floor came down to 148
+     because a floor is only a floor if the box can hold it: 196 + his 30px lift
+     is 226, which does not fit the 183px arena a 375x667 phone can afford. At
+     148 + 30 = 178 he clears it by 5px and renders whole. He is smaller than the
+     151.6px of him that used to be visible there, by 3.6px, and that is the
+     trade: all of a slightly smaller boss instead of 58% of a bigger one. */
+  /* The lift scales with the arena for the same reason his height does. At a
+     fixed 30 he cleared the top of a 183px arena by 2.1px of measured ink, and a
+     2.1px margin is not headroom, it is a coin flip for any guard watching it.
+     Taking it out of the LIFT rather than his height keeps him the same size on
+     the phone that can least afford to lose any of him: 16px at a 183px arena,
+     the full 30 back by the time the arena is 375px. */
+  margin-bottom: clamp(16px, 8cqh, 30px);    /* the lift: he hangs, he does not stand */
   filter: drop-shadow(0 26px 16px rgba(0, 0, 0, 0.55));
 }
 /* THE TWO FIGURES WERE TOUCHING. Tom, 2026-08-13: "the live wire looks too

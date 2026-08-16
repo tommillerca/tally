@@ -14870,6 +14870,28 @@ async function openFight(pitWrap, fighter, foeCfg) {
     });
   }
   body.innerHTML = `
+    <!-- THE HUD IS ITS OWN ROW, NOT A LID ON THE ARENA.
+         It used to be position:absolute top:0 inside .arena carrying an opaque
+         background, so it did not sit beside the scene, it sat ON it. Measured
+         at 375x667 against a mage den: the HUD is 92.4px tall, so a 292px arena
+         held only 197.6px of scene and 110.4px of the 262px boss figure rendered
+         BEHIND the bars. The arena is the scene now, and nothing covers it. -->
+    <div class="fight-hud">
+      <div class="hud-side you">
+        <div class="fname">You</div>
+        <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
+        <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
+        <div class="fstate" id="youState" hidden></div>
+        ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+      </div>
+      <div class="hud-side foe">
+        <div class="fname">${esc(foe.name)}</div>
+        <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
+        <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
+        <div class="fstate" id="foeState" hidden></div>
+        ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
+      </div>
+    </div>
     <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
       <div class="pit-crowd"></div>
       <div class="pit-banner l"></div><div class="pit-banner r"></div>
@@ -14877,25 +14899,6 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-floor"></div>
       <div class="pit-fog"></div>
       <div class="arena-floor"></div>
-      <!-- fighting-game HUD: bars pinned to the arena's top corners with a
-           guaranteed center gap (they used to ride the fighters and collided
-           mid-arena, with the pet's bar piling under yours) -->
-      <div class="fight-hud">
-        <div class="hud-side you">
-          <div class="fname">You</div>
-          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
-          <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
-          <div class="fstate" id="youState" hidden></div>
-          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
-        </div>
-        <div class="hud-side foe">
-          <div class="fname">${esc(foe.name)}</div>
-          <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
-          <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
-          <div class="fstate" id="foeState" hidden></div>
-          ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
-        </div>
-      </div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
         <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
