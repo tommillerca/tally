@@ -32,6 +32,7 @@ import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
+import { hlwArt } from './hollow-art.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -3923,8 +3924,32 @@ function gardenRowHtml(garden, seedTotal) {
  * compost/buy-bed calls the list sheet used. Apothecary half NOT built yet.
  * UNVERIFIED: needs the full verification pass (fire controls, decoded pixels,
  * ui-audit + figure-audit rows) before this can ship. */
-const HLW_SPOTS = [[68, 256], [132, 256], [68, 352], [132, 352], [68, 447]]; // bed centers, 390-wide stage
-const HLW_BUY = [300, 360];
+/* Bed centres on the 390-wide stage, mapped from the designer's five-slot frame
+   (viewBox slots at 53,74 / 125,74 / 53,182 / 125,182 / 89,290 inside a frame
+   drawn at left 20, top 186, 150x349). Row three is a single CENTRED slot: the
+   handoff notes call that deliberate rather than vacant, and it is what makes a
+   five-bed garden read as designed instead of as a gap. */
+const HLW_FRAME = { x: 20, y: 186, w: 150, h: 349 };
+/* The keeper's fixed gardening fit: Charcoal Bones, Charcoal Skull, Sun Boater.
+   All three are real catalogue items, verified against data/boneheadz.js. */
+const HLW_FIT = { B: 'B0-1', SK: 'SK0-1', H: 'H9' };
+const HLW_SPOTS = [[67, 251], [130, 251], [67, 346], [130, 346], [99, 441]];
+/* 740, not 900. The bottom 160 units held nothing: the lowest object the keeper
+   can reach is the compost heap at y 502 and he is 190 tall, so 692 is the real
+   floor. Those empty units were pure scroll cost on a screen whose instruction and
+   whose talking keeper both sat under the fold. The path and the last stepping
+   stones run off the bottom edge, which is what a path is meant to do. */
+const HLW_H = 740;
+/* The next slot you could own, INSIDE the frame. It used to sit on open grass to
+   the right, which read as a price tag in a field rather than as "this bed could
+   be yours". The comp puts it on a ghost slot inside the frame and that is the
+   whole difference. Derived from HLW_SPOTS so it can never drift from the beds. */
+const hlwBuySpot = owned => HLW_SPOTS[Math.min(owned, HLW_SPOTS.length - 1)];
+/* Five buttons all labelled "Garden bed" tell a screen reader nothing about which
+   one is worth tapping, which is the only thing this screen is about. */
+const hlwBedLabel = (p, i) => `Bed ${i + 1}, ${p.empty ? 'empty, plant a seed'
+  : p.ready ? `${p.name}, ready to harvest`
+  : p.canWater ? `${p.name}, needs water` : `${p.name}, ${fmtCookTime(p.remainingMs)} left`}`;
 
 function hlwBedArt(p) {
   // soil mound is the base of every owned bed; growth stage sits on top
@@ -3946,12 +3971,101 @@ function hlwBedArt(p) {
       <path d="M18 30 q-9 -2 -12 -10 q9 0 12 10 z M18 26 q9 -3 11 -11 q-9 1 -11 11 z" fill="${p.canWater ? '#9fae6a' : '#7fae57'}" stroke="#3a5426" stroke-width="1.4"></path></g></svg>`;
 }
 
+/* THE KEEPER TALKS. Same voice as speechLine() on Today (dry, self-deprecating,
+   the joke is usually that he is a skeleton doing a physical job, a small turn
+   at the end of the line), but every line is about the GARDEN. He never mentions
+   the player's food, weight, streak or logging: he is a gardener, not a progress
+   report, and this is a health app.
+   Gated on state the garden already knows, so he can never assert something the
+   beds contradict. That is the one rule: one "that is ready" over an empty bed
+   and he is furniture forever. */
+const HLW_SAY = {
+  first: [
+    'So this is the Hollow. I am the one who stands here.',
+    'Right. Beds there, seeds in the shed, and I do the loitering.',
+    'Welcome to the patch. Put something in the dirt and we will see.',
+  ],
+  /* No day count, no question, no welcome-back fanfare. A number is an
+     accusation, and somebody away for a fortnight was probably unwell. */
+  back: [
+    'Morning. Weeds had a good run of it.',
+    'There you are. Sun did my job while I stood about.',
+    'Everything is where you left it. I did check.',
+    'Nothing happened. That is the garden for you.',
+    'Still here. So is all of it.',
+  ],
+  noSeeds: [
+    'No seeds, no crops, no notes. Walks turn up seeds, apparently.',
+    'I would offer you a seed but I have pockets made of air.',
+    'Nothing to plant. Even I cannot grow a plan.',
+    'Seeds come from out there. I do not go out there.',
+    'The pouch is empty. I checked twice, then shook it.',
+  ],
+  empty: [
+    'Dirt. Excellent dirt. Doing nothing.',
+    'I have been guarding an empty patch all morning. Riveting.',
+    'Nothing planted. I am basically a scarecrow with a pension.',
+    'The soil is ready. I have been ready for years.',
+    'I raked it. That is all I am qualified to do.',
+    'We could grow something. Or keep admiring the mud. Your call.',
+  ],
+  ripe: [
+    'That one is done. Pick it before I try with these hands.',
+    'Ready. I have been staring at it for an hour to be sure.',
+    'It came up. I take no credit and all of the credit.',
+    'Ripe. Somewhere a proper farmer is very confused.',
+    'Harvest time. My favourite kind of standing around.',
+    'That is ready, chief. I am not touching it, I would drop it.',
+  ],
+  growing: [
+    'It is doing whatever it does under there. Best not to watch.',
+    'Coming along. Slowly. Like everything with roots.',
+    'Give it time. Time is the one thing I have plenty of.',
+    'Growing. I would say it is thriving but I do not want to jinx it.',
+    'That one is taking its time. Bold, for a vegetable.',
+    'Nothing to do but wait, which is my speciality.',
+  ],
+  full: [
+    'Every bed working. Nothing left for me to fuss over.',
+    'Full house. I will be over here supervising.',
+    'All planted. Now the hard part, which is waiting.',
+  ],
+  idle: [
+    'Rained overnight. Did half my job for me.',
+    'Wind has been at the fence again.',
+    'That crow has opinions about my technique.',
+    'Quiet out. I like it quiet.',
+    'I talk to the plants. They are better listeners than the pot.',
+    'Good soil, this. I would eat it if I had the equipment.',
+    'Nothing doing today. That is allowed.',
+  ],
+};
+
+/* Picked with a per-session salt, the way speechLine does, so opening the sheet
+   twice in a row does not hand back the same line. */
+function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway }) {
+  if (S.hlwSalt == null) S.hlwSalt = Math.floor(Math.random() * 1e6);
+  const pick = arr => arr[(S.hlwSalt + arr.length) % arr.length];
+  if (firstEver) return pick(HLW_SAY.first);
+  if (daysAway >= 3) return pick(HLW_SAY.back);
+  if (ripe) return pick(HLW_SAY.ripe);
+  if (!planted && !seeds) return pick(HLW_SAY.noSeeds);
+  if (!planted) return pick(HLW_SAY.empty);
+  if (planted >= owned) return pick(HLW_SAY.full);
+  if (growing) return pick(HLW_SAY.growing);
+  return pick(HLW_SAY.idle);
+}
+
 function openHollow(after) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`, { cls: '', onClose: () => after?.() });
   const body = $('#hollowBody', wrap);
-  const av = { x: 112, y: 560, facing: 1, moving: false, dur: 1.4 };
+  /* y 500, not 560. His box is 190 tall, so on the 740 stage 560 put his own
+     contact shadow 6 units past the bottom edge, and on a 667-tall phone his
+     speech bubble, which is the screen's primary status text, sat 30px under
+     the fold. Measured in the render at both sizes, not derived from the CSS. */
+  const av = { x: 112, y: 500, facing: 1, moving: false, dur: 1.4 };
   let busy = false;        // a ritual in flight: hold re-renders so animations run whole
   let pouchOpen = false;
   let walkT = null;
@@ -3960,10 +4074,13 @@ function openHollow(after) {
 
   function walkTo(cx, cy, then) {
     const x = Math.max(-14, Math.min(214, cx - 95));
-    const y = Math.max(140, Math.min(700, cy - 158));
+    const y = Math.max(140, Math.min(HLW_H - 190, cy - 158));
     const dx = x - av.x, dy = y - av.y, dist = Math.hypot(dx, dy);
     if (dist < 4) { then?.(); return; }
-    av.dur = Math.max(0.9, Math.min(2.4, dist / 140));
+    /* Capped at 1.2s, was 2.4. Every handler starts with `if (busy) return`, so the
+       walk is a window where taps vanish with nothing on screen saying so. 2.4s of
+       walk plus a 2s pour was 4.4s of a screen that looked idle and answered nothing. */
+    av.dur = Math.max(0.9, Math.min(1.2, dist / 140));
     if (dx !== 0) av.facing = dx > 0 ? 1 : -1;
     av.x = x; av.y = y; av.moving = true;
     const fig = $('#hlwAv', body);
@@ -4015,10 +4132,26 @@ function openHollow(after) {
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const band = bandNow();
     const beds = garden.plots.map((p, i) => ({ ...p, cx: HLW_SPOTS[i][0], cy: HLW_SPOTS[i][1] }));
+    /* WHAT THE KEEPER CAN HONESTLY SAY. Read from the same garden state the beds
+       are drawn from, so he can never claim something the screen contradicts. */
+    const nowMs = Date.now();
+    const ripeN = garden.plots.filter(p => p && nowMs >= p.readyAt).length;
+    const growN = garden.plots.filter(p => p && nowMs < p.readyAt).length;
+    const lastSeen = await kvGet('hlwSeen', 0);
+    const daysAway = lastSeen ? Math.floor((nowMs - lastSeen) / 864e5) : 0;
+    const firstEver = !lastSeen;
+    if (!busy) await kvSet('hlwSeen', nowMs);
+    const say = hlwLine({ ripe: ripeN, growing: growN, planted: ripeN + growN,
+      owned: garden.plotsOwned, seeds: seedTotal, firstEver, daysAway });
     body.innerHTML = `
+    ${/* ABOVE the diorama, not under it. The stage is taller than any phone, so a
+          note below it needed a 176px scroll at 390x844 and 318px at 375x667: the
+          only instruction on the screen, including "Nothing ever dies", was one a
+          first-time player never saw. */''}
+    <p class="note" style="margin:0 2px 8px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       <div style="position:absolute;inset:0;background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.14),transparent 70%)"></div>
-      <svg viewBox="0 0 390 900" style="position:absolute;inset:0;width:100%;height:100%;display:block">
+      <svg viewBox="0 0 390 ${HLW_H}" style="position:absolute;inset:0;width:100%;height:100%;display:block">
         <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#44532f" stroke-width="46" fill="none" stroke-linecap="round" opacity=".45"></path>
         <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#7d7257" stroke-width="38" fill="none" stroke-linecap="round" opacity=".85"></path>
         <g fill="#b3a68e" stroke="#17151d" stroke-width="1.8">
@@ -4044,13 +4177,20 @@ function openHollow(after) {
           <rect x="31" y="70" width="26" height="46" rx="3" fill="#4c3b2b" stroke="#17151d" stroke-width="2.5"></rect>
           <circle cx="52" cy="94" r="2.4" fill="#f2e9d7"></circle>
         </g>
-        ${bedPrice != null ? `<g transform="translate(${HLW_BUY[0] - 42} ${HLW_BUY[1] - 30})">
-          <ellipse cx="42" cy="30" rx="36" ry="24" fill="#5c6e3e"></ellipse>
-          <ellipse cx="42" cy="30" rx="36" ry="24" fill="none" stroke="#48562f" stroke-width="2" stroke-dasharray="6 6"></ellipse>
-          <path d="M63 54 V12" stroke="#8a5a3a" stroke-width="7" stroke-linecap="round"></path>
-          <g transform="rotate(-3 64 5)">
-            <rect x="35" y="-10" width="58" height="30" rx="6" fill="#f2e9d7" stroke="#17151d" stroke-width="3"></rect>
-            <text x="64" y="10" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${bedPrice.toLocaleString()}</text>
+        ${HLW_SPOTS.slice(garden.plotsOwned).map(([gx, gy]) => `
+          <g transform="translate(${gx - 36} ${gy - 24})">
+            <ellipse cx="36" cy="24" rx="36" ry="24" fill="#5c6e3e"></ellipse>
+            <ellipse cx="36" cy="24" rx="36" ry="24" fill="none" stroke="#48562f" stroke-width="2" stroke-dasharray="6 6"></ellipse>
+            <path d="M21 24 c3 -8 5 -8 8 0 M39 16 c3 -8 5 -8 8 0 M33 32 c3 -8 5 -8 8 0" fill="#6d8048"></path>
+          </g>`).join('')}
+        ${/* The sign hangs INWARD from the slot, not outward: hung right it was clipped
+              by the frame's own edge. Measured on the render, not guessed. */''}
+        ${bedPrice != null ? `<g id="hlwSign" transform="translate(${hlwBuySpot(garden.plotsOwned)[0] - 36} ${hlwBuySpot(garden.plotsOwned)[1] - 24})">
+          <path d="M36 46 V4" stroke="#8a5a3a" stroke-width="7" stroke-linecap="round"></path>
+          <g transform="rotate(-3 36 -3)">
+            <rect x="7" y="-18" width="58" height="30" rx="6" fill="#f2e9d7" stroke="#17151d" stroke-width="3"></rect>
+            <circle cx="20" cy="-3" r="6.5" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"></circle>
+            <text x="46" y="2" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${bedPrice.toLocaleString()}</text>
           </g></g>` : ''}
         <g transform="translate(26 640)">
           <ellipse cx="30" cy="50" rx="22" ry="5" fill="rgba(23,21,29,.3)"></ellipse>
@@ -4067,18 +4207,33 @@ function openHollow(after) {
         </g>
       </svg>
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
         <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
-        ${!p.empty && !p.ready ? `<span class="hlw-chip" style="left:${p.cx - 34}px;top:${p.cy - 52}px"><svg width="9" height="11" viewBox="0 0 10 12"><path d="M5 0 Q9 6 9 8.5 A4 4 0 0 1 1 8.5 Q1 6 5 0 z" fill="#9fd0e8"></path></svg>${fmtCookTime(p.remainingMs)}</span>` : ''}
-        <button class="hlw-bed" data-bed="${i}" aria-label="Garden bed" style="left:${p.cx - 42}px;top:${p.cy - 30}px"></button>`).join('')}
-      ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed" style="left:${HLW_BUY[0] - 42}px;top:${HLW_BUY[1] - 30}px"></button>` : ''}
+        ${p.empty || p.ready ? '' : p.canWater
+          ? `<span class="hlw-chip thirst" style="left:${p.cx}px;top:${p.cy - 52}px"><svg width="9" height="11" viewBox="0 0 10 12"><path d="M5 0 Q9 6 9 8.5 A4 4 0 0 1 1 8.5 Q1 6 5 0 z" fill="currentColor"></path></svg>THIRSTY</span>`
+          : `<span class="hlw-chip" style="left:${p.cx}px;top:${p.cy - 52}px">${fmtCookTime(p.remainingMs)}</span>`}
+        <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
+      ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
       <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:26px;top:630px;width:70px;height:66px"></button>
       <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
+        ${say ? `<span id="hlwSay" class="hlw-say">${esc(say)}</span>` : ''}
         <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>
         <span id="hlwFlip" style="position:absolute;inset:0;display:block;transform:scaleX(${av.facing});transition:transform .18s ease-in-out">
           <span id="hlwAnim" style="position:absolute;inset:0;display:block;animation:hlwIdle 4s ease-in-out infinite;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35))">
-            <span class="bh-stage" style="position:absolute;inset:0">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</span>
+            ${/* NO .bh-stage HERE. That class carries a panel background, a border and a
+                  radius, which put the keeper on a dark card in the middle of a lawn: the
+                  highest-contrast object on the screen, carrying no information, and two
+                  first-time reviewers independently assumed the image had failed to load.
+                  He stands on the grass.
+
+                  And he wears the GARDENING FIT, not the player's equipped look. The
+                  designer's call and the reason is better than mine: a fixed fit reads as
+                  a character, and it avoids equipped-cosmetic clipping with the walk and
+                  water poses. At 190px a full going-out outfit also looks pasted in from
+                  another app. */''}
+            <span style="position:absolute;inset:0">${avatarLayersHtml(HLW_FIT, { noYard: true, skip: ['BG', 'C'] })}</span>
           </span></span>
       </div>
       ${pouchOpen ? `<button id="hlwPouch" style="position:absolute;left:96px;top:190px;width:210px;z-index:30;background:#1d1b22;border:2.5px solid #17151d;border-radius:16px;box-shadow:4px 5px 0 rgba(0,0,0,.45);padding:12px 14px;display:grid;gap:9px;cursor:pointer;text-align:left">
@@ -4091,14 +4246,13 @@ function openHollow(after) {
       ${band !== 'day' ? `<div style="position:absolute;inset:0;pointer-events:none;z-index:9">
         ${[[60, 540, 6, 0], [300, 480, 7, 1.4], [140, 680, 5.4, 2.6], [330, 780, 6.6, .8]].map(([x, y, d, dl]) => `<span style="position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${dl}s infinite"></span>`).join('')}
       </div>` : ''}
-    </div></div>
-    <p class="note" style="margin:10px 2px 4px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies.</p>`;
+    </div></div>`;
 
     // scale the 390-wide stage to the sheet width
     const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
     const s = vp.clientWidth / 390;
     st.style.transform = `scale(${s})`;
-    vp.style.height = Math.round(900 * s) + 'px';
+    vp.style.height = Math.round(HLW_H * s) + 'px';
 
     $$('[data-bed]', body).forEach(btn => btn.addEventListener('click', () => {
       if (busy) return;
@@ -4109,14 +4263,15 @@ function openHollow(after) {
         if (p.empty) { busy = false; openPlantSheet(p.index, render); return; }
         if (p.ready) {
           const res = await harvestPlot(p.index);
-          busy = false;
-          if (!res.ok) { render(); return; }
+          if (!res.ok) { busy = false; render(); return; }
           await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
           levelSound(S.sounds);
           const art = $(`#hlwBedArt${i} g`, body);
           if (art) art.style.animation = 'hlwPluck .9s ease-out forwards';
           toastAt(p.cx, p.cy, `+${res.n} ${res.name}`);
-          setTimeout(render, 1200);
+          // busy stays TRUE across the pluck: released early, the 30s tick could
+          // re-render straight over the animation the harvest exists to show.
+          setTimeout(() => { busy = false; render(); }, 1200);
           return;
         }
         if (p.canWater) {
@@ -4129,7 +4284,11 @@ function openHollow(after) {
           }, 2000);
           return;
         }
-        busy = false;   // growing and already watered: the walk over IS the interaction
+        /* Growing and already watered. This used to walk the keeper over and then
+           end in silence: no toast, no line, no sound, the one bed state that
+           answered a tap with nothing. Say what it is waiting for. */
+        busy = false;
+        toastAt(p.cx, p.cy, `${fmtCookTime(p.remainingMs)} to go`);
       });
     }));
     $('#hlwShed', body)?.addEventListener('click', () => {
