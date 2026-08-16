@@ -98,18 +98,24 @@
  * static server sends. Same tree, same audit, three runs, exit codes read from a
  * file and not through a pipe:
  *
- *   serveTree (python http.server)          throttle on    PASS, life 112/132ms, exit 0
+ *   serveTree (python http.server)          throttle on    PASS, life 107/128ms, exit 0
  *   a server sending cache-control:no-store throttle on    FAIL both moves, exit 1
- *   that same no-store server               throttle off   PASS-ish, exit 1 on one
- *                                                          late frame (see below)
+ *                                                          (jab 4/15 and swing
+ *                                                          18/18 samples showing
+ *                                                          naturalWidth [0,0,0])
+ *   that same no-store server               throttle off   jab PASS, swing red on
+ *                                                          ONE late frame, exit 1
+ *                                                          (see the end of this
+ *                                                          section)
  *
  * MECHANISM. warmStrikeFx (js/app.js:16096) fetches all six frames when the fight
  * opens. Under `cache-control: no-store` the browser may not reuse them, so the
- * <img> tags strikeFx builds at js/app.js:15117 go back to the network for 112KB
- * per frame. With 400ms of emulated latency and a 200KB/s pipe that is about
- * 950ms, while strikeFx's own safety net (js/app.js:15152-15158) gives up waiting
- * after 400ms and plays anyway. So the animation runs over undecoded images and
- * the audit reports the v245 bug against an app that does not have it. python's
+ * <img> tags strikeFx builds at js/app.js:15117 go back to the network for the
+ * whole frame set, which on disk is 181KB for jab (19 + 50 + 112) and 232KB for
+ * swing (31 + 66 + 136). Through 400ms of latency and a 200KB/s pipe that is well
+ * over a second, while strikeFx's own safety net (js/app.js:15152-15158) gives up
+ * waiting after 400ms and plays anyway. So the animation runs over undecoded
+ * images and the audit reports the v245 bug against an app without it. python's
  * http.server sends no cache-control at all, so Chrome heuristically caches from
  * Last-Modified and the same tree passes. tests/release-gate.mjs:53-54 sends
  * exactly the no-store header, and so do most dev static servers.
@@ -268,7 +274,8 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   /* OWN THE CACHE HEADERS ON THE FX FRAMES. See the header: with the throttle on,
      a server that says `cache-control: no-store` (tests/release-gate.mjs:53-54,
      and most dev static servers) forces strikeFx's <img> tags back onto the wire
-     for 112KB per frame and produces a v245 red on a healthy app. The response
+     for the whole 181KB/232KB frame set and produces a v245 red on a healthy app,
+     which is a statement about the fixture and not about the FX. The response
      stage is deliberate: the bytes still come from the real network through the
      emulated pipe, only the storage policy is rewritten, so an unwarmed frame
      still cannot win the race. Scoped to the FX frames alone. */
