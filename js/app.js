@@ -3981,6 +3981,7 @@ function hlwBedArt(p) {
    and he is furniture forever. */
 const HLW_SAY = {
   first: [
+    'You must be {n}. The beds are yours, the loitering is mine.',
     'So this is the Hollow. I am the one who stands here.',
     'Right. Beds there, seeds in the shed, and I do the loitering.',
     'Welcome to the patch. Put something in the dirt and we will see.',
@@ -3988,6 +3989,8 @@ const HLW_SAY = {
   /* No day count, no question, no welcome-back fanfare. A number is an
      accusation, and somebody away for a fortnight was probably unwell. */
   back: [
+    'There you are, {n}. Weeds had a good run of it.',
+    'Everything is where you left it, {n}. I did check.',
     'Morning. Weeds had a good run of it.',
     'There you are. Sun did my job while I stood about.',
     'Everything is where you left it. I did check.',
@@ -3995,6 +3998,7 @@ const HLW_SAY = {
     'Still here. So is all of it.',
   ],
   noSeeds: [
+    'No seeds, {n}. The shed is not going to fill itself.',
     'No seeds, no crops, no notes. Walks turn up seeds, apparently.',
     'I would offer you a seed but I have pockets made of air.',
     'Nothing to plant. Even I cannot grow a plan.',
@@ -4002,6 +4006,7 @@ const HLW_SAY = {
     'The pouch is empty. I checked twice, then shook it.',
   ],
   empty: [
+    'All that dirt, {n}, and nothing in it.',
     'Dirt. Excellent dirt. Doing nothing.',
     'I have been guarding an empty patch all morning. Riveting.',
     'Nothing planted. I am basically a scarecrow with a pension.',
@@ -4010,6 +4015,7 @@ const HLW_SAY = {
     'We could grow something. Or keep admiring the mud. Your call.',
   ],
   ripe: [
+    'Something is ready, {n}. I am not going to pick it for you.',
     'That one is done. Pick it before I try with these hands.',
     'Ready. I have been staring at it for an hour to be sure.',
     'It came up. I take no credit and all of the credit.',
@@ -4018,6 +4024,7 @@ const HLW_SAY = {
     'That is ready, chief. I am not touching it, I would drop it.',
   ],
   growing: [
+    'Coming along, {n}. Slowly. That is how it goes.',
     'It is doing whatever it does under there. Best not to watch.',
     'Coming along. Slowly. Like everything with roots.',
     'Give it time. Time is the one thing I have plenty of.',
@@ -4026,11 +4033,13 @@ const HLW_SAY = {
     'Nothing to do but wait, which is my speciality.',
   ],
   full: [
+    'Every bed is spoken for, {n}. Nothing left for me to worry about.',
     'Every bed working. Nothing left for me to fuss over.',
     'Full house. I will be over here supervising.',
     'All planted. Now the hard part, which is waiting.',
   ],
   idle: [
+    'Quiet one today, {n}.',
     'Rained overnight. Did half my job for me.',
     'Wind has been at the fence again.',
     'That crow has opinions about my technique.',
@@ -4043,9 +4052,26 @@ const HLW_SAY = {
 
 /* Picked with a per-session salt, the way speechLine does, so opening the sheet
    twice in a row does not hand back the same line. */
-function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway }) {
+/* HE USES YOUR NAME, SOMETIMES. Tom's call, 2026-08-16: the gardener should
+   call the player by name. Two things make that land instead of grate.
+   FIRST, not every line. A character who says your name every single time is a
+   chatbot, not a person. Roughly a third of each pool carries `{n}`; the rest
+   never does, so hearing it stays worth something.
+   SECOND, the name is often ABSENT. social.displayName() returns null for
+   anybody who has not registered, which is most players, and there is no honest
+   substitute: "friend" and "player" both read as a form letter from a company.
+   So a nameless player simply gets the lines without `{n}`, and the pool is
+   built so every state still has several. The filter is the mechanism, and
+   tests/hollow-audit.mjs asserts every pool survives it non-empty, because a
+   pool that filtered down to nothing would leave the keeper silent. */
+function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, name }) {
   if (S.hlwSalt == null) S.hlwSalt = Math.floor(Math.random() * 1e6);
-  const pick = arr => arr[(S.hlwSalt + arr.length) % arr.length];
+  const usable = arr => (name ? arr : arr.filter(l => !l.includes('{n}')));
+  const pick = arr => {
+    const a = usable(arr);
+    const line = a[(S.hlwSalt + a.length) % a.length] || arr.find(l => !l.includes('{n}')) || '';
+    return line.replace(/\{n\}/g, name || '');
+  };
   if (firstEver) return pick(HLW_SAY.first);
   if (daysAway >= 3) return pick(HLW_SAY.back);
   if (ripe) return pick(HLW_SAY.ripe);
@@ -4057,9 +4083,14 @@ function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway }) 
 }
 
 function openHollow(after) {
+  /* Read ONCE, on the way in, and written on the way out. See the firstEver
+     comment in render(): reading it per render made the welcome line expire
+     about thirty seconds into a first visit. */
+  let seenAt = 0;
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`, { cls: '', onClose: () => after?.() });
+    <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`,
+    { cls: '', onClose: () => { kvSet('hlwSeen', Date.now()); after?.(); } });
   const body = $('#hollowBody', wrap);
   /* y 500, not 560. His box is 190 tall, so on the 740 stage 560 put his own
      contact shadow 6 units past the bottom edge, and on a 667-tall phone his
@@ -4069,6 +4100,8 @@ function openHollow(after) {
   let busy = false;        // a ritual in flight: hold re-renders so animations run whole
   let pouchOpen = false;
   let walkT = null;
+
+  const bootSeen = kvGet('hlwSeen', 0).then(v => { seenAt = v; });
 
   const bandNow = () => { const h = new Date().getHours(); return (h >= 7 && h < 17) ? 'day' : ((h >= 17 && h < 20) || (h >= 5 && h < 7)) ? 'dusk' : 'night'; };
 
@@ -4127,28 +4160,46 @@ function openHollow(after) {
 
   async function render() {
     if (!body.isConnected || busy) return;
-    const [garden, compost, eq, coin] = await Promise.all([gardenState(), compostStatus(), equipped(), coins()]);
+    await bootSeen;   // seenAt must be settled before firstEver is derived from it
+    const [garden, compost, eq, coin, keeperName] = await Promise.all([
+      gardenState(), compostStatus(), equipped(), coins(),
+      // null for anybody who never registered a social name, which is most players
+      social.displayName().catch(() => null),
+    ]);
     const bedPrice = plotPrice(garden.plotsOwned);
     const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const band = bandNow();
     const beds = garden.plots.map((p, i) => ({ ...p, cx: HLW_SPOTS[i][0], cy: HLW_SPOTS[i][1] }));
+    // shiny UNDEFINED on purpose: this is the viewer's OWN pet, so S.shinyPets answers
+    const hlwPet = petFrom(null, eq && eq.C);
     /* WHAT THE KEEPER CAN HONESTLY SAY. Read from the same garden state the beds
        are drawn from, so he can never claim something the screen contradicts. */
     const nowMs = Date.now();
     const ripeN = garden.plots.filter(p => p && nowMs >= p.readyAt).length;
     const growN = garden.plots.filter(p => p && nowMs < p.readyAt).length;
-    const lastSeen = await kvGet('hlwSeen', 0);
-    const daysAway = lastSeen ? Math.floor((nowMs - lastSeen) / 864e5) : 0;
-    const firstEver = !lastSeen;
-    if (!busy) await kvSet('hlwSeen', nowMs);
+    const daysAway = seenAt ? Math.floor((nowMs - seenAt) / 864e5) : 0;
+    /* firstEver IS SETTLED ONCE PER VISIT, not per render. This used to write
+       hlwSeen during the FIRST render, so the 30s tick, or any action at all,
+       flipped it false and replaced the welcome line about 30 seconds in. The
+       one line written specifically for somebody who has never been here was the
+       line least likely to be read. hlwSeen is written on CLOSE now, and
+       firstEver is captured once when the sheet opens. */
+    const firstEver = !seenAt;
     const say = hlwLine({ ripe: ripeN, growing: growN, planted: ripeN + growN,
-      owned: garden.plotsOwned, seeds: seedTotal, firstEver, daysAway });
+      owned: garden.plotsOwned, seeds: seedTotal, firstEver, daysAway, name: keeperName });
     body.innerHTML = `
     ${/* ABOVE the diorama, not under it. The stage is taller than any phone, so a
           note below it needed a 176px scroll at 390x844 and 318px at 375x667: the
           only instruction on the screen, including "Nothing ever dies", was one a
           first-time player never saw. */''}
-    <p class="note" style="margin:0 2px 8px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>
+    ${/* ONE instruction on a first visit, not two. The bar and the note both sat
+          above the diorama and together pushed the keeper's speech bubble 37px
+          below the fold at 375x667, measured. Two competing paragraphs is also
+          worse writing: a first-timer needs the single next step, and the full
+          rules of the loop are only useful once they have planted something. So
+          the bar REPLACES the note on the first visit and the note returns on
+          the second. */''}
+    ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       <div style="position:absolute;inset:0;background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.14),transparent 70%)"></div>
       <svg viewBox="0 0 390 ${HLW_H}" style="position:absolute;inset:0;width:100%;height:100%;display:block">
@@ -4217,8 +4268,25 @@ function openHollow(after) {
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
       <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:26px;top:630px;width:70px;height:66px"></button>
+      ${/* THE PET IS IN THE GARDEN, AND NOT ON THE FIRST VISIT. Tom handed me this
+            call, so here is the reasoning rather than just the outcome.
+            IN, normally: the designer's handoff puts a wandering pet in the scene
+            with petInGarden defaulting true, and this is a place the player is
+            meant to want to stand around in. A pet that only exists on the Today
+            card reads as a stat, not a companion.
+            OUT, on the first visit: the one job of a first visit is that the
+            player finds the shed and plants something. The accent arrow points
+            at the shed and it is the only loud thing on the screen. A pet
+            wandering on a 12s loop is the second loudest, and it competes with
+            the exact cue the whole layer exists to deliver. It arrives on the
+            second visit, which also gives the garden something new to show.
+            It goes through petAsideHtml/petFrom per the figure contract: shiny
+            is left UNDEFINED so S.shinyPets answers for the viewer's own pet,
+            and it is registered in tests/figure-audit.mjs SITES, which FAILS if
+            a new surface draws a pet and is not listed. */''}
+      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:26px;top:${HLW_H - 150}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74)}</div>` : ''}
       <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
-        ${say ? `<span id="hlwSay" class="hlw-say">${esc(say)}</span>` : ''}
+        ${say ? `<span id="hlwSay" class="hlw-say" role="status" aria-live="polite">${esc(say)}</span>` : ''}
         <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>
         <span id="hlwFlip" style="position:absolute;inset:0;display:block;transform:scaleX(${av.facing});transition:transform .18s ease-in-out">
           <span id="hlwAnim" style="position:absolute;inset:0;display:block;animation:hlwIdle 4s ease-in-out infinite;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35))">
@@ -4241,6 +4309,26 @@ function openHollow(after) {
         ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:11px;font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
         <i style="font-size:10px;font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
       </button>` : ''}
+      ${/* THE FIRST VISIT LAYER. The designer's first-visit comp carried three
+            things the build never had: an accent arrow at the shed, a FREE
+            STARTER SEEDS label on it, and a bottom bar saying where to tap. All
+            three were missing, and it was the single largest gap between what
+            Tom prepped and what shipped. A first-timer got a joke ("I am the one
+            who stands here") and no next step, on a screen where every noun is
+            invented.
+            It points at the SHED and not at a bed, because the shed is where the
+            seeds are and a bed with nothing to plant in it is a dead end. It
+            uses the accent exactly once more, which is the same budget the
+            thirsty bed gets, and it is pointer-events:none so it can never eat
+            the tap it is asking for. It is gone the moment anything is planted,
+            not on a timer, because a timer would take it away mid-read. */''}
+      ${firstEver ? `<div class="hlw-first" aria-hidden="true">
+        ${/* Under the shed DOOR, not beside the shed. Measured on the render: the
+              shed button spans stage x 282 to 382, and the arrow at 262 sat left
+              of it over open grass, pointing at nothing. The door is at ~330. */''}
+        <span class="hlw-arrow" style="left:315px;top:172px">${hlwArt('hollow-back-chevron', { w: 34, h: 34, style: 'transform:rotate(90deg)' })}</span>
+        <span class="hlw-freelabel" style="left:246px;top:212px">FREE STARTER SEEDS</span>
+      </div>` : ''}
       ${band === 'dusk' ? '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(201,127,90,.16),rgba(60,40,70,.18));pointer-events:none;z-index:8"></div>' : ''}
       ${band === 'night' ? '<div style="position:absolute;inset:0;background:rgba(22,28,58,.42);pointer-events:none;z-index:8"></div>' : ''}
       ${band !== 'day' ? `<div style="position:absolute;inset:0;pointer-events:none;z-index:9">

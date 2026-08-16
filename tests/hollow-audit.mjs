@@ -48,7 +48,10 @@ await page.evaluate(async base => {
     ],
     composts: { date: '', used: 0 },
   });
-  await kv.kvSet('hlwSeen', 0);
+  /* A RETURNING player for sections 1 to 5, so the full instruction note is the
+     one on screen. The first visit is seeded deliberately in section 6, and the
+     two states now show different instructions: the bar replaces the note. */
+  await kv.kvSet('hlwSeen', now - 2 * 864e5);
 }, srv.url);
 
 await page.evaluate(() => document.querySelector('#kitchenActBtn')?.click());
@@ -104,7 +107,7 @@ note(overlaps.length === 0, `OVERLAP: ${JSON.stringify(overlaps)}`);
 const foldInfo = await page.evaluate(() => {
   const sc = document.querySelector('#hollowBody');
   sc.scrollTop = 0;
-  const n = sc.querySelector('.note');
+  const n = sc.querySelector('.note, .hlw-bar');
   const r = n ? n.getBoundingClientRect() : null;
   const say = document.querySelector('#hlwSay');
   const sr = say ? say.getBoundingClientRect() : null;
@@ -118,7 +121,7 @@ const foldInfo = await page.evaluate(() => {
     maxScroll: sc.scrollHeight - sc.clientHeight,
   };
 });
-note(foldInfo.noteText, 'NO .note found in #hollowBody');
+note(foldInfo.noteText, 'NO instruction (.note or .hlw-bar) found in #hollowBody');
 note(foldInfo.noteFullyVisible, `NOTE BELOW FOLD: bottom ${foldInfo.noteBottom} vs viewport ${foldInfo.innerH}`);
 note(/cauldron/i.test(foldInfo.noteText || ''), 'NOTE never says where the harvest goes');
 note(foldInfo.keeperSayVisible, `KEEPER LINE BELOW FOLD: bottom ${foldInfo.sayBottom} vs viewport ${foldInfo.innerH}`);
@@ -170,6 +173,84 @@ if (REDUCED) {
   note(motion.total > 0, 'EMPTY SAMPLE: getAnimations() returned nothing, the check did not run');
   note(motion.running.length === 0, `REDUCED MOTION STILL RUNNING: ${motion.running.length} of ${motion.total} -> ${JSON.stringify(motion.running.slice(0, 6))}`);
 }
+
+
+/* ---------- 6. the keeper knows your name, and survives not knowing it ------ */
+const pools = await page.evaluate(async base => {
+  const src = await (await fetch(new URL('js/app.js', base))).text();
+  const block = src.slice(src.indexOf('const HLW_SAY = {'), src.indexOf('\nfunction hlwLine'));
+  const out = {};
+  for (const m of block.matchAll(/^\s{2}([a-zA-Z]+):\s*\[([\s\S]*?)^\s{2}\],/gm)) {
+    const lines = [...m[2].matchAll(/^\s*'((?:[^'\\]|\\.)*)',/gm)].map(x => x[1]);
+    out[m[1]] = { total: lines.length, unnamed: lines.filter(l => !l.includes('{n}')).length,
+      named: lines.filter(l => l.includes('{n}')).length };
+  }
+  return out;
+}, srv.url);
+note(Object.keys(pools).length >= 6, `EMPTY SAMPLE: parsed ${Object.keys(pools).length} keeper pools`);
+for (const [k, v] of Object.entries(pools)) {
+  note(v.unnamed >= 1, `POOL "${k}" has ${v.unnamed} nameless lines: a player with no registered name would leave the keeper SILENT`);
+}
+note(Object.values(pools).some(v => v.named >= 1), 'no pool uses {n} at all, so the keeper never says the name');
+
+/* CLOSE FIRST, THEN RESET. Closing the sheet is what writes hlwSeen now, so
+   seeding a first visit before the close just gets overwritten by it. Getting
+   this backwards made the audit report a self-destruct that the code no longer
+   has, which would have sent me to fix working code. */
+await page.evaluate(() => { document.querySelector('.sheet-close')?.click(); });
+await sleep(900);
+const named = await page.evaluate(async () => {
+  const kv = await import('./js/db.js');
+  await kv.kvSet('social', { name: 'Bonecrusher' });
+  await kv.kvSet('hlwSeen', 0);
+  return (await kv.kvGet('hlwSeen', -1)) === 0;
+});
+note(named, 'could not seed a first visit: hlwSeen did not reset');
+await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+await sleep(2400);
+const nameState = await page.evaluate(() => {
+  const say = document.querySelector('#hlwSay');
+  return {
+    text: say ? say.textContent.trim() : null,
+    live: say ? say.getAttribute('aria-live') : null,
+    leftoverToken: say ? say.textContent.includes('{n}') : false,
+    firstLayer: !!document.querySelector('.hlw-first'),
+    bar: !!document.querySelector('.hlw-bar'),
+    pet: !!document.querySelector('#hlwPet'),
+  };
+});
+note(nameState.text, 'the keeper said nothing at all');
+note(!nameState.leftoverToken, `an unsubstituted {n} reached the screen: "${nameState.text}"`);
+note(nameState.live === 'polite', 'the keeper line is the screen primary status text and has no aria-live');
+
+/* ---------- 7. first visit: guidance present, and it eats no taps ---------- */
+note(nameState.firstLayer, 'FIRST VISIT: no .hlw-first guidance layer, which is the comp gap Tom flagged twice');
+note(nameState.bar, 'FIRST VISIT: no bottom instruction bar');
+note(!nameState.pet, 'FIRST VISIT: the pet is on screen and competes with the one cue the layer exists to deliver');
+const shedHit = await page.evaluate(() => {
+  const shed = document.querySelector('#hlwShed');
+  if (!shed) return { err: 'no shed' };
+  const r = shed.getBoundingClientRect();
+  const desc = el => el ? `${el.tagName}${el.id ? '#' + el.id : ''}${((el.className.baseVal ?? el.className) || '').toString().trim().split(/\s+/).filter(Boolean).map(c => '.' + c).join('')}` : 'null';
+  const pts = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + r.width * 0.3, r.top + r.height * 0.3], [r.right - r.width * 0.3, r.bottom - r.height * 0.3]];
+  return { hits: pts.map(([x, y]) => (y >= 0 && y <= innerHeight ? desc(document.elementFromPoint(x, y)) : 'OFFSCREEN')) };
+});
+note(!shedHit.err && shedHit.hits.every(h => h === 'OFFSCREEN' || h.includes('hlwShed')),
+  `FIRST VISIT: the guidance layer intercepts the shed tap it is pointing at -> ${JSON.stringify(shedHit)}`);
+
+/* ---------- 8. firstEver must not expire mid-visit ------------------------- */
+const seenDuring = await page.evaluate(async () => (await (await import('./js/db.js')).kvGet('hlwSeen', 0)));
+note(seenDuring === 0, `firstEver SELF-DESTRUCTS: hlwSeen was written to ${seenDuring} while the sheet is still open, so the welcome line expires mid-visit`);
+
+/* ---------- 9. the only exit clears the 44px floor ------------------------- */
+const closeBox = await page.evaluate(() => {
+  const b = document.querySelector('.sheet-close');
+  if (!b) return null;
+  const r = b.getBoundingClientRect();
+  return { w: +r.width.toFixed(1), h: +r.height.toFixed(1) };
+});
+note(closeBox && closeBox.w >= 44 && closeBox.h >= 44,
+  `the sheet's only exit is ${closeBox ? closeBox.w + 'x' + closeBox.h : 'missing'}, under the 44px floor`);
 
 await sleep(300);
 if (OUT) await page.screenshot({ path: `${OUT}/fix-${TAG}.png` });
