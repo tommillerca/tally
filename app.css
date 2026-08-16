@@ -7444,6 +7444,20 @@ body::before {
    by a screenful of empty floor (measured at ~450px before this) */
 .fight-body > .arena { transition: min-height .35s ease, height .35s ease, opacity .3s ease; }
 .fight-body.fight-settled > .arena { flex: 0 0 auto; min-height: 0; height: 0; opacity: 0; overflow: hidden; margin: 0; border: 0; }
+/* THE HUD COLLAPSES WITH THE ARENA. While it was absolutely positioned INSIDE
+   .arena it was collapsed for free, by the arena's own height:0 and
+   overflow:hidden. Moving it out of the arena took that away, and nothing here
+   replaced it: measured at 375x667 after a win, 94.4px of live HP bars stayed
+   on screen and pushed .fight-over from top 157.8 down to 260.2. Two dead bars
+   and an empty pet bar above a VICTORY banner is a smaller version of exactly
+   the complaint this class was written for (Tom, 2026-08-10, "huge blank gap at
+   the top of the screen"). It rides the same class flip as the arena and uses
+   the same transition, so the two leave together rather than in sequence. */
+.fight-body > .fight-hud { transition: height .35s ease, opacity .3s ease, margin .35s ease; }
+.fight-body.fight-settled > .fight-hud {
+  height: 0; opacity: 0; overflow: hidden; margin: 0; padding-top: 0; padding-bottom: 0; border: 0;
+}
+@media (prefers-reduced-motion: reduce) { .fight-body > .fight-hud { transition: none; } }
 .fight-body.fight-settled > .fight-actions,
 .fight-body.fight-settled > #fendrow { display: none; }
 @media (prefers-reduced-motion: reduce) { .fight-body > .arena { transition: none; } }
