@@ -635,14 +635,26 @@ export async function redeemCode(raw) {
   if (!def) return { ok: false, reason: 'invalid' };
   const done = (await kvGet('redeemed', [])) || [];
   if (done.includes(code)) return { ok: false, reason: 'used' };
-  let pet = null, coins = 0, dupe = false;
+  let pet = null, coins = 0, stacked = false;
   if (def.pet) {
+    /* DUPES STACK, and the caller has to be able to SAY SO (Tom's call,
+     * 2026-08-16). There used to be an `if (!pet) { dupe = true; coinsAdd(120) }`
+     * consolation here, and it had been unreachable for as long as dupes have
+     * stacked: grantPet returns the species unconditionally for an explicit id,
+     * so `pet` is never null on a valid pet code and that branch never once ran.
+     * Its only living effect was a lie by omission in Settings, where redeeming
+     * a code for a species you already own minted a second copy and then showed
+     * the byte-identical "unlocked!" toast a first-time unlock shows.
+     * Ownership has to be read BEFORE the grant, because the grant is what
+     * changes it, and there is nothing in grantPet's return value that can tell
+     * the two cases apart afterwards. */
+    const ownedBefore = await ownedCosmeticIds();
     pet = await grantPet(def.pet, 'code:' + code);
-    if (!pet) { dupe = true; coins += 120; await coinsAdd(120); } // already owned -> coins
+    stacked = !!pet && ownedBefore.has(pet.id);
   }
   if (def.coins) { coins += def.coins; await coinsAdd(def.coins); }
   done.push(code); await kvSet('redeemed', done);
-  return { ok: true, pet, coins, dupe };
+  return { ok: true, pet, coins, stacked };
 }
 
 /* ---- v130: BANKED per-INSTANCE leveling + instance equip. Each individual pet
