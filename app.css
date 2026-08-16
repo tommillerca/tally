@@ -7817,3 +7817,27 @@ body::before {
 }
 @keyframes hlwSayIn { from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(.94); }
                         to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+/* THE COMMON CRATE'S AUTHORED FRAMES.
+   Every frame is stacked in the same box and only `.on` is shown, so stepping
+   the sequence is a class swap with no layout and no reflow. They are all in
+   the DOM from the start, which is also what lets openPackReveal decode them
+   before the sequence is allowed to run.
+   144px is 48 x 3 EXACTLY. The vector crates use 148, which is what the icon
+   path hands out, but 148 is not a multiple of 48 and pixel art resampled off
+   its grid turns to mush. image-rendering: pixelated keeps the edges hard at
+   whatever the device pixel ratio does on top. */
+.co-seq { position: relative; display: block; width: 144px; height: 144px; margin: 0 auto; }
+.co-seq img {
+  position: absolute; inset: 0; width: 144px; height: 144px;
+  image-rendering: pixelated; opacity: 0;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .5));
+}
+.co-seq img.on { opacity: 1; }
+/* Reduced motion gets the OPEN state, not the closed one. The point of the beat
+   is that the crate opened; freezing on frame 0 would tell a player who cannot
+   have animation that nothing happened. */
+@media (prefers-reduced-motion: reduce) {
+  .co-seq img { opacity: 0 !important; }
+  .co-seq img:last-child { opacity: 1 !important; }
+}
