@@ -47,7 +47,17 @@ const APPROVED = [
   // Phase 0, approved 2026-08-06 at rev 3 ("okay im liking this now")
   { screen: 'Today',      mock: 'today.html',        built: true,  markers: ['hero-lvrow', 'hero-scene', 'var(--coral)'] },
   { screen: 'Wardrobe',   mock: 'wardrobe.html',     built: true,  markers: ['ward-head', 'ward-lv', 'pd-swatch', 'pd-center'] },
-  { screen: 'The Pit',    mock: 'pit.html',          built: true,  markers: ['fight-hud', 'border-bottom: 2px solid var(--ink)', 'range-pill'] },
+  /* 'border-bottom: 2px solid var(--ink)' used to be the middle marker here and
+     it was never a signature, it was a generic declaration. Markers are matched
+     with a plain src.includes over the whole app source, so a marker only proves
+     its screen shipped if the string belongs to that screen and nowhere else.
+     That one is carried by .sheet.t1 .sheet-head, .t1-budget and .map-topbar as
+     well, so once the Pit HUD stopped having a bottom border the marker went on
+     passing, satisfied by three rules from other screens. A marker that answers
+     for a screen it does not describe cannot fail for the right reason.
+     .hud-side is the Pit's own: 8 uses in app.css and 2 in js/app.js, all of
+     them this HUD. */
+  { screen: 'The Pit',    mock: 'pit.html',          built: true,  markers: ['fight-hud', 'hud-side', 'range-pill'] },
   { screen: 'Kitchen',    mock: 'kitchen.html',      built: true,  markers: ['marquee', 'garland', 'wisp', 'spore'] },
   // Tier 1, approved 2026-08-06 ("these are looking really good let's build them")
   { screen: 'Add food',        mock: 't1-picker.html',   built: true, markers: ['t1-routes', 't1-budget', 't1-frow'] },
