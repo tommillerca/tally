@@ -465,7 +465,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   const warm = await timeImageLoad(PROBE_URL);
   console.log(`  cache probe: cold ${cold.ms}ms (floor ${COLD_FLOOR_MS}ms), warm ${warm.ms}ms (ceiling ${WARM_CEILING_MS}ms), decoded ${cold.w}x`);
   if (!cold.w || !warm.w) await bailSetup(`the cache probe could not even load ${PROBE_URL} (naturalWidth ${cold.w}/${warm.w}). The fixture is not serving the FX frames.`);
-  if (cold.ms < COLD_FLOOR_MS) await bailSetup(`a cold 112KB frame took ${cold.ms}ms through a pipe that should cost about 900ms, so the network throttle is NOT in effect and the v245 race cannot happen here. This audit would pass no matter how broken the FX are, which is not a check (anti-regression rule 1).`);
+  if (cold.ms < COLD_FLOOR_MS) await bailSetup(`an uncached FX frame loaded in ${cold.ms}ms, under the ${COLD_FLOOR_MS}ms floor, so the 400ms-latency pipe is NOT in effect and the v245 race cannot happen here. This audit would pass no matter how broken the FX are, which is not a check (anti-regression rule 1).`);
   if (warm.ms >= WARM_CEILING_MS) await bailSetup(`a frame this audit had just loaded took ${warm.ms}ms to load AGAIN, so nothing is being cached and every re-read pays the throttled network. Under that, even a correct app plays over undecoded frames and this audit would report the v245 bug against a healthy tree. Almost always the server: check for 'cache-control: no-store' (tests/release-gate.mjs:53-54 sends it) and for the FX header rewrite above still being installed.`);
 
   /* FLOORS AND THE ONE REMAINING CEILING, all justified from measurement.
