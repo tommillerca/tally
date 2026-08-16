@@ -9059,6 +9059,9 @@ async function renderSettings(el) {
     await syncNotifications();
     const loc = await kvGet('lastLoc', null);
     await scheduleRares();   // retired: clears any rare pushes still queued
+    // syncNotifications only owns the reminder + streak ids, so a siege push
+    // already sitting on the device would outlive the pref that turned it off.
+    if (!prefs.enabled || !prefs.siege) await cancelSiegeReminder();
     if (note) toast(note, 2600);
     renderSettings(el);
   };
@@ -9076,12 +9079,17 @@ async function renderSettings(el) {
   $('#notifAll', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true }, 'All notifications on.');
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: true }, 'All notifications on.');
   });
   $('#notifEss', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true }, 'Essentials only: reminders, streak saver + friend requests.');
+    // Essentials is exactly the three kinds this toast names, so `siege` goes OFF.
+    // Both presets used to write the same four keys, which made "Just essentials"
+    // and "Everything (power user)" byte-identical and the labels a lie. `siege`
+    // is the fifth kind (notify.js DEFAULTS) and the only one with no row of its
+    // own, so these two buttons are the only place it can be set at all.
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: reminders, streak saver + friend requests.');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
     const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
