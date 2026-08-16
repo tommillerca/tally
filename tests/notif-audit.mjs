@@ -148,20 +148,43 @@ const fired = await page.evaluate(async () => {
 check('TEST  notifyNow returns true when permission is granted (web path)',
   fired === true, `notifyNow returned ${fired}`);
 
-/* Also verify the button itself fires the toast on success. Drain the
-   existing toast queue first (each entry is 2200 ms + 180 ms per app.js:
-   1735-1757, so previous ALL/ESS toasts might still be showing), then
-   click, then WAIT for the specific text this button produces rather
-   than a fixed sleep + read. Same trap as the redeem audit; same fix. */
-await sleep(3000);   // let any preceding queued toasts drain
+/* Also verify the button itself fires the toast on success.
+ *
+ * DO NOT read #toast once and hope. `toast()` is a QUEUE (app.js:2244): each
+ * entry holds the screen for its own duration (2200ms default, 3200ms for
+ * this button) before the next runs, and the app emits ambient toasts of its
+ * own that sit AHEAD of the one we trigger. Measured on this build: the click
+ * lands while "Tip: back up your log" is showing, a seed-pouch nudge is
+ * already queued behind it, and "Test notification sent." does not reach the
+ * screen until ~8000ms after the click. The previous 6000ms wait on the live
+ * textContent expired mid-queue and read "" on a perfectly healthy app.
+ *
+ * So: record every distinct message into __toastLog with a MutationObserver
+ * (a queued toast can come and go inside one poll interval), then wait on the
+ * CONDITION, not on a duration. The copy asserted here is unique to this
+ * button, so the log cannot match anything else, and if the message never
+ * appears the loop still times out with an empty log and the check still
+ * fails. Same trap as the redeem audit; same fix. */
+await page.evaluate(() => {
+  window.__toastLog = [];
+  const el = document.getElementById('toast');
+  if (!el) return;
+  const push = () => {
+    const t = (el.textContent || '').trim();
+    if (t && window.__toastLog[window.__toastLog.length - 1] !== t) window.__toastLog.push(t);
+  };
+  new MutationObserver(push).observe(el, { childList: true, subtree: true, characterData: true });
+});
 await page.evaluate(() => document.querySelector('#notifTest').click());
-const testToast = await page.waitForFunction(
-  () => {
-    const t = (document.getElementById('toast')?.textContent || '').trim();
-    return /test notification sent|background the app|could not send/i.test(t) ? t : null;
-  },
-  { timeout: 6000, polling: 100 }
-).then(h => h.jsonValue()).catch(() => '');
+const TOAST_RE = /test notification sent|background the app|could not send/i;
+let testToast = '';
+for (const t0 = Date.now(); Date.now() - t0 < 25000;) {
+  testToast = await page.evaluate(re =>
+    (window.__toastLog || []).find(t => new RegExp(re, 'i').test(t)) || '', TOAST_RE.source);
+  if (testToast) break;
+  await sleep(250);
+}
+console.log('toast log:', JSON.stringify(await page.evaluate(() => window.__toastLog || [])));
 console.log('test toast:', testToast);
 check('TEST  #notifTest button toasts success (not "Could not send")',
   /test notification sent|background the app/i.test(testToast) && !/could not send/i.test(testToast),

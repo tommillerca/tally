@@ -395,7 +395,7 @@ export function rollDenLoot(den, week, ownedSet, maxLevel = 999, preferArch = nu
 // Daily wins log as a NON-gating type ('bossday' / 'roamboss') so grinding them
 // never fast-forwards the endless-Pit gate — only the FIRST-ever clear of each
 // den identity advances the gate (a permanent 'boss' marker, counted once).
-export async function claimDenWin(den, day = dateKey()) {
+export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
   const r = den.reward;
   if (den.roaming) {
     const xp = await award(denKey(day, den), 'roamboss', r.xp || 50, `Roaming boss: ${den.name}`);
@@ -431,8 +431,29 @@ export async function claimDenWin(den, day = dateKey()) {
   // landmark: once per day for loot/coins/xp, logged non-gating
   const xp = await award(denKey(day, den), 'bossday', r.xp || 50, `Boss den: ${den.name}`);
   if (xp === 0) return null; // already cleared today
-  // gate marker: advances the endless Pit exactly once per den ever beaten
-  await award(`bossfirst-${den.id}`, 'bossfirst', 0, `First clear: ${den.name}`);
+  /* GATE MARKER, SCOPED TO THE WEEK. Tom, 2026-08-16, after saying this had
+     been "fixed" five times: "I've killed a boss den and it still didn't raise
+     my pit cap."
+     He was right again, and this was the last one. A landmark den's `id` is its
+     GRID CELL (`${cx}_${cy}`, poi.js denForCell), but denForCell seeds its tier
+     and boss from `den:${week}:${cx}:${cy}`, so the cell holds a DIFFERENT boss
+     every week. The marker was `bossfirst-<cell>`, so the first clear of a cell
+     banked it forever and every later week's boss in that cell minted nothing.
+     A player who fights the dens near home hits this permanently: real kills,
+     no ceiling movement, no explanation on screen.
+     Reproduced before changing anything: three real kills at the Gastown anchor
+     across W30/W31/W32 wrote only TWO markers and left the ceiling at 13 where
+     it should have been 16.
+     This is also the other half of his 2026-08-13 "some do some dont". That fix
+     gave the ROAMING branch a marker; roaming ids are `roam-<date>-<cell>` and
+     remote is `remote-<day>`, both already time-scoped, so only this landmark
+     branch still carried the coarse identity.
+     Week, not day, on purpose: the boss rotates weekly, so a new week is a new
+     boss and counts once, while re-clearing it daily inside that week hits
+     award()'s own dedupe and pays no ceiling. Old `bossfirst-<cell>` rows keep
+     counting as their own distinct id, so nobody's existing total is clawed
+     back and no migration is needed. */
+  await award(`bossfirst-${week}-${den.id}`, 'bossfirst', 0, `First clear: ${den.name}`);
   if (r.crate) await grantCrate(r.crate, 'boss-den');
   // every boss drops two pieces: keep ONE (chooser persists in kv until picked)
   const owned = await ownedGearIds();
@@ -649,4 +670,49 @@ export async function claimGluttonWin(day = dateKey(), slot = 0) {
   }
   if (!gear) await boneDustAdd(40);                // already own it all: consolation
   return { xp, coins: 140, gear };
+}
+
+/* RESTORE THE CEILING THAT THE CELL-SCOPED MARKER SWALLOWED.
+ *
+ * The fix above makes future kills count. It does nothing for the weeks a
+ * player already lost, and those are the players who are annoyed: somebody who
+ * beat a boss in the same cell for six straight weeks banked ONE marker and is
+ * owed five more. Telling them it is fixed while leaving their ceiling where
+ * the bug left it would be a half-truth.
+ *
+ * Nothing needs to be guessed to give it back. Every landmark kill ever made
+ * wrote a reward row keyed `boss-<YYYY-MM-DD>-<cell>` (claimDenWin ->
+ * denKey(dateKey(), den)), so the exact set of (week, cell) pairs the player
+ * actually beat is already on the device. Fold those dates to ISO weeks, dedupe,
+ * and mint the marker each one should have had.
+ *
+ * Deliberately narrow: only keys starting `boss-`. Remote rows are
+ * `remoteboss-<day>` and roaming rows are `roamboss-<day>-<cell>`, and both
+ * branches already minted their own correct markers at claim time, so touching
+ * them would double-count.
+ *
+ * The kv flag is written BEFORE any award, matching backfillStarterSeedsIfNeeded:
+ * a crash midway must leave a player short rather than run the whole thing twice.
+ * award() is idempotent per key anyway, so a re-run could not duplicate, but the
+ * ordering is the house rule and it costs nothing to keep.
+ */
+export async function backfillDenCeilingIfNeeded() {
+  if (await kvGet('denceil-backfill')) return null;
+  await kvSet('denceil-backfill', true);
+  const rows = await db.all('xp');
+  const owed = new Set();
+  for (const r of rows) {
+    if (r.type !== 'bossday' || !r.key.startsWith('boss-')) continue;
+    const m = r.key.slice('boss-'.length).match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if (!m) continue;
+    // midday UTC so a date string cannot land on the previous ISO week
+    owed.add(`${isoWeekKey(new Date(`${m[1]}T12:00:00Z`))}-${m[2]}`);
+  }
+  let added = 0;
+  for (const id of owed) {
+    if (await db.get('xp', `bossfirst-${id}`)) continue;
+    await award(`bossfirst-${id}`, 'bossfirst', 0, 'Past boss den clear (restored)');
+    added++;
+  }
+  return added ? { added, ranks: added * 3 } : null;
 }

@@ -65,6 +65,89 @@ ok('STEP each distinct boss moves it by the same amount, whatever kind it is',
   (roamWin.ceiling - probe.base) === (landWin.ceiling - roamWin.ceiling),
   `roaming +${roamWin.ceiling - probe.base}, landmark +${landWin.ceiling - roamWin.ceiling}`);
 
+/* THE SAME CELL, A NEW BOSS EVERY WEEK.
+ *
+ * Tom, 2026-08-16, having been told this was fixed five times: "I've killed a
+ * boss den and it still didn't raise my pit cap."
+ *
+ * A landmark den's `id` is its GRID CELL (`${cx}_${cy}`), but denForCell seeds
+ * the boss and tier from `den:${week}:${cx}:${cy}`, so one cell holds a
+ * DIFFERENT boss each ISO week. The gate marker was `bossfirst-<cell>`, so the
+ * first clear of a cell banked it forever and every later week's boss in that
+ * cell minted nothing. A player who fights the dens near home sees real kills
+ * and a frozen ceiling, permanently.
+ *
+ * Five audits already covered this bug area and ALL of them passed while it was
+ * live, because every one of them beat a den exactly ONCE in a fresh profile.
+ * Once is the one case the bug cannot show up in. So this drives the REAL
+ * densNear/claimDenWin pair at a real anchor, pinned to ONE cell, across four
+ * consecutive weeks, and asserts the whole delta rather than a trend.
+ *
+ * PROVE-RED: revert the marker to `bossfirst-${den.id}` and WEEK-ROTATION goes
+ * red at +1 win / +3 ceiling instead of +4 / +12.
+ *
+ * The re-clear case is load-bearing in the other direction: it is a second real
+ * kill of the same week's boss on a LATER day, so it reaches the marker line
+ * and can only be stopped by award()'s dedupe. Deleting dedupe to make the
+ * rotation case pass turns this one red.
+ */
+const WEEKS = ['2026-W30', '2026-W31', '2026-W32', '2026-W33'];
+const rot = await page.evaluate(async weeks => {
+  const poi = await import('./js/poi.js');
+  const pit = await import('./js/pit.js');
+  const { db } = await import('./js/db.js');
+  const LAT = 49.28434, LNG = -123.10884;              // Gastown, a real den anchor
+  const ceil = async () => pit.endlessCeiling(await poi.denWinsCount());
+  const landmarks = week => poi.densNear(week, LAT, LNG).filter(d => !d.roaming && !d.remote);
+  const seedWeek = landmarks(weeks[0]);
+  if (!seedWeek.length) return { cell: null, missing: weeks.slice(), steps: [] };
+  const cell = seedWeek[0].id;                         // pin ONE cell for every week
+  const out = { cell, bosses: [], missing: [], steps: [],
+    baseWins: await poi.denWinsCount(), baseCeiling: await ceil() };
+  for (const week of weeks) {
+    const den = landmarks(week).find(d => d.id === cell);
+    if (!den) { out.missing.push(week); continue; }
+    out.bosses.push(`${week} "${den.boss}" t${den.tier}`);
+    /* The THIRD argument is not optional here: without it claimDenWin defaults
+       to the real current week and every iteration writes the same marker, so
+       the check would pass on the broken build. */
+    const paid = await poi.claimDenWin(den, `${week}-d1`, week);
+    out.steps.push({ week, paid: !!paid, wins: await poi.denWinsCount(), ceiling: await ceil() });
+  }
+  // a second real kill of the LAST week's boss, on a later day inside that week
+  const lastWeek = weeks[weeks.length - 1];
+  const again = landmarks(lastWeek).find(d => d.id === cell);
+  const paidAgain = again ? await poi.claimDenWin(again, `${lastWeek}-d2`, lastWeek) : null;
+  out.reclear = { paid: !!paidAgain, wins: await poi.denWinsCount(), ceiling: await ceil() };
+  out.markers = (await db.all('xp'))
+    .filter(x => x.type === 'bossfirst' && x.key.endsWith(cell)).map(x => x.key);
+  return out;
+}, WEEKS);
+
+console.log(JSON.stringify(rot));
+const N = WEEKS.length;
+const lastStep = rot.steps[rot.steps.length - 1];
+ok('SETUP a real den was found in the pinned cell for every week (an empty sample proves nothing)',
+  !!rot.cell && rot.steps.length === N && rot.missing.length === 0,
+  rot.cell ? `cell ${rot.cell}, ${rot.steps.length}/${N} weeks: ${rot.bosses.join(' | ')}${rot.missing.length ? `, MISSING ${rot.missing.join(',')}` : ''}`
+    : `NO landmark den at the anchor, 0 of ${N} weeks sampled`);
+ok('SETUP every one of those weekly kills actually paid out (an unpaid kill is not a test of the gate)',
+  rot.steps.length === N && rot.steps.every(s => s.paid),
+  `${rot.steps.filter(s => s.paid).length}/${N} paid`);
+ok(`WEEK-ROTATION ${N} weekly bosses in ONE cell raise denWins by exactly ${N} (this is Tom's frozen pit cap)`,
+  !!lastStep && lastStep.wins - rot.baseWins === N,
+  lastStep ? `wins ${rot.baseWins} -> ${lastStep.wins}, +${lastStep.wins - rot.baseWins}, expected +${N} (${N - (lastStep.wins - rot.baseWins)} short)`
+    : 'no weekly kill landed at all');
+ok(`WEEK-ROTATION and raise the endless ceiling by exactly ${3 * N}`,
+  !!lastStep && lastStep.ceiling - rot.baseCeiling === 3 * N,
+  lastStep ? `ceiling ${rot.baseCeiling} -> ${lastStep.ceiling}, +${lastStep.ceiling - rot.baseCeiling}, expected +${3 * N} (${3 * N - (lastStep.ceiling - rot.baseCeiling)} short)`
+    : 'no weekly kill landed at all');
+ok(`WEEK-ROTATION one distinct gate marker per week, ${N} in that cell (a cell-only marker leaves 1)`,
+  rot.markers?.length === N, `markers ${JSON.stringify(rot.markers)}`);
+ok('DEDUPE re-killing the SAME week\'s boss on a later day does NOT raise it again (no farm)',
+  !!lastStep && rot.reclear.paid && rot.reclear.ceiling === lastStep.ceiling,
+  `re-clear paid=${rot.reclear?.paid}, ceiling ${lastStep?.ceiling} -> ${rot.reclear?.ceiling}`);
+
 await browser.close(); srv.close?.();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nevery kind of boss counts');
 process.exit(fails.length ? 1 : 0);

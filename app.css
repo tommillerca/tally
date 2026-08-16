@@ -238,7 +238,10 @@ svg { display: block; }
 .sheet-grab { width: 38px; height: 4.5px; background: var(--line-strong); border-radius: 3px; margin: 9px auto 2px; flex: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px var(--pad) 10px; flex: none; }
 .sheet-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sheet-close { color: var(--text-3); font-size: 14px; font-weight: 700; padding: 6px 4px; }
+/* 44px MINIMUM. Measured at 43.8 x 30.9 css px, under the project's own 40px
+   floor, and on several sheets it is the ONLY way out. Padding alone could not
+   fix the height because the line box is 19px; min-height plus centring does. */
+.sheet-close { color: var(--text-3); font-size: 14px; font-weight: 700; padding: 6px 10px; min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .sheet-body { overflow-y: auto; padding: 2px var(--pad) calc(var(--sab) + 20px); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 @keyframes slideup { from { transform: translate(-50%, 60%); } to { transform: translate(-50%, 0); } }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
@@ -501,7 +504,24 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  /* The duration collapse alone is a TRAP on a loop: 0.001s does not stop an
+     infinite animation, it runs one full cycle every millisecond. Measured with
+     reduce emulated, 9 of the Hollow's 10 animations still reported playState
+     "running", and the fireflies changed MORE pixels frame-to-frame than with
+     the setting off. The iteration cap is what actually stops them: one instant
+     cycle, then the element falls back to its own styles. One-shots that declare
+     their own fill-mode (forwards/both) still hold their end state. */
+  *, *::before, *::after {
+    animation-duration: 0.001s !important; transition-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    /* AND THE DELAY, which the first version of this fix missed. A loop with a
+       positive animation-delay still reports playState "running" for the whole
+       length of that delay, so a 2.6s stagger meant 2.6s of an animation the
+       player asked not to have. Found 2026-08-16 by the backdrop lane, which had
+       to work around it with negative staggers inside its own file. Zero here
+       means the one instant cycle above starts immediately and is done. */
+    animation-delay: 0s !important; transition-delay: 0s !important;
+  }
 }
 
 /* ---------- boneheadz ---------- */
@@ -588,6 +608,8 @@ a { color: var(--accent); text-decoration: none; }
 .crate-row.cookpot.ready { border: 1px solid rgba(165, 232, 71, 0.5); border-radius: 12px; box-shadow: 0 0 12px rgba(165, 232, 71, 0.18); }
 .crate-row.recipe.lack { opacity: 0.55; }
 .recipe-need { display: block; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
+/* seed label: what this seed is FOR, so it reads above the grow-time fine print */
+.seed-use { display: block; color: var(--text-2); font-weight: 600; margin-top: 2px; }
 .ingredient-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
 .ing-cell { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .ing-cell.empty { opacity: 0.4; }
@@ -652,6 +674,9 @@ a { color: var(--accent); text-decoration: none; }
 .pot-card { display: grid; gap: 4px; justify-items: center; text-align: center; padding: 12px 8px 10px; border-radius: 14px; background: var(--surface-2); border: 2px solid var(--line); min-height: 104px; align-content: center; }
 .pot-card.ready { border-color: rgba(165,232,71,.55); box-shadow: 0 0 12px rgba(165,232,71,.18); }
 .pot-card.buy { cursor: pointer; border-style: dashed; color: var(--muted); }
+/* a queued cook is paid for but not on the fire yet: dashed like the buy card
+   says "not a pot", the dimming says "waiting its turn" */
+.pot-card.queued { border-style: dashed; opacity: .72; }
 .pot-card .pot-ico { font-size: 24px; line-height: 1; }
 .pot-card b { font-size: 12.5px; }
 .pot-card small { font-size: 11px; color: var(--muted); }
@@ -5106,6 +5131,15 @@ body::before {
   margin: 18px 16px 4px;
   line-height: 1.35;
 }
+/* The boundary line. Quieter than the sign-off on purpose: it is a standing fact,
+   not the close, so it reads as fine print you can find rather than a notice. */
+.log-only {
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-align: center;
+  margin: 14px 20px 2px;
+  line-height: 1.4;
+}
 
 /* An armed purchase button: gold while it waits for the second tap, so "are you
    sure" reads as a state rather than as a new button appearing. */
@@ -7644,3 +7678,95 @@ body::before {
 /* The takeover celebrates a badge; this line says what the player actually did,
    because the toast that confirms it is covered 380ms later by this screen. */
 .cele-note { margin: 14px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
+
+/* ---- The Hollow (v1 WIP): garden diorama. Namespaced .hlw-* ---- */
+@keyframes hlwIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes hlwWalk{0%{transform:translateY(0) rotate(-1.2deg)}100%{transform:translateY(-5px) rotate(1.2deg)}}
+@keyframes hlwSway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(5deg)}}
+@keyframes hlwReady{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+@keyframes hlwGlow{0%,100%{opacity:.5}50%{opacity:.9}}
+@keyframes hlwFirefly{0%,100%{transform:translate(0,0);opacity:.15}25%{opacity:.9}50%{transform:translate(14px,-18px);opacity:.3}75%{opacity:.85}}
+@keyframes hlwPour{0%,100%{transform:rotate(-2deg)}25%,75%{transform:rotate(-14deg)}}
+@keyframes hlwDrop{0%{transform:translateY(0);opacity:0}15%{opacity:.9}100%{transform:translateY(30px);opacity:0}}
+@keyframes hlwPluck{0%{transform:translate(0,0) scale(1);opacity:1}60%{transform:translate(-14px,-44px) scale(1.15)}100%{transform:translate(-22px,-64px) scale(.9);opacity:0}}
+@keyframes hlwToast{0%{transform:translateY(6px);opacity:0}15%,80%{transform:translateY(0);opacity:1}100%{transform:translateY(-8px);opacity:0}}
+@keyframes hlwSprout{0%{transform:scale(0);opacity:0}70%{transform:scale(1.25)}100%{transform:scale(1);opacity:1}}
+@keyframes hlwSteam{0%{transform:translateY(0);opacity:.55}100%{transform:translateY(-14px);opacity:0}}
+@keyframes hlwCrowBob{0%,86%,100%{transform:translateY(0) rotate(0deg)}90%{transform:translateY(-3px) rotate(-6deg)}94%{transform:translateY(0) rotate(3deg)}}
+.hlw-vp{width:100%;overflow:hidden;border-radius:18px;position:relative}
+.hlw-stage{width:390px;height:740px;position:relative;transform-origin:0 0;background:linear-gradient(180deg,#55673a 0%,#617442 38%,#5d7040 66%,#4f6138 100%);overflow:hidden}
+/* 60px, NOT the 84px the soil mound is drawn at. The spots are 63px apart, so an
+   84px box overlapped its row-mate by 21px, and on the lower row the overlapping
+   winner was #hlwBuy (appended last, same z-index): a thumb aiming at a bed could
+   arm a 1,500-coin spend. 60 leaves a 3px gutter and still clears the 40px floor. */
+.hlw-bed{position:absolute;width:60px;height:60px;background:none;border:none;cursor:pointer;z-index:6;padding:0}
+.hlw-bed.arming{width:104px;margin-left:-22px;height:auto;padding:7px 4px;background:#1d1b22;border:2.5px solid var(--accent);border-radius:12px;box-shadow:4px 5px 0 rgba(0,0,0,.45);font-family:var(--display),Bangers,sans-serif;font-size:13px;letter-spacing:.05em;color:var(--accent);z-index:14}
+.hlw-chip{position:absolute;display:inline-flex;align-items:center;gap:4px;background:rgba(13,12,18,.6);border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:12px;letter-spacing:.06em;color:#f2e9d7;pointer-events:none;z-index:5;transform:translateX(-50%)}
+/* The screen's ONE accent moment, spent on the only bed that wants something.
+   Every growing bed used to wear the same droplet, so the droplet meant nothing. */
+/* -7px off the bed's centre line: at 3 beds owned the price sign hangs in the
+   right half of this bed's row, and a centred chip clipped its board by 0.4px.
+   Measured in the render; the audit pins the intersection at zero. */
+/* The chip module owns the markup, the scene owns the position. A zero-size
+   absolutely positioned anchor at the bed's centre x, so .hlw-chip's own
+   translateX(-50%) centres it regardless of how long the label is. */
+.hlw-chipwrap{position:absolute;width:0;height:0;z-index:5}
+.hlw-signwrap{position:absolute;width:66px;height:70px;pointer-events:none;z-index:5}
+/* FIRST VISIT. pointer-events none on the whole layer: it points at the shed,
+   so it must never be the thing that catches the tap it is asking for. */
+.hlw-first{position:absolute;inset:0;pointer-events:none;z-index:11}
+.hlw-first>*{position:absolute}
+.hlw-arrow{filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.hlw-arrow svg circle{fill:var(--accent);fill-opacity:1}
+.hlw-arrow svg path{stroke:#17151d}
+.hlw-freelabel{background:var(--accent);color:#17151d;border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:11px;letter-spacing:.06em;white-space:nowrap;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
+.hlw-bar{margin:0 2px 8px;padding:9px 12px;border-radius:12px;background:#1d1b22;border:2px solid var(--accent);color:var(--accent);font-family:var(--display),Bangers,sans-serif;font-size:14px;letter-spacing:.05em;text-align:center}
+/* READY carries the lime now. It is the payoff, and it was the least visible
+   thing on the screen: 175 css px of fruit at 1.81:1 while the optional watering
+   action wore this chip. The accent MOVED, it was not duplicated. */
+/* A BRAND FOCUS RING. Every control had one, but it was the unstyled Chromium
+   default (outline: auto 1px rgb(0,95,204)) and app.css carried zero
+   :focus-visible rules. On this screen every control is a transparent box over
+   artwork, so a 1px hairline browser ring is the only thing a keyboard user has
+   to go on. Accent, offset, and a dark halo so it survives on the lawn too. */
+/* the panel takes focus on open as a tabindex=-1 container, so it must not
+   draw a ring: only real controls get one. */
+.sheet:focus,.sheet:focus-visible{outline:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+.hlw-bed:focus-visible{outline:3px solid var(--accent);outline-offset:0;box-shadow:0 0 0 6px rgba(13,12,18,.55)}
+.hlw-chip.ready{background:var(--accent);color:#17151d;margin-left:-7px}
+/* Thirst keeps the droplet and drops to the muted ground. Still the only chip
+   with a droplet, so it is still unambiguous, just no longer the loudest thing. */
+.hlw-chip.thirst{background:rgba(13,12,18,.72);color:#9fd0e8;margin-left:-7px}
+.hlw-toast{position:absolute;white-space:nowrap;background:rgba(13,12,18,.72);border-radius:999px;padding:4px 10px;font-family:var(--display),Bangers,sans-serif;font-size:12.5px;letter-spacing:.06em;color:var(--accent);animation:hlwToast 2.4s ease-out forwards;z-index:12}
+
+/* THE KEEPER'S SPEECH BUBBLE. Sits above his head, never over a bed, and never
+   takes a tap: pointer-events stay off so it can never sit between a thumb and
+   a crop. Same bone-card look as the Boneyard's .map-poi-tip. */
+.hlw-say {
+  /* announced: this is the screen's primary status text */
+
+  position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%);
+  max-width: 210px; width: max-content; z-index: 6; pointer-events: none;
+  background: var(--bone-hi, #f2e9d7); color: var(--ink, #17151d);
+  border: 2px solid var(--ink, #17151d); border-radius: 13px;
+  box-shadow: 3px 4px 0 rgba(0, 0, 0, .45);
+  /* BANGERS, because this pill IS the designer's coach mark. Tom, 2026-08-16:
+     "the font for the bonehead speech bubble isnt the right one?" It was not.
+     The comp's pill is background #f2e9d7, border 2.5px #17151d, radius 16,
+     font-family Bangers, and this rule had copied every one of those except the
+     face. The result looked like the designer's component wearing a system font.
+     Sized up to 15px with a little tracking because Bangers at 12.5px on a
+     two-line sentence is genuinely hard, which is the real reason a reviewer
+     defended the system stack here. */
+  padding: 8px 12px; font-family: var(--display), Bangers, sans-serif;
+  font-size: 15px; font-weight: 400; letter-spacing: .02em; line-height: 1.22;
+  text-align: center; animation: hlwSayIn .34s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+.hlw-say::after {
+  content: ''; position: absolute; left: 50%; bottom: -11px; margin-left: -6px;
+  border: 6px solid transparent; border-top-color: var(--ink, #17151d);
+  border-bottom-width: 5px;
+}
+@keyframes hlwSayIn { from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(.94); }
+                        to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }

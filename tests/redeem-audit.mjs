@@ -54,9 +54,14 @@ async function snapshot() {
       coins: await coins(),
       redeemed: (await kvGet('redeemed', [])) || [],
       petCount: (await petInstances()).length,
-      /* Also count the toast on screen; the app clears + rewrites #toast on
-         each redeem, so the LAST toast is what the player sees. */
-      toast: (document.getElementById('toast')?.textContent || '').trim(),
+      /* EVERY message shown since the click, not whatever happens to be on
+         screen at one instant. `toast()` is a QUEUE holding up to 4 entries
+         (app.js), and the app emits ambient toasts of its own ("Tip: back up
+         your log", "Progress imported"). Those sit AHEAD of the redeem toast,
+         so a single read after a fixed sleep returns an unrelated message and
+         the check fails on a healthy app. Asserting over the recorded log is
+         also the honest question: was the player shown this copy at all. */
+      toasts: (window.__toastLog || []).slice(),
     };
   });
 }
@@ -66,6 +71,22 @@ await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(600);
 await page.evaluate(() => { location.hash = '#/settings'; });
 await page.waitForSelector('#redeemBtn', { timeout: 10000 });
+
+/* Record every toast the app shows from here on. A MutationObserver is used
+   rather than polling because a queued toast can come and go inside one poll
+   interval, and a message the player saw but the audit slept through is
+   exactly the failure this whole file exists to catch. */
+await page.evaluate(() => {
+  window.__toastLog = [];
+  const el = document.getElementById('toast');
+  if (!el) return;
+  const push = () => {
+    const t = (el.textContent || '').trim();
+    if (t && window.__toastLog[window.__toastLog.length - 1] !== t) window.__toastLog.push(t);
+  };
+  push();
+  new MutationObserver(push).observe(el, { childList: true, subtree: true, characterData: true });
+});
 
 /* Clean kv 'redeemed' so the demo profile does not have a stale burn on our
    test code (a code already burned would short-circuit at reason 'used' on
@@ -91,21 +112,40 @@ const pickedCoinCode = codeTable.find(c => c.def.coins && c.def.pet) || codeTabl
 const pickedPetOnly  = codeTable.find(c => c.def.pet && !c.def.coins) || codeTable.find(c => c.def.pet);
 
 /* -------- 1. STATE TRANSITION: unredeemed -> redeemed -------- */
-async function redeemViaUI(code) {
+async function redeemViaUI(code, expectRe) {
   await page.evaluate(c => {
     document.querySelector('#redeemInput').value = c;
   }, code);
+  /* The log is CUMULATIVE and deliberately never cleared. Clearing it per
+     attempt discarded messages that had not surfaced yet, because the app's
+     own ambient toasts (tips, seed-pouch nudges, import progress) interleave
+     with the redeem ones and push them arbitrarily far back in the queue.
+     Each snapshot is taken immediately after its own attempt, so the log at
+     that instant still contains only what has happened up to then and the
+     checks stay specific to their attempt. */
   await page.evaluate(() => document.querySelector('#redeemBtn').click());
-  /* The click handler is async: it awaits redeemCode + kvSet + toast. The
-     toast is QUEUED (app.js:1735) and each entry shows for 2200 ms + a 180
-     ms fade before the next runs, so a snapshot < 2400ms after a redeem
-     reads the PREVIOUS toast, not the one this redeem produced. Wait long
-     enough for the queue to have cycled. */
+  /* WAIT FOR THE MESSAGE, not for a duration. Three fixed-duration attempts
+     failed here because toast lengths vary (the success toast passes 3600ms,
+     the rejections use the 2200ms default) and the app's ambient toasts push
+     the redeem one arbitrarily deep into the queue. Any constant chosen sits
+     between two real durations and stops mid-queue. Waiting on the condition
+     removes the constant entirely; if the copy never appears this still times
+     out and the check still fails, so it is not a check that cannot fail. */
+  /* STATE first: the click handler awaits redeemCode + coinsAdd + kvSet, and
+     none of that is observable through the toast. Settle for it before the
+     condition loop, or the loop breaks on an early toast and the kv/coins
+     assertions read a write that has not landed. Two concerns, two waits. */
   await sleep(2600);
+  const DEADLINE = 25000;
+  for (const t0 = Date.now(); Date.now() - t0 < DEADLINE;) {
+    const hit = await page.evaluate(re => (window.__toastLog || []).some(t => new RegExp(re, 'i').test(t)), expectRe.source);
+    if (hit) break;
+    await sleep(250);
+  }
 }
 
 const before1 = await snapshot();
-await redeemViaUI(pickedCoinCode.code);
+await redeemViaUI(pickedCoinCode.code, /unlocked|redeemed|coins/);
 const after1 = await snapshot();
 check(`REDEEM-1  ${pickedCoinCode.code} added itself to kv 'redeemed' (state transition)`,
   after1.redeemed.includes(pickedCoinCode.code) && after1.redeemed.length === before1.redeemed.length + 1,
@@ -115,12 +155,12 @@ check(`REDEEM-1  ${pickedCoinCode.code} paid its coins (+${expectedCoinDelta}) O
   after1.coins - before1.coins >= expectedCoinDelta,
   `coins delta=${after1.coins - before1.coins}`);
 check(`REDEEM-1  the toast on success mentions "redeemed" or the pet name (not the "already" copy)`,
-  /redeemed|unlocked|coins/.test(after1.toast) && !/already/i.test(after1.toast),
-  after1.toast);
+  after1.toasts.some(t => /redeemed|unlocked|coins/.test(t) && !/already/i.test(t)),
+  JSON.stringify(after1.toasts));
 
 /* -------- 2. SECOND REDEEM of the SAME code pays nothing -------- */
 const before2 = await snapshot();
-await redeemViaUI(pickedCoinCode.code);
+await redeemViaUI(pickedCoinCode.code, /already redeemed/);
 const after2 = await snapshot();
 check(`REDEEM-2  the SECOND ${pickedCoinCode.code} pays NO coins`,
   after2.coins === before2.coins,
@@ -133,12 +173,12 @@ check(`REDEEM-2  kv 'redeemed' is unchanged (no second entry)`,
   after2.redeemed.filter(c => c === pickedCoinCode.code).length === 1,
   `redeemed=[${after2.redeemed.join(',')}]`);
 check(`REDEEM-2  the toast on the re-attempt reads "That code was already redeemed."`,
-  /already redeemed/i.test(after2.toast),
-  after2.toast);
+  after2.toasts.some(t => /already redeemed/i.test(t)),
+  JSON.stringify(after2.toasts));
 
 /* -------- 3. INVALID code pays nothing and says so -------- */
 const before3 = await snapshot();
-await redeemViaUI('GARBAGE_' + Date.now());
+await redeemViaUI('GARBAGE_' + Date.now(), /isn.?t valid/);
 const after3 = await snapshot();
 check('REDEEM-INVALID  an unrecognised code pays NO coins',
   after3.coins === before3.coins,
@@ -150,20 +190,20 @@ check("REDEEM-INVALID  kv 'redeemed' is unchanged",
   after3.redeemed.length === before3.redeemed.length,
   `redeemed=[${after3.redeemed.join(',')}]`);
 check("REDEEM-INVALID  the toast reads \"That code isn't valid.\"",
-  /isn.?t valid/i.test(after3.toast),
-  after3.toast);
+  after3.toasts.some(t => /isn.?t valid/i.test(t)),
+  JSON.stringify(after3.toasts));
 
 /* -------- 4. EMPTY input rejects without a state change -------- */
 const before4 = await snapshot();
-await redeemViaUI('');
+await redeemViaUI('', /enter a code/);
 const after4 = await snapshot();
 check('REDEEM-EMPTY  empty input pays NO coins and does not touch kv',
   after4.coins === before4.coins &&
   after4.redeemed.length === before4.redeemed.length &&
   after4.petCount === before4.petCount);
 check('REDEEM-EMPTY  toast reads "Enter a code first."',
-  /enter a code/i.test(after4.toast),
-  after4.toast);
+  after4.toasts.some(t => /enter a code/i.test(t)),
+  JSON.stringify(after4.toasts));
 
 /* -------- 5. DUPE BRANCH: measure whether the "already owned -> +120" path is
    even reachable. -------- */
@@ -189,7 +229,7 @@ if (pickedPetOnly && !pickedPetOnly.def.coins) {
     }
   }, pickedPetOnly.def.pet);
   const beforeD = await snapshot();
-  await redeemViaUI(pickedPetOnly.code);
+  await redeemViaUI(pickedPetOnly.code, /unlocked|already|coins/);
   const afterD = await snapshot();
   const dupeDelta = afterD.coins - beforeD.coins;
   const grantedNewPet = afterD.petCount > beforeD.petCount;

@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 385, date: '2026-08-16', title: 'Boss dens raise your ceiling again', items: [
+    "<b>Beating a boss den raises your Gauntlet ceiling again, and this time it is actually fixed.</b> The boss standing in a den changes every week, but the game was remembering the SPOT you had beaten rather than the boss you beat there. So once you had cleared the dens near you, every new boss that turned up in those same spots counted for nothing, no matter how many you killed. If you fight close to home, you were frozen. That is the whole reason this kept coming back after being called fixed: the roaming and remote bosses were sorted a while ago and the ordinary map dens, the ones almost everyone fights, were not.",
+    "<b>Every clear it swallowed has been given back.</b> The app can still see which dens you beat and when, so it recounts them the next time you open it and tells you how many ranks it restored. You do not need to go and re-fight anything.",
+    "<b>Five held items sat on your Bonehead's face.</b> One banner covered nearly three quarters of it, so anyone who equipped it lost their head behind it. All five have moved, and every held item in the game is now checked automatically so this cannot happen again.",
+    "<b>You can line up a second cook.</b> The Kitchen only ever allowed one start per pot per visit, which meant most of what you grew had nowhere to go. Composting is sorted by what your recipes are short of now.",
+    'New players start with a few seeds, and everyone already playing gets the same handful.',
+    'Some quiet work in the Bone Garden. It is still being worked on.',
+  ] },
   { n: 384, date: '2026-08-16', title: 'The fight buttons hold their own words again', items: [
     "<b>Move buttons were cutting their own text off.</b> A button with two lines of description was being squashed to one line's height, so the rest of the sentence fell out the bottom and landed on the row below. It came in with yesterday's change that stopped the fighters resizing, and it hit four of the nine buttons on most phones and six of nine on a small one.",
     "<b>The ITEMS button could not be tapped at all.</b> It was sitting below the bottom of the button area, and nothing on screen said that area could scroll. There is a soft fade at the bottom edge now whenever there is more below, so you can see there is somewhere to go.",

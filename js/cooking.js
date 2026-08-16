@@ -178,8 +178,76 @@ async function readSlots() {
 }
 async function writeSlots(arr) { await kvSet('cooking', arr); }
 
+/* ---------- the cook queue ----------
+ * A visit could only ever START as many cooks as you own pots, and the measured
+ * median player opens the app once a day. tests/garden-sim.mjs put numbers on
+ * what that costs: the garden grows 7.1 ingredients a day and the kitchen eats
+ * 1.5 to 2.4 of them, and no edit to a recipe moves that, because the ceiling is
+ * cook starts per visit and not what a dish costs. Of everything measured, a
+ * queue is the ONLY change that raised ingredient spend (2.4 to 3.9 a day) while
+ * ALSO raising the share of fights the player got to take with a buff up (64% to
+ * 67%). Every other lever bought spend by taking the buff away.
+ *
+ * Nothing about a dish changes here: same ingredients, same cook time, same buff,
+ * same duration. This is throughput, not potency. There is no purchasable slot
+ * and no gate: the depth is flat and free for everybody.
+ *
+ * Ingredients are spent when you QUEUE, so a queued cook is already paid for and
+ * advancing it can never charge anybody twice. */
+export const QUEUE_MAX = 2;
+async function readQueue() { const q = await kvGet('cookq', []); return Array.isArray(q) ? q : []; }
+
+export async function queueCook(recipeId) {
+  const r = RECIPE_BY_ID[recipeId];
+  if (!r) return { ok: false, reason: 'unknown' };
+  const q = await readQueue();
+  if (q.length >= QUEUE_MAX) return { ok: false, reason: 'full' };
+  const inv = await ingredients();
+  if (!canCook(r, inv)) return { ok: false, reason: 'ingredients' };
+  for (const [id, n] of Object.entries(r.needs)) inv[id] -= n;
+  await kvSet('ingredients', inv);
+  q.push({ recipeId });
+  await kvSet('cookq', q);
+  return { ok: true, queued: q.length };
+}
+
+/* Move the queue along, on the CLOCK. A pot that finished while the app was shut
+ * hands its dish over AT THE MOMENT IT FINISHED, and the next cook starts there
+ * rather than whenever the player happened to look, so a queue lined up on Monday
+ * has really drained by Tuesday instead of waiting for a tap it never got.
+ * Returns the dishes it collected on the player's behalf so the caller can pay
+ * the same XP a manual Serve pays. It has exactly ONE caller for that reason. */
+export async function advanceQueue(now = Date.now()) {
+  const q = await readQueue();
+  if (!q.length) return [];
+  const arr = await readSlots();
+  const banked = [];
+  while (q.length) {
+    let idx = arr.findIndex(c => !c);
+    let at = now;
+    if (idx < 0) {
+      // the pot that came free EARLIEST, so the line runs in the order it was laid
+      const done = arr.map((c, i) => ({ i, t: c.readyAt })).filter(x => x.t <= now).sort((a, b) => a.t - b.t)[0];
+      if (!done) break;
+      idx = done.i; at = done.t;
+      const prev = RECIPE_BY_ID[arr[idx].recipeId];
+      arr[idx] = null;
+      if (prev) {
+        if (prev.potion) await grantPotion(prev.id); else await addToPantry(prev, at);
+        banked.push(prev);
+      }
+    }
+    const r = RECIPE_BY_ID[q.shift().recipeId];
+    arr[idx] = r ? { recipeId: r.id, startedAt: at, readyAt: at + r.cookMin * 60e3 } : null;
+  }
+  await writeSlots(arr);
+  await kvSet('cookq', q);
+  return banked;
+}
+
 export async function cookState(now = Date.now()) {
   const arr = await readSlots();
+  const queue = (await readQueue()).map(x => RECIPE_BY_ID[x.recipeId]).filter(Boolean);
   const slots = arr.map((c, index) => {
     const r = c && RECIPE_BY_ID[c.recipeId];
     if (!r) return { index, empty: true };
@@ -188,6 +256,7 @@ export async function cookState(now = Date.now()) {
   const readySlots = slots.filter(s => !s.empty && s.ready);
   return {
     potsOwned: arr.length, slots,
+    queue, queueLeft: Math.max(0, QUEUE_MAX - queue.length),
     freeCount: slots.filter(s => s.empty).length,
     readyCount: readySlots.length,
     anyCooking: slots.some(s => !s.empty && !s.ready),

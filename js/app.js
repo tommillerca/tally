@@ -5,7 +5,7 @@ import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSo
 import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, initLootIfNeeded, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
 } from './game.js';
 import {
@@ -32,6 +32,9 @@ import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
+import { hlwArt } from './hollow-art.js';
+import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
+import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -41,7 +44,7 @@ import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.j
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
-import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin} from './poi.js';
+import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { installPaddockSeam } from './paddock-cards.js';
@@ -49,7 +52,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  spawnIngredient, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -513,7 +516,7 @@ async function boot() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first-ever install
       if (!sheetStack.length) location.reload();   // apply the new build as soon as no sheet is open
-      else toast('Update ready — leave this screen to apply', 3600);
+      else toast('Update ready. Leave this screen to apply', 3600);
     });
   }
   requestPersistence();
@@ -560,7 +563,15 @@ async function boot() {
   const init = await initGameIfNeeded(S.settings.targets);
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
+  // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
+  const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
+  if (pouch) setTimeout(() => toast(`${pouch.seeds} starter seeds in your pouch: exactly one Bone Broth. Plant them in the Kitchen.`, 4200), init && init.xp > 0 ? 4200 : 1400);
+  /* Give back the Gauntlet ceiling the cell-scoped gate marker swallowed. See
+     backfillDenCeilingIfNeeded: a player who beat the same cell's boss week
+     after week banked one marker and is owed the rest. */
+  const ceil = await backfillDenCeilingIfNeeded();
+  if (ceil) setTimeout(() => toast(`Boss dens recounted: ${ceil.added} past clear${ceil.added === 1 ? '' : 's'} restored, Gauntlet ceiling +${ceil.ranks} ranks.`, 4600), 5600);
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
@@ -576,7 +587,7 @@ async function boot() {
   onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges); flushAnalytics(); refreshNotifSchedules(); });
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
-  initAnalytics(APP_BUILD); // anonymous first-party usage analytics — tag events with the real running build (not the frozen social-protocol version)
+  initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
 
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -620,7 +631,7 @@ async function boot() {
 /* DAY ROLLOVER (v224).
    The native shell is a long-lived WebView: iOS suspends and resumes it rather
    than relaunching, so boot() can go days without running. Everything
-   day-shaped used to roll over ONLY in boot() — S.date, the day close-out,
+   day-shaped used to roll over ONLY in boot(). S.date, the day close-out,
    yesterday's close-out crate, the daily wheel, quests, Pit energy. So the
    second morning you opened the app it was still on yesterday's date, and
    because renders compare S.date against a live dateKey() (`isToday`), the app
@@ -661,7 +672,7 @@ async function maybeShowWhatsNew() {
     if (navigator.webdriver || !S.settings) return;
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
-    if ($('#sheets')?.children.length) return;   // something already open — try again next launch
+    if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
     openWhatsNew();
   } catch { /* never block boot */ }
 }
@@ -1313,7 +1324,7 @@ const COMMUNITY_MAX_SHOWS = 3;
 const DISCORD_MARK = `<svg class="dc-mark" viewBox="0 0 24 18" width="16" height="12" aria-hidden="true" fill="currentColor"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A14 14 0 0 0 8.6.1a19.7 19.7 0 0 0-4.9 1.5C.6 6.3-.2 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.6 14.6 0 0 0 1.3-2.1 13 13 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4a13 13 0 0 1-2 1 14.4 14.4 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.7zM8 12.6c-1.2 0-2.1-1.1-2.1-2.4C5.9 8.9 6.8 7.8 8 7.8s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4zm8 0c-1.2 0-2.1-1.1-2.1-2.4 0-1.3.9-2.4 2.1-2.4s2.2 1.1 2.2 2.4c0 1.3-1 2.4-2.2 2.4z"/></svg>`;
 
 /* THE APP ICON, not just the mark. Tom, 2026-08-12: "add the discord app icon
-   in the popup so people know. maybe the discord icon with a bonehead chillin
+   in the popup so people know. Maybe the discord icon with a bonehead chillin
    next to it or something to really grab the attention".
    The eyebrow mark above is deliberately monochrome so an in-house
    announcement does not read as an ad. This is the opposite job: the blurple
@@ -1350,7 +1361,7 @@ async function openCommunityCard() {
       <p class="drop-eyebrow dc-eyebrow">${DISCORD_MARK}<span>THE CLUBHOUSE</span></p>
       ${/* YOUR bonehead, not a stock one: it is already loaded, it costs no new
            precache entry, and "that is my guy" is a stronger reason to look
-           than any illustration we could ship. skip BG/C for the same reason
+           than any illustration we could ship. Skip BG/C for the same reason
            every other small stage does: a backdrop would box him in and the
            pet belongs to petAsideHtml, not to a hand-placed row. */''}
       <div class="dc-hero">${DISCORD_APP_ICON}<span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
@@ -1459,7 +1470,7 @@ async function openThanksCard() {
     <div class="drop-card">
       <p class="drop-eyebrow dc-eyebrow">${THANKS_MARK}<span>THANK YOU</span></p>
       ${/* YOUR bonehead. Already loaded, no new precache entry, and "that is my
-           guy" beats any stock illustration. skip BG/C for the same reason the
+           guy" beats any stock illustration. Skip BG/C for the same reason the
            Discord hero does: a backdrop would box him in. */''}
       <div class="bt-hero"><span class="dc-bh">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</span></div>
       <h1 class="drop-title">Thanks for being <em>early</em></h1>
@@ -1607,6 +1618,10 @@ async function maybeShowGardenPopup() {
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
         if (tries++ < 60) setTimeout(tick, 500);
+        // 60 tries x 500ms: the boot stayed busy for the whole 30s window and this
+        // launch never showed the card at all. Without this row a player who was
+        // never told about the garden is indistinguishable from one who declined.
+        else trackEvent('garden_intro_suppressed', { n: seen });
         return;      // busy boot: does NOT consume one of the 5 showings
       }
       await kvSet(GARDEN_SEEN_KEY, seen + 1);
@@ -1643,13 +1658,19 @@ function openGardenPopup() {
       <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
     </div>`;
   document.body.appendChild(veil);
+  /* WHY THESE FOUR ROWS. Only a fraction of players have ever reached the garden
+     and nothing recorded which half of the funnel loses them: never shown the card,
+     or shown it and said no. shown / suppressed / cta / later answer exactly that,
+     on the same anonymous pipe as every other event. */
+  trackEvent('garden_intro_shown');
   const close = () => veil.remove();
-  $('#gardenLaterBtn', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#gardenLaterBtn', veil).addEventListener('click', () => { trackEvent('garden_intro_later'); close(); });
+  veil.addEventListener('click', e => { if (e.target === veil) { trackEvent('garden_intro_later', { tap: 'veil' }); close(); } });
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
+    trackEvent('garden_intro_cta');
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openGardenSheet(() => refresh());
+    openHollow(() => refresh());
   });
 }
 
@@ -2251,7 +2272,16 @@ function nextToast() {
 const sheetStack = [];
 function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog"><div class="sheet-grab"></div>${html}</div>`;
+  /* A DIALOG THAT DOES NOT TRAP FOCUS IS NOT A DIALOG. Measured on the Hollow:
+     the tab cycle was 59 stops long and the first stop INSIDE the sheet was stop
+     46. Stops 0 to 45 were the hero buttons, wallet pills, nav tabs and the
+     Kitchen sheet underneath, all invisible beneath the overlay, all focusable.
+     role="dialog" was set with aria-modal null, no accessible name, and the
+     background neither inert nor aria-hidden. Escape did nothing.
+     aria-modal plus inert on the background fixes the whole class in one place,
+     for every sheet in the app, not just this one. */
+  const label = (name || (html.match(/<h2[^>]*>([^<]{1,60})<\/h2>/) || [])[1] || 'Panel').trim();
+  wrap.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet ${cls}" role="dialog" aria-modal="true" aria-label="${esc(label)}"><div class="sheet-grab"></div>${html}</div>`;
   $('#sheets').appendChild(wrap);
   /* Sheets are the app's other surface, and the heaviest ones (the Stable's ring,
      the Wardrobe, a pack reveal) are exactly the ones that used to assemble
@@ -2271,12 +2301,59 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
   composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
+  /* Inert the world behind it, move focus in, and remember where focus came from
+     so closing puts it back. Only the FIRST sheet inerts #app: a sheet opened on
+     top of a sheet must not un-inert it on the way out. */
+  const prevFocus = document.activeElement;
+  /* INERT THE SIBLINGS, NOT #app. #sheets lives INSIDE #app, so inerting #app
+     inerts the sheet with it: measured, every hit probe on the Hollow came back
+     as BODY and the screen was completely dead. Inert each direct child of #app
+     except the sheet host, and remember exactly which ones we touched so a child
+     that was already inert for its own reasons is not un-inerted on close. */
+  const appEl = $('#app'), host = $('#sheets');
+  let inerted = [];
+  if (appEl && host) {
+    /* Everything behind THIS sheet: the app's other children on the first open,
+       and on every open the sheets already stacked underneath. The Hollow opens
+       on top of the Kitchen, and the Kitchen's own doors stayed tabbable through
+       the overlay. */
+    const behind = sheetStack.length === 1 ? [...appEl.children].filter(el => el !== host) : [];
+    const lower = sheetStack.slice(0, -1).map(r => r.wrap);
+    inerted = [...behind, ...lower].filter(el => el && !el.inert);
+    inerted.forEach(el => { el.inert = true; el.setAttribute('aria-hidden', 'true'); });
+  }
+  /* FOCUS THE PANEL, NOT ITS FIRST BUTTON. Focusing the Done button moved focus
+     correctly and then painted a full accent focus ring on it for every mouse and
+     touch user, on every sheet in the app: Chromium treats programmatic focus on
+     a real control as :focus-visible. Caught in the render, a lime box around
+     Done in all three band screenshots. The standard dialog answer is a
+     tabindex="-1" container: a screen reader lands on the named dialog, the next
+     Tab enters the controls in order, and nothing draws a ring nobody asked for. */
+  requestAnimationFrame(() => {
+    const panel = wrap.querySelector('.sheet');
+    if (panel) { panel.tabIndex = -1; panel.focus?.({ preventScroll: true }); }
+  });
+  rec.restoreFocus = () => {
+    inerted.forEach(el => { el.inert = false; el.removeAttribute('aria-hidden'); });
+    if (prevFocus && prevFocus.isConnected) try { prevFocus.focus(); } catch { /* gone */ }
+  };
   return wrap;
 }
+/* ESCAPE CLOSES THE TOP SHEET. It did nothing: measured with focus inside the
+   Hollow, the sheet was still present 700ms after the keypress. Bound once, at
+   the module level, so no sheet has to remember it. history.back() is used rather
+   than closeTopSheet directly, so the history stack stays in step with what the
+   backdrop tap and the Done button already do. */
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !sheetStack.length) return;
+  e.preventDefault();
+  history.back();
+});
 function closeTopSheet() {
   const rec = sheetStack.pop();
   if (!rec) return;
   try { rec.onClose?.(); } catch { /* noop */ }
+  try { rec.restoreFocus?.(); } catch { /* noop */ }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
   if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
   // slide down + backdrop fade, then remove. pointer-events off immediately so a
@@ -2387,6 +2464,15 @@ async function dayBudget() {
 
 /* ================= today ================= */
 
+/* WHERE THE NUMBERS ARE, not in the game room. A reviewer who came here because a
+   doctor told them to log meals asked whether cooking Bone Broth turns up in their
+   diary. It never has (nothing in cooking.js or garden.js touches the 'log' store)
+   but the separation was invisible in the product, and an unstated boundary is not
+   a promise. It sits UNDER the day's totals because that is the moment the question
+   gets asked, and it is permanent and unconditional: a trust line that only shows
+   up sometimes is worse than none at all. */
+const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -2466,7 +2552,7 @@ async function renderToday(el) {
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet — your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
+    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
   }
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
@@ -2570,7 +2656,7 @@ async function renderToday(el) {
   ${isToday && hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`} — your walking isn't counting. Tap to fix.</span>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
   ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
@@ -2645,6 +2731,7 @@ async function renderToday(el) {
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  ${LOG_ONLY_LINE}
   `;
 
   // animate ring, macro bars, and the remaining number from their previous states
@@ -2751,7 +2838,7 @@ async function renderToday(el) {
   $('details.garden-banner')?.addEventListener('toggle', e => {
     if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
   });
-  $('#gardenToKitchen')?.addEventListener('click', () => openGardenSheet(() => refresh()));
+  $('#gardenToKitchen')?.addEventListener('click', () => openHollow(() => refresh()));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -3463,7 +3550,7 @@ function gluttonLoreHtml() {
 function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   const eq = themedLook(den.theme && den.theme.key, den.id);
   /* SHOW THE MONSTER. Tom, 2026-08-09: "you have a drop down banner that says
-     some shit about the bouncer below. it should have this type of art in there"
+     some shit about the bouncer below. It should have this type of art in there"
      next to a screenshot of the teaser wall. Right: the row was a 52px head, a
      chevron and a paragraph you had to open to read. A whole figure on a dark
      tile, exactly as the teaser draws them, IS the row. Nothing to expand, and
@@ -3493,6 +3580,21 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
     // a siege has a clock on it, so it outranks everything
     { pri: sieged ? 0 : owed ? 30 : soon ? 35 : 45,
       html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
+    /* ALWAYS, ripe or not. This row used to be dropped entirely unless a crop was
+       already ready, so the only people told the garden exists were the people who
+       had already found it and planted something. The no-crops copy has always been
+       written (gardenBannerHtml handles cropsRipe === 0); nothing rendered it. Ripe
+       crops still outrank the drop and still take the action accent, because only
+       then is the row waiting on the player. */
+    /* QUIET LAUNCH. Tom, 2026-08-16: "let's keep the garden launch pretty quiet
+       though because i want to test it and not draw too much attention yet ...
+       especially since we are going to be finalizing art and how it plays."
+       ext/garden-reach un-gated this banner so every player saw the garden on
+       Today whether or not they had ever planted, and it rode into this train on
+       the kitchen branch rather than being chosen. Re-gated: only a player who
+       already has something growing is shown it. The row is a one-line revert
+       when the art and the loop are settled, and the intro instrumentation from
+       that same branch is KEPT, because a quiet test still wants numbers. */
     ...(cropsRipe ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }] : []),
     /* The current drop, ALWAYS. It used to share one slot with the Garden and
        lose it to any ripe crop, which is exactly why Tom stopped seeing the new
@@ -3916,6 +4018,508 @@ function gardenRowHtml(garden, seedTotal) {
   </button>`;
 }
 
+/* ---- The Hollow (WIP v1): the garden as a diorama your bonehead tends. ----
+ * Design: ~/Downloads/home-page-avatar-showcase (The Hollow.dc.html), approved
+ * 2026-08-15. Economy untouched: this is presentation over the intact garden.js
+ * state; every action routes through the same plantSeed/waterPlot/harvestPlot/
+ * compost/buy-bed calls the list sheet used. Apothecary half NOT built yet.
+ * UNVERIFIED: needs the full verification pass (fire controls, decoded pixels,
+ * ui-audit + figure-audit rows) before this can ship. */
+/* Bed centres on the 390-wide stage, mapped from the designer's five-slot frame
+   (viewBox slots at 53,74 / 125,74 / 53,182 / 125,182 / 89,290 inside a frame
+   drawn at left 20, top 186, 150x349). Row three is a single CENTRED slot: the
+   handoff notes call that deliberate rather than vacant, and it is what makes a
+   five-bed garden read as designed instead of as a gap. */
+/* TWO PLOTS, which is the comp's own layout and Tom's call on 2026-08-16.
+   Both reviewers measured the right half as dead: 60.4% flat ground at 390x844
+   and a 157 x 223 region with 0.0% drawn content. They disagreed on the fix (set
+   dressing versus the second frame) and Tom picked the frame, so the empty half
+   now earns its space as you progress instead of being scenery you never touch.
+   Comp coordinates verbatim: left 20/186, right 220/242, both 150 x 349. The
+   right frame ends at y591 on a 740 stage, clear of the compost heap at y676. */
+const HLW_FRAME = { x: 20, y: 186, w: 150, h: 349 };
+const HLW_FRAME_R = { x: 220, y: 242, w: 150, h: 349 };
+/* The keeper's fixed gardening fit: Charcoal Bones, Charcoal Skull, Sun Boater.
+   All three are real catalogue items, verified against data/boneheadz.js. */
+const HLW_FIT = { B: 'B0-1', SK: 'SK0-1', H: 'H9' };
+/* Three in the left frame, two in the right. The three you start with stay
+   together so a new player's garden reads as one place, and the two you buy open
+   the second frame, which is what gives the right side a reason to exist. Bed art
+   is 84 wide, so the right pair at 264 and 327 spans x222 to x369 inside a frame
+   running 220 to 370. Measured, not estimated. */
+/* ONE COLUMN PER FRAME. Two columns never actually fitted: bed art is 84 wide
+   and a frame is 150, so a pair at 67 and 130 spanned x25 to x172 and pushed past
+   the frame's own right edge at 170 while overlapping each other. Measured in the
+   render after the second frame went in, both frames were also half empty, with
+   the beds bunched at the top and 135 units of bare soil below them.
+   Left frame x20-170 centres on 95, right frame x220-370 centres on 295, and the
+   three plus two are spread down their frames instead of huddled. */
+const HLW_SPOTS = [[95, 252], [95, 357], [95, 462], [295, 312], [295, 447]];
+/* 740, not 900. The bottom 160 units held nothing: the lowest object the keeper
+   can reach is the compost heap at y 502 and he is 190 tall, so 692 is the real
+   floor. Those empty units were pure scroll cost on a screen whose instruction and
+   whose talking keeper both sat under the fold. The path and the last stepping
+   stones run off the bottom edge, which is what a path is meant to do. */
+const HLW_H = 740;
+/* The next slot you could own, INSIDE the frame. It used to sit on open grass to
+   the right, which read as a price tag in a field rather than as "this bed could
+   be yours". The comp puts it on a ghost slot inside the frame and that is the
+   whole difference. Derived from HLW_SPOTS so it can never drift from the beds. */
+const hlwBuySpot = owned => HLW_SPOTS[Math.min(owned, HLW_SPOTS.length - 1)];
+/* Five buttons all labelled "Garden bed" tell a screen reader nothing about which
+   one is worth tapping, which is the only thing this screen is about. */
+const hlwBedLabel = (p, i) => `Bed ${i + 1}, ${p.empty ? 'empty, plant a seed'
+  : p.ready ? `${p.name}, ready to harvest`
+  : p.canWater ? `${p.name}, needs water` : `${p.name}, ${fmtCookTime(p.remainingMs)} left`}`;
+
+
+/* THE KEEPER TALKS. Same voice as speechLine() on Today (dry, self-deprecating,
+   the joke is usually that he is a skeleton doing a physical job, a small turn
+   at the end of the line), but every line is about the GARDEN. He never mentions
+   the player's food, weight, streak or logging: he is a gardener, not a progress
+   report, and this is a health app.
+   Gated on state the garden already knows, so he can never assert something the
+   beds contradict. That is the one rule: one "that is ready" over an empty bed
+   and he is furniture forever. */
+const HLW_SAY = {
+  first: [
+    'You must be {n}. The beds are yours, the loitering is mine.',
+    'So this is the Hollow. I am the one who stands here.',
+    'Right. Beds there, seeds in the shed, and I do the loitering.',
+    'Welcome to the patch. Put something in the dirt and we will see.',
+  ],
+  /* No day count, no question, no welcome-back fanfare. A number is an
+     accusation, and somebody away for a fortnight was probably unwell. */
+  back: [
+    'There you are, {n}. Weeds had a good run of it.',
+    'Everything is where you left it, {n}. I did check.',
+    'Morning. Weeds had a good run of it.',
+    'There you are. Sun did my job while I stood about.',
+    'Everything is where you left it. I did check.',
+    'Nothing happened. That is the garden for you.',
+    'Still here. So is all of it.',
+  ],
+  noSeeds: [
+    'No seeds, {n}. The shed is not going to fill itself.',
+    'No seeds, no crops, no notes. Walks turn up seeds, apparently.',
+    'I would offer you a seed but I have pockets made of air.',
+    'Nothing to plant. Even I cannot grow a plan.',
+    'Seeds come from out there. I do not go out there.',
+    'The pouch is empty. I checked twice, then shook it.',
+  ],
+  empty: [
+    'All that dirt, {n}, and nothing in it.',
+    'Dirt. Excellent dirt. Doing nothing.',
+    'I have been guarding an empty patch all morning. Riveting.',
+    'Nothing planted. I am basically a scarecrow with a pension.',
+    'The soil is ready. I have been ready for years.',
+    'I raked it. That is all I am qualified to do.',
+    'We could grow something. Or keep admiring the mud. Your call.',
+  ],
+  ripe: [
+    'Something is ready, {n}. I am not going to pick it for you.',
+    'That one is done. Pick it before I try with these hands.',
+    'Ready. I have been staring at it for an hour to be sure.',
+    'It came up. I take no credit and all of the credit.',
+    'Ripe. Somewhere a proper farmer is very confused.',
+    'Harvest time. My favourite kind of standing around.',
+    'That is ready, chief. I am not touching it, I would drop it.',
+  ],
+  growing: [
+    'Coming along, {n}. Slowly. That is how it goes.',
+    'It is doing whatever it does under there. Best not to watch.',
+    'Coming along. Slowly. Like everything with roots.',
+    'Give it time. Time is the one thing I have plenty of.',
+    'Growing. I would say it is thriving but I do not want to jinx it.',
+    'That one is taking its time. Bold, for a vegetable.',
+    'Nothing to do but wait, which is my speciality.',
+  ],
+  full: [
+    'Every bed is spoken for, {n}. Nothing left for me to worry about.',
+    'Every bed working. Nothing left for me to fuss over.',
+    'Full house. I will be over here supervising.',
+    'All planted. Now the hard part, which is waiting.',
+  ],
+  idle: [
+    'Quiet one today, {n}.',
+    'Rained overnight. Did half my job for me.',
+    'Wind has been at the fence again.',
+    'That crow has opinions about my technique.',
+    'Quiet out. I like it quiet.',
+    'I talk to the plants. They are better listeners than the pot.',
+    'Good soil, this. I would eat it if I had the equipment.',
+    'Nothing doing today. That is allowed.',
+  ],
+};
+
+/* Picked with a per-session salt, the way speechLine does, so opening the sheet
+   twice in a row does not hand back the same line. */
+/* HE USES YOUR NAME, SOMETIMES. Tom's call, 2026-08-16: the gardener should
+   call the player by name. Two things make that land instead of grate.
+   FIRST, not every line. A character who says your name every single time is a
+   chatbot, not a person. Roughly a third of each pool carries `{n}`; the rest
+   never does, so hearing it stays worth something.
+   SECOND, the name is often ABSENT. social.displayName() returns null for
+   anybody who has not registered, which is most players, and there is no honest
+   substitute: "friend" and "player" both read as a form letter from a company.
+   So a nameless player simply gets the lines without `{n}`, and the pool is
+   built so every state still has several. The filter is the mechanism, and
+   tests/hollow-audit.mjs asserts every pool survives it non-empty, because a
+   pool that filtered down to nothing would leave the keeper silent. */
+function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, name }) {
+  if (S.hlwSalt == null) S.hlwSalt = Math.floor(Math.random() * 1e6);
+  const usable = arr => (name ? arr : arr.filter(l => !l.includes('{n}')));
+  const pick = arr => {
+    const a = usable(arr);
+    const line = a[(S.hlwSalt + a.length) % a.length] || arr.find(l => !l.includes('{n}')) || '';
+    return line.replace(/\{n\}/g, name || '');
+  };
+  if (firstEver) return pick(HLW_SAY.first);
+  if (daysAway >= 3) return pick(HLW_SAY.back);
+  if (ripe) return pick(HLW_SAY.ripe);
+  if (!planted && !seeds) return pick(HLW_SAY.noSeeds);
+  if (!planted) return pick(HLW_SAY.empty);
+  if (planted >= owned) return pick(HLW_SAY.full);
+  if (growing) return pick(HLW_SAY.growing);
+  return pick(HLW_SAY.idle);
+}
+
+function openHollow(after) {
+  /* Read ONCE, on the way in, and written on the way out. See the firstEver
+     comment in render(): reading it per render made the welcome line expire
+     about thirty seconds into a first visit. */
+  let seenAt = 0;
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`,
+    { cls: '', onClose: () => { kvSet('hlwSeen', Date.now()); after?.(); } });
+  const body = $('#hollowBody', wrap);
+  /* y 500, not 560. His box is 190 tall, so on the 740 stage 560 put his own
+     contact shadow 6 units past the bottom edge, and on a 667-tall phone his
+     speech bubble, which is the screen's primary status text, sat 30px under
+     the fold. Measured in the render at both sizes, not derived from the CSS. */
+  const av = { x: 112, y: 500, facing: 1, moving: false, dur: 1.4 };
+  let busy = false;        // a ritual in flight: hold re-renders so animations run whole
+  let pouchOpen = false;
+  let walkT = null;
+
+  const bootSeen = kvGet('hlwSeen', 0).then(v => { seenAt = v; });
+
+  const bandNow = () => { const h = new Date().getHours(); return (h >= 7 && h < 17) ? 'day' : ((h >= 17 && h < 20) || (h >= 5 && h < 7)) ? 'dusk' : 'night'; };
+
+  function walkTo(cx, cy, then) {
+    const x = Math.max(-14, Math.min(214, cx - 95));
+    const y = Math.max(140, Math.min(HLW_H - 190, cy - 158));
+    const dx = x - av.x, dy = y - av.y, dist = Math.hypot(dx, dy);
+    if (dist < 4) { then?.(); return; }
+    /* Capped at 1.2s, was 2.4. Every handler starts with `if (busy) return`, so the
+       walk is a window where taps vanish with nothing on screen saying so. 2.4s of
+       walk plus a 2s pour was 4.4s of a screen that looked idle and answered nothing. */
+    av.dur = Math.max(0.9, Math.min(1.2, dist / 140));
+    if (dx !== 0) av.facing = dx > 0 ? 1 : -1;
+    av.x = x; av.y = y; av.moving = true;
+    const fig = $('#hlwAv', body);
+    if (fig) {
+      fig.style.transition = `left ${av.dur}s ease-in-out,top ${av.dur}s ease-in-out`;
+      fig.style.left = x + 'px'; fig.style.top = y + 'px';
+      const flip = $('#hlwFlip', body); if (flip) flip.style.transform = `scaleX(${av.facing})`;
+      const anim = $('#hlwAnim', body); if (anim) anim.style.animation = 'hlwWalk .38s ease-in-out infinite alternate';
+    }
+    clearTimeout(walkT);
+    walkT = setTimeout(() => {
+      av.moving = false;
+      const anim = $('#hlwAnim', body); if (anim) anim.style.animation = 'hlwIdle 4s ease-in-out infinite';
+      clampSayNow();
+      then?.();
+    }, av.dur * 1000);
+  }
+
+  let clampSayNow = () => {};
+
+  function waterFx(cx, cy) {
+    const st = $('#hlwStage', body); if (!st) return;
+    const d = document.createElement('div');
+    d.style.cssText = `position:absolute;left:${cx}px;top:${cy}px;width:0;height:0;z-index:7;pointer-events:none`;
+    d.innerHTML = `<svg viewBox="0 0 64 48" style="position:absolute;left:-36px;top:-60px;width:64px;height:48px;overflow:visible;animation:hlwPour 2.4s ease-in-out infinite;transform-origin:40% 70%">
+        <g fill="#9aa5b1" stroke="#17151d" stroke-width="2.5" stroke-linejoin="round">
+          <path d="M10 16 q-9 5 -5 15" fill="none" stroke-width="4"></path>
+          <rect x="12" y="14" width="24" height="22" rx="5"></rect>
+          <path d="M36 18 L56 31 L51 38 L34 27 z"></path></g>
+        <ellipse cx="24" cy="14" rx="8" ry="3" fill="#7f8c99" stroke="#17151d" stroke-width="2"></ellipse></svg>
+      <span style="position:absolute;left:14px;top:-22px;width:5px;height:9px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in infinite"></span>
+      <span style="position:absolute;left:20px;top:-20px;width:4px;height:8px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in .22s infinite"></span>
+      <span style="position:absolute;left:26px;top:-18px;width:4px;height:8px;border-radius:60% 60% 50% 50%;background:#9fd0e8;animation:hlwDrop .7s ease-in .44s infinite"></span>`;
+    st.appendChild(d);
+    setTimeout(() => d.remove(), 2400);
+  }
+
+  function toastAt(cx, cy, msg) {
+    const st = $('#hlwStage', body); if (!st) return;
+    const t = document.createElement('span');
+    t.className = 'hlw-toast';
+    t.style.left = (cx - 50) + 'px'; t.style.top = (cy - 48) + 'px';
+    t.textContent = msg;
+    st.appendChild(t);
+    setTimeout(() => t.remove(), 2400);
+  }
+
+  async function render() {
+    if (!body.isConnected || busy) return;
+    await bootSeen;   // seenAt must be settled before firstEver is derived from it
+    const [garden, compost, eq, coin, keeperName] = await Promise.all([
+      gardenState(), compostStatus(), equipped(), coins(),
+      // null for anybody who never registered a social name, which is most players
+      social.displayName().catch(() => null),
+    ]);
+    const bedPrice = plotPrice(garden.plotsOwned);
+    const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
+    const band = bandNow();
+    const beds = garden.plots.map((p, i) => ({ ...p, cx: HLW_SPOTS[i][0], cy: HLW_SPOTS[i][1] }));
+    // shiny UNDEFINED on purpose: this is the viewer's OWN pet, so S.shinyPets answers
+    const hlwPet = petFrom(null, eq && eq.C);
+    /* WHAT THE KEEPER CAN HONESTLY SAY. Read from the same garden state the beds
+       are drawn from, so he can never claim something the screen contradicts. */
+    const nowMs = Date.now();
+    const ripeN = garden.plots.filter(p => p && nowMs >= p.readyAt).length;
+    const growN = garden.plots.filter(p => p && nowMs < p.readyAt).length;
+    const daysAway = seenAt ? Math.floor((nowMs - seenAt) / 864e5) : 0;
+    /* firstEver IS SETTLED ONCE PER VISIT, not per render. This used to write
+       hlwSeen during the FIRST render, so the 30s tick, or any action at all,
+       flipped it false and replaced the welcome line about 30 seconds in. The
+       one line written specifically for somebody who has never been here was the
+       line least likely to be read. HlwSeen is written on CLOSE now, and
+       firstEver is captured once when the sheet opens. */
+    const firstEver = !seenAt;
+    const say = hlwLine({ ripe: ripeN, growing: growN, planted: ripeN + growN,
+      owned: garden.plotsOwned, seeds: seedTotal, firstEver, daysAway, name: keeperName });
+    body.innerHTML = `
+    ${/* ABOVE the diorama, not under it. The stage is taller than any phone, so a
+          note below it needed a 176px scroll at 390x844 and 318px at 375x667: the
+          only instruction on the screen, including "Nothing ever dies", was one a
+          first-time player never saw. */''}
+    ${/* ONE instruction on a first visit, not two. The bar and the note both sat
+          above the diorama and together pushed the keeper's speech bubble 37px
+          below the fold at 375x667, measured. Two competing paragraphs is also
+          worse writing: a first-timer needs the single next step, and the full
+          rules of the loop are only useful once they have planted something. So
+          the bar REPLACES the note on the first visit and the note returns on
+          the second. */''}
+    ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed. Your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
+    <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
+      ${hollowBackdropHtml({ band })}
+      <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
+      ${hlwArt('hollow-bed-frame', { x: HLW_FRAME_R.x, y: HLW_FRAME_R.y, w: HLW_FRAME_R.w, h: HLW_FRAME_R.h, style: 'z-index:1;pointer-events:none' })}
+      ${beds.map((p, i) => `
+        <div style="position:absolute;left:${p.cx - 42}px;top:${p.cy - 30}px;width:84px;height:60px;pointer-events:none;z-index:2" id="hlwBedArt${i}">${hlwBedArt(p)}</div>
+        ${(() => { const c = hlwChipHtml(p); return c ? `<span class="hlw-chipwrap" style="left:${p.cx}px;top:${p.cy - 52}px">${c}</span>` : ''; })()}
+        <button class="hlw-bed" data-bed="${i}" aria-label="${esc(hlwBedLabel(p, i))}" style="left:${p.cx - 30}px;top:${p.cy - 30}px"></button>`).join('')}
+      ${/* Every slot you do not own gets its ghost, not only the one on sale. With
+            the second frame in, drawing just the purchasable one left the last
+            slot as bare soil inside a wooden frame, which reads as a gap in the
+            build rather than as a bed you have not bought. */''}
+      ${HLW_SPOTS.slice(garden.plotsOwned).map(([gx, gy]) =>
+        `<div style="position:absolute;left:${gx - 42}px;top:${gy - 30}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>`).join('')}
+      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice, coin)}</span>` : ''}
+      ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
+      <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
+      ${/* MEASURED IN THE RENDER, not carried over. The hand-drawn scene put the
+      compost heap bottom-LEFT; the designer puts it bottom-RIGHT and the module
+      draws it at x 256-368, y 676-736. This button kept its old coordinates and
+      was sitting on empty grass, so the composting action had no target at all. */''}
+      <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:266px;top:672px;width:92px;height:64px"></button>
+      ${/* THE PET IS IN THE GARDEN, AND NOT ON THE FIRST VISIT. Tom handed me this
+            call, so here is the reasoning rather than just the outcome.
+            IN, normally: the designer's handoff puts a wandering pet in the scene
+            with petInGarden defaulting true, and this is a place the player is
+            meant to want to stand around in. A pet that only exists on the Today
+            card reads as a stat, not a companion.
+            OUT, on the first visit: the one job of a first visit is that the
+            player finds the shed and plants something. The accent arrow points
+            at the shed and it is the only loud thing on the screen. A pet
+            wandering on a 12s loop is the second loudest, and it competes with
+            the exact cue the whole layer exists to deliver. It arrives on the
+            second visit, which also gives the garden something new to show.
+            It goes through petAsideHtml/petFrom per the figure contract: shiny
+            is left UNDEFINED so S.shinyPets answers for the viewer's own pet,
+            and it is registered in tests/figure-audit.mjs SITES, which FAILS if
+            a new surface draws a pet and is not listed. */''}
+      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:26px;top:${HLW_H - 150}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74)}</div>` : ''}
+      <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
+        ${say ? `<span id="hlwSay" class="hlw-say" role="status" aria-live="polite">${esc(say)}</span>` : ''}
+        <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>
+        <span id="hlwFlip" style="position:absolute;inset:0;display:block;transform:scaleX(${av.facing});transition:transform .18s ease-in-out">
+          <span id="hlwAnim" style="position:absolute;inset:0;display:block;animation:hlwIdle 4s ease-in-out infinite;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35))">
+            ${/* NO .bh-stage HERE. That class carries a panel background, a border and a
+                  radius, which put the keeper on a dark card in the middle of a lawn: the
+                  highest-contrast object on the screen, carrying no information, and two
+                  first-time reviewers independently assumed the image had failed to load.
+                  He stands on the grass.
+
+                  And he wears the GARDENING FIT, not the player's equipped look. The
+                  designer's call and the reason is better than mine: a fixed fit reads as
+                  a character, and it avoids equipped-cosmetic clipping with the walk and
+                  water poses. At 190px a full going-out outfit also looks pasted in from
+                  another app. */''}
+            <span style="position:absolute;inset:0">${avatarLayersHtml(HLW_FIT, { noYard: true, skip: ['BG', 'C'] })}</span>
+          </span></span>
+      </div>
+      ${pouchOpen ? `<button id="hlwPouch" style="position:absolute;left:96px;top:190px;width:210px;z-index:30;background:#1d1b22;border:2.5px solid #17151d;border-radius:16px;box-shadow:4px 5px 0 rgba(0,0,0,.45);padding:12px 14px;display:grid;gap:9px;cursor:pointer;text-align:left">
+        <span style="display:flex;align-items:center;justify-content:space-between"><b style="font-family:var(--display),Bangers,sans-serif;font-size:16px;font-weight:400;letter-spacing:.06em;color:#f2e9d7">SEED POUCH</b><i style="font-size:10px;font-weight:700;color:#8f8578;font-style:normal">TAP TO CLOSE</i></span>
+        ${seedTotal ? SEED_IDS.filter(id => (garden.seeds[id] || 0) > 0).map(id => `<span style="display:flex;align-items:center;gap:9px">${bhIcon('garden-seed', 20, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}<b style="flex:1;font-size:12.5px;font-weight:700;color:#f2e9d7">${esc(seedName(id))}</b><b style="font-family:var(--display),Bangers,sans-serif;font-size:15px;color:#f2e9d7">×${garden.seeds[id]}</b></span>`).join('') : '<i style="font-size:11px;font-weight:600;color:#8f8578;font-style:normal">No seeds yet.</i>'}
+        <i style="font-size:10px;font-weight:600;color:#8f8578;font-style:normal">Seeds come from walks and compost · ${compost.left} composts left today</i>
+      </button>` : ''}
+      ${/* THE FIRST VISIT LAYER. The designer's first-visit comp carried three
+            things the build never had: an accent arrow at the shed, a FREE
+            STARTER SEEDS label on it, and a bottom bar saying where to tap. All
+            three were missing, and it was the single largest gap between what
+            Tom prepped and what shipped. A first-timer got a joke ("I am the one
+            who stands here") and no next step, on a screen where every noun is
+            invented.
+            It points at the SHED and not at a bed, because the shed is where the
+            seeds are and a bed with nothing to plant in it is a dead end. It
+            uses the accent exactly once more, which is the same budget the
+            thirsty bed gets, and it is pointer-events:none so it can never eat
+            the tap it is asking for. It is gone the moment anything is planted,
+            not on a timer, because a timer would take it away mid-read. */''}
+      ${firstEver ? `<div class="hlw-first" aria-hidden="true">
+        ${/* Under the shed DOOR, not beside the shed. Measured on the render: the
+              shed button spans stage x 282 to 382, and the arrow at 262 sat left
+              of it over open grass, pointing at nothing. The door is at ~330. */''}
+        <span class="hlw-arrow" style="left:315px;top:172px">${hlwArt('hollow-back-chevron', { w: 34, h: 34, style: 'transform:rotate(90deg)' })}</span>
+        <span class="hlw-freelabel" style="left:246px;top:212px">FREE STARTER SEEDS</span>
+      </div>` : ''}
+    </div></div>`;
+
+    /* KEEP THE BUBBLE ON SCREEN. It is anchored to the keeper and centred on him,
+       so when he walks to a left-column bed it hangs off the edge: measured 23.0px
+       clipped at 390x844 and 22.1 at 375x667, with 15px past the device viewport
+       entirely, on three of the five bed positions. Width is not known until it is
+       laid out, so clamp after paint rather than guessing in the template. */
+    const clampSay = () => {
+      const say = $('#hlwSay', body), stg = $('#hlwStage', body);
+      if (!say || !stg) return;
+      say.style.marginLeft = '0px';
+      const s0 = say.getBoundingClientRect(), sr = stg.getBoundingClientRect();
+      const over = Math.max(0, sr.left - s0.left) - Math.max(0, s0.right - sr.right);
+      if (over) say.style.marginLeft = `${Math.round(over / (sr.width / 390))}px`;
+    };
+
+    // scale the 390-wide stage to the sheet width
+    /* THE SCENE IS DECORATION, and a screen reader was walking all of it: 27 inline
+       SVG pieces and two steam glyphs, with an aria-hidden count of zero inside
+       the sheet. The beds carry real labels and the keeper is a live region;
+       everything else is set dressing and should be silent. */
+    $$('#hlwStage svg, #hlwStage .hlw-signwrap, #hlwStage [class^="hlw-p-"]', body)
+      .forEach(el => el.setAttribute('aria-hidden', 'true'));
+
+    const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
+    const s = vp.clientWidth / 390;
+    st.style.transform = `scale(${s})`;
+    vp.style.height = Math.round(HLW_H * s) + 'px';
+    clampSayNow = clampSay;
+    requestAnimationFrame(clampSay);
+
+    $$('[data-bed]', body).forEach(btn => btn.addEventListener('click', () => {
+      if (busy) return;
+      const i = Number(btn.dataset.bed);
+      const p = beds[i];
+      busy = true;
+      /* BESIDE, not on top. The designer specced a -74x stand-off for watering
+         and the build applied it to nothing. Left-column beds are approached
+         from the right and vice versa, so he never blocks the frame edge. */
+      const side = p.cx < 99 ? 74 : -74;
+      walkTo(p.cx + side, p.cy + 10, async () => {
+        if (p.empty) { busy = false; openPlantSheet(p.index, render); return; }
+        if (p.ready) {
+          const res = await harvestPlot(p.index);
+          if (!res.ok) { busy = false; render(); return; }
+          await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
+          levelSound(S.sounds);
+          /* THE PLUCK PLAYS IN FRONT OF HIM, not behind. Measured on a real
+             harvest tap: the keeper's box covered 80.6 x 57.5 of an 84 x 60 bed,
+             so the fruit arc, the pluck and the empty-bed reveal all happened
+             behind a skeleton. He is z-index 4; the art is 2. Raise the ONE bed
+             being harvested above him for the length of the animation. */
+          const wrap = $(`#hlwBedArt${i}`, body);
+          if (wrap) wrap.style.zIndex = '6';
+          const art = $(`#hlwBedArt${i} g`, body);
+          if (art) art.style.animation = 'hlwPluck .9s ease-out forwards';
+          /* And the toast clears the chip row above the bed instead of landing on
+             it: "+3 Ember Pepper" was overlapping a neighbour's timer chip by
+             13.2 x 16. Above the bed, above the chip line. */
+          toastAt(p.cx, p.cy - 34, `+${res.n} ${res.name}${res.bumper ? '  BUMPER!' : ''}`);
+          /* THE BUMPER WAS INVISIBLE HERE. harvestPlot has always returned it and
+             the list UI fires a 26-particle burst for it; the diorama dropped the
+             flag entirely, so a 1-in-10 lucky roll looked exactly like an ordinary
+             pick. The prettier surface had the flatter payoff. */
+          if (res.bumper && wrap) {
+            const r = wrap.getBoundingClientRect();
+            confettiBurst(r.left + r.width / 2, r.top + r.height / 2, 26);
+          }
+          // busy stays TRUE across the pluck: released early, the 30s tick could
+          // re-render straight over the animation the harvest exists to show.
+          setTimeout(() => { busy = false; render(); }, 1200);
+          return;
+        }
+        if (p.canWater) {
+          waterFx(p.cx, p.cy);
+          setTimeout(async () => {
+            const res = await waterPlot(p.index);
+            busy = false;
+            if (res.ok) { popSound(S.sounds); toastAt(p.cx, p.cy, 'Watered!'); }
+            render();
+          }, 2000);
+          return;
+        }
+        /* Growing and already watered. This used to walk the keeper over and then
+           end in silence: no toast, no line, no sound, the one bed state that
+           answered a tap with nothing. Say what it is waiting for. */
+        busy = false;
+        toastAt(p.cx, p.cy, `${fmtCookTime(p.remainingMs)} to go`);
+      });
+    }));
+    $('#hlwShed', body)?.addEventListener('click', () => {
+      if (busy) return;
+      busy = true;
+      walkTo(310, 200, () => { busy = false; pouchOpen = true; render(); });
+    });
+    $('#hlwPouch', body)?.addEventListener('click', () => { pouchOpen = false; render(); });
+    $('#hlwCrow', body)?.addEventListener('click', () => {
+      if (busy) return;
+      busy = true;
+      walkTo(60, 660, () => { busy = false; openCompostSheet(render); });
+    });
+    {
+      const price = plotPrice(garden.plotsOwned);
+      /* REFUSE BEFORE THE COMMIT, not after it. The confirm used to arm in the
+         affirmative accent with 340 coins in the bank and only then answer
+         "Need 1,500 coins", which is the shape of a trap. If it is out of reach
+         the first tap says so and nothing arms. */
+      const buyBtn = $('#hlwBuy', body);
+      if (buyBtn && price != null && coin < price) {
+        buyBtn.addEventListener('click', () => {
+          toast(`${(price - coin).toLocaleString()} coins short. Harvest, walk, or win a fight and come back.`, 3200);
+        });
+      } else
+      armToConfirm(buyBtn, price != null ? `Spend ${price.toLocaleString()}?` : 'Spend?', async () => {
+        if (price == null) return;
+        if ((await coins()) < price) { toast(`Need ${price.toLocaleString()} coins for another bed.`, 2800); return; }
+        await coinsAdd(-price);
+        await addPlot();
+        popSound(S.sounds);
+        render();
+      });
+    }
+  }
+  render();
+  const timer = setInterval(() => {
+    if (!body.isConnected) { clearInterval(timer); return; }
+    if (busy || body.querySelector('.arming')) return;
+    render();
+  }, 30000);   // ponytail: 30s tick (timer chips only need minute granularity here)
+}
+
 function openGardenSheet(after) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Bone Garden</h2><button class="sheet-close">Done</button></div>
@@ -4018,6 +4622,21 @@ function openGardenSheet(after) {
 
 /* ---- plant / compost / harvest ---- */
 
+/* SEED LABELS. Derived from RECIPES against what you actually hold, never
+   hard-coded, so a recipe change cannot leave a stale label behind. This is
+   LEGIBILITY, not depth: it does not add a decision, it stops the existing one
+   from being a guess by naming the dish this seed is closest to feeding. */
+function seedUseLine(id, inv) {
+  const uses = RECIPES.filter(r => r.needs[id]);
+  if (!uses.length) return null;
+  // "closest" = fewest ingredients still missing across the whole recipe, so the
+  // dish named is the one this seed actually moves you toward
+  const short = r => Object.entries(r.needs).reduce((n, [ing, k]) => n + Math.max(0, k - (inv[ing] || 0)), 0);
+  const best = uses.reduce((a, b) => (short(b) < short(a) ? b : a));
+  const need = Math.max(0, best.needs[id] - (inv[id] || 0));
+  return need ? `${need} more for ${best.name}` : `enough for ${best.name}`;
+}
+
 // Pick what goes in a specific bed. Separate from tapping a seed in the pouch
 // (which fills the first free bed) because tapping the bed itself should let you
 // choose, not guess.
@@ -4028,14 +4647,16 @@ function openPlantSheet(slot, after) {
   const body = $('#plantBody', wrap);
   async function render() {
     if (!body.isConnected) return;
-    const g = await gardenState();
+    const [g, inv] = await Promise.all([gardenState(), ingredients()]);
     const owned = SEED_IDS.filter(id => (g.seeds[id] || 0) > 0);
     body.innerHTML = owned.length ? owned.map(id => {
       const rare = isRareSeed(id);
       const mins = growMinutes(id);
+      const use = seedUseLine(id, inv);
       return `<div class="crate-row"><span class="crate-ico">${bhIcon('garden-seed', 26, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
         <div style="flex:1"><b>${esc(seedName(id))} seed${g.seeds[id] > 1 ? ` ×${g.seeds[id]}` : ''}</b>
         <small>grows into ${esc(INGREDIENTS[id].name)}</small>
+        ${use ? `<small class="seed-use">${esc(use)}</small>` : ''}
         <small class="recipe-need">${mins < 60 ? mins + 'm' : (mins / 60) + 'h'} · yields ${rare ? `${HARVEST_BASE_RARE} to ${HARVEST_BASE_RARE + 1}` : `${HARVEST_BASE} to ${HARVEST_BASE + 2}`}</small></div>
         <button class="btn small" data-sow="${id}">Plant</button></div>`;
     }).join('') : `<p class="note" style="margin:6px 2px">No seeds. Walk the Boneyard to find some, or compost a spare ingredient at the heap.</p>`;
@@ -4061,19 +4682,32 @@ function openCompostSheet(after) {
   async function render() {
     if (!body.isConnected) return;
     const [inv, st] = await Promise.all([ingredients(), compostStatus()]);
+    /* SHORTEST FIRST, NOT ALPHABETICAL. Composting only ever returns seeds of the
+       species you put in, so composting the fattest pile (the obvious play)
+       compounds a monoculture: measured over 30 days the median player ends up
+       holding 167 of one common and 0.7 of the thinnest, and a full larder still
+       blocks a pot. Ordering the heap by what the cookbook is shortest of fixes
+       the shape outright (fattest 167 to 45, thinnest 0.7 to 15.3). Rows you can
+       actually compost come first, because a suggestion you cannot act on is
+       noise. UI ONLY: the rates, the cap, the roll and js/garden.js are untouched. */
+    const need = {};
+    for (const r of [...RECIPES, ...POTIONS]) for (const [id, n] of Object.entries(r.needs)) need[id] = (need[id] || 0) + n;
+    const short = id => (need[id] || 0) - (inv[id] || 0);
+    const order = COMMON_INGREDIENT_IDS.slice()
+      .sort((a, b) => ((inv[b] || 0) > 0) - ((inv[a] || 0) > 0) || short(b) - short(a));
     body.innerHTML = `
-      <p class="note" style="margin:2px 2px 12px">Turn one ingredient into seeds of the same kind. The heap only takes <b>${st.cap} a day</b>, so this converts a glut into something growing rather than printing food out of nothing.</p>
+      <p class="note" style="margin:2px 2px 12px">Turn one ingredient into seeds of the same kind. The heap only takes <b>${st.cap} a day</b>, so this converts a glut into something growing rather than printing food out of nothing. Listed with the ones your recipes are shortest of at the top.</p>
       <div class="compost-card">
         <div class="compost-top"><span>${bhIcon('garden-bed', 30)}</span>
           <div style="flex:1"><b>1 ingredient in, 1 to 3 seeds out</b><small>Rolled when you compost, not when you plant.</small></div></div>
         <div class="odds">${SEED_ODDS.map((p, i) => `<span><b>${i + 1}</b>${Math.round(p * 100)}%</span>`).join('')}</div>
       </div>
       <div class="sect-h">Your ingredients · ${st.left} compost${st.left === 1 ? '' : 's'} left today</div>
-      ${COMMON_INGREDIENT_IDS.map(id => {
+      ${order.map(id => {
         const have = inv[id] || 0;
         const can = have > 0 && st.left > 0;
         return `<div class="crate-row ${can ? '' : 'lack'}"><span class="crate-ico">${ingIconHtml(id, 26)}</span>
-          <div style="flex:1"><b>${esc(INGREDIENTS[id].name)}</b><small>you hold ${have}</small></div>
+          <div style="flex:1"><b>${esc(INGREDIENTS[id].name)}</b><small>you hold ${have} · your recipes call for ${need[id] || 0}</small></div>
           <button class="btn small ${can ? '' : 'ghost'}" data-compost="${id}" ${can ? '' : 'disabled'}>Compost 1</button></div>`;
       }).join('')}
       <div class="sect-h">${esc(INGREDIENTS[RARE_INGREDIENT].name)}</div>
@@ -4107,7 +4741,13 @@ function harvestBodyHtml(items) {
   const kickOf = r => r.bumper ? 'BUMPER CROP' : r.watered ? 'FINE HARVEST' : 'HARVEST';
   const subOf = r => r.rare
     ? (r.watered ? 'Watered on time' : 'Grown without watering')
-    : r.bumper ? `Watered and then some: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on the day`
+    /* A bumper is a 1-in-10 roll and it is INDEPENDENT of watering, so this line
+       used to congratulate an unwatered bed for care it never got. Name the two
+       causes separately, because the whole point of surfacing the bumper is that
+       the player can tell the free luck from the thing they did. */
+    : r.bumper ? (r.watered
+      ? `Watered, and a bumper crop on top: ${HARVEST_BASE} base, +1 for the care, +1 on the roll`
+      : `A bumper crop: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on a 1-in-10 roll`)
     : r.watered ? `${HARVEST_BASE} base, +1 for the care` : `${HARVEST_BASE} base · water it next time for more`;
   if (one) {
     return `<div class="hv-card${one.bumper ? ' bumper' : ''}">
@@ -4207,18 +4847,25 @@ async function openKitchen() {
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
-  let view = 'doors';   // 'doors' | 'cook' — the Kitchen opens on its two doors
+  let view = 'doors';   // 'doors' | 'cook'. the Kitchen opens on its two doors
   async function render() {
     if (!body.isConnected) return;
+    /* THE ONLY CALLER of advanceQueue, so the dishes it collected on the player's
+       behalf are paid the same XP a manual Serve pays, exactly once. cookState()
+       stays a plain read; the pots are shown here and nowhere the queue matters. */
+    for (const [i, dish] of (await advanceQueue()).entries()) {
+      await award(`cook-${Date.now().toString(36)}-${i}`, 'cook', 8, `Cooked ${dish.name}`);
+    }
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
-    const canStartAny = cook.freeCount > 0;
+    const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
       const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 13)}${(inv[id] || 0)}/${n}`).join('  ');
       const canStart = have && canStartAny;
+      const verb = cook.freeCount > 0 ? (r.potion ? 'Brew' : 'Cook') : 'Line up';
       return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
         <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
-        <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${r.potion ? 'Brew' : 'Cook'}</button></div>`;
+        <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${verb}</button></div>`;
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
     const potCard = s => {
@@ -4244,6 +4891,7 @@ async function openKitchen() {
     const cookPills = [
       cook.readyCount ? { go: true, ico: bhIcon('dish-broth', 13), txt: `${cook.readyCount} dish${cook.readyCount === 1 ? '' : 'es'} ready` } : null,
       cook.slots.filter(x => !x.empty && !x.ready).length ? { txt: `${cook.slots.filter(x => !x.empty && !x.ready).length} on the fire` } : null,
+      cook.queue.length ? { wait: true, txt: `${cook.queue.length} lined up` } : null,
       (() => { const n = RECIPES.filter(r => canCook(r, inv)).length;
         return n ? { txt: `${n} you can cook now` } : { wait: true, txt: 'Not enough ingredients yet' }; })(),
     ].filter(Boolean);
@@ -4278,7 +4926,7 @@ async function openKitchen() {
         </div>
         <p class="note" style="margin:10px 2px 0">GROW makes them, COOK spends them.</p>`;
       $('#doorCook', body)?.addEventListener('click', () => { view = 'cook'; render(); });
-      $('#doorGrow', body)?.addEventListener('click', () => openGardenSheet(render));
+      $('#doorGrow', body)?.addEventListener('click', () => openHollow(render));
       $('#compostBtn2', body)?.addEventListener('click', () => openCompostSheet(render));
       return;
     }
@@ -4287,8 +4935,13 @@ async function openKitchen() {
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
+        ${cook.queue.map(r => `<div class="pot-card queued"><span class="pot-ico">${recipeIconHtml(r, 26)}</span>
+          <b>${esc(r.name)}</b><small>starts when a pot frees</small></div>`).join('')}
         ${buyPrice != null ? `<button class="pot-card buy" id="buyPot"><span class="pot-ico">➕</span><b>Extra pot</b><small>${buyPrice.toLocaleString()} ${ICONS.coin(12)}</small></button>` : ''}
       </div>
+      ${cook.freeCount === 0 || cook.queue.length ? `<p class="note" style="margin:2px 2px 10px">${cook.queueLeft
+        ? `Pots full? Line up ${cook.queueLeft} more. Each starts on its own the moment the pot ahead of it is done, and the finished dish waits in your Pantry.`
+        : 'Your line is full. The pot works through it while you are away.'}</p>` : ''}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
@@ -4366,9 +5019,15 @@ async function openKitchen() {
       render();
     });
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const res = await startCook(btn.dataset.cook);
-      if (res.ok) { trackEvent('cook', { r: btn.dataset.cook }); popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
-      else if (res.reason === 'busy') toast('Every pot is full. Serve one, or buy another pot.', 3000);
+      let res = await startCook(btn.dataset.cook);
+      // every pot busy is no longer the end of the visit: line it up instead
+      const lined = res.reason === 'busy';
+      if (lined) res = await queueCook(btn.dataset.cook);
+      if (res.ok) {
+        trackEvent('cook', { r: btn.dataset.cook, q: lined ? 1 : 0 }); popSound(S.sounds);
+        toast(lined ? 'Lined up. It starts itself when the pot is free.' : 'Into the pot. Check back when it’s ready.', 2600);
+      }
+      else if (res.reason === 'full') toast('Your line is already full. Serve a dish to make room.', 3000);
       else toast('Not enough ingredients for that dish.');
       render();
     }));
@@ -5604,8 +6263,8 @@ async function renderTrends(el) {
     <div class="card-title">STEPS${stepsHasData ? '<button class="link" data-metric="steps">History ›</button>' : ''}</div>
     <div class="trend-stats" style="margin:2px 0 12px">
       <div class="st"><div class="l">Today</div><div class="v">${stepsToday.toLocaleString()}</div></div>
-      <div class="st"><div class="l">7-day avg${s7.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
-      <div class="st"><div class="l">30-day avg${s30.partial ? '<i class="st-note">incl. today</i>' : ''}</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">7-day avg${s7.partial ? '<i class="st-note">incl. Today</i>' : ''}</div><div class="v">${stepAvg7 ? stepAvg7.toLocaleString() : '·'}</div></div>
+      <div class="st"><div class="l">30-day avg${s30.partial ? '<i class="st-note">incl. Today</i>' : ''}</div><div class="v">${stepAvg30 ? stepAvg30.toLocaleString() : '·'}</div></div>
     </div>
     <div class="chart" id="stepsChart">${barChart(days14, d => d.steps, { target: STEP_REF, color: 'var(--accent)', fmt: v => (v / 1000).toFixed(0) + 'k' })}
       <p class="bc-readout note">${stepsHasData ? 'Tap any bar for that day\'s exact steps.' : ''}</p></div>
@@ -6535,7 +7194,7 @@ function nameWithAlias(f) {
    Approved mockup: market-quality-mockups/crew-fan.html; spec + acceptance:
    market-quality-mockups/crew-fan-HANDOFF.md. Backdrop is their equipped BG, the
    Bonehead holds the centre (figure contract), the pet sits on the plate's top
-   edge at the right tension line. cfan-pet is a registered figure-audit site. */
+   edge at the right tension line. Cfan-pet is a registered figure-audit site. */
 /* THE ART OF ONE CARD, split out so a seat can mount and UNMOUNT it (see
    applyFan). The FIGURE takes the 384 tier, not 192: it draws at 175 CSS px
    inside a 194px card, which is 525 device px on a 3x phone, and 192 visibly
@@ -6743,7 +7402,7 @@ async function renderFriends(el) {
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
     /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
-       fanfare or credit to the sender. otherwise deliveries reads like a receipt
+       fanfare or credit to the sender. Otherwise deliveries reads like a receipt
        you'd get at a store." A gift you have not opened is the only thing on
        this card that is not history, so it sits on top, closed, with the sender's
        name on it. */
@@ -7058,7 +7717,7 @@ async function renderFriends(el) {
 
   /* Two ways to advance: TAP a card (a side card centres it, the centre card
      opens their profile), or DRAG the fan: it follows the finger, settles home,
-     and advances past the threshold. dragstart MUST die or the browser lifts a
+     and advances past the threshold. Dragstart MUST die or the browser lifts a
      single gear PNG off the Bonehead as a ghost image (Tom hit this on the
      mockup); the click suppressor is ONE-SHOT so only the click born from this
      drag's release is eaten, never the next legitimate tap. */
@@ -7189,12 +7848,12 @@ async function renderFriends(el) {
     if (wait) wait.hidden = true;
     /* THE PODIUM IS THE TILE, NOT THE LIST. Two notes from Tom that read as
        opposites but are not:
-         2026-08-08 "I just want it to include all players in the main list" —
+         2026-08-08 "I just want it to include all players in the main list" . 
            about the SHEET, where a podium pulled three people out of the ranking
            and made everyone else a footnote. The sheet is still one flat list.
          2026-08-09 "I don't like that the leaderboard is fully collapsed now and
            we lost the podium art. You should still see that and then also click
-           to open and see the full list." — about the CREW TAB, where removing
+           to open and see the full list.". about the CREW TAB, where removing
            the podium left a card with a sentence on it and nothing to look at.
        So: podium art here as the preview, single list in the sheet. The whole
        card is already a button, so the tap-through he asked for already works;
@@ -7280,7 +7939,7 @@ async function renderFriends(el) {
     const heads = $$('[data-lbhead]', body);
     if (typeof IntersectionObserver === 'function') {
       /* RECYCLE, do not just defer. Tom, 2026-08-13: "scrolling the leaderboard
-         still crashes it like before the fix. it's better than before when it
+         still crashes it like before the fix. It's better than before when it
          wouldn't open but that's a thing."
 
          He is describing the exact hole in the first fix. It mounted on approach
@@ -7296,7 +7955,7 @@ async function renderFriends(el) {
 
          The reason this shipped: my audit measured the mount at OPEN and never
          scrolled, so it measured the one state the player was not complaining
-         about. lb-memory-audit now scrolls to the end before it measures. */
+         about. Lb-memory-audit now scrolls to the end before it measures. */
       const io = new IntersectionObserver(entries => {
         for (const en of entries) {
           const el = en.target;
@@ -7358,7 +8017,7 @@ async function renderFriends(el) {
     const myFit = await equipped();
     const wk = raceWeekKey(dateKey());
     /* PUSH BEFORE YOU PULL. Tom, 2026-08-08: "how often is the step race
-       challenge checking? ive walked since then and dont see myself in 1st. this
+       challenge checking? ive walked since then and dont see myself in 1st. This
        should updating frequently."
        The board reads weekSteps out of the profile snapshot, and that snapshot
        only ever reached the server from autoSync at boot/resume, behind a 5
@@ -7695,7 +8354,7 @@ async function openGiftSheet(f) {
   });
 
   /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
-     still could. armToConfirm's own header records why it exists (a player
+     still could. ArmToConfirm's own header records why it exists (a player
      bought a 1,000-coin cauldron by accident), and these chips were sending up
      to 500 coins to ANOTHER PLAYER on a single tap, which is worse than a
      mis-buy: the refund below only runs when the send FAILS, so a successful
@@ -7766,7 +8425,7 @@ function openFeedbackSheet() {
     btn.disabled = true; if (st) st.textContent = 'Sending...';
     const r = await sendReport('feedback', { note });
     trackEvent('feedback_send');
-    if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks — every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
+    if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks. Every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
     else { if (st) st.textContent = 'Could not send. Try again when you are online.'; btn.disabled = false; }
   });
 }
@@ -8436,7 +9095,7 @@ async function renderSettings(el) {
     }
     confettiBurst(innerWidth / 2, innerHeight * 0.35, 24); levelSound(S.sounds);
     toast(res.pet ? `${res.pet.name} unlocked! Equip it in your Wardrobe.${res.coins ? ` +${res.coins} coins.` : ''}`
-      : `Code redeemed!${res.dupe ? ' (pet already owned — coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
+      : `Code redeemed!${res.dupe ? ' (pet already owned, coins instead)' : ''}${res.coins ? ` +${res.coins} coins.` : ''}`, 3600);
     renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());
@@ -8748,7 +9407,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -8847,8 +9506,8 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
 
 
 /* The level-up MOMENT. A breathing lime glow bursts behind the player's own
-   Bonehead — never a stock figure, this surface is under the figure contract and
-   carries the pet and its shiny — the character pops in, the chips step, and the
+   Bonehead. Never a stock figure, this surface is under the figure contract and
+   carries the pet and its shiny. The character pops in, the chips step, and the
    XP bar speed-ramps to full, builds a glow, releases it in a flash and is
    revealed at the carry-over for the NEW level. It is never shown draining: the
    snap to the real remainder happens under the full flash. Beats live in
@@ -8957,7 +9616,7 @@ function startLevelGlow(el) {
   };
   /* Automation gets the resting simmer so screenshots stay deterministic — but a
      motion effect that can ONLY run outside automation is one no test can ever
-     see, which makes every future change to it a guess. window.__motionForce
+     see, which makes every future change to it a guess. Window.__motionForce
      turns it back on, same idiom as __spireForce / __raceForce / __gardenForce. */
   if (reducedMotion || (navigator.webdriver && !window.__motionForce)) { paint(0.16); return () => {}; }
   let raf = 0;
@@ -9009,7 +9668,7 @@ async function renderBonehead(el) {
      (kvSet('onbName') at the end of the onboarding flow), and social.socialMe()
      is a kvGet. The literal survives as the last rung because a save from before
      'onbName' existed has neither, and a blank heading is worse than the old
-     one. esc() because me.name arrives from the server. */
+     one. Esc() because me.name arrives from the server. */
   const me = await social.socialMe();
   const pick = me && me.name ? null : await kvGet('onbName', null);
   const title = (me && me.name)
@@ -9917,7 +10576,7 @@ function openProgressSheet() { return openCharacter('progress'); }
 // what each gear-granted talent actually DOES (so loot can be compared, not just named)
 const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
 /* The player-facing three-letter stat codes. Mirrors the KEY table inside
-   gearLabel() in js/gear.js, which is the only other place they exist —
+   gearLabel() in js/gear.js, which is the only other place they exist . 
    STAT_META carries the long names and prose labels, not these. If a third
    caller ever needs them, export one table from gear.js and drop this. */
 const STAT_CODE = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hype: 'HYP' };
@@ -9929,7 +10588,7 @@ const STAT_CODE = { power: 'POW', marrow: 'MAR', wind: 'STA', reflex: 'RFX', hyp
 function gearToCard(g) {
   /* Two things about g.stats worth knowing before you touch this. Its keys are
      the long internal names (power/marrow/wind/reflex/hype), not the three-letter
-     codes players read — gearLabel() maps them, and STAT_CODE mirrors that table.
+     codes players read. GearLabel() maps them, and STAT_CODE mirrors that table.
      And GEAR_BUDGET has no `common` entry, so statSplit() hands a common back
      {power: NaN}: commons are plain armour with no stats by design, so filter on
      the values rather than trusting the map to be empty. */
@@ -10100,7 +10759,7 @@ function packCardHtml(c, { selectable = false } = {}) {
     : '';
   /* The BAND under the plate is where a drop says what it does: real stat chips
      when it rolled some, the talent affix on top of them, and an explicit
-     "no stats" line for pure cosmetics — an empty shelf under a legendary's
+     "no stats" line for pure cosmetics. An empty shelf under a legendary's
      nameplate reads as a bug, not as "this one is looks-only". `stats` stays the
      free-form HTML slot every older call site already fills. */
   const chips = (c.statList || []).map(([k, v]) =>
@@ -10151,7 +10810,7 @@ function crateOpenHtml(kind) {
 }
 
 /* What the light does per tier. The ladder is deliberately WIDE: a common gets
-   haze and nothing else, a legendary gets the full fan — the two must not look
+   haze and nothing else, a legendary gets the full fan. The two must not look
    alike. `light` is the burst tint, which is warmer than the frame colour on a
    common (a cream fan on a cream card disappears). */
 const BURST = {
@@ -10187,7 +10846,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
      second target at all"). It needs 5 den wins AND standing inside a den's
      radius, which no audit can arrange, so it went untested and I kept saying it
      was fixed. Same idiom as __crateForce / __spireForce: nothing changes unless a
-     test opts in. pitWrap is only used to re-render the Pit on close, so null is
+     test opts in. PitWrap is only used to re-render the Pit on close, so null is
      safe here. */
   /* Open a real den sheet for a real den, so a test can look at what a player
      looks at rather than at the data behind it. */
@@ -10355,7 +11014,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          depend on a frame arriving.
          The double rAF stays, because the entrance animation genuinely needs
          two frames to have a previous value to interpolate from. The timer is
-         the floor under it. classList.add is idempotent. */
+         the floor under it. ClassList.add is idempotent. */
       const go = () => {
         const add = () => deck.classList.add('go');
         requestAnimationFrame(() => requestAnimationFrame(add));
@@ -10617,7 +11276,7 @@ async function checkPetLevelUp() {
   const petName = (BH_BY_ID[inst.sp] && BH_BY_ID[inst.sp].name) || 'Your pet';
   // if something is already on screen (a fight, another sheet) don't hijack it
   if (sheetStack.length) {
-    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent — pick it in the Stable!`, 4600); }
+    if (newTalent) { confettiRain(60); levelSound(S.sounds); toast(`🐾 ${petName} hit Lv ${cur} and unlocked a new talent. Pick it in the Stable!`, 4600); }
     else { popSound(S.sounds); toast(`🐾 ${petName} reached Lv ${cur}!`, 3000); }
     return;
   }
@@ -10670,7 +11329,7 @@ const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those 
 /* WHAT PETS ARE FOR. Tom, 2026-08-10: "there should also be a tapable sheet at
    the top of the stable... that explains the pets feature of the game - how
    breeding works, why do it and where does it stop paying off? how do pet talents
-   work, what are shinies etc. keep it concise though not too verbose or
+   work, what are shinies etc. Keep it concise though not too verbose or
    rambling."
    Every number here is read from the code that enforces it (pets.js, loot.js)
    rather than typed in, so this sheet cannot drift from the game the way a
@@ -10984,7 +11643,7 @@ async function openStable(opts = {}) {
         <span class="cf-chip r-${it.rarity || 'common'}">${x.shiny ? `${sparkIco(9)} SHINY` : esc((RARITIES[it.rarity] || {}).label || it.rarity || '')}</span>
         <span class="cf-lv">LV ${lvl}</span>
         <!-- Tom, 2026-08-08: "you should have the animated versions of the pets we
-             have animations for. that is the cloud, the orange liz and the purple
+             have animations for. That is the cloud, the orange liz and the purple
              liz." That is ANIMATED_PETS = C1, C4, CX exactly.
              petSpriteHtml rather than petPortraitHtml: it prefers the animated
              build where one exists and falls back to the cropped still otherwise,
@@ -11583,7 +12242,7 @@ async function openStable(opts = {}) {
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
        Short version: `position: sticky; bottom: 0` is clamped by its containing
-       block, and the bar's was #stableBody, i.e. the entire sheet, so it could
+       block, and the bar's was #stableBody, i.e. The entire sheet, so it could
        rise all the way over .cf-acts. Both previous fixes bought room to escape
        it; neither stopped it happening. Measured on v380 at 375x667 with a
        precious pair flagged: [data-destroy] hit li / span.bt-in / div.breed-trade
@@ -11889,7 +12548,7 @@ async function openRecoverySheet({ firstRun = false } = {}) {
       <p class="note" style="margin:2px 2px 14px">${intro}</p>
       <div class="field">
         <label>Recovery ID <span class="rc-hint">the name you look yourself up by</span></label>
-        <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. tom-bones" value="${esc(existingId || '')}">
+        <input id="rcId" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. Tom-bones" value="${esc(existingId || '')}">
         <p class="rc-note" id="rcIdState"></p>
       </div>
       <div class="field">
@@ -12538,7 +13197,7 @@ async function renderBoneyard(el) {
     // unreachable" (private property, etc.); on empty ground -> "nominate this
     // landmark for a boss den". Both send a private note to the devs.
     let lpTimer = null, lpStart = null, lpPointer = null, reportOpen = false;
-    const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold — not an accidental brush
+    const LP_MS = 750, LP_MOVE = 8;   // a deliberate, stationary hold. Not an accidental brush
     function lpClear() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpStart = null; lpPointer = null; }
     function markerAt(target) {
       const el = target && target.closest && target.closest('.map-den-mark, .map-mini-mark, .map-spawn');
@@ -12610,7 +13269,7 @@ async function renderBoneyard(el) {
       if (el) {
         /* A SPIRE IS SOMEBODY'S TURF. Tom, 2026-08-08: "why cant i click a Spire
            on the map in boneyard and see somethign cool like who has it right
-           now etc. it should be like pokemon go where youre proud to rep your
+           now etc. It should be like pokemon go where youre proud to rep your
            gym and flex on other players." It was not even in this selector, so
            tapping one did nothing at all. Every fact below already arrives with
            the /spires poll; nothing new is fetched. */
@@ -12656,7 +13315,7 @@ async function renderBoneyard(el) {
       const lead = isDen
         ? 'Know a spot that would make a great boss den? A landmark, a park, somewhere with meaning. Tell the devs why it belongs on the map.'
         : `Can't reach <b>${esc(ctx.label || 'this spot')}</b>? If it's on private property or otherwise off-limits, let the devs know and they'll review it.`;
-      const ph = isDen ? 'Why here? (e.g. the old lighthouse, the town square...)' : "What's wrong? (e.g. this is on private property)";
+      const ph = isDen ? 'Why here? (e.g. The old lighthouse, the town square...)' : "What's wrong? (e.g. This is on private property)";
       openSheet(`
         <h2>${title}</h2>
         <p class="muted" style="margin:0 0 12px">${lead}</p>
@@ -13000,7 +13659,7 @@ async function renderBoneyard(el) {
       // would sit blank forever behind opacity 0
       await Promise.race([refreshSpires(), new Promise(r => setTimeout(r, 2500))]);
       /* ONE ARRIVAL, NOT FIVE. Tom, 2026-08-08: "it seems like the spires load in
-         after other icons. all the icons should be appearing at the same time it
+         after other icons. All the icons should be appearing at the same time it
          looks cheap when everything staggers in."
          Everything above paints synchronously from local data; spires alone wait
          on a network round trip, so they always landed last. The marker layer
@@ -13440,7 +14099,7 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
      true: as soon as they log anything today, the moment they have ever logged
      anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
      skippable if they dont want to then point them to other things that could
-     be of interest" — skipping does not blank the card, it falls straight
+     be of interest". skipping does not blank the card, it falls straight
      through to the fight/gear/talent nudges underneath, which is what the rest
      of this function already computes. */
   if (!loggedToday && !everLogged && !mealSkipped) sig.push({
@@ -13529,7 +14188,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v384'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v385'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -14776,14 +15435,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'absorb') return `${who === 'You' ? 'Your' : who + "'s"} ward drinks ${ev.amount} damage${ev.broken ? ' and shatters' : ''}`;
     if (ev.t === 'lastlight') return `${who === 'You' ? 'You refuse' : who + ' refuses'} to fall: LAST LIGHT!`;
     if (ev.t === 'miss') return ev.whiffed ? `${who} put everything into a ${ACTIONS[ev.move] ? ACTIONS[ev.move].label.toLowerCase() : (WRAITH_MOVE_LABEL[ev.move] || 'swing').toLowerCase()}... and hit nothing but air` : `${who} whiffed the haymaker`;
-    if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep — ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
+    if (ev.t === 'aoe') return `${esc(ev.name)} unleashed a bone sweep. ${ev.dmgYou} to you${ev.dmgPet ? ` and ${ev.dmgPet} to your pet` : ''}!`;
     /* THE LIVE WIRE. Each line names what the move actually did, because his
        whole point is that his moves check things nothing else checks. */
     if (ev.t === 'wraith') return {
-      bolt: `${esc(ev.name)} throws a hollow bolt — straight through armour`,
+      bolt: `${esc(ev.name)} throws a hollow bolt. Straight through armour`,
       wail: `${esc(ev.name)} WAILS. Your wounds will not close as fast.`,
       rise: `${esc(ev.name)} calls something up out of the floor`,
-      reap: `${esc(ev.name)} reaps — and the fuller your lungs, the deeper it cuts`,
+      reap: `${esc(ev.name)} reaps. And the fuller your lungs, the deeper it cuts`,
       grasp: `${esc(ev.name)} reaches out and takes the wind out of you`,
     }[ev.cast] || '';
     if (ev.t === 'drain') return `${esc(ev.name)} drains ${ev.amount} stamina${ev.healed ? ` and heals ${ev.healed}` : ''}`;
@@ -14992,7 +15651,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
        grid as the attack buttons, so a mis-tap costs a brewed item AND an AP.
        Same armToConfirm every spend and destroy in the app already uses: first
        tap arms and relabels, 3.2s cooloff, second tap commits with a heavy
-       haptic. renderActions() rebuilds this grid every refresh, which disarms
+       haptic. RenderActions() rebuilds this grid every refresh, which disarms
        anything left armed, exactly as it should. */
     $$('[data-potion]', factions).forEach(b => {
       if (b.disabled) return;
@@ -15417,7 +16076,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            that rendered before the fight, so after a win that sheet still
            offers the fight you just won. The Glutton got a fix; the spire did
            not, because the fix was written for the path the ticket named rather
-           than for the shared function. settle() has already claimed the tower
+           than for the shared function. Settle() has already claimed the tower
            by the time this runs, so openSpireSheet's "Face the Warden" button
            is not merely stale, it is a live control for an act that is done.
            STALE_LAUNCHER is the list of modes whose launcher cannot survive a
