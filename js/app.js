@@ -10882,8 +10882,15 @@ function playCrateSeq(reveal, scope, ready, at) {
   });
 }
 
+/* ONE ANSWER TO "does this crate render the authored frames". The kind decides
+   both the markup and the box the box has to be, and those two lived in two
+   places: `kind === 'daily'` here, and a 144 hardcoded in app.css that agreed
+   with nothing. .co-pix is what tells the sheet to size .pack-crate off --pc-seq,
+   so if this predicate and the class ever disagree the sprite goes back to
+   floating inside a box that is not its size. Keep them on one function. */
+const CRATE_IS_PIX = kind => kind === 'daily';
 function crateOpenHtml(kind) {
-  if (kind === 'daily') return crateSeqHtml();
+  if (CRATE_IS_PIX(kind)) return crateSeqHtml();
   const cut = CRATE_LID[kind] ?? 38;
   const ico = crateIcon(kind, 148);
   return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
@@ -11001,7 +11008,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
      is the exact v245 invisible-punch failure. decode() rejections are swallowed
      per image so one broken frame degrades the sequence to a skipped step
      instead of hanging the whole reveal (anti-regression rule 8). */
-  const crateSeqReady = crate === 'daily'
+  const crateSeqReady = CRATE_IS_PIX(crate)
     ? Promise.all(Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => {
         const im = new Image();
         im.src = `assets/crates/common/f${i}.png`;
@@ -11045,7 +11052,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-scene">
               <div class="pack-burst" id="packBurst"></div>
               <div class="pack-deck" id="packDeck"></div>
-              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom"></span>` : ''}
+              ${opening ? `<div class="pack-crate${CRATE_IS_PIX(crate) ? ' co-pix' : ''}">${crateOpenHtml(crate)}</div><span class="pack-bloom"></span>` : ''}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
@@ -11127,7 +11134,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(850, () => { dropSound(S.sounds); haptic.tap(); });    // it lands
         at(2300, () => sparkleSound(S.sounds));                   // the lid goes
         at(2750, () => landed(tier));                             // the card is up
-        if (crate === 'daily') playCrateSeq(reveal, wrap, crateSeqReady, at);
+        if (CRATE_IS_PIX(crate)) playCrateSeq(reveal, wrap, crateSeqReady, at);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so

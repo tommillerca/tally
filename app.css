@@ -3640,6 +3640,35 @@ body::before {
    * within 1px of the old value at 320x568, 360x640 and 375x667.
    */
   --pc-w: 193px; --pc-crate: 120px;
+  /* THE PIXEL CRATE'S OWN EDGE, AND WHY IT IS NOT --pc-crate.
+   * The common crate is not a vector any more, it is nine authored 48x48 PNGs.
+   * Pixel art survives INTEGER scaling and nothing else, so this ladder may only
+   * ever hold multiples of 48px, and --pc-crate (120, 130, 136, 139, 141, 148,
+   * 149, 152, 156, 164) is not one at any breakpoint. The two numbers therefore
+   * cannot be the same variable. --pc-seq is the multiple of 48 nearest the
+   * --pc-crate of the same band, and .pack-crate.co-pix takes its whole box from
+   * it, so the sprite IS the crate box rather than something floating inside one.
+   * Before this, .co-seq was a hardcoded 144 inside whatever --pc-crate was, and
+   * at 320x568 that is 144 in a 102 box: 1.42x oversize and overflowing on both
+   * sides, which is exactly what Tom reported.
+   *
+   * --pc-seq-snap is the offset that puts the left edge on a whole DEVICE pixel.
+   * A centred box has left = (viewport - seq) / 2, so left * dpr is whole only
+   * when (viewport - seq) * dpr is even. Every multiple of 48 is even, so at
+   * dpr 2 this is free and at dpr 3 it needs an EVEN viewport width. Of the
+   * sixteen profiles the audit covers, only the odd widths at dpr 3 fail: 375
+   * (iPhone X/XS/12 mini) and 393 (iPhone 14/15/16 Pro, Pixel 5). Those two stop
+   * being centred EXACTLY and get snapped instead.
+   * WHY THE SNAP IS HALF A CSS PIXEL AND NOT A SIXTH. Half a DEVICE pixel, which
+   * is 1/6 CSS px at dpr 3, is the smaller correction and it is the one you
+   * expect to want. It is not expressible: Chrome quantises a used length to
+   * 1/64 CSS px, so calc(1px / 6) lands on 11/64 = .171875 and the edge measures
+   * 347.015625 device px instead of 347. Writing it as a transform is worse, the
+   * matrix is float32 and it measures 347.000015 and perturbs the width to
+   * 144.00002. With a 1/64 quantum the offsets that land on the dpr-3 grid are
+   * the k/64 solving 3k = 32 (mod 64), and 3 is invertible mod 64, so k = 32 is
+   * the ONLY one: exactly half a CSS pixel, 1.5 device pixels. Snapping down. */
+  --pc-seq: 96px; --pc-seq-snap: 0px;
   --rar: var(--text-2);
   --rar-rgb: 185, 172, 151;
   /* FASTER OFF THE MARK. Tom, 2026-08-08: "the initial open needs to happen a bit
@@ -3656,7 +3685,16 @@ body::before {
    The comment on each line is what the old viewport formula measured at the
    reference device in that band, so a future edit can see the intent it has to
    preserve. */
-@media (min-width: 360px) { .pack-reveal { --pc-w: 219px; --pc-crate: 136px; } } /* 360x740 measured 219.59 / 136.55 */
+/* --pc-seq only has two rungs in range, because the vector box it tracks only
+   ever ran 101.6 to 164.1 and the only multiples of 48 in or near that are 96 and
+   144. The boundary is the step where 144 stops being the nearer of the two: at
+   --pc-crate 136 the errors are 144/136 = +5.9% against 96/136 = -29.4%, so 144
+   from 360px up is not close. Below 360 the band's --pc-crate is 120, the exact
+   arithmetic midpoint of 96 and 144, so the tie is broken by two other numbers:
+   144 would be 45.0% of a 320px viewport against the vector crate's 37.5%, and
+   320x568 sits one band away on 96, so 144 here would leave two 320px phones
+   1.5x apart. It goes down. */
+@media (min-width: 360px) { .pack-reveal { --pc-w: 219px; --pc-crate: 136px; --pc-seq: 144px; } } /* 360x740 measured 219.59 / 136.55 */
 @media (min-width: 375px) { .pack-reveal { --pc-w: 227px; --pc-crate: 141px; } } /* 375x812 measured 228.75 / 142.23 */
 @media (min-width: 390px) { .pack-reveal { --pc-w: 238px; --pc-crate: 148px; } } /* 390x844 measured 237.89 / 147.92 */
 @media (min-width: 393px) { .pack-reveal { --pc-w: 240px; --pc-crate: 149px; } } /* 393x852 measured 239.72 / 149.06 */
@@ -3669,8 +3707,21 @@ body::before {
    matching rule wins, and a short screen must be allowed to shrink a wide one. */
 @media (max-height: 700px) and (min-width: 375px) { .pack-reveal { --pc-w: 224px; --pc-crate: 139px; } } /* 375x667 measured 223.86 / 139.19 */
 @media (max-height: 660px) and (min-width: 360px) { .pack-reveal { --pc-w: 209px; --pc-crate: 130px; } } /* 360x640 measured 207.39 / 128.95 */
-@media (max-height: 620px) { .pack-reveal { --pc-w: 164px; --pc-crate: 102px; } }                        /* 320x568 measured 163.47 / 101.64 */
-@media (max-height: 500px) { .pack-reveal { --pc-w: 112px; --pc-crate: 70px; } }                         /* 320x480 would have measured 109.80 / 68.27 */
+@media (max-height: 620px) { .pack-reveal { --pc-w: 164px; --pc-crate: 102px; --pc-seq: 96px; } }        /* 320x568 measured 163.47 / 101.64; 96 is -5.5% on it, 144 was +41.7% */
+@media (max-height: 500px) { .pack-reveal { --pc-w: 112px; --pc-crate: 70px; } }                         /* 320x480 would have measured 109.80 / 68.27; keeps 96, the nearer step to 70 in ratio (1.371 up against 1.458 down), and 96 still fits the 112px scene */
+
+/* THE SNAP, and it is a list of exact widths on purpose. The condition is
+   "(viewport - --pc-seq) is odd at dpr 3", which is a PARITY test, and a media
+   query cannot ask for the parity of a width: a `min-width: 375px` band spans 375
+   and 376 and those two need opposite answers. So the odd dpr-3 widths in the
+   supported profile list are named one at a time, the same way that list is the
+   contract everywhere else in this feature. `resolution: 3dppx` is exact, not
+   min-: at dpr 4 an odd difference lands on the grid unaided and the snap would
+   be the thing that broke it. A width that is not listed degrades to exact
+   centring, which is half a device pixel off, never to a wrong position. Adding a
+   device to tests/crate-grid-audit.mjs is what turns a missing row red. */
+@media (resolution: 3dppx) and (width: 375px) { .pack-reveal { --pc-seq-snap: -.5px; } } /* (375 - 144) / 2 = 115.5 -> 346.5 device; -.5 gives 115 -> 345 */
+@media (resolution: 3dppx) and (width: 393px) { .pack-reveal { --pc-seq-snap: -.5px; } } /* (393 - 144) / 2 = 124.5 -> 373.5 device; -.5 gives 124 -> 372 */
 
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
@@ -3719,6 +3770,18 @@ body::before {
 .pack-crate {
   position: absolute; left: 50%; bottom: calc(var(--pc-w) * .2185); z-index: 2;
   width: var(--pc-crate); margin-left: calc(var(--pc-crate) / -2);
+}
+/* THE PIXEL CRATE'S BOX IS THE SPRITE, to the device pixel.
+   openPackReveal adds .co-pix to .pack-crate for the crate kind that renders the
+   authored frames. Everything else keeps --pc-crate. This is what "the sprite and
+   the box agree" means here: not "the sprite fits", but that .co-seq's border box
+   and .pack-crate's border box are the SAME rect, same left and same width, so
+   there is no slack for the sprite to sit off-centre inside and nothing for it to
+   overflow. It is also why the size can be a multiple of 48 at every breakpoint
+   without --pc-crate having to be one: the vector crates keep their own ladder. */
+.pack-crate.co-pix {
+  width: var(--pc-seq);
+  margin-left: calc(var(--pc-seq) / -2 + var(--pc-seq-snap));
 }
 .co-sink { animation: crSink .9s ease-in var(--b-sink) both; will-change: opacity; }
 .co-drop { animation: crDrop .85s linear both; will-change: transform; }
@@ -7843,13 +7906,18 @@ body::before {
    the sequence is a class swap with no layout and no reflow. They are all in
    the DOM from the start, which is also what lets openPackReveal decode them
    before the sequence is allowed to run.
-   144px is 48 x 3 EXACTLY. The vector crates use 148, which is what the icon
-   path hands out, but 148 is not a multiple of 48 and pixel art resampled off
-   its grid turns to mush. image-rendering: pixelated keeps the edges hard at
-   whatever the device pixel ratio does on top. */
-.co-seq { position: relative; display: block; width: 144px; height: 144px; margin: 0 auto; }
+   THE SIZE IS --pc-seq, NOT A HARDCODED 144. It used to be 144 at every
+   breakpoint, and 144 is a fine number in itself (48 x 3 exactly) but it was the
+   only number, sitting inside a --pc-crate that runs 70 to 164. At 320x568 that
+   is a 144 sprite in a 102 box: 1.417x the vector crate and 21px of overflow on
+   each side. --pc-seq is a multiple of 48 per band and .pack-crate.co-pix takes
+   its box from the same variable, so the sprite is exactly its parent and the
+   scale stays integer. `margin: 0 auto` is gone with it: auto margins on an
+   already-exact box can only round, and the centring is done once, on the parent,
+   where the device-pixel snap lives. */
+.co-seq { position: relative; display: block; width: var(--pc-seq); height: var(--pc-seq); }
 .co-seq img {
-  position: absolute; inset: 0; width: 144px; height: 144px;
+  position: absolute; inset: 0; width: 100%; height: 100%;
   image-rendering: pixelated; opacity: 0;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .5));
 }

@@ -22,6 +22,17 @@
  *   LADDER  the width is a whole number of CSS pixels too, which a percentage of
  *           a viewport unit cannot be except by accident
  *   FIT     the crate is inside .pack-scene on all four edges
+ * and, for the crate kind that renders the nine authored 48x48 PNGs instead of a
+ * vector icon, the same contract on the SPRITE itself:
+ *   PIXDEV  #crateSeq's rendered box is a whole number of device pixels in BOTH
+ *           dimensions, and so is its left edge
+ *   PIX48   the rendered box is an INTEGER MULTIPLE OF 48 in both dimensions, so
+ *           the 48x48 art is scaled by a whole number and never resampled
+ *   PIXBOX  the sprite does not overflow .pack-crate. It is asserted as EQUALITY,
+ *           not containment: .pack-crate.co-pix takes its width from the same
+ *           --pc-seq the sprite does, so the two rects are the same rect. A
+ *           merely-contained sprite would mean slack for an auto margin to round
+ *           inside, and that is how a 144 sprite ended up in a 102 box.
  * Plus SOURCE (no viewport unit may come back into the two declarations that
  * decide the box), COUNT (an empty sample set is a FAILURE, rule 3) and CONTROL
  * (a missing .pack-crate must make this audit RED, not green).
@@ -128,6 +139,25 @@ const sample = async ({ drop = false } = {}) => page.evaluate(async kill => {
   return out;
 }, drop);
 
+/* THE SPRITE HAS TO BE MEASURED AT REST, AND "at rest" IS A TIME.
+ * #crateSeq lives inside .co-drop and .co-settle, which are still animating a
+ * scale and a rotation for the first 1.06s, and inside .co-sink, which fades and
+ * shrinks the whole thing from 1.32s. getBoundingClientRect includes those
+ * transforms, so a rect read at any other moment measures the crate falling, not
+ * the box the art is painted into, and would report a failure that is not one
+ * (rule 12). So: let the sequence finish in real time, which stops the frame
+ * timers advancing under us, then PAUSE every animation and set its currentTime
+ * to REST_MS. Every one of these animations starts when the sheet mounts and
+ * carries its delay in the shorthand, so one currentTime is one coherent moment.
+ * 1080ms is the only clean one: crDrop ends at 850, crSettle at 280 + 780 =
+ * 1060, crBloom does not start until 1140 and crSink not until 1320.
+ * This does not SUPPRESS anything. An animation that moved into 1080ms would
+ * still be seen here, which is the point. */
+const REST_MS = 1080;
+const freezeAtRest = async () => page.evaluate(ms => {
+  for (const a of document.getAnimations()) { try { a.pause(); a.currentTime = ms; } catch { /* a finished animation can refuse */ } }
+}, REST_MS);
+
 let sampled = 0;
 for (const [name, w, h, dpr] of PROFILES) {
   await page.setViewport({ width: w, height: h, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
@@ -152,6 +182,63 @@ for (const [name, w, h, dpr] of PROFILES) {
   ok(`FIT    ${tag}: the crate is inside .pack-scene on all four edges`, fits,
     `crate [${c.l.toFixed(2)}, ${c.r.toFixed(2)}] x [${c.t.toFixed(2)}, ${c.b.toFixed(2)}] in scene [${s.l.toFixed(2)}, ${s.r.toFixed(2)}] x [${s.t.toFixed(2)}, ${s.b.toFixed(2)}]`);
 }
+
+/* ---- THE PIXEL SPRITE, at every profile ------------------------------------
+   The loop above opens a `golden` crate, which is a vector icon clipped into a
+   lid and a box. The COMMON crate is nine authored 48x48 PNGs and has its own
+   geometry problem: the sprite was a hardcoded 144 at every breakpoint while the
+   crate box it sits in runs 70 to 164, so at 320x568 it rendered 144/101.64 =
+   1.417x the vector crate and hung 21px off each side of its parent. That is the
+   overflow Tom reported. Same three questions as above, asked of the art. */
+let seqSampled = 0;
+for (const [name, w, h, dpr] of PROFILES) {
+  await page.setViewport({ width: w, height: h, deviceScaleFactor: dpr, isMobile: true, hasTouch: true });
+  await new Promise(r => setTimeout(r, 260));
+  const tag = `${name} ${w}x${h}@${dpr}`;
+  await page.evaluate(() => {
+    window.__crateForce = 1;
+    window.__packReveal([{ name: 'Pix', rarity: 'common', kind: 'GEAR · HAT', stats: '+1 POW' }], { coins: 0, crate: 'daily' });
+  });
+  /* Past the last frame step (the sequence ends at --b-card, 1380ms) so no timer
+     can move the art between the freeze and the read, THEN freeze at rest. */
+  await new Promise(r => setTimeout(r, 1500));
+  await freezeAtRest();
+  const m = await page.evaluate(() => {
+    const seq = document.querySelector('#crateSeq');
+    const box = document.querySelector('.pack-crate');
+    const R = el => { const b = el.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height }; };
+    const out = seq && box
+      ? { dpr: window.devicePixelRatio, seq: R(seq), box: R(box),
+          pix: box.classList.contains('co-pix'),
+          on: [...seq.children].findIndex(im => im.classList.contains('on')),
+          undecoded: [...seq.children].filter(im => im.naturalWidth === 0).length }
+      : { err: seq ? 'no .pack-crate' : 'no #crateSeq' };
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    return out;
+  });
+  await new Promise(r => setTimeout(r, 520));
+  if (m.err) {
+    for (const row of ['PIXDEV', 'PIX48 ', 'PIXBOX']) ok(`${row} ${tag}`, false, m.err);
+    continue;
+  }
+  seqSampled++;
+  const s = m.seq, b = m.box, d = m.dpr;
+  ok(`PIXDEV ${tag}: the sprite's box is a whole device pixel in BOTH dimensions, left included`,
+    whole(s.w * d) && whole(s.h * d) && whole(s.l * d),
+    `${s.w}x${s.h} css at left ${s.l} -> ${s.w * d}x${s.h * d} at ${s.l * d} device (dpr ${d})`);
+  ok(`PIX48  ${tag}: the sprite is an INTEGER multiple of the 48px art in both dimensions`,
+    whole(s.w) && whole(s.h) && s.w % 48 === 0 && s.h % 48 === 0 && s.w > 0,
+    `${s.w}x${s.h} css = ${(s.w / 48).toFixed(4)}x${(s.h / 48).toFixed(4)} of 48`);
+  /* EQUALITY, not containment. See the header: slack is where the rounding goes. */
+  const over = Math.max(b.l - s.l, s.r - b.r, b.t - s.t, s.b - b.b);
+  ok(`PIXBOX ${tag}: the sprite IS its crate box, so it cannot overflow it`,
+    m.pix && Math.abs(s.w - b.w) < 1e-6 && Math.abs(s.l - b.l) < 1e-6 && over <= 1e-6,
+    `sprite [${s.l.toFixed(2)}, ${s.r.toFixed(2)}] w ${s.w} in .pack-crate${m.pix ? '.co-pix' : ' (NO .co-pix)'} [${b.l.toFixed(2)}, ${b.r.toFixed(2)}] w ${b.w}; worst overflow ${over.toFixed(3)}px`);
+  if (m.undecoded) ok(`PIXDEC ${tag}: every frame decoded`, false, `${m.undecoded} undecoded`);
+}
+ok('COUNT every profile produced a sprite measurement (an empty sample set is a FAILURE)',
+  seqSampled === PROFILES.length, `${seqSampled} of ${PROFILES.length} profiles measured`);
 
 /* ---- COUNT: an empty sample set is a FAILURE, never a pass (rule 3) -------- */
 ok('COUNT every profile produced a real measurement', sampled === PROFILES.length,
@@ -193,6 +280,33 @@ const badDefs = crateDefs.filter(v => !/^\d+px$/.test(v));
 ok('SOURCE every --pc-crate definition is a whole pixel length, never a viewport expression',
   crateDefs.length > 0 && badDefs.length === 0,
   `${crateDefs.length} definitions, ladder ${crateDefs.join(' ')}${badDefs.length ? ` | rejected: ${badDefs.join(' | ')}` : ''}`);
+
+/* The sprite's ladder gets the same treatment, plus the one thing --pc-crate does
+   not have to satisfy: every rung must be a multiple of 48. A rung of 140px would
+   still be a whole CSS pixel and would still pass PIXDEV at dpr 2, and it would
+   resample the art. The snap is allowed a half pixel, and ONLY a half pixel, for
+   the reason spelled out beside it in app.css. */
+const seqDefs = [...css.matchAll(/--pc-seq\s*:\s*([^;}]+)/g)].map(m => m[1].trim());
+const badSeq = seqDefs.filter(v => !/^\d+px$/.test(v) || parseInt(v, 10) % 48 !== 0 || parseInt(v, 10) === 0);
+ok('SOURCE every --pc-seq rung is a whole pixel length AND a multiple of 48',
+  seqDefs.length > 0 && badSeq.length === 0,
+  `${seqDefs.length} rungs, ladder ${seqDefs.join(' ')}${badSeq.length ? ` | rejected: ${badSeq.join(' | ')}` : ''}`);
+const snapDefs = [...css.matchAll(/--pc-seq-snap\s*:\s*([^;}]+)/g)].map(m => m[1].trim());
+const badSnap = snapDefs.filter(v => !/^(0px|-?\.5px|-?0\.5px)$/.test(v));
+ok('SOURCE every --pc-seq-snap is 0 or exactly half a CSS pixel, never a viewport expression',
+  snapDefs.length > 0 && badSnap.length === 0,
+  `${snapDefs.length} definitions: ${snapDefs.join(' ')}${badSnap.length ? ` | rejected: ${badSnap.join(' | ')}` : ''}`);
+const pixBlock = css.match(/\.pack-crate\.co-pix\s*\{[^}]*\}/);
+ok('SOURCE .pack-crate.co-pix sizes the pixel crate off --pc-seq and nothing else',
+  !!pixBlock && /width\s*:\s*var\(--pc-seq\)/.test(pixBlock[0])
+    && /margin-left\s*:[^;}]*var\(--pc-seq\)/.test(pixBlock[0])
+    && !/var\(--pc-crate\)|vw|dvh|vh/.test(pixBlock[0]),
+  (pixBlock ? pixBlock[0] : 'missing').replace(/\s+/g, ' ').slice(0, 170));
+const seqRule = css.match(/(^|\})\s*\.co-seq\s*\{[^}]*\}/m);
+ok('SOURCE .co-seq takes its box from --pc-seq, not from a hardcoded 144',
+  !!seqRule && /width\s*:\s*var\(--pc-seq\)/.test(seqRule[0]) && /height\s*:\s*var\(--pc-seq\)/.test(seqRule[0])
+    && !/\d+px/.test(seqRule[0].replace(/--pc-seq/g, '')),
+  (seqRule ? seqRule[0] : 'missing').replace(/\s+/g, ' ').slice(0, 170));
 
 await browser.close();
 if (srvHandle) srvHandle.close();
