@@ -34,6 +34,7 @@ import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as 
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml } from './hollow-beds.js';
+import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
@@ -4183,55 +4184,7 @@ function openHollow(after) {
           the second. */''}
     ${firstEver ? '<p class="hlw-bar">Tap the shed. Your starter seeds are inside.</p>' : `<p class="note" style="margin:0 2px 8px">Tap a bed — your bonehead does the rest. Water once mid-grow for the top yield. Nothing ever dies, and everything you pull goes to the cauldrons.</p>`}
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
-      <div style="position:absolute;inset:0;background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.14),transparent 70%)"></div>
-      <svg viewBox="0 0 390 ${HLW_H}" style="position:absolute;inset:0;width:100%;height:100%;display:block">
-        <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#44532f" stroke-width="46" fill="none" stroke-linecap="round" opacity=".45"></path>
-        <path d="M195 150 C205 240 184 380 196 500 C206 590 188 680 195 790 C198 830 195 860 195 880" stroke="#7d7257" stroke-width="38" fill="none" stroke-linecap="round" opacity=".85"></path>
-        <g fill="#b3a68e" stroke="#17151d" stroke-width="1.8">
-          ${[172, 216, 260, 304, 350, 396, 442, 488, 534, 580, 626, 672, 718, 764, 810, 854].map((y, i) => `<ellipse cx="${[196, 200, 196, 200, 195, 199, 196, 200, 196, 191, 196, 198, 195, 197, 196, 195][i]}" cy="${y}" rx="${i % 2 ? 17 : 21}" ry="${i % 2 ? 7 : 8.5}"></ellipse>`).join('')}
-        </g>
-        <g fill="#ece0c6" stroke="#17151d" stroke-width="2" stroke-linejoin="round">
-          ${[14, 38, 62, 86, 110, 254, 278].map(x => `<path d="M${x} 160 v-36 l6 -9 l6 9 v36 z"></path>`).join('')}
-        </g>
-        <g fill="#d9cbae" stroke="#17151d" stroke-width="2">
-          <rect x="8" y="127" width="130" height="7" rx="2.5"></rect><rect x="8" y="143" width="130" height="7" rx="2.5"></rect>
-          <rect x="252" y="127" width="44" height="7" rx="2.5"></rect><rect x="252" y="143" width="44" height="7" rx="2.5"></rect>
-        </g>
-        <g fill="#8a5a3a" stroke="#17151d" stroke-width="2.5" stroke-linejoin="round">
-          <rect x="140" y="58" width="15" height="106" rx="4"></rect><rect x="140" y="58" width="108" height="12" rx="5"></rect>
-        </g>
-        <g transform="rotate(-2 205 102)">
-          <rect x="146" y="84" width="118" height="38" rx="7" fill="#3a2f26" stroke="#17151d" stroke-width="4"></rect>
-          <text x="205" y="110" text-anchor="middle" font-family="Bangers, sans-serif" font-size="23" letter-spacing="2" fill="#f2e9d7">THE HOLLOW</text>
-        </g>
-        <g transform="translate(292 44)">
-          <rect x="6" y="50" width="76" height="66" rx="3" fill="#6d4a2c" stroke="#17151d" stroke-width="3"></rect>
-          <path d="M-8 56 L44 10 L96 56 z" fill="#8a5a3a" stroke="#17151d" stroke-width="3" stroke-linejoin="round"></path>
-          <rect x="31" y="70" width="26" height="46" rx="3" fill="#4c3b2b" stroke="#17151d" stroke-width="2.5"></rect>
-          <circle cx="52" cy="94" r="2.4" fill="#f2e9d7"></circle>
-        </g>
-        ${HLW_SPOTS.slice(garden.plotsOwned).map(([gx, gy]) => `
-          <g transform="translate(${gx - 36} ${gy - 24})">
-            <ellipse cx="36" cy="24" rx="36" ry="24" fill="#5c6e3e"></ellipse>
-            <ellipse cx="36" cy="24" rx="36" ry="24" fill="none" stroke="#48562f" stroke-width="2" stroke-dasharray="6 6"></ellipse>
-            <path d="M21 24 c3 -8 5 -8 8 0 M39 16 c3 -8 5 -8 8 0 M33 32 c3 -8 5 -8 8 0" fill="#6d8048"></path>
-          </g>`).join('')}
-        ${/* The sign hangs INWARD from the slot, not outward: hung right it was clipped
-              by the frame's own edge. Measured on the render, not guessed. */''}
-        <g transform="translate(26 640)">
-          <ellipse cx="30" cy="50" rx="22" ry="5" fill="rgba(23,21,29,.3)"></ellipse>
-          <path d="M14 48 l4 -16 h24 l4 16 z" fill="#8a6f52" stroke="#17151d" stroke-width="2.5"></path>
-          <g style="animation:hlwCrowBob 5s ease-in-out infinite;transform-origin:32px 20px">
-            <ellipse cx="32" cy="16" rx="13" ry="9" fill="#1d1b22" stroke="#17151d" stroke-width="2"></ellipse>
-            <circle cx="43" cy="10" r="6" fill="#1d1b22" stroke="#17151d" stroke-width="2"></circle>
-            <path d="M48 10 l8 2 -8 3 z" fill="#ffb454" stroke="#17151d" stroke-width="1.6"></path>
-            <circle cx="44.5" cy="8.5" r="1.4" fill="#f2e9d7"></circle>
-          </g></g>
-        <g stroke="#4c5c33" stroke-width="3.5" fill="none" stroke-linecap="round">
-          <g style="animation:hlwSway 3.2s ease-in-out infinite;transform-origin:50% 100%;transform-box:fill-box"><path d="M36 680 q-2 -12 -6 -16 M40 680 q0 -14 0 -18 M44 680 q3 -11 7 -15"></path></g>
-          <g style="animation:hlwSway 3.8s ease-in-out .6s infinite;transform-origin:50% 100%;transform-box:fill-box"><path d="M336 660 q-2 -12 -6 -16 M340 660 q0 -14 0 -18 M344 660 q3 -11 7 -15"></path></g>
-        </g>
-      </svg>
+      ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
@@ -4241,7 +4194,11 @@ function openHollow(after) {
       ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice)}</span>` : ''}
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
       <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
-      <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:26px;top:630px;width:70px;height:66px"></button>
+      ${/* MEASURED IN THE RENDER, not carried over. The hand-drawn scene put the
+      compost heap bottom-LEFT; the designer puts it bottom-RIGHT and the module
+      draws it at x 256-368, y 676-736. This button kept its old coordinates and
+      was sitting on empty grass, so the composting action had no target at all. */''}
+      <button class="hlw-bed" id="hlwCrow" aria-label="Compost heap" style="left:266px;top:672px;width:92px;height:64px"></button>
       ${/* THE PET IS IN THE GARDEN, AND NOT ON THE FIRST VISIT. Tom handed me this
             call, so here is the reasoning rather than just the outcome.
             IN, normally: the designer's handoff puts a wandering pet in the scene
@@ -4302,11 +4259,6 @@ function openHollow(after) {
               of it over open grass, pointing at nothing. The door is at ~330. */''}
         <span class="hlw-arrow" style="left:315px;top:172px">${hlwArt('hollow-back-chevron', { w: 34, h: 34, style: 'transform:rotate(90deg)' })}</span>
         <span class="hlw-freelabel" style="left:246px;top:212px">FREE STARTER SEEDS</span>
-      </div>` : ''}
-      ${band === 'dusk' ? '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(201,127,90,.16),rgba(60,40,70,.18));pointer-events:none;z-index:8"></div>' : ''}
-      ${band === 'night' ? '<div style="position:absolute;inset:0;background:rgba(22,28,58,.42);pointer-events:none;z-index:8"></div>' : ''}
-      ${band !== 'day' ? `<div style="position:absolute;inset:0;pointer-events:none;z-index:9">
-        ${[[60, 540, 6, 0], [300, 480, 7, 1.4], [140, 680, 5.4, 2.6], [330, 780, 6.6, .8]].map(([x, y, d, dl]) => `<span style="position:absolute;left:${x}px;top:${y}px;width:5px;height:5px;border-radius:999px;background:#ffe08a;box-shadow:0 0 8px 3px rgba(255,224,138,.7);animation:hlwFirefly ${d}s ease-in-out ${dl}s infinite"></span>`).join('')}
       </div>` : ''}
     </div></div>`;
 

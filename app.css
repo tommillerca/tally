@@ -514,6 +514,13 @@ a { color: var(--accent); text-decoration: none; }
   *, *::before, *::after {
     animation-duration: 0.001s !important; transition-duration: 0.001s !important;
     animation-iteration-count: 1 !important;
+    /* AND THE DELAY, which the first version of this fix missed. A loop with a
+       positive animation-delay still reports playState "running" for the whole
+       length of that delay, so a 2.6s stagger meant 2.6s of an animation the
+       player asked not to have. Found 2026-08-16 by the backdrop lane, which had
+       to work around it with negative staggers inside its own file. Zero here
+       means the one instant cycle above starts immediately and is done. */
+    animation-delay: 0s !important; transition-delay: 0s !important;
   }
 }
 
