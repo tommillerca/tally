@@ -135,13 +135,24 @@ const auto = await page.evaluate(async () => {
     document.querySelector('[data-wntab="news"]')?.click(); await new Promise(r=>setTimeout(r,400)); }
   document.querySelector('[data-news="garden"]')?.click();
   await new Promise(r => setTimeout(r, 1300));
+  /* DISMISS, do NOT take the CTA. This used to prefer the CTA, and every row in
+     NEWS opens a sheet, so it was really asserting "an announcement re-opens
+     What's New on top of wherever its CTA sent you". That is the bug
+     ext/newsrow-stale-sheet fixed: tapping the Bone Garden row left the player
+     looking at a garden sheet they never opened, with What's New stacked over
+     it. The sheet journey is now owned by newsrow-return-audit.mjs.
+     What survives, and what nothing else covers, is the OTHER half: a player who
+     reads an announcement and backs out without going anywhere should land back
+     on News rather than nowhere. So dismiss the veil and assert exactly that. */
   const veil = document.querySelector('.drop-veil');
-  const cta = veil?.querySelector('.drop-cta, button, .btn');
-  if (cta) cta.click(); else veil?.remove();
+  veil?.remove();
   await new Promise(r => setTimeout(r, 2200));   // the app should bring us back
-  return { backOnNews: !!document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden };
+  return {
+    backOnNews: !!document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden,
+    sheetsOpen: document.querySelectorAll('#sheets .sheet-body').length,
+  };
 });
-ok('dismissing drops you back on the News tab', auto.backOnNews, JSON.stringify(auto));
+ok('dismissing an announcement without taking it drops you back on the News tab', auto.backOnNews, JSON.stringify(auto));
 
 /* EVERY ROW, NOT A SAMPLE. Tom, 2026-08-10: "the news tab has broken pop ups in
    it you need to create guard rails to fix these things and then not have them
