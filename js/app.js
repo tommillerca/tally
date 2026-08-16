@@ -10799,7 +10799,58 @@ function packCardHtml(c, { selectable = false } = {}) {
    `egg` is still a guess and stays one: eggs incubate, they never route through
    openCrate(), so nothing renders it. Left as a defensive default. */
 const CRATE_LID = { golden: 38, daily: 36, egg: 44 };
+/* THE COMMON CRATE IS REAL FRAMES, NOT THE CLIP-PATH FAKE.
+   Every other crate is one icon drawn twice, clipped into a box half and a lid
+   half, with the lid flown off on an arc. That is the right trick for a vector
+   icon that has no open state. Tom's ghost chest HAS an open state: 9 authored
+   frames where the lid lifts and the ghost rises out and spreads. Faking a lid
+   cut on top of that would throw away the animation and slice the ghost in half.
+   144px, not the 148 the icon path uses, because the art is 48px and pixel art
+   only survives INTEGER scaling. 148 would resample it to mush. */
+const CRATE_SEQ_FRAMES = 9;
+function crateSeqHtml() {
+  const f = i => `<img src="assets/crates/common/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+  return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
+    + '<span class="co-shadow"></span>'
+    + `<span class="co-seq" id="crateSeq">${Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => f(i)).join('')}</span>`
+    + '</div></div></div>';
+}
+
+/* Step the common crate's 9 authored frames.
+ *
+ * The beat comes from --b-lid in app.css, NOT a fourth hardcoded number. The
+ * timing table already lives there on purpose ("so the timing table is in one
+ * readable place instead of scattered across setTimeouts"), and the JS beats
+ * above are audio only. Reading it means retiming the crack in CSS retimes the
+ * ghost with it, instead of the two silently drifting apart.
+ *
+ * Waits on `ready` (the decode promise) before the first step. A sequence that
+ * starts on an undecoded frame paints nothing, and the whole run fits inside the
+ * gap between the lid going and the card rising, so there is no slack to lose.
+ */
+function playCrateSeq(reveal, scope, ready, at) {
+  const seq = $('#crateSeq', scope);
+  if (!seq) return;
+  const frames = [...seq.children];
+  if (frames.length < 2) return;
+  const cs = getComputedStyle(reveal);
+  const secs = v => (parseFloat(cs.getPropertyValue(v)) || 0) * (cs.getPropertyValue(v).includes('ms') ? 1 : 1000);
+  const start = secs('--b-lid');
+  const span = Math.max(240, secs('--b-card') - start);   // finish before the card rises
+  const step = span / (frames.length - 1);
+  ready.then(() => {
+    frames.forEach((im, i) => {
+      if (i === 0) return;
+      at(start + step * i, () => {
+        for (const f of frames) f.classList.remove('on');
+        im.classList.add('on');
+      });
+    });
+  });
+}
+
 function crateOpenHtml(kind) {
+  if (kind === 'daily') return crateSeqHtml();
   const cut = CRATE_LID[kind] ?? 38;
   const ico = crateIcon(kind, 148);
   return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
@@ -10909,6 +10960,21 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const src = c.imgSrc || c.art;
     if (src) { const im = new Image(); im.src = src; }
   }
+  /* WARM THE CRATE FRAMES TOO, and hold the sequence until they DECODE.
+     tally/CLAUDE.md: never start a sequence on an undecoded first frame. These
+     are only ~2KB each, but "small" is not "decoded", and the whole sequence
+     runs inside a 260ms window between --b-lid and --b-card. A frame that has
+     not decoded when its turn comes paints nothing, and a blank frame mid-open
+     is the exact v245 invisible-punch failure. decode() rejections are swallowed
+     per image so one broken frame degrades the sequence to a skipped step
+     instead of hanging the whole reveal (anti-regression rule 8). */
+  const crateSeqReady = crate === 'daily'
+    ? Promise.all(Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => {
+        const im = new Image();
+        im.src = `assets/crates/common/f${i}.png`;
+        return im.decode().catch(() => {});
+      }))
+    : Promise.resolve();
   return new Promise(resolve => {
     /* THE SEAM THAT MAKES THIS TESTABLE.
      *
@@ -11028,6 +11094,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(850, () => { dropSound(S.sounds); haptic.tap(); });    // it lands
         at(2300, () => sparkleSound(S.sounds));                   // the lid goes
         at(2750, () => landed(tier));                             // the card is up
+        if (crate === 'daily') playCrateSeq(reveal, wrap, crateSeqReady, at);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
