@@ -5,7 +5,7 @@ import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSo
 import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, initLootIfNeeded, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
 } from './game.js';
 import {
@@ -52,7 +52,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, cookState, startCook, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  spawnIngredient, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -563,7 +563,10 @@ async function boot() {
   const init = await initGameIfNeeded(S.settings.targets);
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
+  // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
+  const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
+  if (pouch) setTimeout(() => toast(`${pouch.seeds} starter seeds in your pouch: exactly one Bone Broth. Plant them in the Kitchen.`, 4200), init && init.xp > 0 ? 4200 : 1400);
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
@@ -1610,6 +1613,10 @@ async function maybeShowGardenPopup() {
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
         if (tries++ < 60) setTimeout(tick, 500);
+        // 60 tries x 500ms: the boot stayed busy for the whole 30s window and this
+        // launch never showed the card at all. Without this row a player who was
+        // never told about the garden is indistinguishable from one who declined.
+        else trackEvent('garden_intro_suppressed', { n: seen });
         return;      // busy boot: does NOT consume one of the 5 showings
       }
       await kvSet(GARDEN_SEEN_KEY, seen + 1);
@@ -1646,10 +1653,16 @@ function openGardenPopup() {
       <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
     </div>`;
   document.body.appendChild(veil);
+  /* WHY THESE FOUR ROWS. Only a fraction of players have ever reached the garden
+     and nothing recorded which half of the funnel loses them: never shown the card,
+     or shown it and said no. shown / suppressed / cta / later answer exactly that,
+     on the same anonymous pipe as every other event. */
+  trackEvent('garden_intro_shown');
   const close = () => veil.remove();
-  $('#gardenLaterBtn', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#gardenLaterBtn', veil).addEventListener('click', () => { trackEvent('garden_intro_later'); close(); });
+  veil.addEventListener('click', e => { if (e.target === veil) { trackEvent('garden_intro_later', { tap: 'veil' }); close(); } });
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
+    trackEvent('garden_intro_cta');
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
     openHollow(() => refresh());
@@ -2446,6 +2459,15 @@ async function dayBudget() {
 
 /* ================= today ================= */
 
+/* WHERE THE NUMBERS ARE, not in the game room. A reviewer who came here because a
+   doctor told them to log meals asked whether cooking Bone Broth turns up in their
+   diary. It never has (nothing in cooking.js or garden.js touches the 'log' store)
+   but the separation was invisible in the product, and an unstated boundary is not
+   a promise. It sits UNDER the day's totals because that is the moment the question
+   gets asked, and it is permanent and unconditional: a trust line that only shows
+   up sometimes is worse than none at all. */
+const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -2704,6 +2726,7 @@ async function renderToday(el) {
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  ${LOG_ONLY_LINE}
   `;
 
   // animate ring, macro bars, and the remaining number from their previous states
@@ -3552,7 +3575,14 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
     // a siege has a clock on it, so it outranks everything
     { pri: sieged ? 0 : owed ? 30 : soon ? 35 : 45,
       html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
-    ...(cropsRipe ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }] : []),
+    /* ALWAYS, ripe or not. This row used to be dropped entirely unless a crop was
+       already ready, so the only people told the garden exists were the people who
+       had already found it and planted something. The no-crops copy has always been
+       written (gardenBannerHtml handles cropsRipe === 0); nothing rendered it. Ripe
+       crops still outrank the drop and still take the action accent, because only
+       then is the row waiting on the player. */
+    { pri: cropsRipe ? 20 : 40,
+      html: cropsRipe ? act(gardenBannerHtml(cropsRipe)) : gardenBannerHtml(0) },
     /* The current drop, ALWAYS. It used to share one slot with the Garden and
        lose it to any ripe crop, which is exactly why Tom stopped seeing the new
        drop on Today (2026-08-09). With the Puffer Pack row gone there is room
@@ -4579,6 +4609,21 @@ function openGardenSheet(after) {
 
 /* ---- plant / compost / harvest ---- */
 
+/* SEED LABELS. Derived from RECIPES against what you actually hold, never
+   hard-coded, so a recipe change cannot leave a stale label behind. This is
+   LEGIBILITY, not depth: it does not add a decision, it stops the existing one
+   from being a guess by naming the dish this seed is closest to feeding. */
+function seedUseLine(id, inv) {
+  const uses = RECIPES.filter(r => r.needs[id]);
+  if (!uses.length) return null;
+  // "closest" = fewest ingredients still missing across the whole recipe, so the
+  // dish named is the one this seed actually moves you toward
+  const short = r => Object.entries(r.needs).reduce((n, [ing, k]) => n + Math.max(0, k - (inv[ing] || 0)), 0);
+  const best = uses.reduce((a, b) => (short(b) < short(a) ? b : a));
+  const need = Math.max(0, best.needs[id] - (inv[id] || 0));
+  return need ? `${need} more for ${best.name}` : `enough for ${best.name}`;
+}
+
 // Pick what goes in a specific bed. Separate from tapping a seed in the pouch
 // (which fills the first free bed) because tapping the bed itself should let you
 // choose, not guess.
@@ -4589,14 +4634,16 @@ function openPlantSheet(slot, after) {
   const body = $('#plantBody', wrap);
   async function render() {
     if (!body.isConnected) return;
-    const g = await gardenState();
+    const [g, inv] = await Promise.all([gardenState(), ingredients()]);
     const owned = SEED_IDS.filter(id => (g.seeds[id] || 0) > 0);
     body.innerHTML = owned.length ? owned.map(id => {
       const rare = isRareSeed(id);
       const mins = growMinutes(id);
+      const use = seedUseLine(id, inv);
       return `<div class="crate-row"><span class="crate-ico">${bhIcon('garden-seed', 26, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
         <div style="flex:1"><b>${esc(seedName(id))} seed${g.seeds[id] > 1 ? ` ×${g.seeds[id]}` : ''}</b>
         <small>grows into ${esc(INGREDIENTS[id].name)}</small>
+        ${use ? `<small class="seed-use">${esc(use)}</small>` : ''}
         <small class="recipe-need">${mins < 60 ? mins + 'm' : (mins / 60) + 'h'} · yields ${rare ? `${HARVEST_BASE_RARE} to ${HARVEST_BASE_RARE + 1}` : `${HARVEST_BASE} to ${HARVEST_BASE + 2}`}</small></div>
         <button class="btn small" data-sow="${id}">Plant</button></div>`;
     }).join('') : `<p class="note" style="margin:6px 2px">No seeds. Walk the Boneyard to find some, or compost a spare ingredient at the heap.</p>`;
@@ -4622,19 +4669,32 @@ function openCompostSheet(after) {
   async function render() {
     if (!body.isConnected) return;
     const [inv, st] = await Promise.all([ingredients(), compostStatus()]);
+    /* SHORTEST FIRST, NOT ALPHABETICAL. Composting only ever returns seeds of the
+       species you put in, so composting the fattest pile (the obvious play)
+       compounds a monoculture: measured over 30 days the median player ends up
+       holding 167 of one common and 0.7 of the thinnest, and a full larder still
+       blocks a pot. Ordering the heap by what the cookbook is shortest of fixes
+       the shape outright (fattest 167 to 45, thinnest 0.7 to 15.3). Rows you can
+       actually compost come first, because a suggestion you cannot act on is
+       noise. UI ONLY: the rates, the cap, the roll and js/garden.js are untouched. */
+    const need = {};
+    for (const r of [...RECIPES, ...POTIONS]) for (const [id, n] of Object.entries(r.needs)) need[id] = (need[id] || 0) + n;
+    const short = id => (need[id] || 0) - (inv[id] || 0);
+    const order = COMMON_INGREDIENT_IDS.slice()
+      .sort((a, b) => ((inv[b] || 0) > 0) - ((inv[a] || 0) > 0) || short(b) - short(a));
     body.innerHTML = `
-      <p class="note" style="margin:2px 2px 12px">Turn one ingredient into seeds of the same kind. The heap only takes <b>${st.cap} a day</b>, so this converts a glut into something growing rather than printing food out of nothing.</p>
+      <p class="note" style="margin:2px 2px 12px">Turn one ingredient into seeds of the same kind. The heap only takes <b>${st.cap} a day</b>, so this converts a glut into something growing rather than printing food out of nothing. Listed with the ones your recipes are shortest of at the top.</p>
       <div class="compost-card">
         <div class="compost-top"><span>${bhIcon('garden-bed', 30)}</span>
           <div style="flex:1"><b>1 ingredient in, 1 to 3 seeds out</b><small>Rolled when you compost, not when you plant.</small></div></div>
         <div class="odds">${SEED_ODDS.map((p, i) => `<span><b>${i + 1}</b>${Math.round(p * 100)}%</span>`).join('')}</div>
       </div>
       <div class="sect-h">Your ingredients · ${st.left} compost${st.left === 1 ? '' : 's'} left today</div>
-      ${COMMON_INGREDIENT_IDS.map(id => {
+      ${order.map(id => {
         const have = inv[id] || 0;
         const can = have > 0 && st.left > 0;
         return `<div class="crate-row ${can ? '' : 'lack'}"><span class="crate-ico">${ingIconHtml(id, 26)}</span>
-          <div style="flex:1"><b>${esc(INGREDIENTS[id].name)}</b><small>you hold ${have}</small></div>
+          <div style="flex:1"><b>${esc(INGREDIENTS[id].name)}</b><small>you hold ${have} · your recipes call for ${need[id] || 0}</small></div>
           <button class="btn small ${can ? '' : 'ghost'}" data-compost="${id}" ${can ? '' : 'disabled'}>Compost 1</button></div>`;
       }).join('')}
       <div class="sect-h">${esc(INGREDIENTS[RARE_INGREDIENT].name)}</div>
@@ -4668,7 +4728,13 @@ function harvestBodyHtml(items) {
   const kickOf = r => r.bumper ? 'BUMPER CROP' : r.watered ? 'FINE HARVEST' : 'HARVEST';
   const subOf = r => r.rare
     ? (r.watered ? 'Watered on time' : 'Grown without watering')
-    : r.bumper ? `Watered and then some: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on the day`
+    /* A bumper is a 1-in-10 roll and it is INDEPENDENT of watering, so this line
+       used to congratulate an unwatered bed for care it never got. Name the two
+       causes separately, because the whole point of surfacing the bumper is that
+       the player can tell the free luck from the thing they did. */
+    : r.bumper ? (r.watered
+      ? `Watered, and a bumper crop on top: ${HARVEST_BASE} base, +1 for the care, +1 on the roll`
+      : `A bumper crop: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on a 1-in-10 roll`)
     : r.watered ? `${HARVEST_BASE} base, +1 for the care` : `${HARVEST_BASE} base · water it next time for more`;
   if (one) {
     return `<div class="hv-card${one.bumper ? ' bumper' : ''}">
@@ -4771,15 +4837,22 @@ async function openKitchen() {
   let view = 'doors';   // 'doors' | 'cook'. the Kitchen opens on its two doors
   async function render() {
     if (!body.isConnected) return;
+    /* THE ONLY CALLER of advanceQueue, so the dishes it collected on the player's
+       behalf are paid the same XP a manual Serve pays, exactly once. cookState()
+       stays a plain read; the pots are shown here and nowhere the queue matters. */
+    for (const [i, dish] of (await advanceQueue()).entries()) {
+      await award(`cook-${Date.now().toString(36)}-${i}`, 'cook', 8, `Cooked ${dish.name}`);
+    }
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
-    const canStartAny = cook.freeCount > 0;
+    const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
       const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 13)}${(inv[id] || 0)}/${n}`).join('  ');
       const canStart = have && canStartAny;
+      const verb = cook.freeCount > 0 ? (r.potion ? 'Brew' : 'Cook') : 'Line up';
       return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
         <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
-        <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${r.potion ? 'Brew' : 'Cook'}</button></div>`;
+        <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${verb}</button></div>`;
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
     const potCard = s => {
@@ -4805,6 +4878,7 @@ async function openKitchen() {
     const cookPills = [
       cook.readyCount ? { go: true, ico: bhIcon('dish-broth', 13), txt: `${cook.readyCount} dish${cook.readyCount === 1 ? '' : 'es'} ready` } : null,
       cook.slots.filter(x => !x.empty && !x.ready).length ? { txt: `${cook.slots.filter(x => !x.empty && !x.ready).length} on the fire` } : null,
+      cook.queue.length ? { wait: true, txt: `${cook.queue.length} lined up` } : null,
       (() => { const n = RECIPES.filter(r => canCook(r, inv)).length;
         return n ? { txt: `${n} you can cook now` } : { wait: true, txt: 'Not enough ingredients yet' }; })(),
     ].filter(Boolean);
@@ -4848,8 +4922,13 @@ async function openKitchen() {
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
+        ${cook.queue.map(r => `<div class="pot-card queued"><span class="pot-ico">${recipeIconHtml(r, 26)}</span>
+          <b>${esc(r.name)}</b><small>starts when a pot frees</small></div>`).join('')}
         ${buyPrice != null ? `<button class="pot-card buy" id="buyPot"><span class="pot-ico">➕</span><b>Extra pot</b><small>${buyPrice.toLocaleString()} ${ICONS.coin(12)}</small></button>` : ''}
       </div>
+      ${cook.freeCount === 0 || cook.queue.length ? `<p class="note" style="margin:2px 2px 10px">${cook.queueLeft
+        ? `Pots full? Line up ${cook.queueLeft} more. Each starts on its own the moment the pot ahead of it is done, and the finished dish waits in your Pantry.`
+        : 'Your line is full. The pot works through it while you are away.'}</p>` : ''}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
         ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
@@ -4927,9 +5006,15 @@ async function openKitchen() {
       render();
     });
     $$('[data-cook]', body).forEach(btn => btn.addEventListener('click', async () => {
-      const res = await startCook(btn.dataset.cook);
-      if (res.ok) { trackEvent('cook', { r: btn.dataset.cook }); popSound(S.sounds); toast('Into the pot. Check back when it’s ready.', 2600); }
-      else if (res.reason === 'busy') toast('Every pot is full. Serve one, or buy another pot.', 3000);
+      let res = await startCook(btn.dataset.cook);
+      // every pot busy is no longer the end of the visit: line it up instead
+      const lined = res.reason === 'busy';
+      if (lined) res = await queueCook(btn.dataset.cook);
+      if (res.ok) {
+        trackEvent('cook', { r: btn.dataset.cook, q: lined ? 1 : 0 }); popSound(S.sounds);
+        toast(lined ? 'Lined up. It starts itself when the pot is free.' : 'Into the pot. Check back when it’s ready.', 2600);
+      }
+      else if (res.reason === 'full') toast('Your line is already full. Serve a dish to make room.', 3000);
       else toast('Not enough ingredients for that dish.');
       render();
     }));
@@ -9309,7 +9394,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
