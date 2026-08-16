@@ -5,6 +5,7 @@
 import { db, kvGet, kvSet } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
 import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
+import { grantSeed } from './garden.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days a Streak Freeze protected back when the
@@ -553,8 +554,20 @@ export async function initLootIfNeeded() {
      three and nothing else. This covers exactly that gap without paying anybody
      for what they type into their food diary. */
   await grantConsumable('vigor', 'welcome');
+  /* STARTER POUCH. Rewarded-actions SOP, the state transition: "this device has
+     never been given the welcome kit" becomes "it has", recorded by the
+     'loot-init' kv flag that guards the whole function above. There is no second
+     transition, so a second call pays nothing at all: it returns null at the
+     guard before reaching any grant. grantSeed is purely additive and would
+     happily pay twice, so the guard is the only thing standing between this and
+     a farm, which is why the grants stay INSIDE it.
+     Two Marrow and one Grave Salt is not an arbitrary handful: it is exactly
+     Bone Broth, the first recipe, so three free beds plus this pouch is a
+     legible errand instead of an empty garden with a coach mark. */
+  await grantSeed('marrow', 2);
+  await grantSeed('salt', 1);
   await kvSet('loot-init', true);
-  return { crates: 2, draught: true };
+  return { crates: 2, draught: true, seeds: 3 };
 }
 
 // XP rows for a given date (for the progress sheet).

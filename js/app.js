@@ -560,7 +560,7 @@ async function boot() {
   const init = await initGameIfNeeded(S.settings.targets);
   if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
@@ -1607,6 +1607,10 @@ async function maybeShowGardenPopup() {
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
         if (tries++ < 60) setTimeout(tick, 500);
+        // 60 tries x 500ms: the boot stayed busy for the whole 30s window and this
+        // launch never showed the card at all. Without this row a player who was
+        // never told about the garden is indistinguishable from one who declined.
+        else trackEvent('garden_intro_suppressed', { n: seen });
         return;      // busy boot: does NOT consume one of the 5 showings
       }
       await kvSet(GARDEN_SEEN_KEY, seen + 1);
@@ -1643,10 +1647,16 @@ function openGardenPopup() {
       <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
     </div>`;
   document.body.appendChild(veil);
+  /* WHY THESE FOUR ROWS. Only a fraction of players have ever reached the garden
+     and nothing recorded which half of the funnel loses them: never shown the card,
+     or shown it and said no. shown / suppressed / cta / later answer exactly that,
+     on the same anonymous pipe as every other event. */
+  trackEvent('garden_intro_shown');
   const close = () => veil.remove();
-  $('#gardenLaterBtn', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  $('#gardenLaterBtn', veil).addEventListener('click', () => { trackEvent('garden_intro_later'); close(); });
+  veil.addEventListener('click', e => { if (e.target === veil) { trackEvent('garden_intro_later', { tap: 'veil' }); close(); } });
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
+    trackEvent('garden_intro_cta');
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
     openGardenSheet(() => refresh());
@@ -2387,6 +2397,15 @@ async function dayBudget() {
 
 /* ================= today ================= */
 
+/* WHERE THE NUMBERS ARE, not in the game room. A reviewer who came here because a
+   doctor told them to log meals asked whether cooking Bone Broth turns up in their
+   diary. It never has (nothing in cooking.js or garden.js touches the 'log' store)
+   but the separation was invisible in the product, and an unstated boundary is not
+   a promise. It sits UNDER the day's totals because that is the moment the question
+   gets asked, and it is permanent and unconditional: a trust line that only shows
+   up sometimes is worse than none at all. */
+const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -2645,6 +2664,7 @@ async function renderToday(el) {
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  ${LOG_ONLY_LINE}
   `;
 
   // animate ring, macro bars, and the remaining number from their previous states
@@ -3493,7 +3513,14 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
     // a siege has a clock on it, so it outranks everything
     { pri: sieged ? 0 : owed ? 30 : soon ? 35 : 45,
       html: (owed || soon || sieged) ? act(spireBannerHtml(held)) : spireBannerHtml(held) },
-    ...(cropsRipe ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }] : []),
+    /* ALWAYS, ripe or not. This row used to be dropped entirely unless a crop was
+       already ready, so the only people told the garden exists were the people who
+       had already found it and planted something. The no-crops copy has always been
+       written (gardenBannerHtml handles cropsRipe === 0); nothing rendered it. Ripe
+       crops still outrank the drop and still take the action accent, because only
+       then is the row waiting on the player. */
+    { pri: cropsRipe ? 20 : 40,
+      html: cropsRipe ? act(gardenBannerHtml(cropsRipe)) : gardenBannerHtml(0) },
     /* The current drop, ALWAYS. It used to share one slot with the Garden and
        lose it to any ripe crop, which is exactly why Tom stopped seeing the new
        drop on Today (2026-08-09). With the Puffer Pack row gone there is room
@@ -4018,6 +4045,21 @@ function openGardenSheet(after) {
 
 /* ---- plant / compost / harvest ---- */
 
+/* SEED LABELS. Derived from RECIPES against what you actually hold, never
+   hard-coded, so a recipe change cannot leave a stale label behind. This is
+   LEGIBILITY, not depth: it does not add a decision, it stops the existing one
+   from being a guess by naming the dish this seed is closest to feeding. */
+function seedUseLine(id, inv) {
+  const uses = RECIPES.filter(r => r.needs[id]);
+  if (!uses.length) return null;
+  // "closest" = fewest ingredients still missing across the whole recipe, so the
+  // dish named is the one this seed actually moves you toward
+  const short = r => Object.entries(r.needs).reduce((n, [ing, k]) => n + Math.max(0, k - (inv[ing] || 0)), 0);
+  const best = uses.reduce((a, b) => (short(b) < short(a) ? b : a));
+  const need = Math.max(0, best.needs[id] - (inv[id] || 0));
+  return need ? `${need} more for ${best.name}` : `enough for ${best.name}`;
+}
+
 // Pick what goes in a specific bed. Separate from tapping a seed in the pouch
 // (which fills the first free bed) because tapping the bed itself should let you
 // choose, not guess.
@@ -4028,14 +4070,16 @@ function openPlantSheet(slot, after) {
   const body = $('#plantBody', wrap);
   async function render() {
     if (!body.isConnected) return;
-    const g = await gardenState();
+    const [g, inv] = await Promise.all([gardenState(), ingredients()]);
     const owned = SEED_IDS.filter(id => (g.seeds[id] || 0) > 0);
     body.innerHTML = owned.length ? owned.map(id => {
       const rare = isRareSeed(id);
       const mins = growMinutes(id);
+      const use = seedUseLine(id, inv);
       return `<div class="crate-row"><span class="crate-ico">${bhIcon('garden-seed', 26, BH_ICON_TINTS[INGREDIENTS[id].iconId] || undefined)}</span>
         <div style="flex:1"><b>${esc(seedName(id))} seed${g.seeds[id] > 1 ? ` ×${g.seeds[id]}` : ''}</b>
         <small>grows into ${esc(INGREDIENTS[id].name)}</small>
+        ${use ? `<small class="seed-use">${esc(use)}</small>` : ''}
         <small class="recipe-need">${mins < 60 ? mins + 'm' : (mins / 60) + 'h'} · yields ${rare ? `${HARVEST_BASE_RARE} to ${HARVEST_BASE_RARE + 1}` : `${HARVEST_BASE} to ${HARVEST_BASE + 2}`}</small></div>
         <button class="btn small" data-sow="${id}">Plant</button></div>`;
     }).join('') : `<p class="note" style="margin:6px 2px">No seeds. Walk the Boneyard to find some, or compost a spare ingredient at the heap.</p>`;
@@ -4107,7 +4151,13 @@ function harvestBodyHtml(items) {
   const kickOf = r => r.bumper ? 'BUMPER CROP' : r.watered ? 'FINE HARVEST' : 'HARVEST';
   const subOf = r => r.rare
     ? (r.watered ? 'Watered on time' : 'Grown without watering')
-    : r.bumper ? `Watered and then some: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on the day`
+    /* A bumper is a 1-in-10 roll and it is INDEPENDENT of watering, so this line
+       used to congratulate an unwatered bed for care it never got. Name the two
+       causes separately, because the whole point of surfacing the bumper is that
+       the player can tell the free luck from the thing they did. */
+    : r.bumper ? (r.watered
+      ? `Watered, and a bumper crop on top: ${HARVEST_BASE} base, +1 for the care, +1 on the roll`
+      : `A bumper crop: ${HARVEST_BASE} base, +${r.n - HARVEST_BASE} on a 1-in-10 roll`)
     : r.watered ? `${HARVEST_BASE} base, +1 for the care` : `${HARVEST_BASE} base · water it next time for more`;
   if (one) {
     return `<div class="hv-card${one.bumper ? ' bumper' : ''}">
@@ -8732,7 +8782,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast('Welcome kit: 2 crates are waiting on your Bonehead', 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
