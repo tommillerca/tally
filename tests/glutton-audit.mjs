@@ -178,14 +178,21 @@ const purseBefore = await wallet();
    code for half of every day, and a guard nobody can trust is a guard nobody
    reads. Verified 2026-08-16, red on clean main at slot 1, green at slot 0,
    with js/poi.js untouched in both runs. */
-const repeat = await page.evaluate(async () => {
+/* THE SLOT COMES FROM THE LEDGER, not the clock. Reading gluttonWindow() was
+   the second wrong answer: this audit forces the sheet open with __openGlutton
+   regardless of the wall clock, so it can win a slot while no window is live,
+   and gluttonWindow().slot is then -1. Re-claiming -1 leaves the won slot
+   untouched and re-reports the same phantom exploit.
+   The row the win actually wrote is the only source that cannot disagree with
+   the win. Parse it, and let the SETUP check below fail loudly if it is not
+   there, rather than silently re-claiming something else. */
+const reclaimSlot = Number((won.keys[0] || '').split('-').pop());
+const repeat = await page.evaluate(async slot => {
   const poi = await import('./js/poi.js');
-  const w = poi.gluttonWindow();
   const out = [];
-  for (let i = 0; i < 2; i++) out.push(await poi.claimGluttonWin(undefined, w.slot));
-  return { slot: w.slot, out: out.map(r => (r === null ? 'null' : JSON.stringify(r))) };
-});
-const reclaimSlot = repeat.slot;
+  for (let i = 0; i < 2; i++) out.push(await poi.claimGluttonWin(undefined, slot));
+  return { slot, out: out.map(r => (r === null ? 'null' : JSON.stringify(r))) };
+}, reclaimSlot);
 const purseAfter = await wallet();
 console.log(`re-claim attempts in the already-won state (slot ${reclaimSlot}):`, repeat.out.join(' | '));
 console.log('wallet before:', JSON.stringify(purseBefore), "after:", JSON.stringify(purseAfter));
