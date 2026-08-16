@@ -3536,7 +3536,36 @@ body::before {
 /* ---- pack-crack loot reveal ---- */
 /* A reveal sheet goes edge to edge: the normal 24px + safe-area gap at the top
    let a hub panel show above the moment. */
-.sheet.takeover { height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310; }
+/* A TAKEOVER IS CENTRED BY MARGINS, NOT BY translateX(-50%).
+ *
+ * .sheet centres itself with `left: 50%; transform: translateX(-50%)`, and -50%
+ * of an ODD viewport width is a HALF CSS PIXEL. At dpr 3 that is one and a half
+ * device pixels, and a transform is a compositor offset, not a layout one, so
+ * Chrome cannot pixel-snap it: the entire subtree is rasterised and then drawn
+ * half a device pixel off the grid, with bilinear filtering on the way. For most
+ * sheets that is a hairline nobody will ever see. For a 48x48 pixel sprite
+ * upscaled 9x it is a one-device-pixel blended seam at every single texel
+ * boundary, and it was costing 5.2% of the crate's pixels at 375x812@3 and
+ * 393x852@3 while every geometric measurement of the sprite read as perfect.
+ * Measured with tests/crate-palette-audit.mjs: 94.80% of the sprite's pixels were
+ * its own colours with the transform, 100.00% with these margins, at both widths.
+ * Even viewport widths were never affected, which is why this hid for so long.
+ *
+ * `left: 0; right: 0; margin-inline: auto` puts the box in exactly the same place
+ * (still capped at .sheet's max-width, still centred on a tablet) through LAYOUT,
+ * which Chrome does snap. The slide-in keeps its own keyframes because slideup's
+ * are `translate(-50%, ...)` and would put the offset straight back.
+ *
+ * This is not specific to the crate: it is every composited thing inside any
+ * takeover on any odd-width phone. It is scoped to .takeover rather than fixed on
+ * .sheet because .sheet is shared by every sheet in the app and that is a sweep,
+ * not a side effect of this change. */
+.sheet.takeover {
+  height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310;
+  left: 0; right: 0; width: auto; margin-inline: auto; transform: none;
+  animation-name: takeoverUp;
+}
+@keyframes takeoverUp { from { transform: translateY(60%); } to { transform: translateY(0); } }
 .sheet.takeover ~ .sheet-backdrop, .sheet.takeover + .sheet-backdrop { z-index: 309; }
 .sheet.takeover .sheet-grab { display: none; }
 /* TAKEOVER. A reveal fills the sheet and paints its own ground, so nothing of
