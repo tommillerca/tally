@@ -278,6 +278,130 @@ function rateLimitRecovery(request, env, name = 'rl_recovery') {
   return rateLimit(env, name, 'ip', clientIp(request));
 }
 
+/* ---------------- events retention ----------------
+   Until now nothing on this worker deleted an events row, ever. The table only
+   grew, and D1's 10 GB per-database limit is a hard stop: it is the one number
+   here that cannot be bought past, so "we will pay for more" is not an answer.
+
+   THE WINDOW: 60 days, and 90 was rejected on arithmetic, not taste.
+   Measured, by building the real events DDL in local SQLite and reading the
+   page_count delta: one events row costs 189 bytes once idx_events_day,
+   idx_events_device_day and idx_events_name are counted alongside the row
+   itself. At roughly 76 events per active device per day that is 14.4 KB per
+   device per day, so 10,000 DAU writes about 143 MB a day. Then:
+
+     90 days x 143 MB = 12.9 GB   over the 10 GB cap on events ALONE
+     60 days x 143 MB =  8.6 GB
+     30 days x 143 MB =  4.3 GB
+
+   Everything else measured at 10,000 players comes to 578 MB (grants 531 MB at
+   1.9M rows, friendships 35 MB, players 8 MB, the rest under 4 MB), plus the
+   backups table, whose blob is a whole encrypted save and is capped at 4 MB per
+   player. Leaving a gigabyte of operational headroom (D1 does not auto-VACUUM,
+   so freed pages are reused rather than returned), 60 days holds to roughly
+   8,000 to 9,000 DAU and 90 days runs out around 5,500. 60 is the larger of the
+   two candidates that survives the arithmetic anywhere near the target.
+
+   When DAU passes that, this constant comes down. It is one line, and the
+   pruner will eat the backlog over the following ticks on its own.
+
+   RATE-LIMIT ROWS ARE NOT PRODUCT EVENTS, and they need the opposite treatment
+   in both directions. rateLimitRecovery above stores its per-IP counters as
+   rows in this same table, named rl_recovery / rl_ridcheck, and counts only the
+   ones inside a 10 MINUTE window. So:
+     1. Pruning must never remove a row the limiter is still counting. Delete
+        one and the limiter quietly resets, which turns the unauthenticated
+        ciphertext endpoints into an unthrottled way to harvest wrapped keys.
+     2. They must not be kept for 60 days either. They are one row per attempt
+        per IP, they carry no product meaning, and they pollute the dashboard:
+        /stats counts DISTINCT device, and an IP hash is not a device.
+   Hence their own window of 24 hours. That is 144 times the limiter's 10 minute
+   horizon, so no counter it can still see is ever inside the deletable set, and
+   the rows still leave 59 days earlier than everything else. */
+const EVENT_RETENTION_DAYS = 60;
+const EVENT_RETENTION_OVERRIDE_DAYS = { rl_recovery: 1, rl_ridcheck: 1 };
+
+/* BATCHING. D1 has a 30 second query timeout and a SINGLE writer. An unbounded
+   DELETE against tens of millions of rows either times out, or does not and
+   holds the write lock while every profile sync, gift and grant queues behind
+   it. So every run is bounded three ways (rows per statement, rows per tick,
+   wall clock) and carries no cursor: each statement is independently correct,
+   so a tick killed halfway leaves the remainder for the next one and nothing
+   has to be remembered in between.
+
+   Measured against a 3,000,000 row events table in local SQLite: both DELETEs
+   are index-driven (SEARCH events USING INDEX idx_events_day / idx_events_name,
+   never a scan), one 1,000 row batch takes 48 to 115 ms, and 50 batches take
+   2.8 s. That leaves the 20 s budget below mostly as protection against D1's
+   per-statement network latency rather than against the work itself. */
+const PRUNE_BATCH = 1000;        // rows per DELETE statement
+const PRUNE_MAX_ROWS = 50000;    // rows per scheduled tick
+const PRUNE_BUDGET_MS = 20000;   // wall clock per tick, under D1's 30 s ceiling
+
+/** Delete expired events in bounded batches. Safe to interrupt and resume.
+ *  Returns what it did, for the cron log and for the DEV-only test hook. */
+async function pruneEvents(env, now = Date.now(), opts = {}) {
+  const batch = Math.max(1, Math.min(5000, Number(opts.batch) || PRUNE_BATCH));
+  const maxRows = Math.max(0, opts.maxRows === undefined ? PRUNE_MAX_ROWS : Number(opts.maxRows));
+  const budgetMs = Math.max(100, opts.budgetMs === undefined ? PRUNE_BUDGET_MS : Number(opts.budgetMs));
+  const started = Date.now();
+  const deleted = {};
+  let total = 0, stopped = null;
+  const room = () => maxRows - total;
+  const outOfTime = () => Date.now() - started >= budgetMs;
+
+  /* Pass 1: the short-window names, one pass each. idx_events_name stores its
+     entries as (name, rowid), so within a name the OLDEST rows come first and
+     the LIMIT stops the moment a batch is full: no scan, and no runaway once
+     the backlog for that name is gone. */
+  for (const [name, days] of Object.entries(EVENT_RETENTION_OVERRIDE_DAYS)) {
+    const cutoffTs = now - days * 86400000;
+    for (;;) {
+      if (room() <= 0) { stopped = 'maxRows'; break; }
+      if (outOfTime()) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, room());
+      const r = await env.DB.prepare(
+        'DELETE FROM events WHERE id IN (SELECT id FROM events WHERE name = ? AND ts < ? LIMIT ?)')
+        .bind(name, cutoffTs, n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted[name] = (deleted[name] || 0) + c; total += c; }
+      if (c < n) break;   // that name is drained for this cutoff
+    }
+    if (stopped) break;
+  }
+
+  /* Pass 2: everything else, on idx_events_day. `day` is the indexed column and
+     it is derived from the same ts the row carries, so comparing the YYYY-MM-DD
+     strings is both correct and the only version of this that does not scan.
+     The override names are excluded so that "the events table covers the last
+     60 days" stays exactly true of the rows it is said about. */
+  if (!stopped) {
+    const names = Object.keys(EVENT_RETENTION_OVERRIDE_DAYS);
+    const holes = names.map(() => '?').join(',');
+    const cutoffDay = new Date(now - EVENT_RETENTION_DAYS * 86400000).toISOString().slice(0, 10);
+    for (;;) {
+      if (room() <= 0) { stopped = 'maxRows'; break; }
+      if (outOfTime()) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, room());
+      const r = await env.DB.prepare(
+        `DELETE FROM events WHERE id IN (SELECT id FROM events WHERE day < ? AND name NOT IN (${holes}) LIMIT ?)`)
+        .bind(cutoffDay, ...names, n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted.window = (deleted.window || 0) + c; total += c; }
+      if (c < n) break;   // caught up
+    }
+  }
+
+  return {
+    total, deleted,
+    retentionDays: EVENT_RETENTION_DAYS,
+    cutoffDay: new Date(now - EVENT_RETENTION_DAYS * 86400000).toISOString().slice(0, 10),
+    stopped,                       // null = it finished; otherwise the bound that hit
+    more: stopped !== null,        // true = there is still a backlog for the next tick
+    ms: Date.now() - started,
+  };
+}
+
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
@@ -767,6 +891,24 @@ async function sweepSieges(env, rows, now) {
 }
 
 export default {
+  /* THE CRON. Declared in wrangler.toml under [triggers], every 15 minutes.
+     This is the only thing on this worker that deletes anything, and the only
+     reason the events table has a ceiling at all.
+
+     Awaited rather than handed to ctx.waitUntil, and the error is rethrown, so
+     a broken prune shows up as a FAILED cron invocation in the Cloudflare
+     dashboard. A pruner that silently stops is indistinguishable from one that
+     had nothing to do, right up until the 10 GB cap arrives. */
+  async scheduled(event, env) {
+    try {
+      const r = await pruneEvents(env, Date.now());
+      console.log('prune', JSON.stringify({ cron: (event && event.cron) || null, ...r }));
+    } catch (e) {
+      console.error('prune failed', (e && e.stack) || e);
+      throw e;
+    }
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -1968,6 +2110,36 @@ export default {
           'SELECT id, created_at, last_seen, max_level, max_level_at FROM players WHERE id = ?')
           .bind(String(b.id || '')).first();
         return json({ ok: true, row: row || null });
+      }
+      /* Run the retention prune on demand, with an injectable clock and
+         injectable bounds. DEV only. This calls the SAME pruneEvents the cron
+         calls, so a test drives the real thing rather than a copy of it, and
+         the clock injection is what lets a test assert the 60 day boundary
+         without waiting 60 days. It can only ever delete rows that are already
+         past their window under the clock it is handed. */
+      if (env.DEV === '1' && path === '/dev/prune' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await pruneEvents(env, Number(b.nowMs) || Date.now(), {
+          batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs,
+        });
+        return json({ ok: true, ...r });
+      }
+      /* Count events matching a filter. DEV only, read only. A retention test
+         has to assert what SURVIVED every bit as precisely as what went, and
+         /stats only exposes coarse aggregates over the whole table. */
+      if (env.DEV === '1' && path === '/dev/events-count' && request.method === 'GET') {
+        const where = [], bind = [];
+        const eName = url.searchParams.get('name');
+        const eDevice = url.searchParams.get('device');
+        const minTs = url.searchParams.get('minTs');
+        const maxTs = url.searchParams.get('maxTs');
+        if (eName) { where.push('name = ?'); bind.push(eName); }
+        if (eDevice) { where.push('device = ?'); bind.push(eDevice); }
+        if (minTs) { where.push('ts >= ?'); bind.push(Number(minTs)); }
+        if (maxTs) { where.push('ts < ?'); bind.push(Number(maxTs)); }
+        const row = await env.DB.prepare(
+          `SELECT COUNT(*) n FROM events${where.length ? ' WHERE ' + where.join(' AND ') : ''}`).bind(...bind).first();
+        return json({ n: Number((row && row.n) || 0) });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
         const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v FROM players WHERE id = ?')
