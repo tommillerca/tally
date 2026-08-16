@@ -98,6 +98,12 @@ const PRECACHE = [
   './js/poi.js',
   './js/spires.js',
   './js/garden.js',
+  /* The Hollow's three modules. openHollow imports all of them, so a single
+     failed fetch of any one is a blank app, which is exactly what
+     precache-audit caught before this shipped. */
+  './js/hollow-art.js',
+  './js/hollow-beds.js',
+  './js/hollow-scene.js',
   './js/gear.js',
   './js/pets.js',
   './js/paddock.js',
