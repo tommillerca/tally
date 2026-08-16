@@ -27,7 +27,9 @@
  *                                     normalised.
  *
  * THE GUARD RAILS (this file):
- *   COVERAGE  every pet call site in js/app.js must be claimed by a SITE below.
+ *   COVERAGE  every pet call site in js/app.js AND js/studio.js must be claimed
+ *             by a SITE below (see SOURCES; the Studio compositor draws pets on
+ *             a canvas, so app.js alone is no longer the whole story).
  *             A new screen that draws a pet and is not registered here FAILS,
  *             the same way tests/fx-audit.js derives its coverage from STRIKE_FX.
  *   STATIC    the source may not build a pet from an outfit slot ({ id: x.C }),
@@ -243,35 +245,70 @@ const SITES = [
       'only rendered while exactly one pet is flagged for breeding; the state is '
       + 'driven by the Stable checks rather than from here',
   },
+  {
+    /* THE STUDIO COMPOSITOR (js/studio.js, PLAN-the-studio.md step 2). The first
+       surface registered here that is not a screen: it takes a look plus the
+       composer knobs and returns a 1080x1920 PNG Blob, and every card the Studio,
+       AR Snap and the auto-cards ever export will come out of it. Registered
+       because COVERAGE now reads js/studio.js as well, so its one pet path has to
+       be claimed by a row or the build fails.
+       The plan named this the most likely place for the shiny bug to come back,
+       so the module REFUSES a pet whose `shiny` is not already a resolved
+       boolean rather than defaulting it to false: it cannot see S.shinyPets, and
+       quietly guessing would put a shiny pet in base colours on something a
+       player posts publicly and permanently. */
+    key: 'studio-card', claim: 'art.get(petRel)', paired: false, undriven:
+      'the compositor draws into a canvas and hands back a Blob, so there are no '
+      + 'DOM <img> elements for the ink/PLANE/NEAR machinery in this file to measure. '
+      + 'It is driven end to end by tests/studio-audit.mjs instead, on the decoded '
+      + 'pixels of a real exported Blob: every BH_SLOTS slot at the right z order, a '
+      + 'shiny pet rendering shiny and a plain one not, every composer option '
+      + 'changing the exported pixels, 1080x1920 exactly, and nothing drawn outside '
+      + 'the 6% safe gutter',
+  },
 ];
 
 /* ------------------------------------------------------ COVERAGE + STATIC ---- */
 const APP = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
 const LINES = APP.split('\n');
-const CALL = /pet(?:SpriteHtml|PortraitHtml|AsideHtml)\s*\(/;
+/* COVERAGE reads every file that can draw a pet, not only js/app.js. The Studio
+   compositor (js/studio.js) draws onto a canvas rather than emitting <img>, so
+   its pet path is a different function name, and scanning only app.js would
+   have left a whole new figure surface invisible to the rule whose entire job is
+   noticing new figure surfaces. */
+const SOURCES = ['js/app.js', 'js/studio.js']
+  .map(f => ({ file: f, lines: readFileSync(path.join(ROOT, f), 'utf8').split('\n') }));
+const CALL = /(?:pet(?:SpriteHtml|PortraitHtml|AsideHtml)|drawStudioPet)\s*\(/;
 const callSites = [];
-LINES.forEach((ln, i) => {
-  if (!CALL.test(ln)) return;
-  if (/^\s*(?:function|\/\/|\*)/.test(ln)) return;         // the declarations themselves
-  /* ONE line either side, not three. At ±3 a brand-new unregistered call site
-     inserted just above petSpriteHtml was "claimed" by petAsideHtml's own body
-     three lines up, so COVERAGE passed on a screen nobody had registered: the
-     window was wide enough to borrow somebody else's claim. */
-  callSites.push({ line: i + 1, text: ln.trim(), ctx: LINES.slice(Math.max(0, i - 1), i + 2).join('\n') });
-});
+for (const src of SOURCES) {
+  src.lines.forEach((ln, i) => {
+    if (!CALL.test(ln)) return;
+    if (/^\s*(?:function|\/\/|\*)/.test(ln)) return;       // the declarations themselves
+    /* ONE line either side, not three. At ±3 a brand-new unregistered call site
+       inserted just above petSpriteHtml was "claimed" by petAsideHtml's own body
+       three lines up, so COVERAGE passed on a screen nobody had registered: the
+       window was wide enough to borrow somebody else's claim. */
+    callSites.push({
+      file: src.file, line: i + 1, text: ln.trim(),
+      ctx: src.lines.slice(Math.max(0, i - 1), i + 2).join('\n'),
+    });
+  });
+}
 ok('COVERAGE there are pet call sites to audit at all (zero is a FAILURE)', callSites.length > 0, `${callSites.length} found`);
 const unclaimed = callSites.filter(c => !SITES.some(s => c.ctx.includes(s.claim)));
 ok('COVERAGE every pet call site in the app is registered here',
   unclaimed.length === 0,
-  unclaimed.length ? unclaimed.map(c => `js/app.js:${c.line}  ${c.text.slice(0, 90)}`).join('\n      ') : `${callSites.length} sites, all claimed`);
+  unclaimed.length ? unclaimed.map(c => `${c.file}:${c.line}  ${c.text.slice(0, 90)}`).join('\n      ') : `${callSites.length} sites, all claimed`);
 
 /* The exact shape that drops shiny: a pet object built out of an outfit slot.
    An outfit has a species id and nothing else, so shiny/level/lineage are gone
    the moment anyone writes this. */
 const OUTFIT_PET = /\{\s*id:\s*[\w.]+\.C\b/g;
 const badLines = [];
-LINES.forEach((ln, i) => { if (/^\s*(?:\*|\/\/|\/\*)/.test(ln)) return;   // prose about the bug is not the bug
-  if (OUTFIT_PET.test(ln)) badLines.push(`js/app.js:${i + 1}  ${ln.trim().slice(0, 90)}`); OUTFIT_PET.lastIndex = 0; });
+for (const src of SOURCES) {
+  src.lines.forEach((ln, i) => { if (/^\s*(?:\*|\/\/|\/\*)/.test(ln)) return;   // prose about the bug is not the bug
+    if (OUTFIT_PET.test(ln)) badLines.push(`${src.file}:${i + 1}  ${ln.trim().slice(0, 90)}`); OUTFIT_PET.lastIndex = 0; });
+}
 ok('STATIC nothing builds a pet out of an outfit slot (that is how shiny is lost)',
   badLines.length === 0, badLines.length ? '\n      ' + badLines.join('\n      ') : 'no { id: x.C } constructions');
 ok('STATIC the contract helpers exist to be used',
