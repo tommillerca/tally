@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, STORES } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -8899,7 +8899,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
   </div>
 
   ${notifPlat !== 'none' ? `
@@ -9168,7 +9168,7 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
@@ -9178,7 +9178,13 @@ async function renderSettings(el) {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
       await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
+      /* EVERY store db.js defines, never a hand-copied list. The literal that
+         used to sit here had six of the seven names: 'inv' was missing, so an
+         erase kept the entire inventory (crates, gear, cosmetics, pets) and
+         wiped only the kv flag recording that the welcome kit had been paid.
+         Inventory was strictly non-decreasing across an erase and every
+         erase-then-reonboard handed out another kit. See js/db.js STORES. */
+      for (const st of STORES) await db.clear(st);
       location.reload();
     });
   });
