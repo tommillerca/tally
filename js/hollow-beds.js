@@ -30,7 +30,7 @@
  *                and never outside it left, right or below. The beds are 95px
  *                apart vertically, so that headroom lands on grass, not on the
  *                bed above. tests/hollow-beds-audit.mjs pins it under 30.
- *   SIGN_BOX     66 x 70, top-left at the wrapper. Everything the sign draws stays
+ *   SIGN_BOX     96 x 96, top-left at the wrapper. Everything the sign draws stays
  *                inside it, price text included, at 1,500 and at 4,000.
  *                Placed as above, the board lands exactly where the shipped sign
  *                sat: centred on (spotX, spotY - 27).
@@ -57,7 +57,10 @@ const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&a
    the art, never the art to fit the grid. */
 export const BED_BOX = { w: 96, h: 96 };
 
-const SIGN_BOX = { w: 66, h: 70 };
+/* 96, not 66. At 66 hlwArt rounded the 48px sprite to 1x, so the one sign in
+   the scene that carries a NUMBER was drawn at half the scene's pixel size and
+   the price was unreadable at 13px over it. 2x like everything else. */
+const SIGN_BOX = { w: 96, h: 96 };
 const PE = 'pointer-events:none;'; // art never takes a tap; the caller owns the button
 
 /* Where a plant's roots meet the soil, in BED_BOX px. Taken from the piece: the
@@ -161,7 +164,14 @@ export function hlwBedArt(plot) {
      the sprite on a composited layer and resample it. The thirst cue for a
      pixel crop is the bed's own watered state instead. */
   const pixId = cropArtId(st.key, plot.ing);
-  if (pixId) return soil + hlwArt(pixId, { x: pos.x, y: pos.y, w: pos.w, cls: `hlw-p-${pixId}`, style: PE });
+  /* A PIXEL CROP IS DRAWN ON THE BED'S OWN TILE, not placed by the vector
+     anchor. Measured: every crop PNG is 48x48 with ink filling most of it
+     (crop-graveroot-ripe inks 4,3 to 44,47) on the same canvas as
+     hollow-bed-tilled (2,7 to 46,44), so Tom authored them as overlays. Running
+     them through place() sized them from the VECTOR stage heights (17/22/34/54),
+     which hlwArt rounds to 1x: the plants were drawn at half the pixel size of
+     the bed they grew in, the one scale break left in the scene. */
+  if (pixId) return soil + hlwArt(pixId, { x: 0, y: 0, w: BED_BOX.w, h: BED_BOX.h, cls: `hlw-p-${pixId}`, style: PE });
   return soil + paint(st.id, { x: pos.x, y: pos.y, w: pos.w, cls: `hlw-p-${st.id}`, style }, swaps);
 }
 
@@ -205,7 +215,7 @@ export function hlwChipHtml(plot) {
 }
 
 /* The buy-a-bed sign. Everything, price text included, stays inside SIGN_BOX
-   (66 x 70). The text rides its own copy of the board's rotation rather than
+   (96 x 96). The text rides its own copy of the board's rotation rather than
    being spliced into the piece, so it lands on the board without editing the
    designer's markup. */
 /* THE GHOST BED UNDER THE SIGN. hollow-bed-locked has shipped in HLW_ART since
@@ -221,7 +231,11 @@ export function hlwGhostBedHtml() {
    accent confirm and then refusing you after the second tap. */
 export function hlwPriceSignHtml(price, afford = null) {
   const art = hlwArt('hollow-price-sign',
-    { x: 0, y: 0, w: SIGN_BOX.w, cls: 'hlw-p-hollow-price-sign', style: PE });
+    /* h MATTERS. Without it hlwArt centres the scaled sprite against the NATIVE
+       height (48), so a 96px sprite came out at top -24 and every offset measured
+       from the wrapper was 24px wrong: the price landed under the board, on the
+       post. Measured with a DOM probe, not eyeballed. */
+    { x: 0, y: 0, w: SIGN_BOX.w, h: SIGN_BOX.h, cls: 'hlw-p-hollow-price-sign', style: PE });
   const short = afford != null && afford < price;
   const label = Number(price).toLocaleString();
   /* THE PRICE WAS SILENTLY GONE. Both lines below used to be string surgery on
@@ -235,8 +249,12 @@ export function hlwPriceSignHtml(price, afford = null) {
      wrapper, so both work whichever way hlwArt chose to render. */
   const pix = !art.startsWith('<svg');
   const out = pix
-    ? `<span style="position:relative;display:inline-block;${short ? 'opacity:.62;' : ''}">${art}`
-      + `<span style="position:absolute;left:0;right:0;top:38%;text-align:center;font-family:Bangers,sans-serif;`
+    /* THE WRAPPER MUST CARRY SIGN_BOX. hlwArt's <img> is position:absolute, so an
+       inline-block with no size collapsed to 0 wide and the label, centred with
+       left:0;right:0, was centred on a zero-width box: the price rendered OFF the
+       board, to its left, over the ghost bed. It looked like a stray number. */
+    ? `<span style="position:relative;display:block;pointer-events:none;width:${SIGN_BOX.w}px;height:${SIGN_BOX.h}px;${short ? 'opacity:.62;' : ''}">${art}`
+      + `<span style="position:absolute;left:0;right:0;top:30px;text-align:center;font-family:Bangers,sans-serif;`
       + `font-size:13px;letter-spacing:.5px;color:#17151d;pointer-events:none">${label}</span></span>`
     : art.replace('</svg>',
       `<g transform="rotate(-3 31 19)"><text x="41" y="24" text-anchor="middle" font-family="Bangers, sans-serif" font-size="14" letter-spacing=".5" fill="#17151d">${label}</text>` +

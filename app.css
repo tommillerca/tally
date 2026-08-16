@@ -7758,15 +7758,25 @@ body::before {
    absolutely positioned anchor at the bed's centre x, so .hlw-chip's own
    translateX(-50%) centres it regardless of how long the label is. */
 .hlw-chipwrap{position:absolute;width:0;height:0;z-index:5}
-.hlw-signwrap{position:absolute;width:66px;height:70px;pointer-events:none;z-index:5}
+/* 96x96, tracking SIGN_BOX. It was left at the vector 66x70 when the sign
+   went to 2x, so the 96px board overflowed a 66px box. */
+.hlw-signwrap{position:absolute;width:96px;height:96px;pointer-events:none;z-index:5}
 /* FIRST VISIT. pointer-events none on the whole layer: it points at the shed,
    so it must never be the thing that catches the tap it is asking for. */
 .hlw-first{position:absolute;inset:0;pointer-events:none;z-index:11}
 .hlw-first>*{position:absolute}
 .hlw-arrow{filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-.hlw-arrow svg circle{fill:var(--accent);fill-opacity:1}
-.hlw-arrow svg path{stroke:#17151d}
-.hlw-freelabel{background:var(--accent);color:#17151d;border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:11px;letter-spacing:.06em;white-space:nowrap;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
+.hlw-arrow svg circle{fill:rgba(13,12,18,.82);fill-opacity:1;stroke:var(--accent);stroke-width:2}
+.hlw-arrow svg path{stroke:var(--accent)}
+/* THE ONBOARDING LABEL IS NOT A HARVEST. Measured: this pill held 65% of the
+   accent pixels on screen and was 2.2x the area of a READY chip while wearing
+   the identical lime-pill-with-dark-Bangers treatment. One harvests, one
+   navigates, and on a first visit that is a coin flip. DESIGN.md: the accent
+   marks the ONE thing to do next, and hollow-beds.js documents exactly one lime
+   object per bed state.
+   It keeps the lime as an outline so it still reads as guidance, and gives the
+   fill back to READY, which is the only thing on this screen that pays out. */
+.hlw-freelabel{background:rgba(13,12,18,.82);color:var(--accent);border:1.5px solid var(--accent);border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:11px;letter-spacing:.06em;white-space:nowrap;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
 .hlw-bar{margin:0 2px 8px;padding:9px 12px;border-radius:12px;background:#1d1b22;border:2px solid var(--accent);color:var(--accent);font-family:var(--display),Bangers,sans-serif;font-size:14px;letter-spacing:.05em;text-align:center}
 /* READY carries the lime now. It is the payoff, and it was the least visible
    thing on the screen: 175 css px of fruit at 1.81:1 while the optional watering
@@ -7873,7 +7883,12 @@ body::before {
   background-color: #1b2418;
   background-image: url('assets/hollow/pix/hollow-ground.png');
   background-repeat: repeat;
-  background-size: 96px 96px;
+  /* ONE PIXEL SCALE FOR THE WHOLE SCENE. The tile is 96px native and was drawn
+     at 96px, so it ran at 1x while every sprite in the scene runs at 2x (48px
+     art in a 96px box). Two pixel sizes in one picture is the single loudest
+     amateur tell there is: the grass read as fine printed texture under chunky
+     furniture. 192px puts the ground on the same 2x grid as everything else. */
+  background-size: 192px 192px;
   image-rendering: pixelated;
 }
 /* THE PATH DOWN THE MIDDLE. Deleting the vector bezier left a dead column
@@ -7882,7 +7897,16 @@ body::before {
    seamless on BOTH axes (measured 0.0 / 0.0) and 60% transparent, so it lays
    over the ground rather than replacing it. 96px wide is 48 x 2, on the grid. */
 .hlw-path {
-  position: absolute; top: 0; bottom: 0; left: 50%; margin-left: -48px; width: 96px;
+  /* 48px, not 96. At 96 this was a quarter of the stage's width, dead centre,
+     full height, hard-edged on both sides: a rectangle, and it split the picture
+     into two equal halves with nothing to choose between them. A garden track is
+     narrower than a bed. At 48 the left and right margins become usable again
+     and the beds stop being two symmetrical columns flanking a strip. */
+  /* IT STARTS INSIDE THE FENCE. The fence is one unbroken run with no gate, so a
+     track that reached the top of the stage came out from UNDER a solid fence.
+     168 is the fence's bottom edge, measured on the sprite (rows 6-44 at 2x from
+     y104), so the track now begins where the garden does. */
+  position: absolute; top: 168px; bottom: 0; left: 50%; margin-left: -24px; width: 48px;
   z-index: 0; pointer-events: none;
   /* Cobble ALONE read as scattered debris: it is 60% transparent, so over dark
      ground you see gaps rather than stones. Tom's dirt tile goes underneath, so
@@ -7892,6 +7916,51 @@ body::before {
                     url('assets/hollow/pix/hollow-dirt.png');
   background-repeat: repeat, repeat;
   background-size: 96px 96px, 96px 96px;
+  /* The tile is 96px on a 48px track, so centre it: the stones sit down the
+     middle of the worn line instead of being sliced at the left edge. */
+  background-position: -24px 0, -24px 0;
   image-rendering: pixelated;
+  /* Feathered sideways so the track meets the grass instead of butting into it.
+     A hard vertical edge running the full height is what read as drawn-by-a-
+     computer; the dirt spills alternate along it for the same reason. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30%, #000 70%, transparent 100%),
+                      linear-gradient(180deg, transparent 0, #000 12%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 30%, #000 70%, transparent 100%),
+              linear-gradient(180deg, transparent 0, #000 12%);
+  /* Two masks, INTERSECTED. The default composite is add, which would union the
+     two fades and mask nothing at all. */
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
   opacity: .92;
 }
+
+/* DEPTH. A flat tile over a flat colour has no atmosphere, which is most of why
+   the scene read as objects sitting on a texture rather than as a place. Two
+   cheap painterly moves, both BEHIND every sprite so nothing composites over
+   the art (constraint: no filter or blend on .hlw-pix):
+   - a vertical falloff so the far edge sits back and the near edge comes forward
+   - a corner vignette so the eye is pushed to the middle third where the beds are
+   Neither touches a sprite; they are painted on the ground layer itself. */
+.hlw-ground::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8,11,8,.55) 0%, rgba(8,11,8,0) 26%, rgba(8,11,8,0) 62%, rgba(8,11,8,.42) 100%),
+    radial-gradient(120% 68% at 50% 46%, rgba(8,11,8,0) 38%, rgba(8,11,8,.5) 100%);
+}
+/* THE LOCKED BED MUST NOT BE THE BRIGHTEST THING ON SCREEN. Measured: the ghost
+   bed read 4.80:1 against the ground while an owned tilled bed read 1.03:1, so
+   the slot you cannot use out-shouted the harvest by 3x. Dimmed and desaturated
+   so it reads as absent rather than as the prize. */
+.hlw-p-hollow-bed-locked { opacity: .4; }
+
+/* THE CROW HOPS WITHOUT A TRANSFORM. hlwCrowBob animates transform, which promotes
+   the layer and gets the sprite resampled bilinearly whatever image-rendering
+   says: the bird was the one soft object in a hard-edged scene. Animating top
+   goes through layout, so every frame is re-rasterised on the pixel grid. 4px is
+   two art pixels at 2x, so the hop lands on the grid too. */
+/* steps(1), not ease. A smooth tween puts the sprite on fractional device rows
+   between the two keyframes, which is the same resampling the transform ban
+   exists to stop: measured mid-hop at device y 587.188. Stepping makes the bird
+   only ever occupy 122 or 118, both whole. */
+@keyframes hlwCrowHop { 0%, 100% { top: 122px } 50% { top: 118px } }
+.hlw-crowperch { animation: hlwCrowHop 5s steps(1, end) infinite }

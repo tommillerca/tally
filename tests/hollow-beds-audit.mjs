@@ -20,7 +20,7 @@
  *   DROPLET      the thirst droplet exists for canWater and for nothing else,
  *                in the markup AND in the pixels
  *   INERT        zero buttons, and elementFromPoint never lands on module output
- *   BOX          the sign at 1,500 and at 4,000 stays inside its declared 66x70,
+ *   BOX          the sign at 1,500 and at 4,000 stays inside its declared 96x96,
  *                and bed art stays inside 84x60 plus its declared headroom
  *   MOTION       animations run with motion on (or the next line proves nothing),
  *                and ZERO report playState "running" with reduce emulated
@@ -367,8 +367,11 @@ const boxes = await page.evaluate(([headroom]) => {
 note(boxes.signs.length === 2, `EMPTY SAMPLE: ${boxes.signs.length} price signs rendered, expected 2 (1,500 and 4,000)`);
 for (const s of boxes.signs) {
   note(s.children > 3, `EMPTY SAMPLE: sign "${s.text}" has ${s.children} drawn children`);
-  note(s.w === 66 && s.h === 70, `BOX sign "${s.text}" declares 66x70 but measures ${s.w}x${s.h}`);
-  if (s.bad.length) fail.push(`BOX sign "${s.text}" paints outside its 66x70 box: ${JSON.stringify(s.bad)}`);
+  /* 96x96 since the sign went to 2x with the rest of the scene. At 66 hlwArt
+     rounded the 48px sprite to 1x and the price was drawn at half the scene's
+     pixel size. This pin tracks SIGN_BOX in js/hollow-beds.js. */
+  note(s.w === 96 && s.h === 96, `BOX sign "${s.text}" declares 96x96 but measures ${s.w}x${s.h}`);
+  if (s.bad.length) fail.push(`BOX sign "${s.text}" paints outside its 96x96 box: ${JSON.stringify(s.bad)}`);
   if (!/^[\d,]+$/.test(s.text)) fail.push(`BOX sign shows "${s.text}", not a price`);
 }
 note(boxes.beds.length === 8, `EMPTY SAMPLE: ${boxes.beds.length} bed boxes, expected 8`);

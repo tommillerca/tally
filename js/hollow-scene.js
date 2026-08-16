@@ -69,10 +69,14 @@ const stagger = s => -s;
    come up 18 units to clear the 740 floor and it brought its steam glyphs with
    it, which then landed on top of this tuft. Measured in the render, both read
    as one blob at (322,654). Nudged clear rather than dropped. */
-const TUFTS = [[27, 659, 28, 3.2, 0], [340, 620, 28, 3.8, 0.6], [138, 715, 24, 3.5, 1.1]];
+/* On-stage, and grouped rather than evenly sprinkled. Two of the three used to
+   hang half off the edge (tuft-right lost 49% of its height, tuft-left 48% of
+   its width) because the coordinates were the vector tufts' and the pixel ones
+   are 96px. */
+const TUFTS = [[2, 318, 96, 3.2, 0], [4, 450, 96, 3.8, 0.6], [292, 208, 96, 3.5, 1.1]];
 
 const glow = (x, y, w, h, shape, rgba, secs) =>
-  `<span style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:50%;background:radial-gradient(${shape},${rgba},transparent 68%);animation:hlwGlow ${secs}s ease-in-out ${stagger(0)}s infinite;${NONE};z-index:3"></span>`;
+  `<span style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:50%;background:radial-gradient(${shape},${rgba},transparent 84%);animation:hlwGlow ${secs}s ease-in-out ${stagger(0)}s infinite;${NONE};z-index:3"></span>`;
 
 export function hollowBackdropHtml({ band } = {}) {
   const lit = band !== 'day';   // NOTES.md: glowOn = band !== day
@@ -91,13 +95,13 @@ export function hollowBackdropHtml({ band } = {}) {
         from the render, because an off-stage sprite looks identical to one that
         was never drawn. */''}
   <div style="position:absolute;inset:0;z-index:1;${NONE}">
-    ${hlwArt('hollow-scarecrow', { x: 296, y: 600, w: 96, style: NONE })}
-    ${hlwArt('hollow-barrel', { x: 6, y: 556, w: 96, style: NONE })}
-    ${/* Dirt spills ON the path's edges (it spans 147 to 243), so the straight
+    ${hlwArt('hollow-scarecrow', { x: 0, y: 194, w: 96, style: NONE })}
+    ${hlwArt('hollow-barrel', { x: 286, y: 592, w: 96, style: NONE })}
+    ${/* Dirt spills ON the track's edges (it spans 171 to 219), so the straight
           sides read as worn earth rather than as a drawn rectangle. Three
           variants alternated so no two neighbours are the same stamp. */''}
-    ${[[100, 156, 'a'], [236, 268, 'b'], [100, 380, 'c'],
-       [236, 492, 'a'], [100, 604, 'b'], [236, 636, 'c']].map(([x, y, v]) =>
+    ${[[126, 150, 'a'], [168, 238, 'b'], [168, 352, 'c'],
+       [168, 466, 'a'], [126, 598, 'b'], [168, 580, 'c']].map(([x, y, v]) =>
       hlwArt(`hollow-spill-${v}`, { x, y, w: 96, style: NONE })).join('')}
   </div>
   <div style="position:absolute;inset:0;z-index:0;${NONE};background:radial-gradient(80% 30% at 50% 0%,rgba(255,236,180,.10),transparent 70%)"></div>
@@ -106,25 +110,45 @@ export function hollowBackdropHtml({ band } = {}) {
         runs edge to edge as one repeat instead of two hand-placed segments with
         a gate gap invented between them. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${[0, 232].map(x => hlwArt('hollow-fence', { x, y: 104, w: 232, style: NONE })).join('')}
+    ${/* 2x, like everything else. The fence tile is 232 native and was drawn at
+          232, so its pickets were half the pixel size of the beds standing behind
+          them. One run of 464 covers the 390 stage with the seam off screen. */''}
+    ${hlwArt('hollow-fence', { x: -37, y: 104, w: 464, style: NONE })}
   </div>
 
-  ${/* THE CROW. Comp spot (26,150) plus the piece's own viewBox origin. It stands
-        on the grass: the comp perched it on a small rock, and the rock is one of
-        the two things the asset pack never shipped (see the report). Bob only —
-        app.css carries hlwCrowBob but no flap keyframe, and app.css is not mine. */''}
-  <div style="position:absolute;left:39px;top:152px;width:45px;height:25px;z-index:0;${NONE};animation:hlwCrowBob 5s ease-in-out ${stagger(0)}s infinite;transform-origin:50% 100%">
-    ${hlwArt('hollow-crow', { x: 24, y: 60, w: 96, style: NONE })}
+  ${/* THE CROW, PERCHED AND STATIC. It used to sit in a div carrying hlwCrowBob,
+        which animates transform: a transform on ANY ancestor promotes the layer
+        and the compositor resamples it bilinearly whatever image-rendering says,
+        so the one bird in the scene was the one soft sprite in it. Same rule the
+        tufts already follow. It still moves: hlwCrowHop animates TOP, which lays
+        out rather than composites, so the sprite is re-rasterised on the pixel
+        grid every frame instead of being resampled once. Placement is measured off both sprites' ink rather
+        than inherited from the vector comp: the scarecrow's crossbar is art rows
+        15-18, which at 2x from y194 is y200-208, and the crow's feet are art row
+        41, which puts its box top at 122. It now stands on the bar. */''}
+  <div class="hlw-crowperch" style="position:absolute;left:25px;top:122px;width:96px;height:96px;z-index:1;${NONE}">
+    ${hlwArt('hollow-crow', { x: 0, y: 24, w: 96, style: NONE })}
   </div>
 
   ${/* HANGING SIGN. Board top lands at y84, clear of the Dynamic Island zone
         (~y10-48) exactly as the handoff requires. The label is a text run the
         pack deliberately does not bake in; attributes are the comp's. */''}
+  ${/* THE TITLE SITS ON THE BOARD NOW. It used to float 100px BELOW a blank
+        pixel signpost in antialiased vector Bangers, 2.1x wider than the plank,
+        with only 21% of its height over any opaque sign pixel. It read as a
+        rendering failure and it was the first thing the eye hit.
+        The board is 144px (48 x 3) so the word fits inside it, and the label is
+        a plain span centred on the plank rather than an SVG text run in the
+        comp's old coordinate space. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-sign', { x: 150, y: 30, w: 96, style: NONE })}
-    <svg viewBox="136 54 133 114" style="position:absolute;left:136px;top:54px;width:133px;height:114px;overflow:visible;${NONE}">
-      <g transform="rotate(-2 205 102)"><text x="205" y="110" text-anchor="middle" font-family="Bangers, sans-serif" font-size="23" letter-spacing="2" fill="#f2e9d7">THE HOLLOW</text></g>
-    </svg>
+    ${/* 2x and fully on stage. At 3x the board's own art started at y-12, so the
+          plank was clipped by the top of the stage and the label, placed at y66,
+          landed on the POST and the dirt below it in near-black on near-black.
+          Measured on the sprite: the plank occupies art rows 8-25 and cols 10-36,
+          which at 2x from (147,72) is x167-219, y64-98. The label is sized and
+          centred to that rectangle rather than to the sprite's bounding box. */''}
+    ${hlwArt('hollow-sign', { x: 96, y: 56, w: 96, style: NONE })}
+    <span style="position:absolute;left:94px;top:55px;width:96px;text-align:center;font-family:Bangers,sans-serif;font-size:13px;letter-spacing:.5px;color:#efe2c4;text-shadow:0 1px 0 rgba(0,0,0,.55);${NONE}">THE HOLLOW</span>
   </div>
 
   ${/* SEED SHED. The comp draws it as one group at translate(292 44); the pack
@@ -133,11 +157,27 @@ export function hollowBackdropHtml({ band } = {}) {
         is the one exception: the pack redrew it taller than the comp's, so it is
         seated on the shed's ground line instead of the comp's y. */''}
   <div style="position:absolute;inset:0;z-index:0;${NONE}">
-    ${hlwArt('hollow-shed', { x: 252, y: 26, w: 96, style: NONE })}
-    ${''}
-    ${hlwArt('hollow-crate', { x: 300, y: 150, w: 96, style: NONE })}
-    ${hlwArt('hollow-sack', { x: 20, y: 150, w: 96, style: NONE })}
-    ${lit ? glow(301, 54, 70, 56, 'ellipse', 'rgba(255,190,130,.5)', 3) : ''}
+    ${/* CLUSTERED, not scattered. Six props sitting alone at even spacing read
+          as stamps on a texture. Grouped into two corners they read as places
+          someone works: the shed with its crate and sack tucked against it, and
+          the barrel by the compost at the far end. Overlap is deliberate, it is
+          the only depth cue a flat top-down scene gets. */''}
+    ${/* 2x. At 3x the shed was the only object in the scene drawn at a third
+          pixel size AND its roof was cut off by the top of the stage. */''}
+    ${hlwArt('hollow-shed', { x: 240, y: 30, w: 96, style: NONE })}
+    ${hlwArt('hollow-crate', { x: 292, y: 66, w: 96, style: NONE })}
+    ${hlwArt('hollow-sack', { x: 230, y: 96, w: 96, style: NONE })}
+    ${/* THE COIN CHIP WAS EATING IT. The shed's warm glow measured 0.1% of its own
+          box against a 40% floor, and the reason was occlusion, not colour: the
+          app's coin chip sits at roughly stage x300-382, y20-52 at a much higher
+          z, and the glow was under it. Dropped below the chip's band. */''}
+    ${/* THE SHED'S OWN HANGING LANTERN IS STILL NOT DRAWN. There is no window to light. Read off the sprite:
+          hollow-shed is an isometric shack with no bright aperture anywhere in
+          its 48x48, and the hanging lantern the pack ships for it (hollow-shed-
+          lantern) is VECTOR, which Tom's "everything but the bonehead is pixel"
+          rule keeps out of this scene. The glow measured 3.9% of its own box
+          against a 40% floor: it was emitted and painting nothing, a light with
+          no source. The lantern post carries the night on its own at 89%. */''}
   </div>
 
   ${/* GRASS TUFTS */''}
@@ -154,8 +194,8 @@ export function hollowBackdropHtml({ band } = {}) {
   ${/* COMPOST HEAP, bottom-right per the comp. Raised 18 units from its comp y
         (694 -> 676) because the comp's 900-tall stage let it finish at 754 and
         this one ends at 740. Steam glyphs are the comp's, on app.css's hlwSteam. */''}
-  <div style="position:absolute;left:256px;top:676px;width:112px;height:60px;z-index:0;${NONE}">
-    ${hlwArt('hollow-compost', { style: NONE })}
+  <div style="position:absolute;left:262px;top:656px;width:112px;height:60px;z-index:0;${NONE}">
+    ${hlwArt('hollow-compost', { w: 96, style: NONE })}
     ${/* PROPS TOM MADE THAT NOTHING WAS DRAWING. The render had two dead zones,
           mid-left under the bed column and the right margin beside it, and a
           scarecrow, a rain barrel and a firefly cluster sitting unused. The
@@ -171,6 +211,19 @@ export function hollowBackdropHtml({ band } = {}) {
     <span style="position:absolute;left:66px;top:-22px;color:#9fc27a;font-size:14px;animation:hlwSteam 2.6s ease-out ${stagger(1.2)}s infinite">〜</span>
   </div>
 
+  ${/* THE SHED GLOW LIVES OUT HERE, not in the props div. Every scenery group is
+        its own position:absolute z-index:0 stacking context, so a z-index:3 glow
+        inside the FIRST group still paints under every later group's z-0 layer.
+        It sits on the shed's right face, where a window would be on the piece
+        Tom actually drew. hollow-backdrop-audit still grades this glow against
+        the DELETED VECTOR COMP's rect (301,54,70,56), so it reads 11% however
+        the glow is positioned or coloured: three placements were measured, 3.9%,
+        11.2% and 0.5%, and the number tracked overlap with the comp rect rather
+        than anything about the light. That audit is pinned to a scene that no
+        longer exists and needs the invariant rewrite already on the list; it is
+        not a reason to put a lamp where the old vectors used to be. */''}
+  ${lit ? `<div style="position:absolute;inset:0;z-index:3;${NONE}">${glow(272, 58, 50, 42, 'ellipse', 'rgba(255,190,130,.5)', 3)}</div>` : ''}
+
   ${/* LANTERN. The pack draws post, cap, glass and base as ONE piece 151 tall, a
         little longer than the comp's separate post, so it is anchored by its FOOT
         at the stage floor (740 - 151 = 589); that puts the glass within 2 units of
@@ -182,11 +235,19 @@ export function hollowBackdropHtml({ band } = {}) {
           warm drop-shadow and the flame itself were unconditional, so the lantern
           was alight in the day render. A lit lantern in full sun says nothing;
           worse, it spends the one warm light source the night has. */''}
-    ${hlwArt('hollow-lantern-post', { x: 75, y: 589, style: lit
+    ${/* 2x, foot on the floor. Native is 48x88, so at 1x it was a doll's lamp in
+          a 2x world. At 2x it is 96x176 and 740 - 176 = 564 puts its foot on the
+          stage floor, which is the y the box has to be back-solved from because
+          hlwArt centres the scaled sprite in the box it is given. */''}
+    ${hlwArt('hollow-lantern-post', { x: 20, y: 608, w: 96, style: lit
       ? `${NONE};filter:drop-shadow(0 0 5px rgba(255,217,138,.95)) drop-shadow(0 0 16px rgba(255,217,138,.6))`
       : NONE })}
-    ${lit ? hlwArt('hollow-lantern-flame', { x: 82.5, y: 614, style: NONE }) : ''}
-    ${lit ? glow(38, 572, 96, 96, 'circle', 'rgba(255,217,138,.42)', 4) : ''}
+    ${/* THE FLAME IS THE ONE PIECE WITH NO PNG, so hlwArt renders it as vector and
+          a w of 96 scaled a 7x8 glyph to 96x109.7 and pushed it 7.7px off the
+          bottom of the stage. It rides the post's glass at the post's own 2x
+          offset (+15,+50 from the box origin) at a size that suits a 2x lantern. */''}
+    ${lit ? hlwArt('hollow-lantern-flame', { x: 35, y: 614, w: 14, style: NONE }) : ''}
+    ${lit ? glow(16, 566, 104, 104, 'circle', 'rgba(255,217,138,.4)', 4) : ''}
   </div>
 
   ${/* TIME OF DAY. Dusk is TWO layers (NOTES.md): a soft-light wash plus a normal

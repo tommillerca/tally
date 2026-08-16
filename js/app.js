@@ -4345,10 +4345,15 @@ function openHollow(after) {
             slot as bare soil inside a wooden frame, which reads as a gap in the
             build rather than as a bed you have not bought. */''}
       ${HLW_SPOTS.slice(garden.plotsOwned).map(([gx, gy]) =>
-        `<div style="position:absolute;left:${gx - 42}px;top:${gy - 30}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>`).join('')}
-      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 33}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 46}px">${hlwPriceSignHtml(bedPrice, coin)}</span>` : ''}
+        `<div style="position:absolute;left:${gx - BED_BOX.w / 2}px;top:${gy - BED_BOX.h / 2}px;width:${BED_BOX.w}px;height:${BED_BOX.h}px;pointer-events:none;z-index:2">${hlwGhostBedHtml()}</div>`).join('')}
+      ${bedPrice != null ? `<span id="hlwSign" class="hlw-signwrap" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 48}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 66}px">${hlwPriceSignHtml(bedPrice, coin)}</span>` : ''}
       ${bedPrice != null ? `<button class="hlw-bed" id="hlwBuy" aria-label="Dig a new bed for ${bedPrice.toLocaleString()} coins" style="left:${hlwBuySpot(garden.plotsOwned)[0] - 30}px;top:${hlwBuySpot(garden.plotsOwned)[1] - 30}px"></button>` : ''}
-      <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="right:8px;left:auto;top:56px;width:100px;height:120px"></button>
+      ${/* THE TARGET FOLLOWS THE ART. The shed cluster moved left when the props
+              went to 2x (shed art now x246-330, sack 236-320, crate 298-382), and a
+              right-anchored button left the tap target sitting mostly on empty grass
+              beside the thing it names. Left-anchored and sized to the cluster, held
+              clear of the coin chip row at the top. */''}
+        <button class="hlw-bed" id="hlwShed" aria-label="Seed shed" style="left:236px;right:auto;top:56px;width:150px;height:112px"></button>
       ${/* MEASURED IN THE RENDER, not carried over. The hand-drawn scene put the
       compost heap bottom-LEFT; the designer puts it bottom-RIGHT and the module
       draws it at x 256-368, y 676-736. This button kept its old coordinates and
@@ -4412,8 +4417,8 @@ function openHollow(after) {
         ${/* Under the shed DOOR, not beside the shed. Measured on the render: the
               shed button spans stage x 282 to 382, and the arrow at 262 sat left
               of it over open grass, pointing at nothing. The door is at ~330. */''}
-        <span class="hlw-arrow" style="left:315px;top:172px">${hlwArt('hollow-back-chevron', { w: 34, h: 34, style: 'transform:rotate(90deg)' })}</span>
-        <span class="hlw-freelabel" style="left:246px;top:212px">FREE STARTER SEEDS</span>
+        <span class="hlw-arrow" style="left:272px;top:172px">${hlwArt('hollow-back-chevron', { w: 34, h: 34, style: 'transform:rotate(90deg)' })}</span>
+        <span class="hlw-freelabel" style="left:224px;top:212px">FREE STARTER SEEDS</span>
       </div>` : ''}
     </div></div>`;
 
@@ -4455,9 +4460,32 @@ function openHollow(after) {
     const raw = vp.clientWidth / 390;
     const step = 1 / (2 * dpr);
     const s = Math.max(step, Math.round(raw / step) * step);
+    /* ORIGIN 0 0. The marginLeft below is (viewport - 390*s)/2, which is the
+       correct centring ONLY if the scale grows from the top-left corner. With
+       the default 50% 50% origin the scaled box also drifts by 390*(1-s)/2, so
+       the two disagreed. */
+    st.style.transformOrigin = '0 0';
     st.style.transform = `scale(${s})`;
     st.style.marginLeft = `${Math.round((vp.clientWidth - 390 * s) / 2)}px`;
     vp.style.height = Math.round(HLW_H * s) + 'px';
+    /* AND SNAP THE STAGE'S TOP EDGE. Snapping the scale is only half of it: the
+       stage's own y comes from everything laid out above it in the sheet, and
+       measured at 393x852 dpr2 it landed on a HALF device pixel, so all 29
+       sprites in the scene reported a fractional device top and every one of
+       them was resampled vertically. Measured after layout rather than derived,
+       because the offset is whatever the header above happens to produce. */
+    const snapTop = () => {
+      st.style.transform = `scale(${s})`;
+      const dtop = st.getBoundingClientRect().top * dpr;
+      const off = dtop - Math.round(dtop);
+      if (Math.abs(off) > 0.001) st.style.transform = `translateY(${(-off / dpr).toFixed(4)}px) scale(${s})`;
+    };
+    /* TWICE, and the second one is not belt-and-braces. The sheet slides in on a
+       transition, so a first-frame measurement snaps to a position the stage is
+       still moving through: measured, it corrected 0.1 of the 0.5 and left 0.4.
+       The second pass runs after the sheet has settled. */
+    requestAnimationFrame(snapTop);
+    setTimeout(snapTop, 420);
     clampSayNow = clampSay;
     requestAnimationFrame(clampSay);
 
