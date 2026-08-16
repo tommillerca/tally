@@ -191,6 +191,10 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
+  'hollow-audit.mjs': ['full', 'drives the Hollow at two viewports with and without reduced motion, including a real harvest tap and the modal contract. About 90s, too slow for the fast tier.'],
+  'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
+  'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
   'ledger-voice-audit.mjs': ['skip', 'shoots the ledger copy for reading, into a fixed scratch dir; asserts nothing about layout.'],

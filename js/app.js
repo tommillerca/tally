@@ -3581,8 +3581,16 @@ function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
        written (gardenBannerHtml handles cropsRipe === 0); nothing rendered it. Ripe
        crops still outrank the drop and still take the action accent, because only
        then is the row waiting on the player. */
-    { pri: cropsRipe ? 20 : 40,
-      html: cropsRipe ? act(gardenBannerHtml(cropsRipe)) : gardenBannerHtml(0) },
+    /* QUIET LAUNCH. Tom, 2026-08-16: "let's keep the garden launch pretty quiet
+       though because i want to test it and not draw too much attention yet ...
+       especially since we are going to be finalizing art and how it plays."
+       ext/garden-reach un-gated this banner so every player saw the garden on
+       Today whether or not they had ever planted, and it rode into this train on
+       the kitchen branch rather than being chosen. Re-gated: only a player who
+       already has something growing is shown it. The row is a one-line revert
+       when the art and the loop are settled, and the intro instrumentation from
+       that same branch is KEPT, because a quiet test still wants numbers. */
+    ...(cropsRipe ? [{ pri: 20, html: act(gardenBannerHtml(cropsRipe)) }] : []),
     /* The current drop, ALWAYS. It used to share one slot with the Garden and
        lose it to any ripe crop, which is exactly why Tom stopped seeing the new
        drop on Today (2026-08-09). With the Puffer Pack row gone there is room
