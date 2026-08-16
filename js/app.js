@@ -8136,7 +8136,23 @@ async function diagnosticsLine() {
     let extra = '';
     try {
       if (id === 'LocalNotifications' && P[id].checkPermissions) extra = ':' + ((await P[id].checkPermissions()).display || '?');
-      else if (id === 'BhVault' && P[id].status) { const s = await P[id].status(); extra = ':' + (s && s.readable === false ? 'unreadable' : (s && s.present ? 'has-key' : 'empty')); }
+      /* READ THE KEYS THE PLUGINS ACTUALLY RETURN. This asked for `readable` and
+         `present`, and neither exists on either side: BhVault.status() resolves
+         { available, e2e, hasIdentity, readError } on iOS
+         (native/ios/App/App/BhVault.swift) and the same plus `reason` on Android
+         (native/android/.../BhVault.kt). So both branches fell through and this
+         printed `BhVault:ok:empty` on EVERY phone: one holding a live key, and
+         one whose vault could not be read at all.
+         That is the worst possible string to get wrong here. The rule this whole
+         subsystem is built on is that a failed vault read must never be reported
+         as an empty vault, because "empty" is what makes the app decide the
+         player is new and mint over a recoverable account. This is the
+         diagnostic that exists to catch that, and it would have said "empty"
+         during the incident it was written for. */
+      else if (id === 'BhVault' && P[id].status) {
+        const s = await P[id].status();
+        extra = ':' + (s && (s.readError || s.available === false) ? 'unreadable' : (s && s.hasIdentity ? 'has-key' : 'empty'));
+      }
       else if (id === 'Haptics') extra = ':no-readback';
       else if (id === 'Health') extra = ':auth-not-probed';
     } catch { extra = ':probe-failed'; }
@@ -11680,7 +11696,19 @@ function openPetBreedResult(off) {
 async function ingestHkFromUrl() {
   const h = location.hash || '';
   if (!h.startsWith('#/hk')) return;
-  const payload = parseHkPayload(decodeURIComponent(h));
+  /* THE HASH IS PLAYER-SUPPLIED, SO THE DECODE HAS TO SURVIVE GARBAGE.
+     decodeURIComponent throws URIError on any stray '%' ("#/hk%", "#/hk?n=100%"),
+     this runs inside boot() BEFORE route() and bindTabs(), and boot() is called
+     bare at the bottom of this file. So one bad character left #screen EMPTY with
+     a working tab bar that did nothing, and the hash survives a reload, so the
+     app stayed dead until the player edited the URL. Measured, not reasoned:
+     "URIError: URI malformed", screen innerHTML length 0.
+     Falling back to the raw hash is right rather than merely safe: parseHkPayload
+     reads plain `k=v` pairs and never needed the decode to have succeeded. If it
+     genuinely cannot read it, the existing toast still says so. */
+  let decoded = h;
+  try { decoded = decodeURIComponent(h); } catch { /* malformed escape: parse it raw */ }
+  const payload = parseHkPayload(decoded);
   history.replaceState(null, '', location.pathname + location.search + '#/today');
   if (payload) await ingestHealth(payload, { celebrate: true });
   else toast('Could not read the Health sync link');
@@ -13501,7 +13529,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v383'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v384'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -14937,6 +14965,24 @@ async function openFight(pitWrap, fighter, foeCfg) {
        potions on screen at once at every supported width. Not scrollIntoView:
        that walks up and scrolls the sheet too. */
     if (fight.itemsOpen) factions.scrollTop = factions.scrollHeight;
+    /* TELL THE PLAYER THERE IS MORE. Measured on live v383: the tray hid 43px at
+       390x844 and 68px at 375x667, and the ITEMS door lived entirely inside that
+       band with all nine of its hit probes answering #endTurn or the sheet body.
+       The scroll worked; nothing on screen said it existed. `scrolls` drives the
+       fade, `at-end` removes it once you have seen the bottom, and both are
+       recomputed on scroll because the tray's content changes every turn. */
+    const markScroll = () => {
+      const more = factions.scrollHeight - factions.clientHeight;
+      factions.classList.toggle('scrolls', more > 2);
+      factions.classList.toggle('at-end', more <= 2 || factions.scrollTop >= more - 2);
+    };
+    /* AND AGAIN AFTER LAYOUT SETTLES. Measured at 430x932: markScroll ran while
+       the tray still reported its pre-layout height, so a tray hiding 48px was
+       marked as not scrolling and drew no fade. Once per render is not enough
+       when the row heights depend on text that has only just been written. */
+    markScroll();
+    requestAnimationFrame(() => { if (factions.isConnected) markScroll(); });
+    factions.addEventListener('scroll', markScroll, { passive: true });
     $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
     $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
     renderEndTurn();
