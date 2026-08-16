@@ -156,14 +156,25 @@
  * whole life at 8ms, so a frame that is still blank when its turn comes is caught
  * in the sample where it is shown) and cannot be tripped by a later frame that is
  * merely late. The all-frames count is still printed as a diagnostic.
+ *
+ * NOTE FOR WHOEVER READS CLAUDE.md NEXT. Its FX rule is worded "naturalWidth > 0
+ * on every frame, in the same sample where the frame is visible". The second half
+ * of that sentence is the load-bearing half and is exactly what is asserted here;
+ * "every frame" as a literal reading is what went red on a healthy tree the
+ * moment the frames came off a real network. Do not put it back without first
+ * serving the tree with `cache-control: no-store` and watching it lie.
  * ---------------------------------------------------------------------------
  *
  * Usage:
- *   node tests/fx-audit.js                     # audit the LIVE site
- *   node tests/fx-audit.js http://localhost:8765/   # audit a local build
+ *   node tests/fx-audit.js                     # serve THIS tree and audit it
+ *   node tests/fx-audit.js http://localhost:8765/   # audit a build already served
  *
- * Exits non-zero on any failure, so it cannot report success over a broken
- * animation. Puppeteer is borrowed from the overlay-render-kit rather than added
+ * EXIT CODES. 0 pass. 1 a FINDING about the app, i.e. an animation that is not
+ * putting pixels on the victim. 2 SETUP: the audit could not establish the
+ * conditions it needs (no browser, no cacheable fixture, no throttle) and has
+ * therefore made NO claim about the FX. Keeping 1 for findings only is the whole
+ * point of the second fix above: a harness that grades its own environment must
+ * not be able to spend the word "v245" on it.
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -175,12 +186,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
    loadPuppeteer: the repo's own node_modules first so a fresh clone works after
    `npm install`, the overlay-render-kit as fallback so machines already set up
    that way need no install. This file used to carry its own copy of the kit path,
-   which meant it could only ever run on one Mac. The exit-1-with-a-reason
-   behaviour is kept: a missing browser is a SETUP failure and must not read as an
-   FX failure. */
+   which meant it could only ever run on one Mac. The exit-with-a-reason behaviour
+   is kept: a missing browser is a SETUP failure and must not read as an FX
+   failure. It exits 2 now rather than 1, with the cache precondition below and
+   for the same reason: 1 means a finding about the app. Callers that only ask
+   "was it zero" are unaffected. */
+const EXIT_SETUP = 2;
 let puppeteer;
 try { puppeteer = await loadPuppeteer(); }
-catch (e) { console.error(`FX AUDIT CANNOT RUN (setup, not a failing check):\n${e.message}`); process.exit(1); }
+catch (e) { console.error(`FX AUDIT CANNOT RUN (setup, not a failing check):\n${e.message}`); process.exit(EXIT_SETUP); }
 
 /* NEVER GRADE PRODUCTION. This defaulted to the live site, so a bare run of
    this audit measured whatever is deployed and said nothing at all about the
@@ -241,7 +255,6 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   /* SETUP failures exit 2, findings exit 1. A harness that cannot establish its
      own preconditions has not checked the app, and saying so with the same exit
      code as "the punch is invisible" is how a false red gets believed. */
-  const EXIT_SETUP = 2;
   const bailSetup = async (msg) => {
     console.error(`\nFX AUDIT CANNOT RUN (setup, not a failing check):\n  ${msg}\n  No claim has been made about the FX.`);
     try { await browser.close(); } catch { /* already gone */ }
@@ -262,6 +275,13 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
   const FX_ASSET_RE = /\/assets\/bh\/fx\//;
   const rewrite = { ok: 0, failed: 0, lastError: '' };
   cdp.on('Fetch.requestPaused', async (ev) => {
+    /* Only rewrite a real 200. A redirect or a 404 passes through untouched: this
+       exists to make a SUCCESSFUL frame reusable, not to invent a cache entry for
+       a frame that is not there, and a missing frame must still fail loudly. */
+    if (ev.responseStatusCode !== 200) {
+      try { await cdp.send('Fetch.continueRequest', { requestId: ev.requestId }); } catch { /* request already gone */ }
+      return;
+    }
     const headers = (ev.responseHeaders || []).filter(h => !/^(cache-control|pragma|expires)$/i.test(h.name));
     headers.push({ name: 'cache-control', value: 'public, max-age=600' });
     try {
