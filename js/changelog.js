@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 386, date: '2026-08-16', title: 'The health bars were sitting on the boss', items: [
+    "<b>The health bars were drawn ON TOP of the fighters, not beside them.</b> On a smaller phone that meant the boss lost his head and hood behind them, and on the smallest phones he was rendering outside the fight area altogether. The bars have their own row now, so the arena is all scene. Measured on five phone sizes: nothing is covered on any of them.",
+    "<b>\"Just essentials\" notifications did nothing.</b> It wrote exactly the same settings as \"Everything\", so the two buttons were the same button with different labels. Essentials now means what it says.",
+    "<b>Redeeming a pet code for a pet you already own</b> used to show the same message as a brand new one, so you could not tell what had happened. It stacks a second copy and tells you plainly.",
+    "<b>Backing up and restoring could duplicate your things.</b> A restore put your old save back on top of the current one instead of replacing it, so anything you bought after the backup stayed while the coins that paid for it came back. Restoring now replaces, and a damaged backup file still leaves your existing save untouched.",
+    'A fight-screen check and a strike-animation check were both passing when they should not have been. One of them was grading the live site instead of the build being tested.',
+  ] },
   { n: 385, date: '2026-08-16', title: 'Boss dens raise your ceiling again', items: [
     "<b>Beating a boss den raises your Gauntlet ceiling again, and this time it is actually fixed.</b> The boss standing in a den changes every week, but the game was remembering the SPOT you had beaten rather than the boss you beat there. So once you had cleared the dens near you, every new boss that turned up in those same spots counted for nothing, no matter how many you killed. If you fight close to home, you were frozen. That is the whole reason this kept coming back after being called fixed: the roaming and remote bosses were sorted a while ago and the ordinary map dens, the ones almost everyone fights, were not.",
     "<b>Every clear it swallowed has been given back.</b> The app can still see which dens you beat and when, so it recounts them the next time you open it and tells you how many ranks it restored. You do not need to go and re-fight anything.",
