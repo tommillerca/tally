@@ -115,6 +115,7 @@ const BROWSER = [
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
   'log-write-failure-audit.mjs', // a failed save must not look like a saved meal
+  'write-failure-visible-audit.mjs', // and neither must a failed anything-else: the DB-layer seam that gives EVERY rejected write a voice, plus the quiet list that keeps fire-and-forget bookkeeping from shouting. ~62s, of which 13 are deliberately spent proving the toast throttle is a GAP and not a mute
   'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
@@ -216,6 +217,7 @@ const DECLARED = {
 
   'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
   'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
+  'map-offline-guard-audit.mjs': ['full', 'the Boneyard with the tile host blocked: the polite offline message and NOTHING else, no uncaught TypeError from startMap dereferencing elements the wipe deleted, no GPS watch armed for a map that never drew. Needs x20 CPU throttling to reach the race at all (unthrottled the wipe lands after startMap finishes and the check cannot fail), so it is slow by construction. Run it on any startMap change.'],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],

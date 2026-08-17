@@ -57,11 +57,122 @@ function tx(store, mode, fn) {
   }));
 }
 
+/* ===================== A REJECTED WRITE CANNOT BE SWALLOWED =====================
+ *
+ * THE BUG. Exactly ONE write in this app survived a full disk: the meal log at
+ * js/app.js, which wraps its own `db.put('log', e)` and tells the player. Every
+ * other write was a bare `await db.put(...)` or `await kvSet(...)` with no
+ * catch: 20-odd db.put sites and 88 kvSet sites in js/app.js alone, plus every
+ * XP award in js/game.js and every crate, gear, pet, egg and weapon grant in
+ * js/loot.js. On a quota abort the promise rejects, the rest of the function is
+ * skipped, and the rejection unwinds to window.unhandledrejection, where
+ * js/analytics.js files it as an anonymous `err` row with a truncated message.
+ * The player sees the fight-win animation and never gets the crate, and nobody
+ * can tell afterwards which write it was.
+ *
+ * WHY IT IS FIXED HERE AND NOT AT THE CALL SITES. 100+ try/catch blocks is a
+ * change nobody can review, and the 101st write would forget it. Worse, a
+ * per-site catch cannot see the failures that a caller ALREADY swallows: a
+ * `.catch(() => {})` two frames up the stack hides the write forever, and there
+ * are plenty of those. Every write in the app goes through this object, so this
+ * is the one place that sees all of them and the only place that cannot be
+ * bypassed. The rejection is still RE-THROWN, unchanged: callers keep their
+ * existing control flow, the reward code after the failed write still does not
+ * run, and the app still does not pretend the write landed. The only thing
+ * added is that the failure is now announced, once, to someone who can speak.
+ *
+ * LOUD vs QUIET. Some writes are fire-and-forget by design, and interrupting the
+ * player for those would be worse than silence. The line drawn here:
+ *
+ *   LOUD (default)  the write is the durable record of something the player did
+ *                   or earned and can NAME afterwards: a meal, a weight, a step
+ *                   row, an XP award, a crate/pet/gear/weapon row, coins, dust,
+ *                   talents, the garden, the pantry, their equipped look. If one
+ *                   of these does not land, the player has lost something and is
+ *                   entitled to know why.
+ *   QUIET           ambient bookkeeping the app re-derives, re-asks or simply
+ *                   repeats next launch: "have I shown this popup", "when did I
+ *                   last sync", the telemetry queue, a cached last position, a
+ *                   one-shot migration marker. Losing one costs the player
+ *                   nothing they could name; a toast about it would be noise
+ *                   they cannot act on, arriving in the middle of something else.
+ *
+ * The QUIET list is EXPLICIT and the default is LOUD, deliberately (anti-
+ * regression rule 8: never default to hidden). A new key nobody classified
+ * degrades to a toast that is arguably unnecessary, never to a reward that
+ * vanishes in silence. Adding a key here is a decision on the record.
+ *
+ * Store alone was not a usable axis: `kv` carries both `coins` and
+ * `discordIntroSeen`. Key is.
+ */
+const QUIET_KV = new Set([
+  // telemetry and identity plumbing
+  'evq', 'analyticsId', 'recoveryId', 'recoverySetAt',
+  // "have I already shown this" one-shots for intros, tours and announcements
+  'spiresIntroSeen', 'bossesIntroSeen', 'mageIntroSeen', 'raceIntroSeen', 'raceResultSeen',
+  'gardenIntroSeen', 'discordIntroSeen', 'discordIntroShown', 'discordJoined',
+  'betaThanksSeen', 'cosmeticTeaserSeen', 'changelogSeen', 'grantsSeen', 'seenUnlocks',
+  'hlwSeen', 'siegeSeen', 'map-seen', 'mapLpHint', 'namePrompted', 'notifAsked',
+  'surveyDone', 'surveySnoozeAt', 'renameRequired', 'petSeenLevel',
+  // "when did I last do X" throttles: a lost timestamp costs one extra attempt
+  'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
+  'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
+  // idempotent one-shot migrations and backfills: they re-run next launch
+  'game-init', 'loot-init', 'bootRestored', 'dayOneEquipFix', 'denceil-backfill',
+  'seedpouch-backfill', 'freeze-refunded', 'wheelResetOnce_v61', 'petLvlV', 'hkScopesV',
+  // diagnostics and caches the app recomputes
+  'vaultConflict', 'vaultUnreadable', 'lastLoc', 'knownIncoming', 'cloudOff', 'apiBase',
+]);
+/* Two families are minted per week / per drop, so they cannot be listed by name.
+   Both are pure "have I shown this yet" markers, same class as the set above. */
+const QUIET_KV_PREFIX = ['dropSeen.', 'raceResult:', 'raceResultShown:'];
+
+export function writeIsQuiet(store, val) {
+  if (store !== 'kv') return false;
+  const k = val && typeof val === 'object' ? val.k : val;
+  if (typeof k !== 'string') return false;
+  return QUIET_KV.has(k) || QUIET_KV_PREFIX.some(p => k.startsWith(p));
+}
+
+/* The sink is registered ONCE, by js/app.js, because js/app.js owns the toast
+   and the analytics client and this file must not import either (db.js is
+   imported by analytics.js, so a reverse import would be a cycle). */
+let writeFailureSink = null;
+export function onWriteFailure(fn) { writeFailureSink = typeof fn === 'function' ? fn : null; }
+
+function keyOf(store, val) {
+  if (val == null || typeof val !== 'object') return val == null ? null : String(val);
+  if (store === 'kv') return val.k;
+  return val.id ?? val.key ?? val.date ?? null;
+}
+
+function reportWriteFailure(store, val, err) {
+  const key = keyOf(store, val);
+  const quiet = writeIsQuiet(store, val);
+  const quota = /quota|QuotaExceeded/i.test(`${(err && err.name) || ''} ${(err && err.message) || ''}`);
+  /* Tag the error itself as well as calling the sink. Anything that catches this
+     downstream, including analytics' unhandledrejection handler, can now say
+     WHICH write died instead of filing an anonymous row. */
+  try { if (err && typeof err === 'object') err.tallyWrite = { store, key, quiet, quota }; } catch { /* frozen error */ }
+  /* THE ONE STORE THAT CANNOT BE REPORTED. The sink queues telemetry, and
+     telemetry is queued by writing kv 'evq'. Reporting a failed 'evq' write
+     would queue an event, which writes 'evq', which fails, forever. */
+  if (store === 'kv' && key === 'evq') return;
+  if (!writeFailureSink) return;
+  try { writeFailureSink({ store, key, quiet, quota, error: err }); }
+  catch { /* a broken reporter must never break the write path */ }
+}
+
+/* Rejections are re-thrown so every existing caller behaves exactly as before. */
+function write(store, val, run) {
+  return run().catch(err => { reportWriteFailure(store, val, err); throw err; });
+}
+
 export const db = {
-  put: (store, val) => tx(store, 'readwrite', s => s.put(val)),
-  del: (store, key) => tx(store, 'readwrite', s => s.delete(key)),
+  put: (store, val) => write(store, val, () => tx(store, 'readwrite', s => s.put(val))),
+  del: (store, key) => write(store, key, () => tx(store, 'readwrite', s => s.delete(key))),
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
-  clear: (store) => tx(store, 'readwrite', s => s.clear()),
+  clear: (store) => write(store, null, () => tx(store, 'readwrite', s => s.clear())),
   all: (store) => tx(store, 'readonly', s => s.getAll()),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');

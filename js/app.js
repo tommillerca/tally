@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, onWriteFailure } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -2269,6 +2269,61 @@ function nextToast() {
     if (reducedMotion) done(); else setTimeout(done, 180);
   }, job.ms);
 }
+
+/* ============ THE ONE PLACE A FAILED WRITE REACHES THE PLAYER ============
+ *
+ * js/db.js reports every rejected write here (see the long note above `db`
+ * there for why the seam is at the DB layer and how LOUD vs QUIET is decided).
+ * It still re-throws, so nothing about anyone's control flow changed: this
+ * handler only gives the failure a voice and a name.
+ *
+ * Registered at MODULE level, not inside boot(). Boot itself writes before it
+ * finishes (day rollover, backfills, autoSync), and a handler installed at the
+ * end of boot would be deaf for exactly the stretch where a returning player on
+ * a full phone is most likely to lose something.
+ *
+ * THROTTLED, because a full disk fails EVERY write at once. The failure that
+ * matters is one message the player can act on; forty of them stacked up is the
+ * same information delivered as an unusable wall, and js/app.js's toast queue
+ * caps at 4 anyway so the extras would just evict each other. One toast, then
+ * silence for WRITE_TOAST_GAP_MS. Telemetry is NOT throttled the same way: it
+ * records one named event per distinct store+key so the diagnosis survives.
+ *
+ * QUIET writes never toast. They are counted and the first of each is reported,
+ * so a device drowning in failed bookkeeping writes is still visible to us
+ * without the player being interrupted about a popup-seen flag.
+ */
+const WRITE_TOAST_GAP_MS = 12000;
+let lastWriteToastAt = 0;
+const writeFailSeen = new Set();
+export const writeFailures = { loud: 0, quiet: 0, lastKey: null };  // read by tests/write-failure-visible-audit.mjs
+/* A call site that ALREADY tells the player about its own failure, in words
+   specific to what it was doing, claims the next failure on that store so the
+   player does not get the same news twice in two voices. Exactly one such call
+   site exists today: the meal log, whose message names the Add button. One-shot
+   and cleared whichever way the write goes. */
+let writeToastOwner = null;
+function ownWriteFailure(store) { writeToastOwner = store; }
+function releaseWriteFailure() { writeToastOwner = null; }
+onWriteFailure(({ store, key, quiet, quota }) => {
+  const tag = `${store}:${key == null ? '?' : String(key).slice(0, 48)}`;
+  writeFailures[quiet ? 'quiet' : 'loud']++;
+  writeFailures.lastKey = tag;
+  if (!writeFailSeen.has(tag)) {
+    writeFailSeen.add(tag);
+    trackEvent('write_failed', { store, key: String(key ?? '').slice(0, 48), quiet: quiet ? 1 : 0, quota: quota ? 1 : 0 });
+  }
+  if (writeToastOwner === store) { writeToastOwner = null; return; }
+  if (quiet) return;
+  const now = Date.now();
+  if (now - lastWriteToastAt < WRITE_TOAST_GAP_MS) return;
+  lastWriteToastAt = now;
+  /* Same voice Tom chose for the meal path: name the cause, name the action.
+     "Free up some space" is the only thing the player can actually do. */
+  toast(quota
+    ? 'That did not save: this device is out of storage. Free up some space, then try again.'
+    : 'That did not save. Check your device storage, then try again.', 5200);
+});
 
 const sheetStack = [];
 function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
@@ -5484,9 +5539,14 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
        screen so the user knows whats happening and that they have to make room
        on the storage of their device". So the sheet STAYS OPEN with the portion
        still selected and the button live, because a player who has just been
-       told to free up space needs somewhere to land when they come back. */
+       told to free up space needs somewhere to land when they come back.
+       ownWriteFailure('log') claims this failure from the app-wide handler
+       registered next to toast(), so the player hears the message that names
+       the Add button rather than that one AND the generic one. */
+    ownWriteFailure('log');
     try {
       await db.put('log', e);
+      releaseWriteFailure();
     } catch (err) {
       btn.disabled = false;
       const full = err && /quota/i.test(err.name + ' ' + err.message);
@@ -13035,7 +13095,39 @@ async function renderBoneyard(el) {
   const stopOrient = () => removeEventListener('deviceorientation', onOrient);
   huntStopOrient = stopOrient;
 
+  /* THE MAP CAN DIE UNDER startMap's FEET, AND startMap KEPT WALKING.
+   *
+   * MapLibre fires `error` before `load` whenever the tile host is unreachable,
+   * and the handler below replaces ALL of #mapBody with the polite "needs a
+   * network signal" message plus a Retry button. That wipe removes #mapCanvas,
+   * #mapStage, #mapDen, #mapSpire and every other element the rest of this
+   * function reaches for. startMap is async, so the wipe lands during one of its
+   * awaits and execution resumes on a body that no longer contains any of them:
+   * `$('#mapCanvas', body).addEventListener(...)` is a TypeError on null. So a
+   * player who opened the Boneyard with no signal got the polite message AND an
+   * uncaught crash, which is also how the rest of the setup (markers, buttons,
+   * the geolocation watch) silently never ran.
+   *
+   * The fix is an ABORT, not seven null guards. There were never two unguarded
+   * dereferences here, there were NINE on the same straight-line path
+   * (#mapCanvas, #mapStage, #mapDen, #mapSecret, #mapMini, #mapSpire,
+   * #mapGlutton, #mapCollect, plus three more uses of the #mapCanvas handle);
+   * only the first one is visible because it throws and takes the other eight
+   * with it. Null-guarding them one at a time would let startMap run to
+   * completion against a dead screen, wiring listeners to nothing and starting
+   * a GPS watch and two intervals for a map that is not there.
+   *
+   * `mapAborted` is set by whatever performs the wipe (the wipe owns declaring
+   * it, so a future wipe site cannot forget), and checked at every point where
+   * startMap resumes from an await. Straight-line code between two awaits cannot
+   * be interrupted, so those three checks cover every resumption point. Retry
+   * re-enters startMap, which starts with a fresh `mapAborted` of its own.
+   *
+   * The dereferences themselves are ALSO optional-chained, as a backstop: if a
+   * future edit adds a fourth await without a check, the screen degrades to the
+   * offline message with dead buttons rather than to a page error. */
   async function startMap() {
+    let mapAborted = false;
     stopHuntWatch();
     if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
@@ -13159,6 +13251,7 @@ async function renderBoneyard(el) {
     try {
       map = createBoneyardMap(maplibregl, $('#mapCanvas', body), { lat, lng });
     } catch (e) {
+      mapAborted = true;
       body.innerHTML = `<p class="warn" style="margin:16px">The map renderer could not start on this device.</p>`;
       return;
     }
@@ -13180,6 +13273,9 @@ async function renderBoneyard(el) {
     cleanupExtras = () => { prevCleanupRO(); try { ro.disconnect(); } catch { /* noop */ } };
     map.once('error', e => {
       if (!loaded) {
+        // THE WIPE OWNS THE ABORT: everything the rest of startMap reaches for
+        // lives inside this innerHTML and is about to stop existing.
+        mapAborted = true;
         body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
         $('#mapRetry', body)?.addEventListener('click', startMap);
       }
@@ -13293,13 +13389,14 @@ async function renderBoneyard(el) {
     };
     map.on('moveend', rerunPlacement);
     map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
-    $('#mapRecenter', body).addEventListener('click', () => {
-      follow = true; $('#mapRecenter', body).hidden = true;
+    $('#mapRecenter', body)?.addEventListener('click', () => {
+      follow = true; const rc = $('#mapRecenter', body); if (rc) rc.hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
     });
 
     // player marker: mini bonehead + facing cone + the collect-radius ring
     const mapShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
+    if (mapAborted) return;   // RESUMPTION POINT 1: the tile host died during that await
     const youEl = document.createElement('div');
     youEl.className = 'map-you';
     youEl.innerHTML = `<div class="map-radius" hidden><b>${COLLECT_RADIUS_M} M</b></div><div class="map-cone" hidden></div><div class="map-you-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], shinyPetId: mapShiny })}</div>`;
@@ -13332,6 +13429,7 @@ async function renderBoneyard(el) {
     const date = dateKey();
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
+    if (mapAborted) return;   // RESUMPTION POINT 2
     const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
@@ -13456,7 +13554,7 @@ async function renderBoneyard(el) {
       return { label: 'Map marker', lat: null, lng: null };
     }
     const mapEl = $('#mapCanvas', body);
-    mapEl.addEventListener('pointerdown', ev => {
+    mapEl?.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
       // one long-press at a time: ignore secondary touch points (multi-touch),
       // a press already being tracked, or any press while a report sheet is open.
@@ -13475,11 +13573,11 @@ async function renderBoneyard(el) {
         if (pt) { reportOpen = true; openReportSheet('den-nominate', { label: null, lat: pt.lat, lng: pt.lng }); }
       }, LP_MS);
     });
-    mapEl.addEventListener('pointermove', ev => {
+    mapEl?.addEventListener('pointermove', ev => {
       if (!lpStart || (lpPointer != null && ev.pointerId !== lpPointer)) return;
       if (Math.abs(ev.clientX - lpStart.x) > LP_MOVE || Math.abs(ev.clientY - lpStart.y) > LP_MOVE) lpClear();
     });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => mapEl.addEventListener(t, ev => {
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => mapEl?.addEventListener(t, ev => {
       if (lpPointer != null && ev.pointerId !== lpPointer) return;
       lpClear();
     }));
@@ -13488,7 +13586,7 @@ async function renderBoneyard(el) {
     // Short tap = inspect; the 750ms hold above still opens the report sheet.
     const poiTip = document.createElement('div');
     poiTip.className = 'map-poi-tip'; poiTip.hidden = true;
-    $('#mapStage', body).appendChild(poiTip);
+    $('#mapStage', body)?.appendChild(poiTip);
     const hidePoiTip = () => { poiTip.hidden = true; };
     function markerInfo(el) {
       for (const r of denMarkers.values()) if (r.el === el) { const d = r.den; return { name: d.name || 'Boss den', reward: d.roaming ? 'A daily boss: rare gear and coins' : 'A boss fight: rare gear and coins', distM: d.dist }; }
@@ -13511,7 +13609,7 @@ async function renderBoneyard(el) {
       if (top < 8) top = (m.bottom - stage.top) + 10;
       poiTip.style.left = left + 'px'; poiTip.style.top = top + 'px';
     }
-    mapEl.addEventListener('click', ev => {
+    mapEl?.addEventListener('click', ev => {
       if (reportOpen) return;
       const el = ev.target && ev.target.closest && ev.target.closest('.map-den-mark, .map-mini-mark, .map-spawn, .map-spire');
       if (el) {
@@ -13736,6 +13834,7 @@ async function renderBoneyard(el) {
       catch { myName = null; }
     };
     await loadMyName();
+    if (mapAborted) return;   // RESUMPTION POINT 3
     let spireFetchedAt = 0, spireFetchKey = '', spireFetching = false;
     const SPIRE_POLL_MS = 60000;
     async function refreshSpires({ force = false } = {}) {
@@ -14049,7 +14148,7 @@ async function renderBoneyard(el) {
     // a moving vehicle. Returns true (and nags) when you're going too fast.
     const tooFastToAct = () => { if (youSpeed > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
 
-    $('#mapDen', body).addEventListener('click', async () => {
+    $('#mapDen', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
@@ -14072,7 +14171,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapSecret', body).addEventListener('click', async () => {
+    $('#mapSecret', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const key = $('#mapSecret', body).dataset.secretKey;
       const s = secretsNear(scoutLat, scoutLng).find(x => x.key === key);
@@ -14084,7 +14183,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapMini', body).addEventListener('click', async () => {
+    $('#mapMini', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapMini', body).dataset.miniId;
       const rec = miniMarkers.get(id);
@@ -14100,7 +14199,7 @@ async function renderBoneyard(el) {
 
     // One button, three jobs, because a spire only ever wants one thing from you:
     // take it, collect from it, or keep it alive.
-    $('#mapSpire', body).addEventListener('click', async () => {
+    $('#mapSpire', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       if (!spireInRange) return;
       const { s, view, rival, siege } = spireInRange;
@@ -14133,7 +14232,7 @@ async function renderBoneyard(el) {
       await refreshSpires();
     });
 
-    $('#mapGlutton', body).addEventListener('click', () => {
+    $('#mapGlutton', body)?.addEventListener('click', () => {
       if (tooFastToAct()) return;
       // `gluttonBeaten` never existed: this threw ReferenceError on EVERY tap, so
       // Face The Glutton has never once opened. Beaten/out-of-window is already
@@ -14142,7 +14241,7 @@ async function renderBoneyard(el) {
       openGluttonSheet();
     });
 
-    $('#mapCollect', body).addEventListener('click', async () => {
+    $('#mapCollect', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
