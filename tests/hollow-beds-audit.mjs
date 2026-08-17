@@ -267,7 +267,31 @@ const dropRender = await page.evaluate(() => {
     /* ONE LINE. The caller's anchor is a zero-width absolutely positioned
        wrapper, so a chip with no nowrap gets min-content and "1h 30m" arrives
        stacked. Measured, not assumed: two lines is roughly double the height. */
-    lines: chips.map(c => ({ text: c.textContent.trim(), rects: c.getClientRects().length, h: +c.getBoundingClientRect().height.toFixed(1), w: +c.getBoundingClientRect().width.toFixed(1) })),
+    /* WRAPPING IS COUNTED, NOT INFERRED FROM HEIGHT. This used to be `h > 26`,
+       a proxy for "roughly double a line", and a proxy that the chip's own
+       styling can move without anything wrapping: giving the chip a 2px keyline
+       took it from 22.2 to 26.2px and turned all three rows red on text that is
+       still one line. A Range over the chip's contents yields ONE CLIENT RECT
+       PER LINE BOX, so distinct tops IS the number of lines, whatever the
+       padding and border happen to be. */
+    lines: chips.map(c => {
+      const r = document.createRange(); r.selectNodeContents(c);
+      /* CLUSTER BY VERTICAL OVERLAP, not by an identical top. The thirst chip
+         holds an inline droplet AND text: the droplet is 9px and the text is
+         about 15, both centred on one line, so their tops differ by a few px and
+         counting distinct tops called a single line two. Rects on the same line
+         OVERLAP vertically; rects on different lines do not. */
+      const rects = [...r.getClientRects()].filter(x => x.height > 0.5)
+        .map(x => ({ t: x.top, b: x.bottom })).sort((a, b) => a.t - b.t);
+      let lines = 0, cur = null;
+      for (const x of rects) {
+        const overlap = cur ? Math.min(cur.b, x.b) - Math.max(cur.t, x.t) : -1;
+        if (cur && overlap > Math.min(cur.b - cur.t, x.b - x.t) * 0.5) { cur.t = Math.min(cur.t, x.t); cur.b = Math.max(cur.b, x.b); }
+        else { cur = { ...x }; lines++; }
+      }
+      return { text: c.textContent.trim(), lineTops: lines,
+        h: +c.getBoundingClientRect().height.toFixed(1), w: +c.getBoundingClientRect().width.toFixed(1) };
+    }),
     dropClip: (() => {
       const s = document.querySelector('#hbRig .hlw-chip.thirst svg');
       if (!s) return null;
@@ -284,7 +308,8 @@ note(dropRender.withSvg === 1, `DROPLET expected exactly 1 chip carrying one, go
 note(dropRender.dropClip?.inChip, 'DROPLET is not inside its chip');
 note(dropRender.lines.length >= 2, `EMPTY SAMPLE: ${dropRender.lines.length} chips measured for wrapping`);
 for (const l of dropRender.lines) {
-  if (l.h > 26) fail.push(`CHIP "${l.text}" is ${l.h}px tall, so it wrapped onto more than one line`);
+  if (l.lineTops > 1) fail.push(`CHIP "${l.text}" renders on ${l.lineTops} line boxes, so it wrapped (box is ${l.w}x${l.h})`);
+  if (l.lineTops === 0) fail.push(`EMPTY SAMPLE: CHIP "${l.text}" produced no line box to measure`);
   if (l.w < 24) fail.push(`CHIP "${l.text}" is only ${l.w}px wide`);
 }
 // and it has to be VISIBLE, not just present: ink pixels against the lime chip

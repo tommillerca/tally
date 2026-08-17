@@ -7799,7 +7799,14 @@ body::before {
    grass field a 60% dark fill blends toward the grass and the label loses its
    plate. Measured on the day tile (median rgb 38,147,35) a .6 chip reads about
    2.5:1 against the grass, a .82 chip reads 4.6:1. */
-.hlw-chip{position:absolute;display:inline-flex;align-items:center;gap:4px;background:rgba(13,12,18,.82);border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:12px;letter-spacing:.06em;color:#f2e9d7;pointer-events:none;z-index:5;transform:translateX(-50%)}
+/* A SMALL BOARD, NOT AN iOS PILL. border-radius:999px is the single least
+   Stardew shape there is: its UI is 9-sliced panels with square corners and a
+   dark keyline, and a fully round capsule reads as app chrome dropped onto a
+   game. 4px is two art pixels at 2x, which is a chamfer rather than a curve, and
+   the keyline is a real 2px border with a HARD offset shadow so nothing on this
+   screen carries a blur. The font stays Bangers: it is the brand's display face
+   and swapping it for a pixel face is Tom's call, not a CSS tidy-up. */
+.hlw-chip{position:absolute;display:inline-flex;align-items:center;gap:4px;background:rgba(13,12,18,.82);border:2px solid #17151d;border-radius:4px;box-shadow:3px 3px 0 rgba(0,0,0,.45);padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:12px;letter-spacing:.06em;color:#f2e9d7;pointer-events:none;z-index:5;transform:translateX(-50%)}
 /* The screen's ONE accent moment, spent on the only bed that wants something.
    Every growing bed used to wear the same droplet, so the droplet meant nothing. */
 /* -7px off the bed's centre line: at 3 beds owned the price sign hangs in the
@@ -7827,7 +7834,7 @@ body::before {
    object per bed state.
    It keeps the lime as an outline so it still reads as guidance, and gives the
    fill back to READY, which is the only thing on this screen that pays out. */
-.hlw-freelabel{background:rgba(13,12,18,.82);color:var(--accent);border:1.5px solid var(--accent);border-radius:999px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:11px;letter-spacing:.06em;white-space:nowrap;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
+.hlw-freelabel{background:rgba(13,12,18,.82);color:var(--accent);border:2px solid var(--accent);border-radius:4px;padding:3px 9px;font-family:var(--display),Bangers,sans-serif;font-size:11px;letter-spacing:.06em;white-space:nowrap;box-shadow:3px 3px 0 rgba(0,0,0,.35)}
 .hlw-bar{margin:0 2px 8px;padding:9px 12px;border-radius:12px;background:#1d1b22;border:2px solid var(--accent);color:var(--accent);font-family:var(--display),Bangers,sans-serif;font-size:14px;letter-spacing:.05em;text-align:center}
 /* READY carries the lime now. It is the payoff, and it was the least visible
    thing on the screen: 175 css px of fruit at 1.81:1 while the optional watering
@@ -7849,7 +7856,7 @@ body::before {
    A hard 2px dark ring gives it back an edge of its own (the ring reads 4.55:1
    against the grass) without touching the hue. No blur: this is a pixel scene
    and a soft shadow is the wrong idiom, 2px is one art pixel at 2x. */
-.hlw-chip.ready{background:var(--accent);color:#17151d;margin-left:-7px;box-shadow:0 0 0 2px #17151d}
+.hlw-chip.ready{background:var(--accent);color:#17151d;margin-left:-7px}
 /* Thirst keeps the droplet and drops to the muted ground. Still the only chip
    with a droplet, so it is still unambiguous, just no longer the loudest thing. */
 .hlw-chip.thirst{background:rgba(13,12,18,.86);color:#9fd0e8;margin-left:-7px}
@@ -7864,7 +7871,7 @@ body::before {
   position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%);
   max-width: 210px; width: max-content; z-index: 6; pointer-events: none;
   background: var(--bone-hi, #f2e9d7); color: var(--ink, #17151d);
-  border: 2px solid var(--ink, #17151d); border-radius: 13px;
+  border: 2px solid var(--ink, #17151d); border-radius: 6px;   /* three art pixels at 2x, a chamfer rather than a curve */
   box-shadow: 3px 4px 0 rgba(0, 0, 0, .45);
   /* BANGERS, because this pill IS the designer's coach mark. Tom, 2026-08-16:
      "the font for the bonehead speech bubble isnt the right one?" It was not.
