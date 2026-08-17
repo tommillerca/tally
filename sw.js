@@ -56,6 +56,10 @@ const PRECACHE = [
   './assets/crates/common/f6.png',
   './assets/crates/common/f7.png',
   './assets/crates/common/f8.png',
+  /* the Golden crate's three authored bone-chest states, same reason */
+  './assets/crates/golden/f0.png',
+  './assets/crates/golden/f1.png',
+  './assets/crates/golden/f2.png',
   './assets/brand/logo.png',
   './assets/brand/tombstone.png',
   './assets/brand/sword.png',

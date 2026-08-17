@@ -7981,6 +7981,8 @@ body::before {
    path hands out, but 148 is not a multiple of 48 and pixel art resampled off
    its grid turns to mush. image-rendering: pixelated keeps the edges hard at
    whatever the device pixel ratio does on top. */
+/* the backpack / shop / reveal-card chest icons: hard pixels, never smoothed */
+.crate-ico-pix { display: block; image-rendering: pixelated; }
 .co-seq { position: relative; display: block; width: 144px; height: 144px; margin: 0 auto; }
 .co-seq img {
   position: absolute; inset: 0; width: 144px; height: 144px;
