@@ -10960,6 +10960,26 @@ function crateSeqHtml() {
  * starts on an undecoded frame paints nothing, and the whole run fits inside the
  * gap between the lid going and the card rising, so there is no slack to lose.
  */
+/* HOW LONG EACH FRAME HOLDS, in ms, f0 through f7. f8 is the last pose and holds
+   until the card takes the screen.
+ *
+ * READ OFF THE ART, not spread evenly. The nine frames are four beats, and
+ * measuring how much of the drawing changes between them says so:
+ *   f0 f1   the ghost presses at a shut lid          10.7% changed
+ *   f2 f3   the lid cracks and the head comes out    44.7% and 41.6%
+ *   f4 f5   the body is out, arms opening            37.5% and 26.2%
+ *   f6 f7   the spread settling                      13.3% and 29.3%
+ * Even spacing gave a 45% change and a 13% change the same 32.5ms, so the crack
+ * had no snap and the settle had no ease. Anticipation holds, the crack goes
+ * fast, and the tail gets progressively longer so it reads as coming to rest. */
+/* FRAME-ALIGNED. A 60Hz display cannot hold a frame for 38ms: it holds it for 2
+   frames (33.3) or 3 (50). Measured on the first pass, a table of 45/38/38/42
+   came back as 33/49/34/33, which is the display quantising values that were
+   never reachable. These are 4,3,2,2,2,3,4,4 frames at 60Hz, so the intent and
+   what the screen can do are the same number. The driver still works off elapsed
+   time rather than frame counts, so a 120Hz phone lands on them too. */
+const CRATE_SEQ_MS = [67, 50, 33, 33, 33, 50, 67, 67];
+
 function playCrateSeq(reveal, scope, ready, at) {
   const seq = $('#crateSeq', scope);
   if (!seq) return;
@@ -10968,8 +10988,13 @@ function playCrateSeq(reveal, scope, ready, at) {
   const cs = getComputedStyle(reveal);
   const secs = v => (parseFloat(cs.getPropertyValue(v)) || 0) * (cs.getPropertyValue(v).includes('ms') ? 1 : 1000);
   const start = secs('--b-lid');
-  const span = Math.max(240, secs('--b-card') - start);   // finish before the card rises
-  const step = span / (frames.length - 1);
+  /* The table is the authority, but it must still finish before the card rises,
+     so it is SCALED to fit if anyone shortens the window in CSS. Scaling rather
+     than truncating keeps the shape of the timing when the budget changes. */
+  const table = CRATE_SEQ_MS.slice(0, frames.length - 1);
+  const want = table.reduce((a, b) => a + b, 0);
+  const span = Math.max(240, secs('--b-card') - start - 60);
+  const holds = table.map(v => v * (want > span ? span / want : 1));
   /* SNAP THE SPRITE ONTO THE DEVICE GRID BEFORE THE FIRST STEP.
      Every arithmetic argument about the crate's width assumes it is centred
      exactly, and it is not: .sheet.takeover centres with translateX(-50%), which
@@ -11018,13 +11043,26 @@ function playCrateSeq(reveal, scope, ready, at) {
     const dropEl = seq.closest('.co-drop');
     if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });
     at(start, snapToGrid);
-    frames.forEach((im, i) => {
-      if (i === 0) return;
-      at(start + step * i, () => {
+    /* ONE rAF LOOP, not eight setTimeouts. A timer per frame drifts, and a
+       dropped frame on a mid-range phone silently shortens whichever hold it
+       lands in. Reading performance.now() every frame means a slow frame skips
+       ahead instead of desyncing the whole sequence from the CSS beats it has to
+       finish inside. */
+    const cum = []; holds.reduce((a, v, n) => (cum[n] = a + v), 0);
+    let t0 = 0, shown = 0;
+    const tick = now => {
+      if (!t0) t0 = now;
+      const e = now - t0;
+      let want2 = 0;
+      while (want2 < cum.length && e >= cum[want2]) want2++;
+      if (want2 !== shown) {
+        shown = want2;
         for (const f of frames) f.classList.remove('on');
-        im.classList.add('on');
-      });
-    });
+        frames[Math.min(shown, frames.length - 1)].classList.add('on');
+      }
+      if (shown < frames.length - 1) requestAnimationFrame(tick);
+    };
+    at(start, () => requestAnimationFrame(tick));
   });
 }
 
@@ -11182,7 +11220,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const wrap = openSheet(`
       <div class="reveal-take">
         <div class="grainy"></div>
-        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}" id="packReveal">
+        ${/* pix-crate scopes the retimed beats to the crate that has nine authored
+              frames to get through. The vector crates are one icon on a lid arc and
+              their timing is Tom's from 2026-08-08 ("the initial open needs to
+              happen a bit faster"); widening the window for all of them would undo
+              that for four crate types to fix one. */''}
+        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}${crate === 'daily' ? ' pix-crate' : ''}" id="packReveal">
           <div class="pack-head">
             <div class="pack-count" id="packCount"></div>
             ${crate ? '<div class="pack-title">Dug up something good.</div>' : ''}
@@ -11211,6 +11254,11 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       </div>`, { cls: 'takeover', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
     setFxLayer(305);
     const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
+    /* One reader for the CSS beat table, shared by the sequence and the audio. */
+    const beat = v => {
+      const raw = getComputedStyle(reveal).getPropertyValue(v).trim();
+      return (parseFloat(raw) || 0) * (raw.endsWith('ms') ? 1 : 1000);
+    };
     const countEl = $('#packCount', wrap), dotsEl = $('#packDots', wrap), hintEl = $('#packHint', wrap);
     let i = 0;
     const done = () => { history.back(); setTimeout(resolve, 150); };
@@ -11231,7 +11279,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const first = i === 0 && opening;
       // .opening runs the crate beats; .browsing collapses every delay to one
       // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
-      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}`;
+      /* KEEP pix-crate. This line reassigns className wholesale on every card, so
+         the modifier the template put there was wiped the moment the first card
+         painted and the retimed beats never applied: measured, --b-card still
+         resolved to 1.38s with the class reading "pack-reveal opening r-common".
+         It is a property of the CRATE, not of the card being shown. */
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${crate === 'daily' ? ' pix-crate' : ''}`;
       if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
       if (hintEl) hintEl.textContent = i >= cards.length - 1
         ? (crate ? 'Tap to close the crate' : 'Tap to close')
@@ -11277,9 +11330,19 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         // runway it needs and must not hold the sequence up
         hydratePackArt(deck);
         go();
-        at(850, () => { dropSound(S.sounds); haptic.tap(); });    // it lands
-        at(2300, () => sparkleSound(S.sounds));                   // the lid goes
-        at(2750, () => landed(tier));                             // the card is up
+        /* THE SOUNDS READ THE SAME TABLE THE PICTURE DOES.
+           These were hardcoded at 850 / 2300 / 2750, which are the beats from
+           BEFORE 2026-08-08, when the CSS table was halved and the JS was not
+           touched. Measured against the shipped CSS: the lid goes at 1120ms and
+           its sparkle fired at 2300, so the sound arrived 1.2 SECONDS after the
+           thing it is the sound of, and the card-up cue landed 1.37s late. The
+           comment above this block says the timing table lives in one readable
+           place and only audio is scheduled here; that was true and the audio
+           then drifted anyway, because it was still a set of literals. Reading
+           the properties is the only version of that claim that stays true. */
+        at(beat('--b-land'), () => { dropSound(S.sounds); haptic.tap(); });   // it lands
+        at(beat('--b-lid'), () => sparkleSound(S.sounds));                    // the lid goes
+        at(beat('--b-card'), () => landed(tier));                             // the card is up
         if (crate === 'daily') playCrateSeq(reveal, wrap, crateSeqReady, at);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art

@@ -107,7 +107,17 @@ if (seam) {
      crate mid-flight, at device y 470.766, then reported that as a defect.
      Only the sink is rewound after the wait, so the crate is held in the state a
      player looks at while the frames play. */
-  await sleep(1350);
+  /* WAIT FOR THE SEQUENCE TO FINISH, not for a clock. The frames are driven by a
+     rAF loop now, so a fixed sleep can land while the driver is still running and
+     the frame this file forces gets overwritten on the next tick: measured, EXACT
+     fell to 65.67% while PALETTE stayed at 99.56%, which is the signature of
+     comparing against the wrong frame rather than a repainted one. The driver
+     stops once the last frame is up, so that is the safe moment to take over. */
+  await page.waitForFunction(() => {
+    const seq = document.querySelector('#crateSeq');
+    return !!seq && seq.children[seq.children.length - 1].classList.contains('on');
+  }, { polling: 60, timeout: 12000 }).catch(() => {});
+  await sleep(120);
   await page.evaluate(() => {
     for (const a of document.getAnimations()) {
       try {
