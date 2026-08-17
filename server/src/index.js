@@ -122,6 +122,14 @@ async function rateLimitRecovery(request, env, limit = 10, windowMs = 600000, bu
    the rows still leave 59 days earlier than everything else. */
 const EVENT_RETENTION_DAYS = 60;
 const EVENT_RETENTION_OVERRIDE_DAYS = { rl_recovery: 1, rl_ridcheck: 1 };
+/* HOW FAR BACK /stats READS, which is a different question from how far back
+   the table goes. Retention is a storage decision; this is a latency one. See
+   the long note on the /stats route for the measured curve that forced it, and
+   for the list of figures whose meaning changed the day it landed. Lowering it
+   makes the dashboard faster and narrower; raising it costs time superlinearly.
+   It must stay <= EVENT_RETENTION_DAYS, or the route would claim a window the
+   pruner has already emptied. */
+const STATS_WINDOW_DAYS = 14;
 
 /* BATCHING. D1 has a 30 second query timeout and a SINGLE writer. An unbounded
    DELETE against tens of millions of rows either times out, or does not and
@@ -200,6 +208,126 @@ async function pruneEvents(env, now = Date.now(), opts = {}) {
     cutoffDay: new Date(now - EVENT_RETENTION_DAYS * 86400000).toISOString().slice(0, 10),
     stopped,                       // null = it finished; otherwise the bound that hit
     more: stopped !== null,        // true = there is still a backlog for the next tick
+    ms: Date.now() - started,
+  };
+}
+
+/* ---------------- grants retention ----------------
+   grants was the second table nothing ever deleted from, and at 531 MB for
+   1.95M rows on the 10,000 player fixture it is the largest non-events table.
+   It is NOT the same job as pruning telemetry: a grant is the DELIVERY RECORD
+   for a gift, a welcome kit, a step-race payout or an admin make-good, and
+   deleting the wrong row silently eats somebody's present. So this deletes only
+   what the code can prove is safe, and the proof is in three parts.
+
+   1. HOW THE CLIENT CONSUMES A GRANT. GET /grants is a cursor read: the client
+      sends `since`, gets `id > since ORDER BY id LIMIT 50`, and js/social.js
+      pullGrants writes its local grantCursor to the last id in the batch ONLY
+      after applying every grant in it. So a request carrying since=N is the
+      client stating that everything with id <= N has landed on the device.
+      Until 2026-08-17 the server threw that statement away, which is the whole
+      reason grants could not be pruned: nothing here could tell a delivered
+      gift from one still waiting. GET /grants now records it in
+      players.grants_ack, and that column is what makes the first rule below
+      provable rather than hopeful.
+
+   2. WHAT DELETING A ROW CAN AND CANNOT CAUSE.
+      RE-DELIVERY is defended twice and neither defence is the row. The server
+      side is UNIQUE (player_id, key) + INSERT OR IGNORE, which only works while
+      the row exists; the client side is award()'s key check in the xp store
+      plus grantsSeen in kv, and both of those live in the save forever. Reading
+      every INSERT INTO grants in this file, no route can regenerate a pruned
+      key by itself either: gift/cheer keys carry the UTC day and are only ever
+      counted for TODAY, spire and siege keys carry a timestamp that does not
+      recur, and social-welcome is written once at /register. The one exception
+      is an admin deliberately reusing a key on /admin/grant, and the client's
+      ledger stops that from paying twice.
+      LOSS is the real risk, and it is one-way. Delete a row the client has not
+      read and that reward never arrives. Everything below exists to make that
+      impossible for anything carrying value.
+
+   3. WHERE THE LINE IS DRAWN.
+      DELETED, because it has provably been delivered: id <= grants_ack, and
+      older than GRANT_RETENTION_DAYS. The age bound is not decoration. A
+      restore from cloud backup rolls the client's cursor BACKWARDS, because
+      grantCursor lives in kv and kv is inside the encrypted blob; js/social.js
+      autoSync pushes that blob on a 10 minute throttle and pulls grants after
+      it, so the backup can trail the ack by one sync cycle. 90 days is that
+      cycle with three months of margin: a device whose ack has not moved in 90
+      days has also not pushed a backup in 90 days, so its restore point is
+      older than anything being deleted here either way.
+      DELETED, because it can never carry value: type 'cheer', past the same age
+      bound, acknowledged or not. /cheer builds its payload from
+      { from, cheer, cheerFrom, note } and nothing else, so there is no coins,
+      xp, dust, crate, gearId, egg or consumable field for applyPayload to act
+      on; js/app.js presents it as a stacked toast and a Deliveries line. A
+      three month old "somebody cheered you" is not news, and it is also the
+      highest-volume producer in the table at 10 per friend per day.
+      NEVER DELETED, at any age, acknowledged or not: the stepweek- keys.
+      /steps/settled reads those rows back as the RECEIPT for a race that has
+      already paid out, for any week ever asked for, and the comment on that
+      route explains at length why the live board cannot answer the same
+      question. They are also what /steps/week checks to decide a week is
+      already settled. There are five a week, which is 260 rows a year, so
+      keeping them forever costs nothing worth having.
+      NEVER DELETED, and this one is an admission rather than a policy: a
+      value-bearing grant for a player who has never acknowledged it. A dormant
+      account whose friends keep sending gifts accumulates rows that no rule
+      here can touch, because the only safe signal is the one the client has not
+      sent. That tail is unbounded. Capping it needs a product decision about
+      how long an unopened gift waits, which is Tom's to make, not this file's. */
+const GRANT_RETENTION_DAYS = 90;
+/* The stepweek- receipts, as a key RANGE rather than a LIKE. Player ids contain
+   '_', which is a LIKE wildcard, and /gift already learned that lesson; a range
+   is also the form the planner can drive an index with. '.' is the next
+   character after '-' that can start a key, so [stepweek-, stepweek.) is exactly
+   the set of keys beginning "stepweek-". */
+const STEPWEEK_LO = 'stepweek-';
+const STEPWEEK_HI = 'stepweek.';
+
+/** Delete grants that have provably been delivered, or that can never carry
+ *  value, in bounded batches. Same contract as pruneEvents: no cursor, every
+ *  statement independently correct, safe to interrupt and resume. */
+async function pruneGrants(env, now = Date.now(), opts = {}) {
+  const batch = Math.max(1, Math.min(5000, Number(opts.batch) || PRUNE_BATCH));
+  const maxRows = Math.max(0, opts.maxRows === undefined ? PRUNE_MAX_ROWS : Number(opts.maxRows));
+  const budgetMs = Math.max(100, opts.budgetMs === undefined ? PRUNE_BUDGET_MS : Number(opts.budgetMs));
+  const started = Date.now();
+  const days = Math.max(0, opts.retentionDays === undefined ? GRANT_RETENTION_DAYS : Number(opts.retentionDays));
+  const cutoffTs = now - days * 86400000;
+  let total = 0, stopped = null;
+
+  /* ONE statement, not two passes, because both rules share the same age bound
+     and the same never-delete carve-out, and one predicate means one walk of
+     idx_grants_ts instead of two. The index is what keeps this honest: without
+     it the planner falls back to a MULTI-INDEX OR over idx_grants_key plus a
+     temp b-tree for the ORDER BY, and a 1,000 row batch measured 382 ms against
+     400,000 rows instead of 13.6 ms. ORDER BY g.ts is not cosmetic either: it
+     is what makes a batch stop at the oldest rows and return, rather than
+     walking the whole table to find its LIMIT. */
+  for (;;) {
+    if (total >= maxRows) { stopped = 'maxRows'; break; }
+    if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
+    const n = Math.min(batch, maxRows - total);
+    const r = await env.DB.prepare(
+      `DELETE FROM grants WHERE id IN (
+         SELECT g.id FROM grants g LEFT JOIN players p ON p.id = g.player_id
+          WHERE g.ts < ?
+            AND (g.key < ? OR g.key >= ?)
+            AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer')
+          ORDER BY g.ts LIMIT ?)`)
+      .bind(cutoffTs, STEPWEEK_LO, STEPWEEK_HI, n).run();
+    const c = Number(r?.meta?.changes || 0);
+    total += c;
+    if (c < n) break;   // caught up
+  }
+
+  return {
+    total,
+    retentionDays: days,
+    cutoffTs,
+    stopped,
+    more: stopped !== null,
     ms: Date.now() - started,
   };
 }
@@ -315,8 +443,17 @@ export default {
      had nothing to do, right up until the 10 GB cap arrives. */
   async scheduled(event, env) {
     try {
-      const r = await pruneEvents(env, Date.now());
-      console.log('prune', JSON.stringify({ cron: (event && event.cron) || null, ...r }));
+      const now = Date.now();
+      const r = await pruneEvents(env, now);
+      /* Grants second, and with whatever wall clock the events pass left. Events
+         are the table with the 10 GB deadline and they are also the only one
+         whose backlog can arrive in a burst, so they get the budget first; the
+         grants pruner is cursorless and resumes on the next tick, so being cut
+         short costs it nothing. Both are awaited and neither is swallowed: a
+         pruner that silently stops is indistinguishable from one with nothing
+         to do, right up until the cap arrives. */
+      const g = await pruneGrants(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms) });
+      console.log('prune', JSON.stringify({ cron: (event && event.cron) || null, ...r, grants: g }));
     } catch (e) {
       console.error('prune failed', (e && e.stack) || e);
       throw e;
@@ -506,8 +643,32 @@ export default {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
         const since = Number(url.searchParams.get('since') || 0);
-        const rows = await env.DB.prepare('SELECT id, key, type, payload, ts FROM grants WHERE player_id = ? AND id > ? ORDER BY id LIMIT 50')
-          .bind(auth.playerId, since).all();
+        /* RECORD THE READ WATERMARK. `since` is the client's grantCursor, and
+           js/social.js pullGrants only advances it after applying the whole
+           batch, so this request is the device stating that everything at or
+           below `since` has landed. Nothing on the server used to keep that,
+           which is why grants could never be pruned. See pruneGrants above.
+
+           Batched with the read so it costs one D1 round trip rather than two,
+           and written under three guards:
+             - `COALESCE(grants_ack,0) < ?` so the common case (a client with
+               nothing new to fetch re-sending the same cursor) changes no rows
+               and the single writer is not touched at all.
+             - MIN(?, the player's own highest grant id) so a client that sends
+               a wildly future `since` cannot mark grants it has never been
+               shown as acknowledged. Only its own account is reachable either
+               way, but a self-inflicted hole is still a hole.
+             - the ack is only ever raised, never lowered, so a restore that
+               rolls the client's cursor backwards re-delivers whatever survives
+               instead of un-acknowledging what is already gone. */
+        const ackSql = `MIN(?, COALESCE((SELECT MAX(id) FROM grants WHERE player_id = players.id), 0))`;
+        const [, rows] = await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE players SET grants_ack = ${ackSql}
+              WHERE id = ? AND COALESCE(grants_ack, 0) < ${ackSql}`).bind(since, auth.playerId, since),
+          env.DB.prepare('SELECT id, key, type, payload, ts FROM grants WHERE player_id = ? AND id > ? ORDER BY id LIMIT 50')
+            .bind(auth.playerId, since),
+        ]);
         const grants = (rows.results || []).map(r => ({ id: r.id, key: r.key, type: r.type, payload: JSON.parse(r.payload), ts: r.ts }));
         return json({ grants, cursor: grants.length ? grants[grants.length - 1].id : since });
       }
@@ -1150,39 +1311,85 @@ export default {
 
       /* Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
        *
-       * WINDOW-LIMITED SINCE THE RETENTION PRUNE. Everything below that reads
-       * `events` now describes the last EVENT_RETENTION_DAYS days and nothing
-       * before that, because the cron deletes older rows. Calling any of it
-       * "total" or "all time" would be a lie, so `windowDays` ships in the
-       * response and dashboard.html labels these from it:
+       * TWO WINDOWS, AND THEY MEAN DIFFERENT THINGS.
        *
-       *   totalDevices   distinct devices SEEN IN THE WINDOW, not ever
-       *   totalEvents    events in the window
-       *   byName         per-name counts in the window
-       *   playMinutes / sessions / avgSessionMin  session_ping + session_start
-       *                  counted in the window
-       *   screenTime, featureOpens, featureTime, errors, errorsByBuild
-       *   newByDay       WORSE than narrowed: it is MIN(day) per device, so a
-       *                  device whose real first day has been pruned reappears
-       *                  as new on the oldest day it still has a row
-       *   returnRate     same shape of error, MIN/MAX day per device
-       *   testers        first / last / events, same
-       *   vault          firstDay / lastDay of the backfill spike
+       * EVENT_RETENTION_DAYS (60) is what EXISTS: the cron deletes events older
+       * than that, so nothing here can see further back however it is asked.
+       * STATS_WINDOW_DAYS (14) is what this route CHOOSES TO READ, and it is
+       * new on 2026-08-17. Both ship in the response so dashboard.html labels
+       * every figure from the window that actually produced it.
        *
-       * NOT affected, and worth knowing: dau (today), wau (7 days) and
-       * activeByDay (14 days) all sit inside the window already, and byCountry /
-       * byCity / reports / leads read tables the pruner never touches.
+       * WHY A SECOND WINDOW EXISTS. Measured in local SQLite against the real
+       * events DDL, at 250k / 1M / 4M / 12M rows, best of three per statement:
        *
-       * NO COUNTERS TABLE IS NEEDED for most of this, and one should not be
-       * built before this is used up: the `devices` table is never pruned, its
-       * ON CONFLICT clause deliberately does NOT overwrite first_seen, and
-       * rateLimitRecovery writes no row to it. So devices.first_seen /
-       * last_seen are honest ALL-TIME values, and totalDevices, newByDay,
-       * returnRate and testers.first/last can all be re-pointed at that table
-       * and become true again. Only the all-time COUNTS of raw events
-       * (totalEvents, byName, playMinutes, sessions) have no home once the rows
-       * are gone; those are the only figures a counters table would buy, and
-       * nobody has yet said they need them. */
+       *     rows        testers    activeByDay   byName    whole route
+       *     250,000      196 ms       40 ms       57 ms       460 ms
+       *   1,000,000      880 ms      168 ms      213 ms      1,962 ms
+       *   4,000,000    5,922 ms    1,450 ms    1,574 ms     12,357 ms
+       *  12,000,000   33,883 ms    6,111 ms    5,285 ms     56,995 ms
+       *
+       * The tester leaderboard is superlinear (roughly N^1.3: it groups the
+       * whole table by device and does a row lookup per row for `name`, which
+       * stops fitting in cache) and it crosses D1's 30 SECOND STATEMENT LIMIT
+       * at about 12M rows. 12M rows is 2,600 daily devices on a 60 day window,
+       * not the 10,000 the retention arithmetic was sized for. The dashboard
+       * breaks at a quarter of the scale the storage cap does.
+       *
+       * WHAT CHANGED, AND WHICH FIGURES CHANGED MEANING WITH IT. A "total" that
+       * quietly becomes a window is a reporting lie, and this route has already
+       * had to correct one of those, so each of these is named:
+       *
+       *   MOVED OFF events ENTIRELY, onto `devices`, which the pruner never
+       *   touches and whose ON CONFLICT deliberately does not overwrite
+       *   first_seen. The previous comment here signposted exactly this fix.
+       *     totalDevices  WAS distinct devices seen in the last 60 days.
+       *                   NOW devices ever seen. A bigger, true, all-time number.
+       *     newByDay      WAS MIN(day) over surviving rows, so a long-standing
+       *                   tester whose first day had been pruned reappeared as
+       *                   new. NOW devices.first_seen. It stops lying.
+       *     returnRate    Same shape of error, same fix, off first_seen /
+       *                   last_seen. It stops lying.
+       *     testers.first / .last   WAS first and last SURVIVING day. NOW the
+       *                   device's real first and last seen, all time.
+       *   These four are corrections, not narrowings, and all four are now O(devices)
+       *   instead of O(events): 752 ms to 0.1 ms for totalDevices at 12M rows.
+       *
+       *   NARROWED from 60 days to STATS_WINDOW_DAYS, which IS a meaning change
+       *   and the reason statsWindowDays ships in the response:
+       *     totalEvents, byName, screenTime, featureOpens, featureTime,
+       *     playMinutes, sessions, avgSessionMin, and testers.events / .played.
+       *   Every one of those was a 60 day figure yesterday and is a 14 day
+       *   figure today. Comparing a number from this dashboard against one
+       *   written down last week compares two different questions.
+       *
+       *   UNCHANGED: dau (today), wau (7 days) and activeByDay (14 days) were
+       *   already inside the new window. errors, errorsByBuild and vault still
+       *   read the whole 60 days, because they are cheap (name-indexed, tiny
+       *   result sets: 23 ms and 13 ms at 12M rows) and because a crash you saw
+       *   six weeks ago is exactly the one you want to know has stopped.
+       *   byCountry / byCity / reports / leads read tables the pruner never
+       *   touches and are untouched here.
+       *
+       * The window alone was not enough, and the index swap in schema.sql is
+       * the other half: idx_events_device_day became (device, name, day) so the
+       * tester grouping is a COVERING index scan instead of 12M row lookups,
+       * and idx_events_day became (day, device) so the day-ranged counts and
+       * COUNT(DISTINCT device) never leave the index. Both are strict prefix
+       * supersets of what they replace. Measured together on the same 12M table
+       * with the new SQL: testers 33,883 -> 1,890 ms, activeByDay 6,111 -> 348,
+       * totalEvents 4,894 -> 174, dau 461 -> 13, whole route 56,995 -> 14,357.
+       * A third swap (idx_events_name -> (name, day)) was tried and REJECTED on
+       * the measurement: it made byName worse (5,721 -> 9,001 ms) and pings
+       * worse (1,580 -> 3,301), because the wider entries cost more to scan
+       * than the day bound saves.
+       *
+       * WHAT IS STILL THE NEXT WALL. byName scans idx_events_name whole
+       * whatever window is asked for, so it scales with the TABLE, not the
+       * window: 5,721 ms at 12M rows extrapolates to 30 s at about 63M, which
+       * is roughly 13,700 daily devices on a 60 day retention window. That is
+       * past the 10,000 target rather than a quarter of it, but it is the
+       * figure to watch, and the fix for it when it comes is a rollup table,
+       * not another index. */
       if (path === '/stats' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
         if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
@@ -1196,34 +1403,47 @@ export default {
         const EX_IDS = ['fb31564c-22cc-49e8-836b-2da8fbf8531f'];
         const inList = EX_IDS.map(id => `'${String(id).replace(/[^a-f0-9-]/gi, '')}'`).join(',') || "''";
         const nin = col => `${col} NOT IN (${inList})`;
-        const totalDevices = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE ${nin('device')}`)).n;
+        // The reporting window. `day` is a YYYY-MM-DD string derived from the
+        // same ts the row carries, so comparing the strings is both correct and
+        // the only version of this the (day, device) index can drive.
+        const statsFrom = new Date(Date.now() - STATS_WINDOW_DAYS * 864e5).toISOString().slice(0, 10);
+        // ALL TIME and true, off `devices` rather than `events`: the pruner never
+        // touches that table and its upsert never overwrites first_seen.
+        const totalDevices = (await q(`SELECT COUNT(*) n FROM devices WHERE ${nin('device')}`)).n;
         const dau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day = ? AND ${nin('device')}`, today)).n;
         const wau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')}`, weekAgo)).n;
-        const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE ${nin('device')}`)).n;
-        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`);
-        const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY day ORDER BY day`, new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10));
-        const newByDay = await all(`SELECT day, COUNT(*) n FROM (SELECT device, MIN(day) day FROM events WHERE ${nin('device')} GROUP BY device) GROUP BY day ORDER BY day DESC LIMIT 14`);
+        const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE day >= ? AND ${nin('device')}`, statsFrom)).n;
+        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`, statsFrom);
+        const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY day ORDER BY day`, statsFrom);
+        // first_seen is ms epoch; date(x/1000,'unixepoch') is the same UTC day
+        // string the events rows carry, so this chart keeps its x axis.
+        const newByDay = await all(`SELECT day, COUNT(*) n FROM (SELECT date(first_seen/1000,'unixepoch') day FROM devices WHERE ${nin('device')} AND first_seen IS NOT NULL) GROUP BY day ORDER BY day DESC LIMIT 14`);
         // screen-dwell "heatmap": total minutes testers spent on each screen
-        const screenTime = await all(`SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND props IS NOT NULL AND ${nin('device')} GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC`);
+        const screenTime = await all(`SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC`, statsFrom);
         // feature usage: how often each feature-sheet was opened + total minutes in it
-        const featureOpens = await all(`SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY n DESC LIMIT 40`);
-        const featureTime = await all(`SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40`);
+        const featureOpens = await all(`SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY n DESC LIMIT 40`, statsFrom);
+        const featureTime = await all(`SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40`, statsFrom);
         // play time: one ping ≈ 45s of active play; sessions = session_start count
-        const pings = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_ping' AND ${nin('device')}`)).n || 0;
-        const sessions = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_start' AND ${nin('device')}`)).n || 0;
+        const pings = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_ping' AND day >= ? AND ${nin('device')}`, statsFrom)).n || 0;
+        const sessions = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_start' AND day >= ? AND ${nin('device')}`, statsFrom)).n || 0;
         const playMinutes = Math.round(pings * 45 / 60);
         const avgSessionMin = sessions ? Math.round((pings * 45 / sessions / 60) * 10) / 10 : 0;
-        // return rate: share of testers who came back on a later day than their first
-        const r = await q(`SELECT COUNT(*) total, SUM(CASE WHEN firstday <> lastday THEN 1 ELSE 0 END) returned FROM (SELECT device, MIN(day) firstday, MAX(day) lastday FROM events WHERE ${nin('device')} GROUP BY device)`);
+        // return rate: share of testers who came back on a later day than their
+        // first. All time and true, for the same reason totalDevices is.
+        const r = await q(`SELECT COUNT(*) total, SUM(CASE WHEN date(first_seen/1000,'unixepoch') <> date(last_seen/1000,'unixepoch') THEN 1 ELSE 0 END) returned FROM devices WHERE ${nin('device')} AND first_seen IS NOT NULL AND last_seen IS NOT NULL`);
         const returnRate = r && r.total ? Math.round((r.returned / r.total) * 100) : 0;
-        // per-tester leaderboard (top 30 by activity), with Crew name + coarse geo
+        /* Per-tester leaderboard (top 30 by activity in the window), with Crew
+           name + coarse geo. `first` and `last` come off devices now, so they
+           are the real first and last seen rather than the oldest and newest day
+           that happens to have survived the prune. */
         const testers = await all(
-          `SELECT e.device, COUNT(*) events, MIN(e.day) first, MAX(e.day) last,
+          `SELECT e.device, COUNT(*) events,
                   SUM(CASE WHEN e.name IN ('food_log','pit_win','boss_win','mini_win','cook','hatch','quest_claim','friend_battle','buy_weapon','transmute') THEN 1 ELSE 0 END) played,
-                  d.label, d.country, d.region, d.city
+                  d.label, d.country, d.region, d.city,
+                  date(d.first_seen/1000,'unixepoch') first, date(d.last_seen/1000,'unixepoch') last
            FROM events e LEFT JOIN devices d ON d.device = e.device
-           WHERE ${nin('e.device')}
-           GROUP BY e.device ORDER BY events DESC LIMIT 30`);
+           WHERE e.day >= ? AND ${nin('e.device')}
+           GROUP BY e.device ORDER BY events DESC LIMIT 30`, statsFrom);
         const byCountry = await all(`SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY country ORDER BY n DESC`);
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
         // community map feedback: newest first (den nominations + unreachable reports + general feedback)
@@ -1255,10 +1475,12 @@ export default {
           `SELECT name, COUNT(*) n, COUNT(DISTINCT device) devices, MAX(app_v) build,
                   MIN(day) firstDay, MAX(day) lastDay
            FROM events WHERE name IN ('vault_backfill','vault_recover') GROUP BY name`);
-        // windowDays travels with the numbers so the dashboard cannot label them
-        // "all time" after this constant changes. See the block above for which
-        // figures it applies to.
-        return json({ windowDays: EVENT_RETENTION_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
+        /* BOTH windows travel with the numbers, so the dashboard cannot label a
+           figure with a window it was not computed over. windowDays is what the
+           events table still HOLDS; statsWindowDays is what this route READ.
+           They are different questions and after 2026-08-17 they are different
+           numbers, which is exactly why neither can be typed into the HTML. */
+        return json({ windowDays: EVENT_RETENTION_DAYS, statsWindowDays: STATS_WINDOW_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
       /* Admin: hand a specific player coins through the normal grants channel, so a
@@ -1317,6 +1539,54 @@ export default {
           batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs,
         });
         return json({ ok: true, ...r });
+      }
+      /* Run the GRANTS prune on demand, DEV only. Deliberately a separate route
+         from /dev/prune rather than a second field on it: the events retention
+         suite asserts the shape /dev/prune returns, and a pruner for the table
+         that holds people's gifts should not be able to break those assertions
+         or hide behind them. Same injectable clock and bounds, plus an
+         injectable retentionDays so a test can prove the 90 day line from both
+         sides without waiting 90 days. */
+      if (env.DEV === '1' && path === '/dev/prune-grants' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await pruneGrants(env, Number(b.nowMs) || Date.now(), {
+          batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs, retentionDays: b.retentionDays,
+        });
+        return json({ ok: true, ...r });
+      }
+      /* Read grants back exactly, DEV only. A retention test has to assert what
+         SURVIVED as precisely as what went, and GET /grants cannot do it: it
+         only ever shows one player their own rows ABOVE their cursor, which is
+         the half of the table this pruner is least interested in. */
+      if (env.DEV === '1' && path === '/dev/grants' && request.method === 'GET') {
+        const where = [], bind = [];
+        const player = url.searchParams.get('player');
+        const keyPrefix = url.searchParams.get('keyPrefix');
+        const type = url.searchParams.get('type');
+        if (player) { where.push('player_id = ?'); bind.push(player); }
+        if (type) { where.push('type = ?'); bind.push(type); }
+        if (keyPrefix) { where.push('key >= ? AND key < ?'); bind.push(keyPrefix, keyPrefix + '￿'); }
+        const sql = `SELECT id, player_id, key, type, ts FROM grants${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY id`;
+        const rows = (await env.DB.prepare(sql).bind(...bind).all()).results || [];
+        return json({ n: rows.length, rows });
+      }
+      /* Plant a grant at a chosen AGE, and read/set the acknowledgement cursor.
+         DEV only. Both are the only way to build a fixture that is old enough
+         to be prunable without a fake clock on the write side, and to prove
+         that GET /grants really is what moves grants_ack. */
+      if (env.DEV === '1' && path === '/dev/grant-aged' && request.method === 'POST') {
+        const b = await request.json();
+        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          .bind(b.playerId, b.key, b.type || 'social', JSON.stringify(b.payload || {}),
+                Date.now() - (Number(b.ageMs) || 0)).run();
+        const row = await env.DB.prepare('SELECT id, ts FROM grants WHERE player_id = ? AND key = ?')
+          .bind(b.playerId, b.key).first();
+        return json({ ok: true, ...(row || {}) });
+      }
+      if (env.DEV === '1' && path === '/dev/grants-ack' && request.method === 'GET') {
+        const row = await env.DB.prepare('SELECT grants_ack FROM players WHERE id = ?')
+          .bind(url.searchParams.get('player')).first();
+        return json({ ack: row ? row.grants_ack : null });
       }
       /* Count events matching a filter. DEV only, read only. A retention test
          has to assert what SURVIVED every bit as precisely as what went, and

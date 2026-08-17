@@ -111,26 +111,35 @@
         const meta = [l.label ? 'Crew: ' + esc(l.label) : '', l.geo ? esc(l.geo) : '', new Date(l.ts).toLocaleString()].filter(Boolean).join(' · ');
         return `<div class="rpt lead"><div class="lead-head"><b>${esc(who)}</b> · ${mail}</div>${featChips}${fb}${want}<div class="rmeta">${meta}</div></div>`;
       }).join('') : '<p class="note">No survey responses yet.</p>';
-      /* The events table is pruned on a cron, so every figure below that counts
-         events describes a WINDOW, not all of history. The label is built from
-         the window the server reports rather than typed in here, so it cannot
-         drift from EVENT_RETENTION_DAYS the day somebody changes it. "Testers
-         (all time)" was the worst of these: it read as a launch-to-date total
-         and quietly became "testers seen in the last 60 days". */
+      /* TWO WINDOWS, AND A LABEL HAS TO SAY WHICH ONE IT MEANS.
+         windowDays is how long the events table KEEPS rows (the retention
+         cron). statsWindowDays is how far back /stats CHOSE to read, which is
+         shorter, because the tester leaderboard crossed D1's 30 second
+         statement limit at 12M rows. Both come off the response rather than
+         being typed here, so neither can drift from the constant that produced
+         it. "Testers (all time)" was the original version of this mistake: it
+         read as a launch-to-date total and had quietly become "testers seen in
+         the last 60 days".
+         The four all-time figures below (Testers seen, Came back, New players
+         by day, and each tester's first/last) now come off the `devices` table,
+         which the pruner never touches, so they carry NO window suffix and are
+         true again. Everything counted out of `events` carries the stats
+         window. */
       const win = Number(s.windowDays) || 0;
-      const inWin = win ? ` (last ${win}d)` : '';
+      const sw = Number(s.statsWindowDays) || win;
+      const inWin = sw ? ` (last ${sw}d)` : '';
       $('#out').innerHTML = `
         <div class="cards">
-          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers seen${inWin}</div></div>
+          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers seen (all time)</div></div>
           <div class="card"><div class="n">${s.dau}</div><div class="l">Active today</div></div>
           <div class="card"><div class="n">${s.wau}</div><div class="l">Active this week</div></div>
-          <div class="card"><div class="n">${s.returnRate != null ? s.returnRate + '%' : '—'}</div><div class="l">Came back${inWin}</div></div>
+          <div class="card"><div class="n">${s.returnRate != null ? s.returnRate + '%' : '—'}</div><div class="l">Came back (all time)</div></div>
           <div class="card"><div class="n">${s.playMinutes != null ? hrs(s.playMinutes) : '—'}</div><div class="l">Play time${inWin}</div></div>
           <div class="card"><div class="n">${s.sessions ?? '—'}</div><div class="l">Sessions${inWin}</div></div>
           <div class="card"><div class="n">${s.avgSessionMin != null ? s.avgSessionMin + 'm' : '—'}</div><div class="l">Avg session</div></div>
           <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Events${inWin}</div></div>
         </div>
-        ${win ? `<p class="note">Analytics events are pruned after <b>${win} days</b> to stay under D1's 10 GB limit, so every card above that counts events covers that window only, not launch to date. <b>New players by day</b> is the one to distrust hardest: it is each device's first surviving day, so a long-standing tester whose real first day has aged out reappears as new.</p>` : ''}
+        ${sw ? `<p class="note">Every card and chart marked <b>(last ${sw}d)</b> counts raw analytics events, and this dashboard reads <b>${sw} days</b> of them: the per-device leaderboard scans the whole table, and at 12M rows it took 34 seconds against D1's 30 second statement limit. Rows themselves are kept for <b>${win} days</b> and then pruned to stay under D1's 10 GB cap, so ${sw} days is a reporting choice and ${win} is the hard floor on what could ever be asked. <b>Testers seen</b>, <b>Came back</b> and <b>New players by day</b> are the exception: they come off the device register, which is never pruned, so they are genuinely all time.</p>` : ''}
         <h2>Crashes</h2>
         ${(s.errors || []).length ? `
           <p class="note">Grouped by message, newest first. <b>devices</b> is the spread: 1 is one unlucky phone, several is everybody. Not filtered by the developer-device exclusion, because a crash is a crash.</p>
@@ -152,15 +161,15 @@
           </table>
         ` : '<p class="note">Nothing yet, which is correct until a native build ships the BhVault registration. Backfills with zero recovers after a few weeks would itself be a finding.</p>'}
 
-        <h2>Screen time — where testers spend it</h2>${stime.length ? stime.map(d => bar(d.s || '?', d.min || 0, stMax)).join('') : '<p class="note">No screen-time data yet (ships in the next app update).</p>'}
-        <h2>Feature usage — opens</h2>${fopen.length ? fopen.map(d => bar(d.f || '?', d.n || 0, foMax)).join('') : '<p class="note">No feature data yet.</p>'}
-        <h2>Feature usage — minutes in each</h2>${ftime.length ? ftime.map(d => bar(d.f || '?', d.min || 0, ftMax)).join('') : '<p class="note">No feature-time data yet.</p>'}
+        <h2>Screen time — where testers spend it${inWin}</h2>${stime.length ? stime.map(d => bar(d.s || '?', d.min || 0, stMax)).join('') : '<p class="note">No screen-time data yet (ships in the next app update).</p>'}
+        <h2>Feature usage — opens${inWin}</h2>${fopen.length ? fopen.map(d => bar(d.f || '?', d.n || 0, foMax)).join('') : '<p class="note">No feature data yet.</p>'}
+        <h2>Feature usage — minutes in each${inWin}</h2>${ftime.length ? ftime.map(d => bar(d.f || '?', d.min || 0, ftMax)).join('') : '<p class="note">No feature-time data yet.</p>'}
         <h2>Active players by day</h2>${s.activeByDay.map(d => bar(d.day, d.n, actMax)).join('') || '<p class="note">No data yet.</p>'}
-        <h2>New players by day</h2>${s.newByDay.map(d => bar(d.day, d.n, Math.max(1, ...s.newByDay.map(x => x.n)))).join('') || '<p class="note">No data yet.</p>'}
-        <h2>Every tracked action</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
+        <h2>New players by day (first ever seen)</h2>${s.newByDay.map(d => bar(d.day, d.n, Math.max(1, ...s.newByDay.map(x => x.n)))).join('') || '<p class="note">No data yet.</p>'}
+        <h2>Every tracked action${inWin}</h2>${s.byName.map(d => bar(d.name, d.n, nameMax)).join('') || '<p class="note">No events yet.</p>'}
         <h2>Testers by country</h2>${(s.byCountry || []).length ? s.byCountry.map(d => bar(d.country, d.n, Math.max(1, ...s.byCountry.map(x => x.n)))).join('') : '<p class="note">No geo yet (fills in as testers on the new build check in).</p>'}
         <h2>Testers by city</h2>${(s.byCity || []).length ? s.byCity.map(d => bar([d.city, d.region, d.country].filter(Boolean).join(', ') || '?', d.n, Math.max(1, ...s.byCity.map(x => x.n)))).join('') : '<p class="note">No city data yet.</p>'}
-        <h2>Testers (top 30)</h2>
+        <h2>Testers (top 30${inWin})</h2>
         <p class="note">"Played" counts real gameplay (meals logged, fights won, cooks, hatches) — telemetry-only devices show as browsed.</p>
         ${testers.length ? testers.map(t => {
           const who = t.label || ('anon ' + t.device.slice(0, 6));
