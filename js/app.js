@@ -8926,7 +8926,11 @@ async function renderSettings(el) {
     <div class="card-title">REDEEM A CODE</div>
     <p class="note" style="margin:0 0 10px">Got a code from a friend? Redeem it for a pet.</p>
     <div style="display:flex;gap:8px">
-      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;text-transform:uppercase">
+      <!-- min-width:0, for the same reason every equal-track grid in app.css now
+           says minmax(0, 1fr): a flex item's automatic minimum is its min-content
+           width, and an <input> carries a default size of about 170px, so this row
+           was 2px wider than a 320 phone and the Redeem button ended at x=322. -->
+      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase">
       <button class="btn small" id="redeemBtn">Redeem</button>
     </div>
   </div>

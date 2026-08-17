@@ -343,7 +343,7 @@ svg { display: block; }
 .search-wrap input { padding-left: 40px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 
 .seg { display: flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; padding: 9px 6px; border-radius: 9px; font-size: 13.5px; font-weight: 700; color: var(--text-2); }
@@ -487,7 +487,7 @@ a { color: var(--accent); text-decoration: none; }
 .xp-bar { height: 8px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin-top: 10px; }
 .xp-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9ed32e, var(--accent)); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 
-.badge-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.badge-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
 .badge {
   display: grid; justify-items: center; gap: 6px; padding: 11px 4px 9px;
   border-radius: 13px; background: var(--surface-2); border: 1px solid var(--line);
@@ -604,7 +604,7 @@ a { color: var(--accent); text-decoration: none; }
 .bh-hero.mini .bh-hero-meta { justify-items: start; }
 .bh-hero-meta { display: grid; justify-items: center; gap: 5px; font-size: 14px; }
 
-.ward-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.ward-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
 .ward-cell {
   position: relative; aspect-ratio: 1; border-radius: 13px; overflow: hidden;
   background: var(--surface-2); border: 2px solid var(--line);
@@ -637,7 +637,7 @@ a { color: var(--accent); text-decoration: none; }
 .recipe-need { display: block; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
 /* seed label: what this seed is FOR, so it reads above the grow-time fine print */
 .seed-use { display: block; color: var(--text-2); font-weight: 600; margin-top: 2px; }
-.ingredient-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.ingredient-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .ing-cell { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .ing-cell.empty { opacity: 0.4; }
 .ing-cell .ing-ico { font-size: 22px; }
@@ -1035,7 +1035,7 @@ body::before {
 }
 .hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
 
-.hero-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.hero-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .hero-act {
   display: grid; justify-items: center; gap: 5px; padding: 11px 2px 9px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
@@ -1047,13 +1047,13 @@ body::before {
 /* FIVE is the shipped row now (option B2, 2026-08-07), not an edge case, so it
    gets a label size you can actually read rather than the 9.5px it had while it
    was a fallback. Measured at 375px: 63px per tile, "Character" fits on one line. */
-.hero-actions.five { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.hero-actions.five { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .hero-actions.five .hero-act { font-size: 10.5px; padding: 10px 1px 8px; letter-spacing: -.01em; }
 /* the Garden's door reads in growth green when something is ready to pick */
 .hero-act.grow { border-color: color-mix(in srgb, var(--mint) 60%, var(--line)); }
 .hero-act.grow span { color: var(--mint); }
 .hero-badge.go { color: var(--mint); }
-.hero-actions.six { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.hero-actions.six { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
 .hero-actions.six .hero-act { font-size: 9px; padding: 9px 1px 7px; }
 .hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
@@ -1264,7 +1264,7 @@ body::before {
   padding: 2px 12px;
 }
 .fight-log { min-height: 34px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 6px; }
-.fight-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.fight-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 /* TIGHTER ROWS, the other half of Tom's 2026-08-13 call. 11/9 padding made a
    ten-button tray 317px on a 393x852 phone and left the boss 34% of the screen.
    8/7 plus a 44px floor keeps every button a legal tap target while giving the
@@ -1715,7 +1715,7 @@ body::before {
 /* ===== character sheet: game tabs + stat pills ===== */
 /* Five tabs in a 2-column grid meant three rows and ~430px of chrome before any
    content. One compact row instead, so the Wardrobe doll is visible on arrival. */
-.ch-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 14px 0 10px; }
+.ch-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 14px 0 10px; }
 .chip.ch-tab {
   position: relative; display: grid; justify-items: center; gap: 3px;
   padding: 9px 2px 7px; border-radius: 14px;
@@ -3222,7 +3222,7 @@ body::before {
   font-size: 9px; font-weight: 800; color: #201500;
   background: var(--amber); border-radius: 999px; padding: 1.5px 6px; pointer-events: none;
 }
-.gear-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.gear-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
 .gear-chip {
   background: var(--surface); border: 1px solid var(--line); border-radius: 13px;
   padding: 8px 9px; display: grid; gap: 2px; min-width: 0;
@@ -3622,7 +3622,7 @@ body::before {
 }
 
 /* ---- Trends: week recap ---- */
-.recap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 6px; }
+.recap-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .recap-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px 4px; text-align: center; }
 .recap-pill .rp-v { font-family: var(--display); font-weight: 400; letter-spacing: .5px; font-size: 25px; line-height: 1; }
 .recap-pill .rp-v small { font-size: 12px; font-weight: 700; opacity: .7; }
@@ -4592,7 +4592,7 @@ body::before {
   font-style: normal; color: var(--text-3); font-weight: 700; letter-spacing: 0;
   text-transform: none; font-size: 11.5px; text-align: right;
 }
-.col-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.col-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .col-cell {
   position: relative; aspect-ratio: 1; border-radius: 11px; overflow: hidden; padding: 0;
   background: var(--surface-2); border: 2px solid var(--line);
@@ -4850,7 +4850,7 @@ body::before {
 /* ===== The Bone Garden (v259) ===== */
 /* Beds share the cauldron card language on purpose: both are things on a timer in
    the same room, so they should read as one status block, not two systems. */
-.plot-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.plot-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .plot-card {
   position: relative; display: grid; gap: 3px; justify-items: center; text-align: center;
   padding: 11px 6px 10px; border-radius: 14px; background: var(--surface-2);
@@ -5419,7 +5419,7 @@ body::before {
 }
 
 /* ---- the four capture routes, one row ---- */
-.t1-routes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t1-routes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .t1-route {
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 3px 7px; min-height: 62px;
@@ -5488,7 +5488,7 @@ body::before {
 .t1-hero .k b { font-family: var(--display); font-size: var(--fs-7); font-weight: 400; line-height: .9; letter-spacing: .02em; color: var(--gold); font-variant-numeric: tabular-nums; }
 .t1-hero .k small { font-size: var(--fs-1); font-weight: 800; letter-spacing: .1em; color: var(--text-3); }
 .t1-hero .k .of { margin-left: auto; font-size: var(--fs-1); font-weight: 700; color: var(--text-3); text-align: right; }
-.t1-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.t1-macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .t1-macros small { display: block; font-size: 9px; font-weight: 800; letter-spacing: .09em; color: var(--text-3); margin-bottom: 4px; }
 .t1-macros b { display: block; font-size: var(--fs-3); font-weight: 800; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
 .t1-macros .tr { height: 8px; background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
@@ -5554,7 +5554,7 @@ body::before {
 .t1-field .lbl label { margin: 0; }
 .t1-field .lbl .t1-tag { padding: 0 5px; font-size: 9px; }
 .t1-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.t1-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.t1-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 
 /* ---- label-scan stage + rules ---- */
 .t1-stage {
@@ -6255,7 +6255,7 @@ body::before {
   border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text-2);
 }
-.onb-earns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin: 14px 0 16px; }
+.onb-earns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 14px 0 16px; }
 .onb-earn {
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 10px 4px 8px; text-align: center;
@@ -6513,7 +6513,7 @@ body::before {
 .t3-row.done .t3-tx b { color: var(--text-2); text-decoration: line-through; }
 
 /* --- garden -------------------------------------------------------------- */
-.t3-beds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.t3-beds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .t3-bed {
   position: relative; background: #241d15; border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 12px 6px 9px; text-align: center; overflow: hidden;
@@ -6539,7 +6539,7 @@ body::before {
 .t3-bed:disabled { opacity: .55; }
 .t3-timer { height: 8px; margin-top: 6px; border-width: 1.5px; }
 .t3-timer > i { background: var(--mint); }
-.t3-pouch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t3-pouch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .t3-seed {
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 4px 7px; text-align: center; color: var(--text); width: 100%; display: block;
@@ -7164,7 +7164,7 @@ body::before {
 .tz-h { font-family: var(--display); font-weight: 400; font-size: 34px; letter-spacing: .04em; margin: 12px 0 2px; }
 .tz-sub { color: var(--text-2); margin: 0 0 14px; }
 .tz-grid { display: none; /* replaced by .tz-wall */
-  grid-template-columns: repeat(3, 1fr); gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
   background: var(--surface-2); border: 2px solid #17151d; border-radius: 14px;
   padding: 10px; box-shadow: var(--sh-sm);
 }
@@ -7284,7 +7284,7 @@ body::before {
    across so a phone still shows a whole face per cell, and each cell pops in on
    a stagger so the grid assembles itself rather than appearing as a slab. */
 .boss-wall {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px;
   margin: 12px 0 10px;
 }
 .boss-cell {
@@ -7757,7 +7757,7 @@ body::before {
 .pdk-teaser { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; background: #1d1b22; border: 2px solid #17151d; border-radius: 13px; box-shadow: 0 3px 0 #17151d; padding: 9px; }
 .pdk-teaser-tx small { display: block; color: #a5e847; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; }
 .pdk-teaser-tx b { display: block; color: #f2e9d7; font-size: 12.5px; font-weight: 700; margin-top: 2px; }
-.pdk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.pdk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pdk-tile { position: relative; aspect-ratio: 1; background: #201d28; border: 2px solid #17151d; border-radius: 13px; box-shadow: 0 3px 0 #17151d; display: grid; place-items: center; overflow: hidden; }
 .pdk-tile img { width: 84%; height: 84%; object-fit: contain; }
 .pdk-tile.r-legendary { box-shadow: 0 3px 0 #17151d, 0 0 14px rgba(255,201,97,.28); }
