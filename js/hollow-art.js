@@ -88,6 +88,10 @@ const HLW_PIX = {
   'hollow-fence-corner': [48, 48],
   'hollow-fence': [232, 48],
   'hollow-grass-tuft': [48, 48],
+  'hollow-ground-day': [92, 64],
+  'hollow-ground-dusk': [92, 64],
+  'hollow-ground-night': [92, 64],
+  'hollow-ground-olive': [92, 64],
   'hollow-ground': [96, 96],
   'hollow-lantern-post': [48, 88],
   'hollow-path': [48, 48],
@@ -96,11 +100,15 @@ const HLW_PIX = {
   'hollow-scarecrow': [48, 48],
   'hollow-shed': [48, 48],
   'hollow-sign': [48, 48],
+  'hollow-soil-hole': [48, 48],
+  'hollow-soil-mound': [48, 48],
+  'hollow-soil-scuffed': [48, 48],
+  'hollow-soil-wet': [48, 48],
   'hollow-spill-a': [48, 48],
   'hollow-spill-b': [48, 48],
   'hollow-spill-c': [48, 48],
   'hollow-tuft-left': [48, 48],
-  'hollow-tuft-right': [48, 48]
+  'hollow-tuft-right': [48, 48],
 };
 
 /* Native size of a pixel id, or null when the id is still vector. */

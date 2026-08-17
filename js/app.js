@@ -4375,7 +4375,17 @@ function openHollow(after) {
             is left UNDEFINED so S.shinyPets answers for the viewer's own pet,
             and it is registered in tests/figure-audit.mjs SITES, which FAILS if
             a new surface draws a pet and is not listed. */''}
-      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:26px;top:${HLW_H - 150}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74)}</div>` : ''}
+      ${/* THE PET WAS STANDING INSIDE THE LAMP POST. Tom, 2026-08-16: "you've
+            placed the pet awkwardly with the lamp post." Measured: the pet sat at
+            26,590 in a 74px box, and the lantern spans x20-116, y564-740, so the
+            two overlapped almost completely. Moved to the open grass between the
+            right bed column and the barrel, clear of the path (171-219), the
+            ghost bed (376-472) and the barrel (572-662).
+            SECOND PASS: that put it at chest height beside the keeper's arm,
+            floating, which read as a sticker rather than a pet in the garden. It
+            stands on the grass now, below the last bed (which ends at 578) and
+            left of the path (which starts at 171). */''}
+      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:96px;top:${HLW_H - 128}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74)}</div>` : ''}
       <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
         ${say ? `<span id="hlwSay" class="hlw-say" role="status" aria-live="polite">${esc(say)}</span>` : ''}
         <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>

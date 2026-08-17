@@ -8042,15 +8042,13 @@ body::before {
    the frame toward black and widening a luminance range that was already 7x
    from median to 99th percentile. Depth comes from the lifted ground and from
    props overlapping, not from a grade laid over the top. */
-/* THE LOCKED BED MUST NOT BE THE BRIGHTEST THING ON SCREEN. Measured: the ghost
-   bed read 4.80:1 against the ground while an owned tilled bed read 1.03:1, so
-   the slot you cannot use out-shouted the harvest by 3x. Dimmed and desaturated
-   so it reads as absent rather than as the prize. */
-/* .62, up from .4. The dimming existed because the pale ghost bed measured
-   4.80:1 against a near-black ground while an owned bed measured 1.03:1, so the
-   slot you cannot use out-shouted the harvest. On grass that inversion is gone
-   and .4 simply made the buyable slot disappear. */
-.hlw-p-hollow-bed-locked { opacity: .62; }
+/* NO DIMMING ON THE BUY SLOT ANY MORE.
+   It was dimmed because a pale translucent BED FRAME measured 4.80:1 against the
+   ground while an owned bed measured 1.03:1, so the slot you cannot use was the
+   brightest thing on screen. With the frames gone the slot is a dug hole in dark
+   soil, which is quiet by construction, and dimming it on grass made it read as
+   a bush rather than as somewhere to plant. The price sign is the signal. */
+.hlw-p-hollow-soil-hole { opacity: 1; }
 
 /* THE CROW HOPS WITHOUT A TRANSFORM. hlwCrowBob animates transform, which promotes
    the layer and gets the sprite resampled bilinearly whatever image-rendering

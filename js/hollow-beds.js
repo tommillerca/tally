@@ -135,15 +135,32 @@ const cropTint = plot =>
              tap and the seed landing) */
 export function hlwBedArt(plot) {
   if (plot.locked) {
-    return paint('hollow-bed-locked',
-      { x: (BED_BOX.w - 76) / 2, y: (BED_BOX.h - 52) / 2, w: 76, cls: 'hlw-p-hollow-bed-locked', style: PE });
+    /* The SECOND locked render. hlwGhostBedHtml draws the buy slot on the scene
+       and this one draws it inside a bed box, and swapping only the first left
+       a framed ghost bed still appearing here: hollow-beds-audit caught it,
+       "excused in NOT_IN_BEDS but the module renders it". Both are the hole now.
+       No 76x52 inset either: the soil sprite fills its own box like every other
+       bed state, so it lands on the same grid as the rest. */
+    return paint('hollow-soil-hole', { w: BED_BOX.w, cls: 'hlw-p-hollow-soil-hole', style: PE });
   }
   /* WATERED IS ITS OWN LOOK NOW. It used to share the tilled art and announce
      itself only through a chip, so the one action a player performs every day
      changed nothing they could see in the bed. */
-  const soilId = plot.empty && !plot.tilled ? 'hollow-bed-empty'
-    : (plot.watered && hlwPixSize('hollow-bed-watered')) ? 'hollow-bed-watered'
-    : 'hollow-bed-tilled';
+  /* SOIL, NOT FURNITURE. Tom, 2026-08-16: "it's the gardening beds that are
+     making the garden look fucked. it's too busy. maybe it should just be the
+     dirt piles."
+     He is right and he had already drawn the answer. The raised beds are a
+     wooden frame with bone corners and a slat floor: five of them on screen is
+     five rectangles of hard keyline competing with the crops growing inside
+     them, and the frame carries none of the state. His frameless soil set does:
+     scuffed dirt reads as "you could dig here", a mound reads as planted, wet
+     soil reads as watered, and the crop sits ON the soil instead of inside a
+     box. Same 48px sprites at 2x, so BED_BOX and every offset derived from it
+     are unchanged. The framed beds stay in the asset folder rather than being
+     deleted; they are Tom's art and this is a presentation call. */
+  const soilId = plot.empty && !plot.tilled ? 'hollow-soil-scuffed'
+    : (plot.watered && hlwPixSize('hollow-soil-wet')) ? 'hollow-soil-wet'
+    : 'hollow-soil-mound';
   // ids are stripped: up to five beds render at once and duplicate ids are a
   // trap for anything that later reaches for #rake or #fruit.
   const soil = paint(soilId, { x: 0, y: 0, w: BED_BOX.w, cls: `hlw-p-${soilId}`, style: PE },
@@ -223,7 +240,10 @@ export function hlwChipHtml(plot) {
    it priced an object that was not drawn. The designer calls this a ghost slot
    and that is exactly what it is, a bed you can see the shape of and do not own. */
 export function hlwGhostBedHtml() {
-  return hlwArt('hollow-bed-locked', { w: BED_BOX.w, cls: 'hlw-p-hollow-bed-locked', style: PE });
+  /* A DUG HOLE, not a ghost of the furniture that no longer exists. With the
+     frames gone, a translucent frame was advertising a thing the garden does not
+     have; an empty hole reads as a spot waiting to be claimed. */
+  return hlwArt('hollow-soil-hole', { w: BED_BOX.w, cls: 'hlw-p-hollow-soil-hole', style: PE });
 }
 
 /* `afford` is the player's balance, or null when the caller does not care. A sign

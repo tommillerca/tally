@@ -73,7 +73,7 @@ const stagger = s => -s;
    hang half off the edge (tuft-right lost 49% of its height, tuft-left 48% of
    its width) because the coordinates were the vector tufts' and the pixel ones
    are 96px. */
-const TUFTS = [[2, 318, 96, 3.2, 0], [4, 450, 96, 3.8, 0.6], [292, 208, 96, 3.5, 1.1]];
+const TUFTS = [[2, 318, 96, 3.2, 0], [0, 660, 96, 3.8, 0.6], [292, 208, 96, 3.5, 1.1]];
 
 const glow = (x, y, w, h, shape, rgba, secs) =>
   `<span style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:50%;background:radial-gradient(${shape},${rgba},transparent 84%);animation:hlwGlow ${secs}s ease-in-out ${stagger(0)}s infinite;${NONE};z-index:3"></span>`;

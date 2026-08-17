@@ -48,6 +48,20 @@ const NOT_IN_BEDS = {
   'hollow-timer-chip': 'a fixed 64x22 SVG pill cannot flex to a "2h 58m" label, and its baked droplet would put a droplet on non-thirsty beds; .hlw-chip already carries its spec (rgba(13,12,18,.6), r11, h22)',
   'hollow-water-done': 'a tick droplet on every watered bed is the exact regression the shipped thirst-cue fix removed; watered is carried by the ABSENCE of the thirst chip',
   'hollow-coin-plaque': 'the coin balance is HUD chrome, not a bed, and the module contract has no export for it',
+  /* Tom, 2026-08-16: "it's the gardening beds that are making the garden look
+     fucked. it's too busy. maybe it should just be the dirt piles." The beds are
+     a wooden frame with bone corners; five of them is five hard rectangles
+     competing with the crops inside them, and the frame carries no state. The
+     frameless soil set does, so hollow-soil-* replaced them.
+     KEPT, NOT DELETED. They are Tom's art and this is a presentation call he
+     could reverse; they are excused here rather than removed from the folder,
+     which is exactly what this list is for. */
+  /* hollow-bed-watered is deliberately absent from this list: it never shipped
+     in HLW_ART, only as a PNG, so excusing it here is a stale exclusion and the
+     audit says so. The list covers HLW_ART pieces, not the asset folder. */
+  'hollow-bed-empty': 'replaced by hollow-soil-scuffed; the framed beds read as furniture and made the scene busy',
+  'hollow-bed-tilled': 'replaced by hollow-soil-mound; same call',
+  'hollow-bed-locked': 'replaced by hollow-soil-hole; a dug hole reads as a slot to claim, a ghost frame advertised furniture the garden no longer has',
 };
 /* Derived, not listed: anything the designer names as a crop or as bed/water/
    timer/price/coin furniture is in scope. */
