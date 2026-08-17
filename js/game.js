@@ -83,20 +83,52 @@ export async function awardCapped(prefix, type, xp, label, cap, date) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
-    if (await db.get('xp', key)) continue;
-    return award(key, type, xp, label, d);
+    /* `claimed`, not the xp number, decides whether this slot was ours. A
+       second tab racing for the same n loses the addIfAbsent inside awardOnce
+       and must move on to n+1 rather than being paid for a row it did not
+       write. Measured before this: two tabs each pushing 12 awards against a
+       12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
+       of 120, because both were told they had granted the same key. */
+    const r = await awardOnce(key, type, xp, label, d);
+    if (r.claimed) return r.xp;
   }
   return 0;
 }
 
 export async function award(key, type, xp, label, date) {
-  const existing = await db.get('xp', key);
-  if (existing) return 0;
-  const before = await totalXp();
-  await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
+  return (await awardOnce(key, type, xp, label, date)).xp;
+}
+
+/* THE LEDGER ROW IS THE RECEIPT, SO WRITING IT HAS TO BE THE TEST-AND-SET.
+ *
+ * This used to be `const existing = await db.get('xp', key); if (existing)
+ * return 0;` and then, several awaits later, a `db.put`. Every "the ledger is
+ * the authority" claim in this codebase rests on that pair, and a pair is not
+ * an authority: with the app open in two tabs both reads returned undefined,
+ * both writes landed on the same key, and both callers were told they had been
+ * granted the reward. The ROW count stayed correct (one key, one row) which is
+ * exactly why it is invisible to any check that counts rows: what doubled was
+ * everything the caller does on the strength of a non-zero return, which is
+ * coins, dust, crates, gear and level-ups.
+ *
+ * addIfAbsent does the check and the insert in one IndexedDB request, so
+ * exactly one caller can ever be told `claimed: true` for a key. Returns the
+ * pair rather than just the xp because `xp` is ambiguous by design: award()
+ * pays 0 for a duplicate AND 0 for a legitimately zero-XP payload, and that
+ * ambiguity is precisely the v390 gift double-pay. Callers that gate money on
+ * "did I write this row" must read `claimed`.
+ *
+ * `before` is derived by subtraction rather than read first: the row is now
+ * already committed by the time we get here, so totalXp() includes it. */
+export async function awardOnce(key, type, xp, label, date) {
+  const row = { key, type, xp, label, date: date || dateKey(), ts: Date.now() };
+  const claimed = await db.addIfAbsent('xp', row);
+  if (!claimed) return { claimed: false, xp: 0 };
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
-    const lvB = levelFor(before), lvA = levelFor(before + xp);
+    const after = await totalXp();
+    const before = after - (xp || 0);
+    const lvB = levelFor(before), lvA = levelFor(after);
     if (lvA.level > lvB.level) {
       const rewards = await grantLevelRewards(lvB.level, lvA.level);
       if (typeof dispatchEvent === 'function') {
@@ -104,7 +136,7 @@ export async function award(key, type, xp, label, date) {
       }
     }
   }
-  return xp;
+  return { claimed: true, xp };
 }
 
 // v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays
@@ -115,9 +147,13 @@ export async function award(key, type, xp, label, date) {
 export async function claimFriendBattle(friendId, won, date) {
   const d = date || dateKey();
   const key = `friendbattle-${d}-${friendId}`;
-  if (await db.get('xp', key)) return { firstToday: false, coins: 0, xp: 0, won };
   const xp = won ? 12 : 5;
-  await award(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  /* The claim IS the check. `if (await db.get(...)) return firstToday:false`
+     followed by an award was two operations with an await between them, and
+     the caller pays 25 coins on firstToday, so two tabs battling the same
+     friend at the same moment were both paid. */
+  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  if (!claim.claimed) return { firstToday: false, coins: 0, xp: 0, won };
   const row = await db.get('xp', key);
   if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
   return { firstToday: true, coins: won ? 25 : 8, xp, won };
