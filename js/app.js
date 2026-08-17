@@ -87,7 +87,90 @@ import { parseNutritionText } from './labelparse.js';
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const num = v => { const x = parseFloat(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
+/* ================= every number a player types =================
+ *
+ * parseFloat IS NOT A VALIDATOR, IT IS A SCANNER. It stops at the first
+ * character it does not like and hands back whatever it got so far, so
+ * `parseFloat('12abc')` is 12 and `parseFloat('1e9')` is a billion. This used
+ * to be the whole of the app's number handling, and in a food and weight
+ * tracker that is not a cosmetic problem: the value lands in a permanent log
+ * row, it feeds the day total, the weight trend, the XP payout and the shared
+ * leaderboard, and nothing on screen ever tells the player it happened.
+ *
+ * THE COMMA IS THE EXPENSIVE ONE, and it cuts both ways. The old line did
+ * `String(v).replace(',', '.')` unconditionally, which is right for `1,5`
+ * (most of the world writes 1.5 that way) and catastrophically wrong for
+ * `1,234`, which came back as 1.234. Measured on v387, 2026-08-17: a quick add
+ * typed as `1,234` stored kcal 1.234 and rendered on Today as "1". A 1000x
+ * loss, silent and permanent. That format is not exotic either, it is the
+ * format THIS APP prints: every kcal readout goes through toLocaleString().
+ *
+ * So the contract is: accept a plain decimal, accept ONE comma used as a
+ * decimal point, and REFUSE everything else rather than guess at intent. A
+ * refusal the player can see beats a number they can never find again.
+ *
+ * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
+ * wrong it was. `num` keeps the old null-or-number shape for the live-preview
+ * call sites that must not nag on every keystroke. */
+const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
+/* `1,234` / `1,234.5` / `1,234,567`: digit grouping, and the exact shape where
+   the decimal-comma reading and the grouping reading disagree by 1000x. Never
+   guessed, always refused. */
+const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
+function numParse(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return { why: 'empty' };
+  if (NUM_GROUPED.test(s)) return { why: 'grouped' };
+  const commas = (s.match(/,/g) || []).length;
+  const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
+  if (!NUM_SHAPE.test(t)) return { why: 'shape' };
+  const x = Number(t);
+  return isFinite(x) ? { ok: true, value: x } : { why: 'shape' };
+}
+const num = v => { const r = numParse(v); return r.ok ? r.value : null; };
+
+/* READ A FIELD, OR TELL THE PLAYER WHY NOT.
+ *
+ * Silent coercion is the whole bug class this guards, so nothing here
+ * substitutes a fallback for something the player actually typed: only a
+ * genuinely blank field marked `optional` gets `blank`. `12abc` does not
+ * become 12, an empty required field does not become 0, and an out-of-range
+ * value does not get clamped into range behind the player's back.
+ *
+ * The ranges are domain bounds, not paranoia. Without them zero, negative and
+ * 1e20 all reached the store: weight 0 kg overwrote profile.weightKg and
+ * dropped the protein target to 0 g, a negative serving size minted a food
+ * whose per-100 g calories were permanently negative, and 1e308 calories times
+ * a 0.5 g serving overflowed to Infinity inside the food itself, after which
+ * its portion sheet read "NaN" and it could never be logged again. */
+function readNum(input, { name, min = null, max = null, optional = false, blank = 0, unit = '' } = {}) {
+  const r = numParse(input ? input.value : '');
+  const refuse = msg => { toast(msg, 3600); input?.focus(); return { ok: false }; };
+  if (!r.ok) {
+    if (r.why === 'empty') return optional ? { ok: true, value: blank } : refuse(`${name} is required`);
+    if (r.why === 'grouped') return refuse(`${name}: leave out the thousands comma, type 1234 not 1,234`);
+    return refuse(`${name}: digits only, like 1234 or 12.5`);
+  }
+  if (min != null && r.value < min) return refuse(`${name} must be at least ${min}${unit}`);
+  if (max != null && r.value > max) return refuse(`${name} cannot be more than ${max.toLocaleString()}${unit}`);
+  return { ok: true, value: r.value };
+}
+
+/* The domain bounds, in one place so a new surface cannot invent its own.
+   Deliberately generous: they exist to stop nonsense reaching permanent
+   history, not to argue with an outlier. */
+const LIMITS = {
+  kcalEntry: { min: 0, max: 20000 },      // one log row or one serving of one food
+  macroG: { min: 0, max: 2000 },          // grams of protein / carbs / fat / fibre / sugar
+  sodiumMg: { min: 0, max: 100000 },
+  servingG: { min: 0.1, max: 20000 },     // grams in a portion, and a food's serving size
+  servings: { min: 0.01, max: 1000 },     // the x-servings multiplier
+  weightKg: { min: 20, max: 500 },
+  weightLb: { min: 44, max: 1100 },
+  targetKcal: { min: 800, max: 20000 },
+  age: { min: 10, max: 120 },
+  heightCm: { min: 90, max: 250 },
+};
 // Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
 // social sync, so "online now" = within ~6 min (accurate at session boundaries).
 function onlineLabel(lastSeen) {
@@ -5413,7 +5496,17 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   const qtyArea = $('#qtyArea', wrap);
 
+  /* THE LAST THING THE PLAYER TYPED INTO THE AMOUNT BOX, kept because the box
+     itself is about to lie about it. Tapping Add fires blur first, and the
+     blur handler repaints the field from `sel`, so by the time the Add handler
+     looks, "12abc" already reads "0.25". Without this, an unreadable amount
+     and an empty one collapse into the same silently-defaulted 0.25 of a
+     serving, and the coercion reaches the log. null means "not typed into":
+     the steppers and the chips set the amount themselves and clear it. */
+  let amtRaw = null;
+
   function renderQty() {
+    amtRaw = null;
     if (sel.mode === 'grams') {
       qtyArea.innerHTML = `
         <div class="t1-step">
@@ -5421,8 +5514,9 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
           <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams"><small>GRAMS</small></div>
           <button class="plus" data-d="10" aria-label="more"></button>
         </div>`;
-      $('#gramsIn', wrap).addEventListener('input', e => { sel.grams = num(e.target.value) || 0; preview(); });
+      $('#gramsIn', wrap).addEventListener('input', e => { amtRaw = e.target.value; sel.grams = num(e.target.value) || 0; preview(); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
+        amtRaw = null;
         sel.grams = Math.max(1, (sel.grams || 0) + Number(b.dataset.d));
         $('#gramsIn', wrap).value = fmtQty(sel.grams);
         preview();
@@ -5436,10 +5530,11 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
         </div>
         <div class="note" style="text-align:center;margin-top:8px">Tap the number to type any amount, e.g. 1.33</div>`;
       const qin = $('#qtyIn', wrap);
-      qin.addEventListener('input', e => { sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
+      qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
       qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
+        amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
         qin.value = fmtQty(sel.qty);
         preview();
@@ -5502,8 +5597,48 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   $('#addBtn', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
+    /* THE BOUND IS ENFORCED HERE, NOT IN THE FIELD.
+       #qtyIn and #gramsIn drive a live preview on every keystroke, so they
+       cannot toast per character without nagging a player halfway through
+       typing "12". The store is reached at THIS tap, so this is where the
+       amount has to be legal. Measured on v387: a negative grams typed here
+       logged -115 kcal against the day, an empty box logged 0 g of food, and
+       1e20 servings logged 1.98e22 kcal and then stuck to the food as its
+       remembered lastPortion, so every future log of it started there too. */
+    const amt = sel.mode === 'grams'
+      ? { v: sel.grams, name: 'Grams', ...LIMITS.servingG, unit: ' g' }
+      : { v: sel.qty, name: 'Servings', ...LIMITS.servings, unit: '' };
+    /* An UNREADABLE box is refused; a BLANK one keeps its visible default (the
+       servings field clamps to 0.25 on blur, in front of the player, on a live
+       preview). Those are different events and collapsing them is the whole
+       bug: "12abc" and an empty box both became 0.25 of a serving. */
+    const outOfRange = `${amt.name} must be between ${amt.min}${amt.unit} and ${amt.max.toLocaleString()}${amt.unit}`;
+    if (amtRaw != null) {
+      const raw = numParse(amtRaw);
+      const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
+      if (!raw.ok && raw.why !== 'empty') {
+        toast(raw.why === 'grouped'
+          ? `${amt.name}: leave out the thousands comma, type 1234 not 1,234`
+          : `${amt.name}: digits only, like 150 or 1.5`, 3600);
+        amtEl?.focus();
+        return;
+      }
+      /* Range-checked on the RAW TEXT, not on sel, because sel has already
+         lost the answer: the servings handler floors at 0 for the preview and
+         the blur clamp then lifts it to 0.25, so a typed -70 arrives here
+         looking exactly like a quarter serving. */
+      if (raw.ok && !(raw.value >= amt.min && raw.value <= amt.max)) {
+        toast(outOfRange, 3600);
+        amtEl?.focus();
+        return;
+      }
+    }
+    if (!(amt.v >= amt.min && amt.v <= amt.max)) { toast(outOfRange, 3600); return; }
     const n = nutrientsFor(food, sel);
-    if (!n || !isFinite(n.kcal)) { toast('Pick a portion first'); return; }
+    /* Every macro, not just kcal: a food carrying one poisoned key would
+       otherwise pass on kcal alone and write a NaN into the log, where it
+       poisons the day total, the protein ring and the trend it feeds. */
+    if (!n || !['kcal', 'p', 'c', 'f'].every(k => n[k] == null || isFinite(n[k]))) { toast('Pick a portion first'); return; }
     const e = {
       id: editing ? entry.id : newId(),
       date: editing ? entry.date : S.date,
@@ -5638,8 +5773,19 @@ function openQuickAdd(getMeal, entry = null) {
   $('#qaKcal', wrap).focus();
   $('#qaAdd', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
-    const kcal = num($('#qaKcal', wrap).value);
-    if (kcal == null) { toast('Calories required'); return; }
+    /* One field at a time, and bail on the first refusal: readNum toasts, and
+       there is only one toast slot, so validating all four at once would stomp
+       three of the four messages unread. The macros are optional and BLANK
+       means 0, but `12abc` in a macro box is not blank and does not become 12. */
+    const k = readNum($('#qaKcal', wrap), { name: 'Calories', ...LIMITS.kcalEntry });
+    if (!k.ok) return;
+    const p = readNum($('#qaP', wrap), { name: 'Protein', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!p.ok) return;
+    const c = readNum($('#qaC', wrap), { name: 'Carbs', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!c.ok) return;
+    const f = readNum($('#qaF', wrap), { name: 'Fat', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!f.ok) return;
+    const kcal = k.value;
     const e = {
       id: entry ? entry.id : newId(),
       date: entry ? entry.date : S.date,
@@ -5648,7 +5794,7 @@ function openQuickAdd(getMeal, entry = null) {
       foodId: null,
       name: $('#qaName', wrap).value.trim() || 'Quick add',
       portionLabel: '',
-      kcal, p: num($('#qaP', wrap).value) || 0, c: num($('#qaC', wrap).value) || 0, f: num($('#qaF', wrap).value) || 0,
+      kcal, p: p.value, c: c.value, f: f.value,
     };
     await db.put('log', e);
     const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -5915,13 +6061,30 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
   $('#ffSave', wrap).addEventListener('click', async () => {
     const name = $('#ffName', wrap).value.trim();
-    const kcal = num($('#ffKcal', wrap).value);
     if (!name) { toast('Name required'); return; }
-    if (kcal == null) { toast('Calories required'); return; }
-    const grams = num($('#ffGrams', wrap).value);
+    /* A custom food is worse than a log row: it is a TEMPLATE, so a bad number
+       here is re-logged every time the player picks it, and the serving size
+       divides into per100, which is how a negative serving size minted a food
+       with permanently negative calories per 100 g and how 1e308 kcal over a
+       0.5 g serving overflowed per100.kcal to Infinity. That food then read
+       "NaN" in its own portion sheet and could never be logged again. */
+    const kc = readNum($('#ffKcal', wrap), { name: 'Calories', ...LIMITS.kcalEntry });
+    if (!kc.ok) return;
+    const g = readNum($('#ffGrams', wrap), { name: 'Grams', ...LIMITS.servingG, optional: true, blank: null, unit: ' g' });
+    if (!g.ok) return;
+    const macro = (sel, label, lim = LIMITS.macroG, unit = ' g') =>
+      readNum($(sel, wrap), { name: label, ...lim, optional: true, blank: null, unit });
+    const mp = macro('#ffP', 'Protein'); if (!mp.ok) return;
+    const mc = macro('#ffC', 'Carbs'); if (!mc.ok) return;
+    const mf = macro('#ffF', 'Fat'); if (!mf.ok) return;
+    const mfib = macro('#ffFib', 'Fiber'); if (!mfib.ok) return;
+    const msug = macro('#ffSug', 'Sugars'); if (!msug.ok) return;
+    const mna = macro('#ffNa', 'Sodium', LIMITS.sodiumMg, ' mg'); if (!mna.ok) return;
+    const kcal = kc.value;
+    const grams = g.value;
     const perServing = {
-      kcal, p: num($('#ffP', wrap).value) || 0, c: num($('#ffC', wrap).value) || 0, f: num($('#ffF', wrap).value) || 0,
-      fiber: num($('#ffFib', wrap).value), sugar: num($('#ffSug', wrap).value), sodium: num($('#ffNa', wrap).value),
+      kcal, p: mp.value || 0, c: mc.value || 0, f: mf.value || 0,
+      fiber: mfib.value, sugar: msug.value, sodium: mna.value,
     };
     const food = {
       id: f ? f.id : 'c-' + newId(),
@@ -5959,7 +6122,16 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
 function scaleToPer100(n, grams) {
   const k = 100 / grams; const out = {};
-  for (const key of Object.keys(n)) if (n[key] != null) out[key] = Math.round(n[key] * k * 100) / 100;
+  /* Belt and braces on top of the readNum bounds: this is a WRITE into a
+     permanent food template, and a non-finite value here does not fail loudly,
+     it renders as "NaN" in the portion sheet forever and makes the food
+     unloggable. Drop the key instead, so the food degrades to incomplete
+     rather than to poison (anti-regression rule 8, applied to data). */
+  for (const key of Object.keys(n)) {
+    if (n[key] == null) continue;
+    const v = Math.round(n[key] * k * 100) / 100;
+    if (isFinite(v)) out[key] = v;
+  }
   return out;
 }
 function scalePer100(per100, grams) {
@@ -7015,10 +7187,18 @@ function openWeightSheet() {
     </div>`);
   $('#wVal', wrap).focus();
   $('#wSave', wrap).addEventListener('click', async () => {
-    const v = num($('#wVal', wrap).value);
+    /* THE HIGHEST-CONSEQUENCE FIELD IN THE APP. This row is permanent history,
+       it feeds the smoothed trend and the per-week rate the player makes
+       decisions from, and it overwrites profile.weightKg, which every future
+       target recalc is derived from. Bounds are in the DISPLAY unit, so the
+       message names the number the player is looking at. */
+    const kgMode = S.settings.units === 'kg';
+    const lim = kgMode ? LIMITS.weightKg : LIMITS.weightLb;
+    const w = readNum($('#wVal', wrap), { name: 'Weight', ...lim, unit: kgMode ? ' kg' : ' lb' });
+    if (!w.ok) return;
     const d = $('#wDate', wrap).value;
-    if (v == null || !d) { toast('Enter a weight'); return; }
-    const kg = S.settings.units === 'kg' ? v : lbToKg(v);
+    if (!d) { toast('Pick a date'); return; }
+    const kg = kgMode ? w.value : lbToKg(w.value);
     await db.put('weights', { date: d, kg });
     // keep profile weight fresh for future target recalcs
     S.settings.profile.weightKg = kg;
@@ -9052,9 +9232,19 @@ async function renderSettings(el) {
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {
-    const kcal = num($('#tKcal').value), p2 = num($('#tP').value), c = num($('#tC').value), f = num($('#tF').value);
-    if (!kcal || kcal < 800) { toast('Calorie target looks too low'); return; }
-    S.settings.targets = { ...S.settings.targets, kcal: Math.round(kcal), p: Math.round(p2 || 0), c: Math.round(c || 0), f: Math.round(f || 0) };
+    /* The target is the denominator of the calorie ring, the "left today"
+       number and the over/under colour, so a nonsense target quietly recolours
+       the whole app. There was a floor here already; there was no ceiling, so
+       1e9 sailed through and every day read as 100% left. */
+    const k = readNum($('#tKcal'), { name: 'Calorie target', ...LIMITS.targetKcal, unit: ' kcal' });
+    if (!k.ok) return;
+    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!p2.ok) return;
+    const c = readNum($('#tC'), { name: 'Carb target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!c.ok) return;
+    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!f.ok) return;
+    S.settings.targets = { ...S.settings.targets, kcal: Math.round(k.value), p: Math.round(p2.value || 0), c: Math.round(c.value || 0), f: Math.round(f.value || 0) };
     await kvSet('settings', S.settings);
     toast('Targets saved');
   });
@@ -9292,12 +9482,37 @@ function profileFormHtml(p, units) {
     </div>`;
 }
 
+/* The plan form's fields cannot toast as you type: get() runs on every
+   keystroke to redraw the live preview, so a message per character would be
+   unusable. It reports the problem instead, and the two Save handlers say it.
+   Without this the form took a negative body weight and computed a protein
+   target of -154 g, and took an age of 1e20 and pinned the calorie floor. */
+function profileProblem(np) {
+  const missing = [];
+  if (np.age == null) missing.push('age');
+  if (np.heightCm == null) missing.push('height');
+  if (np.weightKg == null) missing.push('weight');
+  if (missing.length) return `Fill in ${missing.join(', ')}`;
+  if (np.age < LIMITS.age.min || np.age > LIMITS.age.max) return `Age must be between ${LIMITS.age.min} and ${LIMITS.age.max}`;
+  if (np.heightCm < LIMITS.heightCm.min || np.heightCm > LIMITS.heightCm.max) return 'That height does not look right, check it';
+  const imp = np.units === 'lb';
+  const shown = imp ? kgToLb(np.weightKg) : np.weightKg;
+  const wl = imp ? LIMITS.weightLb : LIMITS.weightKg;
+  if (shown < wl.min || shown > wl.max) return `Weight must be between ${wl.min} and ${wl.max} ${imp ? 'lb' : 'kg'}`;
+  return null;
+}
+
 function bindProfileForm(wrap, initial, onChange) {
   const state = { units: initial.units || 'lb', sex: initial.sex || 'm', activity: initial.activity || 'moderate', goal: initial.goal || 'recomp' };
   const get = () => {
     const imp = state.units === 'lb';
     const age = num($('#pfAge', wrap).value);
-    const heightCm = imp ? ftInToCm(num($('#pfFt', wrap).value) || 0, num($('#pfIn', wrap).value) || 0) : (num($('#pfCm', wrap).value) || 0);
+    /* null, not 0, for an unreadable height: 0 is a number the maths will
+       happily use, and ftInToCm(0, 0) is a person 0 cm tall. */
+    const ft = num($('#pfFt', wrap).value), inch = num($('#pfIn', wrap).value);
+    const heightCm = imp
+      ? (ft == null && inch == null ? null : ftInToCm(ft || 0, inch || 0))
+      : num($('#pfCm', wrap).value);
     const w = num($('#pfW', wrap).value);
     const weightKg = w == null ? null : (imp ? lbToKg(w) : w);
     return { sex: state.sex, age, heightCm, weightKg, activity: state.activity, goal: state.goal, units: state.units };
@@ -9306,13 +9521,16 @@ function bindProfileForm(wrap, initial, onChange) {
     const p = get();
     const hint = GOALS.find(g => g.id === state.goal);
     $('#goalHint', wrap).textContent = hint ? hint.hint : '';
-    if (p.age && p.heightCm > 90 && p.weightKg) {
-      const t = computeTargets(p);
-      $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
-        <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
-        <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
-      onChange?.(p, t);
-    }
+    /* The preview is a promise about the plan, so it renders only for a plan
+       that would actually be accepted. It used to advertise "Protein -154 g"
+       off a negative body weight and then save exactly that. */
+    const problem = profileProblem(p);
+    if (problem) { $('#pfPreview', wrap).textContent = problem; return; }
+    const t = computeTargets(p);
+    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
+      <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
+      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
+    onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
   $('#pfLb', wrap).addEventListener('click', e => { state.units = 'lb'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
@@ -9345,7 +9563,8 @@ function openProfileSheet() {
   const get = bindProfileForm(wrap, p);
   $('#pfSave', wrap).addEventListener('click', async () => {
     const np = get();
-    if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
+    const problem = profileProblem(np);
+    if (problem) { toast(problem, 3400); return; }
     S.settings.profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
     S.settings.units = np.units;
     S.settings.targets = computeTargets(S.settings.profile);
@@ -9454,7 +9673,8 @@ function renderOnboarding(step = 0, ctx = {}) {
   const get = bindProfileForm(el, { units: 'lb' });
   $('#onbSave').addEventListener('click', async () => {
     const np = get();
-    if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
+    const problem = profileProblem(np);
+    if (problem) { toast(problem, 3400); return; }
     trackEvent('onb_done', { skip: 0 });
     await saveInitialSettings(np);
   });
