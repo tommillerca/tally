@@ -13506,7 +13506,17 @@ async function renderBoneyard(el) {
       for (const r of spawnMarkers.values()) if (r.el === el) return { label: (r.spawn.type === 'rare' ? 'Rare pile' : 'Bone pile'), lat: r.spawn.lat, lng: r.spawn.lng };
       return { label: 'Map marker', lat: null, lng: null };
     }
+    /* THE OFFLINE PATH DESTROYS THESE ELEMENTS AND CANNOT STOP THE FUNCTION.
+       map.once('error') above replaces body.innerHTML wholesale with the "needs a
+       network signal" message. It is an event handler, so it cannot return out of
+       the function that registered it, and everything below carries on against a
+       body whose children it just deleted. A player who opens the Boneyard
+       offline therefore gets the polite message AND an uncaught TypeError.
+       Found by the external session, which flagged it and deliberately left it.
+       Guarded rather than restructured: the offline message is already the right
+       outcome, the only bug is the throw behind it. */
     const mapEl = $('#mapCanvas', body);
+    if (!mapEl) return;                 // the error handler already swapped the body
     mapEl.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
       // one long-press at a time: ignore secondary touch points (multi-touch),
@@ -14151,7 +14161,7 @@ async function renderBoneyard(el) {
 
     // One button, three jobs, because a spire only ever wants one thing from you:
     // take it, collect from it, or keep it alive.
-    $('#mapSpire', body).addEventListener('click', async () => {
+    $('#mapSpire', body)?.addEventListener('click', async () => {   // same offline teardown as #mapCanvas above
       if (tooFastToAct()) return;
       if (!spireInRange) return;
       const { s, view, rival, siege } = spireInRange;
