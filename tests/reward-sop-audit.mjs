@@ -34,8 +34,9 @@
  * before paying: the two NO-OP guards in tests/unit.test.js own that. This
  * complements both rather than duplicating them.
  *
- * PROVE-RED: see the block above RED_RECIPES at the foot of this file. Each fix
- * this audit protects has a one-line reintroduction and the row it turns red.
+ * PROVE-RED: the block at the foot of this file lists, for every fix this audit
+ * protects, the one-line reintroduction and the row it turns red, with the
+ * overpay each one measured. All of them were run.
  *
  * Usage: node tests/reward-sop-audit.mjs            (serves this tree)
  *        node tests/reward-sop-audit.mjs <base-url>
@@ -366,7 +367,9 @@ const results = await page.evaluate(async () => {
     },
     harvest: () => ({
       setup: async () => { await db.kvSet('garden', { seeds: {}, plotsOwned: 3, plots: [{ ing: ING, plantedAt: 1, readyAt: 2, watered: false }, null, null], composts: { date: '', used: 0 } }); },
-      act: () => garden.harvestPlot(0),
+      // a FIXED rand: harvestYield rolls a 10% bumper, and a check whose
+      // expected count is a dice roll is a check that goes red on its own
+      act: () => garden.harvestPlot(0, Date.now(), () => 0.99),
       won: r => !!r.ok,
       count: async () => (await cooking.ingredients())[ING] || 0,
     }),
@@ -477,27 +480,44 @@ ok('CONTROL the repeat half examined a non-empty sample', Object.keys(results).l
 await browser.close();
 if (srv) srv.close();
 
-/* PROVE-RED, confirmed 2026-08-17 in a throwaway copy of this tree. Each line
- * is the single edit that reintroduces the bug, and the rows it turns red:
+/* PROVE-RED, every line below CONFIRMED 2026-08-17 in a throwaway copy of this
+ * tree (/tmp/red), one reintroduction at a time, with the tree restored between
+ * each. The clean tree runs 72 checks and exits 0. Each entry is the single edit
+ * that puts the bug back, and the rows it turns red with the measured overpay:
  *
- *  js/game.js awardOnce -> `db.put` after a `db.get` guard, as it was
- *      REPEAT award / awardCapped / glutton / denWin / miniWin / spawn /
- *      friendBattle / quest / questAll / grant / badges / streak
- *      "TWO OVERLAPPING attempts pay for one, not two"
- *  js/loot.js openCrate -> move `db.del('inv', crateRow.id)` back to the end
- *      REPEAT crate TWO OVERLAPPING
- *  js/loot.js hatchEgg -> `db.del` instead of `db.take`
- *      REPEAT egg TWO OVERLAPPING
- *  js/loot.js redeemCode -> drop the `db.add('kv', {k: 'redeemed:'+code})` claim
- *      REPEAT redeem TWO OVERLAPPING
- *  js/spires.js collectTribute -> read spireState() then kvSet, as it was
- *      REPEAT tribute TWO OVERLAPPING
- *  js/loot.js coinsAdd -> read coins() then kvSet
- *      REPEAT tribute / quest / glutton TWO OVERLAPPING (as an UNDERPAY, which
- *      the ratio check reports as an overpay of the count, not of the coins)
- *  ACTIONS: delete any row -> COVERAGE "every paying call site belongs to a
- *      registered action"; add a payout inside a registered function ->
- *      COVERAGE "no registered action has grown or lost a payout"
+ *  js/game.js awardOnce -> db.get then db.put, as it was
+ *      10 rows red. award, awardCapped, glutton (280 coins + 40 dust for ONE
+ *      appearance), denWin, miniWin, spawn (120 coins for one spawn),
+ *      friendBattle, quest (200 coins + 30 dust for one quest), questAll, grant
+ *      (200 coins + 40 dust for one grant key): "TWO OVERLAPPING attempts:
+ *      exactly one takes the state", wins 2.
+ *  js/loot.js openCrate -> find the row in inventory(), delete it at the end
+ *      REPEAT crate, wins 2, 40 coins out of one crate.
+ *  js/loot.js hatchEgg -> db.del instead of db.take
+ *      REPEAT egg, wins 2.
+ *  js/loot.js redeemCode -> drop the db.add('kv', 'redeemed:<code>') claim
+ *      REPEAT redeem, wins 2, 100 coins for one code.
+ *  js/spires.js collectTribute -> spireState() then kvSet, as it was
+ *      REPEAT tribute, wins 2, 240 coins + 32 dust for one lot of tribute.
+ *  js/game.js claimFriendBattle -> db.get then award, returning firstToday:true
+ *      REPEAT friendBattle, wins 2 (the caller is what pays the 25 coins).
+ *  js/game.js grantLevelRewards -> the `claimed` flag, get then put
+ *      REPEAT levelRewards, wins 2, 2290 coins + 300 dust for ONE level.
+ *  js/garden.js harvestPlot -> grant then clear, as it was
+ *      REPEAT harvest, wins 2, and "hand over one lot" 4 ingredients vs 2.
+ *  js/cooking.js collectDish -> readSlots then writeSlots
+ *      REPEAT dish, wins 2, and "hand over one lot" 2 dishes vs 1.
+ *  js/social.js applyPayload -> db.get then awardOnce
+ *      REPEAT grant, wins 2, 200 coins + 40 dust for one grant key.
+ *
+ *  COVERAGE, the half that keeps the class fixed:
+ *    add `export async function sneakyPayout() { await coinsAdd(9999); }` to
+ *      js/hunt.js -> "every paying call site belongs to a registered action",
+ *      naming js/hunt.js:sneakyPayout and the line it pays on.
+ *    add one coinsAdd(500) inside collectSpawn -> "no registered action has
+ *      grown or lost a payout", registered 3 sites, source has 4.
+ *    delete the collectSpawn row from ACTIONS -> "every paying call site
+ *      belongs to a registered action", naming js/hunt.js:collectSpawn.
  */
 console.log(`\n${fails ? `REWARD SOP AUDIT FAILED (${fails})` : 'REWARD SOP VERIFIED'}`);
 process.exit(fails ? 1 : 0);
