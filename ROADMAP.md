@@ -55,6 +55,61 @@ rotate daily, every copy takes its turn ("today's herd"). Fliers, clouds and
 catfish stack their own spots, uncapped. FYI not a decision: cap and rotation
 are tunable one-liners if you want a different number or a "+N more" hint.
 
+## 🥚 Chest and egg art Tom authored 2026-08-16 evening — LOGGED, not wired in
+
+Written down because I keep failing to. Tom, 2026-08-16: "bro you gotta start
+writing this shit down like i told you." Both items below sat in my task list as
+BLOCKED ON TOM for hours after he had already made the art, because I did not
+re-check his PixelLab account before saying I was waiting on him. Checking the
+account is now part of the job before anything is called blocked.
+
+### Already correct, verified byte-identical, no work needed
+
+The shipped 15-frame egg hatch (assets/eggs/step/f1..f15.png) ALREADY ends on
+Tom's intended art. Compared pixel for pixel against the states he authored at
+19:18 to 19:21:
+
+  shipped f1  vs "make the egg unbroken"   (1560ded7)  IDENTICAL
+  shipped f15 vs "shells are all on the floor" (1ee4b08c) IDENTICAL
+
+So both of his notes, "the egg needs to end on the art i created where it's a
+smoke plume coming out" and "why are no shells falling on the floor like i
+provided", are already satisfied on the shipped build. He had never seen it
+because the hatch cinematic is only reachable by walking an egg to term. Recorded
+at real speed and sent 2026-08-16. The only non-identical frame is the mid
+sequence "make the shell more..." (569f84e7), which is a variant rather than a
+replacement.
+
+### NEW, on the account, NOT wired in
+
+**Five chest open-states, 20:00 to 20:04.** The shipped 9-frame common crate
+stops at f8 with the ghost spread and the chest still mid-open, so it never
+finishes opening. These give it an ending:
+  8d1c990b  plain chest open, ghost out          <- the ending the sequence lacks
+  ab64c11c  plain chest open, empty, no ghost    <- the settled state after
+  2fb62986  purple rune chest, open, gems        <- a different TIER
+  9d2afa64  bone chest, open, green flame, gold  <- a different TIER
+  c0fa1bba  near-duplicate of 9d2afa64
+
+The last three are the vault / special rarity Tom said not to drop
+("we are not dropping it. find a way to use the special chest"). Art now exists;
+the mechanic is still the open DECISION in the Bone Bazaar / vault entry.
+
+**A full egg family, 19:13.** dino, monster, rotten, haunted, glowing, stinking,
+each with a cracked variant and several with a top-of-shell-missing variant. The
+game ships ONE generic egg. Making egg art per pet type is a design decision, not
+a wiring job, and it is not taken.
+
+**A wooden crate, lid on (39fcabcc), 21:06.**
+
+### What has to happen before any of it ships
+
+1. The chest ending is the small one and should go first: two frames appended to
+   the existing sequence, so the crate actually closes its own animation.
+2. The tiers need the vault-rarity mechanic decided first. Art before mechanic is
+   the wrong order and would be thrown away.
+3. The egg family needs a decision on whether egg art becomes per pet type.
+
 ## 🎨 The Hollow: art redraws Tom owns — LOGGED 2026-08-16, not started
 
 From the Impeccable critique run 2026-08-16 (two isolated assessments plus my own
