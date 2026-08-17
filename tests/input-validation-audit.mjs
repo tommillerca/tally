@@ -90,8 +90,40 @@ const near = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9;
 
 /* ---------------------------------------------------------------- harness */
 
+/* A SHEET FOCUSES ITSELF ON THE NEXT FRAME AND THIS AUDIT CAN BEAT IT TO IT.
+   openSheet() in js/app.js moves focus onto the .sheet panel inside a
+   requestAnimationFrame, so a screen reader lands on the named dialog rather
+   than on its first button. That has been there since v385, it is correct, and
+   it is not what this audit is testing. But a sheet's fields are in the DOM the
+   instant its innerHTML is set, so waitForSelector can return BEFORE that frame
+   runs. A bare page.focus() then lands first and the pending rAF takes the caret
+   straight back to the panel. Measured with a focusin/focusout log while driving
+   openPortion, one open in eight:
+
+     27ms focusin  #q          <- page.focus('#q')
+     29ms focusout #q
+     30ms focusin  div.sheet   <- openSheet's rAF, one frame late
+     34ms key "c" -> div.sheet <- and every keystroke after it
+
+   #q stays empty, no input event fires, the results list keeps its empty-state
+   note, and the wait for "#results [data-food]" times out 6650ms later with
+   nothing to say about why. A player cannot lose this race: a real tap focuses
+   the field many frames after the sheet has painted. So the harness yields the
+   two frames, then confirms the caret actually stuck before typing a character.
+   FAILING RESULT: focus never settles on `sel` in three tries and this throws by
+   name, instead of the surface dying on an opaque selector timeout. */
+async function focusField(sel) {
+  await evalPage(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  for (let i = 0; i < 3; i++) {
+    await page.focus(sel);
+    if (await evalPage(s => document.activeElement === document.querySelector(s), sel)) return true;
+    await sleep(80);
+  }
+  throw new Error(`focus never settled on ${sel}: something keeps taking the caret back, so nothing typed would reach it`);
+}
+
 async function typeInto(sel, value) {
-  await page.focus(sel);
+  await focusField(sel);
   await evalPage(s => {
     const el = document.querySelector(s);
     el.value = '';
@@ -309,8 +341,12 @@ async function openPortion(mode) {
   await page.waitForSelector('[data-addmeal]', { timeout: 12000 });
   await evalPage(() => document.querySelector('[data-addmeal="2"]').click());
   await page.waitForSelector('#q', { timeout: 6000 });
-  await page.focus('#q');
+  await focusField('#q');
   await page.keyboard.type('chicken breast', { delay: 5 });
+  /* The typed text is the whole input to the search. Assert it landed rather
+     than discovering it did not, six seconds later, as a missing row. */
+  const typed = await evalPage(() => document.querySelector('#q').value);
+  if (typed !== 'chicken breast') throw new Error(`the search box holds "${typed}", not "chicken breast": the keystrokes did not reach #q`);
   await sleep(650);
   await page.waitForSelector('#results [data-food]', { timeout: 6000 });
   await evalPage(() => document.querySelector('#results [data-food]').click());
