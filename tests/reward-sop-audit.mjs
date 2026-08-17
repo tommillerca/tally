@@ -25,6 +25,10 @@
  *             the prize. Concurrently matters: on 2026-08-17 every one of these
  *             paid in full when two calls overlapped, because the authority was
  *             read in one transaction and the reward written in another.
+ *   NO-OP     an action that decides nothing is owed must not damage the record
+ *             it consulted. The REPEAT rows cannot see this: they grade what the
+ *             second attempt PAID, and it correctly pays nothing while wiping
+ *             the record on its way out. See the block near the foot of the file.
  *   CONTROL   the FIRST attempt actually paid, and the scanner actually found
  *             sites. An empty sample is a failure, never a pass.
  *
@@ -471,6 +475,54 @@ for (const [name, r] of Object.entries(results)) {
   }
 }
 
+/* ===========================================================================
+ * NO-OP: an action that decides it is owed NOTHING must not damage the record
+ * it consulted.
+ *
+ * Every kv-backed action above answers "is a payout owed?" from inside one
+ * kvUpdate transaction, and says no by returning `undefined` from its updater.
+ * kvUpdate honours that by writing nothing. Drop the `if (next !== undefined)`
+ * and the no-op instead stores `v: undefined` over the whole record: measured
+ * 2026-08-17 on this tree, a SECOND collectTribute on an emptied tower left kv
+ * 'spires' undefined (every tower the player holds, not just the one), and a
+ * harvest of an empty bed left kv 'garden' undefined (seeds, plots owned and
+ * all three beds).
+ *
+ * THE REPEAT ROWS ABOVE CANNOT SEE THIS, and that is why these two exist. They
+ * grade what the second attempt PAID, and the second attempt correctly pays
+ * nothing while wiping the record on its way out. Both audits in this repo ran
+ * green on the broken version. So the measure here is the RECORD, before and
+ * after, not the payout: the tower count must be unchanged and the garden must
+ * still be a garden.
+ * ======================================================================== */
+const noop = await page.evaluate(async () => {
+  const [spires, garden, db] = await Promise.all([
+    import('/js/spires.js'), import('/js/garden.js'), import('/js/db.js')]);
+  const now = Date.now();
+  const id = 'sop-noop';
+  await db.kvSet('spires', { [id]: { claimedAt: now - 5 * 864e5, tendedAt: now - 864e5, collectedAt: now - 2 * 864e5, level: 1, meta: { name: 'SOP', lat: 0, lng: 0 } } });
+  const first = await spires.collectTribute(id);
+  const towersAfterFirst = Object.keys((await db.kvGet('spires', null)) || {}).length;
+  const second = await spires.collectTribute(id);         // the no-op
+  const rawSpires = await db.kvGet('spires', '(no row at all)');
+  const towersAfterSecond = rawSpires && typeof rawSpires === 'object' ? Object.keys(rawSpires).length : String(rawSpires);
+
+  await db.kvSet('garden', { seeds: { x: 1 }, plotsOwned: 3, plots: [null, null, null], composts: { date: '', used: 0 } });
+  const h = await garden.harvestPlot(0, Date.now());      // an empty bed: the no-op
+  const rawGarden = await db.kvGet('garden', '(no row at all)');
+  const plotsAfter = rawGarden && typeof rawGarden === 'object' ? (rawGarden.plots || []).length : String(rawGarden);
+  return { first: !!first.ok, second: !!second.ok, towersAfterFirst, towersAfterSecond, harvest: !!h.ok, plotsAfter };
+});
+/* CONTROL first: if the tribute never paid, the no-op below is not a no-op and
+   both rows would pass by never reaching the state they are about. */
+ok('CONTROL noop the tribute actually paid once and the tower survived it, so the second call really is the no-op',
+  noop.first === true && noop.second === false && noop.towersAfterFirst === 1,
+  JSON.stringify({ firstPaid: noop.first, secondPaid: noop.second, towersAfterFirst: noop.towersAfterFirst }));
+ok("NO-OP collectTribute on an already-emptied tower leaves kv 'spires' exactly as it was, not undefined",
+  noop.towersAfterSecond === 1, `towers after the no-op: ${noop.towersAfterSecond} (expected 1)`);
+ok("NO-OP harvestPlot on an empty bed leaves kv 'garden' a garden, not undefined",
+  noop.harvest === false && noop.plotsAfter === 3, `harvest ok: ${noop.harvest}, plots after: ${noop.plotsAfter} (expected false and 3)`);
+
 const driven = ACTIONS.filter(a => a.drive).map(a => a.drive);
 const missingDrivers = driven.filter(d => !(d in results));
 ok('CONTROL every action that claims a driver actually ran one', missingDrivers.length === 0, missingDrivers.join(', '));
@@ -482,7 +534,7 @@ if (srv) srv.close();
 
 /* PROVE-RED, every line below CONFIRMED 2026-08-17 in a throwaway copy of this
  * tree (/tmp/red), one reintroduction at a time, with the tree restored between
- * each. The clean tree runs 72 checks and exits 0. Each entry is the single edit
+ * each. The clean tree runs 75 checks and exits 0. Each entry is the single edit
  * that puts the bug back, and the rows it turns red with the measured overpay:
  *
  *  js/game.js awardOnce -> db.get then db.put, as it was
@@ -509,6 +561,13 @@ if (srv) srv.close();
  *      REPEAT dish, wins 2, and "hand over one lot" 2 dishes vs 1.
  *  js/social.js applyPayload -> db.get then awardOnce
  *      REPEAT grant, wins 2, 200 coins + 40 dust for one grant key.
+ *  js/db.js kvUpdate -> `os.put(...)` unconditionally, dropping the
+ *      `if (next !== undefined)` skip
+ *      the two NO-OP rows, and ONLY those two: kv 'spires' reads undefined
+ *      after the second collect (every tower gone, not just the emptied one)
+ *      and kv 'garden' reads undefined after harvesting an empty bed. Every
+ *      REPEAT row stays green, which is the point of the pair: the second
+ *      attempt pays nothing while destroying the record on its way out.
  *
  *  COVERAGE, the half that keeps the class fixed:
  *    add `export async function sneakyPayout() { await coinsAdd(9999); }` to
