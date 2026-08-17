@@ -7,6 +7,7 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
+  awardCapped, XP_DAILY_CAP,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
@@ -4434,7 +4435,7 @@ function openHollow(after) {
         if (p.ready) {
           const res = await harvestPlot(p.index);
           if (!res.ok) { busy = false; render(); return; }
-          await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
+          await awardCapped('harvest', 'garden', 6, `Harvested ${res.name}`, XP_DAILY_CAP.garden);
           levelSound(S.sounds);
           /* THE PLUCK PLAYS IN FRONT OF HIM, not behind. Measured on a real
              harvest tap: the keeper's box covered 80.6 x 57.5 of an 84 x 60 bed,
@@ -4578,7 +4579,7 @@ function openGardenSheet(after) {
     $$('[data-harvest]', body).forEach(btn => btn.addEventListener('click', async () => {
       const res = await harvestPlot(Number(btn.dataset.harvest));
       if (!res.ok) { render(); return; }
-      await award(`harvest-${Date.now().toString(36)}`, 'garden', 6, `Harvested ${res.name}`);
+      await awardCapped('harvest', 'garden', 6, `Harvested ${res.name}`, XP_DAILY_CAP.garden);
       confettiBurst(innerWidth / 2, innerHeight * 0.35, res.bumper ? 26 : 16); levelSound(S.sounds);
       showHarvest(res);
       render();
@@ -4854,7 +4855,7 @@ async function openKitchen() {
        behalf are paid the same XP a manual Serve pays, exactly once. cookState()
        stays a plain read; the pots are shown here and nowhere the queue matters. */
     for (const [i, dish] of (await advanceQueue()).entries()) {
-      await award(`cook-${Date.now().toString(36)}-${i}`, 'cook', 8, `Cooked ${dish.name}`);
+      await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
     }
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
     const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
@@ -4970,7 +4971,7 @@ async function openKitchen() {
     $$('[data-serve]', body).forEach(btn => btn.addEventListener('click', async () => {
       const dish = await collectDish(Number(btn.dataset.serve));
       if (dish) {
-        await award(`cook-${Date.now().toString(36)}`, 'cook', 8, `Cooked ${dish.name}`); // small XP + powers cooking quests
+        await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook); // small XP + powers cooking quests
         confettiBurst(innerWidth / 2, innerHeight * 0.35, 20); levelSound(S.sounds);
         toast(dish.potion ? `${dish.icon} ${dish.name} brewed! Drink it mid-fight.` : `${dish.icon} ${dish.name} is in your Pantry. Eat it when you want the buff.`, 3400);
       }
@@ -15807,7 +15808,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (badges.length) queueCelebration({ newBadges: badges });
       }
     } else if (won) {
-      await award(`fight-${Date.now().toString(36)}`, 'fight', 10, 'Pit win');
+      await awardCapped('fight', 'fight', 10, 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
@@ -15898,7 +15899,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           coins = 50;
           // a uniquely-keyed ledger row, so the Siegebreaker badge has something to
           // count and a repeated settle can never double-count it
-          await award(`siege-${foeCfg.spire.id}-${Date.now().toString(36)}`, 'siege', 12, `Broke the siege at ${foeCfg.spire.name}`);
+          await awardCapped('siege', 'siege', 12, `Broke the siege at ${foeCfg.spire.name}`, XP_DAILY_CAP.siege);
           await breakSiege(foeCfg.spire.id);
           if (res && res.ok && res.level) await setSpireLevel(foeCfg.spire.id, res.level);
           await cancelSiegeReminder();
