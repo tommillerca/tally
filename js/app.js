@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, DbUnavailableError } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -538,7 +538,23 @@ async function boot() {
   // DB, polluting the leaderboard). Real users never run with ?demo.
   const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
-  const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
+  /* BOUNDED, AND THE .catch WAS NEVER THE BOUND.
+     `.catch(() => null)` handles a REJECTION. A fetch that completes its TCP
+     handshake and then never answers does not reject, ever, so this line used to
+     hang the entire app in front of a captive portal or a dead middlebox:
+     measured, #screen held 0 children and 28 characters of text at 25 seconds
+     and stayed there. bootSync now spends a deadline of its own (social.BOOT_NET_MS)
+     and ABORTS its requests, which is the real fix. This race is the belt to that
+     brace: bootSync also awaits things that are not fetches (the native keychain
+     plugin, crypto), and none of those can be allowed to own the first screen
+     either. One second of slack over bootSync's own budget, so the inner abort
+     normally wins and this only fires for a hang the inner bound cannot see.
+     Either way the app CARRIES ON and the definitive-failure branch below tells
+     the player, in the wording that path already uses. */
+  const cloudRestore = NOSOCIAL ? null : await Promise.race([
+    social.bootSync().catch(() => null),
+    new Promise(r => setTimeout(() => r({ restored: false, reason: 'net-timeout' }), social.BOOT_NET_MS + 1000)),
+  ]);
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
     S.userFoods = await db.all('foods');
@@ -7272,7 +7288,10 @@ async function renderFriends(el) {
     $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
     $('#crewGoOnline', el)?.addEventListener('click', async () => {
       const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
-      const r = await social.goOnline();
+      // catch, like the Settings twin below: goOnline REJECTS on a dropped or
+      // timed-out connection, and an uncaught throw here leaves the player
+      // holding a disabled "Connecting..." button with no toast and no way back.
+      const r = await social.goOnline().catch(() => ({ ok: false, reason: 'network' }));
       if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast('Could not connect. Try again in a bit.'); return; }
       trackEvent('go_online');
       confettiRain(60); levelSound(S.sounds);
@@ -16617,4 +16636,58 @@ async function seedDemo() {
 
 /* ================= go ================= */
 
-boot();
+/* A PLAYER MUST NEVER FACE A BLANK SCREEN WITH NO EXPLANATION.
+ *
+ * This is the general rule, and it is worth more than any one cause. boot() was
+ * called bare, so ANY throw before route() left the static shell (gear, tab bar)
+ * painted and #screen empty: 0 children, 28 characters of text, no message ever,
+ * for as long as the player kept looking at it. Measured with storage denied:
+ * two unhandled SecurityErrors and a permanently empty room.
+ *
+ * Three things this owes the player, in order:
+ *   1. WHAT HAPPENED, in their words, not the exception's.
+ *   2. WHAT THEY CAN DO. A screen that only apologises is a nicer dead end.
+ *   3. THE TRUTH ABOUT THEIR DATA. A boot failure destroys nothing, and the
+ *      silence was being read as "my gym is gone".
+ *
+ * Styled inline on purpose. app.css may be exactly what failed to arrive, and a
+ * message that is white text on a white page is another blank screen. Everything
+ * this needs is on the element itself.
+ *
+ * Deliberately NOT a toast: toast() lives in the module that just failed, it
+ * fades, and it can be painted under the splash. This replaces the empty room.
+ */
+function bootFailScreen(err) {
+  try {
+    const el = document.getElementById('screen');
+    if (!el || document.getElementById('bootFail')) return;
+    // storage is the one cause worth naming, because the player can actually
+    // fix it (leave private browsing / allow site data) and nothing else here can.
+    const storage = err instanceof DbUnavailableError
+      || /SecurityError|InvalidStateError|QuotaExceeded|indexedDB/i.test(String(err && (err.name + ' ' + err.message) || err));
+    const detail = String((err && (err.stack || err.message)) || err || 'unknown').split('\n')[0].slice(0, 180);
+    const safeText = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const body = storage
+      ? ['Boneheadz Gym keeps your whole gym on this device, and the browser is blocking its storage. Private browsing is the usual reason.',
+        'Nothing has been lost. Open the app in a normal window, or allow site data for this site, then tap Try again.']
+      : ['Something went wrong while starting up. Nothing has been lost; anything already saved is still on this device.',
+        'Tap Try again. If it keeps happening, close the app completely and open it once more.'];
+    /* #screen is `opacity: 0` until the router adds `screen-in` (app.css, "every
+       screen arrives whole"), so a message written straight into it is in the DOM
+       and invisible, which is another blank page. The audit caught this with an
+       opacity-chain measurement of 0.000 on a message it could otherwise read.
+       Both belts: the class for the case where app.css loaded, and an inline
+       opacity for the case where it did not. */
+    el.className += ' screen-in';
+    el.innerHTML = `<div id="bootFail" style="opacity:1;min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px 22px;text-align:center;background:#14121c;color:#ece9f5;font-family:system-ui,-apple-system,sans-serif">
+      <div style="font-size:52px;line-height:1">💀</div>
+      <h1 style="margin:0;font-size:21px;line-height:1.25;letter-spacing:.02em">${storage ? 'WE CANNOT OPEN YOUR GYM ON THIS DEVICE' : 'BONEHEADZ GYM DID NOT FINISH STARTING'}</h1>
+      ${body.map(p => `<p style="margin:0;max-width:30em;font-size:15px;line-height:1.5;color:#c9c3dd">${p}</p>`).join('')}
+      <button id="bootFailRetry" style="margin-top:6px;padding:13px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#e8483c;color:#fff">Try again</button>
+      <p style="margin:4px 0 0;font-size:11px;line-height:1.4;color:#7d7791;word-break:break-word;max-width:32em">${safeText(detail)}</p>
+    </div>`;
+    document.getElementById('bootFailRetry')?.addEventListener('click', () => location.reload());
+  } catch { /* if even this throws there is nothing left to try */ }
+}
+
+boot().catch(e => { console.error('boot failed', e); bootFailScreen(e); });

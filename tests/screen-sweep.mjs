@@ -15,7 +15,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, launch } from './godmode.js';
 
 /* This harness never advances CSS animations: an element reports playState
    'running' with currentTime stuck at 0, so anything that fades in paints at its
@@ -26,11 +26,13 @@ const settle = async (page, ms = 250) => {
 };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-/* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
-   fresh clone works after `npm install`, the overlay-render-kit as fallback so the
-   already-configured machines need no install. Each of these files used to carry
-   its OWN copy of a hardcoded path into a sibling project. */
-const puppeteer = await loadPuppeteer();
+/* THE BROWSER COMES FROM godmode.launch(), not from puppeteer.launch() here.
+   Same resolution as before (the repo's own node_modules first so a fresh clone
+   works after `npm install`, the overlay-render-kit as fallback), plus the two
+   things a hand-rolled launch keeps losing: --no-sandbox when running as uid 0,
+   without which Chrome refuses to start at all and this suite exits 1 with a
+   launch error that reads exactly like a broken app, and the orphaned-browser
+   tracking. The custom GL args below are passed through untouched. */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let srv = null, srvHandle = null;
@@ -49,8 +51,7 @@ const shots = process.env.SHOTS ? path.resolve(process.env.SHOTS) : null;
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
-const browser = await puppeteer.launch({
-  headless: process.env.HEADLESS_MODE || 'new',
+const browser = await launch({
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
