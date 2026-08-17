@@ -12812,7 +12812,35 @@ async function syncFromClipboard() {
       toast('No sync data on the clipboard. Run your "Sync Boneheadz" shortcut first.', 3400);
       return;
     }
+    /* A CLIPBOARD READING CARRIES NO TIMESTAMP, SO IT MUST NOT BE COUNTED TWICE.
+       HK_TEMPLATE has no d= in it, so parseHkPayload stamps dateKey(): the day
+       the player TAPS SYNC, not the day the reading was taken. The guide above
+       recommends a 9:00 PM automation and says Boneheadz picks it up next time
+       you open the app, so the ordinary flow is a Monday-night reading synced
+       again on Tuesday morning before the shortcut has re-run. Same bytes on the
+       clipboard, new dateKey(), and Monday's walk is written a second time onto
+       Tuesday's row. raceWeekDates spans seven consecutive days, so both rows sit
+       in the same race week almost every time and weekStepsNow doubles: one walk
+       paying twice into a podium worth 5,000 coins plus a Golden Crate.
+       The server cannot see this. Its bounds hold weekSteps monotone per week and
+       cap it per elapsed day; a doubled honest total is an increase and is far
+       under the cap, so it is accepted as real.
+       The identity of a reading is its own bytes. If they have not changed, the
+       shortcut has not re-run, and there is no new reading to ingest. Re-syncing
+       identical text on the SAME day is left alone: it rewrites the same numbers
+       and changes nothing, and refusing it would read as a broken Sync button. */
+    const clipKey = String(text || '').trim();
+    const clipId = { text: clipKey.slice(0, 512), len: clipKey.length };
+    const prevClip = await kvGet('hkClipLast', null);
+    if (prevClip && prevClip.text === clipId.text && prevClip.len === clipId.len &&
+        prevClip.date && prevClip.date !== payload.date) {
+      // A refusal the player can act on. Silence here is indistinguishable from a
+      // dead button, and the fix is one they can perform.
+      toast(`Same reading you already synced on ${prevClip.date}. Run your "Sync Boneheadz" shortcut again to pick up today's steps.`, 4600);
+      return;
+    }
     await ingestHealth(payload);
+    await kvSet('hkClipLast', { ...clipId, date: payload.date });
     refresh();
   } catch {
     toast('Clipboard not available. Run the shortcut, then tap Sync again.', 3200);
