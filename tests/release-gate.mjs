@@ -100,6 +100,7 @@ const BROWSER = [
   'teaser-fire-audit.mjs',   // the drop announcement fires from BOOT, not by hand
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
+  'zoom-a11y-audit.mjs',     // pinch zoom stays possible: the v1 scaffold's user-scalable=no cannot come back, and body keeps the touch-action that replaced its only real job. 22s, one boot, and it is FAST because the smallest text in the app is 6.8px and zoom is the only way a player can enlarge any of it
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'notif-audit.mjs',         // Notification tiers do what they say (measured, not toggle-position); boot-asker webdriver-skip guard behaviourally verified
   'notif-tier-audit.mjs',    // Essentials is a bounded strict subset of Everything, the toast copy and the payload agree both ways, and every silenced kind is driven through the real scheduler

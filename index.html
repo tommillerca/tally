@@ -2,7 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<!-- NO user-scalable=no. It shipped in the v1 scaffold (98e5a3e) as boilerplate, with no
+     comment, no doc and no issue behind it: privacy.html and help/steps.html were both
+     written without it, so it was never a policy. The usual reason to add it is killing
+     the 300ms double-tap-zoom delay on a game UI, and app.css already does that the modern
+     way with `touch-action: manipulation` on body (app.css:71), which suppresses double-tap
+     zoom while LEAVING deliberate pinch zoom alone. So the tag was buying nothing and
+     costing everything: the app has 48 CSS rules under 10px (down to 6.8px on the paper
+     doll), and with zoom disabled that text could not be enlarged by any means available
+     to a player. Guarded by tests/zoom-a11y-audit.mjs so it cannot come back. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Boneheadz Gym</title>
 <meta name="description" content="Boneheadz Gym: gamified calorie and macro tracking. Scan, log, earn loot, level up.">
 <meta name="theme-color" content="#0d0c12">
