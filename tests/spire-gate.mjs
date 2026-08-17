@@ -22,14 +22,13 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, loadPuppeteer, launch} from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
    fresh clone works after `npm install`, the overlay-render-kit as fallback so the
    already-configured machines need no install. Each of these files used to carry
    its OWN copy of a hardcoded path into a sibling project. */
-const puppeteer = await loadPuppeteer();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let srv = null, srvHandle = null;
@@ -47,7 +46,13 @@ base = base.replace(/\/?$/, '/');
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
-const browser = await puppeteer.launch({
+/* launch(), not puppeteer.launch(). Chrome refuses to start its sandbox as uid 0,
+   so on a root container this died at launch and exited 1, which in this suite
+   means A FINDING. Worse than a plain crash: the static rows above print PASS
+   first, so the output opens green and then stops. godmode's launch() adds the
+   root flags, chromePath() and the orphan tracking; the args below are this
+   file's own and are preserved. */
+const browser = await launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],

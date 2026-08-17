@@ -41,7 +41,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { loadPuppeteer, serveTree } from './godmode.js';
+import { loadPuppeteer, serveTree, launch} from './godmode.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, '..');
@@ -124,13 +124,18 @@ for (const [mode, kind] of Object.entries(EXITS)) {
 }
 
 /* ---------- 3. LIVE: drive a real spire win and tap the real button ----- */
-const puppeteer = await loadPuppeteer();
 let srvHandle = null;
 let base = process.env.URL;
 if (!base) { srvHandle = await serveTree(ROOT); base = srvHandle.url; }
 base = base.replace(/\/?$/, '/');
 
-const browser = await puppeteer.launch({
+/* launch(), not puppeteer.launch(). Chrome refuses to start its sandbox as uid 0,
+   so on a root container this died at launch and exited 1, which in this suite
+   means A FINDING. Worse than a plain crash: the static rows above print PASS
+   first, so the output opens green and then stops. godmode's launch() adds the
+   root flags, chromePath() and the orphan tracking; the args below are this
+   file's own and are preserved. */
+const browser = await launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],

@@ -17,7 +17,7 @@
  * so it fails. It is never skipped and never passed.
  */
 import path from 'node:path';
-import { loadPuppeteer } from './godmode.js';
+import { loadPuppeteer, launch} from './godmode.js';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,11 +25,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
    fresh clone works after `npm install`, the overlay-render-kit as fallback so the
    already-configured machines need no install. Each of these files used to carry
    its OWN copy of a hardcoded path into a sibling project. */
-const puppeteer = await loadPuppeteer();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const srv = spawn('python3', ['-m','http.server','8139','--bind','127.0.0.1'], { cwd: ROOT, stdio:'ignore' });
 await sleep(900);
-const b = await puppeteer.launch({ headless:'new', defaultViewport:{width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true} });
+/* launch(), not puppeteer.launch(). Chrome refuses to start its sandbox as uid 0,
+   so on a root container this died at launch and exited 1, which in this suite
+   means A FINDING. Worse than a plain crash: the static rows above print PASS
+   first, so the output opens green and then stops. godmode's launch() adds the
+   root flags, chromePath() and the orphan tracking; the args below are this
+   file's own and are preserved. */
+const b = await launch({ headless:'new', defaultViewport:{width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true} });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('PAGEERROR', e.message));
 await p.goto('http://127.0.0.1:8139/?demo', { waitUntil:'networkidle2' });
