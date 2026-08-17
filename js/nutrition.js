@@ -138,6 +138,33 @@ export function addDays(key, n) {
   const x = new Date(y, m - 1, d + n);
   return dateKey(x);
 }
+
+/* MONOTONIC DAY GUARD, part 1 of 2. Part 2 is claimDay() in js/db.js.
+ *
+ * Turn a 'YYYY-MM-DD' key into an integer count of days since 1970-01-01.
+ * NO Date OBJECT IS BUILT, and that is the point rather than a micro-
+ * optimisation: dateKey() above asks the device what day it is, so it moves
+ * whenever the device clock moves. This function asks nothing. It is pure
+ * arithmetic on the characters of a string, so two keys can be ordered
+ * against each other without the clock getting a second vote. A local
+ * midnight, a timezone, a DST fold and a leap year are all already baked
+ * into the key by the time it arrives here.
+ *
+ * Howard Hinnant's days_from_civil, exact for any proleptic Gregorian date.
+ * Returns NaN for anything that is not a well-formed key, and every caller
+ * treats NaN as "cannot judge this", never as zero. */
+export function dayOrdinal(key) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key == null ? '' : key));
+  if (!m) return NaN;
+  const mo = +m[2], d = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return NaN;
+  const y = +m[1] - (mo <= 2 ? 1 : 0);
+  const era = Math.floor(y / 400);
+  const yoe = y - era * 400;                                   // [0, 399]
+  const doy = Math.floor((153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
 export function mealForHour(h) {
   if (h >= 4 && h < 10.5) return 0;       // breakfast
   if (h >= 10.5 && h < 15) return 1;      // lunch

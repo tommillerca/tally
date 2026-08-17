@@ -2,7 +2,7 @@
 // VIGOR that you earn ONLY from healthy behaviour — logging food and getting
 // steps. It never hard-locks (the free floor is always there) and never rewards
 // eating less: Vigor comes from logging + walking, not from a calorie deficit.
-import { db, kvGet, kvSet } from './db.js';
+import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const FREE_FIGHTS = 3;          // free Pit fights every day, no strings attached
@@ -45,7 +45,17 @@ async function todaySignals() {
 export async function refreshPitEnergy() {
   const st = (await kvGet('pitEnergy', null)) || {};
   const today = dateKey();
-  if (st.date !== today) { st.date = today; st.freeUsed = 0; st.fromSteps = 0; st.fromLog = 0; }
+  /* MONOTONIC DAY GUARD (js/db.js claimDay). FREE_FIGHTS refills purely because
+     the stored date stopped matching dateKey(), which is three free Pit fights
+     per clock nudge (measured at 3.0 per reset). The stored date still moves so
+     this cannot loop, but the FLOOR only refills on a day the device honestly
+     reached; on a distrusted day freeUsed carries over and the player keeps
+     whatever they had left, which is the never-hard-lock promise above. */
+  if (st.date !== today) {
+    const day = await claimDay(today);
+    st.date = today;
+    if (day.fresh) { st.freeUsed = 0; st.fromSteps = 0; st.fromLog = 0; }
+  }
   st.vigor = clampVigor(st.vigor || 0);
   const { steps } = await todaySignals();
   const stepTarget = Math.min(STEP_VIGOR_CAP, Math.floor(steps / STEP_VIGOR_PER));
