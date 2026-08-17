@@ -10932,15 +10932,20 @@ function playCrateSeq(reveal, scope, ready, at) {
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
-    /* ON THE DROP'S OWN animationend, not on a timer.
-       The `at(start)` beat looks like the right moment and is not: `at` is a
-       setTimeout, and navigator.webdriver scales JS timing by 0.25 at
-       js/app.js:14722 while the CSS drop is not scaled, so under any harness the
-       snap fires at ~280ms against a drop that lands at 1020ms and corrects a
-       position the crate is about to leave. Measured, that left the sprite at
-       device y 470.750 with the horizontal snap already correct at 122.000.
-       animationend is the same instant in both worlds. The other two calls are
-       belt and braces for a browser that never fires it. */
+    /* ON THE DROP'S OWN animationend, not on the `at(start)` beat.
+       The beat is 1.12s and the drop lands at 1.02s, so on a player's phone the
+       two agree by 100ms of luck. Tie the snap to the thing it is correcting
+       instead: retiming the lid in CSS would otherwise silently move the snap
+       off the landing.
+       CORRECTION TO MY OWN EARLIER NOTE, kept because it was wrong in a way
+       worth not repeating: I wrote that `at` is scaled 0.25x under webdriver.
+       It is not. `at` is a bare setTimeout (see openPackReveal) and nothing
+       scales it. The 0.25 factor is real but lives in the FIGHT's FX
+       choreography, `const s = fast ? 0.25 : 1`, and never touches this file's
+       beats. What actually happened is duller: the audit slept 900ms against a
+       1.02s CSS drop and measured the crate mid-flight, at device y 470.750.
+       The other two calls are belt and braces for a browser that never fires
+       animationend. */
     snapToGrid();
     const dropEl = seq.closest('.co-drop');
     if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });

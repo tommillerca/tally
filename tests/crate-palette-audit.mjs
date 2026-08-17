@@ -97,11 +97,16 @@ if (seam) {
      So: pause everything, then seek the drop to its END and the sink to its
      START. That is the state a player looks at while the frames play, and it is
      the same state on any machine. */
-  /* 1350ms is a CSS duration, not a JS one, and that distinction is the whole
-     reason this number is safe. The drop is a 1.02s CSS animation and CSS is not
-     time-scaled under webdriver, so it has landed and fired animationend by then
-     on any machine. Only the sink is then rewound, so the crate is held in the
-     state a player looks at while the frames play. */
+  /* 1350ms clears the drop, which is a 1.02s CSS animation. That is the whole
+     reason this number is what it is, and the earlier version of this comment
+     dressed it up as something cleverer: it claimed navigator.webdriver scales
+     JS timing by 0.25 so no single sleep could be right. It does not. The crate
+     reveal's `at` is a bare setTimeout; the 0.25 factor is real but belongs to
+     the fight's FX choreography and never reaches this screen. The first version
+     of this file simply slept 900ms against a 1.02s animation and measured the
+     crate mid-flight, at device y 470.766, then reported that as a defect.
+     Only the sink is rewound after the wait, so the crate is held in the state a
+     player looks at while the frames play. */
   await sleep(1350);
   await page.evaluate(() => {
     for (const a of document.getAnimations()) {
