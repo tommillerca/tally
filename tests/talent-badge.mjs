@@ -17,7 +17,7 @@
  * so it fails. It is never skipped and never passed.
  */
 import path from 'node:path';
-import { loadPuppeteer } from './godmode.js';
+import { loadPuppeteer, chromePath, sandboxArgs } from './godmode.js';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,7 +29,7 @@ const puppeteer = await loadPuppeteer();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const srv = spawn('python3', ['-m','http.server','8139','--bind','127.0.0.1'], { cwd: ROOT, stdio:'ignore' });
 await sleep(900);
-const b = await puppeteer.launch({ headless:'new', defaultViewport:{width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true} });
+const b = await puppeteer.launch({ headless:'new', defaultViewport:{width:390,height:844,deviceScaleFactor:2,isMobile:true,hasTouch:true}, executablePath: chromePath(), args: sandboxArgs() });
 const p = await b.newPage();
 p.on('pageerror', e => console.log('PAGEERROR', e.message));
 await p.goto('http://127.0.0.1:8139/?demo', { waitUntil:'networkidle2' });

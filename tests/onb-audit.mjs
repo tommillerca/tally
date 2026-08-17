@@ -24,7 +24,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
@@ -53,6 +53,8 @@ const ok = (n, pass, d = '') => { results.push({ n, pass }); console.log(`${pass
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  executablePath: chromePath(),
+  args: sandboxArgs(),
 });
 const errors = [];
 
