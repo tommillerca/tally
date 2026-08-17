@@ -2270,6 +2270,16 @@ export default {
        *   figure today. Comparing a number from this dashboard against one
        *   written down last week compares two different questions.
        *
+       *   CORRECTED a second way: byName and testers now exclude the recovery
+       *   rate limiter's own rows. Those live in this table by design, keyed by
+       *   an IP HASH in the device column, and on a quiet run rl_ridcheck was
+       *   the single most common "event name" while an IP hash held the top of
+       *   the tester leaderboard with no label, no geo and no first-seen.
+       *   Measured at 12M rows: testers is unaffected (1,890 -> 1,924 ms, still
+       *   a COVERING scan) and byName pays about 17% (5,721 -> 6,693 ms). Only
+       *   those two; see the note at NOT_PRODUCT below for why dau, wau,
+       *   activeByDay and totalEvents deliberately still count them.
+       *
        *   UNCHANGED: dau (today), wau (7 days) and activeByDay (14 days) were
        *   already inside the new window. errors, errorsByBuild and vault still
        *   read the whole 60 days, because they are cheap (name-indexed, tiny
@@ -2293,11 +2303,20 @@ export default {
        *
        * WHAT IS STILL THE NEXT WALL. byName scans idx_events_name whole
        * whatever window is asked for, so it scales with the TABLE, not the
-       * window: 5,721 ms at 12M rows extrapolates to 30 s at about 63M, which
-       * is roughly 13,700 daily devices on a 60 day retention window. That is
+       * window: 6,693 ms at 12M rows extrapolates to 30 s at about 54M, which
+       * is roughly 11,700 daily devices on a 60 day retention window. That is
        * past the 10,000 target rather than a quarter of it, but it is the
        * figure to watch, and the fix for it when it comes is a rollup table,
-       * not another index. */
+       * not another index. Widening idx_events_name was already tried and is
+       * measured above to make it worse.
+       *
+       * AND FINALLY, THE HONEST CAVEAT ON ALL OF THE ABOVE. Every number here
+       * was measured in local SQLite on the real DDL, which is the right way to
+       * compare plans and the wrong way to predict absolute latency on D1: a
+       * deployed statement also pays network time, and it runs on Cloudflare's
+       * hardware rather than this one. Treat the RATIOS as the finding (20x on
+       * activeByDay, 6x on testers, 4x on the whole route) and the milliseconds
+       * as the shape of the curve, not as a promise. */
       if (path === '/stats' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
         if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
@@ -2311,6 +2330,28 @@ export default {
         const EX_IDS = ['fb31564c-22cc-49e8-836b-2da8fbf8531f'];
         const inList = EX_IDS.map(id => `'${String(id).replace(/[^a-f0-9-]/gi, '')}'`).join(',') || "''";
         const nin = col => `${col} NOT IN (${inList})`;
+        /* RATE-LIMIT ROWS ARE NOT PRODUCT EVENTS, and they are in this table by
+           design: rateLimitRecovery stores its per-IP counters here, keyed by an
+           IP HASH in the `device` column. The retention note already called out
+           that they pollute the dashboard, and they do: on a quiet local run
+           rl_ridcheck was the single most common "event name" and an IP hash sat
+           at the top of the tester leaderboard with no label, no geo and no
+           first-seen, because it has no `devices` row to join to.
+           Excluded here from the two figures where it is FREE to exclude them.
+           `testers` already reads e.name out of idx_events_device_name_day, and
+           byName is grouping on name, so neither plan changes.
+           NOT excluded from dau / wau / activeByDay / totalEvents, deliberately.
+           Those are served index-only by idx_events_day_device (day, device),
+           which does not carry `name`; adding a name predicate would force a row
+           lookup per event and hand back the whole 20x this fix just bought
+           (activeByDay 348 ms would go back towards 6,111 ms at 12M rows). So
+           those four still count an IP hash as a device, for at most the 24
+           hours the rate-limit override keeps the rows. The real fix is for the
+           limiter to stop borrowing this table, which is a bigger change than
+           this one and belongs with whoever owns that route. */
+        const NOT_PRODUCT = Object.keys(EVENT_RETENTION_OVERRIDE_DAYS);
+        const rlHoles = NOT_PRODUCT.map(() => '?').join(',');
+        const noRl = col => `${col} NOT IN (${rlHoles})`;
         // The reporting window. `day` is a YYYY-MM-DD string derived from the
         // same ts the row carries, so comparing the strings is both correct and
         // the only version of this the (day, device) index can drive.
@@ -2321,7 +2362,7 @@ export default {
         const dau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day = ? AND ${nin('device')}`, today)).n;
         const wau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')}`, weekAgo)).n;
         const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE day >= ? AND ${nin('device')}`, statsFrom)).n;
-        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`, statsFrom);
+        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE day >= ? AND ${noRl('name')} AND ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`, statsFrom, ...NOT_PRODUCT);
         const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY day ORDER BY day`, statsFrom);
         // first_seen is ms epoch; date(x/1000,'unixepoch') is the same UTC day
         // string the events rows carry, so this chart keeps its x axis.
@@ -2350,8 +2391,8 @@ export default {
                   d.label, d.country, d.region, d.city,
                   date(d.first_seen/1000,'unixepoch') first, date(d.last_seen/1000,'unixepoch') last
            FROM events e LEFT JOIN devices d ON d.device = e.device
-           WHERE e.day >= ? AND ${nin('e.device')}
-           GROUP BY e.device ORDER BY events DESC LIMIT 30`, statsFrom);
+           WHERE e.day >= ? AND ${noRl('e.name')} AND ${nin('e.device')}
+           GROUP BY e.device ORDER BY events DESC LIMIT 30`, statsFrom, ...NOT_PRODUCT);
         const byCountry = await all(`SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY country ORDER BY n DESC`);
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
         // community map feedback: newest first (den nominations + unreachable reports + general feedback)

@@ -161,17 +161,17 @@ const CASES = [
        query is correct, fast-looking in a small fixture, and a timeout in
        production. */
     name: 'GET /stats tester leaderboard is a COVERING scan of idx_events_device_name_day',
-    fragment: 'FROM events e LEFT JOIN devices d ON d.device = e.device',
+    fragment: "WHERE e.day >= ? AND ${noRl('e.name')} AND ${nin('e.device')}",
     mustIndex: 'COVERING INDEX idx_events_device_name_day',
     mustNotScan: 'SCAN e USING INDEX idx_events_device_day',
-    params: ['2026-08-01'],
+    params: ['2026-08-01', 'rl_recovery', 'rl_ridcheck'],
     sql:
       `SELECT e.device, COUNT(*) events,
               SUM(CASE WHEN e.name IN ('food_log','pit_win','boss_win','mini_win','cook','hatch','quest_claim','friend_battle','buy_weapon','transmute') THEN 1 ELSE 0 END) played,
               d.label, d.country, d.region, d.city,
               date(d.first_seen/1000,'unixepoch') first, date(d.last_seen/1000,'unixepoch') last
        FROM events e LEFT JOIN devices d ON d.device = e.device
-       WHERE e.day >= ? AND e.device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f')
+       WHERE e.day >= ? AND e.name NOT IN (?,?) AND e.device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f')
        GROUP BY e.device ORDER BY events DESC LIMIT 30`,
   },
   {
