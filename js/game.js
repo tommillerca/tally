@@ -52,6 +52,43 @@ export async function totalXp() {
 // Idempotent award. Returns the xp granted (0 if this key already exists).
 let quietLevelups = false; // backfills replay history; they must not celebrate or drop loot
 
+/* WHAT A REPEATABLE ACTION IS ALLOWED TO PAY IN ONE DAY.
+   These exist because six call sites built their award key out of Date.now(),
+   which defeats the entire point of award(): the key is what stops a reward
+   being claimed twice, and a fresh timestamp is a fresh key every single call.
+   So Pit wins, harvests, cooks and siege breaks had NO cap and NO dedupe, and a
+   player could farm them forever. Found 2026-08-16 chasing a level 80 account
+   whose device logged 214 Pit wins in one day, 200 the day before and 159 before
+   that.
+   Sized against the bounded sources rather than picked: everything else in the
+   game (steps, health, meals, quests, streaks) tops out around 690 XP on a
+   maximal day, so the repeatables are allowed roughly 300 on top. That keeps a
+   long session worth playing without making the ladder farmable.
+     fight  12 x 10 = 120     a solid Pit session, not an afternoon of tapping
+     garden 10 x  6 =  60     five beds, so two full cycles in a day
+     cook    8 x  8 =  64
+     siege   5 x 12 =  60     sieges are rare anyway, this is a backstop
+   Levels are NOT capped and are not meant to be (Tom, 2026-08-16). The ladder
+   just has to be climbed rather than farmed. */
+export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5 };
+
+/* Award a repeatable action against its daily ceiling.
+   The key is `${prefix}-${date}-${n}`, so it is bounded by construction: dedupe
+   works again, replaying a day cannot double-pay, and the nth award of the day
+   is a stable key rather than a timestamp nobody can reason about. Returns 0
+   once the day's ceiling for that source is spent, which is the same thing
+   award() already returns for a duplicate, so every caller's `if (g)` still
+   means "something was actually granted". */
+export async function awardCapped(prefix, type, xp, label, cap, date) {
+  const d = date || dateKey();
+  for (let n = 1; n <= cap; n++) {
+    const key = `${prefix}-${d}-${n}`;
+    if (await db.get('xp', key)) continue;
+    return award(key, type, xp, label, d);
+  }
+  return 0;
+}
+
 export async function award(key, type, xp, label, date) {
   const existing = await db.get('xp', key);
   if (existing) return 0;
