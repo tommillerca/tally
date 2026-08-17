@@ -521,6 +521,30 @@ a { color: var(--accent); text-decoration: none; }
        to work around it with negative staggers inside its own file. Zero here
        means the one instant cycle above starts immediately and is done. */
     animation-delay: 0s !important; transition-delay: 0s !important;
+    /* AND THE TRANSITION HALF WAS NEVER ACTUALLY REMOVED, only shortened.
+       `transition-property` keeps its initial value, which is `all`, so
+       collapsing the duration does not delete transitions: it turns EVERY
+       property on EVERY element into a live 1ms transition, including on
+       elements the designer gave none. Measured 2026-08-17 by listening for
+       transitionrun across a full tab walk: 4 kinds of transition with the
+       setting OFF, 17 with it ON, and 13 of those existed ONLY under reduce.
+       Among them `#screen` opacity, fired 14 times in one session, which is the
+       screen-in reveal every route goes through.
+       That is backwards for a block whose whole job is to remove motion, and it
+       is a correctness hazard on top of a cosmetic one: any code that reveals or
+       moves something and then MEASURES it on the same task reads the in-flight
+       value instead of the settled one. Verified: with reduce emulated, adding
+       `screen-in` to #screen produces a CSSTransition on opacity in playState
+       "running" and getComputedStyle answers 0 while the settled value is 1.
+       Without reduce there is no transition and it answers 1 immediately.
+       `none` is what the duration collapse was reaching for. Safe on events:
+       the only transitionend listener in the app (js/wheel.js) sits behind a
+       `if (reducedMotion) { ...; return; }` and never registers here, and it
+       carries its own timeout net anyway; all three animationend listeners are
+       about ANIMATIONS, which this does not touch. Two rules in this file
+       already do exactly this locally (.bh-anim, #sheets .sheet-body.sheet-in).
+       Guard: tests/reduced-motion-settle-audit.mjs. */
+    transition-property: none !important;
   }
 }
 
