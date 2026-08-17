@@ -13,17 +13,33 @@
  * waiting is the thing that triggers it.
  *
  * MEASURED here, one year of diary (1,825 log rows, 60 weigh-ins, 1,982 awards),
- * initGameIfNeeded end to end, all three trees interleaved in one session, two
- * samples each, because this container's own speed drifts by nearly 2x between
- * sessions:
- *     origin/main   (award() rescanned the xp store)  1x 13.3-13.4s  4x 35.0-38.7s
- *     gwart/xpperf  (constant-cost award)             1x  2.8-3.0s   4x 10.0-11.1s  5x 13.3s  6x 14.2s
- *     this branch   (chunked and checkpointed)        1x  2.5-2.8s   4x  9.7-10.5s  5x 13.5s  6x 14.6s
- * The 12,000ms line is crossed at NO THROTTLE on main, and between 4x and 5x
- * after the constant-cost award(). 4x is an ordinary mid-range phone and
- * index.html's own boot curve is calibrated out to 40x, so speed moved the cliff
- * without removing it. What changed here is the shape: checkpointed, resumable,
- * and behind the paint.
+ * all three trees interleaved in ONE browser session, two samples each, because
+ * this container's own speed drifts by nearly 2x between sessions and a table
+ * stitched from separate ones reports the load average rather than the code.
+ * PAINT is the first sample where #screen has children; INIT is the moment kv
+ * 'game-init' lands, which is the only definition of "the replay finished" the
+ * app itself uses. Re-taken against origin/main = ddbb079 (v391), because v390
+ * and v391 rewrote js/app.js substantially and the v388 table this comment used
+ * to carry stopped being evidence:
+ *
+ *                                          PAINT                INIT
+ *   v391 main   (award() rescans xp)   1x  never / never    30.6s / 30.7s
+ *                                      4x  never / never    65.8s / 65.2s
+ *   gwart/xpperf (constant-cost award) 1x  never / never     3.6s /  3.7s
+ *                                      4x  never / never    18.1s / 10.9s
+ *   this branch (chunked, checkpointed)1x  347ms / 418ms     5.5s /  5.7s
+ *                                      4x  799ms / 1130ms   27.4s / 29.7s
+ *
+ * Read the PAINT column first. On v391 and on xpperf, NO sample between the
+ * reload and the flag had anything on #screen: the replay is still in front of
+ * first paint, so index.html's 12s dead-shell backstop fires and the loop is
+ * live. On v391 the replay does not finish for 30.6s unthrottled, so the
+ * backstop fires on a desktop-class machine, not just a slow phone.
+ * xpperf's constant-cost award() cuts the total by 8x and still never paints,
+ * which is the point: speed alone moves the cliff without removing it.
+ * This branch pays for it in total time (5.5s against xpperf's 3.6s at 1x,
+ * because chunking yields between chunks) and buys the only property that ends
+ * the loop: content is up in under 1.2s in every sample, always before the flag.
  *
  * WHAT THIS ASSERTS, and how each goes red:
  *   SAMPLE  The legacy save was really built and the replay really ran on it. An
