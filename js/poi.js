@@ -6,7 +6,7 @@
 // later, exactly like hunt spawns.
 import { award, levelFor, totalXp } from './game.js';
 import { coinsAdd, grantCrate, grantGear, ownedGearIds, boneDustAdd } from './loot.js';
-import { kvGet, kvSet, db } from './db.js';
+import { kvGet, kvSet, kvUpdate, db } from './db.js';
 import { GEAR_ITEMS } from './gear.js';
 import { TALENT_TREES } from './pit.js';
 import { distanceM, bearingDeg } from './hunt.js';
@@ -472,11 +472,19 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
 }
 
 // Player picked a piece from a pending boss drop. Grants + clears the entry.
+/* TAKING THE PENDING ENTRY IS THE CLAIM. Reading it and then rewriting the list
+   without it was two transactions, so two overlapping picks both found the same
+   open choice and both reported a claim (only grantGear's own owned-check kept
+   a second copy out of the inventory). One transaction, so exactly one caller
+   can take a drop. */
 export async function claimDenLoot(key, gearId) {
-  const pending = (await kvGet('denloot', [])) || [];
-  const entry = pending.find(p => p.key === key);
-  if (!entry || !entry.choices.includes(gearId)) return null;
-  await kvSet('denloot', pending.filter(p => p.key !== key));
+  let entry = null;
+  await kvUpdate('denloot', (list) => {
+    const pending = list || [];
+    entry = pending.find(p => p.key === key && p.choices.includes(gearId)) || null;
+    return entry ? pending.filter(p => p.key !== key) : undefined;
+  }, []);
+  if (!entry) return null;
   const g = await grantGear(gearId, 'boss-den');
   return g || GEAR_ITEMS.find(x => x.id === gearId) || null;
 }

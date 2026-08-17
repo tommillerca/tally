@@ -161,6 +161,39 @@ Follow this for every action that pays coins, dust, XP, gear, crates or a card.
    every paying `social.*Remote` call to consult its answer BEFORE paying, the
    other pins the spire branch specifically. Both are proven red against the real
    exploits. Any new rewarded remote call is covered the moment it is written.
+6. **The check and the write are the SAME transaction, and "twice" includes
+   "at once".** Added 2026-08-17, after sweeping the whole class rather than the
+   one feature it was found on. Every paying action in the app obeyed parts 1 to
+   4 and still paid twice, because "read the authority, then write the reward"
+   is two IndexedDB transactions with an `await` between them, and two
+   overlapping calls both read a state nobody had taken yet. Measured against a
+   real database on this tree: two concurrent claims paid the Glutton 280 coins
+   for one appearance, 120 for one spawn, 200 for one quest, 240 plus dust for
+   one lot of spire tribute, 2290 coins and 300 dust for ONE level, two pets out
+   of one egg and two crates' loot out of one crate row. Sequentially every one
+   of them correctly refused. AND "at once" does not need two taps: the app open
+   in TWO TABS is one account on one IndexedDB, and both tabs run every boot
+   path. Measured the same day on two real pages: 50 awards of +10 from a
+   balance of 1000 landed on 1280 rather than 1500, one 100-coin grant pulled by
+   both tabs paid 200 while leaving exactly ONE ledger row, a 12/day XP ceiling
+   paid 190, and "Erase all data" left 30 inv rows and 150 coins standing.
+   So use the primitives in `js/db.js` instead of hand-rolling the pattern:
+   `db.addIfAbsent` (mint a key only if absent; resolves true only for the
+   caller whose row landed), `db.take` (hand a row over and delete it; resolves
+   the row, or undefined if somebody else got it), `kvUpdate` (read-modify-write
+   one kv record, with a SYNCHRONOUS updater; return undefined from it to write
+   nothing), `kvBump` (the currency case) and `awardOnce` (the ledger claim,
+   which returns `{ claimed, xp }` because `award()` returns 0 for BOTH a
+   duplicate and a legitimately 0-XP payload, and that ambiguity is exactly the
+   v390 gift double-pay: anything gating money on "did I mint it" must read
+   `claimed`). Two guards, and they cover different halves:
+   `node tests/reward-sop-audit.mjs` derives the paying call sites from
+   `js/*.js`, so a NEW payout nobody registered FAILS, and it performs every
+   registered action twice, sequentially and concurrently, in one page. Add an
+   ACTIONS row with every new payout, and a driver unless you can say why it
+   cannot have one. `node tests/multitab-audit.mjs` drives TWO live pages on one
+   database, which is the only place the second-consumer failures above can be
+   reproduced at all.
 
 ## Transitions and in-between moments (added 2026-08-08)
 

@@ -143,18 +143,26 @@ export function addIfAbsent(store, val) {
   }));
 }
 
-/* ATOMIC TAKE. Deletes the row and reports whether THIS call is the one that
-   found it there. The read and the delete share a transaction, so two tabs
-   melting the same gear cannot both be told they melted it. */
+/* ATOMIC TAKE. Hands the row over and deletes it, in ONE transaction.
+ *
+ * An inventory row (a crate, an egg, a piece of gear) IS the right to one
+ * payout, so reading it and deleting it in a second transaction lets two
+ * overlapping callers both read it and both get paid. Two tabs melting the
+ * same gear cannot both be told they melted it.
+ *
+ * Resolves THE ROW when this call is the one that found it, and `undefined`
+ * when it was already gone. The row rather than a bare boolean because
+ * openCrate has to know WHAT it took before it can roll it, and every caller
+ * that only wants the yes/no reads the same answer off truthiness. */
 export function take(store, key) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   return open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readwrite');
     const os = t.objectStore(store);
     const g = os.get(key);
-    let had = false;
-    g.onsuccess = () => { had = g.result !== undefined; if (had) os.delete(key); };
-    t.oncomplete = () => resolve(had);
+    let row;
+    g.onsuccess = () => { row = g.result; if (row !== undefined) os.delete(key); };
+    t.oncomplete = () => resolve(row);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('take aborted'));
   }));
@@ -163,7 +171,16 @@ export function take(store, key) {
 /* ATOMIC READ-MODIFY-WRITE on one kv row. `fn` MUST be synchronous, see above.
    Returns the value that was actually stored. This is the replacement for every
    `const v = await kvGet(k); v.push(x); await kvSet(k, v)` in the tree: that
-   shape loses one of two concurrent additions every time it interleaves. */
+   shape loses one of two concurrent additions every time it interleaves.
+
+   RETURN `undefined` FROM `fn` TO WRITE NOTHING. That is how a caller says "on
+   looking at the real state inside the transaction, there is nothing to do
+   here": a collect on an empty pot, a harvest of a bed somebody else just took,
+   a tribute already claimed. It matters because those callers are the ones
+   whose whole job is to decide whether a payout is owed, and a no-op that still
+   wrote the record back would touch a row it never changed. kvUpdate then
+   resolves undefined, so `if (!out.ok)` and `if (next === undefined)` are both
+   honest readings of "I did not take the state". */
 export function kvUpdate(k, fn, fallback = null) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   return open().then(db => new Promise((resolve, reject) => {
@@ -175,7 +192,7 @@ export function kvUpdate(k, fn, fallback = null) {
     g.onsuccess = () => {
       const cur = g.result ? g.result.v : fallback;
       try { next = fn(cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
-      os.put({ k, v: next });
+      if (next !== undefined) os.put({ k, v: next });
     };
     t.oncomplete = () => resolve(next);
     t.onerror = () => reject(threw || t.error);
