@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 388, date: '2026-08-16', title: 'The Step Egg actually hatches now', items: [
+    "<b>The Step Egg hatch was drawing all fifteen of its frames at once, stacked down the screen.</b> It should crack in place, one frame at a time, and end on the shell pieces and the smoke. It does now. The egg is also about twice the size it was and sits where your new pet appears, instead of small and high up and then jumping.",
+    "<b>The Common Crate opens as real artwork instead of a cut-in-half icon.</b> Nine hand-drawn frames of the lid cracking and the ghost climbing out, timed to what each frame actually shows rather than spread evenly, and the crate now clears the screen before your card arrives instead of dissolving behind it.",
+    'Its sound effects were more than a second out of step with the picture and have been since August. The thud, the lid and the card all land on the right moment now.',
+  ] },
   { n: 387, date: '2026-08-16', title: 'Daily limits on the things you can repeat', items: [
     "<b>Pit wins, harvests, cooking and breaking a siege now have a daily limit.</b> They had none, so those four kept paying out however many times you did them, which made the ladder something to grind rather than climb. Twelve Pit wins, ten harvests, eight cooks and five siege breaks a day, sized so a long session is still well worth playing. Levels themselves are not capped and never will be.",
   ] },
