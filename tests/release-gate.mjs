@@ -81,7 +81,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
-  'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
+  'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
@@ -132,6 +132,37 @@ function run(file, args) {
     p.stderr.on('data', d => { out += d; });
     p.on('close', code => res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) }));
   });
+}
+
+/* THERE ARE THREE OUTCOMES, NOT TWO.
+ *
+ * This gate read every exit code as pass-or-fail, which forces any suite that
+ * CANNOT run on a given machine into one of two lies: exit 0 and be counted as
+ * evidence it never gathered, or exit 1 and be indistinguishable from a real
+ * defect. The first is how a suite retires into silence. The second is the
+ * false red that teaches people to ignore the gate, which is the failure mode
+ * this file's own header is written against.
+ *
+ * So exit 97 is UNPROVEN: the suite ran, measured that this machine lacks a
+ * property it needs, and graded nothing on that surface. See godmode.js
+ * (UNPROVEN_EXIT, boneyardCapability) for how a suite is allowed to claim it:
+ * only against a measurement taken in the same run, never against a hostname,
+ * an env var or a hand-set flag.
+ *
+ * UNPROVEN IS NEVER COUNTED AS GREEN. It gets its own column in the run, its
+ * own block in the summary, and it keeps the gate's own exit non-zero, because
+ * a gate that could not run part of itself has not certified a release. The
+ * exit is 97 rather than 1 when nothing actually failed, so the difference
+ * between "the app is broken" and "this machine cannot check it" survives all
+ * the way out to whatever is reading the exit code. */
+const UNPROVEN = 97;
+/* The suites print their own banner; this pulls it back out for the summary so
+   the reason is on screen next to the verdict rather than 200 lines above it. */
+function unprovenLines(out) {
+  const lines = out.split('\n');
+  const rows = lines.filter(l => l.startsWith('UNPRV ')).length;
+  const missing = lines.filter(l => /is UNREACHABLE|no webgl|will not link|read back as|measured NOTHING/.test(l));
+  return { rows, why: [...new Set(missing.map(l => l.trim()))].slice(0, 3) };
 }
 
 /* A SUITE THAT CRASHES MUST NOT LOOK LIKE A QUIET FAILURE. This printed only
@@ -261,7 +292,7 @@ const DECLARED = {
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
   'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
-  't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow.'],
+  't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow. Section 7 (the Boneyard, 11 rows) needs a reachable vector tile host and declares itself UNPROVEN with exit 97 where there is not one, rather than letting two `count(...) === 0` rows pass on a map with nothing on it. Sections 1 to 6 need no map and still grade there.'],
   't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],
   't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
@@ -305,7 +336,7 @@ const DECLARED = {
   'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
   'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
   'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
-  'spire-gate.mjs':       ['full', 'the spire day-gate, which is a rewarded action and has been exploited twice. RED under BOTH headless modes, so it is not the harness. Under triage; it stays declared so it cannot be forgotten.'],
+  'spire-gate.mjs':       ['full', "the spire day-gate, which is a rewarded action and has been exploited twice. The old 'RED under both headless modes' note was wrong about the cause: measured 2026-08-17, the reds were an unreachable vector tile host (https://tiles.openfreemap.org, net::ERR_CERT_AUTHORITY_INVALID from a sandboxed container), not the headless mode and not the GPU, and one row PASSED on `sheets 0 -> 0` because there was no map to open a sheet on. It now measures that property and reports its ten map rows as UNPROVEN with exit 97 where the host is unreachable, so a machine that cannot host it says so by name instead of producing a mixture of reds and vacuous greens. Green with 10 assertions on a connected machine."],
   'balance-audit.js':     ['skip', 'takes a URL argument and is run by hand against live; it has no self-served mode to give the gate.'],
   'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
   'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
@@ -477,19 +508,31 @@ try {
   if (!/^no orphaned/.test(out)) console.log(out.split('\n').pop() + '\n');
 } catch { /* never block a gate run on housekeeping */ }
 
+/* WHICH BROWSER STACK IS ABOUT TO GRADE THIS RELEASE. Nothing printed this
+   before, and a stale puppeteer resolved out of an unrelated project on the
+   same machine reported its own missing API as an app defect (see
+   godmode.loadPuppeteer). A gate that cannot name its instrument is not
+   certifying anything. Never fatal here: the PURE tier needs no browser. */
+try {
+  const gm = await import('./godmode.js');
+  await gm.loadPuppeteer();
+  console.log(`instrument: ${gm.puppeteerOriginLine()}\n`);
+} catch (e) {
+  console.log(`instrument: puppeteer UNRESOLVED, so every browser suite below will die at launch:\n        ${String(e.message).split('\n')[0]}\n`);
+}
+
 const results = [];
-for (const f of PURE) {
-  const r = await run(f, []);
-  results.push(r);
-  console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(failLines(r.out));
+const verdict = r => (r.code === 0 ? 'PASS ' : r.code === UNPROVEN ? 'UNPRV' : 'FAIL ');
+function report(r) {
+  console.log(`${verdict(r)} ${r.file.padEnd(24)} ${r.secs}s`);
+  if (r.code === UNPROVEN) {
+    const u = unprovenLines(r.out);
+    console.log(`        ${u.rows} check(s) DID NOT RUN on this machine. Not a pass.`);
+    for (const w of u.why) console.log(`        ${w}`);
+  } else if (r.code !== 0) console.log(failLines(r.out));
 }
-for (const f of BROWSER) {
-  const r = await run(f, [base]);
-  results.push(r);
-  console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(failLines(r.out));
-}
+for (const f of PURE) { const r = await run(f, []); results.push(r); report(r); }
+for (const f of BROWSER) { const r = await run(f, [base]); results.push(r); report(r); }
 
 if (own) own.server.close();
 if (!runAll && FULL.length) {
@@ -499,10 +542,31 @@ if (!runAll && FULL.length) {
   console.log('      in here silently: the COVERAGE assertion above refuses to start a');
   console.log('      browser until every file on disk is DECLARED with a reason.');
 }
-const bad = results.filter(r => r.code !== 0);
-console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
+const unprv = results.filter(r => r.code === UNPROVEN);
+const bad = results.filter(r => r.code !== 0 && r.code !== UNPROVEN);
+/* GREEN IS COUNTED OUT OF WHAT WAS ACTUALLY GRADED, and the unproven suites are
+   never folded into either half of that fraction. "50/53 suites green" with
+   three unproven reads as three failures; "50/50 suites green" with three
+   unproven reads as a clean run. Both are wrong, so the count says how many
+   were run at all and the unproven ones are named on their own line. */
+const graded = results.length - unprv.length;
+console.log(`\n${graded - bad.length}/${graded} suites green against ${base}`);
 if (bad.length) console.log(`BLOCKED: ${bad.map(r => r.file).join(', ')}`);
+if (unprv.length) {
+  console.log(`\nUNPROVEN HERE: ${unprv.length} suite(s) did NOT run and are NOT green.`);
+  for (const r of unprv) {
+    const u = unprovenLines(r.out);
+    console.log(`        ${r.file.padEnd(26)} ${u.rows} check(s) not graded`);
+    for (const w of u.why) console.log(`          ${w}`);
+  }
+  console.log('        These guard shipped surfaces and this machine cannot host them.');
+  console.log('        Run the gate somewhere that can before calling a release checked.');
+}
 /* Release on the way out, pass or fail: a lock only ever left behind on a RED run
    trains everyone to ignore the line, which is how it stopped meaning anything. */
 await releaseLock();
-process.exit(bad.length ? 1 : 0);
+/* A real failure outranks an unproven suite: if something was driven and
+   misbehaved, that is the headline and it exits 1. With nothing failing but
+   something unrun, the gate exits 97, which is non-zero (this run certified
+   nothing) and distinguishable (nobody should go hunting for a defect). */
+process.exit(bad.length ? 1 : unprv.length ? UNPROVEN : 0);
