@@ -233,7 +233,13 @@ async function closeSheets(max = 6) {
 }
 
 function grade(tag, m) {
-  const text = m.text || '';
+  /* AN INVISIBLE TOAST HAS NO WORDS. #toast keeps its last textContent after it
+     hides, so grading m.text unconditionally let a leftover message prop up the
+     FLOOR: measured on the pre-fix tree, every silent write scored 57 chars and
+     10 words off "New talent points ready. Tap Build to spec your Bonehead."
+     which is the exact stale toast the v373 finding described reading like
+     success. What is not on screen counts as nothing. */
+  const text = m.visible ? (m.text || '') : '';
   const chars = text.length;
   const words = text.split(/\s+/).filter(Boolean).length;
   ok(`${tag} SPEAKS  something visible answers the tap`, m.visible === true, JSON.stringify(text.slice(0, 120)));
