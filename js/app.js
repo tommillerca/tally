@@ -704,6 +704,13 @@ async function boot() {
    *     reach the leaderboard.
    */
   const hkTaken = takeHkFromUrl();
+  /* THESE TWO STAY IN FRONT OF THE PAINT. They are not awards, they are figure
+     state: S.shinyPets and S.slimeSlots are read by avatarLayersHtml on every
+     render, so painting without them is the "shiny dropped on a new screen"
+     failure the figure contract exists to stop, on frame one of every boot. Two
+     small IndexedDB reads each, nothing like the replay below. */
+  await refreshShinyPets();
+  await refreshSlimedSlots();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
@@ -744,6 +751,8 @@ async function boot() {
      after week banked one marker and is owed the rest. */
   const ceil = await backfillDenCeilingIfNeeded();
   if (ceil) setTimeout(() => toast(`Boss dens recounted: ${ceil.added} past clear${ceil.added === 1 ? '' : 's'} restored, Gauntlet ceiling +${ceil.ranks} ranks.`, 4600), 5600);
+  /* Again, because the loot backfills above can hand out a pet or slimed gear,
+     and the paint-time pass could not have seen those. */
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
