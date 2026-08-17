@@ -78,7 +78,6 @@ const PRECACHE = [
   './assets/eggs/step/f13.png',
   './assets/eggs/step/f14.png',
   './assets/eggs/step/f15.png',
-  './assets/eggs/step/f1-24.png',
   './assets/crates/golden/f1.png',
   './assets/crates/golden/f2.png',
   './assets/brand/logo.png',

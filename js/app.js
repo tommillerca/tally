@@ -367,7 +367,12 @@ function spawnIcon(type, s = 20) {
    inline glyph beside a line of text would be mush whatever we did, so those
    keep the vector icon. They are the tiny ones in quest rows and price chips,
    not the art Tom is looking at. */
-const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0', egg: 'eggs/step/f1' };
+/* The egg is NOT in here. Tom, looking at the before/after: "i feel like the
+   step egg looks worse for the icon maybe we keep the egg icon and just swap the
+   chests". The 24px half reads as a grey pebble at tile size, where the vector
+   egg cluster still reads as eggs. The chests survive the same reduction because
+   their silhouette is a box with a lid; a smooth ovoid has no edges to keep. */
+const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0' };
 function crateIcon(kind, s = 22) {
   const pix = CRATE_ICON_PIX[kind];
   if (pix && s >= 24) {
@@ -10353,7 +10358,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art">${crateIcon('egg', 48)}</span>
+          <span class="art">${crateIcon('egg', 46)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
