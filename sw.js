@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v387';
+const VERSION = 'tally-v388';
 const PRECACHE = [
   './',
   './index.html',
@@ -44,6 +44,18 @@ const PRECACHE = [
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
   './assets/brand/wordmark.png',
+  /* The common crate's 9 authored frames. The whole sequence runs inside a
+     260ms window, so a cold fetch mid-open paints a blank frame. Precached
+     rather than left to the runtime cache for that reason. 36KB for all 9. */
+  './assets/crates/common/f0.png',
+  './assets/crates/common/f1.png',
+  './assets/crates/common/f2.png',
+  './assets/crates/common/f3.png',
+  './assets/crates/common/f4.png',
+  './assets/crates/common/f5.png',
+  './assets/crates/common/f6.png',
+  './assets/crates/common/f7.png',
+  './assets/crates/common/f8.png',
   './assets/brand/logo.png',
   './assets/brand/tombstone.png',
   './assets/brand/sword.png',

@@ -9716,12 +9716,9 @@ function openHatchReveal(res, charWrap) {
     <div class="hatch-stage${reduced ? ' egg-burst' : ''}" id="hatchStage">
       <div class="hatch-glow"></div>
       <div class="hatch-flash"></div>
-      <div class="bone-egg" id="boneEgg">
-        <svg class="egg-cracks" viewBox="0 0 100 130" preserveAspectRatio="none" aria-hidden="true">
-          <path class="ec" pathLength="1" d="M50 8 L45 36 L55 58 L46 82"/>
-          <path class="ec" pathLength="1" d="M50 8 L59 32 L49 54"/>
-          <path class="ec" pathLength="1" d="M28 62 L46 68 L38 88 L54 100"/>
-        </svg>
+      <div class="bone-egg pix" id="boneEgg">
+        <span class="egg-seq" id="eggSeq">${Array.from({ length: EGG_SEQ_FRAMES },
+          (_, i) => `<img src="assets/eggs/step/f${i + 1}.png" alt="" class="${i === 0 ? 'on' : ''}" decoding="sync">`).join('')}</span>
         ${shards}
       </div>
     </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
@@ -9758,16 +9755,51 @@ function openHatchReveal(res, charWrap) {
     finish();
   } else {
     const egg = $('#boneEgg', wrap2);
-    const cracks = $$('.egg-cracks .ec', wrap2);
+    /* THE WIND-UP. Tom, 2026-08-16: "it seemed like it just went super quick
+       cracking ... there needs to be a little fun lead up/wind up as it's
+       hatching and then releases the pet to the player this is a fun moment
+       theyve worked hard to have happen by walking a lot it should feel
+       rewarding."
+       The old schedule was 2.35s end to end and its whole crack phase was
+       880ms. The authored frames make that worse, not better: the break-in is
+       267ms of real motion and the burst is 183ms, so nearly all of a straight
+       playback is standing still. Reward is not frames, it is ANTICIPATION,
+       so the beats below spend their time BEFORE the payoff, not after.
+       Three phases: a strain nobody asked for (something moves while the egg
+       is still whole), an escalating crack, then a dwell on the eye where the
+       player is looked at, and only then the burst.
+       Frame numbers are the authored keys: 1 whole, 2-5 break-in, 6 and 10 the
+       eye, 7-9 the blink, 11-14 the burst, 15 the smoke rest pose. */
+    const seq = $('#eggSeq', wrap2);
+    const frames = seq ? [...seq.children] : [];
+    const show = n => {
+      if (!seq || !seq.isConnected) return;
+      for (const f of frames) f.classList.remove('on');
+      frames[n - 1]?.classList.add('on');
+    };
+    const wob = () => { if (!egg.isConnected) return; egg.classList.remove('wob'); void egg.offsetWidth; egg.classList.add('wob'); };
     hitSound(S.sounds, 'thud');
-    [[520, 0], [960, 1], [1400, 2]].forEach(([t, i]) => setTimeout(() => {
-      if (!egg.isConnected) return;
-      egg.classList.remove('wob'); void egg.offsetWidth; egg.classList.add('wob');
-      cracks[i]?.classList.add('draw');
-      hitSound(S.sounds, 'thud');
-    }, t));
-    setTimeout(() => { if (stage.isConnected) { stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 1800);
-    setTimeout(() => { if (revealEl.isConnected) finish(); }, 2350);
+    const BEATS = [
+      [700,  1, true,  'thud'],   // it moves, and it is still whole. the tell.
+      [1500, 2, true,  'thud'],   // first crack
+      [2000, 3, true,  'thud'],
+      [2450, 4, true,  'thud'],
+      [2850, 5, true,  'thud'],
+      [3200, 6, true,  'zap'],    // the eye. it is looking at you.
+      [3900, 7, false, null],     // blink, no shake: the shell is not moving, IT is
+      [4000, 8, false, null],
+      [4100, 9, false, null],
+      [4200, 10, false, null],
+      [4900, 11, true, 'thud'],   // the burst, accelerating
+      [5000, 12, true, 'thud'],
+      [5070, 13, true, 'zap'],
+      [5130, 14, false, null],
+    ];
+    for (const [t, n, shake, snd] of BEATS) {
+      setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t);
+    }
+    setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200);
+    setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750);
   }
   $('#hatchOk', wrap2).addEventListener('click', () => history.back());
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
@@ -10820,7 +10852,154 @@ function packCardHtml(c, { selectable = false } = {}) {
    `egg` is still a guess and stays one: eggs incubate, they never route through
    openCrate(), so nothing renders it. Left as a defensive default. */
 const CRATE_LID = { golden: 38, daily: 36, egg: 44 };
+/* THE COMMON CRATE IS REAL FRAMES, NOT THE CLIP-PATH FAKE.
+   Every other crate is one icon drawn twice, clipped into a box half and a lid
+   half, with the lid flown off on an arc. That is the right trick for a vector
+   icon that has no open state. Tom's ghost chest HAS an open state: 9 authored
+   frames where the lid lifts and the ghost rises out and spreads. Faking a lid
+   cut on top of that would throw away the animation and slice the ghost in half.
+   144px, not the 148 the icon path uses, because the art is 48px and pixel art
+   only survives INTEGER scaling. 148 would resample it to mush. */
+const CRATE_SEQ_FRAMES = 9;
+const EGG_SEQ_FRAMES = 15;
+function crateSeqHtml() {
+  const f = i => `<img src="assets/crates/common/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+  /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
+     VECTOR crates, which are one static icon and therefore need faking: crDrop
+     squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
+     are transforms, and a transform on a pixel sprite or ANY ancestor promotes
+     the layer so the compositor resamples it bilinearly whatever
+     image-rendering says. Measured on the running reveal before this change:
+     the 144px sprite rendered at 159.67px and only 16.11% of its pixels still
+     matched the art Tom drew. tests/crate-palette-audit.mjs pins it.
+     The pixel crate does not need the fake motion anyway: the nine authored
+     frames ARE the animation. */
+  return `<div class="co-sink pix"><div class="co-drop pix"><div class="co-settle pix">`
+    + '<span class="co-shadow"></span>'
+    + `<span class="co-seq" id="crateSeq">${Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => f(i)).join('')}</span>`
+    + '</div></div></div>';
+}
+
+/* Step the common crate's 9 authored frames.
+ *
+ * The beat comes from --b-lid in app.css, NOT a fourth hardcoded number. The
+ * timing table already lives there on purpose ("so the timing table is in one
+ * readable place instead of scattered across setTimeouts"), and the JS beats
+ * above are audio only. Reading it means retiming the crack in CSS retimes the
+ * ghost with it, instead of the two silently drifting apart.
+ *
+ * Waits on `ready` (the decode promise) before the first step. A sequence that
+ * starts on an undecoded frame paints nothing, and the whole run fits inside the
+ * gap between the lid going and the card rising, so there is no slack to lose.
+ */
+/* HOW LONG EACH FRAME HOLDS, in ms, f0 through f7. f8 is the last pose and holds
+   until the card takes the screen.
+ *
+ * READ OFF THE ART, not spread evenly. The nine frames are four beats, and
+ * measuring how much of the drawing changes between them says so:
+ *   f0 f1   the ghost presses at a shut lid          10.7% changed
+ *   f2 f3   the lid cracks and the head comes out    44.7% and 41.6%
+ *   f4 f5   the body is out, arms opening            37.5% and 26.2%
+ *   f6 f7   the spread settling                      13.3% and 29.3%
+ * Even spacing gave a 45% change and a 13% change the same 32.5ms, so the crack
+ * had no snap and the settle had no ease. Anticipation holds, the crack goes
+ * fast, and the tail gets progressively longer so it reads as coming to rest. */
+/* FRAME-ALIGNED. A 60Hz display cannot hold a frame for 38ms: it holds it for 2
+   frames (33.3) or 3 (50). Measured on the first pass, a table of 45/38/38/42
+   came back as 33/49/34/33, which is the display quantising values that were
+   never reachable. These are 4,3,2,2,2,3,4,4 frames at 60Hz, so the intent and
+   what the screen can do are the same number. The driver still works off elapsed
+   time rather than frame counts, so a 120Hz phone lands on them too. */
+const CRATE_SEQ_MS = [67, 50, 33, 33, 33, 50, 67, 67];
+
+function playCrateSeq(reveal, scope, ready, at) {
+  const seq = $('#crateSeq', scope);
+  if (!seq) return;
+  const frames = [...seq.children];
+  if (frames.length < 2) return;
+  const cs = getComputedStyle(reveal);
+  const secs = v => (parseFloat(cs.getPropertyValue(v)) || 0) * (cs.getPropertyValue(v).includes('ms') ? 1 : 1000);
+  const start = secs('--b-lid');
+  /* The table is the authority, but it must still finish before the card rises,
+     so it is SCALED to fit if anyone shortens the window in CSS. Scaling rather
+     than truncating keeps the shape of the timing when the budget changes. */
+  const table = CRATE_SEQ_MS.slice(0, frames.length - 1);
+  const want = table.reduce((a, b) => a + b, 0);
+  const span = Math.max(240, secs('--b-card') - start - 60);
+  const holds = table.map(v => v * (want > span ? span / want : 1));
+  /* SNAP THE SPRITE ONTO THE DEVICE GRID BEFORE THE FIRST STEP.
+     Every arithmetic argument about the crate's width assumes it is centred
+     exactly, and it is not: .sheet.takeover centres with translateX(-50%), which
+     on a 393px viewport is translateX(-196.5px). Half a CSS pixel, inherited by
+     everything inside, and at dpr 3 that is one and a half device pixels. Proven
+     rather than reasoned: forcing that translate to a whole -196px in a throwaway
+     tree moved tests/crate-palette-audit.mjs's PALETTE row from 84.05% to 97.86%,
+     which is the position-independent measure of whether the art is being
+     resampled.
+     Measured and corrected rather than derived, because the offset is whatever
+     the sheet, the viewport parity and the device pixel ratio happen to produce
+     together. Same technique as the Hollow stage. It runs once the drop has
+     landed, which is also the only moment it needs to be true: the frames play
+     from rest. */
+  const snapToGrid = () => {
+    /* `top`/`left` on the relatively positioned sprite, NOT margins. A margin
+       changes layout, and .pack-crate is anchored by BOTTOM, so a marginTop that
+       pushed the sprite down grew its parent and pulled the whole crate up by
+       the same amount: measured, a 0.25px correction landed the sprite 0.5px
+       further off than it started, at device y 470.750. A relative offset moves
+       the paint without touching the box. */
+    seq.style.left = '0px'; seq.style.top = '0px';
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const r = seq.getBoundingClientRect();
+    const fx = r.left * dpr - Math.round(r.left * dpr);
+    const fy = r.top * dpr - Math.round(r.top * dpr);
+    if (Math.abs(fx) > 0.001) seq.style.left = `${(-fx / dpr).toFixed(4)}px`;
+    if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
+  };
+  ready.then(() => {
+    /* ON THE DROP'S OWN animationend, not on the `at(start)` beat.
+       The beat is 1.12s and the drop lands at 1.02s, so on a player's phone the
+       two agree by 100ms of luck. Tie the snap to the thing it is correcting
+       instead: retiming the lid in CSS would otherwise silently move the snap
+       off the landing.
+       CORRECTION TO MY OWN EARLIER NOTE, kept because it was wrong in a way
+       worth not repeating: I wrote that `at` is scaled 0.25x under webdriver.
+       It is not. `at` is a bare setTimeout (see openPackReveal) and nothing
+       scales it. The 0.25 factor is real but lives in the FIGHT's FX
+       choreography, `const s = fast ? 0.25 : 1`, and never touches this file's
+       beats. What actually happened is duller: the audit slept 900ms against a
+       1.02s CSS drop and measured the crate mid-flight, at device y 470.750.
+       The other two calls are belt and braces for a browser that never fires
+       animationend. */
+    snapToGrid();
+    const dropEl = seq.closest('.co-drop');
+    if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });
+    at(start, snapToGrid);
+    /* ONE rAF LOOP, not eight setTimeouts. A timer per frame drifts, and a
+       dropped frame on a mid-range phone silently shortens whichever hold it
+       lands in. Reading performance.now() every frame means a slow frame skips
+       ahead instead of desyncing the whole sequence from the CSS beats it has to
+       finish inside. */
+    const cum = []; holds.reduce((a, v, n) => (cum[n] = a + v), 0);
+    let t0 = 0, shown = 0;
+    const tick = now => {
+      if (!t0) t0 = now;
+      const e = now - t0;
+      let want2 = 0;
+      while (want2 < cum.length && e >= cum[want2]) want2++;
+      if (want2 !== shown) {
+        shown = want2;
+        for (const f of frames) f.classList.remove('on');
+        frames[Math.min(shown, frames.length - 1)].classList.add('on');
+      }
+      if (shown < frames.length - 1) requestAnimationFrame(tick);
+    };
+    at(start, () => requestAnimationFrame(tick));
+  });
+}
+
 function crateOpenHtml(kind) {
+  if (kind === 'daily') return crateSeqHtml();
   const cut = CRATE_LID[kind] ?? 38;
   const ico = crateIcon(kind, 148);
   return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
@@ -10930,6 +11109,21 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const src = c.imgSrc || c.art;
     if (src) { const im = new Image(); im.src = src; }
   }
+  /* WARM THE CRATE FRAMES TOO, and hold the sequence until they DECODE.
+     tally/CLAUDE.md: never start a sequence on an undecoded first frame. These
+     are only ~2KB each, but "small" is not "decoded", and the whole sequence
+     runs inside a 260ms window between --b-lid and --b-card. A frame that has
+     not decoded when its turn comes paints nothing, and a blank frame mid-open
+     is the exact v245 invisible-punch failure. decode() rejections are swallowed
+     per image so one broken frame degrades the sequence to a skipped step
+     instead of hanging the whole reveal (anti-regression rule 8). */
+  const crateSeqReady = crate === 'daily'
+    ? Promise.all(Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => {
+        const im = new Image();
+        im.src = `assets/crates/common/f${i}.png`;
+        return im.decode().catch(() => {});
+      }))
+    : Promise.resolve();
   return new Promise(resolve => {
     /* THE SEAM THAT MAKES THIS TESTABLE.
      *
@@ -10958,7 +11152,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const wrap = openSheet(`
       <div class="reveal-take">
         <div class="grainy"></div>
-        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}" id="packReveal">
+        ${/* pix-crate scopes the retimed beats to the crate that has nine authored
+              frames to get through. The vector crates are one icon on a lid arc and
+              their timing is Tom's from 2026-08-08 ("the initial open needs to
+              happen a bit faster"); widening the window for all of them would undo
+              that for four crate types to fix one. */''}
+        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}${crate === 'daily' ? ' pix-crate' : ''}" id="packReveal">
           <div class="pack-head">
             <div class="pack-count" id="packCount"></div>
             ${crate ? '<div class="pack-title">Dug up something good.</div>' : ''}
@@ -10967,7 +11166,14 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-scene">
               <div class="pack-burst" id="packBurst"></div>
               <div class="pack-deck" id="packDeck"></div>
-              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom"></span>` : ''}
+              ${/* THE BLOOM GOES BEHIND A PIXEL CRATE. It is mix-blend-mode: screen at
+                    rgba(255,252,244,.98) and it sits at z-index 3 while .pack-crate
+                    sits at 2, so on the pixel crate it was screen-blending the
+                    sprite itself and erasing the dark keyline the whole drawing is
+                    built on. Measured: a pixel the art draws as 0,0,0 rendered as
+                    183,241,213. Behind it, the light still climbs out of the mouth
+                    and around the box; it just stops repainting the art. */''}
+              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom${crate === 'daily' ? ' pix' : ''}"></span>` : ''}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
@@ -10980,6 +11186,11 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       </div>`, { cls: 'takeover', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
     setFxLayer(305);
     const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
+    /* One reader for the CSS beat table, shared by the sequence and the audio. */
+    const beat = v => {
+      const raw = getComputedStyle(reveal).getPropertyValue(v).trim();
+      return (parseFloat(raw) || 0) * (raw.endsWith('ms') ? 1 : 1000);
+    };
     const countEl = $('#packCount', wrap), dotsEl = $('#packDots', wrap), hintEl = $('#packHint', wrap);
     let i = 0;
     const done = () => { history.back(); setTimeout(resolve, 150); };
@@ -11000,7 +11211,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const first = i === 0 && opening;
       // .opening runs the crate beats; .browsing collapses every delay to one
       // beat. r-<rarity> carries --rar / --rar-rgb to the dots, bloom and haze.
-      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}`;
+      /* KEEP pix-crate. This line reassigns className wholesale on every card, so
+         the modifier the template put there was wiped the moment the first card
+         painted and the retimed beats never applied: measured, --b-card still
+         resolved to 1.38s with the class reading "pack-reveal opening r-common".
+         It is a property of the CRATE, not of the card being shown. */
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${crate === 'daily' ? ' pix-crate' : ''}`;
       if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
       if (hintEl) hintEl.textContent = i >= cards.length - 1
         ? (crate ? 'Tap to close the crate' : 'Tap to close')
@@ -11046,9 +11262,20 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         // runway it needs and must not hold the sequence up
         hydratePackArt(deck);
         go();
-        at(850, () => { dropSound(S.sounds); haptic.tap(); });    // it lands
-        at(2300, () => sparkleSound(S.sounds));                   // the lid goes
-        at(2750, () => landed(tier));                             // the card is up
+        /* THE SOUNDS READ THE SAME TABLE THE PICTURE DOES.
+           These were hardcoded at 850 / 2300 / 2750, which are the beats from
+           BEFORE 2026-08-08, when the CSS table was halved and the JS was not
+           touched. Measured against the shipped CSS: the lid goes at 1120ms and
+           its sparkle fired at 2300, so the sound arrived 1.2 SECONDS after the
+           thing it is the sound of, and the card-up cue landed 1.37s late. The
+           comment above this block says the timing table lives in one readable
+           place and only audio is scheduled here; that was true and the audio
+           then drifted anyway, because it was still a set of literals. Reading
+           the properties is the only version of that claim that stays true. */
+        at(beat('--b-land'), () => { dropSound(S.sounds); haptic.tap(); });   // it lands
+        at(beat('--b-lid'), () => sparkleSound(S.sounds));                    // the lid goes
+        at(beat('--b-card'), () => landed(tier));                             // the card is up
+        if (crate === 'daily') playCrateSeq(reveal, wrap, crateSeqReady, at);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
@@ -14209,7 +14436,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v387'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v388'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

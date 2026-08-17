@@ -102,7 +102,37 @@ for (const kind of KINDS) {
       boxClip: box ? getComputedStyle(box).clipPath : null };
   });
   ok(`RUNS ${kind}: the crate phase renders (it could not, before the seam)`, !!shot, JSON.stringify(shot));
-  if (shot) {
+  /* The COMMON crate no longer uses the clip-path lid fake: it plays 9 authored
+     frames, so it has no lid element and no cut to measure. Asserting a clip on
+     it would be asserting a mechanism the crate does not use. It gets a stronger
+     check instead, below, because a sequence can fail in ways a static clip
+     cannot: a frame that never advances, or one that paints undecoded. */
+  if (shot && kind === 'daily') {
+    /* SAMPLE DURING THE SEQUENCE, not at 160ms. The .co-drop scale animation is
+       still running early on (144 x 0.944 = 136), so an early read measures the
+       crate falling, not the frames playing. The property under test is "the
+       authored frames play on their integer grid", and they play at --b-lid,
+       after the settle finishes. Measuring before then is rule 12: it grades a
+       state nobody is complaining about and reports a failure that is not one. */
+    await sleep(1100);
+    const seq = await page.evaluate(() => {
+      const el = document.querySelector('#crateSeq');
+      if (!el) return { err: 'no #crateSeq' };
+      const f = [...el.children];
+      const r = el.getBoundingClientRect();
+      return { n: f.length, w: Math.round(r.width),
+        undecoded: f.filter(im => im.naturalWidth === 0).length,
+        matted: null };
+    });
+    ok('SEQ daily: all 9 authored frames are mounted', seq.n === 9, JSON.stringify(seq));
+    ok('SEQ daily: every frame is DECODED (an undecoded frame paints nothing)',
+      seq.n > 0 && seq.undecoded === 0, `${seq.undecoded} undecoded of ${seq.n}`);
+    /* 144 is 48 x 3 exactly. Pixel art off its integer grid is resampled to
+       mush, and the icon path's 148 is not a multiple of 48. */
+    ok('SEQ daily: the box is an INTEGER multiple of the 48px art (144 = 48x3)',
+      seq.w % 48 === 0, `${seq.w}px, ${seq.w / 48}x`);
+  }
+  if (shot && kind !== 'daily') {
     /* The lid and the box are two clips of the SAME art. If the two cuts do not
        meet, the closed crate shows a seam or the lid slices through the box. */
     /* The lid cut has to land on the SEAM IN THE ART, or the lid slices through
