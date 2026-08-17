@@ -3571,7 +3571,26 @@ body::before {
 /* ---- pack-crack loot reveal ---- */
 /* A reveal sheet goes edge to edge: the normal 24px + safe-area gap at the top
    let a hub panel show above the moment. */
-.sheet.takeover { height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310; }
+/* CENTRED BY LAYOUT, NOT BY HALF A PIXEL.
+   .sheet centres with translateX(-50%), and on a 393px viewport that is
+   translateX(-196.5px): half a CSS pixel, inherited by every descendant, and at
+   dpr 3 it is one and a half DEVICE pixels. Vector UI never notices. Pixel art
+   does: proven on the crate by forcing that one translate to a whole -196px in
+   a throwaway tree, which moved tests/crate-palette-audit.mjs's PALETTE row from
+   84.05% to 97.86% with nothing else changed.
+   A takeover is full bleed, so layout centring is exactly equivalent to the
+   transform on every phone (width:100% under a 600px cap) and lands on whole
+   pixels. Scoped to .takeover deliberately: dropping the transform on the base
+   .sheet would change the containing block for any position:fixed descendant
+   anywhere in the app, which is a much wider blast radius than this is worth.
+   The slide-in needs its own keyframes because the shared one carries the
+   -50% inside the transform it animates. */
+.sheet.takeover {
+  height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310;
+  left: 0; right: 0; margin-inline: auto; transform: none;
+  animation: slideupFlat .28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes slideupFlat { from { transform: translateY(60%); } to { transform: translateY(0); } }
 .sheet.takeover ~ .sheet-backdrop, .sheet.takeover + .sheet-backdrop { z-index: 309; }
 .sheet.takeover .sheet-grab { display: none; }
 /* TAKEOVER. A reveal fills the sheet and paints its own ground, so nothing of
@@ -3691,6 +3710,34 @@ body::before {
 .co-sink { animation: crSink .9s ease-in var(--b-sink) both; will-change: opacity; }
 .co-drop { animation: crDrop .85s linear both; will-change: transform; }
 .co-settle { position: relative; animation: crSettle .78s cubic-bezier(.2,.9,.3,1) var(--b-settle) both; }
+/* ---- THE PIXEL CRATE'S OWN MOTION ----
+   Everything below exists because the vector crate's motion is transform-based
+   and transforms are fatal to pixel art. The drop is animated on TOP, which goes
+   through layout rather than the compositor, so every frame is re-rasterised on
+   the pixel grid instead of being resampled once. There is no settle wobble at
+   all: it was a scale, and Tom's nine frames already carry the motion. */
+.co-drop.pix { position: relative; animation: crDropPix 1.02s cubic-bezier(.34,.02,.32,1) both; will-change: auto; }
+.co-settle.pix { animation: none; }
+.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .9s ease-in var(--b-sink) both; }
+/* THE EXIT IS NOT A SCALE EITHER. crSink ends on translateY() scale(.9), and a
+   scale on an ancestor resamples the sprite exactly like the drop did: caught by
+   tests/crate-palette-audit.mjs measuring the sprite at 143.508px wide mid-sink
+   with 0.57% of its pixels still the artist's. Same motion, carried on `top`. */
+@keyframes crSinkPix {
+  0%   { top: 0; opacity: 1 }
+  60%  { opacity: 1 }
+  99%  { opacity: 0 }
+  100% { top: calc(var(--pc-w) * .1092); opacity: 0; visibility: hidden }
+}
+@keyframes crDropPix {
+  0%   { top: calc(var(--pc-w) * -1.5966); opacity: 0 }
+  26%  { opacity: 1 }
+  70%  { top: 0 }
+  80%  { top: calc(var(--pc-w) * -.0588) }
+  100% { top: 0 }
+}
+/* Behind the crate, not over it. See js/app.js where the class is emitted. */
+.pack-bloom.pix { z-index: 1; }
 .co-box, .co-lid { display: block; }
 .co-box svg, .co-lid svg, .co-box .bhi-wrap, .co-lid .bhi-wrap { display: block; width: 100%; height: auto; }
 .co-box { filter: drop-shadow(0 6px 8px rgba(0,0,0,.5)); }
@@ -7852,7 +7899,10 @@ body::before {
 .co-seq img {
   position: absolute; inset: 0; width: 144px; height: 144px;
   image-rendering: pixelated; opacity: 0;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .5));
+  /* A HARD SHADOW, NOT A BLUR. drop-shadow(0 4px 6px) puts a soft grey ramp
+     around art that has no soft anything in it, and the ramp is off the pixel
+     grid by construction. 3px is exactly ONE art pixel at 3x. */
+  filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .55));
 }
 .co-seq img.on { opacity: 1; }
 /* Reduced motion gets the OPEN state, not the closed one. The point of the beat

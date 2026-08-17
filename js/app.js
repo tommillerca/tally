@@ -10932,7 +10932,17 @@ const CRATE_SEQ_FRAMES = 9;
 const EGG_SEQ_FRAMES = 15;
 function crateSeqHtml() {
   const f = i => `<img src="assets/crates/common/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
-  return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
+  /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
+     VECTOR crates, which are one static icon and therefore need faking: crDrop
+     squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
+     are transforms, and a transform on a pixel sprite or ANY ancestor promotes
+     the layer so the compositor resamples it bilinearly whatever
+     image-rendering says. Measured on the running reveal before this change:
+     the 144px sprite rendered at 159.67px and only 16.11% of its pixels still
+     matched the art Tom drew. tests/crate-palette-audit.mjs pins it.
+     The pixel crate does not need the fake motion anyway: the nine authored
+     frames ARE the animation. */
+  return `<div class="co-sink pix"><div class="co-drop pix"><div class="co-settle pix">`
     + '<span class="co-shadow"></span>'
     + `<span class="co-seq" id="crateSeq">${Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => f(i)).join('')}</span>`
     + '</div></div></div>';
@@ -10960,7 +10970,49 @@ function playCrateSeq(reveal, scope, ready, at) {
   const start = secs('--b-lid');
   const span = Math.max(240, secs('--b-card') - start);   // finish before the card rises
   const step = span / (frames.length - 1);
+  /* SNAP THE SPRITE ONTO THE DEVICE GRID BEFORE THE FIRST STEP.
+     Every arithmetic argument about the crate's width assumes it is centred
+     exactly, and it is not: .sheet.takeover centres with translateX(-50%), which
+     on a 393px viewport is translateX(-196.5px). Half a CSS pixel, inherited by
+     everything inside, and at dpr 3 that is one and a half device pixels. Proven
+     rather than reasoned: forcing that translate to a whole -196px in a throwaway
+     tree moved tests/crate-palette-audit.mjs's PALETTE row from 84.05% to 97.86%,
+     which is the position-independent measure of whether the art is being
+     resampled.
+     Measured and corrected rather than derived, because the offset is whatever
+     the sheet, the viewport parity and the device pixel ratio happen to produce
+     together. Same technique as the Hollow stage. It runs once the drop has
+     landed, which is also the only moment it needs to be true: the frames play
+     from rest. */
+  const snapToGrid = () => {
+    /* `top`/`left` on the relatively positioned sprite, NOT margins. A margin
+       changes layout, and .pack-crate is anchored by BOTTOM, so a marginTop that
+       pushed the sprite down grew its parent and pulled the whole crate up by
+       the same amount: measured, a 0.25px correction landed the sprite 0.5px
+       further off than it started, at device y 470.750. A relative offset moves
+       the paint without touching the box. */
+    seq.style.left = '0px'; seq.style.top = '0px';
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const r = seq.getBoundingClientRect();
+    const fx = r.left * dpr - Math.round(r.left * dpr);
+    const fy = r.top * dpr - Math.round(r.top * dpr);
+    if (Math.abs(fx) > 0.001) seq.style.left = `${(-fx / dpr).toFixed(4)}px`;
+    if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
+  };
   ready.then(() => {
+    /* ON THE DROP'S OWN animationend, not on a timer.
+       The `at(start)` beat looks like the right moment and is not: `at` is a
+       setTimeout, and navigator.webdriver scales JS timing by 0.25 at
+       js/app.js:14722 while the CSS drop is not scaled, so under any harness the
+       snap fires at ~280ms against a drop that lands at 1020ms and corrects a
+       position the crate is about to leave. Measured, that left the sprite at
+       device y 470.750 with the horizontal snap already correct at 122.000.
+       animationend is the same instant in both worlds. The other two calls are
+       belt and braces for a browser that never fires it. */
+    snapToGrid();
+    const dropEl = seq.closest('.co-drop');
+    if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });
+    at(start, snapToGrid);
     frames.forEach((im, i) => {
       if (i === 0) return;
       at(start + step * i, () => {
@@ -11134,7 +11186,14 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-scene">
               <div class="pack-burst" id="packBurst"></div>
               <div class="pack-deck" id="packDeck"></div>
-              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom"></span>` : ''}
+              ${/* THE BLOOM GOES BEHIND A PIXEL CRATE. It is mix-blend-mode: screen at
+                    rgba(255,252,244,.98) and it sits at z-index 3 while .pack-crate
+                    sits at 2, so on the pixel crate it was screen-blending the
+                    sprite itself and erasing the dark keyline the whole drawing is
+                    built on. Measured: a pixel the art draws as 0,0,0 rendered as
+                    183,241,213. Behind it, the light still climbs out of the mouth
+                    and around the box; it just stops repainting the art. */''}
+              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom${crate === 'daily' ? ' pix' : ''}"></span>` : ''}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
