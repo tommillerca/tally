@@ -398,6 +398,26 @@ const DECLARED = {
      browser starts, so a prove-red that matches nothing cannot read as green. */
   'map-offline-audit.mjs': ['full', "opening the Boneyard with the tile host blocked must give the offline message and throw NOTHING. Arrived with #33 and belonged to no tier, which is the same coverage failure my own two audits caused. 'full' rather than fast: 25s, and it boots MapLibre and aborts real tile requests. It earned the tier the hard way, failing 1 run in 2 on an intermittent null deref that read as flakiness and was a real error; six consecutive green runs after the fix."],
 
+  /* ONE ACCOUNT, TWO TABS, and until 2026-08-17 nothing in this repo had ever
+     opened the app twice. Every other suite here drives ONE page, and a single
+     page cannot produce this failure because the failure IS the second
+     consumer. Two puppeteer pages on one served tree, one origin, one
+     IndexedDB, plus a fake Worker on loopback so the grant rows run the real
+     social.pullGrants() rather than a re-implementation of it.
+     Measured on ddbb079 before the fix and all now assertions: 50 coin awards
+     across two tabs landed on 1280 instead of 1500; a 12-grant feed pulled by
+     both tabs paid 140 of an expected 120 while leaving exactly one ledger row
+     per key; ten gear ids granted twice left twenty inv rows, each melting for
+     full dust; a 12/day XP ceiling paid 190; and Erase all data with a second
+     tab writing left rows standing in three stores.
+     'full' rather than FAST for the ordinary reason: 34s measured, two
+     concurrent browser pages plus two node servers, and the erase block
+     navigates both tabs off ?demo mid-run so it must not race a parallel suite.
+     Seven prove-red modes, each reintroducing exactly one old shape in the
+     bytes on their way out of the server, and each verifying it really
+     substituted before the run is graded. */
+  'multitab-audit.mjs': ['full', 'the app open TWICE: exact currency across two tabs, one payout per grant key, one inv row per ownable item, a daily XP ceiling that holds, and an erase that leaves zero rows while the other tab is writing. 34s, two live pages, a fake Worker for the real pull path, seven prove-red modes.'],
+
   'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Was deliberately red on main while it pinned two unfixed findings; both are fixed as of v391 and it is GREEN, 35 checks. Stays full rather than fast: it installs and upgrades a real service worker across two builds, which is slow and must not race a parallel suite.'],
 
   'input-validation-audit.mjs': ['full', 'every number a player can type, driven through the real controls: weight (kg and lb), quick add, custom food, the portion sheet, daily targets and the plan form, each against empty, whitespace, a partial parse ("12abc"), scientific notation, a grouped thousands comma, an absurd integer, negative and zero. Grades what REACHES THE STORE (bound ZERO, not a trend), whether the player is TOLD, and that legitimate values including a decimal comma still land exactly, so it cannot pass on an app that refuses everything. Carries a COVERAGE half derived from js/app.js, so a new numeric field nobody drove FAILS. Eleven surfaces at ~25 sheet round trips each with toast-queue settles, so it is minutes, not seconds: full, never fast.'],

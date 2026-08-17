@@ -193,9 +193,14 @@ async function serveApi() {
       return;
     }
     if (u.pathname === '/grants') {
+      /* `feeds` serves a DIFFERENT list to each request when set, which is the
+         ordinary case rather than a contrivance: the server's grant feed grows,
+         so two tabs pulling seconds apart legitimately see different rows. That
+         is the situation where an overwritten seen-list loses keys. */
+      const feed = state.feeds ? (state.feeds[state.hits] || []) : state.grants;
       state.hits++;
       res.writeHead(200, cors);
-      return res.end(JSON.stringify({ grants: state.grants, cursor: state.cursor }));
+      return res.end(JSON.stringify({ grants: feed, cursor: state.cursor }));
     }
     res.writeHead(404, cors); res.end('{}');
   });
@@ -208,14 +213,18 @@ const puppeteer = await loadPuppeteer();
 const app = await serveApp();
 const api = await serveApi();
 
-ok('SETUP  --prove-red actually changed bytes (a transform that matches nothing proves nothing)',
-  !PROVE || transformHits > 0, PROVE ? `mode ${PROVE}, ${transformHits} substitutions` : 'no prove-red mode');
-
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   executablePath: chromePath(),
   defaultViewport: { width: 430, height: 932, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
-  args: [...sandboxArgs()],
+  /* THE SECOND TAB HAS TO ACTUALLY RUN. Chrome backgrounds every page but the
+     active one and throttles its timers, so without these three flags the two
+     tabs take turns instead of racing: measured with a deliberately reintroduced
+     double-pay in the grant path, one tab applied all 12 grants and the other
+     applied 0, and the guard graded the bug as safe. A player with two windows
+     open, or a PWA beside its own website, has both running. */
+  args: [...sandboxArgs(), '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
 });
 
 const HOOKS = `
@@ -307,10 +316,15 @@ const reset = () => readA(async () => {
 /* ---------------- GRANTS: the real pull, one feed, two tabs ---------------- */
 {
   await reset();
-  api.state.grants = [
-    { key: 'mt-grant-1', type: 'social', ts: Date.now(), payload: { coins: 100, note: 'probe make-good' } },
-    { key: 'mt-grant-2', type: 'social', ts: Date.now(), payload: { coins: 25, dust: 10, note: 'probe prize' } },
-  ];
+  /* TWELVE grants, not two. Each one is an independent chance for the two
+     pulls to interleave, and one grant is a coin flip: with only two in the
+     feed, tab A's whole loop can finish inside the few milliseconds before tab
+     B's fetch resolves, and a double-pay bug reads as safe. Twelve makes the
+     race reliable rather than lucky, which is the difference between a guard
+     and a guard that sometimes runs. The total is an exact sum, so ONE grant
+     paying twice anywhere in the feed is red. */
+  api.state.grants = Array.from({ length: 12 }, (_, i) => (
+    { key: `mt-grant-${i}`, type: 'social', ts: Date.now(), payload: { coins: 10, dust: 5, note: 'probe make-good' } }));
   api.state.cursor = 7;
   await Promise.all([A, B].map(p => p.evaluate(() => window.__t.social.goOnline())));
   await readA(async () => { await window.__t.db.kvSet('coins', 0); await window.__t.db.kvSet('bonedust', 0); });
@@ -318,23 +332,51 @@ const reset = () => readA(async () => {
   await sleep(600);
   const out = await readA(async () => {
     const xp = await window.__t.db.db.all('xp');
+    const keys = xp.filter(r => /^mt-grant-/.test(r.key)).map(r => r.key);
     return {
       coins: await window.__t.loot.coins(),
       dust: await window.__t.loot.boneDust(),
-      rows1: xp.filter(r => r.key === 'mt-grant-1').length,
-      rows2: xp.filter(r => r.key === 'mt-grant-2').length,
-      seen: ((await window.__t.db.kvGet('grantsSeen', [])) || []).length,
+      rows: keys.length,
+      distinct: new Set(keys).size,
     };
   });
   /* BOTH halves. The double-pay leaves exactly ONE ledger row, so a row count
      on its own passes on the bug: the coin balance is the discriminating half,
      and the row count is what proves the ledger did not silently grow instead. */
-  exact('GRANT-PULL  one 100+25 coin feed pulled by both tabs pays each grant EXACTLY once',
-    125, out.coins, `(pullGrants returned ${JSON.stringify(pulled)}, api hits ${api.state.hits})`);
-  exact('GRANT-PULL  the same feed pays its dust exactly once', 10, out.dust);
-  exact('GRANT-LEDGER  grant 1 has exactly one ledger row', 1, out.rows1);
-  exact('GRANT-LEDGER  grant 2 has exactly one ledger row', 1, out.rows2);
-  exact('GRANT-SEEN  every key in the feed survives both tabs writing the seen list', 2, out.seen);
+  exact('GRANT-PULL  a 12-grant feed pulled by both tabs pays each grant EXACTLY once (12 x 10 coins)',
+    120, out.coins, `(pullGrants returned ${JSON.stringify(pulled)}, api hits ${api.state.hits})`);
+  exact('GRANT-PULL  and the same feed pays its dust exactly once (12 x 5)', 60, out.dust);
+  /* The row count is the half that would have passed on the bug: the double-pay
+     leaves exactly one row per key. It is here to prove the ledger did not grow
+     instead, so the two rows together pin both directions. */
+  exact('GRANT-LEDGER  exactly one ledger row per grant, none duplicated', 12, out.rows);
+  exact('GRANT-LEDGER  and every key is distinct', 12, out.distinct);
+}
+
+/* ---------------- the seen list, when the feed grows between pulls --------- */
+{
+  await reset();
+  api.state.hits = 0;
+  /* Ten keys to one tab, ten different keys to the other. Both tabs read the
+     seen list before either writes it, so a write built from a stale read
+     silently drops the other tab's ten. Nothing here pays: this row is about
+     the list, and a key that falls out of it is a key the next pull re-ingests. */
+  const mk = (a, b) => Array.from({ length: 10 }, (_, i) => ({ key: `mt-seen-${a}${i}`, type: 'social', ts: Date.now(), payload: { note: 'probe' } }));
+  api.state.feeds = { 0: mk('a'), 1: mk('b') };
+  api.state.cursor = 11;
+  // reset() cleared kv, which took the account row with it: register again or
+  // signedFetch throws 'offline' and this row would grade an empty sample.
+  await Promise.all([A, B].map(p => p.evaluate(() => window.__t.social.goOnline())));
+  await at(`() => window.__t.social.pullGrants().then(r => r.applied, e => 'ERR ' + e.message)`);
+  await sleep(700);
+  const seen = await readA(async () => ((await window.__t.db.kvGet('grantsSeen', [])) || []).length);
+  const applied = await readA(async () => (await window.__t.db.db.all('xp')).filter(r => /^mt-seen-/.test(r.key)).length);
+  api.state.feeds = null;
+  // empty sample guard: if the pull never reached the feed, `seen` is 0 for the
+  // wrong reason and the row below would be measuring nothing at all
+  ok('GRANT-SEEN  the pulls actually landed the 20 grants (0 would make the row below vacuous)', applied === 20, `${applied} ledger rows for the feed`);
+  exact('GRANT-SEEN  20 keys pulled across two tabs all survive the seen list (a dropped key is a grant that gets re-ingested)',
+    20, seen);
 }
 
 /* ---------------- a sealed gift, opened in both tabs ----------------------- */
@@ -364,22 +406,25 @@ const reset = () => readA(async () => {
 /* ---------------- inventory: granted once, melted once --------------------- */
 {
   await reset();
-  const gid = await readA(() => window.__t.gear.GEAR_ITEMS[0].id);
-  await at(`(id) => window.__t.loot.grantGear(id, 'probe').then(g => !!g)`, gid);
-  await sleep(400);
-  const rows = await readA(async id => (await window.__t.db.db.all('inv')).filter(x => x.kind === 'gear' && x.gearId === id).length, gid);
-  exact(`INV-DUPE  gear "${gid}" granted in both tabs leaves exactly one inv row`, 1, rows);
+  /* TEN pieces, same reasoning as the grant feed: one piece is one coin flip.
+     Ten independent races make the measurement reliable, and the totals are
+     exact sums so a single double anywhere is red. */
+  const gids = await readA(() => window.__t.gear.GEAR_ITEMS.slice(0, 10).map(g => g.id));
+  await at(`(ids) => Promise.all(ids.map(id => window.__t.loot.grantGear(id, 'probe').then(g => !!g)))`, gids);
+  await sleep(500);
+  const rows = await readA(async ids => (await window.__t.db.db.all('inv')).filter(x => x.kind === 'gear' && ids.includes(x.gearId)).length, gids);
+  exact(`INV-DUPE  ${gids.length} gear ids granted in both tabs leave exactly one inv row each`, gids.length, rows);
 
-  // and melting that ONE row from both tabs pays for it once
+  // and melting those rows from both tabs pays for each of them once
+  const worth = await readA(ids => ids.reduce((a, id) => a + window.__t.loot.gearDustValue(window.__t.gear.GEAR_BY_ID[id]), 0), gids);
   await readA(async () => { await window.__t.db.kvSet('bonedust', 0); });
-  const melts = await at(`(id) => window.__t.loot.disenchantGear(id).then(r => r.ok ? r.dust : 0)`, gid);
-  await sleep(400);
+  const melts = await at(`(ids) => Promise.all(ids.map(id => window.__t.loot.disenchantGear(id).then(r => r.ok ? r.dust : 0))).then(a => a.reduce((x, y) => x + y, 0))`, gids);
+  await sleep(500);
   const dust = await readA(() => window.__t.loot.boneDust());
-  const once = Math.max(...melts);
-  exact('MELT-ONCE  one gear row melted from both tabs pays its dust exactly once', once, dust,
-    `(melts returned ${JSON.stringify(melts)})`);
-  exact('MELT-ONCE  and the row is gone', 0,
-    await readA(async id => (await window.__t.db.db.all('inv')).filter(x => x.gearId === id).length, gid));
+  exact('MELT-ONCE  gear melted from both tabs at once pays each piece exactly its dust value, once',
+    worth, dust, `(the two tabs claim ${JSON.stringify(melts)} between them)`);
+  exact('MELT-ONCE  and every row is gone', 0,
+    await readA(async ids => (await window.__t.db.db.all('inv')).filter(x => ids.includes(x.gearId)).length, gids));
 }
 
 /* ---------------- the daily XP ceiling ------------------------------------- */
@@ -425,15 +470,21 @@ const reset = () => readA(async () => {
   /* B writes CONTINUOUSLY across the whole handshake, which is the worst case:
      an idle second tab would let a per-store loop look fine. */
   const writer = B.evaluate(t => window.__at(t, async () => {
-    let wrote = 0;
-    for (let i = 0; i < 40; i++) {
+    /* A DURATION, not a fixed count. Forty writes finish in about 150ms, so a
+       count-bounded writer is already done by the time the erase opens and the
+       old per-store loop looks clean. This one keeps writing until it is frozen
+       or the window closes, which is what a player with the app open in another
+       tab actually looks like. */
+    const until = t + 2000;
+    let wrote = 0, i = 0, stoppedAt = null;
+    while (Date.now() < until) {
       try {
         await window.__t.loot.coinsAdd(5);
-        await window.__t.db.db.put('inv', { id: 'mt-live-' + i, kind: 'cos', itemId: 'Y', ts: Date.now() });
+        await window.__t.db.db.put('inv', { id: 'mt-live-' + (i++), kind: 'cos', itemId: 'Y', ts: Date.now() });
         wrote++;
-      } catch (e) { break; }   // frozen: this is the protocol working
+      } catch (e) { stoppedAt = Date.now() - t; break; }   // frozen: the protocol working
     }
-    return wrote;
+    return { wrote, stoppedAt, ranFor: Date.now() - t };
   }), T);
   /* A starts LATER on purpose. Firing both at the same instant lets the freeze
      broadcast beat the other tab's first write, and then the erase is being
@@ -453,24 +504,34 @@ const reset = () => readA(async () => {
     c.__kvKeys = (await window.__t.db.db.all('kv')).map(r => r.k);
     return { erased: 'erased', counts: c };
   }), T + 250);
-  const [wrote, res] = await Promise.all([writer, eraser]);
+  const [w, res] = await Promise.all([writer, eraser]);
+  const wrote = w.wrote;
   const erased = res.erased;
   const counts = res.counts || { unreadable: 1 };
   const total = Object.entries(counts).filter(([k]) => !k.startsWith('__')).reduce((a, [, v]) => a + v, 0);
   /* ZERO, not "fewer than before". The bug's signature is survival, so a
      comparison against the previous count grades the bug as a pass. */
   exact('ERASE-ZERO  "Erase all data" with a second tab writing leaves every store at zero rows',
-    0, total, `(${JSON.stringify(counts)}, erase said "${erased}", the other tab landed ${wrote} of 40 writes)`);
+    0, total, `(${JSON.stringify(counts)}, erase said "${erased}", the other tab landed ${wrote} writes and stopped at ${w.stoppedAt}ms of its ${w.ranFor}ms window)`);
   /* EMPTY SAMPLE GUARD. If the other tab never got a write in before the erase,
      zero rows afterwards is free and this row proves nothing about the race. */
-  ok('ERASE-SAMPLE  the other tab really did have writes in flight when the erase started (0 would make ERASE-ZERO vacuous)',
-    wrote > 0, `tab B landed ${wrote} writes before it was frozen`);
+  /* TWO WAYS THIS ROW COULD BE VACUOUS, so both are ruled out: a second tab that
+     wrote nothing, and a second tab that had already finished before the erase
+     opened. The write window runs 250ms before the erase and 1750ms past it. */
+  ok('ERASE-SAMPLE  the other tab really was writing across the erase (a tab that wrote nothing, or finished first, would make ERASE-ZERO free)',
+    wrote > 0 && w.ranFor >= 250, `tab B landed ${wrote} writes, ran for ${w.ranFor}ms, frozen at ${w.stoppedAt}ms`);
   // and the other tab is on its way out rather than sitting on a dead save
   await sleep(1200);
   const bUrl = await B.evaluate(() => location.href).catch(() => 'gone');
   ok('ERASE-RELOAD  the other tab is told, so it does not keep playing a save that no longer exists',
     bUrl !== 'gone', `tab B at ${bUrl}`);
 }
+
+/* LAST, not first: the transforms run as files are requested, so a count taken
+   before the first page load is always zero and would grade every mode as
+   broken (or, worse, as fine). */
+ok('SETUP  --prove-red actually changed bytes (a transform that matches nothing proves nothing)',
+  !PROVE || transformHits > 0, PROVE ? `mode ${PROVE}, ${transformHits} substitutions` : 'no prove-red mode');
 
 console.log('');
 if (fails.length) {
