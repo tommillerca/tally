@@ -161,6 +161,25 @@ Follow this for every action that pays coins, dust, XP, gear, crates or a card.
    every paying `social.*Remote` call to consult its answer BEFORE paying, the
    other pins the spire branch specifically. Both are proven red against the real
    exploits. Any new rewarded remote call is covered the moment it is written.
+6. **The check and the write are the SAME transaction, and "twice" includes
+   "at once".** Added 2026-08-17, after sweeping the whole class rather than the
+   one feature it was found on. Every paying action in the app obeyed parts 1 to
+   4 and still paid twice, because "read the authority, then write the reward"
+   is two IndexedDB transactions with an `await` between them, and two
+   overlapping calls both read a state nobody had taken yet. Measured against a
+   real database on this tree: two concurrent claims paid the Glutton 280 coins
+   for one appearance, 120 for one spawn, 200 for one quest, 240 plus dust for
+   one lot of spire tribute, 2290 coins and 300 dust for ONE level, two pets out
+   of one egg and two crates' loot out of one crate row. Sequentially every one
+   of them correctly refused. So use the primitives instead of hand-rolling the
+   pattern: `db.add` (mint a key only if absent), `db.take` (hand a row over and
+   delete it), `kvUpdate` (read-modify-write a kv record) and `awardOnce` (the
+   ledger claim, which unlike `award()` answers "did I mint it?" rather than
+   returning 0 for both a duplicate and a 0-XP payload). `node
+   tests/reward-sop-audit.mjs` derives the paying call sites from `js/*.js`, so
+   a NEW payout nobody registered FAILS, and it performs every registered action
+   twice, sequentially and concurrently. Add an ACTIONS row with every new
+   payout, and a driver unless you can say why it cannot have one.
 
 ## Transitions and in-between moments (added 2026-08-08)
 
