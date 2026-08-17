@@ -118,6 +118,7 @@ const BROWSER = [
   'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
+  'boot-speaks-audit.mjs',   // NO BLANK SCREEN, EVER: a network that accepts and never answers, storage denied, an injected throw in boot(), and a module graph that never runs. 49s, FAST because a permanent blank first screen is the worst thing we can ship and it must not wait for --all
 ];
 
 function run(file, args) {

@@ -118,7 +118,20 @@ export const chromePath = () => {
    exactly that and died at launch on every root container. */
 export const sandboxArgs = () => (process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []);
 
-export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
+/* THE ONE PLACE A BROWSER IS LAUNCHED, AND IT IS EXPORTED FOR A REASON.
+ *
+ * All of this used to live inside boot(), so an audit that wanted a browser
+ * WITHOUT boot()'s ?demo navigation had no choice but to call puppeteer.launch
+ * itself, and every one that did lost the pieces below. dead-shell-audit.mjs did
+ * exactly that at two call sites and could not run at all in a root container:
+ * Chrome refuses its sandbox as uid 0, so it died at launch with a Chrome error
+ * and exit 1, which reads like a broken APP rather than a broken harness. It
+ * also lost chromePath() and the leak tracking.
+ *
+ * So: launch() owns the sandbox flags, the executable search and the tracking,
+ * boot() is launch() plus a navigation, and a new audit that needs its own page
+ * setup uses launch() instead of reaching for puppeteer directly. */
+export async function launch(opts = {}) {
   const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
      check here dies at launch and reads as "the browser is broken". No-op on a
@@ -140,15 +153,20 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
     ...opts,
     args: [...rootArgs, ...(opts.args || [])],
   });
-  /* TRACK THE BROWSER BEFORE ANYTHING ELSE CAN THROW.
+  _trackBrowser(browser);
+  return browser;
+}
+
+export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
+  /* THE BROWSER IS TRACKED BEFORE ANYTHING ELSE CAN THROW, inside launch().
    * A boot that throws AFTER launch is exactly the leak Gwart found on Tom's
    * machine on 2026-08-14: 16 orphaned Chrome parents + 176 helpers, one alive
    * 15 hours, from 39 audits that time out at page.goto every run. The audit's
    * code cannot close a browser it never received a reference to, so cleanup
-   * belongs here, not there. Track NOW so the process-exit backstop covers
-   * even the throw-inside-boot path, and set an internal try so we can close
-   * synchronously and rethrow with the browser already gone. */
-  _trackBrowser(browser);
+   * belongs here, not there. Tracking happens at launch so the process-exit
+   * backstop covers even the throw-inside-boot path; the try below closes
+   * synchronously and rethrows with the browser already gone. */
+  const browser = await launch(opts);
   try {
     const page = await browser.newPage();
     /* COLLECTED, NOT JUST PRINTED, AND HOOKED BEFORE THE FIRST goto. A suite that

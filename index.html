@@ -97,22 +97,76 @@
      too. 12s covers past 40x with the same behaviour everywhere else. The cost
      of the extra four seconds falls only on a genuinely dead shell, which is
      already broken and waiting either way. -->
+<!-- AND WHEN THE LAST LINE OF DEFENCE LOSES, IT SAYS SO.
+     The retry above is right to fire only once, but "reload once, then give up
+     in silence" ends at exactly the screen it was written to prevent: static
+     markup, an empty #screen, 28 characters of text, and nothing that tells the
+     player what happened or what to try. Measured on a permanently dead shell:
+     0 children at 32 seconds, no message, ever.
+     So the timer has a losing branch now. Same dumbness rules as everything else
+     down here: classic script, no imports, no reliance on app.css having
+     arrived (a stylesheet is one of the things that can go missing, and white
+     text on a white page is another blank screen), inline styles only.
+     The retry BUTTON is not a loop: a tap is a person deciding, which is the one
+     thing the automatic reload can never be. It clears the flag so the automatic
+     recovery is available again on the reloaded page. -->
 <script>
 (function () {
   var KEY = 'bhg-shell-retry';
+  function bust() {
+    var u = location.href.split('#')[0];
+    return u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash;
+  }
+  function speak(head, lines) {
+    var el = document.getElementById('screen');
+    if (!el || el.children.length) return;
+    // app.css holds #screen at opacity 0 until the router adds `screen-in`, so a
+    // message written into it is present and INVISIBLE without this. Belt and
+    // brace: the class for when the stylesheet arrived, inline opacity for when
+    // the stylesheet is itself what went missing.
+    el.className += ' screen-in';
+    var h = '<div id="bootFail" style="opacity:1;min-height:70vh;display:flex;flex-direction:column;align-items:center;'
+      + 'justify-content:center;gap:14px;padding:28px 22px;text-align:center;background:#14121c;color:#ece9f5;'
+      + 'font-family:system-ui,-apple-system,sans-serif">'
+      + '<div style="font-size:52px;line-height:1">&#128128;</div>'
+      + '<h1 style="margin:0;font-size:21px;line-height:1.25;letter-spacing:.02em">' + head + '</h1>';
+    for (var i = 0; i < lines.length; i++) {
+      h += '<p style="margin:0;max-width:30em;font-size:15px;line-height:1.5;color:#c9c3dd">' + lines[i] + '</p>';
+    }
+    h += '<button id="bootFailRetry" style="margin-top:6px;padding:13px 26px;font-size:16px;font-weight:700;'
+      + 'border:0;border-radius:12px;background:#e8483c;color:#fff">Try again</button></div>';
+    el.innerHTML = h;
+    var b = document.getElementById('bootFailRetry');
+    if (b) b.onclick = function () {
+      try { sessionStorage.removeItem(KEY); } catch (e) { /* denied: the reload still happens */ }
+      location.replace(bust());
+    };
+  }
+  var DOWNLOAD = ['BONEHEADZ GYM COULD NOT START',
+    ['The app files did not finish downloading, so nothing could load. Nothing has been lost: your gym is safe on this device.',
+      'Check your connection and tap Try again. If you are on public Wi-Fi that wants you to sign in, sign in first.']];
+  var DENIED = ['BONEHEADZ GYM COULD NOT START',
+    ['This browser is blocking storage for this site, so the app could not finish loading. Private browsing is the usual reason.',
+      'Open the app in a normal window, or allow site data for this site, then tap Try again.']];
   // a module error is the specific symptom, but do not depend on catching it:
   // the check below is about the OUTCOME (nothing rendered), which is true no
   // matter which module died or why.
   setTimeout(function () {
-    try {
-      var screenEl = document.getElementById('screen');
-      var alive = screenEl && screenEl.children.length > 0;
-      if (alive) { sessionStorage.removeItem(KEY); return; }
-      if (sessionStorage.getItem(KEY)) return;      // already tried once this session
-      sessionStorage.setItem(KEY, '1');
-      var u = location.href.split('#')[0];
-      location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
-    } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+    var screenEl = document.getElementById('screen');
+    if (screenEl && screenEl.children.length > 0) {
+      try { sessionStorage.removeItem(KEY); } catch (e) { /* nothing to clean up */ }
+      return;
+    }
+    // private mode / storage denied: the once-only reload cannot be TRACKED, so
+    // reloading would risk the loop this script exists to avoid. Speak instead,
+    // and name that cause by itself, because it is the one a player can fix.
+    // Both halves are guarded: reading sessionStorage throws when cookies are
+    // blocked, writing it throws in old Safari private mode.
+    var tried;
+    try { tried = sessionStorage.getItem(KEY) === '1'; } catch (e) { speak(DENIED[0], DENIED[1]); return; }
+    if (tried) { speak(DOWNLOAD[0], DOWNLOAD[1]); return; }   // the one reload already lost
+    try { sessionStorage.setItem(KEY, '1'); } catch (e) { speak(DENIED[0], DENIED[1]); return; }
+    location.replace(bust());
   }, 12000);
 })();
 </script>

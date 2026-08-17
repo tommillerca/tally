@@ -5,12 +5,46 @@ const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
 
+/* THE DATABASE CAN BE UNAVAILABLE, AND THAT IS A SENTENCE THE PLAYER HAS TO READ.
+ *
+ * In private browsing, or with site data blocked, `indexedDB.open` throws a
+ * SecurityError synchronously. Every read in this file then rejects, boot()
+ * throws on its first line, and the player gets an empty room. app.js catches
+ * this class BY TYPE and renders words, so the failure has to arrive as
+ * something identifiable rather than as whatever DOMException the engine chose.
+ * `cause` keeps the original for the error report. */
+export class DbUnavailableError extends Error {
+  constructor(cause) {
+    super('Boneheadz Gym could not open its database on this device.');
+    this.name = 'DbUnavailableError';
+    this.cause = cause;
+  }
+}
+
+/* AN OPEN THAT NEVER ANSWERS IS THE SAME OUTAGE AS A DENIED ONE, and it has two
+ * real causes: another tab holding an old version open (`onblocked`, which fires
+ * and then waits forever), and WebKit's occasional open that fires neither
+ * handler. Both used to hang boot with no rejection and therefore no message.
+ * 8s is enormous for an operation that is milliseconds on a working device, and
+ * it costs nothing to be wrong about: index.html reloads a contentless shell at
+ * 12s regardless, so no boot wait past that point was ever going to be honoured. */
+const OPEN_TIMEOUT_MS = 8000;
+
 export function useDbName(name) { dbName = name; dbPromise = null; }
 
 function open() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName, DB_VERSION);
+      let settled = false;
+      const done = fn => (...a) => { if (settled) return; settled = true; clearTimeout(timer); fn(...a); };
+      const fail = done(reject);
+      const win = done(resolve);
+      const timer = setTimeout(() => {
+        fail(new DbUnavailableError(new Error(`indexedDB.open did not answer within ${OPEN_TIMEOUT_MS}ms`)));
+      }, OPEN_TIMEOUT_MS);
+      let req;
+      try { req = indexedDB.open(dbName, DB_VERSION); } catch (e) { fail(new DbUnavailableError(e)); return; }
+      req.onblocked = () => fail(new DbUnavailableError(new Error('another copy of the app is holding an older database version open')));
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('foods')) {
@@ -38,9 +72,25 @@ function open() {
           db.createObjectStore('inv', { keyPath: 'id' });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        // a success that arrives AFTER the timeout would leak an open connection
+        if (settled) { try { req.result.close(); } catch { /* already gone */ } return; }
+        win(req.result);
+      };
+      req.onerror = () => fail(new DbUnavailableError(req.error));
     });
+    /* NEVER CACHE A REJECTION. This used to hold the failed promise for the life
+       of the page, so one denied open condemned every later call, and even a
+       "Try again" button could not have worked without a full reload. Storage
+       denial is not always permanent: Safari can grant it after a prompt, an
+       upgrade blocked by another tab clears when that tab closes, and a hung
+       open can simply come back. Clearing the cache costs one extra open attempt
+       per call while the failure lasts, and each of those fails immediately.
+       The .catch here also marks the CACHED promise as handled, so the retry
+       machinery cannot itself become a stream of unhandled rejections; the
+       promise handed to each caller still rejects for that caller normally. */
+    const pending = dbPromise;
+    pending.catch(() => { if (dbPromise === pending) dbPromise = null; });
   }
   return dbPromise;
 }

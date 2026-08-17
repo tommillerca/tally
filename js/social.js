@@ -36,6 +36,41 @@ export async function apiBase() {
   cachedApi = kv || PROD_API || '';
   return cachedApi;
 }
+/* NO FETCH IN THIS FILE MAY WAIT FOREVER.
+ *
+ * There were no fetch timeouts anywhere in the client, and `fetch` has none of
+ * its own: a captive portal, a corporate proxy or a dead middlebox that
+ * completes the TCP handshake and then never answers leaves the promise pending
+ * for the life of the page. A pending promise never rejects, so every
+ * `.catch(() => null)` in the app was protection against the wrong failure. Boot
+ * called bootSync BEFORE renderOnboarding, so the whole app hung on it: measured
+ * against a server that accepts and never replies, #screen held 0 children and
+ * the page 28 characters of text at 5s, 10s, 15s, 20s and 25s. Permanently.
+ *
+ * TWO BOUNDS, TWO JOBS, and they are deliberately different numbers.
+ *   NET_TIMEOUT_MS is the general "nothing hangs" bound on every request here.
+ *   It is generous on purpose: pushBackup uploads a whole encrypted save and a
+ *   slow uplink must not be cut off mid-transfer. It exists to end an INFINITE
+ *   wait, not to police slowness.
+ *   BOOT_NET_MS is the tight budget bootSync spends, because that one runs
+ *   while the player is looking at nothing. See bootSync for the reasoning.
+ *
+ * AbortController rather than Promise.race: a race leaves the request in flight,
+ * and on the boot path that means a cloud restore could still land underneath a
+ * screen the app had already given up and rendered. Aborting ends it for real.
+ * AbortController is WKWebView 11.3+, so it reaches every device this ships to;
+ * AbortSignal.timeout() is 16+ and is not used for that reason. */
+export const NET_TIMEOUT_MS = 15000;
+export const BOOT_NET_MS = 8000;
+function timedFetch(url, opts = {}, ms = NET_TIMEOUT_MS) {
+  if (!(ms > 0)) return Promise.reject(new Error('net-timeout'));
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), Math.min(ms, NET_TIMEOUT_MS));
+  return fetch(url, { ...opts, signal: ac.signal })
+    .catch(e => { throw ac.signal.aborted ? new Error('net-timeout') : e; })
+    .finally(() => clearTimeout(timer));
+}
+
 // honor ?api=http://127.0.0.1:8788 once at boot (dev/e2e hook)
 export async function initFromQuery() {
   try {
@@ -231,7 +266,7 @@ async function decryptBackup(b64s) {
   return JSON.parse(new TextDecoder().decode(pt));
 }
 
-async function signedFetch(method, path, bodyObj = null) {
+async function signedFetch(method, path, bodyObj = null, { timeoutMs } = {}) {
   const base = await apiBase();
   const me = await kvGet('social', null);
   if (!base || !me) throw new Error('offline');
@@ -239,11 +274,11 @@ async function signedFetch(method, path, bodyObj = null) {
   const ts = Date.now();
   const key = await signingKey();
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(`${method}\n${path}\n${ts}\n${body}`));
-  return fetch(base + path, {
+  return timedFetch(base + path, {
     method,
     headers: { 'content-type': 'application/json', 'x-bh-player': me.playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
     body: method === 'GET' ? undefined : body,
-  });
+  }, timeoutMs);
 }
 
 /* ---------------- account ---------------- */
@@ -267,15 +302,15 @@ export async function renameOwed() {
 
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
-export async function goOnline() {
+export async function goOnline({ timeoutMs } = {}) {
   const base = await apiBase();
   if (!base) return { ok: false, reason: 'no-api' };
   const id = await ensureIdentity();
-  const r = await fetch(base + '/register', {
+  const r = await timedFetch(base + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ pubkey: id.pubJwk }),
-  });
+  }, timeoutMs);
   if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
   const me = await r.json();
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
@@ -511,9 +546,9 @@ export async function pushBackup(appV = '') {
 
 // Pull + decrypt the cloud backup and merge it in (additive importAll). Returns
 // { restored, counts } or { restored:false }. Used on a fresh/empty install.
-export async function pullBackup() {
+export async function pullBackup({ timeoutMs } = {}) {
   try {
-    const r = await signedFetch('GET', '/backup', null);
+    const r = await signedFetch('GET', '/backup', null, { timeoutMs });
     if (r.status === 404) return { restored: false, reason: 'none' };
     if (!r.ok) return { restored: false, reason: 'http-' + r.status };
     const data = await r.json();
@@ -799,7 +834,33 @@ export async function adoptIdentity(bundle) {
   return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts };
 }
 
-export async function bootSync() {
+/* THE ONE CALL THE PLAYER WAITS ON, SO IT GETS A DEADLINE, NOT JUST A TIMEOUT.
+ *
+ * bootSync runs BEFORE the app renders anything, and it makes up to two
+ * sequential requests (register, then the backup GET). Two independent
+ * per-request timeouts add up, so the bound that matters is a deadline across
+ * the whole thing: each request is given only the time that is left.
+ *
+ * WHY 8 SECONDS. index.html reloads a shell with no content at 12,000ms, and
+ * that number is itself measured (see its comment: a 40x-slow device has its
+ * content by ~10s). So 12s is a hard ceiling on the WHOLE boot, not just on the
+ * network part: anything still being waited for at that point is thrown away by
+ * the reload, and the reload is slower than the wait was. A healthy boot on this
+ * machine reaches first content in 135ms to 216ms of non-network work, measured
+ * across five runs, so the network budget is very nearly the whole of it: 8s
+ * lands the first paint at about 8.2s, comfortably inside the 12s ceiling, and
+ * is still long enough for a genuinely slow but working line to hand over a
+ * backup, which is one small GET that the worker answers in well under a second.
+ * On a device slow enough that its own render alone approaches 12s the shell
+ * reload can still fire, but that device is already in trouble and the point of
+ * this work is that it now gets words when it happens instead of an empty room.
+ *
+ * Missing the budget costs the player nothing permanent. bootRestored is only
+ * set on a success or a definite "no backup", so a timed-out restore is retried
+ * on the very next open, and the app says so out loud in the meantime. */
+export async function bootSync({ timeoutMs = BOOT_NET_MS } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  const left = () => deadline - Date.now();
   try {
     /* fire-and-forget, deliberately BEFORE the cloud gates below: the mirror
        backfill protects local-only players too (cloud off / no api), and it is
@@ -821,11 +882,13 @@ export async function bootSync() {
         const kc = await readKeychainIdentity();
         if (!(kc.id && kc.id.privJwk)) return { restored: false, reason: 'new-player' };
       }
-      const r = await goOnline();
+      if (left() <= 0) return { restored: false, reason: 'net-timeout' };
+      const r = await goOnline({ timeoutMs: left() });
       if (!r.ok) return { restored: false, reason: 'offline' };
     }
     if (await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
-    const res = await pullBackup();
+    if (left() <= 0) return { restored: false, reason: 'net-timeout' };
+    const res = await pullBackup({ timeoutMs: left() });
     /* DO NOT BURN THE ONE-SHOT ON A FAILURE. This used to set bootRestored
        unconditionally, so a transient 500 or a dropped connection on the very
        first boot permanently forfeited the automatic cloud restore: the flag said
