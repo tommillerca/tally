@@ -48,6 +48,7 @@ const PRECACHE = [
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
      rather than left to the runtime cache for that reason. 36KB for all 9. */
   './assets/crates/common/f0.png',
+  './assets/crates/common/f0-24.png',
   './assets/crates/common/f1.png',
   './assets/crates/common/f2.png',
   './assets/crates/common/f3.png',
@@ -58,6 +59,26 @@ const PRECACHE = [
   './assets/crates/common/f8.png',
   /* the Golden crate's three authored bone-chest states, same reason */
   './assets/crates/golden/f0.png',
+  './assets/crates/golden/f0-24.png',
+  /* The Step Egg hatch, all fifteen frames. None of these were precached when
+     the sequence shipped, so the animation was fetching frames from the network
+     while it played. 64K for the set. */
+  './assets/eggs/step/f1.png',
+  './assets/eggs/step/f2.png',
+  './assets/eggs/step/f3.png',
+  './assets/eggs/step/f4.png',
+  './assets/eggs/step/f5.png',
+  './assets/eggs/step/f6.png',
+  './assets/eggs/step/f7.png',
+  './assets/eggs/step/f8.png',
+  './assets/eggs/step/f9.png',
+  './assets/eggs/step/f10.png',
+  './assets/eggs/step/f11.png',
+  './assets/eggs/step/f12.png',
+  './assets/eggs/step/f13.png',
+  './assets/eggs/step/f14.png',
+  './assets/eggs/step/f15.png',
+  './assets/eggs/step/f1-24.png',
   './assets/crates/golden/f1.png',
   './assets/crates/golden/f2.png',
   './assets/brand/logo.png',

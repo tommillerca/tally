@@ -358,17 +358,22 @@ function spawnIcon(type, s = 20) {
    and not one of those is a multiple of 48. So the rule is: take the largest
    whole multiple that does not EXCEED what the caller asked for, which is never
    bigger than the space reserved for it and never lands the art between pixels.
-   Below 48 there is no such multiple, and a 48px drawing crushed into a 12px
+   48 also halves cleanly to 24, so there is a second whole step below it. The
+   halves are nearest-neighbour, checked by eye at 8x before being wired: the
+   bone slats and the flame survive, the wooden chest keeps its skull glow, and
+   the egg keeps its speckle. That covers the Backpack tab chip, which sat at
+   21px showing the old vector crate directly above the new art.
+   Below 24 there is no whole step left, and a 48px drawing crushed into a 12px
    inline glyph beside a line of text would be mush whatever we did, so those
    keep the vector icon. They are the tiny ones in quest rows and price chips,
-   not the art Tom is looking at.
-   The Step Egg has no closed-chest equivalent, so it keeps its own icon. */
-const CRATE_ICON_PIX = { daily: 'common/f0', golden: 'golden/f0' };
+   not the art Tom is looking at. */
+const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0', egg: 'eggs/step/f1' };
 function crateIcon(kind, s = 22) {
   const pix = CRATE_ICON_PIX[kind];
-  if (pix && s >= 48) {
-    const px = Math.floor(s / 48) * 48;
-    return `<span class="bhi-wrap"><img src="assets/crates/${pix}.png" alt="" class="crate-ico-pix"`
+  if (pix && s >= 24) {
+    const px = s >= 48 ? Math.floor(s / 48) * 48 : 24;
+    const file = px === 24 ? `${pix}-24` : pix;
+    return `<span class="bhi-wrap"><img src="assets/${file}.png" alt="" class="crate-ico-pix"`
       + ` width="${px}" height="${px}" style="width:${px}px;height:${px}px" decoding="sync"></span>`;
   }
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
@@ -3854,7 +3859,7 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
   const r = den.reward || {};
   const crateName = r.crate === 'golden' ? 'Golden' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
   const pay = [
-    crateName ? [crateIcon(r.crate, 22), crateName.toUpperCase(), 'CRATE'] : null,
+    crateName ? [crateIcon(r.crate, 24), crateName.toUpperCase(), 'CRATE'] : null,
     r.coins ? [ICONS.coin(22), String(r.coins), 'COINS'] : null,
     r.xp ? [ICONS.star(20), String(r.xp), 'XP'] : null,
   ].filter(Boolean);
@@ -9957,7 +9962,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     </div>`}
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
-      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(21)}<span>Shop</span></button>
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Level</span></button>
@@ -10426,7 +10431,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art">${crateIcon('egg', 46)}</span>
+          <span class="art">${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
