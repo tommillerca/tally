@@ -5,7 +5,7 @@ import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSo
 import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP,
 } from './game.js';
@@ -682,8 +682,58 @@ async function boot() {
 
   if (!S.settings) { renderOnboarding(); return; }
 
-  const init = await initGameIfNeeded(S.settings.targets);
-  if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
+  /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
+   *
+   * Everything below this block used to run first, and initGameIfNeeded at the
+   * head of it is a retroactive replay of an entire diary: for one year of
+   * history, measured at 13.5s on a 5x-throttled CPU and 14.6s at 6x, and that is
+   * WITH the constant-cost award(); on main it is 13.3s with no throttle at all.
+   * index.html's dead-shell backstop reloads the page when #screen is still empty
+   * at 12s, and the replay's completion flag was written only at the very end, so
+   * a slow phone with an old save reloaded into the same replay forever. See the
+   * header comment on initGameIfNeeded in js/game.js for the full table.
+   *
+   * So the app paints its real screen (their actual food diary, not a spinner)
+   * and the backfill runs behind it, checkpointed, announcing itself. Two things
+   * this must not break, both handled rather than hoped for:
+   *   - the hash has to be normalised before the first route(), which is why
+   *     ingestHkFromUrl is now split into takeHkFromUrl (here) and the awarding
+   *     half (below);
+   *   - the screen is now live while the player's level is still climbing, so
+   *     socialSnapshot awaits gameInitSettled() and no half-replayed level can
+   *     reach the leaderboard.
+   */
+  const hkTaken = takeHkFromUrl();
+  window.addEventListener('hashchange', routeFromHash);
+  bindTabs();
+  route();
+  /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
+     and handlers before the scene shell exists, and after it lands too. A no-op in
+     every real session (navigator.webdriver !== true). */
+  installPaddockSeam();
+
+  /* The visible state, and it is deliberately not a blocking one. A resumed boot
+     says so, because "importing" that starts over every time is the symptom the
+     player would otherwise be reading. Toasts queue, so the line stays on screen
+     for the length of the run without any new chrome to go wrong. */
+  let backfillSpoke = false;
+  const init = await initGameIfNeeded(S.settings.targets, {
+    onProgress: ({ done, total, resumed, complete }) => {
+      if (complete || !total) return;
+      if (!backfillSpoke) {
+        backfillSpoke = true;
+        toast(resumed ? 'Still importing your history, picking up where it stopped…' : 'Importing your history…', 4200);
+        return;
+      }
+      // one line per quarter: enough to stay visible, never a backlog
+      const pct = Math.floor((done / total) * 4);
+      if (pct >= 1 && pct <= 3 && done - (pct * total / 4) < 40) toast(`Importing your history… ${pct * 25}%`, 4200);
+    },
+  });
+  if (init && init.xp > 0) {
+    setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
+    route({ keepScroll: true }); // the screen painted at their old level; show the real one
+  }
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
@@ -699,7 +749,7 @@ async function boot() {
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
-  await ingestHkFromUrl();
+  await ingestHkPayload(hkTaken);
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
@@ -710,14 +760,6 @@ async function boot() {
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
-
-  window.addEventListener('hashchange', routeFromHash);
-  bindTabs();
-  route();
-  /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
-     and handlers before the scene shell exists, and after it lands too. A no-op in
-     every real session (navigator.webdriver !== true). */
-  installPaddockSeam();
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
@@ -12925,9 +12967,15 @@ function openPetBreedResult(off) {
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
-async function ingestHkFromUrl() {
+/* Split in two on purpose. boot() now paints BEFORE it does any of its awarding
+   work, and the first route() reads location.hash, so the hash rewrite below has
+   to have already happened or the very first render is a `#/hk...` tab that does
+   not exist. takeHkFromUrl is the synchronous half (read the hash, normalise it,
+   hand back what it said); ingestHkPayload is the awarding half and runs behind
+   the paint with everything else. */
+function takeHkFromUrl() {
   const h = location.hash || '';
-  if (!h.startsWith('#/hk')) return;
+  if (!h.startsWith('#/hk')) return null;
   /* THE HASH IS PLAYER-SUPPLIED, SO THE DECODE HAS TO SURVIVE GARBAGE.
      decodeURIComponent throws URIError on any stray '%' ("#/hk%", "#/hk?n=100%"),
      this runs inside boot() BEFORE route() and bindTabs(), and boot() is called
@@ -12942,7 +12990,12 @@ async function ingestHkFromUrl() {
   try { decoded = decodeURIComponent(h); } catch { /* malformed escape: parse it raw */ }
   const payload = parseHkPayload(decoded);
   history.replaceState(null, '', location.pathname + location.search + '#/today');
-  if (payload) await ingestHealth(payload, { celebrate: true });
+  return { payload };
+}
+
+async function ingestHkPayload(taken) {
+  if (!taken) return;
+  if (taken.payload) await ingestHealth(taken.payload, { celebrate: true });
   else toast('Could not read the Health sync link');
 }
 
@@ -14964,6 +15017,14 @@ async function weekStepsNow(date = dateKey()) {
 }
 
 async function socialSnapshot() {
+  /* NEVER PUBLISH A HALF-REPLAYED LEVEL. The retroactive backfill walks a legacy
+     save from level 1 up to their real level over seconds, and since v385 it runs
+     BEHIND a painted, interactive screen (see boot()), so the player can equip
+     gear, open Crew or come back from background while it is mid-flight and push
+     a profile. Every one of those paths builds its payload here, so this single
+     await is the whole guard: a snapshot is only ever taken of a settled level.
+     A no-op (already-resolved) on every boot that has no backfill to do. */
+  await gameInitSettled();
   const [fighter, eq, xp, gOwned, earned, wk] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds(), weekStepsNow()]);
   const lvl = levelFor(xp);
   return {
