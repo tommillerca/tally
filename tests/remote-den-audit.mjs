@@ -72,8 +72,15 @@ await openPit(page);
 await sleep(1600);
 
 const after = await readRow();
-ok('beating it raises the Gauntlet ceiling', after.denWins > before.denWins,
-  `${before.denWins} -> ${after.denWins} world-boss wins (cap +${3 * (after.denWins - before.denWins)})`);
+/* EXACTLY ONE, not "more". A world boss beaten once must mint one win row. The
+   trend this used to assert, after > before, is satisfied by a double-mint,
+   which is the farm this suite exists to catch: the row passed BECAUSE the app
+   overpaid. den-ceiling-audit already holds the same counter to an exact value.
+   CLAUDE.md rule 11: a counter that gates a reward needs a bound, not a
+   direction. */
+ok('beating it raises the Gauntlet ceiling by exactly one win',
+  after.denWins === before.denWins + 1,
+  `${before.denWins} -> ${after.denWins} world-boss wins, expected ${before.denWins + 1} (cap +${3 * (after.denWins - before.denWins)})`);
 ok('the card shows it is beaten', /beaten|tomorrow/i.test(after.text || ''), after.text);
 ok('the FIGHT button is gone', !after.hasFightBtn, after.hasFightBtn ? 'still offering a pointless re-fight' : '');
 ok('and it points at tomorrow', /tomorrow/i.test(after.text || ''), after.text);
