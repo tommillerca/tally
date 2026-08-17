@@ -80,6 +80,47 @@ const note = (name, detail) => console.log(`NOTE  ${name}  ${detail}`);
 const TEST_DEADLINE_MS = 2500;
 const BOUND_MS = TEST_DEADLINE_MS * 2;
 
+/* ------------------------------------------------- static: no bare fetch left
+   The behavioural rows below can only drive the call sites that exist today.
+   This is the coverage half: the NEXT remote call added to any of these three
+   files cannot ship without a deadline, because a bare fetch() in them fails
+   here. That is the same shape as precache-audit deriving its list from the
+   module graph rather than from a hand-written one.
+   A failing result looks like: "js/social.js:412 fetch(" printed below. */
+const fs = await import('node:fs');
+const DEADLINE_FILES = ['js/social.js', 'js/analytics.js', 'js/sources.js'];
+const bare = [];
+for (const f of DEADLINE_FILES) {
+  const lines = fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n');
+  lines.forEach((ln, i) => {
+    // the two wrapper bodies are the only places a bare fetch belongs, and they
+    // are recognised by the signal they attach, not by their line number
+    if (/signal:\s*ac\.signal/.test(ln)) return;
+    // a call site, OR a default parameter that hands the raw fetch down
+    // (`fetchFn = fetch`), which is how js/sources.js shipped with no deadline
+    if (/(?<![A-Za-z_$.])fetch\s*\(/.test(ln) || /=\s*fetch\s*[,)]/.test(ln)) bare.push(`${f}:${i + 1} ${ln.trim().slice(0, 80)}`);
+  });
+}
+ok('STATIC  every network call in social.js, analytics.js and sources.js goes through a deadline wrapper, so the next one cannot ship without one',
+  bare.length === 0 && DEADLINE_FILES.length === 3,
+  bare.length ? bare.join(' | ') : `${DEADLINE_FILES.length} files scanned, 0 bare fetch calls`);
+
+/* THE LOCAL GAME MUST STAY LOCAL. Crates, the wheel, the Pit, cooking, gear,
+   pets, quests and the XP ledger are the reason this app works on a plane, and
+   today not one of them imports social.js or calls fetch. That is a property
+   worth pinning rather than rediscovering: a single network call added to the
+   crate-opening path would break the offline promise silently, and no
+   behavioural test would notice until somebody was on a train.
+   A failing result looks like: "js/loot.js references the network". */
+const LOCAL_ONLY = ['js/loot.js', 'js/pit.js', 'js/cooking.js', 'js/wheel.js', 'js/quests.js', 'js/game.js', 'js/gear.js', 'js/pets.js', 'js/energy.js', 'js/garden.js'];
+const networked = LOCAL_ONLY.filter(f => {
+  const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+  return /(?<![A-Za-z_$.])fetch\s*\(/.test(src) || /from '\.\/social\.js'/.test(src) || /XMLHttpRequest|navigator\.sendBeacon/.test(src);
+});
+ok('OFFLINE-FIRST  the local game modules reach no network at all, so crates, the wheel, the Pit and the Kitchen cannot stop working on a plane',
+  networked.length === 0 && LOCAL_ONLY.length === 10,
+  networked.length ? networked.join(', ') + ' reference the network' : `${LOCAL_ONLY.length} modules scanned, 0 network references`);
+
 /* ---------------------------------------------------------------- mock Worker
    A stand-in for bonez-api, with a mode per run. 'hang' holds the response open
    and never answers and never closes, which is the state this file exists for;
@@ -200,7 +241,16 @@ const $click = async (sel, waitMs = 5000) => {
       if (!b || b.disabled) return null;
       b.scrollIntoView({ block: 'center' });
       const r = b.getBoundingClientRect();
-      return r.width && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+      if (!r.width || !r.height) return null;
+      /* HIT-TEST BEFORE CLICKING (anti-regression rule 6). A sheet that is still
+         sliding in measures a perfectly good box at coordinates the mouse will
+         miss by the time the event lands, and a click into dead space is
+         indistinguishable from a control that ignored it. Only click when the
+         centre of the box really is this button. */
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const hit = document.elementFromPoint(cx, cy);
+      if (!hit || (hit !== b && !b.contains(hit))) return null;
+      return { x: cx, y: cy };
     }, sel).catch(() => null);
     if (at) { await page.mouse.click(at.x, at.y); return true; }
     if (Date.now() - t0 > waitMs) return false;
@@ -208,7 +258,7 @@ const $click = async (sel, waitMs = 5000) => {
   }
 };
 const btn = sel => page.evaluate(s => { const b = document.querySelector(s); return b ? { text: (b.textContent || '').trim(), disabled: !!b.disabled } : null; }, sel).catch(() => null);
-const toastText = () => page.evaluate(() => [...document.querySelectorAll('.toast, #toast')].map(t => (t.textContent || '').trim()).filter(Boolean).join(' | ')).catch(() => '');
+const toastText = () => page.evaluate(() => { const t = document.querySelector('#toast'); return t && !t.hidden ? (t.textContent || '').trim() : ''; }).catch(() => '');
 const topSheet = () => page.evaluate(() => { const s = [...document.querySelectorAll('#sheets .sheet')].pop(); return s ? (s.innerText || '').replace(/\s+/g, ' ') : ''; }).catch(() => '');
 const screenText = () => page.evaluate(() => (document.querySelector('#screen')?.innerText || '').replace(/\s+/g, ' ')).catch(() => '');
 const coins = () => page.evaluate(async () => {
@@ -244,12 +294,12 @@ const goTab = async tab => {
 
 /* Wait for a condition, returning how long it took, capped. Used by every
    DEADLINE row so the grade is "inside the bound", never "eventually". */
-async function waitFor(fn, capMs) {
+async function waitFor(fn, capMs, pollMs = 120) {
   const t0 = Date.now();
   for (;;) {
     if (await fn()) return Date.now() - t0;
     if (Date.now() - t0 > capMs) return -1;
-    await sleep(250);
+    await sleep(pollMs);
   }
 }
 
@@ -402,69 +452,121 @@ async function openFriendCard() {
   return (await waitFor(() => present('#giftFree'), 8000)) >= 0;
 }
 
+/* DRIVE ONE CONTROL, AND REFUSE TO GRADE A TAP THAT NEVER HAPPENED.
+ *
+ * The naive version of this (click, then wait for the button to be enabled) is
+ * green on a button that was never pressed, because "enabled" is also its
+ * resting state. That is not hypothetical: it made the name-save row read 2ms
+ * and quote a toast left over from the previous block. So every control is
+ * required to be SEEN in its busy state first; if it never goes busy the row
+ * fails and says so rather than reporting a number.
+ *
+ * Toasts are cleared first for the same reason: a stale toast from the block
+ * above is not evidence about this one. */
+/* BLANK IT, NEVER REMOVE IT. #toast is a single persistent element that
+   nextToast() looks up and calls getAttribute on; removing it threw
+   "Cannot read properties of null" inside the app and killed every toast for
+   the rest of the run, which read as four broken controls. The harness must not
+   be able to break the thing it is measuring. */
+const clearToasts = () => page.evaluate(() => { const t = document.querySelector('#toast'); if (t) { t.textContent = ''; t.hidden = true; } }).catch(() => {});
+async function driveUnderHang(sel, tap) {
+  await clearToasts();
+  api.mode = 'hang';
+  const tapped = await tap();
+  if (tapped === false) return { sawBusy: false, ms: -1, label: '', toast: await toastText(), tapped: false };
+  // 1. it has to go busy at all
+  const busy = await waitFor(async () => { const b = await btn(sel); return !!(b && b.disabled); }, 4000, 60);
+  if (busy < 0) return { sawBusy: false, ms: -1, label: '', toast: await toastText(), tapped: true };
+  // 2. and then come back, inside the bound
+  const back = await waitFor(async () => { const b = await btn(sel); return !!(b && !b.disabled); }, BOUND_MS);
+  return { sawBusy: true, ms: back, label: ((await btn(sel)) || {}).text || '', toast: await toastText(), tapped: true };
+}
+const grade = (name, r, gate, wantToast) => ok(name,
+  gate && r.sawBusy && r.ms >= 0 && r.ms <= BOUND_MS && wantToast.test(r.toast),
+  !gate ? 'the control was never reachable, so this row measures nothing'
+    : r.tapped === false ? 'the control could not be tapped at all (nothing at its centre), so nothing was driven'
+    : !r.sawBusy ? 'the control never entered its busy state, so nothing was driven'
+    : r.ms < 0 ? `still disabled after ${BOUND_MS}ms`
+    : `${r.ms}ms (bound ${BOUND_MS}ms), label "${r.label}", toast "${r.toast.slice(0, 60)}"`);
+
 const opened = await openFriendCard();
 await sleep(600);
 ok('CONTROL  the gift sheet opens from a friend card, so the two gift rows below are really driving it',
   opened && /free daily gift/i.test(await topSheet()), (await topSheet()).slice(0, 80));
 
-api.mode = 'hang';
-await $click('#giftFree');
-const freeBack = await waitFor(async () => { const b = await btn('#giftFree'); return b && !b.disabled; }, BOUND_MS);
-ok('DEADLINE  free gift: the button comes back to life inside two deadlines instead of sitting on "..."',
-  opened && freeBack >= 0, freeBack >= 0 ? `${freeBack}ms (bound ${BOUND_MS}ms), label "${(await btn('#giftFree')).text}"` : `still disabled after ${BOUND_MS}ms`);
-ok('DEADLINE  free gift: and the player is told, rather than left to guess',
-  opened && /could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
+const free = await driveUnderHang('#giftFree', () => $click('#giftFree'));
+grade('DEADLINE  free gift: the button comes back to life with words inside two deadlines, instead of sitting on "..."',
+  free, opened, /could not send/i);
 
 const coinsBefore = await coins();
-await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.click()).catch(() => {});
-await sleep(700);
-await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.click()).catch(() => {});
-const chipBack = await waitFor(async () => { const b = await btn('.gift-amt[data-amt="250"]'); return b && !b.disabled; }, BOUND_MS);
+const spend = await driveUnderHang('.gift-amt[data-amt="250"]', async () => {
+  // armToConfirm: the first tap arms, the second commits
+  await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.click()).catch(() => {});
+  await sleep(600);
+  await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.click()).catch(() => {});
+});
 const coinsAfter = await coins();
-ok('DEADLINE  250-coin gift: the chip comes back to life inside two deadlines',
-  opened && chipBack >= 0, chipBack >= 0 ? `${chipBack}ms (bound ${BOUND_MS}ms)` : `still disabled after ${BOUND_MS}ms`);
+grade('DEADLINE  250-coin gift: the chip comes back to life with words inside two deadlines',
+  spend, opened, /not spent|could not send/i);
 /* EXACT, not "about right". Measured before the fix: 5000 -> 4750, no refund,
    no toast, and the chip dead. A spend that cannot complete must leave the
-   balance byte-identical to what it was. */
-/* GATED ON `opened`, because an unchanged balance is trivially true when nothing
-   was ever tapped: that is exactly how this row read green against ddbb079,
-   where the crew fan was empty and the gift sheet never opened at all. An empty
-   sample set is a failure, never a pass (anti-regression rule 3). */
+   balance byte-identical to what it was. Gated on the tap having really
+   happened, because an unchanged balance is trivially true when nothing was
+   pressed: that is how this row read green against ddbb079, where the crew fan
+   was empty and the gift sheet never opened at all. */
 ok('BALANCE  250-coin gift: a send that never got an answer leaves the balance exactly where it started',
-  opened && coinsAfter === coinsBefore,
-  opened ? `${coinsBefore} -> ${coinsAfter} (must be identical)` : 'the gift sheet never opened, so no send was attempted and this row measures nothing');
-ok('BALANCE  and the toast says the coins were not spent',
-  opened && /not spent|could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
+  opened && spend.sawBusy && coinsAfter === coinsBefore,
+  opened && spend.sawBusy ? `${coinsBefore} -> ${coinsAfter} (must be identical)` : 'no send was attempted, so this row measures nothing');
 
 api.mode = 'ok';
 await goTab('friends');
 await $click('#crewEditName');
-await waitFor(() => present('#nbSave'), 8000);
-const nameOpened = /pick|name/i.test(await topSheet());
-api.mode = 'hang';
-await $click('#nbSave');
-const nameBack = await waitFor(async () => { const b = await btn('#nbSave'); return b && !b.disabled; }, BOUND_MS);
+const nameOpened = (await waitFor(() => present('#nbSave'), 8000)) >= 0;
+const name = await driveUnderHang('#nbSave', () => $click('#nbSave'));
 ok('CONTROL  the name builder opens, so the row below is driving a real Save',
   nameOpened, (await topSheet()).slice(0, 70));
-ok('DEADLINE  name save: the button leaves "Saving..." inside two deadlines, with words',
-  nameBack >= 0 && /could not save/i.test(await toastText()),
-  nameBack >= 0 ? `${nameBack}ms, toast "${(await toastText()).slice(0, 60)}"` : `still disabled after ${BOUND_MS}ms`);
+grade('DEADLINE  name save: the button leaves "Saving..." with words inside two deadlines',
+  name, nameOpened, /could not save/i);
 
 api.mode = 'ok';
 await goTab('friends');
-await page.evaluate(() => { const i = document.querySelector('#friendCode'); if (i) { i.value = 'AAA111'; i.dispatchEvent(new Event('input', { bubbles: true })); } }).catch(() => {});
-api.mode = 'hang';
-await $click('#friendAddBtn');
-const addBack = await waitFor(async () => { const b = await btn('#friendAddBtn'); return b && !b.disabled; }, BOUND_MS);
-const addToast = await toastText();
-ok('DEADLINE  add a friend: the button comes back inside two deadlines',
-  addBack >= 0, addBack >= 0 ? `${addBack}ms (bound ${BOUND_MS}ms)` : `still disabled after ${BOUND_MS}ms`);
+const codeIn = await page.evaluate(() => { const i = document.querySelector('#friendCode'); if (!i) return false; i.value = 'AAA111'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; }).catch(() => false);
+const add = await driveUnderHang('#friendAddBtn', () => $click('#friendAddBtn'));
+const addToast = add.toast;
+grade('DEADLINE  add a friend: the button comes back with words inside two deadlines',
+  add, codeIn, /could not reach/i);
 /* RED BEFORE THE FIX in a different way: the button DID come back once a
    deadline existed, and blamed the code. A network failure must not be reported
    as a bad friend code, or the player re-reads a code that was never wrong. */
 ok('CREW  add a friend: a request that never reached the server is not reported as a bad code',
-  !/no bonehead has that code/i.test(addToast) && /could not reach/i.test(addToast),
-  addToast.slice(0, 110) || '(no toast at all)');
+  add.sawBusy && !/no bonehead has that code/i.test(addToast) && /could not reach/i.test(addToast),
+  add.sawBusy ? (addToast.slice(0, 110) || '(no toast at all)') : 'the Add button never went busy, so this row measures nothing');
+
+/* ============ 4b. THE TWO CALLS A FINISHED FIGHT AWAITS, DIRECTLY ========= */
+/* A won spire fight awaits social.claimSpireRemote / defendSpireRemote before it
+   can show the player anything, so a hang there is a rewards screen that never
+   arrives. Driving a real spire fight needs a signed-in test identity that this
+   repo does not have yet (tests/spire-phase3-audit.mjs's own header records the
+   same wall), so these two rows drive the exported calls app.js awaits rather
+   than the fight around them. Stated plainly so nobody reads this as coverage of
+   the fight UI: it is coverage of the promise the fight UI hangs on. */
+api.mode = 'hang';
+const spireSettle = await page.evaluate(async cap => {
+  const s = await import('./js/social.js');
+  const run = async fn => {
+    const t0 = Date.now();
+    try { await Promise.race([fn(), new Promise(r => setTimeout(() => r('CAP'), cap))]); } catch { /* a rejection is a settle */ }
+    return Date.now() - t0;
+  };
+  return {
+    claim: await run(() => s.claimSpireRemote({ id: 'sp1', name: 'Test Spire', lat: 1, lng: 2 })),
+    defend: await run(() => s.defendSpireRemote('sp1')),
+  };
+}, BOUND_MS + 3000).catch(() => ({ claim: -1, defend: -1 }));
+ok('DEADLINE  claimSpireRemote settles against a server that never answers, so a won fight can still pay out',
+  spireSettle.claim > 0 && spireSettle.claim < BOUND_MS + 2500, `${spireSettle.claim}ms (bound ${BOUND_MS + 2500}ms)`);
+ok('DEADLINE  defendSpireRemote settles too',
+  spireSettle.defend > 0 && spireSettle.defend < BOUND_MS + 2500, `${spireSettle.defend}ms (bound ${BOUND_MS + 2500}ms)`);
 
 /* ================================ 5. THE FLAP, MEASURED AND NOT GRADED ===== */
 /* The server acts and the answer is lost. The client refunds, because from here

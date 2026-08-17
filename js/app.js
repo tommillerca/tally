@@ -5964,7 +5964,7 @@ async function openScanner(getMeal) {
        label scanner (it runs entirely on the phone and still works), and offers
        to try the lookup again. */
     if (!reached) {
-      openSheet(`
+      const miss = openSheet(`
         <div class="sheet-head">
           <div class="hd"><h2>Could not look that up</h2><div class="sub">Barcode ${esc(code)}</div></div>
           <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Back">${ICONS.close(17)}</button></div>
@@ -5977,9 +5977,13 @@ async function openScanner(getMeal) {
           <div style="height:10px"></div>
           <button class="btn ghost" id="missManual">Type it in manually</button>
         </div>`, { cls: 't1' });
-      $('#missRetry').addEventListener('click', () => { history.back(); setTimeout(() => handleBarcode(code, getMeal), 240); });
-      $('#missLabel').addEventListener('click', () => openLabelFlow(getMeal, code));
-      $('#missManual').addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
+      /* Scoped to THIS sheet. The document-wide lookup below is the older
+         pattern and works because only one miss-sheet is ever open, but these
+         three ids now exist on two different sheets, so scoping is the honest
+         version rather than a bet on the stack being empty. */
+      $('#missRetry', miss).addEventListener('click', () => { history.back(); setTimeout(() => handleBarcode(code, getMeal), 240); });
+      $('#missLabel', miss).addEventListener('click', () => openLabelFlow(getMeal, code));
+      $('#missManual', miss).addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
       return;
     }
     openSheet(`
