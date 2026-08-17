@@ -27,6 +27,9 @@
  *     one gear piece melted in both tabs             dust paid TWICE
  *     awardCapped, 12/day ceiling, both tabs push    190 XP against a cap of 120
  *     30 keys added to grantsSeen across two tabs    23 survived
+ *     a stale tab saving settings                    reverted the other tab's
+ *                                                    units change with nothing
+ *                                                    said to anybody
  *     Erase all data with a second tab writing       30 inv rows and 150 coins
  *                                                    still there, and the tab
  *                                                    that erased reloaded onto
@@ -62,7 +65,7 @@
  *     --prove-red=inv      grantGear back to newId + put        -> INV-DUPE
  *     --prove-red=melt     disenchantGear back to db.del        -> MELT-ONCE
  *     --prove-red=seen     grantsSeen back to overwrite         -> GRANT-SEEN
- *     --prove-red=erase    erase back to the per-store loop     -> ERASE-ZERO
+ *     --prove-red=settings js/app.js back to whole-snapshot saves  -> SETTINGS-MERGE (source half)\n *     --prove-red=erase    erase back to the per-store loop     -> ERASE-ZERO
  * A mode that changes no bytes is itself a failure (the SETUP row below), so a
  * drifted regex cannot silently prove nothing.
  *
@@ -126,6 +129,17 @@ function transform(rel, buf) {
   if (rel === 'js/game.js' && PROVE === 'award') {
     s = swap(s, "  const claimed = await db.addIfAbsent('xp', row);\n  if (!claimed) return { claimed: false, xp: 0 };",
       "  if (await db.get('xp', key)) return { claimed: false, xp: 0 };\n  await db.put('xp', row);");
+  }
+  if (rel === 'js/app.js' && PROVE === 'settings') {
+    /* back to writing the whole in-memory snapshot, both in the mechanism and
+       at the call sites, so BOTH halves of the SETTINGS-MERGE pair go red.
+       Reverting only the call sites left saveSettings itself still merging, and
+       the behavioural row went on passing through the test hook. */
+    s = swap(s, "S.settings = await kvUpdate('settings', cur => ({ ...(cur || {}), ...changed }), {});",
+      "await kvSet('settings', now); S.settings = now;");
+    const before = s;
+    s = s.replace(/await saveSettings\(\);/g, "await kvSet('settings', S.settings);");
+    if (s !== before) transformHits++;
   }
   if (rel === 'js/db.js' && PROVE === 'erase') {
     /* the seven-transaction, this-tab-only loop the handler used to run inline */
@@ -443,6 +457,36 @@ const reset = () => readA(async () => {
      writing the correct 12 rows, so the row count alone grades it as fine. */
   exact('AWARD-CAP  a 12/day ceiling writes exactly 12 rows however many tabs push at it', 12, rows);
   exact('AWARD-CAP  and pays exactly the capped XP, never more', 120, xa + xb, `(A paid ${xa}, B paid ${xb})`);
+}
+
+/* ---------------- a stale tab saving over a fresh one ---------------------- */
+{
+  await reset();
+  /* Both tabs load settings into memory, which is what boot does. Then A
+     changes one field and saves; B, which has been sitting there since before
+     that, changes a DIFFERENT field and saves. Neither touched the other's
+     field, so both changes must survive. The old code wrote each tab's whole
+     in-memory snapshot, so the later save silently reverted the earlier one. */
+  await readA(() => window.__t.db.kvSet('settings', { units: 'kg', profile: { goal: 'cut' }, fdcKey: null }));
+  await sleep(200);
+  // both tabs load settings the way boot does, through the app's own path
+  await Promise.all([A, B].map(p => p.evaluate(() => window.__settingsLoad())));
+  // A changes units and saves; B, holding the copy it loaded before that, changes profile and saves
+  await A.evaluate(() => window.__settingsSave({ units: 'lb' }));
+  await sleep(200);
+  await B.evaluate(() => window.__settingsSave({ profile: { goal: 'bulk' } }));
+  await sleep(300);
+  const st = await readA(() => window.__t.db.kvGet('settings', {}));
+  exact("SETTINGS-MERGE  a stale tab's save keeps the other tab's change (units) as well as its own (profile)",
+    'lb/bulk', `${st.units}/${st.profile && st.profile.goal}`, JSON.stringify(st));
+  /* SOURCE half: the row above proves the MERGE works, and this proves js/app.js
+     actually uses it rather than still writing its whole snapshot. Without this,
+     the behavioural row is grading a helper nothing calls. */
+  const appSrc = await (await fetch(app.url + 'js/app.js')).text();
+  const snapshotWrites = (appSrc.match(/kvSet\('settings',\s*S\.settings\)/g) || []).length;
+  const deltaWrites = (appSrc.match(/await saveSettings\(\)/g) || []).length;
+  ok('SETTINGS-MERGE  js/app.js saves settings as a DELTA everywhere, never as its whole in-memory snapshot',
+    snapshotWrites === 0 && deltaWrites >= 8, `whole-snapshot writes: ${snapshotWrites}, delta writes: ${deltaWrites}`);
 }
 
 /* ---------------- erase everything, with the other tab writing -------------

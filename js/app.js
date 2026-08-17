@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -114,6 +114,51 @@ const S = {
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
 };
+
+/* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
+ *
+ * Every one of these used to be `S.settings.x = v; await kvSet('settings',
+ * S.settings)`. S.settings is a copy this document read at boot, so the write
+ * is the whole object as this tab last understood it, and with the app open
+ * twice the older tab's copy silently undoes the other's change. Measured with
+ * two real pages: tab A switched units to lb, tab B (which had loaded settings
+ * earlier and then changed the calorie goal) saved, and the stored row came
+ * back { units: 'kg', goal: 1800 }. Tab A's change was gone and nothing told
+ * anybody. It is not currency, but it is the player's plan, their units and
+ * their notification tiers, and "I set that and it went back" is a bug report
+ * nobody can reproduce.
+ *
+ * So: remember what was loaded, diff against it at save time, and merge ONLY
+ * the keys this tab actually touched into whatever is in the store at that
+ * instant, inside one transaction. A tab that changed nothing writes nothing
+ * over anybody. JSON compare rather than identity, because these values are
+ * nested objects (profile, targets) that get spread-rebuilt in place.
+ *
+ * snapSettings() must be called at every point S.settings is (re)loaded, or
+ * the diff is taken against a stale baseline and the merge widens back into a
+ * clobber. The reads are all in this file and all call it. */
+let settingsBase = null;
+function snapSettings() { try { settingsBase = JSON.parse(JSON.stringify(S.settings || {})); } catch { settingsBase = {}; } }
+async function saveSettings() {
+  const base = settingsBase || {}, now = S.settings || {};
+  const changed = {};
+  for (const k of new Set([...Object.keys(base), ...Object.keys(now)])) {
+    if (JSON.stringify(base[k]) !== JSON.stringify(now[k])) changed[k] = now[k];
+  }
+  S.settings = await kvUpdate('settings', cur => ({ ...(cur || {}), ...changed }), {});
+  snapSettings();
+  return S.settings;
+}
+/* Test hooks (webdriver only), same pattern as __crewDeliveries and friends.
+   The clobber this fixes only exists BETWEEN two documents, so a guard has to
+   drive the real S.settings and the real saveSettings in two live tabs; a
+   re-implementation of the merge in the page would grade a helper nothing
+   calls. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__settingsLoad = async () => { S.settings = await kvGet('settings', S.settings); snapSettings(); return S.settings; };
+  window.__settingsSave = async patch => { Object.assign(S.settings, patch); return saveSettings(); };
+}
+
 
 // PET_CROP (the measured ink bounding boxes) now lives in data/boneheadz.js next to
 // bhAsset, because the Paddock's cards need the same numbers and cannot import this
@@ -525,6 +570,7 @@ async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
   S.settings = await kvGet('settings');
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
+  snapSettings();
   S.userFoods = await db.all('foods');
 
   // One-off: players who claimed the Day One Lizard before v241 got it filed in
@@ -580,6 +626,7 @@ async function boot() {
   const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
+    snapSettings();
     S.userFoods = await db.all('foods');
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
   } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
@@ -7023,7 +7070,7 @@ function openWeightSheet() {
     await db.put('weights', { date: d, kg });
     // keep profile weight fresh for future target recalcs
     S.settings.profile.weightKg = kg;
-    await kvSet('settings', S.settings);
+    await saveSettings();
     const game = await onWeighIn(d);
     confettiBurst(innerWidth / 2, innerHeight * 0.4, 12);
     popSound(S.sounds);
@@ -9056,7 +9103,7 @@ async function renderSettings(el) {
     const kcal = num($('#tKcal').value), p2 = num($('#tP').value), c = num($('#tC').value), f = num($('#tF').value);
     if (!kcal || kcal < 800) { toast('Calorie target looks too low'); return; }
     S.settings.targets = { ...S.settings.targets, kcal: Math.round(kcal), p: Math.round(p2 || 0), c: Math.round(c || 0), f: Math.round(f || 0) };
-    await kvSet('settings', S.settings);
+    await saveSettings();
     toast('Targets saved');
   });
   $('#recoveryBtn', el)?.addEventListener('click', () => openRecoverySheet());
@@ -9067,6 +9114,7 @@ async function renderSettings(el) {
     const r = await social.adoptIdentity(other);
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
+    snapSettings();
     toast(r.restored ? 'Switched. Welcome back.' : 'Switched, but there was no save to pull.', 4200);
     route();
   });
@@ -9169,11 +9217,11 @@ async function renderSettings(el) {
     renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());
-  $('#uLb').addEventListener('click', async () => { S.settings.units = 'lb'; await kvSet('settings', S.settings); refresh(); });
-  $('#uKg').addEventListener('click', async () => { S.settings.units = 'kg'; await kvSet('settings', S.settings); refresh(); });
+  $('#uLb').addEventListener('click', async () => { S.settings.units = 'lb'; await saveSettings(); refresh(); });
+  $('#uKg').addEventListener('click', async () => { S.settings.units = 'kg'; await saveSettings(); refresh(); });
   $('#saveKey').addEventListener('click', async () => {
     S.settings.fdcKey = $('#fdcKey').value.trim() || null;
-    await kvSet('settings', S.settings);
+    await saveSettings();
     toast('Saved');
   });
   $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
@@ -9205,6 +9253,7 @@ async function renderSettings(el) {
     try {
       const counts = await importAll(JSON.parse(await file.text()));
       S.settings = await kvGet('settings') || S.settings;
+      snapSettings();
       S.userFoods = await db.all('foods');
       toast(`Imported ${counts.log} log entries, ${counts.foods} foods`);
       refresh();
@@ -9359,7 +9408,7 @@ function openProfileSheet() {
     S.settings.profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
     S.settings.units = np.units;
     S.settings.targets = computeTargets(S.settings.profile);
-    await kvSet('settings', S.settings);
+    await saveSettings();
     toast('Plan updated');
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -9488,7 +9537,11 @@ async function saveInitialSettings(np) {
     fdcKey: null,
     createdAt: Date.now(),
   };
-  await kvSet('settings', S.settings);
+  /* A brand new plan: everything in it is a change, and the store is empty, so
+     the diff has to be taken against nothing rather than against the previous
+     player's baseline. */
+  settingsBase = {};
+  await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
@@ -11596,7 +11649,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     await db.put('weights', { date: payload.date, kg: payload.weightKg });
     await onWeighIn(payload.date);
   }
-  if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
+  if (!S.settings.hkConnected) { S.settings.hkConnected = true; await saveSettings(); }
   const game = await onHealthSync(payload.date, {
     steps: payload.steps, activeKcal: payload.activeKcal,
     exerciseMin: payload.exerciseMin, cycleKm: payload.cycleKm,
@@ -12760,7 +12813,7 @@ async function nativeSyncNow({ silent = false } = {}) {
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
       S.settings.hkConnected = true; S.settings.hkNative = true;
-      await kvSet('settings', S.settings);
+      await saveSettings();
     }
     return true;
   } catch { return false; }
@@ -12804,7 +12857,7 @@ async function connectNativeHealth() {
   const granted = await nativeRequestAuth();
   if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
-  await kvSet('settings', S.settings);
+  await saveSettings();
   // (deliberately NOT advancing hkScopesV here: asking is not evidence of a grant.
   // ingestHealth advances it once sleep data actually arrives.)
   await nativeSyncNow({ silent: false });
@@ -12989,6 +13042,7 @@ async function openRestoreSheet() {
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
     if (!r.ok) return err(r.reason || 'Could not restore.');
     S.settings = await kvGet('settings', S.settings);
+    snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
     toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
