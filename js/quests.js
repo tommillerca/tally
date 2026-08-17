@@ -9,6 +9,7 @@
 // eating less. Longer periods pay bigger (coins + crates) for tougher targets.
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
+import { claimDay } from './db.js';
 import { keepersBoon } from './spires.js';
 import { award } from './game.js';
 import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
@@ -230,6 +231,12 @@ export function questState(q, ctx) {
 }
 
 export async function claimQuest(periodKey, q, period = 'day') {
+  /* MONOTONIC DAY GUARD (js/db.js claimDay). Gated on TODAY rather than on
+     periodKey, because periodKey is a week or month key for the other two
+     tiers and only dayOrdinal-comparable for 'day'. Gating all three on the
+     current day is also the stronger rule: a week and a month roll over off
+     the same clock, so a distrusted today must not pay a weekly either. */
+  if (!(await claimDay(dateKey())).fresh) return null;
   const xp = await award(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`);
   if (!xp) return null;
   // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
@@ -249,6 +256,9 @@ export async function claimQuest(periodKey, q, period = 'day') {
 
 // Bonus daily crate when all three dailies are claimed.
 export async function claimAllBonusIfDue(date, quests, allXp) {
+  // MONOTONIC DAY GUARD (js/db.js claimDay): the all-three bonus crate rides on
+  // the same daily rollover as the claims above, so it takes the same gate.
+  if (!(await claimDay(dateKey())).fresh) return null;
   const allClaimed = quests.every(q => allXp.some(r => r.key === `quest-${date}-${q.id}`));
   if (!allClaimed) return null;
   const xp = await award(`questsall-${date}`, 'questsall', 30, 'All daily quests done', date);

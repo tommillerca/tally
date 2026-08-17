@@ -260,7 +260,23 @@ const DECLARED = {
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
-  'clock-trust-audit.mjs': ['full', 'MEASURES what a movable device clock is worth: installs a Date shim before any app module runs and plays 14 simulated days, counting the XP, coins, crates and free Pit fights each reset pays out, plus the redeem-code one-shot. Reports FINDINGs rather than FAILs for the measurements, so it never blocks a release on a number; it fails only if the sample set is empty or the redeem one-shot stops behaving as measured. About 40s.'],
+  /* WAS MEASUREMENT-ONLY AND EXITED 0 WHILE PRINTING "FINDING XP per clock
+     reset 176.4". Reggie, 2026-08-17: a suite that documents a live exploit and
+     reports success applies no pressure and gets scrolled past, which is the
+     same failure the suite-rot entry exists to avoid. Now that the monotonic
+     day guard exists (claimDay, js/db.js:209) everything the guard BOUNDS is a
+     real assertion, 43 of them, and this goes red if the guard regresses.
+     WHAT IS STILL MEASUREMENT-ONLY, AND WHY, so nobody reads green as clean:
+     the forward walk. A plain forward clock move still pays ~176 XP per reset
+     and no local rule can stop it, because Date.now() and dateKey() read the
+     same device setting, so a day-long jump is arithmetically identical to a
+     day passing. performance.now() is monotonic but its origin dies with the
+     page, and a server timestamp is out (offline-first, and server/ is not
+     ours). The guard's claim is only that the move cannot be UNDONE, and that
+     half is asserted in both directions. Also still findings, unchanged and
+     unfixed: the date-seeded quest rotation is pre-computable a year ahead,
+     and the redeem-code one-shot is per-device kv that an erase resets. */
+  'clock-trust-audit.mjs': ['full', 'ASSERTS the monotonic day guard and MEASURES what is left. Installs a Date shim before any app module runs. Asserts: a never-visited day below the high-water mark pays zero of every daily gate (quest coins, quest claims, free Pit fights, day-close crate, all-quests bonus) with any coin/crate movement attributed to a level-up or it is a leak; an honest forward day more than 20h later still pays the full day; the DAY_GRACE ceiling on BOTH sides of the edge; that an idle month banks no allowance; and that the evening-then-morning player, the eastbound traveller, both NTP corrections and an existing player mid-migration are none of them refused. FINDINGs, not assertions: the 14-day forward walk (unboundable, see the comment above), the pre-computable quest rotation, and the redeem-code one-shot. Fails on an empty sample set. About 60s.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
   'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases and removal, every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
