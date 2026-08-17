@@ -194,6 +194,238 @@ export const chromePath = () => {
    exactly that and died at launch on every root container. */
 export const sandboxArgs = () => (process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []);
 
+/* =====================================================================
+ * UNPROVEN: A CHECK THAT DID NOT RUN IS NOT A CHECK THAT PASSED.
+ *
+ * This project's oldest wound is the empty sample read as a pass
+ * (tally/CLAUDE.md rules 1 and 3). The Boneyard suites are where it bites
+ * hardest, because a map that never drew makes half their rows PASS on nothing:
+ * measured on this container on 2026-08-17, spire-gate's row "SPIRE handler
+ * refuses even if the button is re-enabled" passed with `sheets 0 -> 0` (there
+ * was no button and no sheet to open), and t1-audit's "BONEYARD mini-boss uses
+ * drawn art, not a dingbat" passed on 0 markers of 0. Both are vacuous. Worse,
+ * fight-exit-audit's four deepest rows are nested inside `if (launcher)`, so on
+ * a machine with no map they do not fail, they CEASE TO EXIST: 26 assertions on
+ * a connected machine, 22 here, and nothing said which four went missing.
+ *
+ * So there are three outcomes, not two, and this is the third:
+ *
+ *   PASS   the app was driven and behaved.
+ *   FAIL   the app was driven and misbehaved.
+ *   UNPRV  the app was NOT driven, because this machine cannot host the check.
+ *          Zero assertions of that row ran. Nothing was learned either way.
+ *
+ * UNPROVEN EXITS 97, NOT 0 AND NOT 1, and that choice is the whole design:
+ *   - not 0, because exit 0 is how a suite retires into silence. Every runner,
+ *     every CI, every human skimming a terminal reads 0 as "fine". A suite that
+ *     did not run must never be able to say "fine".
+ *   - not 1, because "I found a defect" and "I could not look" are different
+ *     facts and a triager who cannot tell them apart wastes a day on the wrong
+ *     one, then learns to distrust reds in general.
+ *   - 97 rather than a marker file or a parsed string, because an exit code is
+ *     the one channel every possible runner already reads. If somebody later
+ *     deletes the gate's special-casing, an unproven suite still shows up as
+ *     not-green rather than silently becoming a pass. It degrades safe.
+ *
+ * A row is only ever unproven against a MEASUREMENT taken in the same run (see
+ * boneyardCapability below). Never against a hostname, never against an env
+ * var, never against a flag somebody sets by hand: those are all ways of
+ * writing "skip this" with extra steps, and they stay true after the reason
+ * stops being true.
+ * ===================================================================== */
+export const UNPROVEN_EXIT = 97;
+const _unproven = [];
+/* Prints and records. Returns false so it can stand where an ok() call stood
+   without changing the shape of the surrounding code. */
+export function unproven(name, why) {
+  _unproven.push({ name, why });
+  console.log(`UNPRV ${name}  DID NOT RUN: ${why}`);
+  return false;
+}
+export const unprovenRows = () => _unproven.slice();
+
+/* THE BANNER. Loud, by name, and printed from the measurement taken this run,
+   so it cannot go stale: the moment the machine gains the missing property the
+   banner stops being printed and the rows are graded for real. */
+export function unprovenReport(suite, cap) {
+  if (!_unproven.length) return;
+  const bar = '='.repeat(78);
+  console.log(`\n${bar}`);
+  console.log(`UNPROVEN  ${suite} did not fully run on this machine.`);
+  console.log(`UNPROVEN  ${_unproven.length} check(s) were NOT graded. This is not a pass.`);
+  console.log(bar);
+  if (cap) {
+    console.log('  MISSING, measured in this run:');
+    for (const c of cap.checks.filter(c => !c.ok)) console.log(`    ${c.kind.padEnd(6)} ${c.detail}`);
+    const present = cap.checks.filter(c => c.ok);
+    if (present.length) {
+      console.log('  PRESENT, measured in this run, so these are NOT the reason:');
+      for (const c of present) console.log(`    ${c.kind.padEnd(6)} ${c.detail}`);
+    }
+  }
+  console.log('  Rows that did not run:');
+  for (const r of _unproven) console.log(`    ${r.name}`);
+  console.log(`  Exit ${UNPROVEN_EXIT} means UNPROVEN. Run this suite where the missing property exists`);
+  console.log('  before believing anything about the surface it guards.');
+  console.log(bar);
+}
+
+/* The one place a suite decides its exit code. A real defect outranks an
+   unproven row: if something was driven and misbehaved, that is the headline. */
+export function exitFor(failCount) {
+  if (failCount) return 1;
+  return _unproven.length ? UNPROVEN_EXIT : 0;
+}
+
+/* EVERY ROW IN THE FILE MUST BE CLASSIFIED, or the unproven list rots.
+ *
+ * The failure mode this closes: somebody adds a tenth Boneyard assertion and
+ * does not add it to the suite's MAP_ROWS list. On a machine that can draw the
+ * map nothing looks wrong. On a machine that cannot, that one row is graded
+ * against a dead map and passes on an empty sample, which is the exact
+ * antipattern the unproven mechanism exists to end.
+ *
+ * STATIC, so it runs on EVERY machine including the ones that cannot draw the
+ * map, and so it can be proven red here rather than only on somebody else's
+ * laptop. Reads the suite's own source, pulls every ok('...') / okMap('...')
+ * literal, and requires each to appear in exactly one of the declared groups.
+ * Only single-quoted literals are visible to it, which it says out loud rather
+ * than pretending to total coverage. */
+export function unclassifiedRows(fileUrl, groups, { after = null } = {}) {
+  let src = fs.readFileSync(fileURLToPath(fileUrl), 'utf8');
+  if (after) {
+    /* Positional form, for a suite whose map-dependent rows are one section at
+       the end (t1-audit). Classifying its other two dozen rows would be pure
+       bookkeeping; classifying everything after the section marker is the same
+       guarantee where the guarantee is needed. A marker that no longer matches
+       is a FAILURE, not an empty scan: that is how this check would rot. */
+    const at = src.indexOf(after);
+    if (at < 0) return { seen: 0, missing: [`(the section marker ${JSON.stringify(after)} is gone from this file, so nothing could be classified)`] };
+    src = src.slice(at);
+  }
+  const named = new Set();
+  for (const m of src.matchAll(/\bok(?:Map)?\(\s*'((?:[^'\\]|\\.)*)'/g)) named.add(m[1].replace(/\\'/g, "'"));
+  const declared = new Set(groups.flat());
+  return { seen: named.size, missing: [...named].filter(n => !declared.has(n)) };
+}
+
+/* ---------------------------------------------------------------------
+ * BONEYARD CAPABILITY, MEASURED.
+ *
+ * The Boneyard is MapLibre over a REMOTE vector tile host. Two environment
+ * properties have to hold, and this measures both rather than assuming either:
+ *
+ *   WEBGL  a real WebGL context that can compile and link a program and hand
+ *          back the pixel it drew. Not `!!canvas.getContext('webgl2')`: a
+ *          context object that cannot draw would pass that and fail the map.
+ *   TILES  every remote URL the app's OWN map style names has to answer 2xx to
+ *          a real CORS fetch, which is exactly the request MapLibre makes. A
+ *          style that cannot load fires map.once('error'), and js/app.js
+ *          replaces the whole Boneyard with "The Boneyard needs a network
+ *          signal to draw the map" plus a Retry button. No canvas, no markers,
+ *          no spire offer, no den.
+ *
+ * THE HOST IS NEVER HARDCODED HERE. The style path is read out of js/map.js and
+ * the URLs are read out of the style file, so pointing the app at a different
+ * tile provider moves this probe with it. A hardcoded host is how a probe rots
+ * into always-green.
+ *
+ * AND THE PROBE CANNOT PASS VACUOUSLY. If the style names no remote URL at all,
+ * that is reported as NOT ok, because a probe with an empty sample set has
+ * measured nothing (rule 3), and silence there would hand every Boneyard suite
+ * a free pass on a machine that genuinely cannot draw the map.
+ * --------------------------------------------------------------------- */
+export async function boneyardCapability(page) {
+  const checks = [];
+
+  /* 1. WEBGL, end to end: link a program, draw one triangle, read the pixel
+        back and require it to be the colour the fragment shader wrote. */
+  const gl = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 8; c.height = 8;
+    let ctx = null, api = null;
+    try { ctx = c.getContext('webgl2'); api = ctx ? 'webgl2' : null; } catch { /* reported below */ }
+    if (!ctx) { try { ctx = c.getContext('webgl'); api = ctx ? 'webgl' : null; } catch { /* reported below */ } }
+    if (!ctx) return { ok: false, why: 'no webgl or webgl2 context could be created at all' };
+    const dbg = ctx.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? ctx.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : ctx.getParameter(ctx.RENDERER);
+    const vs = ctx.createShader(ctx.VERTEX_SHADER);
+    ctx.shaderSource(vs, 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }'); ctx.compileShader(vs);
+    const fs = ctx.createShader(ctx.FRAGMENT_SHADER);
+    ctx.shaderSource(fs, 'precision mediump float; void main(){ gl_FragColor = vec4(0.,1.,0.,1.); }'); ctx.compileShader(fs);
+    const prog = ctx.createProgram(); ctx.attachShader(prog, vs); ctx.attachShader(prog, fs); ctx.linkProgram(prog);
+    if (!ctx.getProgramParameter(prog, ctx.LINK_STATUS)) return { ok: false, why: `${api} context exists but a trivial program will not link`, renderer };
+    ctx.useProgram(prog);
+    const buf = ctx.createBuffer(); ctx.bindBuffer(ctx.ARRAY_BUFFER, buf);
+    ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), ctx.STATIC_DRAW);
+    const loc = ctx.getAttribLocation(prog, 'p');
+    ctx.enableVertexAttribArray(loc); ctx.vertexAttribPointer(loc, 2, ctx.FLOAT, false, 0, 0);
+    ctx.viewport(0, 0, 8, 8); ctx.clearColor(0, 0, 0, 1); ctx.clear(ctx.COLOR_BUFFER_BIT);
+    ctx.drawArrays(ctx.TRIANGLES, 0, 3);
+    const px = new Uint8Array(4); ctx.readPixels(4, 4, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, px);
+    const drew = px[0] === 0 && px[1] === 255 && px[2] === 0;
+    return { ok: drew, api, renderer, px: [...px],
+      why: drew ? '' : `${api} drew, but the pixel read back as ${[...px]} instead of the green the shader wrote` };
+  });
+  checks.push({ kind: 'WEBGL', ok: !!gl.ok,
+    detail: gl.ok ? `${gl.api} draws and reads back: ${gl.renderer}` : gl.why });
+
+  /* 2. TILES. Style path out of js/map.js, URLs out of the style, fetched from
+        the page so the answer is the browser's, not node's. */
+  const mapSrc = fs.readFileSync(path.join(ROOT_DIR, 'js', 'map.js'), 'utf8');
+  const stylePath = mapSrc.match(/style:\s*'([^']+)'/)?.[1] || null;
+  if (!stylePath) {
+    checks.push({ kind: 'TILES', ok: false,
+      detail: "js/map.js no longer declares `style: '...'`, so this probe cannot find the map style. Fix the probe; do not assume the map works." });
+    return { ok: false, checks };
+  }
+  /* "Failed to fetch" is what the page sees and it names no cause. Chrome's own
+     net:: error text is the actionable half (ERR_CERT_AUTHORITY_INVALID reads
+     very differently from ERR_NAME_NOT_RESOLVED to whoever has to fix the
+     machine), and it is only available on the puppeteer side. */
+  const netErr = new Map();
+  const onFail = r => netErr.set(r.url(), r.failure()?.errorText || '');
+  page.on('requestfailed', onFail);
+  const net = await page.evaluate(async (sp) => {
+    const styleUrl = new URL(sp, location.href).href;
+    let style;
+    try {
+      const r = await fetch(styleUrl);
+      if (!r.ok) return { fatal: `${styleUrl} answered HTTP ${r.status}` };
+      style = await r.json();
+    } catch (e) { return { fatal: `${styleUrl} could not be fetched: ${e.message}` }; }
+    const urls = new Set();
+    for (const s of Object.values(style.sources || {})) {
+      if (s.url) urls.add(s.url);
+      for (const t of s.tiles || []) urls.add(t);
+    }
+    if (style.glyphs) urls.add(style.glyphs);
+    if (style.sprite) urls.add(String(style.sprite) + '.json');
+    const remote = [...urls].filter(u => /^https?:\/\//i.test(u))
+      // a tile template is not fetchable as written; the source URL above is
+      .map(u => u.replace('{z}', '0').replace('{x}', '0').replace('{y}', '0'));
+    if (!remote.length) return { empty: true, styleUrl };
+    const out = [];
+    for (const u of remote) {
+      try { const r = await fetch(u); out.push({ u, ok: r.ok, status: r.status }); }
+      catch (e) { out.push({ u, ok: false, status: 0, err: e.message }); }
+    }
+    return { results: out, styleUrl };
+  }, stylePath);
+  page.off('requestfailed', onFail);
+  const why = u => netErr.get(u) || '';
+
+  if (net.fatal) checks.push({ kind: 'TILES', ok: false, detail: net.fatal });
+  else if (net.empty) checks.push({ kind: 'TILES', ok: false,
+    detail: `${net.styleUrl} names no remote host at all, so this probe measured NOTHING. An empty sample set is a failure, not a pass.` });
+  else for (const r of net.results) {
+    checks.push({ kind: 'TILES', ok: r.ok,
+      detail: r.ok ? `${r.u} answered HTTP ${r.status}`
+        : `${r.u} is UNREACHABLE from this machine (${[why(r.u), r.err || (r.status ? 'HTTP ' + r.status : '')].filter(Boolean).join(', ')})` });
+  }
+
+  return { ok: checks.every(c => c.ok), checks };
+}
+
 export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
   const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
