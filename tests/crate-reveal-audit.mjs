@@ -88,6 +88,8 @@ await quiet();
 
 /* ---- RUNS + LID, per crate kind ------------------------------------------ */
 const KINDS = ['golden', 'daily'];
+/* how many authored frames each crate is supposed to mount */
+const SEQ_FRAMES = { daily: 9, golden: 3 };
 for (const kind of KINDS) {
   const r = await openCrateOfKind(kind);
   if (r && r.err) { ok(`RUNS ${kind}: the reveal could be driven at all`, false, r.err); continue; }
@@ -107,7 +109,7 @@ for (const kind of KINDS) {
      it would be asserting a mechanism the crate does not use. It gets a stronger
      check instead, below, because a sequence can fail in ways a static clip
      cannot: a frame that never advances, or one that paints undecoded. */
-  if (shot && kind === 'daily') {
+  if (shot && SEQ_FRAMES[kind]) {
     /* SAMPLE DURING THE SEQUENCE, not at 160ms. The .co-drop scale animation is
        still running early on (144 x 0.944 = 136), so an early read measures the
        crate falling, not the frames playing. The property under test is "the
@@ -124,29 +126,27 @@ for (const kind of KINDS) {
         undecoded: f.filter(im => im.naturalWidth === 0).length,
         matted: null };
     });
-    ok('SEQ daily: all 9 authored frames are mounted', seq.n === 9, JSON.stringify(seq));
-    ok('SEQ daily: every frame is DECODED (an undecoded frame paints nothing)',
+    ok(`SEQ ${kind}: all ${SEQ_FRAMES[kind]} authored frames are mounted`, seq.n === SEQ_FRAMES[kind], JSON.stringify(seq));
+    ok(`SEQ ${kind}: every frame is DECODED (an undecoded frame paints nothing)`,
       seq.n > 0 && seq.undecoded === 0, `${seq.undecoded} undecoded of ${seq.n}`);
     /* 144 is 48 x 3 exactly. Pixel art off its integer grid is resampled to
        mush, and the icon path's 148 is not a multiple of 48. */
-    ok('SEQ daily: the box is an INTEGER multiple of the 48px art (144 = 48x3)',
+    ok(`SEQ ${kind}: the box is an INTEGER multiple of the 48px art (144 = 48x3)`,
       seq.w % 48 === 0, `${seq.w}px, ${seq.w / 48}x`);
   }
-  if (shot && kind !== 'daily') {
-    /* The lid and the box are two clips of the SAME art. If the two cuts do not
-       meet, the closed crate shows a seam or the lid slices through the box. */
-    /* The lid cut has to land on the SEAM IN THE ART, or the lid slices through
-       the box. Measured from the rasterised icons (strongest horizontal ink run in
-       the upper half): golden 33.6%, daily 31.3%. crateOpenHtml puts the box cut
-       5% above the lid cut so the closed crate shows no hairline, so the box cut
-       is what should match the seam. */
-    const SEAM = { golden: 33.6, daily: 31.3 };
-    const boxPct = parseFloat((shot.boxClip || '').match(/([\d.]+)%/)?.[1] || 'NaN');
-    const off = Math.abs(boxPct - SEAM[kind]);
-    ok(`LID ${kind}: the cut lands on the seam in the art (within 2%)`,
-      Number.isFinite(boxPct) && off <= 2,
-      `box cut ${boxPct}% vs measured seam ${SEAM[kind]}% (off by ${off.toFixed(1)})`);
-  }
+  /* THE LID CHECK IS GONE BECAUSE THE LID IS GONE.
+     It measured a clip-path cut across two halves of one static icon, which is
+     how both crates used to fake opening. The Common crate stopped using it when
+     Tom's nine frames landed, and the Golden crate stopped tonight when his bone
+     chest replaced it. Neither crate has a lid element any more, so the check
+     read a null clip-path and reported "box cut NaN%", which is the row doing
+     its job: it said the mechanism it watches no longer exists.
+     Nothing is left unguarded. A frame sequence can fail in ways a static clip
+     never could (a frame that never advances, one that paints undecoded, a box
+     off the integer grid) and SEQ above covers all three for both crates.
+     crateOpenHtml still carries the lid branch; it is unreachable while every
+     crate is in CRATE_SEQ, and it is left in place rather than ripped out on a
+     night Tom is asleep. */
   // let it finish so the next kind starts clean
   await sleep(2600);
   await page.evaluate(() => { const b = document.querySelector('.pack-reveal .sheet-close, .pack-done'); if (b) b.click(); else history.back(); });
@@ -202,14 +202,40 @@ const pace = await page.evaluate(async () => {
   const el = document.querySelector('.pack-reveal');
   if (!el) return { err: 'no reveal open' };
   const v = n => parseFloat(getComputedStyle(el).getPropertyValue(n));
-  const out = { settle: v('--b-settle'), lid: v('--b-lid'), card: v('--b-card') };
+  /* the sink's own duration, read off the element rather than assumed, so the
+     ordering check below measures when the crate is actually GONE */
+  const sinkEl = document.querySelector('.co-sink');
+  const sinkDur = sinkEl ? parseFloat(getComputedStyle(sinkEl).animationDuration) : NaN;
+  const out = { settle: v('--b-settle'), lid: v('--b-lid'), card: v('--b-card'),
+    sink: v('--b-sink'), sinkDur, gone: v('--b-sink') + sinkDur, pix: el.classList.contains('pix-crate') };
   const b = document.querySelector('.pack-reveal .sheet-close');
   if (b) b.click(); else history.back();
   await new Promise(r => setTimeout(r, 500));
   return out;
 });
-ok('PACE the card arrives inside 1.6s (it took 2.6s, most of it a closed box)',
-  Number.isFinite(pace.card) && pace.card <= 1.6, JSON.stringify(pace));
+/* ORDER is the bug Tom reported on the recording, 2026-08-16: "you have the
+   ghost crate fading out weird once the card is already in frame and in front of
+   it." Measured off that capture: the sink ran 1.66s to 2.21s while the card rose
+   at 1.72s, so for half a second a finished card sat in front of a chest still
+   dissolving around its edges. The property is an ORDERING one, and a threshold
+   on time-to-card never expressed it. This row does.
+   PROVE-RED: it went red on the shipped v388 numbers above (gone 2.21 > card
+   1.72) before the retiming, which is the defect it exists to catch. */
+ok('ORDER the crate is completely gone before the card starts (Tom: not fading behind it)',
+  Number.isFinite(pace.gone) && Number.isFinite(pace.card) && pace.gone <= pace.card,
+  JSON.stringify(pace));
+/* PACE's ceiling was 1.6s, measured on the VECTOR crate, whose card arrived at
+   1.38s. Both crates are authored frame sequences now and the performance is
+   genuinely longer: the drop lands at 0.71s, bounces until 1.02, the frames play
+   1.12 to 1.52, and only then can the crate clear. 1.6s and a nine-frame
+   sequence that has to finish before the card cannot both hold.
+   The ceiling is 1.9s so drift is still caught, and the 0.44s this costs against
+   the vector crate is a DECISION FOR TOM, not something to tune away quietly:
+   buying it back means shortening the 1.02s drop he has not complained about.
+   Tracked as "retime the whole crate sequence". Do not raise this number again
+   without his answer. */
+ok('PACE the card arrives inside 1.9s (1.6s was the vector crate; the frame sequence is longer)',
+  Number.isFinite(pace.card) && pace.card <= 1.9, JSON.stringify(pace));
 ok('PACE the lid moves inside 1.3s', Number.isFinite(pace.lid) && pace.lid <= 1.3, JSON.stringify(pace));
 
 const lastCard = await page.evaluate(async () => {
