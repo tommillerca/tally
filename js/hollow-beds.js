@@ -47,8 +47,6 @@
 import { HLW_ART, hlwArt } from './hollow-art.js';
 import { INGREDIENTS, fmtCookTime } from './cooking.js';
 import { BH_ICON_TINTS } from './icons-pack.js';
-// crop names come from INGREDIENTS, but they reach innerHTML, so they get escaped
-const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export const BED_BOX = { w: 84, h: 60 };
 

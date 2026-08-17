@@ -1364,11 +1364,6 @@ export function endTurn(fight) {
 
 /* ================= AI (V1 heuristic, tendency reads) ================= */
 
-function haymakerRate(moves) {
-  const atk = moves.filter(m => ['jab', 'swing', 'haymaker'].includes(m));
-  if (atk.length < 2) return 0;
-  return atk.filter(m => m === 'haymaker').length / atk.length;
-}
 
 // run one enemy fighter's whole turn (captain or add), pushing events
 function actForEnemy(fight, who, events) {

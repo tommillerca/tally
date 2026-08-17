@@ -1777,24 +1777,6 @@ const DROP_ID_RE = /^(H|E|M|G)S\d+$/;
 function dropCosmetics() {
   return BH_ITEMS_WITH_UNRELEASED.filter(i => DROP_ID_RE.test(i.id));
 }
-function teaserPreviewIds(n) {
-  /* A spread across slots rather than the first n, or the strip is six hats and
-     reads as one item in six colours instead of a whole wardrobe. */
-  const bySlot = {};
-  for (const i of dropCosmetics()) (bySlot[i.slot] = bySlot[i.slot] || []).push(i);
-  const order = ['H', 'E', 'M', 'G'];
-  const out = [];
-  for (let round = 0; out.length < n; round++) {
-    let added = false;
-    for (const sl of order) {
-      const list = bySlot[sl] || [];
-      if (list[round]) { out.push(list[round]); added = true; }
-      if (out.length >= n) break;
-    }
-    if (!added) break;
-  }
-  return out;
-}
 /* HEAD CROP, NOT A FULL BODY. Tom, 2026-08-08: "if we are showcasing head only
    cosmetics why show the full body?" Right: every one of these 63 items sits on
    the skull, and a full-body skeleton renders the thing being advertised at about
@@ -2433,11 +2415,6 @@ function foodSubtitle(food) {
   const s = food.servings && food.servings[0];
   if (s) bits.push(s.label);
   return bits.join(' · ');
-}
-
-function foodDefaultKcal(food) {
-  const n = nutrientsFor(food, { mode: 'serving', idx: 0, qty: 1 });
-  return n ? Math.round(n.kcal) : null;
 }
 // one default serving, all macros: the Tier 1 food row shows protein next to
 // kcal because protein is the macro the game actually pays for (+40 XP).
@@ -3501,14 +3478,6 @@ function sleepRowHtml(w) {
 // version — no map marker, no blight/spawn-suppression mechanic yet (those are
 // still ROADMAP items). Reachable from a card on Today; the win is idempotent
 // via the same award() ledger every other one-time encounter uses.
-// He surfaces twice a day. Tell the player which it is, in plain language.
-const hr12 = h => `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`;
-function gluttonWhenHtml() {
-  const w = gluttonWindow();
-  return w.active
-    ? `<b style="color:var(--glutton-sick)">He's out on the map right now</b>, until ${hr12(w.endHour)}.`
-    : `He feeds twice a day. Next sighting <b>${hr12(w.nextHour)}${w.tomorrow ? ' tomorrow' : ''}</b>.`;
-}
 // The exact lore lockup + copy Tom already approved (scratchpad/glutton.src.html,
 // direction locked). Reused verbatim for both the compact card and the full
 // sheet reveal — do not paraphrase this, it's Brock's, use it as written.
@@ -6526,18 +6495,6 @@ function metricNum(metricKey, v) {
 function metricUnit(metricKey) {
   if (metricKey === 'weight') return S.settings.units === 'kg' ? 'kg' : 'lb';
   return TREND_METRICS[metricKey].unit;
-}
-
-// tiny bar sparkline for the summary cards (nulls = gaps)
-function metricSpark(vals, color) {
-  const W = 120, H = 26, nn = vals.filter(v => v != null && v > 0);
-  if (!nn.length) return '';
-  const mx = Math.max(...nn), mn = Math.min(...nn), span = (mx - mn) || 1, n = vals.length, bw = W / n;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none">${vals.map((v, i) => {
-    if (v == null || v <= 0) return '';
-    const h = 4 + ((v - mn) / span) * (H - 4);
-    return `<rect x="${(i * bw).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${(bw - 1.5).toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${color}" opacity="0.5"/>`;
-  }).join('')}</svg>`;
 }
 
 // full drill-in chart: bars, a dashed average baseline, best day highlighted green
