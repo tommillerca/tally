@@ -2,7 +2,7 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, newId } from './db.js';
+import { db, kvGet, kvSet, kvBump, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -78,13 +78,22 @@ function rng() {
   return a[0] / 0xffffffff;
 }
 
-/* ---------- coins ---------- */
+/* ---------- coins ----------
+   READ-MODIFY-WRITE IS NOT A BALANCE CHANGE, IT IS A GUESS AT ONE.
+   This was `const c = Math.max(0, (await coins()) + n); await kvSet('coins', c)`,
+   which is a read, an await, and a write of a number that may already be stale.
+   Inside one tab the awaits interleave whenever two payouts overlap; with the
+   app open in two tabs it is constant. Measured on two real pages: 50 awards of
+   +10 from a balance of 1000 landed on 1280 instead of 1500, and 20 spends of
+   100 racing 20 earns of 100 left the player at 2500 instead of 3000, which is
+   500 coins of spending that never happened. Both directions are live: a lost
+   EARN robs the player, a lost SPEND mints currency.
+   kvBump does the read and the write in one IndexedDB transaction, and
+   IndexedDB serialises readwrite transactions on a store across every tab, so
+   the arithmetic is exact by construction rather than by luck. The clamp is
+   unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
-export async function coinsAdd(n) {
-  const c = Math.max(0, (await coins()) + n);
-  await kvSet('coins', c);
-  return c;
-}
+export async function coinsAdd(n) { return kvBump('coins', n); }
 
 /* ---------- inventory ---------- */
 export async function inventory() { return db.all('inv'); }
@@ -96,11 +105,25 @@ export async function ownedCosmeticIds() {
   return owned;
 }
 
+/* ONE COPY OF A THING YOU CAN ONLY OWN ONE OF.
+ *
+ * `newId()` is a timestamp plus six random characters, so two tabs granting the
+ * same cosmetic produced two rows for one item: the ownership check read empty
+ * in both, and nothing downstream could tell the pair apart. Measured with
+ * gear (same shape, below): one gear id granted in two tabs left TWO inv rows,
+ * and disenchantGear melts one row at a time for full dust, so the duplicate is
+ * a dust faucet, not just a cosmetic wart.
+ *
+ * The id is now derived from what the row IS, so the store's own uniqueness
+ * constraint does the deduplication: `addIfAbsent` can only succeed once for
+ * `cos:<itemId>`. Rows minted before this keep their random ids and are
+ * untouched; the ownership check above still short-circuits for anyone who
+ * already owns the item, so no existing save changes shape. */
 export async function grantCosmetic(itemId, source) {
   const owned = await ownedCosmeticIds();
   if (owned.has(itemId)) return null;
-  const row = { id: newId(), kind: 'cos', itemId, source, ts: Date.now() };
-  await db.put('inv', row);
+  const row = { id: `cos:${itemId}`, kind: 'cos', itemId, source, ts: Date.now() };
+  if (!await db.addIfAbsent('inv', row)) return null;   // another tab got there first
   await collectLook(itemId);
   return row;
 }
@@ -117,7 +140,9 @@ export async function grantGear(gearId, source, opts = {}) {
   if (owned.has(gearId)) return null;
   // `slimed`: the rare green-glowing Glutton variant. Purely cosmetic + a brag,
   // stored on the inv row so the wardrobe can mark the piece forever.
-  await db.put('inv', { id: newId(), kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) });
+  // Deterministic id, same reasoning as grantCosmetic: a gear id is ownable once.
+  const row = { id: `gear:${gearId}`, kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) };
+  if (!await db.addIfAbsent('inv', row)) return null;   // another tab got there first
   await collectLook(g.artId);
   return g;
 }
@@ -138,11 +163,8 @@ export const DUST_VALUE = {
   pet:  { common: 10, uncommon: 15, rare: 30, epic: 60, legendary: 120 },
 };
 export async function boneDust() { return (await kvGet('bonedust', 0)) || 0; }
-export async function boneDustAdd(n) {
-  const d = Math.max(0, (await boneDust()) + n);
-  await kvSet('bonedust', d);
-  return d;
-}
+// same read-modify-write hazard, and the same fix, as coinsAdd above
+export async function boneDustAdd(n) { return kvBump('bonedust', n); }
 // Dust is rarity PLUS the piece's stat points. Tom asked for statted gear to be
 // worth more; measuring first showed that EVERY one of the 276 catalog pieces is
 // statted, so a flat "statted" bonus would have been a 50% dust inflation with no
@@ -168,7 +190,13 @@ export async function disenchantGear(gearId) {
   if (!row) return { ok: false, reason: 'not-owned' };
   const gl = await gearLoadout();
   if (gl[g.slot] === gearId) { const next = { ...gl }; delete next[g.slot]; await kvSet('gearloadout', next); }
-  await db.del('inv', row.id);
+  /* ASK THE AUTHORITY FIRST, PAY SECOND. The row is the thing being spent, so
+     removing it has to be what decides whether there is a payout. `db.del`
+     succeeds whether or not anything was there, so two tabs melting the same
+     piece both deleted (the second a no-op) and both paid full dust. `take`
+     does the read and the delete in one transaction and reports which call
+     actually found it, so exactly one melt can ever be paid for. */
+  if (!await db.take('inv', row.id)) return { ok: false, reason: 'not-owned' };
   const dust = gearDustValue(g);
   await boneDustAdd(dust);
   return { ok: true, dust, name: g.name };

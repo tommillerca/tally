@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, STORES } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -559,6 +559,7 @@ async function boot() {
     });
   }
   requestPersistence();
+  watchForWipe();   // listen for another tab wiping this save before it happens
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -9226,13 +9227,22 @@ async function renderSettings(el) {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
       await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      /* EVERY store db.js defines, never a hand-copied list. The literal that
-         used to sit here had six of the seven names: 'inv' was missing, so an
-         erase kept the entire inventory (crates, gear, cosmetics, pets) and
-         wiped only the kv flag recording that the welcome kit had been paid.
-         Inventory was strictly non-decreasing across an erase and every
-         erase-then-reonboard handed out another kit. See js/db.js STORES. */
-      for (const st of STORES) await db.clear(st);
+      /* EVERY store db.js defines, never a hand-copied list, and in ONE
+         transaction, and with every OTHER TAB stopped first.
+         The literal that used to sit here had six of the seven names: 'inv'
+         was missing, so an erase kept the entire inventory (crates, gear,
+         cosmetics, pets) and wiped only the kv flag recording that the welcome
+         kit had been paid. Inventory was strictly non-decreasing across an
+         erase and every erase-then-reonboard handed out another kit.
+         The seven-transaction loop that replaced it was still not true with the
+         app open twice: driven with a second tab writing, the erase finished
+         and left 30 inv rows, a kv row and 150 coins standing, and this tab
+         then reloaded onto a save it thought it had destroyed. db.js's
+         eraseAll() freezes the other tabs, waits for them to confirm it, clears
+         every store together, and tells them to reload. Measured against a
+         second tab writing continuously: zero rows in every store.
+         See js/db.js STORES and eraseAll. */
+      await eraseAll();
       location.reload();
     });
   });
