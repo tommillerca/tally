@@ -111,7 +111,21 @@ const BROWSER = [
   'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
   'redeem-dupe-audit.mjs',   // redeeming a code for a species you ALREADY OWN: the stacked copy gets its own toast, and the dead consolation copy stays dead. Same Settings surface as redeem-audit above, self-serving, 23s. Prove-red: revert either half of the fix and PIN-1 goes red on two byte-equal toasts
   'weight-edit-audit.mjs',   // Log weight (kg + lb conversion) + entry edit/delete: real UI clicks, deep read-back
-  'gate-audit.mjs',          // hunts guards that cannot fail: belongs in every run
+  /* WAS "hunts guards that cannot fail: belongs in every run", CORRECTED 2026-08-17.
+     It does not hunt that class; it checks ONE shape of it. Read the file: it takes
+     three named {ok} helpers (spendPitFight, claimSpire, collectTribute), finds every
+     call site in js/, and fails any site that tests the result for truthiness instead
+     of `.ok`, plus any site whose shape it cannot classify, plus an empty analysed
+     set. That is a real and valuable guard and it is one exploit family wide.
+     The old line mattered because it was FALSE in the expensive direction: it exits 0
+     on a tree that provably carries guards that cannot fail. Measured the same day:
+     shipped main, gate-audit exits 0, while fight-tray-audit's CLIP and AFFORDANCE
+     rows pass a tray hiding 138px with five buttons past its edge. A description that
+     claims more reach than the tool has is the "reads as coverage" failure this file
+     warns about, one level up, in this file. tautology-audit and mutation-sweep below
+     are the two halves that actually hunt the class. */
+  'gate-audit.mjs',          // {ok} result objects are consulted via .ok, never for truthiness: 3 named helpers, every call site in js/, unclassifiable shapes fail
+  'mutation-sweep.mjs',      // the decisive half: breaks what an audit claims to guard and re-runs it, so a guard that stays green is named. FAST runs the node lane only, measured 6s; `--browser` is 314s and is not a tier (see the file's MEASURED block)
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
   'log-write-failure-audit.mjs', // a failed save must not look like a saved meal
@@ -268,6 +282,19 @@ const DECLARED = {
      everyone to ignore it. It runs under --all, where a non-zero exit reads as
      the worklist it is, until the rot it names is cleared. */
   'suite-rot-audit.mjs': ['full', 'audits that never run, and audits aimed at deleted UI. Exits 1 by design on a tree that still has rot; see gwart/dead-audits for the first two.'],
+  /* SAME SHAPE AS suite-rot ABOVE, and declared for the same reason. It is 3.3s
+     of pure source reading and by runtime it belongs in FAST, but it is RED on
+     main today: it names fight-tray-audit.mjs:163 CLIP and :168 AFFORDANCE, whose
+     escape clause `(m.scrolls && m.masked)` is a class js/app.js:15635 toggles
+     from the same scrollHeight - clientHeight the antecedent measures, so the
+     escape fires exactly when the antecedent does. That is not a false positive
+     and it is not this file's call to fix; mutation-sweep confirms it
+     independently (tray squeezed to 90px, five buttons past the edge, 22/22,
+     exit 0). Putting it in FAST would make `npm run gate` permanently red, which
+     is how everyone learns to ignore a gate. It runs under --all, where a
+     non-zero exit reads as the worklist it is. PROMOTE TO FAST the day those two
+     rows are rewritten to measure the affordance independently of the class. */
+  'tautology-audit.mjs': ['full', "assertions that cannot fail, by structure. Four decidable rules: a constant pass expression, a sweep that is vacuously true on an empty sample, a screenshot clipped to the very rect the assertion then bounds it by, and an escape clause the app derives from the antecedent's own subject. 3.3s, no browser, and its header states the four things it provably cannot see. RED on main by design, see above."],
   'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
 
   /* THE FIFTEEN THE OLD NET COULD NOT SEE. Every one of these is a real guard
