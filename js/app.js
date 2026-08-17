@@ -349,7 +349,38 @@ function spawnIcon(type, s = 20) {
   return ICONS.bone(s);
 }
 
+/* THE CLOSED POSE OF THE REAL CHEST, wherever there is room to draw it.
+   Tom, 2026-08-16: "shouldn't we be swapping the icons in the backpack tab etc
+   to get rid of that older shitty art." Yes, and this is the one function all 22
+   call sites go through, so it swaps in one place.
+   WITH ONE HONEST LIMIT. The art is 48px and pixel art only survives INTEGER
+   scaling; the call sites ask for 11, 12, 13, 14, 15, 22, 46, 54, 120 and 130,
+   and not one of those is a multiple of 48. So the rule is: take the largest
+   whole multiple that does not EXCEED what the caller asked for, which is never
+   bigger than the space reserved for it and never lands the art between pixels.
+   48 also halves cleanly to 24, so there is a second whole step below it. The
+   halves are nearest-neighbour, checked by eye at 8x before being wired: the
+   bone slats and the flame survive, the wooden chest keeps its skull glow, and
+   the egg keeps its speckle. That covers the Backpack tab chip, which sat at
+   21px showing the old vector crate directly above the new art.
+   Below 24 there is no whole step left, and a 48px drawing crushed into a 12px
+   inline glyph beside a line of text would be mush whatever we did, so those
+   keep the vector icon. They are the tiny ones in quest rows and price chips,
+   not the art Tom is looking at. */
+/* The egg is NOT in here. Tom, looking at the before/after: "i feel like the
+   step egg looks worse for the icon maybe we keep the egg icon and just swap the
+   chests". The 24px half reads as a grey pebble at tile size, where the vector
+   egg cluster still reads as eggs. The chests survive the same reduction because
+   their silhouette is a box with a lid; a smooth ovoid has no edges to keep. */
+const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0' };
 function crateIcon(kind, s = 22) {
+  const pix = CRATE_ICON_PIX[kind];
+  if (pix && s >= 24) {
+    const px = s >= 48 ? Math.floor(s / 48) * 48 : 24;
+    const file = px === 24 ? `${pix}-24` : pix;
+    return `<span class="bhi-wrap"><img src="assets/${file}.png" alt="" class="crate-ico-pix"`
+      + ` width="${px}" height="${px}" style="width:${px}px;height:${px}px" decoding="sync"></span>`;
+  }
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
   return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
@@ -3833,7 +3864,7 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
   const r = den.reward || {};
   const crateName = r.crate === 'golden' ? 'Golden' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
   const pay = [
-    crateName ? [crateIcon(r.crate, 22), crateName.toUpperCase(), 'CRATE'] : null,
+    crateName ? [crateIcon(r.crate, 24), crateName.toUpperCase(), 'CRATE'] : null,
     r.coins ? [ICONS.coin(22), String(r.coins), 'COINS'] : null,
     r.xp ? [ICONS.star(20), String(r.xp), 'XP'] : null,
   ].filter(Boolean);
@@ -9858,7 +9889,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     </div>`}
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
-      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 21)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(21)}<span>Shop</span></button>
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Level</span></button>
@@ -10860,10 +10891,30 @@ const CRATE_LID = { golden: 38, daily: 36, egg: 44 };
    cut on top of that would throw away the animation and slice the ghost in half.
    144px, not the 148 the icon path uses, because the art is 48px and pixel art
    only survives INTEGER scaling. 148 would resample it to mush. */
-const CRATE_SEQ_FRAMES = 9;
+/* EVERY CRATE THAT HAS AUTHORED FRAMES, and how long each one holds.
+   Tom, 2026-08-16: "not sure why you didn't do the other crate too? bone crate
+   with flame for the rarer one." Fair: the Golden crate was still the vector
+   clip-path trick, one icon sliced into a box half and a lid half with the lid
+   flown off on an arc, which is the right fake for an icon with no open state
+   and the wrong thing entirely when the artist has drawn one.
+   He has drawn one. Identified out of his 24 chest states by palette rather
+   than by eye: bone-white fill above 40% with a saturated green flame in the
+   top third gives exactly three, and their cavity darkness orders them.
+     eeefdb9c  closed          -> golden/f0
+     9d2afa64  open, gold      -> golden/f1
+     c0fa1bba  open, gems      -> golden/f2
+   Three frames, not nine, so the timing is a hold on the closed pose and then
+   two quick reveals: the lid is not animated open here, it cuts, which is what
+   three authored states can honestly carry. */
+const CRATE_SEQ = {
+  daily:  { dir: 'common', frames: 9, ms: [67, 50, 33, 33, 33, 50, 67, 67] },
+  golden: { dir: 'golden', frames: 3, ms: [200, 120] },
+};
+const CRATE_SEQ_FRAMES = CRATE_SEQ.daily.frames;
 const EGG_SEQ_FRAMES = 15;
-function crateSeqHtml() {
-  const f = i => `<img src="assets/crates/common/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+function crateSeqHtml(kind = 'daily') {
+  const cfg = CRATE_SEQ[kind];
+  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
   /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
      VECTOR crates, which are one static icon and therefore need faking: crDrop
      squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
@@ -10876,7 +10927,7 @@ function crateSeqHtml() {
      frames ARE the animation. */
   return `<div class="co-sink pix"><div class="co-drop pix"><div class="co-settle pix">`
     + '<span class="co-shadow"></span>'
-    + `<span class="co-seq" id="crateSeq">${Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => f(i)).join('')}</span>`
+    + `<span class="co-seq" id="crateSeq">${Array.from({ length: cfg.frames }, (_, i) => f(i)).join('')}</span>`
     + '</div></div></div>';
 }
 
@@ -10912,7 +10963,7 @@ function crateSeqHtml() {
    time rather than frame counts, so a 120Hz phone lands on them too. */
 const CRATE_SEQ_MS = [67, 50, 33, 33, 33, 50, 67, 67];
 
-function playCrateSeq(reveal, scope, ready, at) {
+function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
   const seq = $('#crateSeq', scope);
   if (!seq) return;
   const frames = [...seq.children];
@@ -10923,7 +10974,7 @@ function playCrateSeq(reveal, scope, ready, at) {
   /* The table is the authority, but it must still finish before the card rises,
      so it is SCALED to fit if anyone shortens the window in CSS. Scaling rather
      than truncating keeps the shape of the timing when the budget changes. */
-  const table = CRATE_SEQ_MS.slice(0, frames.length - 1);
+  const table = (CRATE_SEQ[kind]?.ms || CRATE_SEQ_MS).slice(0, frames.length - 1);
   const want = table.reduce((a, b) => a + b, 0);
   const span = Math.max(240, secs('--b-card') - start - 60);
   const holds = table.map(v => v * (want > span ? span / want : 1));
@@ -10999,7 +11050,7 @@ function playCrateSeq(reveal, scope, ready, at) {
 }
 
 function crateOpenHtml(kind) {
-  if (kind === 'daily') return crateSeqHtml();
+  if (CRATE_SEQ[kind]) return crateSeqHtml(kind);
   const cut = CRATE_LID[kind] ?? 38;
   const ico = crateIcon(kind, 148);
   return `<div class="co-sink"><div class="co-drop"><div class="co-settle">`
@@ -11117,10 +11168,10 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
      is the exact v245 invisible-punch failure. decode() rejections are swallowed
      per image so one broken frame degrades the sequence to a skipped step
      instead of hanging the whole reveal (anti-regression rule 8). */
-  const crateSeqReady = crate === 'daily'
-    ? Promise.all(Array.from({ length: CRATE_SEQ_FRAMES }, (_, i) => {
+  const crateSeqReady = CRATE_SEQ[crate]
+    ? Promise.all(Array.from({ length: CRATE_SEQ[crate].frames }, (_, i) => {
         const im = new Image();
-        im.src = `assets/crates/common/f${i}.png`;
+        im.src = `assets/crates/${CRATE_SEQ[crate].dir}/f${i}.png`;
         return im.decode().catch(() => {});
       }))
     : Promise.resolve();
@@ -11157,7 +11208,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
               their timing is Tom's from 2026-08-08 ("the initial open needs to
               happen a bit faster"); widening the window for all of them would undo
               that for four crate types to fix one. */''}
-        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}${crate === 'daily' ? ' pix-crate' : ''}" id="packReveal">
+        <div class="pack-reveal ${opening ? 'opening' : 'browsing'}${CRATE_SEQ[crate] ? ' pix-crate' : ''}" id="packReveal">
           <div class="pack-head">
             <div class="pack-count" id="packCount"></div>
             ${crate ? '<div class="pack-title">Dug up something good.</div>' : ''}
@@ -11173,7 +11224,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
                     built on. Measured: a pixel the art draws as 0,0,0 rendered as
                     183,241,213. Behind it, the light still climbs out of the mouth
                     and around the box; it just stops repainting the art. */''}
-              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom${crate === 'daily' ? ' pix' : ''}"></span>` : ''}
+              ${opening ? `<div class="pack-crate">${crateOpenHtml(crate)}</div><span class="pack-bloom${CRATE_SEQ[crate] ? ' pix' : ''}"></span>` : ''}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
@@ -11216,7 +11267,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
          painted and the retimed beats never applied: measured, --b-card still
          resolved to 1.38s with the class reading "pack-reveal opening r-common".
          It is a property of the CRATE, not of the card being shown. */
-      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${crate === 'daily' ? ' pix-crate' : ''}`;
+      reveal.className = `pack-reveal ${first ? 'opening' : 'browsing'} r-${c.rarity}${CRATE_SEQ[crate] ? ' pix-crate' : ''}`;
       if (countEl) countEl.textContent = cards.length > 1 ? `${i + 1} of ${cards.length}` : '';
       if (hintEl) hintEl.textContent = i >= cards.length - 1
         ? (crate ? 'Tap to close the crate' : 'Tap to close')
@@ -11275,7 +11326,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(beat('--b-land'), () => { dropSound(S.sounds); haptic.tap(); });   // it lands
         at(beat('--b-lid'), () => sparkleSound(S.sounds));                    // the lid goes
         at(beat('--b-card'), () => landed(tier));                             // the card is up
-        if (crate === 'daily') playCrateSeq(reveal, wrap, crateSeqReady, at);
+        if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
@@ -14436,7 +14487,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v388'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v389'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

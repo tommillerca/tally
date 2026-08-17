@@ -3741,9 +3741,6 @@ body::before {
   --b-count: 2.12s; --b-title: 2.74s; --b-foot: 2.94s;
   --b-sway: 2.94s; --b-spark: 3.04s;
 }
-/* .55s, not .9s. The crate has done its job by the time the card is up and a
-   long tail is what read as "fading too slowly as the card takes it over". */
-.co-sink.pix { animation-duration: .2s; }   /* it has 200ms to clear, see --b-sink above */
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
 .pack-reveal.r-epic { --rar: var(--violet); --rar-rgb: 155, 146, 232; }
@@ -3797,7 +3794,14 @@ body::before {
    all: it was a scale, and Tom's nine frames already carry the motion. */
 .co-drop.pix { position: relative; animation: crDropPix 1.02s cubic-bezier(.34,.02,.32,1) both; will-change: auto; }
 .co-settle.pix { animation: none; }
-.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .9s ease-in var(--b-sink) both; }
+/* .2s, not .9s. The retime went into an `animation-duration: .2s` rule that sat
+   ABOVE this one, and the `animation` shorthand here reset it straight back to
+   .9s, so the fix Tom asked for never ran: the sink still started at 1.60 and
+   was not finished until 2.50, half a second after the card. Caught by the ORDER
+   row in tests/crate-reveal-audit.mjs reading the animation's real duration off
+   the element instead of trusting the stylesheet. The duration now lives in the
+   shorthand, where nothing can quietly win against it. */
+.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .2s ease-in var(--b-sink) both; }
 /* THE EXIT IS NOT A SCALE EITHER. crSink ends on translateY() scale(.9), and a
    scale on an ancestor resamples the sprite exactly like the drop did: caught by
    tests/crate-palette-audit.mjs measuring the sprite at 143.508px wide mid-sink
@@ -7953,6 +7957,8 @@ body::before {
    path hands out, but 148 is not a multiple of 48 and pixel art resampled off
    its grid turns to mush. image-rendering: pixelated keeps the edges hard at
    whatever the device pixel ratio does on top. */
+/* the backpack / shop / reveal-card chest icons: hard pixels, never smoothed */
+.crate-ico-pix { display: block; image-rendering: pixelated; }
 .co-seq { position: relative; display: block; width: 144px; height: 144px; margin: 0 auto; }
 .co-seq img {
   position: absolute; inset: 0; width: 144px; height: 144px;

@@ -64,7 +64,16 @@ await sleep(900);
 const seam = await page.evaluate(() => typeof window.__packReveal === 'function');
 ok('CONTROL the __packReveal test seam is present', seam);
 
-if (seam) {
+/* EVERY SEQUENCED CRATE, not just the first one built. The Golden crate got its
+   own authored frames (Tom's bone chest with the green flame) after this file
+   was written, and a guard that covers one of two is half a guard: the exact
+   four defects this file exists to catch would have been free to reappear on
+   the new one. */
+const CRATES = [
+  { kind: 'daily',  dir: 'common', frames: 9, frame: 4 },
+  { kind: 'golden', dir: 'golden', frames: 3, frame: 1 },
+];
+for (const C of CRATES) if (seam) {
   /* NOT `() => window.__packReveal(...)`. openPackReveal returns a promise that
      settles when the player closes the reveal, and an implicit return hands that
      promise to page.evaluate, which then waits for a tap that is never coming:
@@ -75,18 +84,30 @@ if (seam) {
      the whole opening sequence when it is true, so under an audit the reveal
      renders in browsing mode with no .pack-crate at all. Without this line every
      assertion below would be measuring a screen that has no crate on it. */
+  /* ONE REVEAL AT A TIME. The loop used to open the second crate on top of the
+     first, so #crateSeq still matched the first one's node and the golden pass
+     reported "9 frames, showing assets/crates/common/f1.png" while grading a
+     3-frame crate against a 9-frame one. The CONTROL row is what said so.
+     A reload is the cheap way to guarantee a clean page per crate. */
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await sleep(1200);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(800);
   await page.evaluate(() => { window.__crateForce = true; });
-  await page.evaluate(() => {
+  /* C lives in node, so it has to be PASSED into the page. Referencing it inside
+     evaluate threw "C is not defined" the moment this file went from one crate
+     to two. */
+  await page.evaluate(kind => {
     window.__packReveal(
       [{ name: 'Test Piece', rarity: 'common', kind: 'gear', iconHtml: '<span></span>' }],
-      { crate: 'daily' });
-  });
+      { crate: kind });
+  }, C.kind);
 
   /* Freeze on a chosen frame rather than racing the sequence. Every animation on
      the page is paused, then the frame under test is the only one with .on, so
      the comparison is against a still that cannot have moved between the
      measurement and the screenshot. */
-  const FRAME = 4;
+  const FRAME = C.frame;
   /* PUT THE CRATE IN A DETERMINISTIC STATE, do not sleep a guessed number.
      navigator.webdriver scales JS timing by 0.25 at js/app.js:14722 while CSS
      animations are not scaled, so no single sleep is right in both worlds: the
@@ -150,18 +171,19 @@ if (seam) {
     };
   }, FRAME);
 
-  ok('CONTROL the crate sequence rendered its frames', !!geo && geo.frames >= 2,
+  ok(`${C.kind} CONTROL the crate sequence rendered ITS OWN frames`,
+    !!geo && geo.frames === C.frames && (geo.src || '').includes(`/${C.dir}/`),
     geo ? `${geo.frames} frames, showing ${geo.src}` : 'no #crateSeq in the reveal');
 
   if (geo) {
-    ok('SCALE the sprite renders at 144x144, 3x its 48px native',
+    ok(`${C.kind} SCALE the sprite renders at 144x144, 3x its 48px native`,
       Math.abs(geo.img.w - 144) < 0.01 && Math.abs(geo.img.h - 144) < 0.01,
       `measured ${geo.img.w}x${geo.img.h}`);
 
     /* Geometry, not pixels, so it names the cause when PALETTE goes red. A
        fractional device origin is resampled however image-rendering is set. */
     const frac = v => Math.abs(v - Math.round(v));
-    ok('ALIGN the sprite sits on whole device pixels',
+    ok(`${C.kind} ALIGN the sprite sits on whole device pixels`,
       frac(geo.img.x * geo.dpr) < 0.02 && frac(geo.img.y * geo.dpr) < 0.02,
       `device origin ${(geo.img.x * geo.dpr).toFixed(3)},${(geo.img.y * geo.dpr).toFixed(3)} at dpr ${geo.dpr}`
       + `; snap ml=${geo.snapped.ml} mt=${geo.snapped.mt}; ${geo.chain.join(' | ') || 'no offset ancestors'}`);
@@ -173,7 +195,7 @@ if (seam) {
        the vector crate's transform motion back and re-running gave exit 0 on the
        rows above. The sprite has to be 144px at EVERY phase, so the animations
        are seeked to their midpoint and it is measured again. */
-    const mid = await page.evaluate(() => {
+    const mid = await page.evaluate(f => {
       let seeked = 0;
       for (const a of document.getAnimations()) {
         try {
@@ -182,10 +204,14 @@ if (seam) {
           a.pause(); a.currentTime = a.effect.getTiming().duration * 0.5; seeked++;
         } catch {}
       }
-      const im = document.querySelector('#crateSeq .cq-f4') || document.querySelector('#crateSeq').children[4];
+      /* the crate's OWN frame index, passed in. Hardcoding 4 was fine while this
+         file knew about one 9-frame crate and threw on the 3-frame golden. */
+      const seqEl = document.querySelector('#crateSeq');
+      const im = seqEl && seqEl.children[Math.min(f, seqEl.children.length - 1)];
+      if (!im) return { seeked, w: 0, h: 0 };
       const r = im.getBoundingClientRect();
       return { seeked, w: r.width, h: r.height };
-    });
+    }, FRAME);
     /* PUT IT BACK. The seek above leaves the crate mid-flight, and the pixel
        comparison below screenshots whatever is on screen: leaving it there took
        the healthy tree from 100.00% to 4.45% exact, which is the harness
@@ -203,7 +229,7 @@ if (seam) {
     });
     await sleep(140);
 
-    ok('MOTION the sprite is never scaled, not even mid-animation',
+    ok(`${C.kind} MOTION the sprite is never scaled, not even mid-animation`,
       mid.seeked > 0 && Math.abs(mid.w - 144) < 0.01 && Math.abs(mid.h - 144) < 0.01,
       `${mid.seeked} crate animation(s) seeked to 50%, sprite measured ${mid.w.toFixed(3)}x${mid.h.toFixed(3)}`);
 
@@ -216,7 +242,10 @@ if (seam) {
     /* The source of truth is the PNG on disk, upscaled 3x by nearest neighbour
        in the page's own canvas. Decoding it in the browser rather than in node
        keeps this file free of an image dependency. */
-    const srcB64 = readFileSync(path.join(ROOT, 'assets', 'crates', 'common', `f${FRAME}.png`)).toString('base64');
+    /* C.dir, not a hardcoded 'common'. This line graded the golden crate's render
+       against the DAILY crate's PNG and reported 3.10% exact, which reads exactly
+       like a broken sprite and was a broken audit. */
+    const srcB64 = readFileSync(path.join(ROOT, 'assets', 'crates', C.dir, `f${FRAME}.png`)).toString('base64');
     const cmp = await page.evaluate(async (shotB64, srcB64) => {
       const load = s => new Promise((res, rej) => {
         const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = 'data:image/png;base64,' + s;
@@ -250,7 +279,7 @@ if (seam) {
 
     /* CONTROL FIRST. An empty or thin sample passes every ratio below by having
        no denominator, which is exactly how a guard stops being able to fail. */
-    ok('CONTROL the source frame has solid art to compare against',
+    ok(`${C.kind} CONTROL the source frame has solid art to compare against`,
       cmp.opaque >= 500, `${cmp.opaque} opaque source px, ${cmp.palette} colours`);
 
     const pctExact = cmp.opaque ? (100 * cmp.exact / cmp.opaque) : 0;
@@ -267,11 +296,11 @@ if (seam) {
        screen a colour the artist actually used? Resampling invents in-between
        colours, a screen-blend bloom invents brighter ones, and a blurred shadow
        invents grey. None of them can hide from it. */
-    ok('PALETTE the render invents no colour the source frame does not contain',
+    ok(`${C.kind} PALETTE the render invents no colour the source frame does not contain`,
       pctPal >= 98, `${pctPal.toFixed(2)}% of rendered px are source colours`
       + (cmp.sample ? `, worst at ${cmp.sample.at}: got ${cmp.sample.got} want ${cmp.sample.want}` : ''));
 
-    ok('EXACT the rendered sprite matches the source frame pixel for pixel',
+    ok(`${C.kind} EXACT the rendered sprite matches the source frame pixel for pixel`,
       pctExact >= 90, `${pctExact.toFixed(2)}% exact of ${cmp.opaque} px`);
   }
 }

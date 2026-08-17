@@ -118,6 +118,8 @@ const BROWSER = [
   'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
+  'crate-palette-audit.mjs', // the nine authored 48x48 crate frames render as the authored pixels: EXACT against the source PNG upscaled 3x nearest-neighbour, PALETTE, SCALE, ALIGN, MOTION, and a CONTROL row so a blank screenshot cannot pass by having nothing to compare. Landed with v388 and belonged to no tier, which failed the coverage assertion below before a browser started. Self-serving, 19s, 8 checks, green on four consecutive runs of fc9bb0f
+  'xp-cap-audit.mjs',        // a repeatable action cannot pay forever: STATIC (no award() key built from a clock or a random source, so the bug class is caught in sources that do not exist yet) plus CAP, ROLLOVER and CONTROL driven through the real awardCapped against a real IndexedDB. Landed with #29 and belonged to no tier. Self-serving, 16s, 11 checks, green on four consecutive runs of fc9bb0f
 ];
 
 function run(file, args) {
@@ -227,6 +229,7 @@ const DECLARED = {
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
+  'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases and removal, every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
   'den-two-target-audit.mjs': ['full', 'two health bars in a two-enemy den; batch-audit gates the two-enemy read every run.'],
   'dust-safeguard-audit.mjs': ['full', 'one curious tap must not spend dust.'],
