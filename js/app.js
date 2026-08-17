@@ -81,7 +81,7 @@ import {
   activeCalorieBonus, assumedActiveBurn,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { fetchOffProduct, fetchFdcByBarcode, searchOnline } from './sources.js';
+import { lookupBarcode, searchOnline } from './sources.js';
 import { parseNutritionText } from './labelparse.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -5301,8 +5301,13 @@ function openAdd(meal = 0) {
       bindRows();
     } catch (e) {
       const sect = $('#onlineSect', results);
+      /* 'unreachable' is thrown only when NEITHER database answered, so this is
+         the no-signal case and it gets the no-signal words. Everything else
+         reached a server and got a real refusal. */
       if (sect) sect.innerHTML = `<p class="note" style="padding:8px 2px">${e.message === 'rate_limit'
         ? 'Online search limit reached for now. Add a free USDA key in Settings for 1,000 searches/hour.'
+        : e.message === 'unreachable'
+        ? 'No signal, so the food databases could not be searched. Your own foods are all still here, and this will work again when you are back online.'
         : 'Online search unavailable right now.'}</p>`;
     }
   }
@@ -5739,15 +5744,46 @@ async function openScanner(getMeal) {
     status.innerHTML = `<span class="plate"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Looking up ${esc(code)}</span>`;
     // 1. local (previously scanned / created)
     let food = S.userFoods.find(f => f.barcode && barcodeMatch(f.barcode, code));
-    // 2. Open Food Facts
-    if (!food) { food = await fetchOffProduct(code); }
-    // 3. USDA branded fallback
-    if (!food) { status.innerHTML = '<span class="plate">Checking USDA</span>'; food = await fetchFdcByBarcode(code, S.settings.fdcKey || 'DEMO_KEY'); }
+    // 2 + 3. Open Food Facts, then the USDA branded fallback. `reached` is the
+    // whole point: see lookupBarcode in js/sources.js.
+    let reached = true;
+    if (!food) {
+      const res = await lookupBarcode(code, S.settings.fdcKey || 'DEMO_KEY');
+      food = res.food; reached = res.reached;
+    }
     if (food) {
       openPortion(food, { meal: getMeal(), via: 'scan' });
       return;
     }
     status.textContent = '';
+    /* "NOT IN THE BOOKS" IS A CLAIM ABOUT THE BOOKS, SO WE HAVE TO HAVE READ THEM.
+       Measured 2026-08-17: with the network removed, this sheet told the player a
+       barcode that resolves perfectly well online "was never listed in the
+       databases" and pointed them at typing it in by hand. That costs them a
+       permanent duplicate custom food for a product Open Food Facts already has,
+       and it does it on the one screen a person uses standing in a supermarket
+       aisle with one bar. The look-up-failed case gets its own sheet, keeps the
+       label scanner (it runs entirely on the phone and still works), and offers
+       to try the lookup again. */
+    if (!reached) {
+      openSheet(`
+        <div class="sheet-head">
+          <div class="hd"><h2>Could not look that up</h2><div class="sub">Barcode ${esc(code)}</div></div>
+          <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Back">${ICONS.close(17)}</button></div>
+        </div>
+        <div class="sheet-body">
+          <p class="note" style="margin-bottom:14px">The food databases need a network signal and this phone cannot reach them right now. This barcode may well be in there. Nothing is lost: try again when you have signal, or scan the nutrition label, which is read entirely on your phone.</p>
+          <button class="btn" id="missRetry">Try again</button>
+          <div style="height:10px"></div>
+          <button class="btn ghost" id="missLabel">${ICONS.camera(18)}Scan the label</button>
+          <div style="height:10px"></div>
+          <button class="btn ghost" id="missManual">Type it in manually</button>
+        </div>`, { cls: 't1' });
+      $('#missRetry').addEventListener('click', () => { history.back(); setTimeout(() => handleBarcode(code, getMeal), 240); });
+      $('#missLabel').addEventListener('click', () => openLabelFlow(getMeal, code));
+      $('#missManual').addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
+      return;
+    }
     openSheet(`
       <div class="sheet-head">
         <div class="hd"><h2>Not in the books</h2><div class="sub">Barcode ${esc(code)}</div></div>
@@ -7891,7 +7927,12 @@ async function renderFriends(el) {
     const btn = $('#friendAddBtn', el); btn.disabled = true; btn.textContent = '...';
     const r = await social.friendRequest(code);
     btn.disabled = false; btn.textContent = 'Add';
-    if (!r.ok) { toast(r.error === 'that is your own code' ? "That's your own code!" : 'No Bonehead has that code. Double-check it.', 3200); return; }
+    if (!r.ok) {
+      toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.'
+        : r.error === 'that is your own code' ? "That's your own code!"
+        : 'No Bonehead has that code. Double-check it.', 3200);
+      return;
+    }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
     else toast('Request sent. They just enter your code back to seal it.', 3600);
@@ -8349,7 +8390,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Sending...';
     const r = await social.friendRequest(f.friendCode);
-    if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast('Could not send that request. Try again.', 2600); return; }
+    if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.' : 'Could not send that request. Try again.', 3000); return; }
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
     else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
     b.outerHTML = `<p class="note" style="text-align:center;margin:6px 0 0">${r.status === 'accepted' ? 'Already in your Crew.' : 'Request sent.'}</p>`;
