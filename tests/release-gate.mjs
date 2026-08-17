@@ -304,6 +304,7 @@ const DECLARED = {
   'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
   'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
   'reap-orphans.mjs':     ['skip', 'a maintenance tool that deletes dead files, not a check.'],
+  'sheet-pixel-grid-audit.mjs': ['full', 'the sheet and the art inside it land on WHOLE device pixels at every shipped width, odd ones included, plus the A/A control that the "94.80% on-palette" report never ran, plus the byte-identical comparison that retires the translateX(-50%) sweep. Opens the takeover at 5 widths x 2 DPRs and renders 12 fixtures, ~2 minutes, too slow for FAST. Prove-red is NUDGE=0.25, a genuine quarter-pixel offset: SAME goes red on all six rows. Reintroducing the transform does NOT make it red, which is the whole finding.'],
 
   /* THE NINE THAT LANDED ON MAIN WITHOUT A TIER, 2026-08-15. Every one of these
      is a real guard that arrived on its own branch, and none of them touched
