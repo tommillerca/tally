@@ -27,22 +27,32 @@ export const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
 /* WRITE EPOCHS. A strictly increasing stamp per store, bumped by every write that
    goes through this module. It exists so a caller can cache something derived from
    a whole store (js/game.js caches the XP total) and know, in constant time and
-   without re-reading the store, whether anything has touched it since. Bumped
+   without re-reading the store, whether anything has touched THAT store since. Bumped
    BEFORE the write lands, so a write that then FAILS still invalidates: the safe
-   direction is a needless rebuild, never a stale number. */
-let writeSeq = 0;
+   direction is a needless rebuild, never a stale number.
+
+   PER STORE, NOT ONE GLOBAL SEQUENCE, and this is the whole point. The first
+   version of this used a single shared counter, so `epoch('xp')` moved when ANY
+   store was written. js/game.js checks that the xp store moved exactly once across
+   its own put, and with a shared counter an unrelated kv write in between broke
+   that check. A fight win is award plus COINS, and coins are kvSet, which is
+   db.put('kv', ...), so in the real app the xp cache was thrown away on almost
+   every award and the next read paid for a full scan anyway: measured at 11 cache
+   drops out of a 12-award burst, against 0 for a burst of bare awards. Making the
+   stamp belong to the store the cache is derived from is the fix. Do not merge
+   these counters back into one. */
 const storeSeq = new Map();
-function bumpStore(store) { storeSeq.set(store, ++writeSeq); }
-export function storeEpoch(store) { return storeSeq.has(store) ? storeSeq.get(store) : writeSeq; }
+function bumpStore(store) { storeSeq.set(store, (storeSeq.get(store) || 0) + 1); }
+export function storeEpoch(store) { return storeSeq.get(store) || 0; }
 
 export function useDbName(name) {
   dbName = name;
   dbPromise = null;
-  /* A different database is different data. Clearing the per-store stamps while
-     writeSeq keeps climbing means every store now reports a value no cache built
-     against the old database can be holding. */
-  writeSeq++;
-  storeSeq.clear();
+  /* A different database is different data, and no write to the new one has
+     happened yet to say so. Bump every store this process knows about: the
+     counters only ever climb, so no cache built against the old database can
+     still match. */
+  for (const s of new Set([...STORES, ...storeSeq.keys()])) bumpStore(s);
 }
 
 function open() {

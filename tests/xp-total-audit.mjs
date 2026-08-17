@@ -20,6 +20,19 @@
  *           SCAN_BUDGET scans for BURST awards, at EVERY row count.
  *           RED: revert totalXp() to `db.all('xp')` + reduce and the scan count
  *           becomes one per award, so it grows 900 -> 5400 -> 10950 with the store.
+ *
+ * THE BURST INTERLEAVES A kv WRITE, AND THAT IS THE POINT. DO NOT SIMPLIFY IT OUT.
+ * The first version of this audit fired bare back-to-back awards. Nothing in the
+ * app does that. A fight win is award plus COINS plus gear plus quests plus badges,
+ * and coins are kvSet, which is db.put('kv', ...). The first version of the cache
+ * was stamped from ONE GLOBAL write counter shared by every store, so that kv write
+ * moved the xp store's epoch too and the cache was discarded on almost every award:
+ * measured on this container at 5400 rows, 11 cache drops and 11 full scans across
+ * a 12-award burst in the app's shape, against 0 in the bare-award shape the audit
+ * was driving. The audit was green and the app was still scanning. An audit whose
+ * fixture is a shape the app never produces is a guard that cannot fail, which is
+ * exactly the class this batch exists to remove. So the kv write stays, and the
+ * INTERLEAVE control check below fails if it ever stops happening.
  *   TRUTH   After every single award, totalXp() equals a from-scratch recount read
  *           straight out of IndexedDB. A cache that disagrees with the rows is a
  *           worse bug than the slow scan was.
@@ -65,14 +78,16 @@ try {
   await sleep(2500);
 
   const out = await page.evaluate(async (SIZES, BURST) => {
-    const { db } = await import('/js/db.js');
+    const { db, kvSet } = await import('/js/db.js');
     const game = await import('/js/game.js');
     const log = [];
 
     // count full scans of the xp store, without changing what db.all does
     const realAll = db.all;
-    let scans = 0;
+    const realPut = db.put;
+    let scans = 0, kvWrites = 0;
     db.all = (store) => { if (store === 'xp') scans++; return realAll(store); };
+    db.put = (store, val) => { if (store === 'kv') kvWrites++; return realPut(store, val); };
 
     // the independent truth: straight out of IndexedDB, never through game.js
     const recount = async () => {
@@ -96,7 +111,7 @@ try {
       /* Warm the cache the way a running app would: something read the total
          before the burst started. The burst is what we are measuring. */
       await game.totalXp();
-      scans = 0;
+      scans = 0; kvWrites = 0;
       let truthMismatch = 0, checked = 0;
       let awardMs = 0;
       for (let i = 0; i < BURST; i++) {
@@ -105,6 +120,11 @@ try {
            crates and grants eggs, which is a different subsystem's cost and
            would swamp the number we are actually measuring. */
         await game.award(`burst-${N}-${i}`, 'seed', 0, 'burst', '2026-01-01');
+        /* THE APP'S BURST, NOT A SYNTHETIC ONE: a fight win pays coins right
+           after the xp, and coinsAdd is kvSet is db.put('kv', ...). Removing
+           this line is what made an earlier version of this audit unable to
+           fail. See the header. */
+        await kvSet('audit-burst-coins', i);
         awardMs += performance.now() - t0;
         awarded++;
         const truth = await recount();
@@ -124,7 +144,7 @@ try {
       /* COLD: force the rebuild path and confirm it lands on the truth. */
       const cold = await game.rebuildXpTotal();
 
-      log.push({ N, rowsBefore, scans, checked, truthMismatch, perAward: +perAward.toFixed(2),
+      log.push({ N, rowsBefore, scans, kvWrites, checked, truthMismatch, perAward: +perAward.toFixed(2),
                  driftSeen: afterDrift - beforeDrift, driftOk: afterDrift === driftTruth, coldOk: cold === driftTruth });
       have += BURST + 1;
     }
@@ -136,6 +156,12 @@ try {
   ok('SAMPLE the audit actually ran at every row count',
      rows.length === SIZES.length && out.awarded === SIZES.length * BURST && rows.every(r => r.rowsBefore > 0),
      `${rows.length} sizes, ${out.awarded} awards, rows ${rows.map(r => r.rowsBefore).join('/')}`);
+
+  /* CONTROL. If the kv writes stop happening the SHAPE check goes back to
+     measuring a shape the app never produces, and passes for the wrong reason. */
+  ok('INTERLEAVE the burst really did write kv between awards',
+     rows.length > 0 && rows.every(r => r.kvWrites >= BURST),
+     rows.map(r => `${r.rowsBefore}rows: ${r.kvWrites} kv writes`).join('  '));
 
   const scanList = rows.map(r => `${r.rowsBefore}rows=${r.scans}scans`).join('  ');
   ok(`SHAPE full xp scans per ${BURST}-award burst never exceed ${SCAN_BUDGET}, at any row count`,
