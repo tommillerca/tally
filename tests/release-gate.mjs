@@ -78,7 +78,14 @@ if (own) console.log(`serving this repo at ${base}\n`);
    imports ../js/pit.js and runs 400 seeded sims, exactly quest-daymore's shape,
    and BROWSER hands every entry a URL it would ignore. ~1s, 4/4 green on main,
    and it carries its own CONTROL row so it cannot pass vacuously. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
+/* tautology-audit is node-only and 3.3s, so it belongs in PURE for the same
+   reason first-fight-audit does: BROWSER hands every entry a URL it would
+   ignore. It was DECLARED 'full' while it was red on main by design. The two
+   fight-tray rows it names landed fixed in v387, so that reason has expired.
+   Promoted after checking it is green because main is CLEAN and not because
+   it stopped working: restoring 56c5058's fight-tray-audit.mjs brings both
+   rows straight back, exit 1. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'tautology-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
@@ -294,7 +301,6 @@ const DECLARED = {
      is how everyone learns to ignore a gate. It runs under --all, where a
      non-zero exit reads as the worklist it is. PROMOTE TO FAST the day those two
      rows are rewritten to measure the affordance independently of the class. */
-  'tautology-audit.mjs': ['full', "assertions that cannot fail, by structure. Four decidable rules: a constant pass expression, a sweep that is vacuously true on an empty sample, a screenshot clipped to the very rect the assertion then bounds it by, and an escape clause the app derives from the antecedent's own subject. 3.3s, no browser, and its header states the four things it provably cannot see. RED on main by design, see above."],
   'weapon-charge-audit.mjs': ['full', 'the weapon charge, sampled as decoded pixels while it runs.'],
 
   /* THE FIFTEEN THE OLD NET COULD NOT SEE. Every one of these is a real guard
