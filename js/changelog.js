@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 387, date: '2026-08-16', title: 'Four things paid out forever', items: [
+    "<b>Pit wins, harvests, cooking and breaking a siege had no daily limit at all.</b> Every reward in the game carries a receipt so it cannot be claimed twice, and those four were stamping theirs with the current time, which meant every single claim looked brand new. They paid out every time, forever. One player found it and reached level 80 in ten days on roughly eleven thousand Pit fights. All four have a daily ceiling now, sized so a long session is still well worth playing: twelve Pit wins, ten harvests, eight cooks and five siege breaks.",
+    "<b>Levels are not capped and never will be.</b> Nothing has been taken off anyone, no level has been reset and nobody has been punished for finding this. It was our bug, and the only thing that changes is how fast the ladder can be climbed from here.",
+  ] },
   { n: 386, date: '2026-08-16', title: 'The health bars were sitting on the boss', items: [
     "<b>The health bars were drawn ON TOP of the fighters, not beside them.</b> On a smaller phone that meant the boss lost his head and hood behind them, and on the smallest phones he was rendering outside the fight area altogether. The bars have their own row now, so the arena is all scene. Measured on five phone sizes: nothing is covered on any of them.",
     "<b>\"Just essentials\" notifications did nothing.</b> It wrote exactly the same settings as \"Everything\", so the two buttons were the same button with different labels. Essentials now means what it says.",
