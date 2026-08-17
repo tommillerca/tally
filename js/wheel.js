@@ -9,7 +9,7 @@
 // skipped under webdriver (unless window.__wheelForce) like the other intros.
 // Reduced motion still grants + shows the prize, just without the spin.
 
-import { kvGet, kvSet } from './db.js';
+import { kvGet, kvSet, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 import { coinsAdd, grantCrate, grantConsumable, coins } from './loot.js';
 import { grantIngredient, INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -196,6 +196,12 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
     await kvSet('wheelLastDate', null);
   }
   if (!force && !preview && (await kvGet('wheelLastDate', null)) === today) return false;
+  /* MONOTONIC DAY GUARD (js/db.js claimDay). The date gate above re-arms the
+     spin the instant dateKey() changes, so a clock nudge past local midnight
+     is a whole extra spin. Ask whether today is a day this device has honestly
+     reached before offering one. Deliberately AFTER the force/preview escapes:
+     ?wheel=1 grants nothing, so it must not open a day either. */
+  if (!force && !preview && !(await claimDay(today)).fresh) return false;
 
   await waitForSplash();
   if (sheetStackOpen()) return false;              // don't stack over an open sheet

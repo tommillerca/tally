@@ -2,7 +2,7 @@
 // XP events are append-only rows in the 'xp' store, keyed for idempotency:
 // awarding the same key twice is a no-op, so backfills and retries are safe.
 
-import { db, kvGet, kvSet } from './db.js';
+import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
 import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
 import { grantSeed, gardenState } from './garden.js';
@@ -515,7 +515,15 @@ export async function onHealthSync(date, { steps, activeKcal, exerciseMin, cycle
 // At boot: settle yesterday (day-close bonus and any missed day checks).
 export async function awardDayCloseIfDue(targets) {
   if (!targets) return null;
-  const y = addDays(dateKey(), -1);
+  /* MONOTONIC DAY GUARD (js/db.js claimDay). Settling yesterday is worth 50 XP
+     and a GOLDEN crate, and it becomes due the moment dateKey() rolls over, so
+     it is the single biggest prize a clock nudge buys. The mark is taken on
+     TODAY, not on the yesterday being settled: the question is whether the
+     device has honestly arrived at a new day, and yesterday's own key is what
+     the award() ledger already dedupes on. */
+  const today = dateKey();
+  if (!(await claimDay(today)).fresh) return null;
+  const y = addDays(today, -1);
   const es = await db.byIndex('log', 'date', y);
   if (!es.length) return null;
   const tot = dayTotals(es);
