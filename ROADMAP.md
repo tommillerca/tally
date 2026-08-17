@@ -55,6 +55,80 @@ rotate daily, every copy takes its turn ("today's herd"). Fliers, clouds and
 catfish stack their own spots, uncapped. FYI not a decision: cap and rotation
 are tunable one-liners if you want a different number or a "+N more" hint.
 
+## 🎨 The Hollow: art redraws Tom owns — LOGGED 2026-08-16, not started
+
+From the Impeccable critique run 2026-08-16 (two isolated assessments plus my own
+verification). Everything in this entry needs Tom's hand in PixelLab; none of it
+can be fixed in code, and each item says why.
+
+**THE RULER. 1 metre = 76 stage px**, anchored on the fence, whose ink measures
+exactly 76 stage px tall and which depicts a 1m picket fence. Every size below is
+derived from that, not chosen.
+
+**Why code cannot fix these.** Every sprite is a 48x48 canvas filled corner to
+corner (measured ink fill 71% to 97%), rendered at exactly 2x. Apparent size is
+therefore set by how much of the cell the drawing occupies, not by anything the
+renderer does. Shrinking a sprite in code means dropping to 1x, which halves its
+pixel size and breaks the one-scale rule the whole scene is built on. The art has
+to be redrawn smaller INSIDE the same 48x48 cell.
+
+### 1. Redraw smaller inside the same 48x48 canvas
+
+| sprite | ink height now | draw it at | reason |
+|---|---|---|---|
+| hollow-crow | 34 | **15** | a crow beside a 1m fence. It is currently 80px wide against the keeper's skull-and-hat at 76: the bird's body is wider than the player's head, and it is 3.5x oversized against the scarecrow it perches on. This is the single loudest wrong thing on the screen and the first one Tom named. |
+| hollow-grass-tuft | 36 | **12** | currently the same apparent size as the crow and 95% the width of the shed |
+| hollow-crate | 38 | **19** | currently 79% the width of the shed it sits beside |
+| hollow-sack | 35 | **23** | |
+| hollow-spill-a/b/c | 33 | **~14** | these should read as scatter on the ground, not as objects. Six of them currently compete with the five plots that matter. |
+
+### 2. Soil states must carry the state
+
+Measured contrast between the four plot states: **1.10:1 to 1.78:1**. Nothing
+reaches 3:1. Planted (mound) against an unowned slot (hole) is **1.10:1**, which
+is not a distinction. An untilled plot against night grass is **1.07:1**, and a
+young bog crop is 1.03:1: measurably invisible. The READY / THIRSTY / timer chips
+are currently carrying the entire garden state and the dirt carries none of it.
+
+Redraw hollow-soil-scuffed, -mound, -wet and -hole further apart in value so a
+player can read the garden without reading a single label.
+
+### 3. hollow-lantern-post has its glow baked in
+
+**50.2% of the sprite's opaque pixels are a pale halo disc** (median RGB
+191,207,170), and the alpha is binary, so it is an opaque disc punching a hole in
+the grass rather than a light. Two consequences, both measured: the lantern burns
+at midday no matter what the `lit` gate does, because the light is in the pixels;
+and at night the CSS radial glow plus two drop-shadows stack on top of an
+already-baked halo, so one lamp carries three glows. Needs a version with no
+baked halo; the lighting is already done properly in CSS.
+
+### 4. A shed at correct scale does not fit, which is a LAYOUT question not an art one
+
+At 2.4m the shed wants 182 stage px. 4x gives 180, which is right, and at that
+size it covered two of the five plots. It is at 3x (135px) now, which fits and is
+still a shed nobody could stand up in. The stage is 390 wide and must hold two
+bed columns plus a path. Either the bed layout changes or the shed stays wrong.
+Tom's call, not started.
+
+### 5. Four cameras in one frame (P3, recorded so it stops ambushing future passes)
+
+Beds are pure top-down, the shed is 3/4 isometric, the fence is straight-on
+elevation, the keeper is a front view. This caps how good the scene can get
+regardless of prop arrangement, and it is the low-grade wrongness a player feels
+and cannot name. The cheapest resolution is a shallow oblique throughout. Not
+this week.
+
+### Done in code already, for the record
+
+Gate cut in the fence at the path; shed, crate and sack moved inside it (they
+were all above the fence line, which reads as the map edge, with their bases
+floating above the only ground line in the band AND painting on top of it: four
+depth inversions); contact shadows added as separate elements under every
+free-standing prop (measured: ZERO semi-transparent pixels in the base row of all
+eleven sprites, so nothing in the scene touched the ground); every crop was
+rendering 24px in front of its own soil and no longer is.
+
 ## 🌱 The Hollow: garden + apothecary as one hands-on scene — DECISION (designed 2026-08-09, awaiting Tom's call)
 
 **Tom's ask (2026-08-09, with an Animal Crossing Pocket Camp garden screenshot):**

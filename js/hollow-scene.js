@@ -73,7 +73,24 @@ const stagger = s => -s;
    hang half off the edge (tuft-right lost 49% of its height, tuft-left 48% of
    its width) because the coordinates were the vector tufts' and the pixel ones
    are 96px. */
-const TUFTS = [[2, 318, 96, 3.2, 0], [0, 660, 96, 3.8, 0.6], [292, 208, 96, 3.5, 1.1]];
+const TUFTS = [[2, 318, 96, 3.2, 0], [0, 660, 96, 3.8, 0.6], [300, 470, 96, 3.5, 1.1]];
+
+
+/* A CONTACT SHADOW, because nothing in this scene had one.
+   Measured across eleven shipped sprites: ZERO semi-transparent pixels in the
+   bottom six ink rows of any of them. Only the old framed beds had a dark ring,
+   baked into the art, which is precisely why they were the only objects that
+   looked like they sat on the ground, and they have since been replaced. Contact
+   shadow is the cheapest depth cue a flat top-down scene has and the scene had
+   none, which is most of why every prop read as a sticker on a lawn.
+   Drawn as a separate element rather than baked into Tom's PNGs: his art is not
+   edited, and one line reverses the whole thing. Flat colour, no blur, because
+   the scene's own rule is that nothing here carries a blur. The ellipse is
+   sized to the prop's FOOTPRINT, not its height, so a shed gets a wide one and
+   a crow gets almost nothing. */
+const shadow = (cx, w, baseY, h = 10, a = .26) =>
+  `<span style="position:absolute;left:${Math.round(cx - w / 2)}px;top:${Math.round(baseY - h / 2)}px;` +
+  `width:${w}px;height:${h}px;border-radius:50%;background:rgba(0,0,0,${a});${NONE};z-index:0"></span>`;
 
 const glow = (x, y, w, h, shape, rgba, secs) =>
   `<span style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:50%;background:radial-gradient(${shape},${rgba},transparent 84%);animation:hlwGlow ${secs}s ease-in-out ${stagger(0)}s infinite;${NONE};z-index:3"></span>`;
@@ -111,8 +128,8 @@ export function hollowBackdropHtml({ band } = {}) {
         from the render, because an off-stage sprite looks identical to one that
         was never drawn. */''}
   <div style="position:absolute;inset:0;z-index:1;${NONE}">
-    ${hlwArt('hollow-scarecrow', { x: 0, y: 194, w: 96, style: NONE })}
-    ${hlwArt('hollow-barrel', { x: 286, y: 592, w: 96, style: NONE })}
+    ${shadow(68, 54, 306, 10)}${hlwArt('hollow-scarecrow', { x: 2, y: 176, w: 144, style: NONE })}
+    ${shadow(336, 58, 658, 10)}${hlwArt('hollow-barrel', { x: 286, y: 592, w: 96, style: NONE })}
     ${/* Dirt spills ON the track's edges (it spans 171 to 219), so the straight
           sides read as worn earth rather than as a drawn rectangle. Three
           variants alternated so no two neighbours are the same stamp. */''}
@@ -129,7 +146,16 @@ export function hollowBackdropHtml({ band } = {}) {
     ${/* 2x, like everything else. The fence tile is 232 native and was drawn at
           232, so its pickets were half the pixel size of the beds standing behind
           them. One run of 464 covers the 390 stage with the seam off screen. */''}
-    ${hlwArt('hollow-fence', { x: -36, y: 104, w: 464, style: NONE })}
+    ${hlwArt('hollow-fence', { x: -36, y: 104, w: 464, style: `${NONE};`
+      /* A GATE, cut where the path already starts. A picket run spanning the
+         whole stage with no opening reads as one thing, the edge of the map, and
+         that is exactly how Tom read it: "the shed is outside the map". The path
+         used to dead-end into it. The gap is stage x171-219, which is the track's
+         own width, and in the image's local space that is 207-255 because the
+         run starts at -36. Hard stops, no feather: this is a gap in a fence, not
+         a fade. */
+      + 'mask-image:linear-gradient(90deg,#000 0 207px,transparent 207px 255px,#000 255px);'
+      + '-webkit-mask-image:linear-gradient(90deg,#000 0 207px,transparent 207px 255px,#000 255px)' })}
   </div>
 
   ${/* THE CROW, PERCHED AND STATIC. It used to sit in a div carrying hlwCrowBob,
@@ -142,7 +168,7 @@ export function hollowBackdropHtml({ band } = {}) {
         than inherited from the vector comp: the scarecrow's crossbar is art rows
         15-18, which at 2x from y194 is y200-208, and the crow's feet are art row
         41, which puts its box top at 122. It now stands on the bar. */''}
-  <div class="hlw-crowperch" style="position:absolute;left:26px;top:122px;width:96px;height:96px;z-index:1;${NONE}">
+  <div class="hlw-crowperch" style="position:absolute;left:66px;top:106px;width:96px;height:96px;z-index:1;${NONE}">
     ${hlwArt('hollow-crow', { x: 0, y: 24, w: 96, style: NONE })}
   </div>
 
@@ -180,9 +206,20 @@ export function hollowBackdropHtml({ band } = {}) {
           the only depth cue a flat top-down scene gets. */''}
     ${/* 2x. At 3x the shed was the only object in the scene drawn at a third
           pixel size AND its roof was cut off by the top of the stage. */''}
-    ${hlwArt('hollow-shed', { x: 240, y: 30, w: 96, style: NONE })}
-    ${hlwArt('hollow-crate', { x: 292, y: 66, w: 96, style: NONE })}
-    ${hlwArt('hollow-sack', { x: 230, y: 96, w: 96, style: NONE })}
+    ${/* INSIDE THE FENCE NOW, at the head of the path. Measured before the move:
+          the shed's ink base was y100, the crate's y130 and the sack's y156,
+          against the fence's y168, which is the only ground line the top band
+          had. All three floated above it AND painted on top of it, so position
+          said "behind the wall" and paint order said "in front of it". Four
+          depth inversions in one corner.
+          The shed is 4x now, not 2x. 1 metre = 76 stage px (the fence ink is 76
+          and a picket fence is 1m), a shed is about 2.4m, so it wants 182 and 4x
+          gives 180. At 2x it was 90px, which made it 70% of the keeper's height:
+          a shack he could not stand up in. Tom's call, 2026-08-16, knowing it
+          puts a second pixel size on screen. */''}
+    ${shadow(300, 116, 286, 14)}${hlwArt('hollow-shed', { x: 228, y: 192, w: 144, style: NONE })}
+    ${shadow(258, 50, 282, 9)}${hlwArt('hollow-crate', { x: 212, y: 208, w: 96, style: NONE })}
+    ${shadow(370, 50, 276, 9)}${hlwArt('hollow-sack', { x: 324, y: 200, w: 96, style: NONE })}
     ${/* THE COIN CHIP WAS EATING IT. The shed's warm glow measured 0.1% of its own
           box against a 40% floor, and the reason was occlusion, not colour: the
           app's coin chip sits at roughly stage x300-382, y20-52 at a much higher

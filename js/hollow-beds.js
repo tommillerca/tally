@@ -188,7 +188,14 @@ export function hlwBedArt(plot) {
      them through place() sized them from the VECTOR stage heights (17/22/34/54),
      which hlwArt rounds to 1x: the plants were drawn at half the pixel size of
      the bed they grew in, the one scale break left in the scene. */
-  if (pixId) return soil + hlwArt(pixId, { x: 0, y: 0, w: BED_BOX.w, h: BED_BOX.h, cls: `hlw-p-${pixId}`, style: PE });
+  /* NO h HERE. The soil above is drawn with w only, so hlwArt centres it against
+     the sprite's NATIVE height; passing h centres against the given height
+     instead, and the 24px difference between those two put every crop in front
+     of its own dirt. Measured on all four plots: soil box y178 / crop box y202,
+     294/318, 410/434, 236/260, a constant +24, and plot 1's plant overhung the
+     front lip of its soil by 32px of ink. Both halves of a bed have to be
+     centred the same way or they are not the same object. */
+  if (pixId) return soil + hlwArt(pixId, { x: 0, y: 0, w: BED_BOX.w, cls: `hlw-p-${pixId}`, style: PE });
   return soil + paint(st.id, { x: pos.x, y: pos.y, w: pos.w, cls: `hlw-p-${st.id}`, style }, swaps);
 }
 
