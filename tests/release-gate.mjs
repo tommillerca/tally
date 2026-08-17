@@ -416,7 +416,7 @@ const DECLARED = {
      Seven prove-red modes, each reintroducing exactly one old shape in the
      bytes on their way out of the server, and each verifying it really
      substituted before the run is graded. */
-  'multitab-audit.mjs': ['full', 'the app open TWICE: exact currency across two tabs, one payout per grant key, one inv row per ownable item, a daily XP ceiling that holds, a stale tab that cannot revert the other one\'s settings, and an erase that leaves zero rows while the other tab is writing. 24 checks, ~40s, two live pages, a fake Worker for the real pull path, eight prove-red modes.'],
+  'multitab-audit.mjs': ['full', "the app open TWICE: exact currency across two tabs, one payout per grant key, one inv row per ownable item, a daily XP ceiling that holds, a stale tab that cannot revert the other one's settings, a returning tab that shows the current balance without losing its open sheet, and an erase that leaves zero rows while the other tab is writing. 28 checks, 38s measured, two live pages, a fake Worker for the real pull path, ten prove-red modes."],
 
   'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Was deliberately red on main while it pinned two unfixed findings; both are fixed as of v391 and it is GREEN, 35 checks. Stays full rather than fast: it installs and upgrades a real service worker across two builds, which is slow and must not race a parallel suite.'],
 
