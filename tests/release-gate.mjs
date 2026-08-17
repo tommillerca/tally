@@ -320,6 +320,29 @@ const DECLARED = {
   'memory-census.mjs': ['full', 'the eight-layer memory ceiling on every screen that mounts art in a loop, sampled at the PEAK after a full scroll of every scroller, twice (tally/CLAUDE.md rules 11 and 12) - lb-memory-audit budgets ONE screen against a two-layer fixture, and that is how six more screens with the same defect stayed invisible. Drives and scrolls most of the app, so it is among the longest suites here. Its own header names what it cannot see (CSS backgrounds, off-DOM Images, the Boneyard map: no WebGL headless), so a pass is "not caught by this instrument", not "clean".'],
   'newcomers-audit.mjs': ['full', 'all six branches of hydrateNewcomers, so "the new player section of the Crew tab is gone" is answered by measurement instead of by picking one of three explanations. Six sequential seeded scenarios at ~3s of settle each; prove-red inverts playing() and rows A and E go red while B, C, D and F stay green.'],
   'race-results-audit.mjs': ['full', 'the settled step-race podium shown is the one that was PAID, which is why it reads /steps/settled and not /steps/week: measured on production 2026-08-14, three of the five paid players had already rolled into the new week and vanished from the live board, promoting 5th to 2nd. Plus VISIBLE-not-merely-present (three opacity-0 bugs in eight days), shows once, and never renders an empty podium. The fixture is the real production result byte for byte, so row 1 cannot be decorative.'],
+  /* THE ROAD EVERY FIX TAKES TO A PLAYER, and until 2026-08-17 nothing had ever
+     driven it. Serves this checkout as version A and version B out of one tree
+     over real https (the app registers its worker only on https, so an http run
+     would grade a page with no update machinery on it), installs the worker on
+     A, flips the server to B without clearing anything, and reports which of
+     index.html / js / css the player is running after a return visit, a reload,
+     a visibilitychange, and the Progress update banner.
+     'full' and not FAST for two reasons: it is six full boots plus onboarding
+     and an offline pass, about eight minutes, and it is DELIBERATELY RED on main
+     today. The reds are the deliverable and both are pre-existing:
+       - sw.js:174 serves a non-OK response as the answer instead of falling back
+         to the cache, so one 404 at deploy time is a dead shell for every
+         returning player while a good cached copy sits unused;
+       - app.js:519-520 promises "Update ready. Leave this screen to apply" and
+         nothing applies it on sheet close.
+     Declared 'full' rather than 'skip' precisely so those two stay visible on
+     every gate:all instead of being retired into silence, same reasoning as
+     suite-rot-audit. It goes green the moment either is fixed.
+     Prove-red: --prove-red=cache-first | stale-version | 404, each landing on a
+     different row; each verifies it really changed the served bytes before a
+     browser starts, so a prove-red that matches nothing cannot read as green. */
+  'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Deliberately red on main; see the block comment above for the two findings it pins.'],
+
   'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above."],
 };
 
