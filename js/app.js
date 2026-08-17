@@ -13385,7 +13385,7 @@ async function renderBoneyard(el) {
     };
     map.on('moveend', rerunPlacement);
     map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
-    $('#mapRecenter', body).addEventListener('click', () => {
+    $('#mapRecenter', body)?.addEventListener('click', () => {
       follow = true; $('#mapRecenter', body).hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
     });
@@ -13557,6 +13557,22 @@ async function renderBoneyard(el) {
        Guarded rather than restructured: the offline message is already the right
        outcome, the only bug is the throw behind it. */
     const mapEl = $('#mapCanvas', body);
+    /* THE ONE BAIL THAT COVERS THE REST OF SETUP.
+       map.once('error') replaces body.innerHTML with the offline message, and an
+       event handler cannot return out of the function that registered it, so
+       everything below carried on against a body whose children it had just
+       deleted. #33 guarded the attachments it could see with ?.; this is the
+       four pointer handlers underneath, which all dereference mapEl and would
+       each need their own guard. Stopping once is the fix, and it is also the
+       honest one: there is no map to wire up.
+       Caught by tests/map-offline-audit.mjs failing 1 run in 2 with
+       "Cannot read properties of null (reading 'addEventListener')", which
+       read as a flaky test and was an intermittent real error.
+       NOT sufficient on its own: this return is nested, so it does not stop the
+       five #mapDen/#mapSecret/#mapMini/#mapGlutton/#mapCollect handlers further
+       down, which get their own ?. for the same reason #33's did. The stack said
+       so (startMap, js/app.js:14166) after a guess said otherwise. */
+    if (!mapEl) return;
     if (!mapEl) return;                 // the error handler already swapped the body
     mapEl.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
@@ -14151,7 +14167,7 @@ async function renderBoneyard(el) {
     // a moving vehicle. Returns true (and nags) when you're going too fast.
     const tooFastToAct = () => { if (youSpeed > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
 
-    $('#mapDen', body).addEventListener('click', async () => {
+    $('#mapDen', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
@@ -14174,7 +14190,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapSecret', body).addEventListener('click', async () => {
+    $('#mapSecret', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const key = $('#mapSecret', body).dataset.secretKey;
       const s = secretsNear(scoutLat, scoutLng).find(x => x.key === key);
@@ -14186,7 +14202,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapMini', body).addEventListener('click', async () => {
+    $('#mapMini', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapMini', body).dataset.miniId;
       const rec = miniMarkers.get(id);
@@ -14235,7 +14251,7 @@ async function renderBoneyard(el) {
       await refreshSpires();
     });
 
-    $('#mapGlutton', body).addEventListener('click', () => {
+    $('#mapGlutton', body)?.addEventListener('click', () => {
       if (tooFastToAct()) return;
       // `gluttonBeaten` never existed: this threw ReferenceError on EVERY tap, so
       // Face The Glutton has never once opened. Beaten/out-of-window is already
@@ -14244,7 +14260,7 @@ async function renderBoneyard(el) {
       openGluttonSheet();
     });
 
-    $('#mapCollect', body).addEventListener('click', async () => {
+    $('#mapCollect', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;

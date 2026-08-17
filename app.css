@@ -3706,12 +3706,14 @@ body::before {
    The slide-in needs its own keyframes because the shared one carries the
    -50% inside the transform it animates. */
 .sheet.takeover {
-  height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310;
+  /* vh first, dvh second: an old parser keeps the vh line and drops the dvh one,
+     a modern one takes both and the dvh wins. See tests/dvh-fallback-audit.mjs. */
+  height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh;
+  border-radius: 0; border-top: 0; z-index: 310;
   left: 0; right: 0; margin-inline: auto; transform: none;
   animation: slideupFlat .28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes slideupFlat { from { transform: translateY(60%); } to { transform: translateY(0); } }
-.sheet.takeover { height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310; }
 .sheet.takeover ~ .sheet-backdrop, .sheet.takeover + .sheet-backdrop { z-index: 309; }
 .sheet.takeover .sheet-grab { display: none; }
 /* TAKEOVER. A reveal fills the sheet and paints its own ground, so nothing of
