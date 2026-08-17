@@ -2087,17 +2087,44 @@ async function maybeRequestNotifPermission() {
   } catch { /* noop */ }
 }
 
+/* WHAT "BACK UP" MEANS DEPENDS ON THE SHELL, and this told everyone the web
+   answer. On the native shells Settings > Export deliberately does nothing but
+   explain itself (see the #exportBtn handler: the WebView cannot save a blob),
+   so the tip sent a TestFlight / APK player down a path that dead-ends, and the
+   condition behind it (lastExportAt) is one native can never satisfy, so it
+   re-fired every 7 days forever. Most of the launch cohort is native, which
+   makes this the most-shown wrong instruction in the app.
+
+   The native answer is the recovery code, because on native it is the ONLY way
+   back in: the save rides in the end-to-end encrypted cloud blob and nobody,
+   the developer included, can decrypt it without the player's phrase. So the
+   native branch points at the thing that exists, and stays SILENT once a phrase
+   and an ID are both set: there is no action left to take, and a tip you cannot
+   act on is how players learn to ignore tips.
+
+   Returns the message, or null for "say nothing". Split out from backupNudge so
+   the decision has one home and the guard can drive it.
+   Guard: tests/native-deadpath-audit.mjs. */
+async function backupNudgeMessage() {
+  if (isNative()) {
+    const covered = (await social.hasRecoveryPhrase()) && !!(await social.myRecoveryId());
+    return covered ? null : 'Tip: set a recovery code (Settings, Recovery code). Without it, losing this phone loses this account.';
+  }
+  const last = await kvGet('lastExportAt', 0);
+  if (Date.now() - last < 14 * 86400e3) return null;
+  return 'Tip: back up your log (Settings, Export)';
+}
+
 async function backupNudge() {
   try {
     const log = await db.all('log');
     if (log.length < 20) return;
-    const last = await kvGet('lastExportAt', 0);
     const nudged = await kvGet('lastNudgeAt', 0);
-    const twoWeeks = 14 * 86400e3;
-    if (Date.now() - last > twoWeeks && Date.now() - nudged > 7 * 86400e3) {
-      await kvSet('lastNudgeAt', Date.now());
-      setTimeout(() => toast('Tip: back up your log (Settings, Export)', 3400), 4000);
-    }
+    if (Date.now() - nudged < 7 * 86400e3) return;
+    const msg = await backupNudgeMessage();
+    if (!msg) return;
+    await kvSet('lastNudgeAt', Date.now());
+    setTimeout(() => toast(msg, 3400), 4000);
   } catch { /* non-critical */ }
 }
 
