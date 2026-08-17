@@ -3779,7 +3779,13 @@ body::before {
      The frame table sums to 400ms from --b-lid 1.12s, so the last pose lands at
      1.52s. Hold it 80ms, sink hard over 200ms, and the crate is fully gone at
      1.80 before the card starts at 1.82. Costs 0.10s of time-to-card. */
-  --b-sink: 1.60s; --b-card: 1.82s;
+  /* 1.64, not 1.60. The frame table ends at 1.52 and the last frame was getting
+     80ms on paper and 25-50ms in practice. Tom, 2026-08-17: the end of the
+     animation clips. Moving the sink 40ms later and making it 40ms quicker buys
+     the final frame 120ms and still has the crate GONE at 1.80, before the card
+     at 1.82, which is the ordering row in tests/crate-reveal-audit.mjs. Tom's
+     frame timings are untouched: the hold came out of the sink, not his art. */
+  --b-sink: 1.64s; --b-card: 1.82s;
   --b-count: 2.12s; --b-title: 2.74s; --b-foot: 2.94s;
   --b-sway: 2.94s; --b-spark: 3.04s;
 }
@@ -3843,7 +3849,7 @@ body::before {
    row in tests/crate-reveal-audit.mjs reading the animation's real duration off
    the element instead of trusting the stylesheet. The duration now lives in the
    shorthand, where nothing can quietly win against it. */
-.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .2s ease-in var(--b-sink) both; }
+.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .16s ease-in var(--b-sink) both; }
 /* THE EXIT IS NOT A SCALE EITHER. crSink ends on translateY() scale(.9), and a
    scale on an ancestor resamples the sprite exactly like the drop did: caught by
    tests/crate-palette-audit.mjs measuring the sprite at 143.508px wide mid-sink
