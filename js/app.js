@@ -16779,7 +16779,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
            re-farm: the payout was gated on "the request did not error" instead of
            on a state transition actually happening.
            A repeat pays the flat consolation and nothing else. See "Rewarded
-           actions" in tally/CLAUDE.md and tests/repeat-audit.mjs. */
+           actions" in tally/CLAUDE.md. The guards are the two NO-OP checks in
+           tests/unit.test.js (one of which pins THIS branch by name) and
+           tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
+           since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
         if (already) {
