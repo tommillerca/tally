@@ -417,6 +417,17 @@ ok('CREW  and it says so in words the player can act on, naming the server',
   /could not reach the crew server/i.test(crewGone.unreached) && /try again/i.test(crewGone.unreached),
   crewGone.unreached.slice(0, 130) || '(no message at all)');
 
+/* AND THE WAY BACK HAS TO WORK. A message with a button on it that does nothing
+   is a worse lie than no message (anti-regression rule 5: operate the control,
+   do not admire it). Signal returns, the player taps Try again, and the crew
+   comes back without leaving the tab. */
+api.mode = 'ok';
+const retryTapped = await $click('#cfanRetry');
+const crewBack = await waitFor(async () => (await readCrew()).cards >= 3, 15000);
+ok('CREW  tapping Try again on the could-not-reach box brings the crew back once there is signal',
+  retryTapped && crewBack >= 0 && /·\s*3/.test((await readCrew()).count),
+  retryTapped ? `${crewBack}ms, ${JSON.stringify(await readCrew()).slice(0, 90)}` : 'the Try again button could not be tapped');
+
 api.mode = 'hang';
 await goTab('today'); await goTab('friends');
 const crewSettled = await waitFor(async () => !(await readCrew()).loading, BOUND_MS + 4000);
