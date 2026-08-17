@@ -668,21 +668,68 @@ function siegeNameFor(id, at) {
 /* The friendship edge, shared by /friends/request (by friend code) and
    /friends/add (by leaderboard add token). One body so the two handles cannot
    drift into different rules: reciprocation auto-accepts, and a repeat is a
-   no-op rather than a second row. */
+   no-op rather than a second row.
+
+   ONE upsert, because the three cases are one decision about one row and the
+   row is the only thing that can arbitrate it.
+
+   It used to be SELECT-then-INSERT, and the two friendliest players in the game
+   broke it: when both press Add at the same moment, both read "no row", both
+   INSERT, and the loser hits PRIMARY KEY (a, b) and falls out of the outer catch
+   as a 500. Measured locally on 2026-08-17: [200, 500], with a
+   "UNIQUE constraint failed: friendships.a, friendships.b" detail handed to the
+   client. Worse than the 500 is what it left behind: the reciprocation rule that
+   turns "they already asked me" into an accepted friendship never ran, so two
+   people who both asked to be friends end up merely pending, each looking at an
+   OUTGOING request and waiting for the other to accept something their client is
+   not showing them.
+
+   The upsert says all of it at once: insert pending if there is no row, promote
+   to accepted if the existing row was requested by the OTHER player, and leave
+   my own repeat alone. RETURNING is the row's own answer, so the status the
+   caller is told is the status that is stored. */
 async function requestFriendship(env, meId, otherId) {
   const [a, b] = pairKey(meId, otherId);
-  const ex = await env.DB.prepare('SELECT status, requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
   const now = Date.now();
-  if (ex && ex.status === 'accepted') return { ok: true, status: 'accepted' };
-  if (ex && ex.requested_by !== meId) { // they already asked me -> accept
-    await env.DB.prepare('UPDATE friendships SET status = ? , ts = ? WHERE a = ? AND b = ?').bind('accepted', now, a, b).run();
-    return { ok: true, status: 'accepted' };
-  }
-  if (!ex) {
-    await env.DB.prepare('INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,?,?,?)')
-      .bind(a, b, 'pending', meId, now).run();
-  }
-  return { ok: true, status: 'pending' };
+  const row = await env.DB.prepare(
+    `INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,'pending',?,?)
+     ON CONFLICT(a, b) DO UPDATE SET
+       status = CASE WHEN friendships.requested_by <> excluded.requested_by THEN 'accepted' ELSE friendships.status END,
+       ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
+     RETURNING status`).bind(a, b, meId, now).first();
+  return { ok: true, status: row?.status === 'accepted' ? 'accepted' : 'pending' };
+}
+
+/* ---------------- daily-capped grants ----------------
+   Gifts and cheers are capped per sender per recipient per day, and the cap used
+   to be read with a COUNT and then used TWICE across an await: once to refuse
+   over the cap, and once to build the grant key as `${prefix}${n}`.
+
+   Both halves broke under concurrency, and the second half broke silently, which
+   is the worse of the two. Measured locally on 2026-08-17, eight concurrent
+   spend-gifts from one sender: every one read n = 0, every one built the key
+   `...-0`, every one was answered `{ok:true}` -- and ONE grant reached the
+   recipient. The client deducts the sender's coins on that ok, so seven gifts
+   were paid for and never delivered. That is exactly the "my coins went weird"
+   report, weeks later, with nothing in any log. Eight cheers landed two. And the
+   cap itself never applied: all eight passed a limit of five.
+
+   The count now lives INSIDE the insert. SQLite evaluates the subqueries and the
+   insert as one statement against one snapshot, and D1 has a single writer, so
+   the second concurrent call sees the first call's row: it gets the next `n`, and
+   the (n+1)th is refused by the WHERE rather than by a stale read. The key format
+   is unchanged and still deterministic (no timestamp, no random id -- the client
+   ledger's idempotence depends on that).
+
+   Returns true when a row landed, false when the cap refused it. */
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now }) {
+  const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
+  const r = await env.DB.prepare(
+    `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
+     SELECT ?, ? || (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?), ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?) < ?`)
+    .bind(to, prefix, to, prefix, hi, type, payload, now, to, prefix, hi, cap).run();
+  return !!(r.meta && r.meta.changes);
 }
 
 /* Expire any siege whose 48h has run out. NEVER destructive: the tower is not
@@ -696,14 +743,24 @@ async function sweepSieges(env, rows, now) {
     // dormancy line in SQL and again in JS let the response describe a state the
     // database was not in, which is how a test can pass over a broken write.
     const dormantAt = Math.min(r.tended_at, now - SPIRE_DORMANT_MS);
-    await env.DB.prepare(
-      `UPDATE spires SET tended_at = ?, siege_until = NULL, siege_name = NULL, updated_at = ?
-       WHERE id = ? AND siege_until IS NOT NULL`)
-      .bind(dormantAt, now, r.id).run();
-    await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-      .bind(r.owner, `siege-lost-${r.id}-${r.siege_until}`, 'spire', JSON.stringify({
-        note: `${r.siege_name || 'The siege'} broke through at ${r.name}. It stands dormant, not lost: walk back and take it again.`,
-      }), now).run();
+    /* ONE batch: losing the tower and being TOLD you lost it must land together
+       or not at all. As two awaited .run() calls the first could land alone,
+       and the owner would find a dormant tower with nothing in Deliveries to
+       explain it -- and no later sweep would ever try again, because the guard
+       below sees siege_until already NULL. The pair stays idempotent whichever
+       way it races: the UPDATE is guarded on siege_until IS NOT NULL so only one
+       sweeper changes the row, and the grant key carries the window so a second
+       sweeper's OR IGNORE is a no-op rather than a second delivery. */
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE spires SET tended_at = ?, siege_until = NULL, siege_name = NULL, updated_at = ?
+         WHERE id = ? AND siege_until IS NOT NULL`)
+        .bind(dormantAt, now, r.id),
+      env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+        .bind(r.owner, `siege-lost-${r.id}-${r.siege_until}`, 'spire', JSON.stringify({
+          note: `${r.siege_name || 'The siege'} broke through at ${r.name}. It stands dormant, not lost: walk back and take it again.`,
+        }), now),
+    ]);
     r.siege_until = null; r.siege_name = null; r.tended_at = dormantAt;
   }
   return rows;
@@ -751,20 +808,41 @@ export default {
           } catch { keyProven = false; }
           if (!keyProven) return json({ error: 'bad key proof' }, 400);
         }
+        const asExisting = row => json({ playerId: row.id, handle: row.handle, friendCode: row.friend_code, name: row.name || null, existing: true });
         const existing = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
-        if (existing) return json({ playerId: existing.id, handle: existing.handle, friendCode: existing.friend_code, name: existing.name || null, existing: true });
+        if (existing) return asExisting(existing);
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
           try {
-            await env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen) VALUES (?,?,?,?,?,?)')
-              .bind(id, pub, handle, code, now, now).run();
-            // welcome grant: a little hello the client ingests as a ledger event
-            await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-              .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now).run();
+            /* ONE batch, so the account and its welcome grant land together or
+               not at all. As two awaited .run() calls they were not a
+               transaction: a failure between them left a player who had joined
+               the Crew and was never welcomed, and no later call would notice. */
+            await env.DB.batch([
+              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen) VALUES (?,?,?,?,?,?)')
+                .bind(id, pub, handle, code, now, now),
+              // welcome grant: a little hello the client ingests as a ledger event
+              env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+                .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now),
+            ]);
             return json({ playerId: id, handle, friendCode: code, ...(keyProven ? { keyProven: true } : {}) });
           } catch (e) {
             if (!String(e).includes('UNIQUE')) throw e;
+            /* NOT EVERY UNIQUE HERE IS A FRIEND-CODE COLLISION, and treating it
+               as one is why this route 500'd on the most ordinary thing a client
+               does. players.pubkey is UNIQUE too, and the SELECT above is a read
+               across an await, so two goOnline() calls from one reinstalling
+               device both saw "no account" and both inserted. Retrying with a
+               fresh id/handle/code cannot help: the pubkey collides again, five
+               times over, and the player was handed "could not allocate friend
+               code" 500 instead of the account that had just been created for
+               them one millisecond earlier. Measured locally on 2026-08-17:
+               three concurrent registers of one pubkey gave 200, 200, 500.
+               Re-read on the pubkey: if the account now exists, the race is the
+               ANSWER, not a failure. */
+            const raced = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
+            if (raced) return asExisting(raced);
           }
         }
         return json({ error: 'could not allocate friend code' }, 500);
@@ -794,17 +872,26 @@ export default {
           .bind(auth.playerId).first();
         const checked = sanitizeSnapshot(body.snapshot, prior || {}, nowP);
         const snap = JSON.stringify(checked.snap);
-        await env.DB.prepare(
-          `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
-             max_level = ?, max_level_at = ?, week_key = ?, week_steps = ? WHERE id = ?`)
-          .bind(snap, String(body.appV || ''), nowP,
-                checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
-                auth.playerId).run();
-        // Keep every tower I hold defended by my CURRENT build. The snapshot used
-        // to be frozen at claim time, so a rival months later fought the weaker
-        // version of me that first took the spire. Cheap: indexed by owner.
-        await env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
-          .bind(snap, nowP, auth.playerId).run();
+        /* ONE batch. The player row and every tower that row defends are one
+           fact, and two awaited .run() calls are not a transaction in D1: the
+           first could land and the second not, leaving towers defended by a build
+           the player's own profile says they do not have. Nothing here needs a
+           value from the other statement, so a batch costs nothing and removes
+           the torn state.
+
+           Keep every tower I hold defended by my CURRENT build. The snapshot used
+           to be frozen at claim time, so a rival months later fought the weaker
+           version of me that first took the spire. Cheap: indexed by owner. */
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
+               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ? WHERE id = ?`)
+            .bind(snap, String(body.appV || ''), nowP,
+                  checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  auth.playerId),
+          env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
+            .bind(snap, nowP, auth.playerId),
+        ]);
         // `bounded` names any field that was pulled down to its ceiling. Empty
         // on every honest sync, so a client that starts seeing entries here is
         // telling us something (a real cheat, or one of our own bugs).
@@ -985,12 +1072,9 @@ export default {
            Case-insensitive, because "Massive Coccyx" and "massive coccyx" are the
            same name to everyone reading a leaderboard. First claimant keeps it.
            `taken` is a named outcome, not an error string the client sniffs. */
-        const clash = await env.DB.prepare(
-          'SELECT id FROM players WHERE name IS NOT NULL AND lower(name) = lower(?) AND id <> ?')
-          .bind(name, auth.playerId).first();
-        if (clash) {
-          // Offer the lowest free #N for this adj+noun so the client can propose
-          // one instead of making the player guess their way through the space.
+        // Offer the lowest free #N for this adj+noun so the client can propose
+        // one instead of making the player guess their way through the space.
+        const taken = async () => {
           const base = buildName(b.adj, b.noun, null);
           const rows = await env.DB.prepare(
             "SELECT name FROM players WHERE name IS NOT NULL AND lower(name) LIKE lower(?) || ' #%'")
@@ -1002,9 +1086,27 @@ export default {
           let free = null;
           for (let i = 1; i <= 999; i++) if (!used.has(i)) { free = i; break; }
           return json({ ok: false, reason: 'taken', name, suggestNum: free }, 409);
+        };
+        const clash = await env.DB.prepare(
+          'SELECT id FROM players WHERE name IS NOT NULL AND lower(name) = lower(?) AND id <> ?')
+          .bind(name, auth.playerId).first();
+        if (clash) return await taken();
+        /* THE INDEX IS THE GUARD, the SELECT above only races. idx_players_name_ci
+           is what makes the name unique; the read is a way to give a NICE answer,
+           and there is an await between it and the UPDATE. Two players reaching
+           for the same joke at the same moment both read "free", and the loser's
+           UPDATE threw straight into the outer 500 handler: measured locally on
+           2026-08-17, [200, 500] with "UNIQUE constraint failed:
+           idx_players_name_ci" in the body. The one that loses a name race must
+           get the same designed 409 with a suggested number as the one that reads
+           the clash, because to the player they are the same event. */
+        try {
+          await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
+            .bind(name, Date.now(), auth.playerId).run();
+        } catch (e) {
+          if (!/UNIQUE|constraint/i.test(String(e))) throw e;
+          return await taken();
         }
-        await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
-          .bind(name, Date.now(), auth.playerId).run();
         return json({ ok: true, name });
       }
 
@@ -1163,10 +1265,26 @@ export default {
         const row = await env.DB.prepare('SELECT owner, siege_until, level FROM spires WHERE id = ?').bind(id).first();
         if (!row || row.owner !== auth.playerId) return json({ ok: false, reason: 'not-yours' }, 403);
         if (!row.siege_until || row.siege_until < now) return json({ ok: false, reason: 'no-siege' }, 409);
-        await env.DB.prepare(
+        /* THE SIEGE CHECK LIVES IN THE WHERE CLAUSE, not in the `if` above.
+           The read above is still worth having -- it is what tells a caller
+           whether they were refused for not-yours or for no-siege -- but it CANNOT
+           be the guard, because there is an await between it and the write. Two
+           concurrent defends of the same open siege both saw siege_until set, both
+           ran `level = level + 1`, and one siege paid two levels. Measured locally
+           on 2026-08-17: twelve concurrent defends took a level-1 tower to level 13.
+           `siege_until IS NOT NULL AND siege_until >= ?` makes the row itself the
+           lock: whoever gets there first clears siege_until in the same statement
+           that increments, so every later UPDATE matches nothing. RETURNING hands
+           back the level the write actually produced, so the number the client
+           mirrors is the number in the database rather than one computed from a
+           stale read. */
+        const won = await env.DB.prepare(
           `UPDATE spires SET siege_until = NULL, siege_name = NULL, tended_at = ?, level = level + 1, updated_at = ?
-             WHERE id = ? AND owner = ?`).bind(now, now, id, auth.playerId).run();
-        return json({ ok: true, level: (row.level || 1) + 1 });
+             WHERE id = ? AND owner = ? AND siege_until IS NOT NULL AND siege_until >= ?
+           RETURNING level`).bind(now, now, id, auth.playerId, now).first();
+        // no row changed: another request in flight repelled this same siege
+        if (!won) return json({ ok: false, reason: 'no-siege' }, 409);
+        return json({ ok: true, level: won.level });
       }
 
       // Who holds these spires? ids come from the client's local cell scan.
@@ -1215,18 +1333,43 @@ export default {
             .bind(now, now, me.profile || null, id).run();
           return json({ ok: true, already: true, level: prev.level || 1 });
         }
-        // Cap: three live spires each, enforced HERE too. A client-only cap is a
-        // suggestion, and this is the rule that keeps towers available to others.
-        const held = await env.DB.prepare('SELECT COUNT(*) AS n FROM spires WHERE owner = ? AND tended_at > ?')
-          .bind(auth.playerId, now - SPIRE_DORMANT_MS).first();
-        if ((held?.n || 0) >= 3) return json({ error: 'cap', cap: 3 }, 409);
-        await env.DB.prepare(`INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        /* THE CAP AND THE SHIELD ARE PART OF THE WRITE, not `if`s in front of it.
+           Both used to be read across an await and then trusted, and neither
+           survived concurrency. Measured locally on 2026-08-17: eight concurrent
+           claims of eight DIFFERENT towers all read `held = 0`, all passed a cap
+           of three, and the player finished holding eight. The shield had the
+           same hole in the other direction: two rivals claiming the same tower at
+           once both read the pre-claim claimed_at, both took it, and the level
+           went up twice for one takeover.
+
+           Evaluated inside the statement, both become true rules. D1 has one
+           writer, so the second concurrent claim sees the first one's row: its
+           cap subquery counts it, and its shield subquery sees the fresh
+           claimed_at. RETURNING gives the level the write actually produced,
+           which is the number the client has to mirror -- computing it from the
+           stale `prev` read published a level the database did not have. */
+        const won = await env.DB.prepare(
+          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?
+              WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
+                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND owner <> ? AND claimed_at > ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
-               level=spires.level+1, updated_at=excluded.updated_at`)
+               level=spires.level+1, updated_at=excluded.updated_at
+           RETURNING level`)
           .bind(id, String(b.name).slice(0, 40), b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
-                me?.profile || null, now, now, 1, now).run();
+                me?.profile || null, now, now, 1, now,
+                auth.playerId, now - SPIRE_DORMANT_MS,
+                id, auth.playerId, now - SPIRE_SHIELD_MS).first();
+        if (!won) {
+          // Nothing landed, so say WHICH rule refused it. Read after the write,
+          // never before: this only picks the message, it decides nothing.
+          const nowRow = await env.DB.prepare('SELECT owner, claimed_at FROM spires WHERE id = ?').bind(id).first();
+          if (nowRow && nowRow.owner !== auth.playerId && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
+            return json({ error: 'shielded', until: (nowRow.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
+          }
+          return json({ error: 'cap', cap: 3 }, 409);
+        }
         // Tell the loser, through the grants channel the client already ingests.
         if (prev && prev.owner !== auth.playerId) {
           await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
@@ -1234,10 +1377,7 @@ export default {
               note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
             }), now).run();
         }
-        // the level AFTER this write is the number the client must mirror: a fresh
-        // claim is 1, a takeover is the previous level + 1
-        const lvl = prev ? (prev.level || 1) + 1 : 1;
-        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: lvl });
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
       }
 
       // A visit restores resolve. Owner only.
@@ -1479,26 +1619,31 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        let reward, key, note;
+        const now = Date.now();
         if (mode === 'free') {
-          key = `gift-free-${auth.playerId}-${day}`;
-          const existed = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?').bind(to, key).first();
-          if (existed) return json({ error: 'already sent today', code: 'daily-done' }, 409);
-          reward = rollFreeGift();
-          note = `${fromName} sent you a gift!`;
-        } else {
-          const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
-          // prefix-range count (no LIKE: playerIds contain '_', a LIKE wildcard)
-          const pfx = `gift-spend-${auth.playerId}-${day}-`;
-          const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
-          const n = (cnt && cnt.n) || 0;
-          if (n >= 5) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
-          key = `gift-spend-${auth.playerId}-${day}-${n}`;
-          reward = { coins };
-          note = `${fromName} sent you ${coins} coins!`;
+          /* ONCE PER DAY, and the UNIQUE (player_id, key) is what enforces it.
+             The check used to be a SELECT followed by an INSERT, which is not a
+             once-per-day check at all across an await: measured locally on
+             2026-08-17, three of eight concurrent free gifts passed it, three
+             rewards were rolled, and one grant was delivered. INSERT OR IGNORE
+             against the constraint is atomic, and `changes` is the honest answer
+             to "was mine the one that landed". Nothing is written on the losing
+             path, so a refused caller has cost the recipient nothing. */
+          const key = `gift-free-${auth.playerId}-${day}`;
+          const reward = rollFreeGift();
+          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode });
+          const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+            .bind(to, key, 'gift', payload, now).run();
+          if (!(r.meta && r.meta.changes)) return json({ error: 'already sent today', code: 'daily-done' }, 409);
+          return json({ ok: true, reward, mode });
         }
-        const payload = JSON.stringify({ ...reward, from: fromName, note, gift: true, mode });
-        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'gift', payload, Date.now()).run();
+        const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
+        const reward = { coins };
+        const landed = await insertCappedGrant(env, {
+          to, prefix: `gift-spend-${auth.playerId}-${day}-`, cap: 5, type: 'gift', now,
+          payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
+        });
+        if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
       }
 
@@ -1520,13 +1665,14 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        const pfx = `cheer-${auth.playerId}-${day}-`;
-        const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
-        const n = (cnt && cnt.n) || 0;
-        if (n >= 10) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
-        const key = `cheer-${auth.playerId}-${day}-${n}`;
-        const payload = JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` });
-        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'cheer', payload, Date.now()).run();
+        // same COUNT-then-key shape as the spend gift, and the same fix: the
+        // count is evaluated inside the insert, so no two concurrent cheers can
+        // mint the same key and silently collapse into one.
+        const landed = await insertCappedGrant(env, {
+          to, prefix: `cheer-${auth.playerId}-${day}-`, cap: 10, type: 'cheer', now: Date.now(),
+          payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
+        });
+        if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         return json({ ok: true });
       }
 
