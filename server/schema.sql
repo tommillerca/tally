@@ -11,7 +11,16 @@ CREATE TABLE IF NOT EXISTS players (
   created_at INTEGER NOT NULL,
   last_seen INTEGER NOT NULL,
   siege_last INTEGER,                -- weekly siege limiter: one per player per 7 days
-  rename_of TEXT                     -- a name we owe them a change from (dup-name repair, 2026-08-08)
+  rename_of TEXT,                    -- a name we owe them a change from (dup-name repair, 2026-08-08)
+  -- SNAPSHOT BOUNDS (2026-08-16). /profile used to store whatever the client
+  -- asserted, and /leaderboard ranks on it, so one signed PUT of
+  -- {level:999999, badges:999999} was rank 1 forever. These four columns are the
+  -- server's own memory of what it has already accepted, so a snapshot can be
+  -- checked against a PRIOR value instead of only against itself.
+  max_level INTEGER,                 -- highest level ever accepted (monotone ratchet)
+  max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
+  week_key TEXT,                     -- the race week the accepted week_steps belong to
+  week_steps INTEGER                 -- highest weekSteps accepted for week_key (monotone)
 );
 
 -- Names are one-of-a-kind, case-insensitively. /name enforces this in code too
@@ -173,6 +182,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id);
 --     "ALTER TABLE recovery ADD COLUMN recovery_id TEXT"
 --   npx wrangler d1 execute bonez --remote --command \
 --     "CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_rid ON recovery (recovery_id)"
+
+-- ---------------------------------------------------------------------------
+-- RATE LIMIT COUNTERS (2026-08-16). Its OWN table, and that separation is the
+-- whole point of it.
+--
+-- The limiter used to count its budget out of `events`, which is the table the
+-- UNAUTHENTICATED /events ingest writes to, keyed on SHA-256('bh-rl:' + ip)
+-- truncated to 8 bytes. Every ingredient of that key is in the published source,
+-- so anyone could compute the bucket for any IP and POST ten forged rows with
+-- that device id and name='rl_recovery'. Ten rows locked that IP out of account
+-- RECOVERY for ten minutes, and about six requests an hour held it there
+-- forever. Recovery is the only thing that saves an account whose keychain is
+-- gone, so a public ingest endpoint could permanently deny the one route that
+-- makes a lost account recoverable.
+--
+-- Nothing that a request body can influence is ever written here. There is no
+-- route that inserts into this table except the limiter itself, which writes
+-- only a bucket it derived server-side. That is what makes the counter honest;
+-- the keyed HMAC in rlBucket() is the second layer, not the first.
+--
+-- Fixed windows, one row per (bucket, name, window), so a burst costs ONE
+-- upsert rather than a row per hit: the counters must not themselves become the
+-- write amplification they exist to prevent.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket TEXT NOT NULL,          -- keyed hash of the subject (IP / device / player). Never a raw IP.
+  name TEXT NOT NULL,            -- which limiter (rl_recovery, rl_events_ip, ...)
+  window_start INTEGER NOT NULL, -- ms epoch, floor(now / windowMs) * windowMs
+  hits INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,   -- when this row may be swept
+  PRIMARY KEY (bucket, name, window_start)
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_expiry ON rate_limits (expires_at);
 
 -- Dark Spires (v252): shared territory. One row per spire id that anyone has
 -- ever claimed; unclaimed spires simply have no row, exactly like the client's
