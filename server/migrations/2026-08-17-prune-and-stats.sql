@@ -3,6 +3,14 @@
 -- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-08-17-prune-and-stats.sql
 -- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-08-17-prune-and-stats.sql
 --
+-- RUN THIS BEFORE ./deploy.sh, not after. deploy.sh does not run migrations,
+-- and the cron's grants pruner reads players.grants_ack directly: without the
+-- column it throws, which shows up as a FAILED cron invocation in the
+-- Cloudflare dashboard and nothing gets pruned. GET /grants is deliberately
+-- softer about it (it falls back to delivering without recording the ack and
+-- logs why), so the worst case is a noisy log and a table that keeps growing,
+-- never a player who stops receiving gifts. Run it first anyway.
+--
 -- NOT PURELY ADDITIVE, unlike 2026-08-16-indexes.sql, and the difference is
 -- worth being explicit about: this file DROPS two indexes. No table is renamed,
 -- no column is removed and no row is rewritten, so the data-safety contract is
@@ -78,7 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_grants_ts ON grants (ts);
 -- and 9.5 GB for sixty days of it against a 10 GB cap. The DAU ceiling for a 60
 -- day window therefore falls from roughly 8,000-9,000 to roughly 7,300-8,200.
 -- That is the deal being struck here, deliberately: the dashboard survives to
--- about 13,700 daily devices instead of 2,600, and the storage runway gets
+-- about 11,700 daily devices instead of 2,600, and the storage runway gets
 -- about 10% shorter. EVENT_RETENTION_DAYS is one line and comes down when it
 -- has to.
 --

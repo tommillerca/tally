@@ -1451,13 +1451,29 @@ export default {
                rolls the client's cursor backwards re-delivers whatever survives
                instead of un-acknowledging what is already gone. */
         const ackSql = `MIN(?, COALESCE((SELECT MAX(id) FROM grants WHERE player_id = players.id), 0))`;
-        const [, rows] = await env.DB.batch([
-          env.DB.prepare(
-            `UPDATE players SET grants_ack = ${ackSql}
-              WHERE id = ? AND COALESCE(grants_ack, 0) < ${ackSql}`).bind(since, auth.playerId, since),
-          env.DB.prepare('SELECT id, key, type, payload, ts FROM grants WHERE player_id = ? AND id > ? ORDER BY id LIMIT 50')
-            .bind(auth.playerId, since),
-        ]);
+        const read = () => env.DB.prepare('SELECT id, key, type, payload, ts FROM grants WHERE player_id = ? AND id > ? ORDER BY id LIMIT 50')
+          .bind(auth.playerId, since);
+        /* THE FALLBACK IS NOT DEFENSIVENESS, IT IS DEPLOY ORDER. batch() is one
+           transaction, so if the UPDATE fails the SELECT rolls back with it and
+           this route returns nothing. players.grants_ack arrives in
+           migrations/2026-08-17-prune-and-stats.sql, and deploy.sh does not run
+           migrations: publish the code before the ALTER and every client in the
+           world silently stops receiving gifts until somebody notices. Retention
+           bookkeeping is not worth that, so a failed ack degrades to "grants
+           still deliver, nothing gets pruned for this player" and says so in the
+           log, which is the direction this trade has to fail in. */
+        let rows;
+        try {
+          [, rows] = await env.DB.batch([
+            env.DB.prepare(
+              `UPDATE players SET grants_ack = ${ackSql}
+                WHERE id = ? AND COALESCE(grants_ack, 0) < ${ackSql}`).bind(since, auth.playerId, since),
+            read(),
+          ]);
+        } catch (e) {
+          console.error('grants ack failed, delivering without it', String(e).slice(0, 200));
+          rows = await read().all();
+        }
         const grants = (rows.results || []).map(r => ({ id: r.id, key: r.key, type: r.type, payload: JSON.parse(r.payload), ts: r.ts }));
         return json({ grants, cursor: grants.length ? grants[grants.length - 1].id : since });
       }

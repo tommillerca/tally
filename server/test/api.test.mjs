@@ -141,6 +141,35 @@ await test('analytics: /stats is admin-gated + aggregates', async () => {
   assert.ok(s.totalDevices >= 1 && s.totalEvents >= 3, JSON.stringify(s));
   assert.ok(s.byName.some(e => e.name === 'pit_win'), 'event names aggregated');
   assert.ok(s.dau >= 1, 'DAU counts today');
+  // Both windows travel with the numbers, so the dashboard can never label a
+  // figure with a window it was not computed over.
+  assert.equal(typeof s.windowDays, 'number', '/stats no longer reports the retention window');
+  assert.equal(typeof s.statsWindowDays, 'number', '/stats no longer reports its own reporting window');
+  assert.ok(s.statsWindowDays <= s.windowDays, '/stats reads further back than the table keeps');
+});
+
+await test('/stats keeps the rate limiter out of byName and the tester board', async () => {
+  /* rateLimitRecovery stores its per-IP counters as events, keyed by an IP HASH
+     in the device column. They are not product events and they are not devices:
+     on a quiet run rl_ridcheck was the most common "event name" on the dashboard
+     and an IP hash led the tester leaderboard with no label and no geo.
+     Drive the REAL limiter rather than planting a synthetic row, so this tests
+     the rows production actually writes. */
+  const probe = await fetch(BASE + `/recovery/available/statsrl${Math.random().toString(36).slice(2, 7)}`);
+  assert.ok(probe.status === 200 || probe.status === 429, `availability probe answered ${probe.status}`);
+  await probe.text();
+  // BOUND: the rows have to exist, or the assertions below pass on nothing.
+  const planted = await (await fetch(`${BASE}/dev/events-count?name=rl_ridcheck`)).json();
+  assert.ok(planted.n > 0, 'the limiter wrote no row, so this test proves nothing');
+
+  const s = await (await fetch(BASE + '/stats?token=devtoken')).json();
+  // DIRECTION: absent. Not "fewer than before": a single one is a wrong row on
+  // a dashboard somebody makes decisions from.
+  for (const rl of ['rl_recovery', 'rl_ridcheck']) {
+    assert.ok(!s.byName.some(e => e.name === rl), `${rl} is being counted as a product event`);
+  }
+  assert.ok(!s.testers.some(t => t.label === null && t.country === null && t.first === null),
+    'a device with no devices row at all is on the tester leaderboard, which is what an IP hash looks like');
 });
 
 await test('backup: PUT stores ciphertext, GET returns it verbatim', async () => {
