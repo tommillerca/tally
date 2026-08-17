@@ -614,34 +614,173 @@ export async function awardDayCloseIfDue(targets) {
   return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
 }
 
+/* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
+ *
+ * This is the one-shot replay that honours a pre-RPG install's history: about
+ * 1,980 awards for a one-year diary (400 log rows, one first-log per date, 60
+ * weigh-ins, up to three per past date, streaks, badges, the level baseline).
+ *
+ * It had three properties and only together were they fatal:
+ *   1. app.js ran it BEFORE route(), so it blocked first paint;
+ *   2. the `game-init` flag was written at the very END, so nothing survived an
+ *      interruption;
+ *   3. index.html's dead-shell backstop reloads the page if #screen is still
+ *      empty at 12s.
+ * So on a slow phone with an old save the replay blocked paint past 12s, the
+ * shell reloaded, the flag had never been written, and the replay started again
+ * from zero: a loop no amount of waiting escapes, because waiting is the thing
+ * that triggers it.
+ *
+ * MEASURED, on this container, one year of diary (1,825 log rows, 60 weigh-ins,
+ * 1,982 awards), end to end. All three trees run back to back in one interleaved
+ * session, two samples each, because the container's own speed drifts by nearly
+ * 2x between sessions and a table stitched from different ones reports the load
+ * average rather than the code:
+ *     origin/main   (award() rescanned the store)  1x 13.3-13.4s  4x 35.0-38.7s
+ *     gwart/xpperf  (constant-cost award)          1x  2.8-3.0s   4x 10.0-11.1s  5x 13.3s  6x 14.2s
+ *     this branch   (chunked and checkpointed)     1x  2.5-2.8s   4x  9.7-10.5s  5x 13.5s  6x 14.6s
+ * The line that matters is 12,000ms. On main it is crossed at NO THROTTLE AT ALL:
+ * 13.3s cold, on the fastest machine available, so a one-year legacy install
+ * trips the dead-shell reload here with nothing slowing it down. The
+ * constant-cost award() moves that line out to between 4x and 5x. That is a large
+ * win and it is still not a fix: 4x is an ordinary mid-range phone, and
+ * index.html's own boot curve is calibrated out to 40x. Speed moves the cliff, it
+ * does not remove it, so the SHAPE is what changed here:
+ *
+ *   - CHECKPOINTED. A cursor in kv ('game-init-at') is written after every chunk
+ *     of awards, so an interrupted boot resumes where it stopped instead of
+ *     restarting. The cursor is a fast-forward hint, never the source of truth:
+ *     award() is idempotent on its ledger key, so the worst a lost or stale
+ *     cursor can cost is a re-run, never a missed award. It is VERIFIED on
+ *     resume against the recomputed item list (see initCursorStart) because the
+ *     player can now log food while the backfill runs, which would shift every
+ *     index under it; a cursor that does not match its own item is discarded and
+ *     that phase restarts.
+ *   - YIELDING. Each chunk hands the task queue back so the page paints and
+ *     stays responsive while it works.
+ *   - The flag now lands AFTER the level baseline loop, not before it, so
+ *     'game-init' means finished rather than nearly finished.
+ *
+ * The chunking now costs nothing measurable: this branch lands inside xpperf's
+ * own run-to-run spread at every throttle, and came out FASTER at 1x and 4x. It
+ * used to cost real time. Each checkpoint is a kv write, and under the SHARED
+ * write counter db.js carried before the per-store fix, every one of those ~32
+ * writes invalidated the XP cache and forced a full rescan of a store averaging
+ * about 960 rows. That is gone, and it is why the earlier measurement of this
+ * branch showed a ~25% penalty that no longer exists.
+ *
+ * The visible-state and never-publish-a-half-level halves live in app.js and in
+ * gameInitSettled() below. tests/boot-backfill-audit.mjs is the guard.
+ */
+const INIT_CURSOR = 'game-init-at';
+/* Awards between checkpoints. A year of history is ~1,980 awards, so this is about
+   33 checkpoints: roughly every 600ms on a 10x-throttled CPU, which is the interval
+   of work an interruption can cost. Smaller values were measured and the extra kv
+   writes plus task-queue hops disappeared into run-to-run noise, so this is chosen
+   for checkpoint spacing in TIME, not for the overhead. */
+const INIT_CHUNK = 60;
+
+let initInFlight = null;
+
+/* Resolves when no retroactive backfill is running. socialSnapshot() awaits this,
+   which is what keeps a HALF-REPLAYED level off the shared leaderboard: the
+   backfill takes the player from level 1 to their real level over seconds, and
+   every profile push in the app (autoSync, pushProfileSoon, syncProfile) builds
+   its payload through socialSnapshot, so one await covers all of them. Never
+   rejects: a backfill that throws still settles this. */
+export function gameInitSettled() { return initInFlight || Promise.resolve(); }
+export function gameInitRunning() { return !!initInFlight; }
+
+// hand the task queue back so the page can paint between chunks
+const yieldToPaint = () => new Promise(r => setTimeout(r, 0));
+
+/* Where to resume. Verified, not trusted: the stored index only counts if the
+   item it claims to have finished is still sitting at that index. */
+function initCursorStart(cur, phases) {
+  if (!cur || !Number.isInteger(cur.p) || cur.p < 0) return { p: 0, i: 0 };
+  const p = Math.min(cur.p, phases.length);
+  const ph = phases[p];
+  if (ph && cur.i > 0 && cur.i <= ph.items.length && ph.key(ph.items[cur.i - 1]) === cur.k) return { p, i: cur.i };
+  return { p, i: 0 };
+}
+
 // One-time retroactive backfill so existing users start with their history honored.
-export async function initGameIfNeeded(targets) {
+export function initGameIfNeeded(targets, { onProgress = null } = {}) {
+  if (initInFlight) return initInFlight;   // one at a time; a second caller joins the first
+  const p = runInitBackfill(targets, onProgress);
+  initInFlight = p;
+  // settle the gate whatever happens, so nothing can wait on it forever
+  p.catch(() => {}).then(() => { if (initInFlight === p) initInFlight = null; });
+  return p;
+}
+
+async function runInitBackfill(targets, onProgress) {
   if (await kvGet('game-init')) return null;
   quietLevelups = true;
   try {
   const [log, weights] = await Promise.all([db.all('log'), db.all('weights')]);
   const today = dateKey();
   const dates = [...new Set(log.map(e => e.date))].sort();
+  // one pass instead of one filter per date: 365 dates over 1,825 rows was 666k
+  // comparisons before the first award even landed
+  const byDate = new Map();
+  for (const e of log) { const a = byDate.get(e.date); if (a) a.push(e); else byDate.set(e.date, [e]); }
 
-  for (const e of log.slice(-400)) await award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date);
-  for (const d of dates) await award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d);
-  for (const w of weights.slice(-60)) await award(`weigh-${w.date}`, 'weigh', 15, 'Weigh-in', w.date);
+  /* The replay, as ordered phases of idempotent items. Order is fixed and every
+     list is derived deterministically (IndexedDB key order for log and weights,
+     a sorted date set), which is what makes an index into one of them a
+     resumable position at all. */
+  const phases = [
+    { id: 'log', items: log.slice(-400),
+      key: e => `log-${e.id}`,
+      run: e => award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date) },
+    { id: 'firstlog', items: dates,
+      key: d => `firstlog-${d}`,
+      run: d => award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d) },
+    { id: 'weigh', items: weights.slice(-60),
+      key: w => `weigh-${w.date}`,
+      run: w => award(`weigh-${w.date}`, 'weigh', 15, 'Weigh-in', w.date) },
+    { id: 'days', items: dates.filter(d => d < today),
+      key: d => `day-${d}`,
+      run: async d => {
+        const es = byDate.get(d) || [];
+        const tot = dayTotals(es);
+        if (targets) {
+          if (targets.p && tot.p >= targets.p) await award(`protein-${d}`, 'protein', 40, 'Protein target hit', d);
+          if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) await award(`dayclose-${d}`, 'dayclose', 50, 'Closed the day on budget', d);
+        }
+        const meals = new Set(es.map(e => e.meal));
+        if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${d}`, 'meals', 20, 'All meals logged', d);
+      } },
+  ];
 
-  for (const d of dates) {
-    if (d >= today) continue;
-    const es = log.filter(e => e.date === d);
-    const tot = dayTotals(es);
-    if (targets) {
-      if (targets.p && tot.p >= targets.p) await award(`protein-${d}`, 'protein', 40, 'Protein target hit', d);
-      if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) await award(`dayclose-${d}`, 'dayclose', 50, 'Closed the day on budget', d);
+  const total = phases.reduce((a, ph) => a + ph.items.length, 0);
+  const start = initCursorStart(await kvGet(INIT_CURSOR, null), phases);
+  let done = phases.slice(0, start.p).reduce((a, ph) => a + ph.items.length, 0) + start.i;
+  onProgress?.({ done, total, resumed: done > 0 });
+
+  for (let p = start.p; p < phases.length; p++) {
+    const ph = phases[p];
+    let i = p === start.p ? start.i : 0;
+    while (i < ph.items.length) {
+      const end = Math.min(i + INIT_CHUNK, ph.items.length);
+      for (; i < end; i++) await ph.run(ph.items[i]);
+      // the checkpoint is written only after its chunk's awards have landed, so
+      // resuming at it can never skip work that was not actually done
+      await kvSet(INIT_CURSOR, { p, i, k: ph.key(ph.items[i - 1]) });
+      done = phases.slice(0, p).reduce((a, q) => a + q.items.length, 0) + i;
+      onProgress?.({ done, total, resumed: false });
+      await yieldToPaint();
     }
-    const meals = new Set(es.map(e => e.meal));
-    if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${d}`, 'meals', 20, 'All meals logged', d);
+    await kvSet(INIT_CURSOR, { p: p + 1, i: 0, k: null });
   }
+
+  /* The tail is small and bounded (six streak keys, one badge sweep, one level
+     baseline loop), so it is not checkpointed: it simply re-runs on a resume,
+     which is correct because every step of it is idempotent. */
   const streak = streakFrom(dates, today);
   await streakAwards(streak);
   await evaluateBadges();
-  await kvSet('game-init', true);
   const xp = await totalXp();
   const lv = levelFor(xp);
   // baseline: levels reached before this feature never retro-drop rewards
@@ -650,6 +789,11 @@ export async function initGameIfNeeded(targets) {
     const row = await db.get('xp', `levelup-${L}`);
     if (row && !row.claimed) { row.claimed = true; await db.put('xp', row); }
   }
+  /* LAST, not first. It used to be set before this loop, which meant an
+     interruption here left the flag saying "done" over an unfinished baseline. */
+  await kvSet('game-init', true);
+  await db.del('kv', INIT_CURSOR);
+  onProgress?.({ done: total, total, complete: true });
   return { xp, level: lv };
   } finally { quietLevelups = false; }
 }
