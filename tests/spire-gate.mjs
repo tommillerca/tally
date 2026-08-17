@@ -22,7 +22,8 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer, chromePath, sandboxArgs } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs,
+  boneyardCapability, unproven, unprovenReport, exitFor, unclassifiedRows } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
@@ -60,6 +61,54 @@ await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, 
 await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207, accuracy: 8 });
 await page.goto(base + '?demo', { waitUntil: 'networkidle2' });
 await sleep(2600);
+
+/* ---------- 0. CAN THIS MACHINE HOST THE CHECK AT ALL? ----------------
+ * Every row below drives the Boneyard, which is MapLibre over a REMOTE vector
+ * tile host. When that host is unreachable, js/app.js:13287 replaces the whole
+ * sheet with "The Boneyard needs a network signal to draw the map" and a Retry
+ * button, so there is no #mapSpire, no marker and no den. The suite then does
+ * not merely fail, it fails DISHONESTLY: measured on this container 2026-08-17,
+ * "SPIRE handler refuses even if the button is re-enabled" PASSED on
+ * `sheets 0 -> 0`, because nothing could open a sheet in the first place. An
+ * empty sample read as a pass, in the file whose job is to stop exactly that.
+ *
+ * So the capability is MEASURED (godmode.boneyardCapability: a real WebGL
+ * program that draws and reads its pixel back, plus a real fetch of every
+ * remote URL the app's own style names) and, when it is absent, all nine map
+ * rows are declared UNPROVEN BY NAME and the suite exits 97. It is never
+ * skipped and it never reports a pass it did not earn. */
+const MAP_ROWS = [
+  'SPIRE button is offered when the day is unspent',
+  'SPIRE is an unheld tower, so the day-gate applies to it',
+  'SPIRE refuses a second attempt the same day',
+  'SPIRE handler refuses even if the button is re-enabled',
+  'DEN tap opens the sheet',
+  'DEN tap opens the sheet, not the tooltip',
+  'DEN sheet odds are real and total 100',
+  'DEN sheet shows what it pays',
+  'DEN sheet grave art actually decoded',
+  'DEN sheet foot states the next action',
+];
+/* Rows that need no map. Keeping the list here rather than deriving "everything
+   else" is the point: a NEW row is unclassified until somebody says which it
+   is, and the ROWS-CLASSIFIED check below fails until they do. */
+const NO_MAP_ROWS = ['NO page errors', 'ROWS-CLASSIFIED every assertion in this file is declared map-dependent or not'];
+const cls = unclassifiedRows(import.meta.url, [MAP_ROWS, NO_MAP_ROWS]);
+ok('ROWS-CLASSIFIED every assertion in this file is declared map-dependent or not',
+  cls.missing.length === 0 && cls.seen > 0,
+  cls.missing.length ? `unclassified: ${cls.missing.join(' | ')}` : `${cls.seen} row names read from this file`);
+
+const mapCap = await boneyardCapability(page);
+if (!mapCap.ok) {
+  for (const n of MAP_ROWS) unproven(n, 'the Boneyard could not draw on this machine');
+  ok('NO page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+  await browser.close();
+  if (srv) srv.kill();
+  const f = results.filter(r => !r.pass);
+  console.log(`\n${results.length - f.length}/${results.length} of the checks that COULD run passed`);
+  unprovenReport('spire-gate.mjs', mapCap);
+  process.exit(exitFor(f.length));
+}
 
 // ask the app itself where a spire is, then stand on it
 const spire = await page.evaluate(async () => {
@@ -196,3 +245,4 @@ if (!results.length) { console.log('\nFAIL: no checks ran'); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join(', ')); process.exit(1); }
 console.log('spire-gate clean');
+process.exit(exitFor(0));
