@@ -925,7 +925,20 @@ Pay to move a gear piece's **look** onto whatever cosmetic you actually want, ke
 
 ---
 
-## 🫠 The Glutton — first big feature highlight — 2026-07-23 — 🎨 FEATURE (art-blocked)
+## 🫠 The Glutton — first big feature highlight — 2026-07-23 — ✅ SHIPPED
+
+STATUS CORRECTED 2026-08-17. This said "FEATURE (art-blocked)" for weeks after
+the Glutton was live, and I read that stale line straight off the headings and
+repeated it to Tom as current. He caught it: "why do you have the glutton art
+blocked we have the glutton live?"
+
+Evidence it ships: js/glutton.js exists, 140 references in js/app.js, the
+Boneyard map spawns him (js/map.js), and the changelog has carried Glutton fixes
+since at least the ceiling change and the Done-button routing. The art that
+blocked it in July arrived and nobody came back to this heading.
+
+A status line nobody updates is worse than no status line, because it gets
+quoted. When a section is finished, the heading changes in the same commit.
 
 A map-wide world event. The Glutton (a slime/blob abomination, Brock's lore) **feasts on part of the Boneyard, creating a blight** that suppresses all spawns in its area until a player hunts it down and beats it. Intended as our **first "big feature" launch** with a proper announcement popup. **Launch gated on Cam's real art** — everything below is designed + mocked on placeholder art, ready to build once art lands.
 
