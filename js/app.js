@@ -603,8 +603,9 @@ async function boot() {
    *
    * Everything below this block used to run first, and initGameIfNeeded at the
    * head of it is a retroactive replay of an entire diary: for one year of
-   * history, measured at 13.5s on a 5x-throttled CPU and 14.6s at 6x, and that is
-   * WITH the constant-cost award(); on main it is 13.3s with no throttle at all.
+   * history, measured on v391 at 30.6s with no throttle at all, and 65.8s at 4x.
+   * The constant-cost award() alone takes that to 3.6s and 18.1s and still never
+   * paints before the replay finishes, so it is not the fix on its own.
    * index.html's dead-shell backstop reloads the page when #screen is still empty
    * at 12s, and the replay's completion flag was written only at the very end, so
    * a slow phone with an old save reloaded into the same replay forever. See the
