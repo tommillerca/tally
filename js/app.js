@@ -548,7 +548,14 @@ async function boot() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first-ever install
       if (!sheetStack.length) location.reload();   // apply the new build as soon as no sheet is open
-      else toast('Update ready. Leave this screen to apply', 3600);
+      /* THE TOAST HAS TO BE TRUE. It promised the update would apply when you
+         left the screen, and nothing ever applied it: there was no flag and no
+         hook on sheet close, so the player kept running old modules against a
+         new cache until something else happened to reload them. Measured by
+         tests/sw-upgrade-audit.mjs: closing the sheet produced zero document
+         loads and all three layers stayed on the old build. closeTopSheet()
+         honours this when the last sheet goes. */
+      else { updatePending = true; toast('Update ready. Leave this screen to apply', 3600); }
     });
   }
   requestPersistence();
@@ -2302,6 +2309,9 @@ function nextToast() {
 }
 
 const sheetStack = [];
+/* set when a new service worker took over while a sheet was open, so the
+   reload the toast promised happens the moment the last sheet closes */
+let updatePending = false;
 function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const wrap = document.createElement('div');
   /* A DIALOG THAT DOES NOT TRAP FOCUS IS NOT A DIALOG. Measured on the Hollow:
@@ -2384,6 +2394,9 @@ addEventListener('keydown', e => {
 function closeTopSheet() {
   const rec = sheetStack.pop();
   if (!rec) return;
+  /* the update the toast promised, applied. Last sheet only, and before any of
+     the teardown below, because location.reload() ends this document anyway. */
+  if (updatePending && !sheetStack.length) { updatePending = false; location.reload(); return; }
   try { rec.onClose?.(); } catch { /* noop */ }
   try { rec.restoreFocus?.(); } catch { /* noop */ }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
