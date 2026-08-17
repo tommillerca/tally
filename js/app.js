@@ -10963,7 +10963,18 @@ function crateSeqHtml(kind = 'daily') {
    time rather than frame counts, so a 120Hz phone lands on them too. */
 const CRATE_SEQ_MS = [67, 50, 33, 33, 33, 50, 67, 67];
 
-function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
+/* tOpen is the moment the reveal mounted, which is when the CSS beats started
+   counting. Without it this function measures from whenever image decoding
+   happened to finish, and the sink and the card do not: two clocks, and the
+   difference between them comes out of the LAST FRAME. Tom, 2026-08-17: "the
+   first chest you open for both kind clips the end of the animation a little bit
+   but the second chest doesn't." The first open is the one that pays for decode.
+   Measured before the fix, one session, real teardown between opens: daily's
+   last frame landed at 1562ms on the first open and 1550ms on the second, with
+   the sink starting at 1600 either way. 38ms of final frame, then 50ms. On this
+   Mac decode costs 10-35ms; on a phone decoding nine PNGs it is enough to push
+   the tail past the sink entirely, which is the clip he is describing. */
+function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performance.now()) {
   const seq = $('#crateSeq', scope);
   if (!seq) return;
   const frames = [...seq.children];
@@ -10976,8 +10987,10 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
      than truncating keeps the shape of the timing when the budget changes. */
   const table = (CRATE_SEQ[kind]?.ms || CRATE_SEQ_MS).slice(0, frames.length - 1);
   const want = table.reduce((a, b) => a + b, 0);
-  const span = Math.max(240, secs('--b-card') - start - 60);
-  const holds = table.map(v => v * (want > span ? span / want : 1));
+  /* The deadline is the SINK, not the card. The crate has to have finished
+     opening before it starts leaving, and the old budget measured to --b-card,
+     which is 220ms after the sink begins. */
+  const HOLD = 100;   // the last authored frame gets READ, not glimpsed
   /* SNAP THE SPRITE ONTO THE DEVICE GRID BEFORE THE FIRST STEP.
      Every arithmetic argument about the crate's width assumes it is centred
      exactly, and it is not: .sheet.takeover centres with translateX(-50%), which
@@ -11008,6 +11021,15 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
+    /* Whatever decode cost, spend it on the pre-roll (a closed crate mid-drop,
+       where nobody can tell) instead of on the tail. If decode overran the whole
+       pre-roll, compress the frame table into what is left rather than running
+       past the sink: scaling keeps the shape of Tom's timing, truncating loses
+       the end of it, which is the very thing being fixed. */
+    const late = Math.max(0, performance.now() - tOpen);
+    const delay = Math.max(0, start - late);
+    const room = Math.max(200, secs('--b-sink') - (late + delay) - HOLD);
+    const holds = table.map(v => v * (want > room ? room / want : 1));
     /* ON THE DROP'S OWN animationend, not on the `at(start)` beat.
        The beat is 1.12s and the drop lands at 1.02s, so on a player's phone the
        two agree by 100ms of luck. Tie the snap to the thing it is correcting
@@ -11025,7 +11047,7 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
     snapToGrid();
     const dropEl = seq.closest('.co-drop');
     if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });
-    at(start, snapToGrid);
+    at(delay, snapToGrid);
     /* ONE rAF LOOP, not eight setTimeouts. A timer per frame drifts, and a
        dropped frame on a mid-range phone silently shortens whichever hold it
        lands in. Reading performance.now() every frame means a slow frame skips
@@ -11045,7 +11067,7 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
       }
       if (shown < frames.length - 1) requestAnimationFrame(tick);
     };
-    at(start, () => requestAnimationFrame(tick));
+    at(delay, () => requestAnimationFrame(tick));
   });
 }
 
@@ -11198,6 +11220,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const opening = !!crate && !reduced;
     let burst = null, burstTried = false;
     const timers = [];
+    const tOpen = performance.now();   // the CSS beats start counting here
     const at = (ms, fn) => timers.push(setTimeout(fn, ms));
     /* a TAKEOVER, not a sheet over a live screen: this is the payoff. */
     const wrap = openSheet(`
@@ -11326,7 +11349,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(beat('--b-land'), () => { dropSound(S.sounds); haptic.tap(); });   // it lands
         at(beat('--b-lid'), () => sparkleSound(S.sounds));                    // the lid goes
         at(beat('--b-card'), () => landed(tier));                             // the card is up
-        if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate);
+        if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate, tOpen);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
@@ -14487,7 +14510,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v389'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v390'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 390, date: '2026-08-17', title: 'The crate finishes opening before it leaves', items: [
+    "<b>The last frame of the crate opening was being cut off, worst on the first crate you opened.</b> The frames were timed from the moment their artwork finished loading, while the crate's exit was timed from the moment the reveal opened. Two different clocks, and the gap between them came out of the ending. On a phone loading nine frames that was enough to start the crate disappearing while it was still opening. Both crates now hold on their final frame before they go.",
+  ] },
   { n: 389, date: '2026-08-17', title: 'The Golden Crate is real artwork too', items: [
     "<b>The Golden Crate opens as a hand-drawn bone chest with a green flame.</b> Closed, then open with the gold, then open with the gems inside. The same treatment the Common Crate got, on the rarer one.",
     "<b>The old crate icons are gone from your Backpack.</b> Both chest tiles and the Backpack tab itself show the real artwork now instead of the flat placeholder icons. The Step Egg keeps its old icon on purpose: the drawing loses its speckle at that size and just reads as a grey pebble.",
