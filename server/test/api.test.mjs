@@ -1,8 +1,12 @@
 // API tests against a locally running worker (npm run dev, port 8788).
 // Node 18+ has WebCrypto + fetch built in, so this mirrors the browser exactly.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 
 const BASE = process.env.API || 'http://127.0.0.1:8788';
+// wrangler must run from server/, not server/test/, to find wrangler.toml
+const SERVER_DIR = path.resolve(import.meta.dirname, '..');
 let passed = 0, failed = 0;
 async function test(name, fn) {
   try { await fn(); passed++; console.log('  PASS', name); }
@@ -10,6 +14,23 @@ async function test(name, fn) {
 }
 
 const b64 = buf => Buffer.from(buf).toString('base64');
+
+/* REGISTRATION IS IP RATE LIMITED (10/hour, rl_register_ip in src/index.js).
+   A suite registers a dozen-plus throwaway players in a few seconds, which is
+   exactly the shape the limiter exists to stop, so each one arrives from its own
+   synthetic edge IP -- the same thing a dozen real phones would look like.
+   cf-connecting-ip is set by Cloudflare at the edge in production and a
+   client-supplied value is replaced there, so this is only settable locally,
+   which is what makes the IP-keyed limiter testable at all.
+   Passing a FIXED ip is how a test drives the limiter deliberately. */
+const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+function regFetch(pubkey, ip = rndIp()) {
+  return fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+    body: JSON.stringify({ pubkey }),
+  });
+}
 async function makeKeys() {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   return {
@@ -37,19 +58,19 @@ await test('health', async () => {
 });
 
 await test('register issues player + friend code + handle', async () => {
-  const r = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: pubJwk }) })).json();
+  const r = await (await regFetch(pubJwk)).json();
   assert.ok(r.playerId && /^BONE-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(r.friendCode) && r.handle.includes(' '), JSON.stringify(r));
   player = r;
 });
 
 await test('re-register with same key returns the SAME account (backup restore)', async () => {
-  const r = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: pubJwk }) })).json();
+  const r = await (await regFetch(pubJwk)).json();
   assert.equal(r.playerId, player.playerId);
   assert.ok(r.existing);
 });
 
 await test('bad pubkey rejected', async () => {
-  const r = await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: { kty: 'RSA' } }) });
+  const r = await regFetch({ kty: 'RSA' });
   assert.equal(r.status, 400);
 });
 
@@ -140,7 +161,7 @@ await test('backup: PUT overwrites the previous row (one per player)', async () 
 
 await test('backup: GET 404 when a player has none', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   const r = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
   assert.equal(r.status, 404);
 });
@@ -180,7 +201,7 @@ await test('name: out-of-range indices rejected (no free text ever)', async () =
 let p2 = null, p2keys = null;
 await test('friends: request by code is pending, reciprocation auto-accepts', async () => {
   p2keys = await makeKeys();
-  p2 = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: p2keys.pubJwk }) })).json();
+  p2 = await (await regFetch(p2keys.pubJwk)).json();
   const r1 = await (await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: p2.friendCode }))).json();
   assert.equal(r1.status, 'pending', JSON.stringify(r1));
   const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
@@ -226,7 +247,7 @@ await test('gift: spend-coins gift delivers the exact coins', async () => {
 
 await test('gift: to a non-friend is 403', async () => {
   const stranger = await makeKeys();
-  const s = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: stranger.pubJwk }) })).json();
+  const s = await (await regFetch(stranger.pubJwk)).json();
   const r = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: s.playerId, mode: 'free' }));
   assert.equal(r.status, 403);
 });
@@ -245,7 +266,7 @@ await test('cheer: preset cheer delivers a reward-less grant; self + bad index r
 
 await test('friends: accept endpoint seals a one-way request', async () => {
   const p3keys = await makeKeys();
-  const p3 = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: p3keys.pubJwk }) })).json();
+  const p3 = await (await regFetch(p3keys.pubJwk)).json();
   await signedFetch(p3keys.kp, p3.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
   const acc = await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: p3.playerId }));
   assert.equal(acc.status, 200);
@@ -279,8 +300,8 @@ await test('friends: remove drops the edge for both sides', async () => {
 await test('leaderboard: hides never-synced players, carries pet.shiny', async () => {
   const synced = await makeKeys();
   const ghost = await makeKeys();
-  const sp = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: synced.pubJwk }) })).json();
-  const gp = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: ghost.pubJwk }) })).json();
+  const sp = await (await regFetch(synced.pubJwk)).json();
+  const gp = await (await regFetch(ghost.pubJwk)).json();
   // level 999: the local dev DB accumulates a synced player per past run, and
   // the board is LIMIT 100, so a modest level can legitimately miss the page
   const body = JSON.stringify({ snapshot: { level: 999, outfit: { SK: 'SK0-1', C: 'C3' }, pet: { id: 'C3', level: 6, shiny: true }, gear: [] }, appV: 'test' });
@@ -300,13 +321,27 @@ await test('leaderboard: hides never-synced players, carries pet.shiny', async (
    stale-week assert fails; remove the INSERT OR IGNORE and the pay-once assert
    fails with two grants. */
 await test('step race: ranks this week only, and pays last week exactly once', async () => {
-  // A FRESH week per run. The local dev DB persists between runs, so a fixed week
-  // meant the second run found last week already settled and the pay-once assert
-  // failed for a reason that had nothing to do with the code. Both keys are
-  // derived from a known Monday so they are always real week starts.
-  const MON = Date.parse('2030-01-07T00:00:00Z');   // a Monday
-  const wk = new Date(MON + (Date.now() % 400) * 7 * 86400000).toISOString().slice(0, 10);
-  const prev = new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
+  /* THE REAL WEEK, not an invented one. This fixture used to pick a week in
+     2030 so each run got a fresh, never-settled key, because the local dev DB
+     persists between runs. That stopped being possible on 2026-08-16: a profile
+     snapshot may now only carry the current, previous or next race week
+     (sanitizeSnapshot in src/index.js), which is precisely the rule that stops
+     an attacker parking a huge total on an uncontested week and collecting the
+     5,000-coin podium. A test cannot ask for an exemption from the thing it is
+     testing, so the fixture uses the real clock and resets its own state
+     instead -- the same idiom recovery.test.mjs already uses for the limiter.
+     Mirrors RACE_EPOCH / RACE_DAYS in src/index.js and js/app.js. */
+  const RACE_EPOCH = '2026-08-07', RACE_DAYS = 7;
+  const epoch = Date.parse(RACE_EPOCH + 'T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (RACE_DAYS * 86400000)) * RACE_DAYS * 86400000;
+  const wk = new Date(weekStart).toISOString().slice(0, 10);
+  const prev = new Date(weekStart - RACE_DAYS * 86400000).toISOString().slice(0, 10);
+  // a real week key means a re-run finds it already settled, so clear the
+  // receipt first. Failing to clear is a skipped reset, not a passing test.
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM grants WHERE key = 'stepweek-${prev}'`], { cwd: SERVER_DIR, stdio: 'ignore' });
+  } catch { /* a remote BASE cannot be reset; the pay-once assert will say so */ }
   /* raceV IS REQUIRED, and this test never sent it. The v300 stale-client fix added
      `raceV >= RACE_RULES` to the board query so a client still counting steps under
      the OLD rules cannot rank against clients on the new ones. The real app sends it
@@ -318,17 +353,29 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   const RACE_V = 2;
   const mk = async (level, weekKey, steps, raceV = RACE_V) => {
     const k = await makeKeys();
-    const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+    const p = await (await regFetch(k.pubJwk)).json();
     const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV }, appV: 'test' });
     assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
     return { k, p };
   };
   const walker = await mk(5, wk, 42000);
   const slower = await mk(5, wk, 9000);
-  const stale = await mk(5, prev, 999999);       // last week's total, must NOT rank now
+  /* LAST WEEK'S RACER. A profile PUT can no longer assert a past week's total
+     (that is the exploit, not the fixture), so this player is staged the only
+     honest way: they sync THIS week like everyone else, and /dev/week-warp then
+     moves their row back to where a player who really raced last week would
+     have left it. STALE_STEPS is a total a human could actually walk -- the old
+     999,999 is now above the weekly ceiling of 7 x 100,000 and would itself be
+     clamped, which would have made this assertion about the wrong thing. */
+  const STALE_STEPS = 120000;
+  const stale = await mk(5, wk, 5000);
+  await fetch(BASE + '/dev/week-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: stale.p.playerId, weekKey: prev, steps: STALE_STEPS }),
+  });
   // and now the gate itself is COVERED rather than merely tripped over: a client on
   // the old rules must not rank, however many steps it claims
-  const oldRules = await mk(5, wk, 888888, RACE_V - 1);
+  const oldRules = await mk(5, wk, 500000, RACE_V - 1);
 
   const r = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
   const ids = r.players.map(x => x.playerId);
@@ -369,7 +416,7 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   const settled1 = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/settled?week=${prev}`)).json();
   assert.equal(settled1.podium.length, 1, 'the settled week reports exactly the racer who was paid');
   assert.equal(settled1.podium[0].place, 1, 'place is a number, not a sentence');
-  assert.equal(settled1.podium[0].steps, 999999, 'the steps are the total that was PAID, not a live count');
+  assert.equal(settled1.podium[0].steps, STALE_STEPS, 'the steps are the total that was PAID, not a live count');
   assert.ok(settled1.podium[0].outfit, 'the winner carries art, so a poster can draw them');
 
   // roll the winner into the new week, exactly as their phone would
@@ -382,13 +429,13 @@ await test('step race: ranks this week only, and pays last week exactly once', a
 
   const settled2 = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/settled?week=${prev}`)).json();
   assert.equal(settled2.podium.length, 1, 'the paid result is unchanged by the winner walking again');
-  assert.equal(settled2.podium[0].steps, 999999, 'and still reports the total they were paid on');
+  assert.equal(settled2.podium[0].steps, STALE_STEPS, 'and still reports the total they were paid on');
   assert.deepEqual(settled2.podium[0].name, settled1.podium[0].name, 'and still names the same player');
 });
 
 await test('settled result: an unsettled week is empty, and empty is not an error', async () => {
   const k = await makeKeys();
-  const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+  const p = await (await regFetch(k.pubJwk)).json();
   const r = await signedFetch(k.kp, p.playerId, 'GET', '/steps/settled?week=2029-01-01');
   assert.equal(r.status, 200, 'a week nobody raced answers cleanly');
   assert.deepEqual((await r.json()).podium, [], 'and reports no podium rather than inventing one');
@@ -405,7 +452,7 @@ await test('settled result: an unsettled week is empty, and empty is not an erro
 await test('names are unique: second claimant is refused and offered a free number', async () => {
   const mk = async () => {
     const k = await makeKeys();
-    const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+    const p = await (await regFetch(k.pubJwk)).json();
     return { k, p };
   };
   const a = await mk(), b = await mk();
@@ -436,7 +483,7 @@ await test('names are unique: second claimant is refused and offered a free numb
 
 await test('names are unique: case-insensitive, and re-saving your OWN name still works', async () => {
   const k = await makeKeys();
-  const p = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: k.pubJwk }) })).json();
+  const p = await (await regFetch(k.pubJwk)).json();
   const pick = { adj: 58, noun: 62, num: 100 + Math.floor(Math.random() * 800) };
   assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify(pick))).status, 200);
   // re-saving the identical name must NOT trip the guard (id <> self)
