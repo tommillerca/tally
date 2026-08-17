@@ -46,10 +46,23 @@ async function newPlayer(name) {
       body: method === 'GET' ? undefined : body,
     });
   };
+  /* AGE THE ACCOUNT FIRST. /profile bounds a claimed level against how long the
+     account has existed (sanitizeSnapshot in src/index.js), so a level-9 or
+     level-44 fighter registered one second ago is clamped, and every defender
+     assertion below would be measuring the clamp rather than the spire. A real
+     level-44 player has been playing for months, so the fixture says so. */
+  await warpPlayer(me.playerId, 400 * 86400000);
   // a profile, so a rival taking this tower fights a real clone
   await signed('PUT', '/profile', { snapshot: { level: 9, stats: { pow: 12, grit: 9 }, weapon: 'cleaver', talents: ['heavyhands'] }, appV: 'test' });
   return { me, signed, name };
 }
+
+// DEV-only time machine for a PLAYER row: ages created_at / max_level_at, so a
+// fixture can represent months of real progress instead of asserting a clamp.
+const warpPlayer = (id, backMs) => fetch(BASE + '/dev/player-warp', {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ id, backMs }),
+});
 
 // DEV-only time machine: shift a spire's own timers back, so shield/dormancy
 // windows can be crossed deterministically instead of with sleeps.
@@ -201,6 +214,12 @@ const run = async () => {
     await J.signed('PUT', `/spires/${s.id}/claim`, { name: s.name, lat: s.lat, lng: s.lng });
     const before = await (await K.signed('GET', `/spires?ids=${s.id}`)).json();
     assert.equal(before.spires[0].defender.level, 9, 'the claim-time snapshot');
+    /* MONTHS PASS, which is what "levels up" means. /profile refuses a level
+       teleport measured against the level the server last accepted, so going 9
+       to 44 in the same second is bounded to 12 and this test would assert the
+       clamp rather than the re-arming it is about. Ageing the row is the fixture
+       telling the truth about how somebody reaches level 44. */
+    await warpPlayer(J.me.playerId, 200 * 86400000);
     // J levels up and pushes
     await J.signed('PUT', '/profile', { snapshot: { level: 44, stats: { pow: 99, grit: 99 }, weapon: 'bonecrusher', talents: ['titan'] }, appV: 'test' });
     const after = await (await K.signed('GET', `/spires?ids=${s.id}`)).json();

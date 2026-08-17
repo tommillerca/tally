@@ -412,20 +412,30 @@ const XP_DAY_CLOSE =
   15;           // 'weigh'      (js/game.js onWeighIn)
 const XP_STREAK_DAY = 100;   // 'streakms', at most one milestone a day (js/game.js)
 
-/* The OPEN-ENDED sources are the honest part of this estimate. A Pit win pays
-   10 XP on a key containing Date.now() (js/app.js) and a food log pays 10 on a
-   per-entry key, so neither has a daily cap in the game at all. 100 such actions
-   in one day is far past any real session (a Pit fight is a whole animation, and
-   a hundred logged foods is not a day anyone has) and it is the only term here
-   that is a judgement rather than a constant, so it is named as one. */
-const XP_OPEN_ENDED_ACTIONS_DAY = 100;
-const XP_OPEN_ENDED_DAY = XP_OPEN_ENDED_ACTIONS_DAY * 10;
+/* The REPEATABLE sources. These used to be the loose end in this derivation:
+   Pit wins, harvests, cooks and siege wins all built their ledger key out of
+   Date.now(), so award() could never dedupe them and they had no daily ceiling
+   of any kind. #29 fixed that at source with awardCapped(), which keys on
+   `${prefix}-${date}-${n}` and stops at XP_DAILY_CAP, so the cap is now real and
+   enforced by construction rather than estimated here. That turns this whole
+   ceiling from a guess into arithmetic.
+   KEEP IN SYNC with XP_DAILY_CAP in js/game.js:73. */
+const XP_REPEATABLE_DAY =
+  12 * 10 +     // fight:  XP_DAILY_CAP.fight  x 10 XP a Pit win   (js/app.js)
+  10 * 6 +      // garden: XP_DAILY_CAP.garden x  6 XP a harvest   (js/app.js)
+  8 * 8 +       // cook:   XP_DAILY_CAP.cook   x  8 XP a cook      (js/app.js)
+  5 * 12;       // siege:  XP_DAILY_CAP.siege  x 12 XP a siege win (js/app.js)
 
-/** The most XP a day of play can plausibly produce: 1,589. For scale, the
- *  heaviest real account on record was level 27, which is 20,800 XP on the curve
- *  above; spread over the two months that account existed that is about 350 XP a
- *  day, so this ceiling is roughly 4.5x the busiest genuine player. */
-const DAILY_XP_CEILING = XP_HEALTH_DAY + XP_DAY_CLOSE + XP_STREAK_DAY + XP_OPEN_ENDED_DAY;
+/** The most XP a day of play can produce: 893. Every term is now either
+ *  date-keyed or capped by XP_DAILY_CAP, and tests/xp-cap-audit.mjs fails on any
+ *  new award() built from a clock or a random source, so this stays an upper
+ *  bound rather than drifting into one.
+ *  CROSS-CHECKED against #29's own figures: it reports about 600 XP on a maximal
+ *  real day, giving 22 days to level 20, 89 to level 50 and 184 to level 80.
+ *  xpForLevel says 13,030 / 53,920 / 111,150 XP for those levels, which at 600 a
+ *  day is 22 / 90 / 185. The curve mirrored above agrees with the client's
+ *  measured behaviour, which is the check that matters. */
+const DAILY_XP_CEILING = XP_HEALTH_DAY + XP_DAY_CLOSE + XP_STREAK_DAY + XP_REPEATABLE_DAY;
 
 /** Every badge in the game, awarded once each, ever. BADGES in js/game.js has 29
  *  rows and evaluateBadges pays 25 XP per badge. This is also the hard clamp on
@@ -434,31 +444,78 @@ const DAILY_XP_CEILING = XP_HEALTH_DAY + XP_DAY_CLOSE + XP_STREAK_DAY + XP_OPEN_
 const MAX_BADGES = 29;
 const XP_ALL_BADGES = MAX_BADGES * 25;
 
-/* A first sync legitimately carries history the account row has never seen. Two
-   real cases: a first Apple Health authorisation BACKFILLS past days, each worth
-   up to XP_HEALTH_DAY, and a player who installed a pre-social build registers
-   only when they update, so created_at is the day they came online rather than
-   the day they started playing. 90 days of allowance covers both with room to
-   spare: at DAILY_XP_CEILING that is 143,010 XP, which is level 94 on the curve,
-   against a heaviest-real-account level of 27. */
-const PRIOR_HISTORY_DAYS = 90;
+/* THERE IS NO HISTORY TO ALLOW FOR. An earlier version of this file granted 90
+   days of "prior history" on a first sync, on the stated grounds that a first
+   Apple Health authorisation backfills months of past days at once. That
+   mechanism does not exist. parseHkPayload (js/game.js:655) parses ONE date per
+   payload, and the native bridge is nativeQueryToday() (js/native.js), which
+   queries today. There is no bulk import anywhere in the client, so a new
+   account genuinely starts at level 1 and climbs at the real rate.
+   That allowance was the single term that lifted the day-zero ceiling to level
+   94, above every real player, which is how a key registered seconds ago could
+   take rank 1 while the code reported the claim as bounded. */
 
 /** The largest single jump the game itself can produce: the level
- *  DAILY_XP_CEILING reaches from a standing start, which is 5. Levels only get
- *  more expensive further up the curve, so 5 is the maximum anywhere, and any
- *  claim that moves further than this in a day did not come from playing. */
+ *  DAILY_XP_CEILING reaches from a standing start. Levels only get more
+ *  expensive further up the curve, so this is the maximum anywhere, and a claim
+ *  that moves further than this in a day did not come from playing. */
 const BURST_LEVELS = levelForXp(DAILY_XP_CEILING);
 
-/** Steps. The game's own top recognised tier is the last STEP_OVER entry at
- *  20,000 in a day (js/game.js STEP_OVER), past which it stops paying at all.
- *  Five times that is the ceiling here: 100,000 steps in a single day is roughly
- *  50 miles on foot, beyond any player and well past anything the game rewards,
- *  yet it leaves five times the game's own maximum as headroom so no real walker
- *  is ever clipped. This is the number that makes 200,000 steps in an hour
- *  impossible: a week's total may not exceed this per ELAPSED day of that week,
- *  so on the Monday of a race week the most anyone can claim is 100,000. */
-const STEP_OVER_TOP = 20000;
-const MAX_STEPS_PER_DAY = 5 * STEP_OVER_TOP;
+/* ---- why there is NO population-relative lift for a newcomer ----
+   The obvious repair for the broken version of this file was to measure a
+   never-observed account against the FIELD: let it assert whatever the
+   established population has already demonstrated, as a rank statistic so one
+   inflated row could not set its own ceiling. That was built, and measured, and
+   it does not work, so it is written down here rather than left as a good idea
+   somebody tries again.
+
+   MEASURED: with the field seeded at the levels really observed in production
+   (80, 54, 50, 46, 37, 36, 29, 23) and the reference set to the third highest, a
+   key registered seconds ago was admitted at level 50 and outranked the five
+   accounts at 46, 37, 36, 29 and 23. Every one of those is a real player who
+   earned their place. A reference that admits a debut ABOVE the weakest honest
+   account fails the only requirement that matters, and the only rank that does
+   not fail it is one below the whole field, at which point it is not a
+   population reference at all.
+
+   So a never-observed account gets the rate ceiling and nothing else, which for
+   a brand new key is about level 3. It cannot outrank anybody, which is the
+   point.
+
+   WHAT A LEGITIMATE LATECOMER LOSES, stated plainly: a player who played offline
+   and only pressed Go Online (js/app.js:9024) today registers as a new account,
+   so the server publishes a level far below their real one and lifts it as the
+   account ages, at up to DAILY_XP_CEILING a day. A genuine level-27 veteran
+   shows their true level after about three weeks. Nothing is lost from their
+   game, which is entirely local: the bound is only on the number the LEADERBOARD
+   publishes. This is a real cost to a real, shrinking population, and it buys the
+   property that nobody can arrive at the top of a ranked board. */
+
+/* ---- steps ----
+   THE SAME MISTAKE, IN THE PLACE THAT PAYS MONEY. This was five times the top
+   STEP_OVER tier, 100,000 a day, on the reasoning that no human walks that far.
+   True, and beside the point: STEP_RACE_PODIUM pays 5,000 coins for first, and
+   the real production race is not won near any physiological limit. The
+   RACE_RULES note above records the actual number, measured on production: the
+   board led with 33,272 steps for a WEEK, which is about 4,750 a day. A cap at
+   100,000 a day let a fresh key post 400,000 and beat that by twelve times while
+   the response cheerfully reported the claim as bounded.
+
+   The cap is now the game's OWN daily cap: the top STEP_MILESTONES tier, 10,000,
+   which js/game.js:345 labels "the daily cap" in as many words. A full week of it
+   is 70,000, which is 2.1x the observed production leader: slightly above a real
+   top walker, which is where a competition bound belongs.
+
+   WHAT A LEGITIMATE OUTLIER LOSES, stated plainly: someone who genuinely walks
+   more than 10,000 steps a day has the excess not counted TOWARD THE RACE. They
+   keep every step's XP, coins, Step Egg and STEP_OVER overflow reward, all
+   untouched, because this bound is only on the racing total. The race becomes
+   "most days at goal" rather than "one enormous number", which sits better with
+   the wellbeing line the game already draws around steps. An ultra-walker doing
+   30,000 a day still wins their week, because almost nobody reaches 10,000 every
+   single day; what they cannot do is win by a margin no one can contest. */
+const STEP_DAILY_CAP = 10000;
+const MAX_STEPS_PER_DAY = STEP_DAILY_CAP;
 
 /** The client caps its own gear list at 400 ids (js/app.js socialSnapshot,
  *  `[...gOwned].slice(0, 400)`). The leaderboard publishes json_array_length of
@@ -502,31 +559,32 @@ function classifyWeekKey(key, nowMs) {
  * see it happened instead of guessing.
  *
  * WHAT THIS DOES NOT CLAIM. The trust model of this game is stated plainly
- * elsewhere in this file: the client wins its own fights. These bounds do not
- * make the snapshot trustworthy, they make it PLAUSIBLE, which is a different
- * and achievable thing. A fresh key can still assert a believable level once,
- * because the server has no prior observation of an account it has never seen.
- * What it can no longer do is assert an impossible one, walk up without the
- * elapsed time to justify it, or take a paying podium it did not walk for.
+ * elsewhere in this file: the client wins its own fights. These bounds cannot
+ * make a client-asserted snapshot trustworthy. What they can do, and what the
+ * first version of this function failed to do, is make it COMPETITIVE-SAFE: a
+ * key the server has never seen cannot outrank the players who earned their
+ * place, and cannot take a prize that pays coins. See the residuals note at the
+ * end of this block for what remains achievable.
+ *
  */
 function sanitizeSnapshot(rawSnap, row, nowMs) {
   const snap = { ...rawSnap };
   const bounded = [];
 
   /* ---- level ----
-     Two independent ceilings, and the lower of the two wins.
-
-     (a) PLAUSIBLE: the level the curve reaches from the most XP this account
-         could ever have earned, which is DAILY_XP_CEILING for every day it has
-         existed, plus PRIOR_HISTORY_DAYS of backfillable history, plus every
-         badge in the game. Time-anchored, so it cannot be outrun by making more
-         requests.
-     (b) NO TELEPORTING: max_level plus BURST_LEVELS for the current day and for
-         each day since max_level was last raised. This is what stops a long
-         quiet account jumping in one PUT; it is measured against a value the
-         SERVER stored, which is the whole reason max_level exists. */
+     (a) THE RATE CEILING: the level the curve reaches from the most XP this
+         account could have earned SINCE IT APPEARED, which is DAILY_XP_CEILING
+         for every day it has existed plus every badge in the game. Time
+         anchored, so it cannot be outrun by making more requests, and for a key
+         registered seconds ago it is about level 3. This is the whole
+         competition bound: a debut cannot outrank anyone because a debut has had
+         no time to earn anything.
+     (b) NO TELEPORTING: once the server has an observation worth trusting,
+         max_level plus BURST_LEVELS for today and for each day since it last
+         rose. This bounds an ESTABLISHED account, which (a) alone does not once
+         it has aged enough for the curve to allow a lot. */
   const ageDays = Math.max(0, (nowMs - (row.created_at || nowMs)) / 86400000);
-  const plausibleCeiling = levelForXp(DAILY_XP_CEILING * (ageDays + PRIOR_HISTORY_DAYS) + XP_ALL_BADGES);
+  const plausibleCeiling = levelForXp(DAILY_XP_CEILING * ageDays + XP_ALL_BADGES);
   const prevMax = intOrNull(row.max_level) || 0;
   let ceiling = plausibleCeiling;
   /* THE JUMP RULE NEEDS A PRIOR OBSERVATION THAT MEANS SOMETHING, and an
@@ -598,12 +656,27 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
         the client legitimately sends across a rollover boundary, and it means a
         fresh account cannot claim last week at all, because the server recorded
         nothing for it. This is the rule that closes the podium theft.
-     3. A LIVE WEEK IS MONOTONE AND RATE-BOUNDED. Never below what was already
-        accepted for the same key (steps do not un-walk), and never above
-        MAX_STEPS_PER_DAY for each day of that week that has actually elapsed.
-        The elapsed-day term IS the per-day delta ceiling: on the Monday of a
-        race week the cap is 100,000, and it only reaches 700,000 once the whole
-        week has been walked, so no hour can ever add 200,000. */
+     3. A LIVE WEEK IS MONOTONE AND RATE-BOUNDED, AND THE RATE RUNS FROM WHEN
+        THE ACCOUNT EXISTED, not from when the week started. Never below what was
+        already accepted for the same key (steps do not un-walk), and never above
+        MAX_STEPS_PER_DAY for each day since the LATER of the week's start and
+        this account's creation.
+
+        That second anchor is the whole fix for the race, and rule 2 was never
+        enough on its own. Freezing past weeks stops a fresh key claiming a week
+        that is over; it does nothing about the week being raced RIGHT NOW, which
+        is where the 5,000 coins actually are. Anchoring on created_at says the
+        thing that is actually true: you may claim steps for the days you have
+        been here, and a key registered ten seconds ago has been here for ten
+        seconds. Its cap is about a hundred steps, so it cannot enter a race
+        already under way, and next week it starts from the week boundary like
+        everyone else and has to walk it.
+
+        This costs a genuine new player their first PARTIAL week: they can only
+        count the days since they installed, so they join the race properly on
+        the next boundary. That is the correct answer to "can someone who arrived
+        on Friday win a week that started on Monday", and it is the same answer
+        any race gives. */
   const claimedKey = typeof snap.weekKey === 'string' ? snap.weekKey : null;
   const when = classifyWeekKey(claimedKey, nowMs);
   const storedKey = typeof row.week_key === 'string' ? row.week_key : null;
@@ -624,11 +697,15 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     snap.weekSteps = acceptedSteps;
   } else {
     // 'current' or 'next'. 'next' is a phone whose local midnight has crossed
-    // before the server's, so it is day one of a week and gets one day's budget.
+    // before the server's, so its week has not started here yet and it earns
+    // nothing from elapsed time; the monotone floor still carries its total.
     const weekStart = Date.parse(claimedKey + 'T00:00:00Z');
-    const elapsedDays = clamp(Math.ceil((nowMs - weekStart) / 86400000), 1, RACE_DAYS);
+    // the later of the week opening and this account existing: you cannot have
+    // walked for a race before you had an account to walk for
+    const raceFrom = Math.max(weekStart, row.created_at || weekStart);
+    const elapsedDays = clamp((nowMs - raceFrom) / 86400000, 0, RACE_DAYS);
     const floor = storedKey === claimedKey ? storedSteps : 0;
-    const cap = MAX_STEPS_PER_DAY * elapsedDays;
+    const cap = Math.floor(MAX_STEPS_PER_DAY * elapsedDays);
     acceptedKey = claimedKey;
     acceptedSteps = clamp(claimedSteps, floor, Math.max(floor, cap));
     if (acceptedSteps !== claimedSteps) bounded.push('weekSteps');

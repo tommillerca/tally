@@ -24,6 +24,15 @@ const b64 = buf => Buffer.from(buf).toString('base64');
    which is what makes the IP-keyed limiter testable at all.
    Passing a FIXED ip is how a test drives the limiter deliberately. */
 const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+/* Backdate an account. /profile bounds a claimed level against how long the
+   account has existed (sanitizeSnapshot in src/index.js), so a fixture that
+   asserts a real level has to say the account is old enough to have earned it.
+   A level-12 player who registered one second ago is not a thing that happens. */
+const ageAccount = (playerId, days = 400) => fetch(BASE + '/dev/player-warp', {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ id: playerId, backMs: days * 86400000 }),
+});
+
 function regFetch(pubkey, ip = rndIp()) {
   return fetch(BASE + '/register', {
     method: 'POST',
@@ -61,6 +70,7 @@ await test('register issues player + friend code + handle', async () => {
   const r = await (await regFetch(pubJwk)).json();
   assert.ok(r.playerId && /^BONE-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(r.friendCode) && r.handle.includes(' '), JSON.stringify(r));
   player = r;
+  await ageAccount(player.playerId);   // so 'level 8' below is a level this account could have reached
 });
 
 await test('re-register with same key returns the SAME account (backup restore)', async () => {
@@ -202,6 +212,7 @@ let p2 = null, p2keys = null;
 await test('friends: request by code is pending, reciprocation auto-accepts', async () => {
   p2keys = await makeKeys();
   p2 = await (await regFetch(p2keys.pubJwk)).json();
+  await ageAccount(p2.playerId);
   const r1 = await (await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: p2.friendCode }))).json();
   assert.equal(r1.status, 'pending', JSON.stringify(r1));
   const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
@@ -351,31 +362,42 @@ await test('step race: ranks this week only, and pays last week exactly once', a
      dust and spire audits earlier today.
      Must match RACE_RULES in server/src/index.js and js/app.js. */
   const RACE_V = 2;
+  /* RACERS HAVE TO HAVE BEEN HERE FOR THE RACE. /profile counts a week's steps
+     only for the days an account has actually existed, so a racer registered one
+     second ago is bounded to about a hundred steps and never reaches the board.
+     That is the fix for the podium theft, not an obstacle to it: the fixture
+     ages each racer so they were present when the week opened, which is what
+     being in a weekly race means. */
   const mk = async (level, weekKey, steps, raceV = RACE_V) => {
     const k = await makeKeys();
     const p = await (await regFetch(k.pubJwk)).json();
+    await ageAccount(p.playerId, 60);
     const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV }, appV: 'test' });
     assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
     return { k, p };
   };
-  const walker = await mk(5, wk, 42000);
-  const slower = await mk(5, wk, 9000);
+  /* Step totals scale with how much of the week has actually elapsed, so the
+     suite is honest on a Monday as well as a Friday. The cap is 10,000 a day. */
+  const elapsed = Math.min(7, (Date.now() - Date.parse(wk + 'T00:00:00Z')) / 86400000);
+  const reachable = Math.max(200, Math.floor(10000 * elapsed));
+  const walker = await mk(5, wk, Math.floor(reachable * 0.9));
+  const slower = await mk(5, wk, Math.floor(reachable * 0.3));
   /* LAST WEEK'S RACER. A profile PUT can no longer assert a past week's total
      (that is the exploit, not the fixture), so this player is staged the only
      honest way: they sync THIS week like everyone else, and /dev/week-warp then
      moves their row back to where a player who really raced last week would
-     have left it. STALE_STEPS is a total a human could actually walk -- the old
-     999,999 is now above the weekly ceiling of 7 x 100,000 and would itself be
-     clamped, which would have made this assertion about the wrong thing. */
-  const STALE_STEPS = 120000;
-  const stale = await mk(5, wk, 5000);
+     have left it. STALE_STEPS is a total a human could actually walk: the weekly
+     ceiling is 7 x 10,000, and the real production board led with 33,272, so
+     this is a winning week rather than an impossible one. */
+  const STALE_STEPS = 34000;
+  const stale = await mk(5, wk, Math.floor(reachable * 0.1));
   await fetch(BASE + '/dev/week-warp', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ playerId: stale.p.playerId, weekKey: prev, steps: STALE_STEPS }),
   });
   // and now the gate itself is COVERED rather than merely tripped over: a client on
   // the old rules must not rank, however many steps it claims
-  const oldRules = await mk(5, wk, 500000, RACE_V - 1);
+  const oldRules = await mk(5, wk, reachable, RACE_V - 1);
 
   const r = await (await signedFetch(walker.k.kp, walker.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
   const ids = r.players.map(x => x.playerId);

@@ -81,6 +81,21 @@ const putProfile = (p, snap) => p.signed('PUT', '/profile', { snapshot: snap, ap
 const storedProfile = async playerId =>
   JSON.parse((await (await fetch(`${BASE}/dev/player?id=${playerId}`)).json()).profile || '{}');
 
+/** Backdate an account. Necessary for any fixture that asserts a REAL level:
+ *  the rate ceiling is a function of how long the account has existed, and a
+ *  level-40 player who registered ten seconds ago is not a thing that happens.
+ *  Ageing the row is what makes the fixture honest rather than what makes it
+ *  pass. */
+const ageAccount = (playerId, days) => fetch(BASE + '/dev/player-warp', {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ id: playerId, backMs: days * 86400000 }),
+});
+async function agedPlayer(days = 400) {
+  const p = await newPlayer();
+  await ageAccount(p.me.playerId, days);
+  return p;
+}
+
 /* The race week, mirrored from RACE_EPOCH / RACE_DAYS in src/index.js. */
 const RACE_EPOCH = '2026-08-07', RACE_DAYS = 7;
 const EPOCH_MS = Date.parse(RACE_EPOCH + 'T00:00:00Z');
@@ -91,18 +106,68 @@ const THIS_WEEK = dayKey(weekStartMs(Date.now()));
 const LAST_WEEK = dayKey(weekStartMs(Date.now()) - WEEK_MS);
 const ELAPSED_DAYS_THIS_WEEK = Math.min(RACE_DAYS,
   Math.max(1, Math.ceil((Date.now() - weekStartMs(Date.now())) / 86400000)));
+/* How much of the race week has ACTUALLY elapsed, as a fraction of days. The
+   server bounds a week total by this, so a fixture that hardcoded step counts
+   would pass on a Thursday and fail on a Monday. Everything below is expressed
+   as a share of what an established account may legitimately have walked by now,
+   which keeps the suite honest on every day of the week.
+   Sanity anchor: over a FULL week this cap is 70,000, against the 33,272 the
+   production board actually led with (RACE_RULES note in src/index.js). */
+const ELAPSED_FRAC_THIS_WEEK = Math.min(RACE_DAYS, (Date.now() - weekStartMs(Date.now())) / 86400000);
 
 /* Bounds the server derives, mirrored so the tests assert against the DERIVATION
    rather than against whatever the server happened to answer. */
 const MAX_BADGES = 29;                       // BADGES.length in js/game.js
-const MAX_STEPS_PER_DAY = 5 * 20000;         // 5x the top STEP_OVER tier in js/game.js
+const MAX_STEPS_PER_DAY = 10000;             // the top STEP_MILESTONES tier, "the daily cap"
 function xpForLevel(L) { return L <= 1 ? 0 : Math.round((120 * Math.pow(L - 1, 1.55) + 80 * (L - 1)) / 10) * 10; }
 function levelForXp(xp) { let L = 1; while (L < 100000 && xpForLevel(L + 1) <= xp) L++; return L; }
-const DAILY_XP_CEILING = 1589;               // see the derivation in src/index.js
-const PRIOR_HISTORY_DAYS = 90;
+const DAILY_XP_CEILING = 893;                // see the derivation in src/index.js
 const XP_ALL_BADGES = MAX_BADGES * 25;
-const BURST_LEVELS = levelForXp(DAILY_XP_CEILING);   // 5
-const dayZeroLevelCeiling = levelForXp(DAILY_XP_CEILING * PRIOR_HISTORY_DAYS + XP_ALL_BADGES);
+const BURST_LEVELS = levelForXp(DAILY_XP_CEILING);   // 3
+const OBSERVATION_DAYS = 7;
+const POPULATION_RANK = 3;
+// what an account the server has never watched may claim, with no field to
+// measure against: one day of the maximum rate, plus every badge
+const dayZeroLevelCeiling = levelForXp(XP_ALL_BADGES);
+
+/* THE REAL POPULATION, from the #29 commit message, measured on the live D1:
+   "Eight accounts are past the twenty entries in LEVEL_NAMES, at 80, 54, 50, 46,
+   37, 36, 29 and 23." These are the levels a fresh key has to be unable to beat.
+   The production weekly step-race leader is 33,272, recorded in the RACE_RULES
+   note in src/index.js. */
+const REAL_LEVELS = [80, 54, 50, 46, 37, 36, 29, 23];
+/* Walkers as a share of what is legitimately reachable by this point in the
+   week, so the field is real whichever day the suite runs. At a full week the
+   top of this field is 63,000, which is the same shape as the 33,272 the real
+   board led with. */
+const WEEK_STEP_CAP_NOW = Math.floor(10000 * ELAPSED_FRAC_THIS_WEEK);
+const REAL_WEEK_STEPS = [0.90, 0.80, 0.70, 0.55, 0.40].map(f => Math.max(50, Math.floor(WEEK_STEP_CAP_NOW * f)));
+
+/** Seed an ESTABLISHED field: accounts that reached their level and then aged,
+ *  which is the only kind the population reference counts. Returns the seeded
+ *  levels actually stored, so a caller can assert against reality rather than
+ *  against what it hoped for. */
+async function seedEstablishedField(levels = REAL_LEVELS, steps = REAL_WEEK_STEPS) {
+  const seeded = [];
+  for (let i = 0; i < levels.length; i++) {
+    const p = await newPlayer();
+    // age the row FIRST so the rate ceiling has the days to justify the level,
+    // exactly as a real account earns it over months
+    await fetch(BASE + '/dev/player-warp', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: p.me.playerId, backMs: 400 * 86400000 }),
+    });
+    await putProfile(p, snapshot({ level: levels[i], badges: 12, weekKey: THIS_WEEK, weekSteps: steps[i] || 9000 }));
+    // and age again so max_level_at is old enough to count as established
+    await fetch(BASE + '/dev/player-warp', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: p.me.playerId, backMs: (OBSERVATION_DAYS + 1) * 86400000 }),
+    });
+    const stored = await storedProfile(p.me.playerId);
+    seeded.push({ p, level: stored.level, steps: stored.weekSteps || 0 });
+  }
+  return seeded;
+}
 
 console.log(`security hardening @ ${BASE}`);
 console.log(`(race week ${THIS_WEEK}, day ${ELAPSED_DAYS_THIS_WEEK} of ${RACE_DAYS}; day-zero level ceiling ${dayZeroLevelCeiling})`);
@@ -139,15 +204,20 @@ await test('the clamped level is what the LEADERBOARD ranks on', async () => {
   // reads something else. This is the consumer the finding was actually about.
   const p = await newPlayer();
   await putProfile(p, snapshot({ level: 999999 }));
-  const board = await (await p.signed('GET', '/leaderboard')).json();
+  const res = await read(await p.signed('GET', '/leaderboard'));
+  const board = res.json;
   assert.ok(board.players.length > 0, 'PRECONDITION: the board is not empty (an empty sample set is a failure)');
   const me = board.players.find(x => x.playerId === p.me.playerId);
   assert.ok(me, 'PRECONDITION: the player is on the board at all');
+  // DIRECTION: failure is the board publishing more than a day-old account could
+  // have earned. BOUND: the day-zero ceiling.
+  // NOTE this asserts the ATTACKER's row, not every row. Established accounts on
+  // this board are legitimately far above it, and an earlier version of this
+  // assertion swept all of them, which only held while the ceiling was set above
+  // every real player. A bound that every row satisfies is the bug, not the test.
   assert.ok(me.level <= dayZeroLevelCeiling, `the board must publish the bounded level, got ${me.level}`);
-  // and nobody at all is above the ceiling, so this is not one lucky row
-  for (const row of board.players) {
-    assert.ok(row.level <= dayZeroLevelCeiling, `${row.name} is on the board at level ${row.level}`);
-  }
+  // and the absurd claim reached no field of the payload at all
+  assert.ok(!/999999/.test(res.text), 'the claimed number appears nowhere on the board');
 });
 
 await test('badges cannot exceed the number of badges that exist', async () => {
@@ -162,8 +232,9 @@ await test('badges cannot exceed the number of badges that exist', async () => {
 
 await test('an honest snapshot passes through untouched', async () => {
   // the guard has to be provably non-destructive, or it is a new bug rather
-  // than a fix. Nothing here is near a bound.
-  const p = await newPlayer();
+  // than a fix. Nothing here is near a bound: an account that has existed long
+  // enough to be level 12, walking a week the production leader would recognise.
+  const p = await agedPlayer(60);
   const honest = snapshot({ level: 12, badges: 7, levelName: 'Macro Machinist', weekKey: THIS_WEEK, weekSteps: 31000 });
   const r = await read(await putProfile(p, honest));
   assert.equal(r.status, 200);
@@ -180,12 +251,9 @@ await test('a level jump beyond the daily maximum is refused once the account is
      deliberately not applied on day one, when a first Apple Health backfill
      legitimately imports months of history at once, so the fixture ages the row
      past that window first. */
-  const p = await newPlayer();
+  const p = await agedPlayer(120);          // old enough to have earned level 10
   await putProfile(p, snapshot({ level: 10 }));
-  const warp = await (await fetch(BASE + '/dev/player-warp', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id: p.me.playerId, backMs: 10 * 86400000 }),
-  })).json();
+  const warp = await (await ageAccount(p.me.playerId, 10)).json();
   assert.ok(warp.ok && warp.row, 'PRECONDITION: the account really was aged');
   assert.equal(warp.row.max_level, 10, 'PRECONDITION: the server recorded the level it accepted');
 
@@ -198,6 +266,81 @@ await test('a level jump beyond the daily maximum is refused once the account is
   const bound = 10 + BURST_LEVELS * (1 + 10);
   assert.ok(stored.level <= bound, `a 10 -> 300 teleport must be held to ${bound}, got ${stored.level}`);
   assert.ok(stored.level > 10, 'but real progress is still allowed through');
+});
+
+/* =====================================================================
+   THE ASSERTION THIS SUITE WAS MISSING, and the reason the first version of
+   these bounds shipped broken.
+
+   Every check above tests that a claim is bounded. Not one of them asked the
+   question the leaderboard actually poses, which is a COMPARISON: can a key
+   registered seconds ago outrank a player who earned their place? The first
+   bounds passed 24/24 while a fresh key sat at rank 1 on the board and rank 1
+   in the money race, because both ceilings were set above every real player.
+   "Bounded" was true and worthless.
+
+   So these two rows compare against a seeded field at the levels really observed
+   in production, and they are the deliverable. DIRECTION: failure is the fresh
+   key placing at or above ANY honest account. BOUND: strictly below the last of
+   them.
+   ===================================================================== */
+group('1a. A FRESH KEY CANNOT OUTRANK A REAL PLAYER');
+
+await test('a key registered seconds ago cannot outrank the field on the LEADERBOARD', async () => {
+  const field = await seedEstablishedField();
+  assert.equal(field.length, REAL_LEVELS.length, 'PRECONDITION: the whole field seeded');
+  // the field has to be REAL, or the comparison is against nothing. Every seeded
+  // account must have kept the level it earned.
+  for (const f of field) {
+    assert.ok(f.level >= 20, `PRECONDITION: an established account kept its level, got ${f.level}`);
+  }
+  const top = Math.max(...field.map(f => f.level));
+  assert.ok(top >= 80, `PRECONDITION: the field really reaches the observed maximum, got ${top}`);
+
+  const attacker = await newPlayer();
+  const r = await read(await putProfile(attacker, snapshot({ level: 999999, badges: 999999 })));
+  assert.equal(r.status, 200, 'the attack is a normal, accepted, signed request');
+
+  const board = await (await attacker.signed('GET', '/leaderboard')).json();
+  assert.ok(board.players.length > field.length, 'PRECONDITION: a populated board to rank within');
+  const mine = board.players.findIndex(x => x.playerId === attacker.me.playerId);
+  const honest = board.players.filter(x => x.playerId !== attacker.me.playerId && x.level >= 20);
+  assert.ok(honest.length >= 3, `PRECONDITION: honest players are on the board to be outranked, got ${honest.length}`);
+
+  const mineLevel = mine >= 0 ? board.players[mine].level : 0;
+  // DIRECTION: failure is the fresh key being level-wise at or above an honest
+  // account. BOUND: strictly below the lowest of them.
+  const lowestHonest = Math.min(...honest.map(x => x.level));
+  assert.ok(mineLevel < lowestHonest,
+    `a key registered seconds ago claimed level ${mineLevel}; the lowest honest player is ${lowestHonest}`);
+  assert.ok(mine === -1 || mine > honest.length - 1,
+    `and it must not place above them on the board: it sat at position ${mine + 1} of ${board.players.length}`);
+});
+
+await test('a key registered seconds ago cannot take the PODIUM that pays 5,000 coins', async () => {
+  const field = await seedEstablishedField();
+  const walkers = field.filter(f => f.steps > 0);
+  assert.ok(walkers.length >= 3, `PRECONDITION: honest walkers are racing, got ${walkers.length}`);
+  const bestHonest = Math.max(...walkers.map(w => w.steps));
+  // the field must really have walked, measured against what is reachable by
+  // this point in the week rather than against a hardcoded number
+  assert.ok(bestHonest >= WEEK_STEP_CAP_NOW * 0.5,
+    `PRECONDITION: the field really walked, top is ${bestHonest} of a reachable ${WEEK_STEP_CAP_NOW}`);
+
+  const attacker = await newPlayer();
+  await putProfile(attacker, snapshot({ weekKey: THIS_WEEK, weekSteps: 5000000 }));
+
+  const race = await (await attacker.signed('GET', `/steps/week?week=${THIS_WEEK}`)).json();
+  assert.ok(race.players.length >= 3, `PRECONDITION: a contested race, got ${race.players.length} racers`);
+  const mine = race.players.find(x => x.playerId === attacker.me.playerId);
+  const mySteps = mine ? mine.steps : 0;
+  // DIRECTION: failure is the fresh key's total reaching the honest leader.
+  // BOUND: strictly below every honest walker on the board.
+  const lowestRacer = Math.min(...race.players.filter(x => x.playerId !== attacker.me.playerId).map(x => x.steps));
+  assert.ok(mySteps < lowestRacer,
+    `a key registered seconds ago posted ${mySteps} steps; the slowest honest racer has ${lowestRacer}`);
+  assert.ok(!mine || mine.rank > 3,
+    `and it must not stand on a paying place: it took rank ${mine && mine.rank} (1st pays ${race.podium[0].coins} coins)`);
 });
 
 group('1b. the step race, which pays real coins');
@@ -228,26 +371,28 @@ await test('and so the podium is not paid to them', async () => {
 });
 
 await test('this week is capped per ELAPSED day, so no hour can add 200,000 steps', async () => {
-  const p = await newPlayer();
+  // an ESTABLISHED account, so this measures the per-elapsed-day rule and not
+  // the account-age rule that the fresh-key rows above cover
+  const p = await agedPlayer(90);
   const r = await read(await putProfile(p, snapshot({ weekKey: THIS_WEEK, weekSteps: 5000000 })));
   assert.ok(r.json.bounded?.includes('weekSteps'), 'the response names it');
   const stored = await storedProfile(p.me.playerId);
   // BOUND: MAX_STEPS_PER_DAY for each day of this race week that has actually
-  // elapsed. On the first day of a week that is 100,000 and it only reaches
-  // 700,000 once the whole week has been walked.
+  // elapsed. A full week is 70,000, which is 2.1x the production leader.
   const cap = MAX_STEPS_PER_DAY * ELAPSED_DAYS_THIS_WEEK;
   assert.ok(stored.weekSteps <= cap, `week total must not exceed ${cap} on day ${ELAPSED_DAYS_THIS_WEEK}, got ${stored.weekSteps}`);
   assert.ok(stored.weekSteps > 0, 'and the racer is not simply erased');
 });
 
 await test('weekSteps is monotone: a later sync cannot walk the total backwards', async () => {
-  const p = await newPlayer();
-  await putProfile(p, snapshot({ weekKey: THIS_WEEK, weekSteps: 40000 }));
+  const p = await agedPlayer(90);
+  const walked = Math.max(200, Math.floor(WEEK_STEP_CAP_NOW * 0.5));
+  await putProfile(p, snapshot({ weekKey: THIS_WEEK, weekSteps: walked }));
   await putProfile(p, snapshot({ weekKey: THIS_WEEK, weekSteps: 100 }));
   const stored = await storedProfile(p.me.playerId);
   // DIRECTION: failure is the number going DOWN. Steps do not un-walk, and a
   // total that can fall is a total that can be rewritten.
-  assert.equal(stored.weekSteps, 40000, 'the highest accepted total for the week stands');
+  assert.equal(stored.weekSteps, walked, 'the highest accepted total for the week stands');
 });
 
 await test('a week key that is not a real, nearby week is dropped entirely', async () => {
@@ -269,7 +414,7 @@ await test('the bounded snapshot is what defends a spire, not the raw claim', as
   // /profile copies the snapshot into spires.defender for every tower the caller
   // holds. If the clamp happened after that copy, a rival would fight the
   // inflated build.
-  const owner = await newPlayer();
+  const owner = await agedPlayer(90);
   const rival = await newPlayer();
   const id = `sp-${900000 + Math.floor(Math.random() * 9000)}-${900000 + Math.floor(Math.random() * 9000)}`;
   await putProfile(owner, snapshot({ level: 6 }));
@@ -280,7 +425,12 @@ await test('the bounded snapshot is what defends a spire, not the raw claim', as
   assert.equal(seen.spires.length, 1, 'PRECONDITION: the rival can see the tower');
   const def = seen.spires[0].defender;
   assert.ok(def, 'PRECONDITION: there is a defender payload to check');
-  assert.ok(def.level <= dayZeroLevelCeiling, `the defender must carry the bounded level, got ${def.level}`);
+  // compare against what was actually STORED, so this asserts the property that
+  // matters (the copy carries the bounded value) rather than re-deriving a
+  // ceiling that will move whenever the field does
+  const stored = await storedProfile(owner.me.playerId);
+  assert.notEqual(stored.level, 999999, 'PRECONDITION: the claim really was bounded');
+  assert.equal(def.level, stored.level, `the defender must carry the bounded level, got ${def.level}`);
   assert.equal(def.badges, MAX_BADGES, 'and the bounded badge count');
 });
 
