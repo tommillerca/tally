@@ -22,7 +22,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -81,18 +82,93 @@ export async function retryOnDetach(fn, resync) {
  * broken app. package.json pins the same version the kit carries (24.43.1) so the
  * two routes cannot behave differently.
  */
+/* MEASURED 2026-08-17, and the paragraph above was wrong on its load-bearing
+ * claim. "package.json pins the same version the kit carries (24.43.1) so the
+ * two routes cannot behave differently" is false: package.json pins 24.43.1 and
+ * the kit on this machine carries puppeteer AND puppeteer-core 21.11.0, which
+ * bundles Chrome 121 and has no Browser.createBrowserContext at all (21.x calls
+ * it createIncognitoBrowserContext; the rename landed in 22). So the two routes
+ * differ by three majors, and the drift surfaced inside an audit as
+ * "TypeError: browser.createBrowserContext is not a function" in onb-audit,
+ * which reads like the APP broke. It did not. The harness was three years old.
+ *
+ * Two things were wrong with the resolution itself, beyond the stale kit:
+ *
+ * 1. A BARE `import('puppeteer')` IS NOT "THE REPO'S OWN node_modules". Node
+ *    resolves a bare specifier by walking node_modules upward from the importing
+ *    file, so it finds the repo's copy only by luck of where the repo sits. Any
+ *    ancestor directory with its own node_modules wins silently, and a git
+ *    worktree checked out beside the main clone has no node_modules of its own
+ *    at all, so the walk leaves the repo entirely. Resolve from ROOT explicitly
+ *    and assert the answer is under ROOT/node_modules.
+ *
+ * 2. THE FALLBACK SWALLOWED EVERY ERROR. `catch { }` treated "the repo's copy is
+ *    absent" and "the repo's copy is present and threw" as the same thing, and
+ *    both fell through to a three-major-old sibling project. A half-installed
+ *    dependency became a wrong-API browser instead of a setup error.
+ *
+ * The kit stays as a fallback for the machines set up that way, but it is now
+ * VERSION-CHECKED against package.json's pin and refuses on a major mismatch,
+ * because a silently wrong puppeteer is worse than no puppeteer: no puppeteer
+ * says SETUP, wrong puppeteer says the app is broken.
+ */
+const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = path.join(process.env.HOME || '', 'Documents/Hyperframes Editor/overlay-render-kit/node_modules/puppeteer');
+const pinnedPuppeteer = () => {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8')).devDependencies?.puppeteer || null; }
+  catch { return null; }
+};
+const majorOf = v => String(v || '').replace(/^[^\d]*/, '').split('.')[0];
+
+/* WHICH BROWSER STACK GRADED THIS RUN, on the record. Nothing could answer that
+   before, which is how a 2024 puppeteer graded a 2026 app for an unknown number
+   of runs. Printed once per process and readable by the gate. */
+export const puppeteerOrigin = { via: null, version: null, entry: null };
+export const puppeteerOriginLine = () => (puppeteerOrigin.via
+  ? `puppeteer ${puppeteerOrigin.version} via ${puppeteerOrigin.via}: ${puppeteerOrigin.entry}`
+  : 'puppeteer not loaded');
+
 let _pptr = null;
 export async function loadPuppeteer() {
   if (_pptr) return _pptr;
-  try { _pptr = (await import('puppeteer')).default; return _pptr; } catch { /* fall through to the kit */ }
+  const pinned = pinnedPuppeteer();
+  const repoPkg = path.join(ROOT_DIR, 'node_modules', 'puppeteer', 'package.json');
+  if (fs.existsSync(repoPkg)) {
+    /* createRequire rooted AT package.json, not at this file, and the answer is
+       checked: a resolve that escaped ROOT/node_modules would be the exact bug
+       this block exists to close, so it throws rather than being used. */
+    const entry = createRequire(path.join(ROOT_DIR, 'package.json')).resolve('puppeteer');
+    const inRepo = entry.startsWith(path.join(ROOT_DIR, 'node_modules') + path.sep);
+    if (!inRepo) throw new Error(
+      `puppeteer resolved OUTSIDE this repo despite ${repoPkg} existing:\n  ${entry}\n` +
+      '  Refusing: an audit graded by a foreign puppeteer reports harness drift as app breakage.');
+    _pptr = (await import(pathToFileURL(entry).href)).default;
+    Object.assign(puppeteerOrigin, { via: 'repo node_modules', version: JSON.parse(fs.readFileSync(repoPkg, 'utf8')).version, entry });
+    process.stderr.write(`[godmode] ${puppeteerOriginLine()}\n`);
+    return _pptr;
+  }
   const kitEntry = path.join(KIT, 'lib/cjs/puppeteer/puppeteer.js');
-  if (fs.existsSync(kitEntry)) { _pptr = (await import(kitEntry)).default; return _pptr; }
+  const kitPkg = path.join(KIT, 'package.json');
+  if (fs.existsSync(kitEntry)) {
+    const kitVer = fs.existsSync(kitPkg) ? JSON.parse(fs.readFileSync(kitPkg, 'utf8')).version : null;
+    if (pinned && majorOf(kitVer) !== majorOf(pinned)) throw new Error(
+      `puppeteer VERSION DRIFT, so no browser audit may run on this machine.\n` +
+      `  package.json pins ${pinned}; the fallback kit carries ${kitVer || 'an unreadable version'}.\n` +
+      `  kit: ${kitEntry}\n` +
+      `  Fix: run \`npm install\` in ${ROOT_DIR}.\n` +
+      '  This is a SETUP failure, not a test failure. A three-major-old puppeteer does\n' +
+      '  not fail loudly, it fails as a missing API inside an assertion, and that reads\n' +
+      '  as the app being broken. onb-audit died on browser.createBrowserContext this way.');
+    _pptr = (await import(pathToFileURL(kitEntry).href)).default;
+    Object.assign(puppeteerOrigin, { via: 'fallback kit', version: kitVer, entry: kitEntry });
+    process.stderr.write(`[godmode] ${puppeteerOriginLine()}\n`);
+    return _pptr;
+  }
   throw new Error(
     'puppeteer not found, so no browser audit can run.\n' +
     // fileURLToPath, not URL.pathname: the latter percent-encodes, and this line
     // exists to be copy-pasted ("Hyperframes%20Editor" is not a directory).
-    `  tried: the repo's own node_modules (run \`npm install\` in ${path.join(path.dirname(fileURLToPath(import.meta.url)), '..')})\n` +
+    `  tried: the repo's own node_modules (run \`npm install\` in ${ROOT_DIR})\n` +
     `  tried: ${kitEntry}\n` +
     '  This is a SETUP failure, not a test failure: nothing about the app has been checked.');
 }
