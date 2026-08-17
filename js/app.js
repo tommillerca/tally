@@ -2271,7 +2271,7 @@ function nextToast() {
 }
 
 const sheetStack = [];
-function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
+function openSheet(html, { cls = '', onClose = null, name = null, ev = null } = {}) {
   const wrap = document.createElement('div');
   /* A DIALOG THAT DOES NOT TRAP FOCUS IS NOT A DIALOG. Measured on the Hollow:
      the tab cycle was 59 stops long and the first stop INSIDE the sheet was stop
@@ -2291,9 +2291,18 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
      revealWhenReady owns un-hiding the body either way. */
   const sBody = wrap.querySelector('.sheet-body');
   if (sBody) revealWhenReady(sBody, { cls: 'sheet-in', cap: 650 });
-  // analytics: which feature-sheets get opened + how long they're held (dwell).
-  // Auto-labels from the sheet's <h2> title unless an explicit name is passed.
-  const feat = (name || (html.match(/<h2[^>]*>([^<]{1,40})<\/h2>/) || [])[1] || 'sheet').trim();
+  /* analytics: which feature-sheets get opened + how long they're held (dwell).
+     `ev` IS NOT `name`. `name` above is the sheet's ACCESSIBLE NAME, the thing a
+     screen reader announces, so it has to stay the human title ("Chicken breast",
+     the friend's name, the foe's name). The analytics label has the opposite
+     requirement: it is a GROUP KEY in a D1 table, so it has to be stable and
+     bounded. Deriving both from one option meant that every sheet whose title is
+     dynamic wrote one dashboard row per food, per friend, per enemy, and the
+     ten sheets with no readable <h2> all landed in a single row called 'sheet'.
+     `ev` is that group key; where it is absent the old derivation stands, which
+     is right for every sheet whose <h2> is fixed copy.
+     tests/analytics-event-audit.mjs proves no site is left unbounded. */
+  const feat = (ev || name || (html.match(/<h2[^>]*>([^<]{1,40})<\/h2>/) || [])[1] || 'sheet').trim();
   const openedAt = Date.now();
   try { trackEvent('feat_open', { f: feat }); } catch { /* noop */ }
   const rec = { wrap, onClose: () => { try { trackEvent('feat_time', { f: feat, ms: Date.now() - openedAt }); } catch { /* noop */ } try { onClose?.(); } catch { /* noop */ } } };
@@ -5337,7 +5346,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       ${editing ? '<button class="btn danger" id="delBtn">Delete entry</button>' : ''}
       ${food.source === 'custom' ? '<div style="height:8px"></div><button class="btn ghost" id="editFoodBtn">Edit food details</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1', name: 'food_portion' });
+    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1', ev: 'food_portion' });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
      visible before the tap, which is why the XP economy read as invisible.
@@ -5546,7 +5555,7 @@ function openTextSheet({ title, value = '', placeholder = '', cta = 'Save' }, on
     <div class="sheet-body">
       <div class="t1-field"><input id="txIn" type="text" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off"></div>
     </div>
-    <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: 'text_input' });
+    <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: title, ev: 'text_input' });
   const input = $('#txIn', wrap);
   setTimeout(() => { input.focus(); input.select(); }, 120);
   const go = () => { const v = input.value.trim(); history.back(); setTimeout(() => onSave(v), 180); };
@@ -5590,7 +5599,7 @@ function openQuickAdd(getMeal, entry = null) {
       ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
       ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button></div>`, { cls: 't1', name: 'quick_add' });
+    <div class="t1-foot"><button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button></div>`, { cls: 't1', ev: 'quick_add' });
   $('#qaKcal', wrap).focus();
   $('#qaAdd', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
@@ -5648,7 +5657,7 @@ async function openScanner(getMeal) {
         <button class="btn small" id="manualGo">Look up</button>
       </div>
       <button class="scan-alt" id="scanToLabel">No barcode on it? <b>Scan the label</b></button>
-    </div>`, { cls: 'scanner t1', name: 'scanner', onClose: () => scanner && scanner.stop() });
+    </div>`, { cls: 'scanner t1', ev: 'scanner', onClose: () => scanner && scanner.stop() });
 
   const video = $('video', wrap);
   const status = $('#scanStatus', wrap);
@@ -5865,7 +5874,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       ${barcode ? `<p class="note">Linked to barcode ${esc(barcode)}, so scanning finds it instantly next time.</p>` : ''}
       ${f ? '<div style="height:12px"></div><button class="btn danger" id="ffDel">Delete food</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button></div>`, { cls: 't1', name: 'food_edit' });
+    <div class="t1-foot"><button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button></div>`, { cls: 't1', ev: 'food_edit' });
 
   $('#ffRetake', wrap)?.addEventListener('click', () => history.back());
 
@@ -8265,7 +8274,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>
       ${stranger ? '' : '<button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>'}
     </div>
-  `, { cls: 'sheet-fp', name: 'friend_profile' });
+  `, { cls: 'sheet-fp', ev: 'friend_profile' });
   $('#fpGift', wrap)?.addEventListener('click', () => openGiftSheet(f));
   $('#fpCheer', wrap)?.addEventListener('click', () => openCheerSheet(f));
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
@@ -9547,7 +9556,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Keep it going</button>
       </div>
-    </div>`, { cls: 'takeover', name: 'celebration', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', ev: 'celebration', onClose: () => setFxLayer() });
   setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
@@ -9770,7 +9779,7 @@ function openHatchReveal(res, charWrap) {
       <div class="reveal-foot">
         <button class="btn" id="hatchOk">${item ? 'Adopt' : 'Nice'}</button>
       </div>
-    </div>`, { cls: 'takeover', name: 'hatch_reveal', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', ev: 'hatch_reveal', onClose: () => setFxLayer() });
   setFxLayer(305);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
@@ -11210,7 +11219,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-dots" id="packDots"></div>
           </div>
         </div>
-      </div>`, { cls: 'takeover', name: 'pack_reveal', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
+      </div>`, { cls: 'takeover', ev: 'pack_reveal', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
     setFxLayer(305);
     const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
     /* One reader for the CSS beat table, shared by the sequence and the audio. */
@@ -11583,7 +11592,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
         <button class="btn ghost" id="celeOk">Later</button>`
       : `<div style="height:16px"></div><button class="btn" id="celeOk">Nice</button>`}
       <div style="height:6px"></div>
-    </div>`, { name: 'pet_levelup' });
+    </div>`, { ev: 'pet_levelup' });
   $('#celeOk', wrap).addEventListener('click', () => history.back());
   const tb = $('#petTalentBtn', wrap);
   /* STRAIGHT TO THE PET THAT LEVELLED. Tom, 2026-08-07: "you click it and it
@@ -12622,7 +12631,7 @@ function openPetBreedResult(off) {
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Adopt</button>
       </div>
-    </div>`, { cls: 'takeover', name: 'breed_reveal', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', ev: 'breed_reveal', onClose: () => setFxLayer() });
   setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
@@ -15065,7 +15074,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
-    { cls: 'full', name: 'fight', onClose: () => {
+    { cls: 'full', ev: 'fight', onClose: () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
          die with the sheet, but they stayed on window, so an audit poking

@@ -24,7 +24,9 @@
  *            unbounded <h2> (a food name, a friend's name) puts one dashboard
  *            row per FOOD in the events table, and an <h2> the regex cannot
  *            read collapses several unrelated features into one row called
- *            'sheet'. Both were measured here before they were fixed.
+ *            'sheet'. Both were measured here before they were fixed, with the
+ *            new `ev` option: the label had to be split off `name`, which is
+ *            the sheet's ACCESSIBLE NAME and must stay the human title.
  *   LIVE     the app is driven with real navigations and real taps under
  *            window.__evProbe, and the rows that ACTUALLY land in the kv queue
  *            are asserted by EXACT COUNT. Exact, never "at least": an
@@ -408,12 +410,14 @@ const sheetSites = [];
     if (/^\s*html\s*[,)]?\s*$/.test(body.split(/,(?![^{]*\})/)[0])) {
       // markup built into a local: the <h2> is only resolvable at runtime, but
       // an explicit name option still pins the label from here
-      const inm = body.match(/\bname:\s*([^,}\n]+)/);
+      const inm = body.match(/\bev:\s*([^,}\n]+)/) || body.match(/\bname:\s*([^,}\n]+)/);
       sheetSites.push({ line, kind: 'indirect', key: inm ? inm[1].trim() : 'html (variable)' });
       continue;
     }
     if (!/^\s*`/.test(body)) continue;                    // the definition / a re-export
-    const nm = body.match(/\bname:\s*([^,}\n]+)/);
+    /* `ev` first: it is the analytics group key. `name` is the sheet's
+       ACCESSIBLE NAME and only doubles as the label where no ev is given. */
+    const nm = body.match(/\bev:\s*([^,}\n]+)/) || body.match(/\bname:\s*([^,}\n]+)/);
     if (nm) {
       const raw = nm[1].trim();
       sheetSites.push({ line, kind: 'name', key: /^'[^']*'$/.test(raw) ? raw.slice(1, -1) : raw });
@@ -462,6 +466,23 @@ ok('CLIP: the client budget equals the server\'s actual clip',
 const fatLabel = labelKeys.filter(k => JSON.stringify({ f: k, ms: 999999 }).length > SRV_CAP || k.length > 40);
 ok('CLIP: every feature label fits, explicit names included', fatLabel.length === 0,
   fatLabel.length ? `over budget: ${fatLabel.join(', ')}` : `${labelKeys.length} labels, longest ${Math.max(...labelKeys.map(k => k.length))} chars`);
+
+/* The live drive below can only weigh the payloads it happens to produce, and
+   the shapes that could actually overflow are the ones carrying variable-length
+   TEXT. There are exactly three, so they are weighed at their worst case here
+   rather than left to whatever the drive happened to touch. `err` is not in the
+   list: pushErr budgets it against SRV_PROP_CAP by shortening the message until
+   it fits, and tests/error-telemetry-audit.mjs owns that. */
+const WORST = [
+  ['feat_time', { f: 'x'.repeat(40), ms: 1234567 }, 'the <h2> path caps the label at 40 chars'],
+  // loot.js newIid: `p<base36 ms>-<seq>-<species>`, plus healDupIids' `~N` suffix
+  ['pet_iid_heal', { n: 99999, sample: Array(3).fill('p' + 'z'.repeat(9) + '-99999-' + 'S'.repeat(12) + '~99') }, 'three pet instance ids'],
+  ['screen_time', { s: 'x'.repeat(40), ms: 1234567, bg: 1 }, 'the route name'],
+].map(([n, props, why]) => ({ n, len: JSON.stringify(props).length, why }));
+for (const w of WORST) note('CLIP worst case', `${w.n} at ${w.len}/${SRV_CAP} chars (${w.why})`);
+ok('CLIP: the three variable-length payload shapes cannot overflow at their worst',
+  WORST.every(w => w.len <= SRV_CAP),
+  WORST.map(w => `${w.n}=${w.len}`).join(' '));
 
 /* ======================= 4. PROBE SEALED ===================================
  * The escape hatch this audit runs on must never reach the network. flush(),
