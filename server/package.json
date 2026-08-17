@@ -4,8 +4,12 @@
   "type": "module",
   "scripts": {
     "db:local": "wrangler d1 execute bonez --local --file=schema.sql",
-    "dev": "wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken",
-    "test": "node test/api.test.mjs",
+    "//dev": "--test-scheduled exposes /__scheduled locally, which is the only way to drive the retention cron in a test. Local dev only; it is not a route on the deployed worker.",
+    "dev": "wrangler dev --local --port 8788 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken",
+    "//test": "schema-plan needs nothing running; the other two need `npm run dev`.",
+    "test": "node schema-plan.test.mjs && node test/api.test.mjs && node retention.test.mjs",
+    "test:plan": "node schema-plan.test.mjs",
+    "test:retention": "node retention.test.mjs",
     "deploy": "./deploy.sh"
   },
   "devDependencies": {
