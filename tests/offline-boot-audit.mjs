@@ -118,11 +118,34 @@ const reachable = async () => {
   try { const r = await fetch(base + 'index.html', { cache: 'no-store' }); return r.ok; } catch { return false; }
 };
 
-/* Take the network away for everything, worker included. */
+/* Take the network away for everything, worker included.
+ *
+ * AND THE HTTP CACHE WITH IT, because otherwise the growth proof below is not a
+ * proof. Its claim is "the worker only puts after a successful network response,
+ * so growth means it got out". That is false while Chrome's own disk cache is
+ * warm: the static-asset branch of sw.js calls `fetch(e.request)` with the
+ * request's default cache mode, so a heuristically-fresh HTTP-cache entry is
+ * returned with `res.ok === true` and put into Cache Storage without a byte
+ * crossing the network.
+ *
+ * Measured on this tree, 2026-08-17, cold pass, with the server stopped and a
+ * node-side fetch at the origin REFUSED: the SW caches went 137 -> 156 entries,
+ * all nineteen of them Bonehead part PNGs the same profile had already
+ * downloaded during the online boot. With Network.clearBrowserCache called
+ * first and nothing else changed: 137 -> 137, no additions and no removals.
+ * So the red row this audit printed on main was the HTTP cache, not the
+ * network, and the audit was accusing the worker of something it could not do.
+ *
+ * Clearing is also the HARSHER offline test, which is the one worth
+ * certifying: it forces every request to be answered out of the worker's own
+ * precache or not at all. */
 async function setOffline(on) {
   await page.setOfflineMode(on);   // so navigator.onLine is honest too
   if (on) {
     if (srv) { srv.close(); srv = null; }
+    const cdp = await page.createCDPSession();
+    await cdp.send('Network.clearBrowserCache');
+    await cdp.detach().catch(() => {});
     for (let i = 0; i < 50 && await reachable(); i++) await sleep(100);
   } else if (!srv) {
     srv = await serveTree(ROOT, { forcePort: PORT });
@@ -193,7 +216,10 @@ async function offlinePass(tag) {
   /* The worker only writes to its cache after a response that came back ok, so a
      bigger cache means it reached the network during a pass that claims it could
      not. This is the check that caught the two emulation approaches above. */
-  ok(`${tag}: the worker never reached the network (its cache did not grow)`,
+  /* Not "did not grow much": ZERO new entries. The browser HTTP cache is cleared
+     in setOffline, so the only way a new entry can appear is a response that came
+     off the network, and there is no network. */
+  ok(`${tag}: the worker never reached the network (not one new cache entry)`,
     before === null || after === null || after <= before,
     after === null ? 'unreadable: this page is not the app (see the shell check below)' : `${before} -> ${after} entries`);
 

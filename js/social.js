@@ -373,9 +373,14 @@ export async function setName(adj, noun, num) {
     return { ok: true, name: data.name };
   } catch { return { ok: false }; }
 }
+/* `reached:false` means the request never got an answer, which is NOT the same
+   news as "no Bonehead has that code" and must not borrow its copy. Measured
+   2026-08-17 against a hanging server: the Add button came back with "No
+   Bonehead has that code. Double-check it." for a code that was perfectly
+   valid, sending the player off to re-read a code that was never the problem. */
 export async function friendRequest(code) {
-  try { const r = await signedFetch('POST', '/friends/request', { code }); const d = await r.json().catch(() => ({})); return { ok: r.ok, ...d }; }
-  catch { return { ok: false }; }
+  try { const r = await signedFetch('POST', '/friends/request', { code }); const d = await r.json().catch(() => ({})); return { ok: r.ok, reached: true, ...d }; }
+  catch { return { ok: false, reached: false }; }
 }
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
