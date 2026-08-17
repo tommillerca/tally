@@ -77,13 +77,19 @@ export function levelFor(xp) {
  * re-put a row award() already counted, so they cost a rebuild and stay correct;
  * neither changes .xp, and xp rows are append-only by design (see the file header).
  *
- * DIRECTION AND BOUND: award() reads the xp store a FIXED number of times, and does
- * not scan it at all on the warm path, whatever the row count. Measured in Chrome
- * on this container: 4.9 / 28 / 35ms per award at 900 / 5400 / 10950 rows before,
- * and about 1ms at all three after, no longer rising with row count.
- * tests/xp-total-audit.mjs pins both halves: the SHAPE (full scans of the xp store
- * do not grow with row count across a burst of awards) and the TRUTH (the cached
- * total equals a from-scratch recount after every single award).
+ * DIRECTION AND BOUND, measured in Chrome on this container against the REAL burst
+ * (award then coins, coins being kvSet, thirty in a row on a page with nothing else
+ * touching IndexedDB), at 900 / 5400 / 10950 xp rows:
+ *     original scan-per-award   4.9 / 28 / 35 ms, one full scan per award
+ *     shared-counter version    10.1 / 25.0 / 38.3 ms, 28 of 30 awards still scanned
+ *     now                       1.1 / 1.3 / 1.5 ms, ZERO scans
+ * award() does not scan the xp store on the warm path at any row count, and the
+ * cost stops tracking the store. The middle row is the version that looked fixed
+ * and was not: see the PER STORE note in js/db.js.
+ *
+ * tests/xp-total-audit.mjs pins both halves against that same interleaved burst:
+ * the SHAPE (full scans of the xp store do not grow with row count) and the TRUTH
+ * (the cached total equals a from-scratch recount after every single award).
  */
 let xpCache = null; // { v, epoch }
 
@@ -145,14 +151,23 @@ export async function award(key, type, xp, label, date) {
   if (existing) return 0;
   const before = await totalXp();
   const e0 = db.epoch('xp');
+  /* `before` has to still BE the live total at the moment we add to it. totalXp()
+     may have awaited, and db.js stamps a store SYNCHRONOUSLY before dispatching a
+     write, so a competing xp write that started in that gap is already visible
+     here as an epoch that the cache we just read does not match. */
+  const live = !!xpCache && xpCache.epoch === e0;
   await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
-  /* Advance the running total ONLY if this award's own put is the single thing
-     that touched the store while it was in flight. Awards interleave (a fight win
-     fires award plus coins plus gear plus quests plus badges), so if any other
-     write landed in between, `before` is already stale and adding to it would bank
-     the drift forever. Drop the cache instead and let the next read pay for one
-     honest scan. */
-  xpCache = db.epoch('xp') === e0 + 1 ? { v: before + (xp || 0), epoch: e0 + 1 } : null;
+  /* Advance the running total ONLY if the xp store moved exactly once across our
+     own put, which is to say only if that one move was ours. This deliberately
+     does NOT care about writes to other stores: a fight win pays coins through
+     kvSet between awards, and the XP total does not depend on kv. TWO CONCURRENT
+     AWARDS: the second one sees the first one's stamp before it reads the cache,
+     `live` is false there, and it rebuilds from a scan that IndexedDB has already
+     serialised behind the first put, so it counts both rows. The first award then
+     resolves into an epoch that is no longer e0 + 1 and drops the cache rather
+     than overwriting the correct one with its own stale sum. Every branch that is
+     unsure costs one honest scan; none of them bank drift. */
+  xpCache = live && db.epoch('xp') === e0 + 1 ? { v: before + (xp || 0), epoch: e0 + 1 } : null;
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
     const lvB = levelFor(before), lvA = levelFor(before + xp);
