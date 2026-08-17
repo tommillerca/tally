@@ -671,7 +671,24 @@ async function boot() {
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
-  onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges); flushAnalytics(); refreshNotifSchedules(); });
+  onAppResume(() => {
+    rollDayIfNeeded(); nativeAutoSync();
+    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+    flushAnalytics(); refreshNotifSchedules();
+    /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
+       other tab has been spending and earning while this one sat there, and
+       nothing here re-read anything: measured with two real pages, tab A came
+       back to the foreground showing 500 coins while the store held 1500, and
+       stayed on 500 until something navigated. The arithmetic was never wrong
+       (every spend re-reads the balance at the moment it is taken, measured:
+       a 200 spend from that stale screen went 1500 -> 1300, not 500 -> 300) but
+       the number on the screen was a lie for as long as the tab was left alone.
+       Guarded on the sheet stack for the same reason the service worker's
+       reload is: refresh() re-routes, which closes every open sheet, and
+       yanking a player's sheet shut because they alt-tabbed would be a worse
+       bug than the one being fixed. */
+    if (!sheetStack.length) refresh();
+  });
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
