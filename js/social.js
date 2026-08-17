@@ -21,8 +21,8 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, exportAll, importAll } from './db.js';
-import { award } from './game.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll } from './db.js';
+import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
@@ -657,10 +657,26 @@ const GIFTBOX = 'giftbox';
  *
  * award() writes its ledger row unconditionally, xp 0 included, so the row IS
  * the durable receipt. Read it directly and the guard covers every payload
- * shape, including the ones that pay nothing but coins. */
+ * shape, including the ones that pay nothing but coins.
+ *
+ * AND READING IT IS NOT ENOUGH WHEN THERE ARE TWO OF YOU. Added 2026-08-17.
+ * The v390 fix above was `if (await db.get('xp', key)) return false;` followed,
+ * one await later, by the award that writes the row. That is a check and then
+ * an act, and the gap between them is a window a second consumer walks
+ * straight through. It does not need a re-delivery or a restore: the app open
+ * in TWO TABS is enough, because pullGrants runs in both and both get the same
+ * feed. Measured on two real pages sharing one database, both handed the same
+ * 100-coin grant at the same instant: the ledger ended with exactly ONE row
+ * for the key, which is what makes it invisible to a row count, and the player
+ * ended with 200 coins. Every payload shape is affected, gifts, race prizes,
+ * make-goods and welcome bonuses alike.
+ *
+ * awardOnce collapses the check and the act into one IndexedDB request
+ * (db.addIfAbsent), so exactly one caller anywhere on the device is ever told
+ * `claimed: true` for a key, and only that one runs the side effects below. */
 async function applyPayload(key, type, p) {
-  if (await db.get('xp', key)) return false;   // already ingested: skip side effects too
-  await award(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
+  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
+  if (!claim.claimed) return false;            // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
   if (p.crate) await grantCrate(p.crate, 'social');
@@ -688,11 +704,25 @@ export async function giftBox() { return (await kvGet(GIFTBOX, [])) || []; }
 /** Open one. Applies the reward at THIS moment, then hands back what was inside
  *  so the caller can play the reveal and name who sent it. */
 export async function openGift(key) {
-  const box = await giftBox();
-  const g = box.find(x => x.key === key);
+  /* Remove first: a double tap must not pay twice. The removal is now an
+     atomic read-modify-write of the box, because `const box = await giftBox();
+     ... await kvSet(GIFTBOX, box.filter(...))` is the same lost-update shape as
+     everything else here: two tabs opening the same present both read the box
+     with the gift in it, and each writes back a list computed from its own
+     stale copy, so a SECOND sealed gift in the box could be resurrected by the
+     loser's write. The payout itself is gated on applyPayload's atomic ledger
+     claim, so only one of them can pay regardless. */
+  let g = null;
+  await kvUpdate(GIFTBOX, list => {
+    const box = list || [];
+    g = box.find(x => x.key === key) || null;
+    return g ? box.filter(x => x.key !== key) : box;
+  }, []);
   if (!g) return null;
-  await kvSet(GIFTBOX, box.filter(x => x.key !== key));   // remove first: a double tap must not pay twice
-  await applyPayload(g.key, g.type, g.payload || {});
+  /* If applyPayload says no, this key was already ingested somewhere else and
+     nothing was paid, so there is nothing to reveal and the caller must not
+     play an unwrap for a present that paid nobody. */
+  if (!await applyPayload(g.key, g.type, g.payload || {})) return null;
   return g;
 }
 
@@ -707,11 +737,16 @@ async function applyGrant(g) {
        stops the ghost present that would now open onto nothing. The ledger row
        openGift wrote is the receipt for both. */
     if (await db.get('xp', g.key)) return false;
-    const box = await giftBox();
-    if (!box.some(x => x.key === g.key)) {
-      box.push({ key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() });
-      await kvSet(GIFTBOX, box.slice(-100));
-    }
+    /* Atomic, because both tabs pull the same feed at boot and each was writing
+       back a box computed from its own stale read: the loser's write put the
+       other tab's newly-sealed gift back out of existence, or duplicated this
+       one. The dedupe now happens INSIDE the transaction, against whatever the
+       box holds at that instant, so the list is exact however many tabs pull. */
+    await kvUpdate(GIFTBOX, list => {
+      const box = list || [];
+      if (box.some(x => x.key === g.key)) return box;
+      return [...box, { key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() }].slice(-100);
+    }, []);
     return true;    // it landed: it is in your box, sealed
   }
   return applyPayload(g.key, g.type, p);
@@ -725,8 +760,9 @@ export async function pullGrants() {
   let applied = 0, heldCount = 0;
   const appliedGrants = []; // the grants that actually landed (for the reveal UI)
   const seen = new Set((await kvGet('grantsSeen', [])) || []);
+  const newlySeen = [];
   for (const g of data.grants || []) {
-    if (seen.has(g.key)) continue; // belt AND suspenders next to award()'s key check
+    if (seen.has(g.key)) continue; // belt AND suspenders next to the ledger claim
     if (await applyGrant(g)) {
       applied++;
       // a sealed gift is not "delivered" yet: keep it out of the boot reveal so
@@ -735,9 +771,28 @@ export async function pullGrants() {
       else heldCount++;
     }
     seen.add(g.key);
+    newlySeen.push(g.key);
   }
-  await kvSet('grantsSeen', [...seen].slice(-500));
-  if (data.cursor && data.cursor !== since) await kvSet('grantCursor', data.cursor);
+  /* MERGE, DO NOT OVERWRITE. This was `kvSet('grantsSeen', [...seen])` built
+     from a read taken before the loop, so a second tab pulling the same feed
+     wrote back a list missing everything the first tab had added meanwhile.
+     Measured with 30 additions across two tabs: 23 survived. A key that falls
+     out of this list is a key the next pull re-ingests, which is exactly the
+     re-delivery the ledger claim in applyPayload now has to catch on its own.
+     Both layers are wanted: this one keeps the cheap check honest. */
+  if (newlySeen.length) {
+    await kvUpdate('grantsSeen', cur => {
+      const merged = new Set(cur || []);
+      for (const k of newlySeen) merged.add(k);
+      return [...merged].slice(-500);
+    }, []);
+  }
+  /* The cursor only ever moves FORWARD. Last write wins on a plain kvSet, and
+     with two tabs pulling, the slower one's older cursor could land last and
+     drag the feed back, re-delivering everything between. */
+  if (data.cursor && data.cursor !== since) {
+    await kvUpdate('grantCursor', cur => (Number(cur) || 0) > Number(data.cursor) ? cur : data.cursor, 0);
+  }
   return { applied, appliedGrants, grants: data.grants || [] };
 }
 
