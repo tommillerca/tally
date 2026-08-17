@@ -24,7 +24,8 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree, loadPuppeteer } from './godmode.js';
+import { boot, seed, sleep, serveTree, loadPuppeteer,
+  boneyardCapability, unproven, unprovenReport, exitFor, unclassifiedRows } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let srv = null, srvHandle = null;
@@ -122,6 +123,53 @@ await page.evaluateOnNewDocument(() => {
       a.poiInEver = true;
   }, 40);
 });
+
+/* EVERY ROW IN THIS FILE IS THE BONEYARD, so every row needs a reachable vector
+ * tile host. Without one, js/app.js swaps the map for its offline message and
+ * this suite grades an empty stage. Measured on this container 2026-08-17 it
+ * came out 11 green and 11 red, and SEVEN of the eleven greens were vacuous:
+ *
+ *   ARRIVAL every straggler fades in within 250ms      0 stragglers
+ *   ARRIVAL stragglers appear via opacity fade         no .poi-in on 0 markers
+ *   ARRIVAL-SLOW stragglers appear via opacity fade    same, on 0 markers
+ *   ARRIVAL-SLOW total-pop backstop <=4000ms           final counts all zero
+ *   PAN new POIs arrive in coordinated beats           0 beat(s), [] markers
+ *   INTERACTED starts false after openMap              false stays false
+ *   INTERACTED programmatic easeTo does NOT flip it    false stays false
+ *
+ * The first of those is the instructive one, because this file already knows
+ * better: the ARRIVAL-SLOW twin of that same latency assertion carries
+ * `slow.stragglers.length > 0 &&` and a comment explaining that a latency check
+ * on an empty sample sails through green, and it correctly went RED. The plain
+ * ARRIVAL twin was never given the same guard. Same file, same author, same
+ * bug class, one row apart. That is the argument for measuring the environment
+ * once at the top rather than per-row vigilance forever.
+ *
+ * COUNT-BASED, not name-based: two of the 22 rows build their name from a
+ * template literal, so a list of quoted names cannot see them. The row count in
+ * the source is what is asserted, so a new assertion added without extending
+ * this block fails here rather than being graded against a dead map. */
+const cls = unclassifiedRows(import.meta.url, []);
+const MAP_ROW_COUNT = 22;   // every ok() in this file except ROWS-COUNTED below
+ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounted for',
+  cls.callSites === MAP_ROW_COUNT + 1,
+  `${cls.callSites} ok() rows in source, expected ${MAP_ROW_COUNT + 1}. If you added a row, it needs a line in the UNPROVEN block above it.`);
+
+const mapCap = await boneyardCapability(page);
+if (!mapCap.ok) {
+  const why = 'the Boneyard could not draw on this machine';
+  /* Named where the source names them, counted where it does not: the two
+     template-literal rows are declared by their line so nothing is silent. */
+  for (const n of cls.names.filter(n => !n.startsWith('ROWS-COUNTED'))) unproven(n, why);
+  const unnamed = cls.callSites - 1 - cls.names.filter(n => !n.startsWith('ROWS-COUNTED')).length;
+  for (let i = 1; i <= unnamed; i++) unproven(`ARRIVAL-SLOW straggler-latency row ${i} of ${unnamed} (name is built from a template literal, see source)`, why);
+  await browser.close();
+  if (srv) srv.kill();
+  const f = results.filter(r => !r.pass).length;
+  console.log(`\n${results.length - f}/${results.length} of the checks that COULD run passed`);
+  unprovenReport('boneyard-audit.mjs', mapCap);
+  process.exit(exitFor(f));
+}
 
 await seed(page, { level: 18, coins: 500 });
 
@@ -644,4 +692,4 @@ if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 if (!results.length) { console.log('FAIL: no checks ran'); process.exit(1); }
-process.exit(failed ? 1 : 0);
+process.exit(exitFor(failed));

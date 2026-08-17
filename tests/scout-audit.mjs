@@ -29,7 +29,8 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree} from './godmode.js';
+import { boot, seed, sleep, serveTree,
+  boneyardCapability, unproven, unprovenReport, exitFor, unclassifiedRows } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let srv = null, srvHandle = null;
@@ -54,6 +55,46 @@ const origin = new URL(base).origin;
 await browser.defaultBrowserContext().overridePermissions(origin, ['geolocation']);
 await page.setGeolocation({ latitude: HOME.lat, longitude: HOME.lng });
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+
+/* THIS WHOLE SUITE IS THE BONEYARD, so it can only run where the Boneyard can
+ * draw, and that means a reachable vector tile host. Without one, js/app.js
+ * swaps the map for its offline message and every row here measures nothing.
+ *
+ * Two of the five then PASS on that nothing, measured on this container
+ * 2026-08-17:
+ *   BOUNDED  "scouting does not grow the marker count", detail `0 -> 0
+ *            markers`. A ceiling satisfied by an empty set is tally/CLAUDE.md
+ *            rule 11 exactly: a bound that can only be violated by markers is
+ *            green when there are no markers, and the suite's own NONEMPTY
+ *            rows in the same run said there were none.
+ *   ANCHORED "a den you only looked at is not enterable", detail "enter button
+ *            correctly hidden". The button is hidden because there is no map,
+ *            not because the distance rule held.
+ * window.__map is set before the map's error handler runs, so its presence is
+ * not evidence either: the suite reaches readWorld() and reads zeroes. */
+const MAP_ROWS = [
+  'SCOUT harness: window.__map exposed',
+  'NONEMPTY before: the map resolved POIs at all',
+  'NONEMPTY after: POIs exist at the new view',
+  'SCOUT: panning to new ground resolves POIs that were not there',
+  'BOUNDED: scouting does not grow the marker count',
+  'ANCHORED: a den you only looked at is not enterable',
+];
+const cls = unclassifiedRows(import.meta.url, [MAP_ROWS, ['ROWS-CLASSIFIED every assertion in this file is declared map-dependent']]);
+ok('ROWS-CLASSIFIED every assertion in this file is declared map-dependent',
+  cls.missing.length === 0 && cls.seen > 0,
+  cls.missing.length ? `unclassified: ${cls.missing.join(' | ')}` : `${cls.seen} row names read from this file`);
+
+const mapCap = await boneyardCapability(page);
+if (!mapCap.ok) {
+  for (const n of MAP_ROWS) unproven(n, 'the Boneyard could not draw on this machine');
+  await browser.close();
+  if (srv) srv.kill();
+  const f = results.filter(r => !r.pass).length;
+  console.log(`\n${results.length - f}/${results.length} of the checks that COULD run passed`);
+  unprovenReport('scout-audit.mjs', mapCap);
+  process.exit(exitFor(f));
+}
 
 await seed(page, { level: 18, coins: 500 });
 await page.evaluate(() => { location.hash = '#/boneyard'; });
@@ -145,4 +186,4 @@ await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
-process.exit(failed ? 1 : 0);
+process.exit(exitFor(failed));
