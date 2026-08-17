@@ -1,5 +1,15 @@
 /* A CENTRING TRANSFORM WITH A FRACTIONAL TRANSLATION RASTERISES OFF THE GRID.
  *
+ * A CORRECTION, KEPT HERE BECAUSE THE LOG COULD NOT CARRY IT. The commit that
+ * introduced this file concluded the mechanism did not exist, and that transform
+ * centring and layout centring render byte-identical. That was WRONG, and it was
+ * wrong for an instructive reason: the fixture pinned the element at 200px wide,
+ * so translateX(-50%) was exactly -100px and could never be fractional. Sixteen
+ * rows reported byte-identical and every one of them had measured nothing. The
+ * conclusion was corrected in a later commit, and it is repeated here because a
+ * wrong conclusion left standing where somebody reads it is worse than a long
+ * comment, and this file is where somebody reads it.
+ *
  * WHY THIS EXISTS. `left: 50%; transform: translateX(-50%)` puts the box in the
  * right place and rasterises it in the wrong one. -50% of an element's own width
  * is a half CSS pixel whenever that width is ODD, and a transform's translation
