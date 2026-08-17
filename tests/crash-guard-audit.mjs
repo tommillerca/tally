@@ -28,7 +28,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadPuppeteer, serveTree, sleep } from './godmode.js';
+import { loadPuppeteer, serveTree, sleep, chromePath, sandboxArgs } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
@@ -43,7 +43,8 @@ const puppeteer = await loadPuppeteer();
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
-  args: process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [],
+  executablePath: chromePath(),
+  args: sandboxArgs(),
 });
 
 /* A fresh page per case on purpose. page.goto() to a URL that differs only in
