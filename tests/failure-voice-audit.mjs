@@ -102,18 +102,27 @@ const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? ' 
  * Same shape as the release gate's own coverage assertion, and the same price:
  * one line per exemption, on the record as a decision. */
 const DATA_STORES = ['log', 'weights', 'foods', 'health'];
+/* KEYED ON THE WRITE PLUS THE LINE ABOVE IT, NOT THE WRITE ALONE. Two different
+   sites in this file are byte-for-byte `await db.put('foods', food);`: the
+   favourite-usage bookkeeping and the custom-food save. A key of just the line
+   would have let the exemption written for the harmless one silently excuse the
+   one that matters, which is the exact failure mode this map exists to prevent.
+   The preceding non-blank line is enough to tell them apart and still survives
+   ordinary editing inside the handler. */
 const EXEMPT = {
-  "await db.put('foods', food);":
+  "food.lastUsedAt = Date.now(); >>> await db.put('foods', food);":
     'persistFoodUse: usage bookkeeping (useCount / lastUsedAt) that runs AFTER the log row it belongs to has already landed and been confirmed. A refusal costs a sort order, not the player\'s data, and a second toast on a successful save is noise.',
-  "if (food.source !== 'generic') await db.put('foods', food);":
+  "$('#favBtn', wrap).classList.toggle('gold', !!food.favorite); >>> if (food.source !== 'generic') await db.put('foods', food);":
     'the favourite star: a toggle whose entire result is the star\'s own state, re-read from the store on the next render. Nothing the player typed is at stake.',
-  "await db.put('health', row);":
+  "if (payload.wtypes) row.wtypes = payload.wtypes; >>> await db.put('health', row);":
     'Apple Health intake. Not a player tap: it runs from a sync that reports its own outcome, and syncFromClipboard owns the messages (tests/health-intake-audit.mjs).',
-  "await db.put('weights', { date: payload.date, kg: payload.weightKg });":
+  "if (payload.weightKg != null) { >>> await db.put('weights', { date: payload.date, kg: payload.weightKg });":
     'same Health intake path as above, same owner of the message.',
-  "await db.put('health', {": 'demo seeding, reachable only under ?demo. No player sees it.',
-  "await db.put('log', {": 'demo seeding, reachable only under ?demo. No player sees it.',
-  "await db.put('weights', { date: addDays(today, -i), kg: Math.round(kg * 10) / 10 });":
+  "const awakeMin = Math.round(sleepMin * 0.05); >>> await db.put('health', {":
+    'demo seeding, reachable only under ?demo. No player sees it.',
+  "const n = nutrientsFor(food, sel); >>> await db.put('log', {":
+    'demo seeding, reachable only under ?demo. No player sees it.',
+  "const kg = 87.4 - (30 - i) * 0.045 + ((i * 7) % 3) * 0.14 - 0.1; >>> await db.put('weights', { date: addDays(today, -i), kg: Math.round(kg * 10) / 10 });":
     'demo seeding, reachable only under ?demo. No player sees it.',
 };
 
@@ -151,24 +160,28 @@ function tryBlocks(src) {
 }
 
 const BLOCKS = tryBlocks(APP);
+const APP_LINES = APP.split('\n');
 const putRe = new RegExp(`db\\.put\\(\\s*'(${DATA_STORES.join('|')})'`, 'g');
 const sites = [];
 let pm;
 while ((pm = putRe.exec(APP))) {
   const lineNo = APP.slice(0, pm.index).split('\n').length;
-  const line = APP.split('\n')[lineNo - 1].trim();
+  const line = APP_LINES[lineNo - 1].trim();
+  let j = lineNo - 2;
+  while (j >= 0 && !APP_LINES[j].trim()) j--;
+  const key = `${j >= 0 ? APP_LINES[j].trim() : ''} >>> ${line}`;
   const guarded = BLOCKS.some(b => pm.index > b.start && pm.index < b.end && /toast\(/.test(b.catchBody));
-  sites.push({ lineNo, line, store: pm[1], guarded });
+  sites.push({ lineNo, line, key, store: pm[1], guarded });
 }
 ok('STATIC-CONTROL the scanner actually found the player-data writes (an empty scan is not a clean scan)',
   sites.length >= 10, `${sites.length} db.put sites on ${DATA_STORES.join('/')}`);
-const undeclared = sites.filter(s => !s.guarded && !EXEMPT[s.line]);
+const undeclared = sites.filter(s => !s.guarded && !EXEMPT[s.key]);
 ok('STATIC every player-data write either speaks on refusal or is declared with a reason',
   undeclared.length === 0,
   undeclared.length ? undeclared.map(s => `js/app.js:${s.lineNo} ${s.line}`).join(' | ') : `${sites.filter(s => s.guarded).length} guarded, ${sites.length - sites.filter(s => s.guarded).length} declared`);
 /* A declaration for a write that no longer exists rots into false coverage the
    same way an unrun audit does, so it is a failure too. */
-const staleExempt = Object.keys(EXEMPT).filter(k => !sites.some(s => s.line === k && !s.guarded));
+const staleExempt = Object.keys(EXEMPT).filter(k => !sites.some(s => s.key === k && !s.guarded));
 ok('STATIC no exemption outlives the write it excuses', staleExempt.length === 0, staleExempt.join(' | ') || 'none');
 
 /* ---------- part two: the DRIVEN half --------------------------------------- */
@@ -329,13 +342,26 @@ const setVal = (sel, v) => page.evaluate((s, val) => {
 
 // ------------------------------------------------------------------- RELOG ---
 {
+  /* "Log it again" only renders a [data-relog] row for a recent entry with no
+     food behind it, which is a quick add. The demo profile logs everything
+     against a food id, so the row never appeared and the CONTROL below caught
+     that the scenario had not run at all rather than passing on an empty sample
+     (rule 3). Plant one quick-add row and the real render path does the rest. */
+  await page.evaluate(async () => {
+    const d = await import('./js/db.js');
+    await d.db.put('log', {
+      id: 'audit-relog', date: new Date().toISOString().slice(0, 10), meal: 0,
+      ts: Date.now(), foodId: null, name: 'Audit Quick', portionLabel: '',
+      kcal: 300, p: 10, c: 30, f: 8,
+    });
+  });
   await page.evaluate(() => { location.hash = '#/today'; });
-  await sleep(1600);
-  await tap('[data-addmeal]');
   await sleep(1800);
+  await tap('[data-addmeal]');
+  await sleep(2000);
   const found = await page.evaluate(() => !!document.querySelector('[data-relog]'));
   if (!found) {
-    ok('RELOG-CONTROL a re-log row was on offer (the demo profile has logged meals)', false, 'no [data-relog] row rendered');
+    ok('RELOG-CONTROL a re-log row was on offer', false, 'no [data-relog] row rendered');
   } else {
     const before = await rows('log');
     await quiet();
