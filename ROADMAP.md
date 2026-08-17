@@ -102,6 +102,53 @@ a wiring job, and it is not taken.
 
 **A wooden crate, lid on (39fcabcc), 21:06.**
 
+### WIRED IN 2026-08-16 night: the bone chest is the Golden crate
+
+Tom, going to bed: "Not sure why you didn't do the other crate too? Bone crate
+with flame for the rarer one." Done. Three of the states above become the Golden
+crate's own sequence, picked out of the batch by palette (bone fill over 40% plus
+a saturated green in the top third):
+
+  eeefdb9c -> assets/crates/golden/f0.png   closed
+  9d2afa64 -> assets/crates/golden/f1.png   open, gold
+  c0fa1bba -> assets/crates/golden/f2.png   open, gems
+
+So c0fa1bba was not a near-duplicate of 9d2afa64, it is the NEXT state. Timing
+[200, 120]ms. Both crates now measure 100.00% exact against their source PNGs
+(13626 opaque px golden, 12348 daily), no invented colours, no transform at any
+point in the drop.
+
+The old vector crate icons are gone from every tile big enough to hold the art.
+48 halves cleanly to 24, checked by eye at 8x first, which reaches the Backpack
+tab chip that sat at 21px showing the old art directly above the new. The egg is
+in the same map now. Under 24px keeps the vector on purpose: a 48px drawing in a
+12px glyph beside text is mush whatever we do.
+
+Two defects fell out of it, both found by guards and not by watching:
+
+  - the sink retime Tom asked for was NEVER RUNNING. `animation-duration: .2s`
+    sat above the `.co-sink.pix` shorthand and the shorthand reset it to .9s, so
+    the crate was still dissolving until 2.50s with the card up at 1.82s. That is
+    the exact overlap he reported, in the build I told him was fixed. Now
+    gone 1.80, card 1.82, confirmed in the captured frames.
+  - all fifteen Step Egg frames were missing from the precache list, so the hatch
+    was fetching frames from the network mid-animation. 64K, now precached.
+
+### DECISION FOR TOM: the reveal is 0.44s slower than the vector crate was
+
+Time-to-card was 1.38s on the old vector crate and the guard pinned it under
+1.6s. Both crates are authored frame sequences now and the performance is
+genuinely longer: the drop lands at 0.71s, bounces until 1.02, the frames play
+1.12 to 1.52, and only then can the crate clear before the card. 1.6s and a
+nine-frame sequence that has to finish first cannot both be true.
+
+The ceiling now sits at 1.9s so drift is still caught. Buying the 0.44s back
+means shortening the 1.02s drop, which Tom has not complained about, so it is
+not touched. His call:
+  a) leave it, the longer performance is the point of authored frames
+  b) shorten the drop to ~0.80s and get back under 1.6s
+  c) cut frames from the sequence instead
+
 ### What has to happen before any of it ships
 
 1. The chest ending is the small one and should go first: two frames appended to
