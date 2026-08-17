@@ -1337,6 +1337,34 @@ body::before {
 .fight-actions.scrolls.at-end { mask-image: none; -webkit-mask-image: none; }
 .fight-endrow { margin-top: 8px; }
 .fight-endrow .fight-act { width: 100%; }
+
+/* ---- SHORT PHONES: PIN THE PRIMARY ACTION, DO NOT SHRINK THE FIGHT ----
+   Measured at 320x568 before this rule, on a real den fight:
+     .fight-body is 466px tall and holds 520px of content
+     End Turn's row renders at 557.9 to 612.6, so 44.6px below a 568 fold
+   The reported bug was "End Turn renders off screen". It is worth being precise
+   about what that turned out to be, because it changes the fix: .fight-body is
+   already overflow-y:auto with 54px of scroll range, and setting scrollTop to
+   its maximum brings End Turn to 503.9-558.6, fully on screen. So the button was
+   never unreachable. It was BELOW THE FOLD ON FIRST PAINT with nothing saying
+   so, which on the one screen where a player is taking turns is worse than it
+   sounds: the primary action of the whole screen requires a hunt.
+   The alternative was to shrink the arena floor from 183 to 129 on these phones,
+   which fixes the symptom by making the fighters small on exactly the devices
+   with the least room to lose. Tom's call, 2026-08-16: pin instead.
+   So the row sticks to the bottom of the scroller. Nothing shrinks, the boss
+   keeps his 183, and the arena and tray scroll behind a control that is always
+   there. 600px is the same breakpoint the discarded shrink used. */
+@media (max-height: 600px) {
+  .fight-body { position: relative; overflow-y: auto; }
+  .fight-body > .fight-endrow {
+    position: sticky; bottom: 0; z-index: 4;
+    /* opaque, or the tray scrolls through the button it is supposed to sit under */
+    background: var(--bg);
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 10px -6px rgba(0, 0, 0, .55);
+  }
+}
 /* container-type:size is what makes the cqh units below real. The figure rules
    have said "scales with the arena" since 2026-08-09, but nothing in this sheet
    ever declared a query container, so cqh silently resolved against the small
