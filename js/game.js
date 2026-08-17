@@ -140,9 +140,17 @@ export async function award(key, type, xp, label, date) {
 export async function claimFriendBattle(friendId, won, date) {
   const d = date || dateKey();
   const key = `friendbattle-${d}-${friendId}`;
-  if (await db.get('xp', key)) return { firstToday: false, coins: 0, xp: 0, won };
   const xp = won ? 12 : 5;
-  await award(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  /* firstToday IS the mint, not a read taken before it. This used to test
+     `db.get(key)` and then award() and then return firstToday:true regardless
+     of what award() said, so two overlapping settles both got firstToday:true
+     and the caller paid the 25 coins TWICE while the ledger correctly held one
+     row: measured 2026-08-17, two concurrent claimFriendBattle both reported a
+     first win. The coins are added by the caller, so award()'s answer is the
+     only thing that could have stopped it and it was thrown away. */
+  if (!(await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d))) {
+    return { firstToday: false, coins: 0, xp: 0, won };
+  }
   const row = await db.get('xp', key);
   if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
   return { firstToday: true, coins: won ? 25 : 8, xp, won };
@@ -177,10 +185,20 @@ export function levelMilestone(L) {
 export async function grantLevelRewards(fromLevel, toLevel) {
   let coins = 0, crates = 0, dust = 0, eggs = 0, milestone = null;
   for (let L = fromLevel + 1; L <= toLevel; L++) {
-    const got = await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
-    const row = await db.get('xp', `levelup-${L}`);
-    if (row && row.claimed) continue;
-    if (row) { row.claimed = true; await db.put('xp', row); }
+    await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
+    /* THE PAYOUT CLAIM IS ITS OWN ROW, AND MINTING IT IS ATOMIC.
+       It used to be a `claimed` flag on the levelup row, set with a get and
+       then a put, which is two transactions: two overlapping level crossings
+       both read claimed=false and both paid. Measured 2026-08-17, two
+       concurrent grantLevelRewards(199, 200) paid 2290 coins and 300 dust for
+       one level. `levelpaid-<L>` is claimed with db.add, so exactly one caller
+       can ever take it. The old flag is still honoured so nobody who already
+       collected a level gets paid for it again, and initGameIfNeeded's
+       retroactive baseline (which sets the flag WITHOUT paying) keeps working
+       unchanged. */
+    const legacy = await db.get('xp', `levelup-${L}`);
+    if (legacy && legacy.claimed) continue;
+    if (!(await db.add('xp', { key: `levelpaid-${L}`, type: 'levelup', xp: 0, label: `Level ${L} rewards`, date: dateKey(), ts: Date.now() }))) continue;
     await coinsAdd(levelCoins(L));
     await grantCrate('golden', 'level-' + L);
     coins += levelCoins(L); crates += 1;
@@ -309,12 +327,12 @@ export async function evaluateBadges() {
   const st = await buildStats();
   const out = [];
   for (const b of BADGES) {
-    const key = 'badge-' + b.id;
-    const got = await db.get('xp', key);
-    if (!got && badgeCheck(b.id, st)) {
-      await award(key, 'badge', 25, b.name);
-      out.push(b);
-    }
+    /* The badge is announced only if THIS call minted it. The old shape read
+       the row, then awarded, then pushed regardless of what award() said, so
+       two overlapping evaluateBadges both announced the same badge and both
+       callers added 25 to the XP they report. awardOnce answers the same
+       question the read was asking, indivisibly. */
+    if (badgeCheck(b.id, st) && await awardOnce('badge-' + b.id, 'badge', 25, b.name)) out.push(b);
   }
   return out;
 }
