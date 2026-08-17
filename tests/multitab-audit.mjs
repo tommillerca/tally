@@ -30,6 +30,14 @@
  *     a stale tab saving settings                    reverted the other tab's
  *                                                    units change with nothing
  *                                                    said to anybody
+ *     a tab foregrounded after the other spent       showed 500 coins over a
+ *                                                    store holding 1500, and
+ *                                                    stayed there. The
+ *                                                    arithmetic was never
+ *                                                    wrong (a 200 spend from
+ *                                                    that screen went 1500 ->
+ *                                                    1300) but the number on
+ *                                                    it was a lie.
  *     Erase all data with a second tab writing       30 inv rows and 150 coins
  *                                                    still there, and the tab
  *                                                    that erased reloaded onto
@@ -65,7 +73,7 @@
  *     --prove-red=inv      grantGear back to newId + put        -> INV-DUPE
  *     --prove-red=melt     disenchantGear back to db.del        -> MELT-ONCE
  *     --prove-red=seen     grantsSeen back to overwrite         -> GRANT-SEEN
- *     --prove-red=settings js/app.js back to whole-snapshot saves  -> SETTINGS-MERGE (source half)\n *     --prove-red=erase    erase back to the per-store loop     -> ERASE-ZERO
+ *     --prove-red=resume   drop the resume refresh              -> RESUME-FRESH\n *     --prove-red=sheetclose refresh on EVERY resume, unguarded  -> RESUME-SHEET\n *     --prove-red=settings js/app.js back to whole-snapshot saves  -> SETTINGS-MERGE (source half)\n *     --prove-red=erase    erase back to the per-store loop     -> ERASE-ZERO
  * A mode that changes no bytes is itself a failure (the SETUP row below), so a
  * drifted regex cannot silently prove nothing.
  *
@@ -129,6 +137,15 @@ function transform(rel, buf) {
   if (rel === 'js/game.js' && PROVE === 'award') {
     s = swap(s, "  const claimed = await db.addIfAbsent('xp', row);\n  if (!claimed) return { claimed: false, xp: 0 };",
       "  if (await db.get('xp', key)) return { claimed: false, xp: 0 };\n  await db.put('xp', row);");
+  }
+  if (rel === 'js/app.js' && PROVE === 'resume') {
+    s = swap(s, "    if (!sheetStack.length) refresh();\n  });", "  });");
+  }
+  if (rel === 'js/app.js' && PROVE === 'sheetclose') {
+    /* the unguarded version: refresh on EVERY resume, sheet or no sheet. This
+       is the regression the guard above exists to stop, and it is why
+       RESUME-SHEET is in the file at all. */
+    s = swap(s, "    if (!sheetStack.length) refresh();", "    refresh();");
   }
   if (rel === 'js/app.js' && PROVE === 'settings') {
     /* back to writing the whole in-memory snapshot, both in the mechanism and
@@ -457,6 +474,60 @@ const reset = () => readA(async () => {
      writing the correct 12 rows, so the row count alone grades it as fine. */
   exact('AWARD-CAP  a 12/day ceiling writes exactly 12 rows however many tabs push at it', 12, rows);
   exact('AWARD-CAP  and pays exactly the capped XP, never more', 120, xa + xb, `(A paid ${xa}, B paid ${xb})`);
+}
+
+/* ---------------- a tab foregrounded after the other moved on -------------- */
+{
+  await reset();
+  await readA(() => window.__t.db.kvSet('coins', 500));
+  await A.bringToFront();
+  await A.evaluate(() => {
+    window.__vis = 0;
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) window.__vis++; });
+    dispatchEvent(new HashChangeEvent('hashchange'));
+  });
+  await sleep(1500);
+  // the chip is formatted for humans ("1,500"), so compare the number in it
+  const chip = p => p.evaluate(() => (document.getElementById('coinBtn')?.textContent || '').replace(/[^0-9]/g, ''));
+  const shown = await chip(A);
+  ok('RESUME-SETUP  tab A is showing the balance it was left with (if it never painted one, the row below is vacuous)',
+    shown === '500', `chip reads "${shown}"`);
+  // background A and move the money from B
+  await B.bringToFront();
+  await sleep(400);
+  await B.evaluate(async () => { for (let i = 0; i < 10; i++) await window.__t.loot.coinsAdd(100); });
+  await sleep(400);
+  // and bring A back, which is the case the brief is about
+  await A.bringToFront();
+  await sleep(2500);
+  const vis = await A.evaluate(() => window.__vis);
+  ok('RESUME-SETUP  bringing the tab back really did fire a visibilitychange (0 would mean nothing was driven)',
+    vis > 0, `${vis} foreground events`);
+  exact('RESUME-FRESH  a tab foregrounded after the other moved the money shows the CURRENT balance, not the one it was left with',
+    '1500', await chip(A), `(store holds ${await readA(() => window.__t.loot.coins())})`);
+  /* AND IT MUST NOT COST THE PLAYER THEIR SHEET. refresh() re-routes, which
+     closes every open sheet, so an unguarded resume-refresh would yank a sheet
+     shut because somebody alt-tabbed. That would be a worse bug than the one
+     above, and it is exactly the kind a "does it update" check cannot see. */
+  await A.evaluate(() => {
+    const b = document.getElementById('pitBtn');
+    if (b) { const r = b.getBoundingClientRect(); window.__pit = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  });
+  const pit = await A.evaluate(() => window.__pit || null);
+  if (pit) {
+    await A.mouse.click(pit.x, pit.y);
+    await sleep(2000);
+    const openBefore = await A.evaluate(() => (document.getElementById('sheets')?.children.length ?? -1));
+    await B.bringToFront(); await sleep(500);
+    await A.bringToFront(); await sleep(2500);
+    const openAfter = await A.evaluate(() => (document.getElementById('sheets')?.children.length ?? -1));
+    ok('RESUME-SHEET  a sheet open in that tab survives the background/foreground round trip',
+      openBefore > 0 && openAfter === openBefore, `sheets before ${openBefore}, after ${openAfter}`);
+    await A.evaluate(() => history.back());
+    await sleep(1200);
+  } else {
+    ok('RESUME-SHEET  a sheet open in that tab survives the background/foreground round trip', false, 'could not open a sheet, so this was not checked');
+  }
 }
 
 /* ---------------- a stale tab saving over a fresh one ---------------------- */
