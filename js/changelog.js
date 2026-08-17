@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 389, date: '2026-08-17', title: 'The Golden Crate is real artwork too', items: [
+    "<b>The Golden Crate opens as a hand-drawn bone chest with a green flame.</b> Closed, then open with the gold, then open with the gems inside. The same treatment the Common Crate got, on the rarer one.",
+    "<b>The old crate icons are gone from your Backpack.</b> Both chest tiles and the Backpack tab itself show the real artwork now instead of the flat placeholder icons. The Step Egg keeps its old icon on purpose: the drawing loses its speckle at that size and just reads as a grey pebble.",
+    "<b>A correction to the last update.</b> v388 said the crate clears the screen before your card arrives. It did not. One line of styling was quietly cancelling another, so the chest was still dissolving for most of a second after the card was already in front of it. That is genuinely fixed now, on both crates.",
+    "<b>Gifts and prizes could pay out more than once.</b> If a gift, a step-race prize or a make-good reached your device a second time, after a restore, a reinstall or an interrupted sync, it paid again. Anything already in your ledger is recognised now and never pays twice.",
+    "<b>The Step Egg's hatch frames are stored on your device up front,</b> so the animation no longer fetches them off the network while it is playing.",
+  ] },
   { n: 388, date: '2026-08-16', title: 'The Step Egg actually hatches now', items: [
     "<b>The Step Egg hatch was drawing all fifteen of its frames at once, stacked down the screen.</b> It should crack in place, one frame at a time, and end on the shell pieces and the smoke. It does now. The egg is also about twice the size it was and sits where your new pet appears, instead of small and high up and then jumping.",
     "<b>The Common Crate opens as real artwork instead of a cut-in-half icon.</b> Nine hand-drawn frames of the lid cracking and the ghost climbing out, timed to what each frame actually shows rather than spread evenly, and the crate now clears the screen before your card arrives instead of dissolving behind it.",
