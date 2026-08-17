@@ -187,17 +187,25 @@ ok('SETUP  the API deadline exists, is finite and is under 20s, and the audit co
   `default=${shortened.def}ms  driven at ${TEST_DEADLINE_MS}ms`);
 
 /* ---------------------------------------------------------------- helpers */
-const $click = async sel => {
-  const at = await page.evaluate(s => {
-    const b = document.querySelector(s);
-    if (!b || b.disabled) return null;
-    b.scrollIntoView({ block: 'center' });
-    const r = b.getBoundingClientRect();
-    return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
-  }, sel).catch(() => null);
-  if (!at) return false;
-  await page.mouse.click(at.x, at.y);
-  return true;
+/* A real mouse click at the element's centre, and it WAITS for the element to
+   have a box. Sheets here are hidden until revealWhenReady() has decoded their
+   images, so a button that is already in the DOM measures 0x0 for a beat; a
+   single-shot querySelector-and-click reads that as "no such control" and a
+   CONTROL row goes red against a working app. Bounded wait, then give up. */
+const $click = async (sel, waitMs = 5000) => {
+  const t0 = Date.now();
+  for (;;) {
+    const at = await page.evaluate(s => {
+      const b = document.querySelector(s);
+      if (!b || b.disabled) return null;
+      b.scrollIntoView({ block: 'center' });
+      const r = b.getBoundingClientRect();
+      return r.width && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+    }, sel).catch(() => null);
+    if (at) { await page.mouse.click(at.x, at.y); return true; }
+    if (Date.now() - t0 > waitMs) return false;
+    await sleep(250);
+  }
 };
 const btn = sel => page.evaluate(s => { const b = document.querySelector(s); return b ? { text: (b.textContent || '').trim(), disabled: !!b.disabled } : null; }, sel).catch(() => null);
 const toastText = () => page.evaluate(() => [...document.querySelectorAll('.toast, #toast')].map(t => (t.textContent || '').trim()).filter(Boolean).join(' | ')).catch(() => '');
@@ -380,7 +388,15 @@ async function openFriendCard() {
      has to re-fetch, and clicking into an empty deck is how this CONTROL row
      first went red against a perfectly good app. */
   if (await waitFor(() => present('#cfanDeck [data-fan]'), 12000) < 0) return false;
+  /* TWICE, ON PURPOSE. Only the CENTRE card of the fan opens a profile; a tap on
+     any other card just brings it to the centre. The first card in DOM order is
+     the centre only for a crew of one, which is why this read as a broken app
+     with three friends and as a working one with one. */
   await page.evaluate(() => document.querySelector('#cfanDeck [data-fan]')?.click()).catch(() => {});
+  await sleep(900);
+  if (!await present('#fpGift')) {
+    await page.evaluate(() => document.querySelector('#cfanDeck [data-fan]')?.click()).catch(() => {});
+  }
   if (await waitFor(() => present('#fpGift'), 8000) < 0) return false;
   if (!await $click('#fpGift')) return false;
   return (await waitFor(() => present('#giftFree'), 8000)) >= 0;
