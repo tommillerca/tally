@@ -22,7 +22,26 @@ let dbName = 'tally';
  * next store cannot silently reintroduce the same hole. */
 export const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
 
-export function useDbName(name) { dbName = name; dbPromise = null; }
+/* WRITE EPOCHS. A strictly increasing stamp per store, bumped by every write that
+   goes through this module. It exists so a caller can cache something derived from
+   a whole store (js/game.js caches the XP total) and know, in constant time and
+   without re-reading the store, whether anything has touched it since. Bumped
+   BEFORE the write lands, so a write that then FAILS still invalidates: the safe
+   direction is a needless rebuild, never a stale number. */
+let writeSeq = 0;
+const storeSeq = new Map();
+function bumpStore(store) { storeSeq.set(store, ++writeSeq); }
+export function storeEpoch(store) { return storeSeq.has(store) ? storeSeq.get(store) : writeSeq; }
+
+export function useDbName(name) {
+  dbName = name;
+  dbPromise = null;
+  /* A different database is different data. Clearing the per-store stamps while
+     writeSeq keeps climbing means every store now reports a value no cache built
+     against the old database can be holding. */
+  writeSeq++;
+  storeSeq.clear();
+}
 
 function open() {
   if (!dbPromise) {
@@ -75,11 +94,13 @@ function tx(store, mode, fn) {
 }
 
 export const db = {
-  put: (store, val) => tx(store, 'readwrite', s => s.put(val)),
-  del: (store, key) => tx(store, 'readwrite', s => s.delete(key)),
+  put: (store, val) => { bumpStore(store); return tx(store, 'readwrite', s => s.put(val)); },
+  del: (store, key) => { bumpStore(store); return tx(store, 'readwrite', s => s.delete(key)); },
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
-  clear: (store) => tx(store, 'readwrite', s => s.clear()),
+  clear: (store) => { bumpStore(store); return tx(store, 'readwrite', s => s.clear()); },
   all: (store) => tx(store, 'readonly', s => s.getAll()),
+  count: (store) => tx(store, 'readonly', s => s.count()),
+  epoch: (store) => storeEpoch(store),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');
     const req = t.objectStore(store).index(index).getAll(value);
@@ -237,6 +258,9 @@ export async function importAll(data, { replace = true } = {}) {
         for (const row of (data[s] || [])) os.put(row);
         if (s === 'kv') for (const row of keptKv) os.put(row);
       }
+      /* An import replaces the contents of every store, so every derived cache
+         built on the old contents is now wrong. Stamp them all. */
+      for (const s of STORES) bumpStore(s);
     } catch (e) {
       /* LOAD-BEARING, do not delete. A synchronous throw out of `os.put`
          (malformed row, unclonable value) does NOT abort the transaction
