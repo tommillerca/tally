@@ -5337,7 +5337,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       ${editing ? '<button class="btn danger" id="delBtn">Delete entry</button>' : ''}
       ${food.source === 'custom' ? '<div style="height:8px"></div><button class="btn ghost" id="editFoodBtn">Edit food details</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1' });
+    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1', name: 'food_portion' });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
      visible before the tap, which is why the XP economy read as invisible.
@@ -5546,7 +5546,7 @@ function openTextSheet({ title, value = '', placeholder = '', cta = 'Save' }, on
     <div class="sheet-body">
       <div class="t1-field"><input id="txIn" type="text" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off"></div>
     </div>
-    <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: title });
+    <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: 'text_input' });
   const input = $('#txIn', wrap);
   setTimeout(() => { input.focus(); input.select(); }, 120);
   const go = () => { const v = input.value.trim(); history.back(); setTimeout(() => onSave(v), 180); };
@@ -5590,7 +5590,7 @@ function openQuickAdd(getMeal, entry = null) {
       ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
       ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button></div>`, { cls: 't1' });
+    <div class="t1-foot"><button class="btn" id="qaAdd">${entry ? 'Save' : 'Add'}</button></div>`, { cls: 't1', name: 'quick_add' });
   $('#qaKcal', wrap).focus();
   $('#qaAdd', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
@@ -5648,7 +5648,7 @@ async function openScanner(getMeal) {
         <button class="btn small" id="manualGo">Look up</button>
       </div>
       <button class="scan-alt" id="scanToLabel">No barcode on it? <b>Scan the label</b></button>
-    </div>`, { cls: 'scanner t1', onClose: () => scanner && scanner.stop() });
+    </div>`, { cls: 'scanner t1', name: 'scanner', onClose: () => scanner && scanner.stop() });
 
   const video = $('video', wrap);
   const status = $('#scanStatus', wrap);
@@ -5865,7 +5865,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       ${barcode ? `<p class="note">Linked to barcode ${esc(barcode)}, so scanning finds it instantly next time.</p>` : ''}
       ${f ? '<div style="height:12px"></div><button class="btn danger" id="ffDel">Delete food</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button></div>`, { cls: 't1' });
+    <div class="t1-foot"><button class="btn" id="ffSave">${f ? 'Save changes' : 'Save food'}</button></div>`, { cls: 't1', name: 'food_edit' });
 
   $('#ffRetake', wrap)?.addEventListener('click', () => history.back());
 
@@ -8265,7 +8265,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>
       ${stranger ? '' : '<button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>'}
     </div>
-  `, { cls: 'sheet-fp' });
+  `, { cls: 'sheet-fp', name: 'friend_profile' });
   $('#fpGift', wrap)?.addEventListener('click', () => openGiftSheet(f));
   $('#fpCheer', wrap)?.addEventListener('click', () => openCheerSheet(f));
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
@@ -8425,7 +8425,18 @@ function openFeedbackSheet() {
     if (!note) { if (st) st.textContent = 'Type something first.'; return; }
     btn.disabled = true; if (st) st.textContent = 'Sending...';
     const r = await sendReport('feedback', { note });
-    trackEvent('feedback_send');
+    /* THE ROW IS AN ATTEMPT, SO IT HAS TO SAY WHETHER IT LANDED. This fired
+       unconditionally one line after a send that returns { ok: false } for an
+       offline device, a dead backend or a 500, so the count of 'feedback_send'
+       has always been the count of TAPS, while the reports table only ever got
+       the ones that arrived. Reading the two side by side made the gap look
+       like lost rows on the server.
+       ADDITIVE ON PURPOSE: the row still fires either way, so the historical
+       series (taps) keeps its meaning and nothing retroactively changes. The
+       new prop is what makes the delivered half computable from here on:
+       json_extract(props,'$.ok') = 1. Rows before this build have no `ok`,
+       which is the honest answer for them: unknown. */
+    trackEvent('feedback_send', { ok: r && r.ok ? 1 : 0 });
     if (r && r.ok) { if (st) st.textContent = 'Sent. Thanks. Every note gets read. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
     else { if (st) st.textContent = 'Could not send. Try again when you are online.'; btn.disabled = false; }
   });
@@ -9322,7 +9333,23 @@ function renderOnboarding(step = 0, ctx = {}) {
      Anti-regression rule 8: whatever hides content must own un-hiding it. */
   el.classList.add('screen-in');
   $('#tabbar').style.display = 'none';
-  trackEvent('onb_step', { n: step });
+  /* ONE ROW PER RENDER, AND A RENDER IS NOT A REACH. The Back button calls
+     renderOnboarding(step - 1) and the player can walk 0-1-0-1-2 through the
+     three screens, so this counted step VIEWS while the launch funnel it exists
+     for reads them as step REACHES: the later steps inflate against step 0, and
+     a funnel can even appear to widen. Measured by driving Back in
+     tests/analytics-event-audit.mjs.
+     ADDITIVE, NOT SILENT: the row still fires on every render, so the existing
+     series keeps meaning exactly what it always meant, and `re` is what makes
+     the true reach count computable from here on. Rows before this build carry
+     no `re` and CANNOT be corrected retroactively; read them as views.
+     `ctx` is the object that survives the whole run (it carries the name pick),
+     so it is the right place for the seen-set: a fresh onboarding gets a fresh
+     one, exactly like a fresh funnel. */
+  const seenSteps = ctx._onbSeen || (ctx._onbSeen = new Set());
+  const revisit = seenSteps.has(step);
+  seenSteps.add(step);
+  trackEvent('onb_step', { n: step, re: revisit ? 1 : 0 });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
   const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
   const ly = id => BH_BY_ID[id] ? `<img class="ly" src="${bhAsset(BH_BY_ID[id])}" alt="">` : '';
@@ -9520,7 +9547,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Keep it going</button>
       </div>
-    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', name: 'celebration', onClose: () => setFxLayer() });
   setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
@@ -9743,7 +9770,7 @@ function openHatchReveal(res, charWrap) {
       <div class="reveal-foot">
         <button class="btn" id="hatchOk">${item ? 'Adopt' : 'Nice'}</button>
       </div>
-    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', name: 'hatch_reveal', onClose: () => setFxLayer() });
   setFxLayer(305);
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
@@ -11183,7 +11210,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-dots" id="packDots"></div>
           </div>
         </div>
-      </div>`, { cls: 'takeover', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
+      </div>`, { cls: 'takeover', name: 'pack_reveal', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
     setFxLayer(305);
     const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
     /* One reader for the CSS beat table, shared by the sequence and the audio. */
@@ -11556,7 +11583,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
         <button class="btn ghost" id="celeOk">Later</button>`
       : `<div style="height:16px"></div><button class="btn" id="celeOk">Nice</button>`}
       <div style="height:6px"></div>
-    </div>`);
+    </div>`, { name: 'pet_levelup' });
   $('#celeOk', wrap).addEventListener('click', () => history.back());
   const tb = $('#petTalentBtn', wrap);
   /* STRAIGHT TO THE PET THAT LEVELLED. Tom, 2026-08-07: "you click it and it
@@ -12595,7 +12622,7 @@ function openPetBreedResult(off) {
       <div class="reveal-foot">
         <button class="btn" id="celeOk">Adopt</button>
       </div>
-    </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    </div>`, { cls: 'takeover', name: 'breed_reveal', onClose: () => setFxLayer() });
   setFxLayer(305);
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
@@ -13581,7 +13608,10 @@ async function renderBoneyard(el) {
         if (isDen && !note) { statusEl.textContent = 'Add a quick reason first.'; return; }
         btn.disabled = true; statusEl.textContent = 'Sending...';
         const r = await sendReport(kind, { lat: ctx.lat, lng: ctx.lng, target: ctx.label, note });
-        trackEvent(isDen ? 'den_nominate' : 'report_unreachable');
+        // same attempt-vs-delivery split as feedback_send above: this fires on
+        // the tap, and the report only exists on the server if r.ok. Additive,
+        // so the historical count keeps meaning "tapped Send to devs".
+        trackEvent(isDen ? 'den_nominate' : 'report_unreachable', { ok: r && r.ok ? 1 : 0 });
         if (r && r.ok) { statusEl.textContent = 'Sent. Thanks for the scouting report, bonehead. 💀'; btn.textContent = 'Sent'; setTimeout(closeTopSheet, 1400); }
         else { statusEl.textContent = 'Could not reach the devs. Try again when you are online.'; btn.disabled = false; }
       });
@@ -15035,7 +15065,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
-    { cls: 'full', onClose: () => {
+    { cls: 'full', name: 'fight', onClose: () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
          die with the sheet, but they stayed on window, so an audit poking

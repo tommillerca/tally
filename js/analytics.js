@@ -14,8 +14,31 @@ const QCAP = 300;
 // verification + showcasing; it runs on a separate demo DB). Both would
 // otherwise register as phantom "testers" and inflate the counts. Real users
 // hit the plain URL in a normal browser.
+/* `has('demo')`, NOT `search.includes('demo')`. The old substring test read the
+   WHOLE query string, values included, so any real player arriving on a link
+   like ?ref=demo-day or ?utm_campaign=freedemo was silently classed as a bot:
+   every event, every crash and their whole existence in DAU dropped on the
+   floor, on the one path most likely to carry a campaign parameter. app.js:108
+   has always decided demo mode with `new URLSearchParams(location.search)
+   .has('demo')`, so those sessions ran on the REAL database as real players
+   while analytics pretended they were not there. Two definitions of the same
+   word is the bug; this is now app.js's. */
 const BOT = (typeof navigator !== 'undefined' && navigator.webdriver === true)
-  || (typeof location !== 'undefined' && location.search && location.search.includes('demo'));
+  || (typeof location !== 'undefined' && new URLSearchParams(location.search || '').has('demo'));
+
+/* AUDIT ESCAPE HATCH, the exact __errProbe idiom documented with pushErr below.
+   tests/analytics-event-audit.mjs sets window.__evProbe before the app's first
+   module runs, so it can drive the REAL app and read what track()/screen()
+   actually queue for a known sequence of taps. Without it the audit can only
+   grep for string literals, and two event names in this app are computed at the
+   call site, so a grep undercounts them.
+   Scoped to the two QUEUE writers and to initAnalytics, deliberately NOT to
+   flush(), sendReport() or sendSurvey(): those are the three that touch the
+   network and they keep the raw BOT gate, so a probed row can never leave the
+   device however the probe is set. Same argument, same blast radius, as the
+   error probe. */
+const probed = () => typeof window !== 'undefined' && !!window.__evProbe;
+const muted = () => BOT && !probed();
 
 async function deviceId() {
   let id = await kvGet('analyticsId', null);
@@ -32,7 +55,7 @@ async function deviceId() {
 // of the kv queue and clobber each other, silently dropping events.
 let writeChain = Promise.resolve();
 export function track(name, props) {
-  if (BOT) return writeChain;
+  if (muted()) return writeChain;
   writeChain = writeChain.then(async () => {
     const q = (await kvGet('evq', [])) || [];
     q.push({ name, props: props || undefined, ts: Date.now() });
@@ -45,7 +68,7 @@ export function track(name, props) {
 // screen(name) closes out the previous screen's time and opens the new one.
 let curScreen = null, curScreenAt = 0;
 export function screen(name) {
-  if (BOT) return;
+  if (muted()) return;
   const now = Date.now();
   if (curScreen && curScreen !== name && curScreenAt) {
     track('screen_time', { s: curScreen, ms: now - curScreenAt });
@@ -128,7 +151,7 @@ export async function sendSurvey(data = {}) {
 }
 
 export async function initAnalytics(version) {
-  if (BOT) return; // automated/verification browsers never count as testers
+  if (muted()) return; // automated/verification browsers never count as testers (flush() keeps the RAW gate)
   appV = version || '';
   track('app_open');
   track('session_start');
@@ -137,9 +160,21 @@ export async function initAnalytics(version) {
   // play-time heartbeat: one ping per ~45s the app is actually visible/foreground.
   // Total play time ≈ ping count × 45s; sessions ≈ session_start count.
   setInterval(() => { if (document.visibilityState === 'visible') track('session_ping'); }, 45000);
+  /* A BACKGROUNDED APP IS NOT A SCREEN CHANGE, AND THE ROW HAS TO SAY SO.
+     Backgrounding closes out the current screen's dwell so the minutes stay
+     honest (time on the lock screen is not time on the Boneyard), and coming
+     back reopens it. Correct for SUM(ms) — and it means one visit to Today,
+     backgrounded four times, emits FIVE screen_time rows for 'today'. The
+     dashboard's screen heatmap prints COUNT(*) next to those minutes
+     (server/src/index.js:1031) and reads it as visits, so a player who checks
+     a text mid-session inflates the visit column without navigating anywhere.
+     Additive: SUM(ms) is untouched and the historical minutes keep their
+     meaning; `bg` is what lets a visit count be recovered, as
+     COUNT(*) WHERE json_extract(props,'$.bg') IS NULL. Rows before this build
+     have no bg and cannot be split retroactively. */
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { track('session_resume'); if (curScreen) curScreenAt = Date.now(); flush(); }
-    else if (curScreen && curScreenAt) { track('screen_time', { s: curScreen, ms: Date.now() - curScreenAt }); curScreenAt = 0; }
+    else if (curScreen && curScreenAt) { track('screen_time', { s: curScreen, ms: Date.now() - curScreenAt, bg: 1 }); curScreenAt = 0; }
   });
 }
 

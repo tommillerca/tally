@@ -99,6 +99,7 @@ const BROWSER = [
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
   'teaser-fire-audit.mjs',   // the drop announcement fires from BOOT, not by hand
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
+  'analytics-event-audit.mjs', // the events MEAN what their names say: the inventory resolves computed names, no unreachable screen row, no unbounded feat_open label, and the queue is read after real taps with EXACT counts (an inequality passes on a double-fire)
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'notif-audit.mjs',         // Notification tiers do what they say (measured, not toggle-position); boot-asker webdriver-skip guard behaviourally verified
