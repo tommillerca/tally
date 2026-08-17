@@ -21,7 +21,7 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { kvGet, kvSet, exportAll, importAll } from './db.js';
+import { db, kvGet, kvSet, exportAll, importAll } from './db.js';
 import { award } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
 
@@ -554,9 +554,34 @@ export async function hasCloudBackup() {
 const HELD_TYPES = new Set(['gift']);
 const GIFTBOX = 'giftbox';
 
+/* IDEMPOTENT ON THE KEY, NOT ON THE XP.
+ *
+ * The line below used to be:
+ *     const xp = await award(key, ...);
+ *     if (xp === 0 && p.xp > 0) return false;   // already ingested
+ * and the intent in that comment is right. The implementation could not carry
+ * it, because award() returns 0 for BOTH "already in the ledger" and "this
+ * payload is worth 0 XP", and the only thing separating them was `p.xp > 0`.
+ * So the guard was live for exactly the payloads that carry XP, and dead for
+ * every payload that does not. Checked against what the server actually sends:
+ *   /gift mode=spend   { coins }                      no xp
+ *   /gift mode=free    { coins | crate | consumable } no xp
+ *   step-race podium   { coins, dust, crate }         no xp
+ *   /admin/grant       { coins, note }                no xp   <- whose own
+ *        header promises "an explicit key so a repeated call cannot pay twice"
+ *   spire notices      { note }                       no xp
+ *   social-welcome     { coins: 50, xp: 10 }          the ONLY protected one
+ * Every gift, every prize and every make-good was therefore re-payable by any
+ * client that ingested its grant row a second time. Measured 2026-08-17 with
+ * two real accounts against a local Worker: a 100-coin gift, opened, then
+ * re-delivered, took the recipient 1100 -> 1200.
+ *
+ * award() writes its ledger row unconditionally, xp 0 included, so the row IS
+ * the durable receipt. Read it directly and the guard covers every payload
+ * shape, including the ones that pay nothing but coins. */
 async function applyPayload(key, type, p) {
-  const xp = await award(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
-  if (xp === 0 && p.xp > 0) return false; // already ingested: skip side effects too
+  if (await db.get('xp', key)) return false;   // already ingested: skip side effects too
+  await award(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
   if (p.coins) await coinsAdd(p.coins);
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
   if (p.crate) await grantCrate(p.crate, 'social');
@@ -595,6 +620,14 @@ export async function openGift(key) {
 async function applyGrant(g) {
   const p = g.payload || {};
   if (HELD_TYPES.has(g.type)) {
+    /* A PRESENT YOU HAVE ALREADY OPENED IS NOT A NEW PRESENT. The box dedupes
+       on key, but only against gifts still SEALED in it; openGift removes the
+       row, so a re-delivered grant found an empty box and put the opened gift
+       straight back, sealed, with an OPEN button on it. Same measurement as
+       applyPayload above: the guard there stops the second payout, and this
+       stops the ghost present that would now open onto nothing. The ledger row
+       openGift wrote is the receipt for both. */
+    if (await db.get('xp', g.key)) return false;
     const box = await giftBox();
     if (!box.some(x => x.key === g.key)) {
       box.push({ key: g.key, type: g.type, payload: p, ts: g.ts || Date.now() });
