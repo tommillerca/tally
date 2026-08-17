@@ -20,7 +20,17 @@ CREATE TABLE IF NOT EXISTS players (
   max_level INTEGER,                 -- highest level ever accepted (monotone ratchet)
   max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
   week_key TEXT,                     -- the race week the accepted week_steps belong to
-  week_steps INTEGER                 -- highest weekSteps accepted for week_key (monotone)
+  week_steps INTEGER,               -- highest weekSteps accepted for week_key (monotone)
+  /* HOW FAR THIS PLAYER'S CLIENT HAS READ THE GRANTS FEED (2026-08-17).
+     GET /grants is a cursor read: the client sends `since` and js/social.js
+     pullGrants only advances its local grantCursor AFTER applying everything in
+     the batch. So a request carrying since=N is the client STATING that every
+     grant with id <= N has been applied on the device.
+     Before this column the server held no record of that at all, which is
+     exactly why grants could not be pruned: nothing on this side could tell a
+     delivered gift from one still waiting. Nullable, so every pre-existing row
+     means "never acknowledged anything" and is protected by default. */
+  grants_ack INTEGER
 );
 
 -- Names are one-of-a-kind, case-insensitively. /name enforces this in code too
@@ -99,6 +109,16 @@ CREATE INDEX IF NOT EXISTS idx_grants_player ON grants (player_id, id);
 -- idx_grants_player starts with `key`, so both were scanning all 1.9M rows
 -- (38.10 ms and 112.96 ms measured) to find at most five.
 CREATE INDEX IF NOT EXISTS idx_grants_key ON grants (key);
+-- The grants pruner walks candidates OLDEST FIRST, and `ts` is the only column
+-- that says how old a row is. Without it the retention DELETE has no usable
+-- index: the planner falls back to a MULTI-INDEX OR over idx_grants_key plus a
+-- TEMP B-TREE for the ORDER BY, and one 1,000-row batch measured 382 ms against
+-- 400,000 rows. With it the plan is SEARCH g USING INDEX idx_grants_ts (ts<?)
+-- and the same batch is 13.6 ms, a 28x difference that grows with the table.
+-- Costs 17 bytes a row measured off the page_count delta (512 -> 529 bytes per
+-- row all-in), which one retention cycle pays back many times over.
+-- See pruneGrants in src/index.js.
+CREATE INDEX IF NOT EXISTS idx_grants_ts ON grants (ts);
 
 -- Anonymous product analytics. Keyed to a random per-device id (NOT the player
 -- pubkey, NOT linked to identity). Event names + coarse props only; never food,
@@ -112,8 +132,41 @@ CREATE TABLE IF NOT EXISTS events (
   day TEXT NOT NULL,      -- YYYY-MM-DD (UTC) for daily rollups
   ts INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_events_day ON events (day);
-CREATE INDEX IF NOT EXISTS idx_events_device_day ON events (device, day);
+/* THE TWO WIDENED INDEXES (2026-08-17). Each REPLACES an earlier one and carries
+   it as a strict prefix, so every plan the old index served is still served, and
+   the planner is left with one obvious choice instead of two similar ones.
+   Measured against a 12,000,000 row events table in local SQLite, with the
+   windowed /stats SQL, best of three:
+
+     idx_events_device_day (device, day) -> (device, name, day)
+       The tester leaderboard groups the whole table by device and reads `name`
+       per row. On (device, day) that is one row lookup per event: 11,726 ms.
+       On (device, name, day) the whole grouping is a COVERING index scan:
+       1,890 ms. It also turns rateLimitRecovery's "device = ? AND name = ?"
+       from a device-prefix walk into a two-column seek.
+
+     idx_events_day (day) -> (day, device)
+       Every day-ranged count and COUNT(DISTINCT device) had to leave the index
+       for the device column. activeByDay 6,111 -> 348 ms, totalEvents
+       4,894 -> 174 ms, dau 461 -> 13 ms. The retention pruner's "day < ?" is
+       unaffected: `day` is still the leading column.
+
+   THE PRICE, and it is not free. Measured off the page_count delta on a fresh
+   build of each index set: the swap costs 20 more bytes per events row. The
+   retention window was sized on 189 bytes a row, so it becomes 209, which is
+   about 158 MB a day at 10,000 DAU instead of 143 MB. Sixty days of that is
+   9.5 GB against a 10 GB cap, so THIS SWAP MOVES THE DAU CEILING FOR A 60 DAY
+   WINDOW DOWN FROM ROUGHLY 8,000-9,000 TO ROUGHLY 7,300-8,200. That is the
+   trade: /stats survives to about 13,700 daily devices instead of 2,600, and
+   the storage runway gets about 10% shorter. When DAU passes it,
+   EVENT_RETENTION_DAYS comes down, exactly as its own note says.
+
+   A THIRD SWAP WAS TRIED AND REJECTED: idx_events_name -> (name, day) made
+   byName WORSE (5,721 -> 9,001 ms) and the session_ping count worse
+   (1,580 -> 3,301 ms), because the wider entries cost more to scan than the day
+   bound saves. It is left as (name) alone. */
+CREATE INDEX IF NOT EXISTS idx_events_day_device ON events (day, device);
+CREATE INDEX IF NOT EXISTS idx_events_device_name_day ON events (device, name, day);
 CREATE INDEX IF NOT EXISTS idx_events_name ON events (name);
 
 -- one row per tester device: their chosen Crew name (if online) + coarse edge
