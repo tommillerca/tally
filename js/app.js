@@ -1503,8 +1503,12 @@ async function openThanksCard() {
   $('#thanksShare', veil).addEventListener('click', async () => {
     const text = `Boneheadz Gym is in beta. Come play: ${TESTFLIGHT_URL}`;
     try { if (navigator.share) { await navigator.share({ title: 'Boneheadz Gym', text }); return; } } catch { return; /* cancelled */ }
+    /* The refused-clipboard branch used to toast the bare URL, which says
+       nothing about what happened: the same tap answers "Invite link copied" or
+       a naked string, and the player cannot tell those apart. Settings' copy
+       diagnostics already gets this right; this is its wording. */
     try { await navigator.clipboard.writeText(TESTFLIGHT_URL); toast('Invite link copied. Send it to a friend!'); }
-    catch { toast(TESTFLIGHT_URL, 4000); }
+    catch { toast(`Could not copy. The invite link is ${TESTFLIGHT_URL}`, 6000); }
   });
 }
 
@@ -2933,10 +2937,27 @@ async function renderToday(el) {
   $$('[data-copymeal]').forEach(b => b.addEventListener('click', async ev => {
     const meal = Number(b.dataset.copymeal);
     const src = yEntries.filter(e => e.meal === meal);
-    let gained = 0, last = null;
+    let gained = 0, last = null, copied = 0;
     for (const e of src) {
       const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
-      await db.put('log', copy);
+      /* SAME CONTRACT AS THE ADD SHEET ("A FAILED WRITE MUST NOT LOOK LIKE A
+         SAVED MEAL", further down this file). A rejected put threw out of this
+         loop, so the toast below never ran and the meals simply were not there.
+         Worse than the single-add case, because a copy is a BATCH: stopping
+         silently halfway leaves a partly-copied day nobody was told about.
+         Report what actually landed, then stop. */
+      try {
+        await db.put('log', copy);
+      } catch (err) {
+        const full = err && /quota/i.test(err.name + ' ' + err.message);
+        toast(full
+          ? `Could not copy the rest: this device is out of storage. ${copied} of ${src.length} landed. Free up some space and tap it again.`
+          : `Could not copy the rest. ${copied} of ${src.length} landed. Tap it again to finish.`, 5200);
+        trackEvent('log_write_failed', { quota: !!full, via: 'copymeal' });
+        refresh();
+        return;
+      }
+      copied++;
       last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       gained += last.xp;
     }
@@ -5218,7 +5239,18 @@ function openAdd(meal = 0) {
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
       const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
-      await db.put('log', copy);
+      // re-log is the one-tap version of the add sheet, and it owes the player
+      // the same answer when the write is refused (see openAdd's #addBtn).
+      try {
+        await db.put('log', copy);
+      } catch (err) {
+        const full = err && /quota/i.test(err.name + ' ' + err.message);
+        toast(full
+          ? 'Could not save: this device is out of storage. Free up some space and tap it again.'
+          : 'Could not save that meal. Tap it again to try.', 5200);
+        trackEvent('log_write_failed', { quota: !!full, via: 'relog' });
+        return;
+      }
       const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
@@ -5606,7 +5638,22 @@ function openQuickAdd(getMeal, entry = null) {
       portionLabel: '',
       kcal, p: num($('#qaP', wrap).value) || 0, c: num($('#qaC', wrap).value) || 0, f: num($('#qaF', wrap).value) || 0,
     };
-    await db.put('log', e);
+    /* THE SAME STORE, THE SAME QUOTA, THE SAME SILENCE. The portion sheet's
+       #addBtn was fixed for this in v373 and quick add was left as it was, so
+       the second-most-common way to log a meal still threw out of the handler:
+       no toast, no close, no XP, and a filled-in form that looked untouched.
+       The sheet stays open with the numbers still in it, same as over there. */
+    try {
+      await db.put('log', e);
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? `Could not save: this device is out of storage. Free up some space and tap ${entry ? 'Save' : 'Add'} again.`
+        : `Could not save that entry. Tap ${entry ? 'Save' : 'Add'} to try again.`, 5200);
+      trackEvent('log_write_failed', { quota: !!full, via: 'quickadd' });
+      return;                       // the sheet stays open, the numbers stay put
+    }
     const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
     if (!entry && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
@@ -5895,7 +5942,21 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       useCount: f?.useCount || 0,
       createdAt: f?.createdAt || Date.now(),
     };
-    await db.put('foods', food);
+    /* A FOOD THAT DID NOT SAVE MUST NOT SAY "Food saved". Unguarded, a refused
+       write threw out of this handler and the next line never ran: no toast, no
+       portion sheet, nothing. Worse here than for a single meal, because a label
+       scan is a minute of the player's work that vanishes with no explanation.
+       The form stays on screen with everything they typed still in it. */
+    try {
+      await db.put('foods', food);
+    } catch (err) {
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? 'Could not save: this device is out of storage. Free up some space and tap Save again.'
+        : 'Could not save that food. Tap Save to try again.', 5200);
+      trackEvent('log_write_failed', { quota: !!full, via: 'food' });
+      return;                       // the form stays open, nothing typed is lost
+    }
     const i = S.userFoods.findIndex(x => x.id === food.id);
     if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
     toast('Food saved');
@@ -6975,7 +7036,18 @@ function openWeightSheet() {
     const d = $('#wDate', wrap).value;
     if (v == null || !d) { toast('Enter a weight'); return; }
     const kg = S.settings.units === 'kg' ? v : lbToKg(v);
-    await db.put('weights', { date: d, kg });
+    // a weigh-in is a log write like any other, and it was the one left bare:
+    // a refused put threw here, so the sheet never closed and never explained.
+    try {
+      await db.put('weights', { date: d, kg });
+    } catch (err) {
+      const full = err && /quota/i.test(err.name + ' ' + err.message);
+      toast(full
+        ? 'Could not save: this device is out of storage. Free up some space and tap Save again.'
+        : 'Could not save that weight. Tap Save to try again.', 5200);
+      trackEvent('log_write_failed', { quota: !!full, via: 'weight' });
+      return;                       // the sheet stays open with the number in it
+    }
     // keep profile weight fresh for future target recalcs
     S.settings.profile.weightKg = kg;
     await kvSet('settings', S.settings);
@@ -7823,7 +7895,7 @@ async function renderFriends(el) {
   const shareCode = async () => {
     const text = `Add me on Boneheadz Gym! My friend code is ${me.friendCode}`;
     try { if (navigator.share) { await navigator.share({ title: 'Boneheadz Gym', text }); return; } } catch { return; /* user cancelled */ }
-    try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); } catch { toast(me.friendCode, 4000); }
+    try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); } catch { toast(`Could not copy. Your friend code is ${me.friendCode}, type it in by hand.`, 5200); }
   };
 
   // The all-players leaderboard: ranked by level, one-tap add-friend on every
@@ -8186,7 +8258,7 @@ async function renderFriends(el) {
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
   $('#crewEditName', el)?.addEventListener('click', () => openNameBuilder(() => renderFriends(el)));
   $('#crewShare', el)?.addEventListener('click', shareCode);
-  $('#crewCopy', el)?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied!'); } catch { toast(me.friendCode, 4000); } });
+  $('#crewCopy', el)?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied!'); } catch { toast(`Could not copy. Your friend code is ${me.friendCode}, type it in by hand.`, 5200); } });
   $('#friendAddBtn', el).addEventListener('click', submitCode);
   $('#friendCode', el).addEventListener('keydown', e => { if (e.key === 'Enter') submitCode(); });
   $('#friendsList', el).addEventListener('click', async e => {
@@ -9050,7 +9122,7 @@ async function renderSettings(el) {
   $('#copyCode', el)?.addEventListener('click', async () => {
     const me = await social.socialMe();
     try { await navigator.clipboard.writeText(me.friendCode); toast('Friend code copied. Send it to a friend!'); }
-    catch { toast(me.friendCode, 4000); }
+    catch { toast(`Could not copy. Your friend code is ${me.friendCode}, type it in by hand.`, 5200); }
   });
   $('#editName', el)?.addEventListener('click', () => openNameBuilder(() => renderSettings(el)));
   $('#friendsBtn', el)?.addEventListener('click', () => { location.hash = '#/friends'; });
@@ -9153,13 +9225,30 @@ async function renderSettings(el) {
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
+    /* ONLY importAll SPEAKS PLAYER ENGLISH, AND THE PARSE HAPPENS IN FRONT OF IT.
+       js/db.js raises curated sentences on purpose ("that backup file is damaged
+       (...). Your old data is unchanged."), and the backup round-trip audit pins
+       that contract. JSON.parse raises "Unexpected token '<', \"<!doctype \"...
+       is not valid JSON", which was printed verbatim into a toast, and picking
+       the wrong file is by far the likeliest way this fails. Same promise either
+       way, in words. Clearing .value matters too: without it the change event
+       does not fire for the same file twice, so "try again" was a dead control. */
+    let data;
     try {
-      const counts = await importAll(JSON.parse(await file.text()));
+      data = JSON.parse(await file.text());
+    } catch {
+      e.target.value = '';
+      toast('That is not a Boneheadz backup file. Pick the tally-backup one you exported. Your old data is unchanged.', 5200);
+      return;
+    }
+    try {
+      const counts = await importAll(data);
       S.settings = await kvGet('settings') || S.settings;
       S.userFoods = await db.all('foods');
       toast(`Imported ${counts.log} log entries, ${counts.foods} foods`);
       refresh();
     } catch (err) { toast('Import failed: ' + err.message, 3200); }
+    finally { e.target.value = ''; }
   });
   $('#eraseBtn').addEventListener('click', () => {
     const wrap = openSheet(`
@@ -10448,7 +10537,20 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     $$('[data-open]', content).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true;
-      const result = await openCrate(b.dataset.open);
+      /* openCrate THROWS ('crate gone') when the row it was handed is no longer
+         in the inventory, which is what a double tap or a stale render produces,
+         and it can reject on any write inside the roll. Unguarded that left the
+         button dead with nothing said: the crate simply refused to open and the
+         player had no control left to press (anti-regression rule 8). */
+      let result;
+      try {
+        result = await openCrate(b.dataset.open);
+      } catch {
+        b.disabled = false;
+        toast('That crate would not open. Your Backpack is refreshed below: tap it again.', 3600);
+        renderCharacter(wrap, 'crates');
+        return;
+      }
       await openCrateReveal(result);
       renderCharacter(wrap, 'crates');
     }));
@@ -10457,10 +10559,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (r.ok) { popSound(S.sounds); toast('Battle Charm active: your next 5 Pit wins pay +25% coins'); }
       // refusing to stack is the point, so say why rather than failing silently
       else if (r.reason === 'active') toast(`A charm is already running: ${r.charges} Pit win${r.charges === 1 ? '' : 's'} left. Save this one.`, 3200);
+      // and the OTHER refusal ('none': the row went while the button stood) owes
+      // the same answer. It said nothing at all, which reads as a dead button.
+      else toast('That Battle Charm is already gone. Your Backpack is refreshed below.', 3200);
       renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
+      // same rule as the charm above: consumeConsumable returns false when the
+      // row has gone, and returning false was the whole message the player got.
       if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit fights ready.`, 3000); }
+      else toast('That Vigor Draught is already gone. Your Backpack is refreshed below.', 3200);
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
