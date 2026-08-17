@@ -2661,6 +2661,42 @@ body::before {
    be the cracks." Removed. The cracks are the only marks on the egg now. */
 @keyframes eggIn { 0% { transform: scale(0.86); opacity: 0 } 70% { opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
 .bone-egg.wob { animation: eggWob 0.36s ease-in-out; }
+/* ---- THE STEP EGG'S AUTHORED FRAMES ----
+   THIS CSS DID NOT EXIST. js/app.js emits `<span class="egg-seq">` with fifteen
+   <img> children and puts `.on` on the current one, and nothing anywhere
+   positioned them or hid the rest. So every frame rendered, in flow, as a column
+   of fifteen eggs running down the screen, and it has been shipping that way.
+   Caught by recording the cinematic and watching it. I had "verified" this
+   sequence by diffing the PNGs on disk against Tom's authored states and
+   declaring it correct, which checks the art and not the screen. Tom watched the
+   recording and said "the egg reveal you sent me is just the ghost crate", and
+   fixing the recorder is what finally put the real thing in front of either of
+   us. The hatch is reachable in the app only by walking an egg to term, which is
+   why nobody had seen it.
+   Same construction as .co-seq, which works: one box, absolutely positioned
+   frames, only .on visible. 96px is 48px art at 2x, the scale the rest of the
+   pixel art uses.
+   .bone-egg.pix drops the vector egg underneath. The container paints a
+   gradient-and-border egg of its own, which is the pre-pixel drawing, and it was
+   sitting behind the sprites the whole time. */
+.bone-egg.pix {
+  width: 96px; height: 96px; border: 0; border-radius: 0;
+  background: none; box-shadow: none;
+}
+.egg-seq { position: relative; display: block; width: 96px; height: 96px; }
+.egg-seq img {
+  position: absolute; inset: 0; width: 96px; height: 96px;
+  image-rendering: pixelated; opacity: 0;
+}
+.egg-seq img.on { opacity: 1; }
+/* Reduced motion gets the LAST pose, the smoke and the shells, not frame 1.
+   Freezing on a whole egg would tell a player who cannot have animation that
+   nothing hatched. Same call the crate sequence makes. */
+@media (prefers-reduced-motion: reduce) {
+  .egg-seq img { opacity: 0 !important; }
+  .egg-seq img:last-child { opacity: 1 !important; }
+}
+
 @keyframes eggWob { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-7deg) } 50% { transform: rotate(6deg) } 75% { transform: rotate(-3deg) } }
 .egg-cracks { position: absolute; inset: 8px 12px; width: calc(100% - 24px); height: calc(100% - 16px); overflow: visible; }
 /* pathLength=1 on each path (set in the markup) normalises the dash to the
@@ -3679,13 +3715,23 @@ body::before {
    f2) instead of 80ms before anything has moved. */
 .pack-reveal.pix-crate {
   --b-land: 1.02s;   /* crDropPix runs 1.02s, not the vector crate's .85s */
-  --b-bloom: 1.22s; --b-sink: 1.66s; --b-card: 1.72s;
-  --b-count: 2.02s; --b-title: 2.64s; --b-foot: 2.84s;
-  --b-sway: 2.84s; --b-spark: 2.94s;
+  --b-bloom: 1.22s;
+  /* THE CRATE MUST BE GONE BEFORE THE CARD ARRIVES, NOT FADING BEHIND IT.
+     Tom, 2026-08-16, watching the recording: "you have the ghost crate fading
+     out weird once the card is already in frame and in front of it." Measured
+     off that capture: the sink ran 1.66s to 2.21s and the card rose at 1.72s, so
+     for half a second the finished card sat in front of a chest still visibly
+     dissolving around its edges. Two things competing for the same moment.
+     The frame table sums to 400ms from --b-lid 1.12s, so the last pose lands at
+     1.52s. Hold it 80ms, sink hard over 200ms, and the crate is fully gone at
+     1.80 before the card starts at 1.82. Costs 0.10s of time-to-card. */
+  --b-sink: 1.60s; --b-card: 1.82s;
+  --b-count: 2.12s; --b-title: 2.74s; --b-foot: 2.94s;
+  --b-sway: 2.94s; --b-spark: 3.04s;
 }
 /* .55s, not .9s. The crate has done its job by the time the card is up and a
    long tail is what read as "fading too slowly as the card takes it over". */
-.co-sink.pix { animation-duration: .55s; }
+.co-sink.pix { animation-duration: .2s; }   /* it has 200ms to clear, see --b-sink above */
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
 .pack-reveal.r-epic { --rar: var(--violet); --rar-rgb: 155, 146, 232; }
