@@ -7997,6 +7997,7 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .co-seq img { opacity: 0 !important; }
   .co-seq img:last-child { opacity: 1 !important; }
+}
 /* PHONES UNDER 600px TALL, where the fight did not fit at all. This is not a
    regression from the HUD move, it is older: on origin/main at 320x568 End Turn
    rendered at 619.3 in a 568 viewport with 61px of body overflow, so the button

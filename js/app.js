@@ -2184,6 +2184,16 @@ function route({ keepScroll = false } = {}) {
   if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
   const el = $('#screen');
   if (isNav) el.classList.remove('screen-in');
+  /* GIVE THE FAILURE SCREEN'S PIN BACK. bootFailScreen (and index.html's shell
+     twin) pin #screen visible with an inline !important opacity, because a
+     last-resort message must not be revocable by the code that just failed.
+     If the app does eventually come up, that pin would outrank `screen-in`
+     forever and quietly disable "every screen arrives whole" for the rest of the
+     session, so a real render takes it out. Unconditional: refresh() renders a
+     real screen too, and a no-op on every normal navigation, which is all of
+     them, because nothing else ever writes these two properties inline. */
+  el.style.removeProperty('opacity');
+  el.style.removeProperty('transition');
   let done;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
   if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
@@ -16899,13 +16909,19 @@ function bootFailScreen(err) {
         'Nothing has been lost. Open the app in a normal window, or allow site data for this site, then tap Try again.']
       : ['Something went wrong while starting up. Nothing has been lost; anything already saved is still on this device.',
         'Tap Try again. If it keeps happening, close the app completely and open it once more.'];
-    /* #screen is `opacity: 0` until the router adds `screen-in` (app.css, "every
-       screen arrives whole"), so a message written straight into it is in the DOM
-       and invisible, which is another blank page. The audit caught this with an
-       opacity-chain measurement of 0.000 on a message it could otherwise read.
-       Both belts: the class for the case where app.css loaded, and an inline
-       opacity for the case where it did not. */
-    el.className += ' screen-in';
+    /* PIN IT VISIBLE, AND DO NOT ASK THE ROUTER'S PERMISSION. See the twin of
+       these two lines in index.html for the full reasoning. Short version:
+       #screen is `opacity: 0` until `screen-in` is added (app.css, "every screen
+       arrives whole"), so a message written straight into it is in the DOM and
+       invisible. Adding that class is not good enough, because the class belongs
+       to route(), which strips it on every navigation, and because app.css:513
+       forces `transition-duration: .001s !important` on `*` under reduced motion,
+       which makes the flip a running CSSTransition that starts at 0 instead of a
+       snap. Inline-with-important outranks all of it and depends on nothing.
+       Anti-regression rule 8: whatever hides content must own un-hiding it, and
+       here the un-hiding must not be revocable by the thing that failed. */
+    el.style.setProperty('transition', 'none', 'important');
+    el.style.setProperty('opacity', '1', 'important');
     el.innerHTML = `<div id="bootFail" style="opacity:1;min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px 22px;text-align:center;background:#14121c;color:#ece9f5;font-family:system-ui,-apple-system,sans-serif">
       <div style="font-size:52px;line-height:1">💀</div>
       <h1 style="margin:0;font-size:21px;line-height:1.25;letter-spacing:.02em">${storage ? 'WE CANNOT OPEN YOUR GYM ON THIS DEVICE' : 'BONEHEADZ GYM DID NOT FINISH STARTING'}</h1>

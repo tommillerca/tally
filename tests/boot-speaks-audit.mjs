@@ -45,9 +45,16 @@
  * throw present in the served source, the module request blocked. A scenario that
  * measured nothing must go red, not green.
  *
- * PROVE-RED: revert either fix and this goes red on that fix's rows alone.
+ * PROVE-RED: revert any one fix and this goes red on that fix's rows alone.
  *   cause 1: drop the deadline in js/social.js bootSync + the race in js/app.js
  *   cause 2: restore `boot();` bare and let js/db.js cache the rejection
+ *   the pin: swap the inline !important opacity in index.html and app.js back to
+ *     `el.className += ' screen-in'`. That revert is only observable when the
+ *     transition it depends on is observable, so dial app.css:515's
+ *     `transition-duration: .001s !important` up to 2s in the same throwaway
+ *     tree: the class flip then leaves the message at opacity 0 for two seconds
+ *     and every SPEAKS row goes red, while the pin as shipped stays green on the
+ *     identical dialled-up tree. That pair is the proof, not the dial alone.
  *
  * Usage: node tests/boot-speaks-audit.mjs        (serves this checkout itself)
  */
@@ -83,11 +90,24 @@ const { browser, page: bootPage } = await boot(srv.url, { headless: process.env.
    kill the run with a stack and no FAIL rows: exit 1 that reads like a broken
    harness rather than a measured failure. A destroyed context means the page is
    between loads, which is a legitimate sample of "nothing on screen". */
-const BLANK_SAMPLE = { kids: 0, chars: 0, words: 0, text: '', hasFail: false, failBox: null, retryBox: null, midNav: true };
+const BLANK_SAMPLE = { kids: 0, chars: 0, words: 0, text: '', hasFail: false, failBox: null, retryBox: null, why: null, midNav: true };
 
 /* What the player can actually SEE, not what is merely in the DOM. The opacity
    product up the whole ancestor chain plus a hit test at the element's own
-   centre, which is what catches a message painted underneath the splash. */
+   centre, which is what catches a message painted underneath the splash.
+ *
+ * `why` EXISTS BECAUSE eff=0 ONCE COST A DAY. This row went red on a rebase with
+ * "chars=305 words=56 eff=0": the message present, correctly sized, on top, and
+ * invisible. That single number is consistent with at least four different
+ * causes (the pin missing, the router having stripped it, the stylesheet rule
+ * having changed, or an opacity transition caught mid-flight) and the detail
+ * line could not tell them apart, so the next person had to rediscover the
+ * mechanism from scratch. It was the last one: app.css:513 forces
+ * `transition-duration: .001s !important` on `*` under reduced motion, and the
+ * initial `transition-property` is `all`, so flipping a class to reveal #screen
+ * started a real CSSTransition from 0 instead of snapping. Every failure detail
+ * now carries the screen's inline pin, its class list, and any running
+ * animation, so an eff of 0 says WHICH of those it was on the line that fails. */
 const lookNow = page => page.evaluate(() => {
   const scr = document.getElementById('screen');
   const fail = document.getElementById('bootFail');
@@ -109,6 +129,13 @@ const lookNow = page => page.evaluate(() => {
     hasFail: !!fail,
     failBox: vis(fail),
     retryBox: vis(btn),
+    why: scr ? {
+      pin: scr.style.getPropertyValue('opacity') || '(none)',
+      pinPri: scr.style.getPropertyPriority('opacity') || '(normal)',
+      cls: scr.getAttribute('class'),
+      op: getComputedStyle(scr).opacity,
+      anims: (scr.getAnimations ? scr.getAnimations() : []).map(a => `${a.constructor.name}:${a.transitionProperty || a.animationName || '?'}:${a.playState}`),
+    } : null,
   };
 });
 
@@ -291,7 +318,7 @@ const toastText = p => p.evaluate(() => ((document.getElementById('toast') || {}
   ok('DENIED the page is NOT the measured blank shell (0 children, <= 60 characters)',
     !(s.kids === 0 && s.chars <= BLANK_CHARS), `screenKids=${s.kids} chars=${s.chars}`);
   ok(`DENIED the player gets WORDS: >= ${SPEAKS_CHARS} characters AND >= ${SPEAKS_WORDS} words, visible (opacity chain + hit test) with a reachable Try again`,
-    speaks(s), `chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)}`);
+    speaks(s), `chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)} why=${JSON.stringify(s.why)}`);
   ok('DENIED the words say WHAT happened and WHAT to do, not just that something went wrong',
     /storage|private browsing|site data/i.test(s.text) && /try again|normal window|allow/i.test(s.text),
     `"${s.text.replace(/\n/g, ' / ').slice(0, 150)}"`);
@@ -349,7 +376,7 @@ const toastText = p => p.evaluate(() => ((document.getElementById('toast') || {}
   ok('UNFORESEEN the page is NOT the measured blank shell (0 children, <= 60 characters)',
     !(s.kids === 0 && s.chars <= BLANK_CHARS), `screenKids=${s.kids} chars=${s.chars}`);
   ok(`UNFORESEEN an unnamed boot failure still gets WORDS: >= ${SPEAKS_CHARS} characters AND >= ${SPEAKS_WORDS} words, visible, with a reachable Try again`,
-    speaks(s), `chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)}`);
+    speaks(s), `chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)} why=${JSON.stringify(s.why)}`);
   ok('UNFORESEEN it does not tell the player their data is gone, because it is not',
     /nothing has been lost|still on this device/i.test(s.text) && !/lost your|data (was )?lost|deleted|wiped/i.test(s.text),
     `"${s.text.replace(/\n/g, ' / ').slice(0, 150)}"`);
@@ -373,8 +400,14 @@ const toastText = p => p.evaluate(() => ((document.getElementById('toast') || {}
   await goto(p, `${srv.url}?demo`);
   const early = await look(p);
   // 12s to the reload, 12s more to the losing branch, plus slack for both loads
-  // 12s to the reload, 12s more to the losing branch, plus slack for both loads
   await waitFor(p, s2 => s2.hasFail, 34000, 250);
+  /* SETTLE, like the two scenarios above already did. A player reads a screen
+     that has stopped moving, so that is the state worth grading. This scenario
+     alone measured the instant the message appeared, which is what let the
+     transition described at lookNow() flap this row. The settle is NOT the fix
+     for that (the inline pin is, and the pin means there is no transition left
+     to catch); it is here so all four scenarios grade the same moment. */
+  await sleep(600);
   const s = await look(p);
 
   ok('SAMPLE the module graph really was broken (js/haptics.js blocked at least once)',
@@ -382,7 +415,7 @@ const toastText = p => p.evaluate(() => ((document.getElementById('toast') || {}
   ok('SAMPLE the shell really was dead to begin with, or nothing below means anything',
     early.kids === 0 && early.chars <= BLANK_CHARS, `screenKids=${early.kids} chars=${early.chars}`);
   ok(`DEAD SHELL when the one reload loses, the shell SPEAKS: >= ${SPEAKS_CHARS} characters AND >= ${SPEAKS_WORDS} words, visible, with a reachable Try again`,
-    speaks(s), `screenKids=${s.kids} chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)}`);
+    speaks(s), `screenKids=${s.kids} chars=${s.chars} words=${s.words} fail=${JSON.stringify(s.failBox)} retry=${JSON.stringify(s.retryBox)} why=${JSON.stringify(s.why)}`);
   ok('DEAD SHELL the words blame the download and not the player, and promise their gym is safe',
     /connection|download/i.test(s.text) && /nothing has been lost|safe on this device/i.test(s.text),
     `"${s.text.replace(/\n/g, ' / ').slice(0, 150)}"`);
