@@ -7603,6 +7603,13 @@ async function renderFriends(el) {
         <p class="fe-title">No Crew yet</p>
         <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
       </div>
+      <!-- "We could not ask" gets its OWN box, because it is not the same news as
+           "you have nobody" and must never borrow that copy. See listFriends. -->
+      <div class="friends-empty" id="cfanUnreached" hidden>
+        <p class="fe-title">Could not reach the Crew server</p>
+        <p class="note">Your Crew is safe: this phone just cannot get to it right now. Everything else in the app works offline. Tap to try again.</p>
+        <button class="btn ghost" id="cfanRetry">Try again</button>
+      </div>
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
@@ -7910,7 +7917,34 @@ async function renderFriends(el) {
   const paintFan = () => {
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
-    $('#cfanCount', el).textContent = ` · ${data.friends.length}`;
+    /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
+       comes back with an empty list, so without this branch the tab tells a
+       player with a full crew that they have none and offers them the
+       make-a-friend copy. The count reads a dash rather than 0 for the same
+       reason: 0 is a claim about their crew, and we do not have one. */
+    const unreached = data.reached === false;
+    const unrBox = $('#cfanUnreached', el);
+    if (unrBox) unrBox.hidden = !unreached;
+    $('#cfanCount', el).textContent = unreached ? '' : ` · ${data.friends.length}`;
+    if (unreached) {
+      wrap.hidden = pager.hidden = true;
+      $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
+      $('#cfanEmpty', el).hidden = true;
+      const searchRow = $('#cfanSearchRow', el);
+      if (searchRow) searchRow.hidden = true;
+      /* Wired once: the box is in the static markup, so a second render must not
+         stack a second listener on the same button. */
+      if (unrBox && unrBox.dataset.wired !== '1') {
+        unrBox.dataset.wired = '1';
+        $('#cfanRetry', unrBox)?.addEventListener('click', async ev => {
+          const b = ev.currentTarget;
+          b.disabled = true; b.textContent = 'Trying...';
+          await paint();
+          if (b.isConnected) { b.disabled = false; b.textContent = 'Try again'; }
+        });
+      }
+      return;
+    }
     if (!data.friends.length) {
       wrap.hidden = pager.hidden = true;
       $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
@@ -9119,8 +9153,9 @@ async function renderSettings(el) {
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
-  const incomingCount = crewData ? crewData.incoming.length : 0;
-  const friendCount = crewData ? crewData.friends.length : 0;
+  const crewReached = !!(crewData && crewData.reached !== false);
+  const incomingCount = crewReached ? crewData.incoming.length : 0;
+  const friendCount = crewReached ? crewData.friends.length : 0;
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
@@ -9151,7 +9186,10 @@ async function renderSettings(el) {
       <button class="crew-code" id="copyCode" title="Copy friend code">${esc(me.friendCode)} ⧉</button>
     </div>
     <button class="crew-friends" id="friendsBtn">
-      <span>${friendCount ? `${friendCount} friend${friendCount === 1 ? '' : 's'}` : 'Add friends'}</span>
+      <!-- Offline this row used to read "Add friends" to a player with a full
+           crew, for the same reason the fan did: an unreachable server and an
+           empty crew were the same value. -->
+      <span>${crewData && !crewReached ? 'Crew server unreachable' : friendCount ? `${friendCount} friend${friendCount === 1 ? '' : 's'}` : 'Add friends'}</span>
       <span class="crew-friends-r">${incomingCount ? `<span class="req-badge">${incomingCount} new</span>` : ''}<span class="crew-chev">›</span></span>
     </button>
     <div class="settings-row" style="margin-top:12px">
