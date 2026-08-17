@@ -21,11 +21,17 @@ async function test(name, fn) {
 
 const b64 = buf => Buffer.from(new Uint8Array(buf)).toString('base64');
 
+/* Registration is IP rate limited (10/hour). Throwaway players each arrive from
+   their own synthetic edge IP, the way real phones would. cf-connecting-ip is
+   set by Cloudflare in production and a client-supplied value is replaced there,
+   so this only works locally, which is what makes the limiter testable. */
+const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+
 async function newPlayer(name) {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: pubJwk }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   const me = await res.json();
