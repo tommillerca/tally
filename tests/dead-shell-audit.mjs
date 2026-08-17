@@ -22,7 +22,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadPuppeteer, serveTree, sleep } from './godmode.js';
+import { loadPuppeteer, serveTree, sleep, chromePath, sandboxArgs } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
@@ -38,7 +38,7 @@ const puppeteer = await loadPuppeteer();
    "reloaded forever". A framenavigated listener on the top frame is the honest
    counter; reading a flag the page sets would trust the thing under test. */
 const session = async (blockRe, waitMs) => {
-  const browser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 } });
+  const browser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 }, executablePath: chromePath(), args: sandboxArgs() });
   const page = await browser.newPage();
   let navs = 0;
   page.on('framenavigated', f => { if (f === page.mainFrame()) navs++; });
@@ -76,7 +76,7 @@ ok('DEAD SHELL it retries exactly ONCE, never loops', dead.navs === 2, `${dead.n
 
 /* 3. RECOVERABLE: the failure is transient, which is what a bad bar actually
       is. The reload must bring the app back on its own, with no user action. */
-const browser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 } });
+const browser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 }, executablePath: chromePath(), args: sandboxArgs() });
 const page = await browser.newPage();
 let blocking = true, navs = 0;
 page.on('framenavigated', f => { if (f === page.mainFrame()) navs++; });
