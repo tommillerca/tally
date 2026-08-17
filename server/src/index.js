@@ -14,6 +14,84 @@ const json = (obj, status = 200, extraHeaders = null) =>
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
+/* THE BACKUP CAP, AND WHAT IT ACTUALLY COSTS (measured 2026-08-17).
+ *
+ * A backup blob is base64(iv || AES-GCM(JSON.stringify(exportAll()))), so its
+ * stored length is a pure function of the save: js/db.js exportAll defines the
+ * payload, js/social.js encryptBackup does the rest, and 12 bytes of IV plus 16
+ * of GCM tag then 4/3 for base64 is exact, not an estimate. Every row shape was
+ * taken off the db.put call sites and the expansion was run through real
+ * WebCrypto rather than assumed. What is MODELLED, and needs production
+ * telemetry to pin down, is how many rows a day a player writes and how that
+ * spreads across players (lognormal on meals/day, median 7, everything else
+ * scaled off it). 3,000 sampled players per tenure:
+ *
+ *   tenure    p50       p95       p99      mean    over the 4 MB cap
+ *    30 d    0.26 MB   0.55 MB   0.75 MB  0.29 MB       0 %
+ *    90 d    0.62 MB   1.39 MB   1.99 MB  0.70 MB       0 %
+ *   180 d    1.17 MB   2.58 MB   4.03 MB  1.31 MB       1.0 %
+ *   365 d    2.23 MB   5.20 MB   7.68 MB  2.56 MB      12.7 %
+ *   730 d    4.28 MB  10.42 MB  15.79 MB  5.01 MB      55.5 %
+ *
+ * The 256-byte fixture the events audit used was right to call itself a floor.
+ * It is roughly a thousandth of a real one-year save.
+ *
+ * SO THE CAP IS NOT THE PROBLEM, AND RAISING IT DOES NOT FIX ANYTHING. Two
+ * separate things are wrong and they pull in opposite directions.
+ *
+ * 1. TOTAL STORAGE. One full save per player, mean size, in the same D1
+ *    database as everything else:
+ *      1,000 players    0.28 GB at 30 d    1.3 GB at 180 d    2.5 GB at 365 d
+ *     10,000 players    2.9  GB at 30 d   12.8 GB at 180 d   25.0 GB at 365 d
+ *    D1's per-database limit is 10 GB and cannot be bought past. At 10,000
+ *    players, backups alone are over it inside six months, before a single
+ *    events row is counted, and events want 8.6 GB of the same 10. This is not
+ *    a retention-tuning problem: a full encrypted save per player does not fit
+ *    in D1 at that scale by a factor of about two and a half. The structural
+ *    answer is to keep the blob in R2 (priced per GB, no wall) and leave this
+ *    table holding only player_id, size, app_v, updated_at and the object key.
+ *    That is real work and it is a recommendation, not a patch.
+ *
+ * 2. WHAT CROSSING THE CAP DOES TODAY, which is worse than the number. The PUT
+ *    below answers 413; js/social.js pushBackup returns false; autoSync
+ *    discards that return value; nothing anywhere tells the player. `backupAt`
+ *    is only stamped on success, so the client retries every sync and fails
+ *    every time, silently, forever. backupNudge in js/app.js does NOT cover
+ *    this: it watches lastExportAt, which is the manual file export, a
+ *    different thing. So a player's cloud backup quietly stops updating and the
+ *    first they hear of it is a restore that comes back a year stale. That is
+ *    the exact failure this feature exists to prevent (a real level 27 account
+ *    was destroyed on 2026-07-27), and on these numbers it already reaches 1%
+ *    of players at six months and 12.7% at a year.
+ *    There is also no remedy behind a warning even if one were shown: the food
+ *    log only grows, and nothing in the app trims it.
+ *
+ * 3. AND THE CLIFF IS NOT WHERE THIS CONSTANT SAYS IT IS. Bisected against
+ *    local D1 on 2026-08-17: the largest blob that stores is 2,199,942 bytes,
+ *    and 2,199,943 comes back "D1_ERROR: string or blob too big:
+ *    SQLITE_TOOBIG". So the real limit is about 2.2 MB, not 4 MB, and every
+ *    save in the 1.8 MB-wide gap between them used to reach the database, throw,
+ *    and fall out of the generic handler as a 500. The PUT below now catches
+ *    that and answers 413, which is what the route already meant to say.
+ *    Against the distribution above, 2.2 MB is not a distant ceiling: p99
+ *    crosses 2 MB at 120 days, p95 at 150 days, and p50 at 330 days. Half of
+ *    the players who stay a year lose their cloud backup, silently, on a limit
+ *    nothing in this file was written against.
+ *
+ * WHAT IS NOT MEASURED HERE, and needs production to settle:
+ *   - Whether the DEPLOYED D1 limit is the same 2,199,942 bytes the local
+ *     emulator enforces. It is the number this file has, it is not necessarily
+ *     the number Cloudflare runs. Lowering MAX_BACKUP_BYTES to match a figure
+ *     measured somewhere else would refuse saves production might accept, and
+ *     refusing to store somebody's save on a guess is the one mistake here that
+ *     cannot be undone, so the constant is deliberately left alone and the
+ *     failure is made legible instead.
+ *   - The real activity distribution. Everything above rests on a modelled
+ *     spread of rows per day. The per-row costs are exact; the row counts are
+ *     not, and only production telemetry can fix that.
+ *   - How many players are ALREADY over the line. `backups.size` is stored on
+ *     every row and nothing reads it: one query against production answers
+ *     this exactly, and no model is needed for it at all. */
 const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows over time)
 
 /* ---------------- names + friend codes ----------------
@@ -1187,9 +1265,37 @@ export default {
         const body = JSON.parse(bodyText || '{}');
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
         const now = Date.now();
-        await env.DB.prepare('INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
-          'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at')
-          .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+        try {
+          await env.DB.prepare('INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
+            'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at')
+            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+        } catch (e) {
+          /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
+             Measured 2026-08-17 by bisection against local D1: the largest blob
+             that stores is 2,199,942 bytes, and 2,199,943 comes back
+             "D1_ERROR: string or blob too big: SQLITE_TOOBIG". The constant
+             above is 4 MB, so every save between roughly 2.2 MB and 4 MB was
+             falling through to the generic handler as an unhandled 500.
+             A 500 and a 413 are the same thing to the client (js/social.js
+             pushBackup only reads r.ok), so this changes nothing a player sees.
+             It changes what the LOGS say, which is the only place anybody could
+             ever have noticed: a 500 reads as "the worker is broken" and gets
+             chased, and this is not that. It is a save that has outgrown the
+             row it lives in, and on the size distribution in the note on
+             MAX_BACKUP_BYTES the p95 player reaches it at about five months.
+             Deliberately NOT lowering MAX_BACKUP_BYTES to match. The measurement
+             above is the LOCAL emulator's limit, not necessarily the deployed
+             one, and a lower constant would refuse backups that production may
+             well accept. Refusing to store somebody's save on the strength of a
+             number measured somewhere else is the one mistake here that cannot
+             be undone. The right fix is to move the blob to R2 and stop asking a
+             row to hold a whole encrypted save; until then this makes the
+             failure legible instead of alarming. */
+          if (/TOOBIG|too big/i.test(String(e))) {
+            return json({ error: 'backup too large for the database', code: 'too-large', bytes: body.blob.length }, 413);
+          }
+          throw e;
+        }
         return json({ ok: true, updatedAt: now });
       }
 
