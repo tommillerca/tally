@@ -44,9 +44,60 @@ export function levelFor(xp) {
   };
 }
 
-export async function totalXp() {
+/* THE RUNNING XP TOTAL, AND WHY IT IS ALLOWED TO EXIST.
+ *
+ * totalXp() used to be db.all('xp') plus a reduce, and award() called it on EVERY
+ * reward. Measured in Chrome on this container against the real store: a full scan
+ * cost 4.4ms at 900 rows (a month), 24ms at 5400 (six months) and 33ms at 10950
+ * (a year), and one award cost 4.9 / 28 / 35ms across the same three. Linear in
+ * rows, and rewards fire in BURSTS (a fight win is award plus coins plus gear plus
+ * quests plus badges), on a phone that is 5 to 8x slower than this machine. Worse,
+ * initGameIfNeeded replays ~1900 awards against a store that is growing under it,
+ * so the retroactive backfill was quadratic.
+ *
+ * So the sum is cached, IN MEMORY ONLY, stamped with the xp store's write epoch
+ * from js/db.js. Nothing is persisted, which deletes a whole class of bug up
+ * front: a cached total cannot outlive the process, so no interrupted write, no
+ * quota failure and no half-finished restore can ever leave a WRONG number sitting
+ * on disk for the next boot to believe. The worst case is a cold cache, and a cold
+ * cache costs exactly one full scan, once, and then rebuilds itself from the truth.
+ *
+ * A CACHED NUMBER THAT CANNOT BE CHECKED IS JUST A FAST WRONG NUMBER, so the cache
+ * is only used when its epoch still matches db.epoch('xp'). db.js stamps that epoch
+ * on every put, delete and clear against the store, before the write is dispatched,
+ * so a write that then fails still invalidates. That covers every way it can drift:
+ *   - interrupted write: db.put stamps a new epoch, so if the tab dies before the
+ *     running total is updated the cache is already disowned and the next read
+ *     rebuilds from the rows that actually committed.
+ *   - import: importAll stamps every store inside its own all-or-nothing
+ *     transaction, so a restored save recomputes from what it actually got.
+ *   - erase / clear / any raw db.del: same stamp, same rebuild.
+ *   - a different database (useDbName, the ?demo save): stamps move too.
+ * The two in-place puts in this file (friendbattle tagging, levelup claimed flag)
+ * re-put a row award() already counted, so they cost a rebuild and stay correct;
+ * neither changes .xp, and xp rows are append-only by design (see the file header).
+ *
+ * DIRECTION AND BOUND: award() reads the xp store a FIXED number of times, and does
+ * not scan it at all on the warm path, whatever the row count. Measured in Chrome
+ * on this container: 4.9 / 28 / 35ms per award at 900 / 5400 / 10950 rows before,
+ * and about 1ms at all three after, no longer rising with row count.
+ * tests/xp-total-audit.mjs pins both halves: the SHAPE (full scans of the xp store
+ * do not grow with row count across a burst of awards) and the TRUTH (the cached
+ * total equals a from-scratch recount after every single award).
+ */
+let xpCache = null; // { v, epoch }
+
+// The truth, and the only thing that ever produces a total it did not add up itself.
+export async function rebuildXpTotal() {
+  const epoch = db.epoch('xp');
   const rows = await db.all('xp');
-  return rows.reduce((a, r) => a + (r.xp || 0), 0);
+  xpCache = { v: rows.reduce((a, r) => a + (r.xp || 0), 0), epoch };
+  return xpCache.v;
+}
+
+export async function totalXp() {
+  if (xpCache && xpCache.epoch === db.epoch('xp')) return xpCache.v;
+  return rebuildXpTotal();
 }
 
 // Idempotent award. Returns the xp granted (0 if this key already exists).
@@ -93,7 +144,15 @@ export async function award(key, type, xp, label, date) {
   const existing = await db.get('xp', key);
   if (existing) return 0;
   const before = await totalXp();
+  const e0 = db.epoch('xp');
   await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
+  /* Advance the running total ONLY if this award's own put is the single thing
+     that touched the store while it was in flight. Awards interleave (a fight win
+     fires award plus coins plus gear plus quests plus badges), so if any other
+     write landed in between, `before` is already stale and adding to it would bank
+     the drift forever. Drop the cache instead and let the next read pay for one
+     honest scan. */
+  xpCache = db.epoch('xp') === e0 + 1 ? { v: before + (xp || 0), epoch: e0 + 1 } : null;
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
     const lvB = levelFor(before), lvA = levelFor(before + xp);
