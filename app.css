@@ -3841,7 +3841,30 @@ body::before {
 }
 
 /* ---- the hand ---- */
-.pack-deck { position: absolute; left: 50%; bottom: calc(var(--pc-w) * .2269); z-index: 1; width: var(--pc-w); transform: translateX(-50%); }
+/* CENTRED BY MARGINS, NOT BY translateX(-50%), AND FOR A DIFFERENT REASON THAN
+   .sheet.takeover.
+   A transform whose translation has a fractional CSS-pixel part cannot be
+   snapped: the layer rasterises at that phase and Chrome resamples it. On
+   .sheet that only happens at an ODD viewport, because .sheet is width:100% so
+   its width IS the viewport. Here it happens at EVERY width, because --pc-w is
+   `min(61vw, 264px, ...)` and 61% of anything is rarely whole: measured
+   translateX at 375/390/393/412/430 is -114.375, -118.945, -119.859, -125.656,
+   -131.148. Five widths, five fractions, both parities.
+   That matters because this box holds the card ART. Measured cost of a
+   fractional centring transform on the content inside one, transform vs
+   margins at 393: images 0.77% of pixels at dpr 2 and 1.72% at dpr 3, and 5.3
+   percentage points of on-palette on a nearest-neighbour sprite. Text and flat
+   panels measured 0.00% at both, which is why this is not a sweep.
+   The margins are exact rather than merely equivalent: .pack-scene is
+   `width: var(--pc-w)` and so is this, so `left:0; right:0` leaves zero free
+   space and both auto margins resolve to 0. The box does not move, the
+   fractional transform is gone, and Chrome snaps the layout position at paint.
+   NOT applied to .pack-crate or .pack-bloom: they already centre through
+   layout, with a negative margin-left. NOT applied to .pack-burst, which is a
+   soft radial glow four times the card's width where nothing could show.
+   Nothing here animates .pack-deck's own transform (crCard, crNext and crSway
+   are all on descendants), so unlike slideup there is no keyframe to follow. */
+.pack-deck { position: absolute; left: 0; right: 0; bottom: calc(var(--pc-w) * .2269); z-index: 1; width: var(--pc-w); margin-inline: auto; }
 /* the rest of the pack, stacked behind the card you are looking at */
 .pc-ghost {
   position: absolute; left: 0; bottom: 0; width: 100%; aspect-ratio: 3 / 4.9; border-radius: 20px;
