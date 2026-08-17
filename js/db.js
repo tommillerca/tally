@@ -76,6 +76,49 @@ function tx(store, mode, fn) {
 
 export const db = {
   put: (store, val) => tx(store, 'readwrite', s => s.put(val)),
+  /* ATOMIC CLAIM: insert only if the key is not there yet, in ONE transaction.
+   *
+   * Why this exists, and why `put` cannot do it. "read the key, see nothing,
+   * write it" is TWO transactions with an await between them, so two overlapping
+   * callers both read nothing and both write, and every reward gated on that
+   * pattern pays twice. `add()` raises a ConstraintError on an existing key
+   * INSIDE the transaction, which is the only place the check and the write are
+   * indivisible, so exactly one caller can ever win the key.
+   *
+   * Resolves true when THIS call inserted the row, false when the key was
+   * already taken. Every other failure still rejects, because a broken database
+   * must not read as "somebody else already claimed it".
+   *
+   * preventDefault on the request error is load-bearing: without it the
+   * ConstraintError aborts the whole transaction, and a caller batching other
+   * writes alongside would lose them. */
+  add: (store, val) => open().then(dbi => new Promise((resolve, reject) => {
+    const t = dbi.transaction(store, 'readwrite');
+    let dup = false;
+    const req = t.objectStore(store).add(val);
+    req.onerror = e => {
+      if (req.error && req.error.name === 'ConstraintError') { dup = true; e.preventDefault(); e.stopPropagation(); }
+    };
+    t.oncomplete = () => resolve(!dup);
+    t.onerror = () => (dup ? resolve(false) : reject(t.error));
+    t.onabort = () => (dup ? resolve(false) : reject(t.error));
+  })),
+  /* ATOMIC SPEND: hand the row over and remove it, in ONE transaction.
+   * The mirror of add() for the other half of the ledger's job. An inventory
+   * row (a crate, an egg) IS the right to one payout, so reading it and then
+   * deleting it in a second transaction lets two overlapping callers both read
+   * it and both get paid. Resolves the row when THIS call took it, undefined
+   * when it was already gone. */
+  take: (store, key) => open().then(dbi => new Promise((resolve, reject) => {
+    const t = dbi.transaction(store, 'readwrite');
+    const s = t.objectStore(store);
+    let row;
+    const g = s.get(key);
+    g.onsuccess = () => { row = g.result; if (row !== undefined) s.delete(key); };
+    t.oncomplete = () => resolve(row);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  })),
   del: (store, key) => tx(store, 'readwrite', s => s.delete(key)),
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
   clear: (store) => tx(store, 'readwrite', s => s.clear()),
@@ -93,6 +136,39 @@ export async function kvGet(k, fallback = null) {
   return row ? row.v : fallback;
 }
 export function kvSet(k, v) { return db.put('kv', { k, v }); }
+
+/* READ-MODIFY-WRITE A kv RECORD INSIDE ONE TRANSACTION.
+ *
+ * `const c = await coins(); await kvSet('coins', c + n)` is the shape half this
+ * app's balances are kept in, and it is two transactions with an await between
+ * them. Two overlapping callers both read the same starting value and the
+ * second write wins, so the app both LOSES payouts (two concurrent coinsAdd(140)
+ * moved the balance by 140, not 280: measured 2026-08-17 on this tree) and pays
+ * duplicates (two concurrent collectTribute both saw the same uncollected days
+ * and both returned the full tribute).
+ *
+ * `fn(current)` runs INSIDE the readwrite transaction, so nothing can interleave
+ * between the read and the write. Return the new value to store it; return
+ * undefined to leave the record untouched, which is how a caller says "on
+ * looking at the real state, there is nothing to do here". Resolves whatever fn
+ * returned. `fn` must be synchronous: an await inside it would let IndexedDB
+ * auto-commit the transaction out from under the write. */
+export function kvUpdate(k, fn, fallback = null) {
+  return open().then(dbi => new Promise((resolve, reject) => {
+    const t = dbi.transaction('kv', 'readwrite');
+    const s = t.objectStore('kv');
+    let next, threw = null;
+    const g = s.get(k);
+    g.onsuccess = () => {
+      try { next = fn(g.result ? g.result.v : fallback); }
+      catch (e) { threw = e; try { t.abort(); } catch { /* already dying */ } return; }
+      if (next !== undefined) s.put({ k, v: next });
+    };
+    t.oncomplete = () => resolve(next);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error);
+  }));
+}
 
 export function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

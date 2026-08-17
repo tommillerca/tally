@@ -22,7 +22,7 @@
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
 import { db, kvGet, kvSet, exportAll, importAll } from './db.js';
-import { award } from './game.js';
+import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
@@ -578,10 +578,17 @@ const GIFTBOX = 'giftbox';
  *
  * award() writes its ledger row unconditionally, xp 0 included, so the row IS
  * the durable receipt. Read it directly and the guard covers every payload
- * shape, including the ones that pay nothing but coins. */
+ * shape, including the ones that pay nothing but coins.
+ *
+ * 2026-08-17: the read and the write are now the SAME transaction. `db.get`
+ * then `award` was still two transactions with an await between them, so two
+ * overlapping ingests of one grant (a pullGrants racing an openGift) both saw
+ * an empty ledger and both paid. awardOnce mints the row with db.add and says
+ * whether THIS call minted it, which is the same answer this guard wanted and
+ * is indivisible. */
 async function applyPayload(key, type, p) {
-  if (await db.get('xp', key)) return false;   // already ingested: skip side effects too
-  await award(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
+  // already ingested: skip side effects too
+  if (!(await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew'))) return false;
   if (p.coins) await coinsAdd(p.coins);
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet
   if (p.crate) await grantCrate(p.crate, 'social');

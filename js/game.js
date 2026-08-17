@@ -89,14 +89,35 @@ export async function awardCapped(prefix, type, xp, label, cap, date) {
   return 0;
 }
 
-export async function award(key, type, xp, label, date) {
-  const existing = await db.get('xp', key);
-  if (existing) return 0;
-  const before = await totalXp();
-  await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
-  // any XP source can cross a level: steps, quests, pit wins, the road
+/* THE LEDGER ROW IS THE RECEIPT, AND MINTING IT IS THE CLAIM.
+ *
+ * Returns true exactly once per key, ever, and false for every later call. Two
+ * reasons it is the real primitive and award() is the wrapper:
+ *
+ * 1. UNAMBIGUOUS. award() returns 0 for BOTH "already in the ledger" and "this
+ *    payload carries no XP", and that ambiguity is what let a gift pay twice
+ *    (v390): the guard was live only for payloads that happened to carry XP.
+ *    A caller that pays coins, dust, gear or a crate against a 0-XP row has to
+ *    be able to ask "did I mint it?" and get a straight answer.
+ * 2. ATOMIC. The claim used to be `db.get` then `db.put`, which is two
+ *    transactions with an await between them, so two overlapping calls both
+ *    read nothing and both wrote. Measured 2026-08-17 against a real IndexedDB
+ *    on this tree: two concurrent claimGluttonWin('2099-01-01', 1) BOTH
+ *    returned a full claim, and two concurrent collectSpawn on one spawn BOTH
+ *    paid. db.add does the check and the write inside one transaction, so
+ *    exactly one caller can win the key however many are in flight.
+ *
+ * Every reward in the app that is gated on a ledger key inherits both
+ * properties from here, which is the point: the guard belongs at the choke,
+ * not at sixty call sites. */
+export async function awardOnce(key, type, xp, label, date) {
+  const minted = await db.add('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
+  if (!minted) return false;
+  // any XP source can cross a level: steps, quests, pit wins, the road.
+  // `after` already includes the row just minted, so `before` is that minus it.
   if (type !== 'levelup' && !quietLevelups) {
-    const lvB = levelFor(before), lvA = levelFor(before + xp);
+    const after = await totalXp();
+    const lvB = levelFor(after - xp), lvA = levelFor(after);
     if (lvA.level > lvB.level) {
       const rewards = await grantLevelRewards(lvB.level, lvA.level);
       if (typeof dispatchEvent === 'function') {
@@ -104,7 +125,11 @@ export async function award(key, type, xp, label, date) {
       }
     }
   }
-  return xp;
+  return true;
+}
+
+export async function award(key, type, xp, label, date) {
+  return (await awardOnce(key, type, xp, label, date)) ? xp : 0;
 }
 
 // v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays

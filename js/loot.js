@@ -2,7 +2,7 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, newId } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -80,10 +80,12 @@ function rng() {
 
 /* ---------- coins ---------- */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
+/* ONE TRANSACTION, or the balance loses writes. Read-then-write let two
+   overlapping payouts both start from the same balance and the second one win:
+   measured 2026-08-17, two concurrent coinsAdd(140) moved the balance by 140
+   instead of 280. Same clamp, same return value, no caller changes. */
 export async function coinsAdd(n) {
-  const c = Math.max(0, (await coins()) + n);
-  await kvSet('coins', c);
-  return c;
+  return kvUpdate('coins', c => Math.max(0, (c || 0) + n), 0);
 }
 
 /* ---------- inventory ---------- */
@@ -139,9 +141,7 @@ export const DUST_VALUE = {
 };
 export async function boneDust() { return (await kvGet('bonedust', 0)) || 0; }
 export async function boneDustAdd(n) {
-  const d = Math.max(0, (await boneDust()) + n);
-  await kvSet('bonedust', d);
-  return d;
+  return kvUpdate('bonedust', d => Math.max(0, (d || 0) + n), 0);   // one transaction, same reason as coinsAdd
 }
 // Dust is rarity PLUS the piece's stat points. Tom asked for statted gear to be
 // worth more; measuring first showed that EVERY one of the 276 catalog pieces is
@@ -297,7 +297,11 @@ export async function hatchEgg(invId) {
   if (!row) throw new Error('egg gone');
   const { ready } = eggProgress(row, await lifetimeStepsSum());
   if (!ready) return { ready: false };
-  await db.del('inv', row.id);
+  /* THE EGG ROW IS THE RIGHT TO ONE PET, so taking it IS the claim. Reading it
+     above and deleting it here used to be two transactions, so two overlapping
+     hatches of one egg both found it and both minted a pet instance. db.take
+     hands the row to exactly one caller; anybody else sees it already gone. */
+  if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
   const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive); // exclusive pets (Day One Lizard) never hatch
   const fresh = pets.filter(i => !owned.has(i.id));
@@ -635,6 +639,15 @@ export async function redeemCode(raw) {
   if (!def) return { ok: false, reason: 'invalid' };
   const done = (await kvGet('redeemed', [])) || [];
   if (done.includes(code)) return { ok: false, reason: 'used' };
+  /* THE CLAIM IS A ROW, NOT A LIST. The `redeemed` array above is a
+     read-modify-write appended at the END of this function, so four concurrent
+     redemptions of one code all read an empty list and all paid: measured
+     2026-08-17 on this tree, `BONEHEADZ` redeemed 4/4 times from one tap
+     window. A per-code kv row claimed with db.add is indivisible, so exactly
+     one caller can ever take the code. The list is still read (above) and still
+     written (below) so devices that redeemed before this change stay redeemed,
+     and it is still what a restore carries. */
+  if (!(await db.add('kv', { k: `redeemed:${code}`, v: Date.now() }))) return { ok: false, reason: 'used' };
   let pet = null, coins = 0, stacked = false;
   if (def.pet) {
     /* DUPES STACK, and the caller has to be able to SAY SO (Tom's call,
@@ -831,10 +844,23 @@ function rollCosmetic(owned, floor, slotBias) {
   return { item, dupe: true };
 }
 
+/* SPEND THE CRATE BEFORE YOU ROLL IT, AND SPEND IT ATOMICALLY.
+ * The row used to be deleted at the END, after every grant, so two overlapping
+ * opens of ONE crate both found the row and both paid: measured 2026-08-17
+ * against a real IndexedDB on this tree, two concurrent openCrate calls on a
+ * single Golden Crate row both resolved with full loot and the inventory still
+ * lost only one crate. db.take is the claim: the get and the delete are one
+ * transaction, so exactly one caller can ever hold this crate. The trade is
+ * deliberate and it is the one openGift, hatchEgg and claimDenLoot already
+ * make: a crash between the take and the rolls costs the player one crate,
+ * which is recoverable, where the other order pays a crate nobody owns out of
+ * the economy, which is not. */
 export async function openCrate(invId) {
-  const inv = await inventory();
-  const crateRow = inv.find(r => r.id === invId && r.kind === 'crate');
-  if (!crateRow) throw new Error('crate gone');
+  const crateRow = await db.take('inv', invId);
+  if (!crateRow || crateRow.kind !== 'crate') {
+    if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
+    throw new Error('crate gone');
+  }
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
@@ -890,7 +916,6 @@ export async function openCrate(invId) {
       results.push({ type: 'cos', item });
     }
   }
-  await db.del('inv', crateRow.id);
   await coinsAdd(coinsWon);
   return { crate: crateRow.crate, def, results, coins: coinsWon };
 }
