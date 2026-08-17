@@ -2679,13 +2679,25 @@ body::before {
    .bone-egg.pix drops the vector egg underneath. The container paints a
    gradient-and-border egg of its own, which is the pre-pixel drawing, and it was
    sitting behind the sprites the whole time. */
+/* 192px, AND DOWN WHERE THE PET LANDS. Tom, 2026-08-16: "it's too small on the
+   screen and too high up too it should be down by where the actual pet you get
+   shows."
+   Measured on the running hatch: the egg drew 98x98 with its centre at y242,
+   and the pet art that replaces it is 200x200 with its centre at y387. So the
+   egg was HALF the size of the thing it turns into, and 145px above it, and the
+   reveal jumped down and doubled at the same moment.
+   192 is 4x the 48px art, which is the integer scale nearest the pet's 200 (4%
+   under) and keeps the sprite on the pixel grid. `top` rather than a margin
+   because .bone-egg is position:relative, so the offset moves the paint without
+   changing the layout the shards and the glow are positioned against. */
 .bone-egg.pix {
-  width: 96px; height: 96px; border: 0; border-radius: 0;
+  width: 192px; height: 192px; border: 0; border-radius: 0;
   background: none; box-shadow: none;
+  top: 145px;   /* measured: at 98 the egg centred on y340 against the pet's y387 */
 }
-.egg-seq { position: relative; display: block; width: 96px; height: 96px; }
+.egg-seq { position: relative; display: block; width: 192px; height: 192px; }
 .egg-seq img {
-  position: absolute; inset: 0; width: 96px; height: 96px;
+  position: absolute; inset: 0; width: 192px; height: 192px;
   image-rendering: pixelated; opacity: 0;
 }
 .egg-seq img.on { opacity: 1; }
