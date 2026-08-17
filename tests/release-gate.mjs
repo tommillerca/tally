@@ -197,6 +197,22 @@ const DECLARED = {
   'hollow-audit.mjs': ['full', 'drives the Hollow at two viewports with and without reduced motion, including a real harvest tap and the modal contract. About 90s, too slow for the fast tier.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
   'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
+  /* DELIBERATELY RED ON MAIN, on two rows, and declared 'full' rather than 'skip'
+     for the same reason suite-rot-audit and sheet-action-reachable-audit are: the
+     finding is the deliverable and hiding it retires it into silence. It grades
+     APPARENT SIZE, which nothing else here does: one metre is a fixed number of
+     stage pixels (derived at run time from hollow-fence-left's measured ink, not
+     hardcoded), every backdrop sprite declares what it depicts in metres, and its
+     measured INK height must land within 15%. Eleven of thirteen rows pass inside
+     2%. hollow-shed reads 1.39m and hollow-sign 1.39m against 2.2 and 2.1: the
+     shed's door measures 0.33 x 0.59m, which is a door nobody in this world fits
+     through, and the crate and sack standing beside it are at world scale, so the
+     shed is out of scale with its own neighbours and not only with the anchor.
+     Either the two props are undersized, or the scene wants a declared depth
+     model that a single px/m cannot express; that is a design call and it is
+     named on every run instead of being tuned away. ~20s, but it is a pixel audit
+     and belongs with the other three. */
+  'hollow-scale-audit.mjs': ['full', 'apparent size: measured INK height against a declared table of object heights in metres, at 78.33 stage px per metre derived from the fence. Second, separate assertion for integer draw scale, which is a crispness rule and NOT a size rule (proven: a crow drawn at exactly 2x satisfies it and reads 0.59m). RED on hollow-shed and hollow-sign by design; see the block comment above.'],
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
   'ledger-voice-audit.mjs': ['skip', 'shoots the ledger copy for reading, into a fixed scratch dir; asserts nothing about layout.'],
