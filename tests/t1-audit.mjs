@@ -27,7 +27,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
@@ -60,7 +60,8 @@ const browser = await puppeteer.launch({
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   // MapLibre needs WebGL. Without these the Boneyard draws as a black rectangle,
   // attribution and all, which reads like a network failure rather than no GPU.
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  executablePath: chromePath(),
+  args: [...sandboxArgs(), '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage();
 const errors = [];

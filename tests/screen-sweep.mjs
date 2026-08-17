@@ -15,7 +15,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs } from './godmode.js';
 
 /* This harness never advances CSS animations: an element reports playState
    'running' with currentTime stuck at 0, so anything that fades in paints at its
@@ -52,7 +52,8 @@ const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  executablePath: chromePath(),
+  args: [...sandboxArgs(), '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage();
 const errors = [];
