@@ -411,9 +411,9 @@ api.mode = 'hang';
 await $click('#giftFree');
 const freeBack = await waitFor(async () => { const b = await btn('#giftFree'); return b && !b.disabled; }, BOUND_MS);
 ok('DEADLINE  free gift: the button comes back to life inside two deadlines instead of sitting on "..."',
-  freeBack >= 0, freeBack >= 0 ? `${freeBack}ms (bound ${BOUND_MS}ms), label "${(await btn('#giftFree')).text}"` : `still disabled after ${BOUND_MS}ms`);
+  opened && freeBack >= 0, freeBack >= 0 ? `${freeBack}ms (bound ${BOUND_MS}ms), label "${(await btn('#giftFree')).text}"` : `still disabled after ${BOUND_MS}ms`);
 ok('DEADLINE  free gift: and the player is told, rather than left to guess',
-  /could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
+  opened && /could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
 
 const coinsBefore = await coins();
 await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.click()).catch(() => {});
@@ -422,14 +422,19 @@ await page.evaluate(() => document.querySelector('.gift-amt[data-amt="250"]')?.c
 const chipBack = await waitFor(async () => { const b = await btn('.gift-amt[data-amt="250"]'); return b && !b.disabled; }, BOUND_MS);
 const coinsAfter = await coins();
 ok('DEADLINE  250-coin gift: the chip comes back to life inside two deadlines',
-  chipBack >= 0, chipBack >= 0 ? `${chipBack}ms (bound ${BOUND_MS}ms)` : `still disabled after ${BOUND_MS}ms`);
+  opened && chipBack >= 0, chipBack >= 0 ? `${chipBack}ms (bound ${BOUND_MS}ms)` : `still disabled after ${BOUND_MS}ms`);
 /* EXACT, not "about right". Measured before the fix: 5000 -> 4750, no refund,
    no toast, and the chip dead. A spend that cannot complete must leave the
    balance byte-identical to what it was. */
+/* GATED ON `opened`, because an unchanged balance is trivially true when nothing
+   was ever tapped: that is exactly how this row read green against ddbb079,
+   where the crew fan was empty and the gift sheet never opened at all. An empty
+   sample set is a failure, never a pass (anti-regression rule 3). */
 ok('BALANCE  250-coin gift: a send that never got an answer leaves the balance exactly where it started',
-  coinsAfter === coinsBefore, `${coinsBefore} -> ${coinsAfter} (must be identical)`);
+  opened && coinsAfter === coinsBefore,
+  opened ? `${coinsBefore} -> ${coinsAfter} (must be identical)` : 'the gift sheet never opened, so no send was attempted and this row measures nothing');
 ok('BALANCE  and the toast says the coins were not spent',
-  /not spent|could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
+  opened && /not spent|could not send/i.test(await toastText()), (await toastText()).slice(0, 90) || '(no toast at all)');
 
 api.mode = 'ok';
 await goTab('friends');
