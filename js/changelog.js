@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 390, date: '2026-08-17', title: 'The crate finishes opening before it leaves', items: [
+    "<b>The last frame of the crate opening was being cut off, worst on the first crate you opened.</b> The frames were timed from the moment their artwork finished loading, while the crate's exit was timed from the moment the reveal opened. Two different clocks, and the gap between them came out of the ending. On a phone loading nine frames that was enough to start the crate disappearing while it was still opening. Both crates now hold on their final frame before they go.",
+    "<b>Opening the Boneyard with no signal threw an error behind the polite message.</b> You got the \"needs a network signal\" screen and a broken page underneath it. Now you just get the message and a Retry button.",
+    "<b>On a short phone the End Turn button is pinned instead of the fighters being shrunk.</b> The Pit was squeezing the characters to make room for the buttons; now the button stays put and the tray scrolls.",
+    "<b>Notifications actually obey the setting you chose,</b> instead of only recording it.",
+    "<b>On some browsers the tab bar could end up far below the bottom of the screen.</b> A newer sizing unit was used with no fallback, so a browser that does not understand it dropped the rule entirely and the page grew instead of fitting.",
+    "<b>Erase all data now clears your gear too.</b> It was leaving the inventory behind, so a wipe was not a full wipe.",
+  ] },
   { n: 389, date: '2026-08-17', title: 'The Golden Crate is real artwork too', items: [
     "<b>The Golden Crate opens as a hand-drawn bone chest with a green flame.</b> Closed, then open with the gold, then open with the gems inside. The same treatment the Common Crate got, on the rarer one.",
     "<b>The old crate icons are gone from your Backpack.</b> Both chest tiles and the Backpack tab itself show the real artwork now instead of the flat placeholder icons. The Step Egg keeps its old icon on purpose: the drawing loses its speckle at that size and just reads as a grey pebble.",

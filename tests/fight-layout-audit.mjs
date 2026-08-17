@@ -324,6 +324,69 @@ const jitter = await page.evaluate(async () => {
 ok('the buttons hold still across turns', jitter.trayDrift <= 2, `moved ${jitter.trayDrift}px  ${JSON.stringify(jitter.seen)}`);
 ok('the arena holds its height across turns', jitter.arenaDrift <= 2, `${jitter.arenaDrift}px`);
 
+/* ---- 5. the smallest phone: the primary action is on screen WITHOUT scrolling
+   and the fighters are not shrunk to buy it ----
+
+   320x568 is an iPhone SE 1st gen and the small Androids. Measured on main
+   before the fix, in a real den fight: .fight-body is 466px tall holding 520px
+   of content, and End Turn's row rendered at 557.9 to 612.6, so 44.6px below the
+   fold. What that turned out to NOT be is the interesting part and it is pinned
+   here so nobody re-fixes the wrong thing: the body is already overflow-y:auto
+   with 54px of range, and driving scrollTop to its maximum brought End Turn to
+   503.9-558.6, fully visible. The button was never unreachable. It was below the
+   fold on first paint, on the one screen where a player takes turns.
+   So this section asserts BOTH halves of the answer, because either alone can be
+   satisfied by the fix that was rejected. Shrinking the arena floor from 183 to
+   129 puts End Turn on screen too, and it does it by making the fighters small
+   on the devices with the least room to lose. */
+for (const [W, H] of [[320, 568], [360, 640]]) {
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(800);
+  await settle(page);
+  const sm = await page.evaluate(() => {
+    const body = document.querySelector('.fight-body');
+    if (body) body.scrollTop = 0;                 /* first paint, not after a hunt */
+    const end = document.getElementById('endTurn');
+    const arena = document.querySelector('.arena');
+    if (!end || !arena || !body) return null;
+    const e = end.getBoundingClientRect(), a = arena.getBoundingClientRect();
+    const tray = document.querySelector('.fight-actions');
+    const moves = [...document.querySelectorAll('.fight-actions button')];
+    return {
+      vh: innerHeight, scrollTop: body.scrollTop,
+      endTop: +e.top.toFixed(1), endBottom: +e.bottom.toFixed(1),
+      arenaH: +a.height.toFixed(1),
+      moves: moves.length,
+      trayRange: tray ? tray.scrollHeight - tray.clientHeight : 0,
+      /* CAN THE LAST MOVE ACTUALLY BE BROUGHT INTO VIEW. Written the obvious way
+         first and it could not fail: comparing a button's offsetTop against the
+         tray's own scrollHeight is true by construction, because scrollHeight is
+         DEFINED as the box that contains the children. So drive the tray to the
+         end of its scroll and ask whether the last button now fits inside the
+         visible box. That fails the moment the tray is squeezed under one row,
+         which is the real way this breaks on a short phone. */
+      lastMoveInView: (() => {
+        if (!tray || !moves.length) return false;
+        tray.scrollTop = tray.scrollHeight;
+        const last = moves[moves.length - 1].getBoundingClientRect();
+        const t = tray.getBoundingClientRect();
+        return last.top >= t.top - 1 && last.bottom <= t.bottom + 1;
+      })(),
+      trayH: tray ? +tray.getBoundingClientRect().height.toFixed(1) : 0,
+    };
+  });
+  ok(`SMALL ${W}x${H}: the fight screen rendered something to measure`, !!sm && sm.moves > 0,
+    sm ? `${sm.moves} move buttons, tray scroll range ${sm.trayRange}px` : 'no fight on screen');
+  if (!sm) continue;
+  ok(`SMALL ${W}x${H}: End Turn is fully on screen with the column unscrolled`,
+    sm.scrollTop === 0 && sm.endBottom <= sm.vh + 1 && sm.endTop >= 0,
+    `End Turn ${sm.endTop} to ${sm.endBottom} of ${sm.vh}, scrollTop ${sm.scrollTop}`);
+  ok(`SMALL ${W}x${H}: the fighters keep their 183px floor, the button is not bought with them`,
+    sm.arenaH >= 183, `arena ${sm.arenaH}px`);
+  ok(`SMALL ${W}x${H}: the last move can be scrolled fully into the tray`, sm.lastMoveInView,
+    `${sm.moves} buttons, tray ${sm.trayH}px, scroll range ${sm.trayRange}px`);
+}
+
 await browser.close();
 if (srvHandle) srvHandle.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nall green');

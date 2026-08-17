@@ -33,7 +33,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep, serveTree} from './godmode.js';
+import { boot, sleep, serveTree, setWidth } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let srv = null, srvHandle = null;
@@ -346,6 +346,65 @@ const tap = await page.evaluate(async () => {
 });
 ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
   !tap.err && tap.before !== tap.after && /r-rare/.test(tap.after), JSON.stringify(tap));
+
+/* ---- TAIL: THE LAST AUTHORED FRAME HAS TO BE SEEN -------------------------
+   Tom, 2026-08-17: "the first chest you open for both kind clips the end of the
+   animation a little bit but the second chest doesn't."
+
+   The frame schedule used to be anchored to the moment image DECODE finished,
+   while the sink and the card were anchored to the moment the reveal opened.
+   Two clocks. Whatever decode cost came straight out of the last frame, and
+   decode costs most on the first open of a session, which is exactly the
+   asymmetry he saw.
+
+   This row holds the crate PNGs back 300ms, which is what a phone fetching and
+   decoding nine of them costs, and then asserts the last frame is still on
+   screen for a real beat before the sink starts. The delay is the whole point:
+   without it the shipped bug passes, because a fast desktop hides it.
+
+   PROVEN RED on the shipped v389 tree with this exact delay:
+     daily  last frame @ 1929ms vs sink @ 1600  -> clipped by 329ms
+     golden last frame @ 1826ms vs sink @ 1600  -> clipped by 226ms */
+{
+  const p2 = await browser.newPage();
+  await setWidth(p2, 393, 852);   // isMobile + hasTouch, or puppeteer reloads the page under us
+  await p2.setRequestInterception(true);
+  p2.on('request', async r => {
+    if (/assets\/crates\/.*\.png/.test(r.url())) await new Promise(x => setTimeout(x, 300));
+    r.continue().catch(() => {});
+  });
+  await p2.goto(base, { waitUntil: 'domcontentloaded' });
+  await sleep(2500);
+  for (const kind of ['daily', 'golden']) {
+    const r = await p2.evaluate(async k => {
+      const t0 = performance.now(); const marks = []; let last = -1;
+      window.__crateForce = true;
+      window.__packReveal([{ name: 'Tail', rarity: 'rare', kind: 'gear', iconHtml: '<span></span>' }], { crate: k });
+      await new Promise(res => { const iv = setInterval(() => {
+        const now = performance.now() - t0;
+        const seq = document.querySelector('#crateSeq');
+        if (seq) { const on = [...seq.children].findIndex(c => c.classList.contains('on'));
+          if (on >= 0 && on !== last) { last = on; marks.push({ f: on, t: +now.toFixed(0) }); } }
+        if (now > 3200) { clearInterval(iv); res(); }
+      }, 16); });
+      const seq = document.querySelector('#crateSeq');
+      const cs = getComputedStyle(document.querySelector('.pack-reveal'));
+      return { shown: marks.length, total: seq ? seq.children.length : 0,
+        lastIdx: marks[marks.length - 1]?.f ?? -1, lastAt: marks[marks.length - 1]?.t ?? null,
+        sink: Math.round(parseFloat(cs.getPropertyValue('--b-sink')) * 1000) };
+    }, kind);
+    /* CONTROL first: a run where the sequence never played would give a huge
+       apparent margin and pass the real check by doing nothing. */
+    ok(`TAIL ${kind} CONTROL the sequence actually reached its final frame under the delay`,
+      r.total > 0 && r.lastIdx === r.total - 1,
+      `showed frame ${r.lastIdx} of ${r.total - 1}`);
+    const hold = r.lastAt === null ? -1 : r.sink - r.lastAt;
+    ok(`TAIL ${kind} the last authored frame is on screen before the crate leaves`,
+      hold >= 60, `final frame held ${hold}ms (want 60+), last frame @ ${r.lastAt}ms, sink @ ${r.sink}ms`);
+    await p2.evaluate(async () => { history.back(); await new Promise(r => setTimeout(r, 900)); });
+  }
+  await p2.close();
+}
 
 await browser.close();
 if (srv) srv.kill();

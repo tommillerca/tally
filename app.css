@@ -77,8 +77,17 @@ svg { display: block; }
 
 /* Flex column: the SCREEN scrolls, the tab bar is an in-flow child pinned at the
    bottom. This avoids the iOS quirk where a position:fixed bottom bar (with
-   backdrop-filter) detaches and floats mid-screen during momentum scroll. */
-#app { max-width: 600px; margin: 0 auto; height: 100dvh; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+   backdrop-filter) detaches and floats mid-screen during momentum scroll.
+
+   THE vh LINE IS LOAD-BEARING, NOT NOISE. An unknown unit makes a declaration
+   invalid at parse time, so a browser that predates dvh (Chrome below 108,
+   iOS below 15.4) dropped `height: 100dvh` and left #app with no height at
+   all. .tabbar is an in-flow flex child, so it sank to the bottom of the
+   document: measured on Today at 390x844, #app 3083px and the tab bar 2173px
+   below the fold, with no tabs, no FAB and no way off the screen. An old
+   parser keeps the first line and a modern one takes the second.
+   See tests/dvh-fallback-audit.mjs. */
+#app { max-width: 600px; margin: 0 auto; height: 100vh; height: 100dvh; position: relative; display: flex; flex-direction: column; overflow: hidden; }
 
 .screen {
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
@@ -230,11 +239,11 @@ svg { display: block; }
   width: 100%; max-width: 600px;
   background: var(--surface); border-radius: 22px 22px 0 0;
   border-top: 1px solid var(--line-strong);
-  max-height: calc(100dvh - var(--sat) - 24px);
+  max-height: calc(100vh - var(--sat) - 24px);
   display: flex; flex-direction: column;
   animation: slideup 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.sheet.full { height: calc(100dvh - var(--sat) - 24px); }
+.sheet.full { height: calc(100vh - var(--sat) - 24px); }
 .sheet-grab { width: 38px; height: 4.5px; background: var(--line-strong); border-radius: 3px; margin: 9px auto 2px; flex: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px var(--pad) 10px; flex: none; }
 .sheet-head h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -247,7 +256,7 @@ svg { display: block; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- founding-player survey sheet (amethyst, prize-led) ---------- */
-.sheet-survey { --amethyst: #b96cf0; max-height: calc(100dvh - var(--sat) - 24px); }
+.sheet-survey { --amethyst: #b96cf0; max-height: calc(100vh - var(--sat) - 24px); }
 .sheet-survey .survey { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 2px var(--pad) calc(var(--sab) + 18px); }
 .survey-hero { position: relative; display: grid; place-items: center; height: 148px; margin: 2px 0 4px; }
 .survey-hero.big { height: 186px; }
@@ -282,7 +291,25 @@ svg { display: block; }
 .sheet-survey .btn:not(.ghost) { background: var(--amethyst); color: #1a0f26; }
 
 /* scanner sheet */
-.sheet.scanner { background: #000; height: calc(100dvh - var(--sat) - 24px); }
+.sheet.scanner { background: #000; height: calc(100vh - var(--sat) - 24px); }
+
+/* @supports, NOT A SECOND DECLARATION, AND THE DIFFERENCE IS MEASURED. The four
+   sheet heights above are the conventional fallback pattern's blind spot: a
+   value containing var() is assumed valid at parse time and only fails at
+   computed-value time, after substitution, and per CSS Variables that makes the
+   declaration UNSET rather than ignored. The earlier declaration is discarded
+   with it. Verified in Chromium with a made-up unit standing in for dvh:
+     max-height: calc(100vh - var(--sat) - 24px);
+     max-height: calc(100xyz - var(--sat) - 24px);   computes to `none`
+   which is a sheet with no ceiling at all, worse than the vh it replaced. So
+   the dvh versions live behind a condition an old browser answers false, and
+   the vh versions above are what it keeps. See tests/dvh-fallback-audit.mjs. */
+@supports (height: 100dvh) {
+  .sheet { max-height: calc(100dvh - var(--sat) - 24px); }
+  .sheet.full { height: calc(100dvh - var(--sat) - 24px); }
+  .sheet-survey { max-height: calc(100dvh - var(--sat) - 24px); }
+  .sheet.scanner { height: calc(100dvh - var(--sat) - 24px); }
+}
 .scan-stage { position: relative; flex: 1; overflow: hidden; border-radius: 0 0 0 0; }
 .scan-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .reticle {
@@ -316,7 +343,7 @@ svg { display: block; }
 .search-wrap input { padding-left: 40px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 
 .seg { display: flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; padding: 9px 6px; border-radius: 9px; font-size: 13.5px; font-weight: 700; color: var(--text-2); }
@@ -411,7 +438,7 @@ svg { display: block; }
 .progress i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }
 
 /* onboarding */
-.onb { min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--sat) + 40px) 22px calc(var(--sab) + 26px); max-width: 600px; margin: 0 auto; }
+.onb { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: calc(var(--sat) + 40px) 22px calc(var(--sab) + 26px); max-width: 600px; margin: 0 auto; }
 .onb .logo { width: 76px; height: 76px; border-radius: 22px; margin-bottom: 22px; }
 .onb h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 .onb .tag { color: var(--text-2); font-size: 16.5px; margin: 12px 0 26px; line-height: 1.45; }
@@ -460,7 +487,7 @@ a { color: var(--accent); text-decoration: none; }
 .xp-bar { height: 8px; border-radius: 5px; background: var(--surface-3); overflow: hidden; margin-top: 10px; }
 .xp-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #9ed32e, var(--accent)); transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 
-.badge-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.badge-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
 .badge {
   display: grid; justify-items: center; gap: 6px; padding: 11px 4px 9px;
   border-radius: 13px; background: var(--surface-2); border: 1px solid var(--line);
@@ -577,7 +604,7 @@ a { color: var(--accent); text-decoration: none; }
 .bh-hero.mini .bh-hero-meta { justify-items: start; }
 .bh-hero-meta { display: grid; justify-items: center; gap: 5px; font-size: 14px; }
 
-.ward-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 12px; }
+.ward-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
 .ward-cell {
   position: relative; aspect-ratio: 1; border-radius: 13px; overflow: hidden;
   background: var(--surface-2); border: 2px solid var(--line);
@@ -610,7 +637,7 @@ a { color: var(--accent); text-decoration: none; }
 .recipe-need { display: block; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
 /* seed label: what this seed is FOR, so it reads above the grow-time fine print */
 .seed-use { display: block; color: var(--text-2); font-weight: 600; margin-top: 2px; }
-.ingredient-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.ingredient-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .ing-cell { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .ing-cell.empty { opacity: 0.4; }
 .ing-cell .ing-ico { font-size: 22px; }
@@ -1008,7 +1035,7 @@ body::before {
 }
 .hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
 
-.hero-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.hero-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .hero-act {
   display: grid; justify-items: center; gap: 5px; padding: 11px 2px 9px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
@@ -1020,13 +1047,13 @@ body::before {
 /* FIVE is the shipped row now (option B2, 2026-08-07), not an edge case, so it
    gets a label size you can actually read rather than the 9.5px it had while it
    was a fallback. Measured at 375px: 63px per tile, "Character" fits on one line. */
-.hero-actions.five { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.hero-actions.five { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .hero-actions.five .hero-act { font-size: 10.5px; padding: 10px 1px 8px; letter-spacing: -.01em; }
 /* the Garden's door reads in growth green when something is ready to pick */
 .hero-act.grow { border-color: color-mix(in srgb, var(--mint) 60%, var(--line)); }
 .hero-act.grow span { color: var(--mint); }
 .hero-badge.go { color: var(--mint); }
-.hero-actions.six { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.hero-actions.six { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
 .hero-actions.six .hero-act { font-size: 9px; padding: 9px 1px 7px; }
 .hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
@@ -1237,7 +1264,7 @@ body::before {
   padding: 2px 12px;
 }
 .fight-log { min-height: 34px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 6px; }
-.fight-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.fight-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 /* TIGHTER ROWS, the other half of Tom's 2026-08-13 call. 11/9 padding made a
    ten-button tray 317px on a 393x852 phone and left the boss 34% of the screen.
    8/7 plus a 44px floor keeps every button a legal tap target while giving the
@@ -1291,9 +1318,16 @@ body::before {
    is the floor, not a nicety. */
 /* The subtrahend grew by the HUD's 92.4px because the HUD is a sibling row now
    rather than a lid, so it costs its own height instead of eating the arena's.
-   400 + 92 = 492. On a 390x844 and a 430x932 phone this is a wash by design:
-   scene was 349.6 and 437.6, it is 352 and 440. The short phone is where the
-   move pays. The 292 floor was never 292 of scene, it was 292 minus the HUD,
+   400 + 92 = 492, and then 504, because 492 was not quite right and the reason
+   is worth keeping. At 492 a 390x844 phone kept 352 of scene against the 349.6
+   it had before, a wash as intended, but the tray lost 11px and 11px crossed a
+   GRID ROW: the resting move buttons went from 6 to 3, with 5 of 8 below the
+   fold, on the commonest phone in the set. A row of controls is worth more than
+   12px of empty arena above a boss who already fits, so the arena gives it
+   back. 340 at 390x844 and 428 at 430x932, and the boss can afford both: he is
+   262 tall plus a 16 to 30px lift. At 375x667 this changes nothing whatsoever,
+   because the arena is pinned to its floor there and the subtrahend never
+   binds. The short phone is where the move pays. The 292 floor was never 292 of scene, it was 292 minus the HUD,
    so 197.6. The floor is 183 of REAL scene now, and it is derived rather than
    picked: a 375x667 phone gives the fight body 564.5px, and the tray's tallest
    honest state needs 152.3 of it, so
@@ -1301,7 +1335,10 @@ body::before {
    That is 14.6px less box than the 197.6 of scene the old arena left, and the
    boss still gains, because 183 of arena the figure can stand in beats 197.6
    with 110.4 of the figure behind the bars. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100svh - 492px), 600px); }
+/* 504, not 492: that is #28's short-phone value, and it wins. The vh line is
+   the dvh branch's point, kept: a browser that does not parse svh drops the
+   declaration entirely and the arena falls back to its intrinsic height. */
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - 504px), 600px); height: clamp(183px, calc(100svh - 504px), 600px); }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
@@ -1337,13 +1374,47 @@ body::before {
 .fight-actions.scrolls.at-end { mask-image: none; -webkit-mask-image: none; }
 .fight-endrow { margin-top: 8px; }
 .fight-endrow .fight-act { width: 100%; }
+
+/* ---- SHORT PHONES: PIN THE PRIMARY ACTION, DO NOT SHRINK THE FIGHT ----
+   Measured at 320x568 before this rule, on a real den fight:
+     .fight-body is 466px tall and holds 520px of content
+     End Turn's row renders at 557.9 to 612.6, so 44.6px below a 568 fold
+   The reported bug was "End Turn renders off screen". It is worth being precise
+   about what that turned out to be, because it changes the fix: .fight-body is
+   already overflow-y:auto with 54px of scroll range, and setting scrollTop to
+   its maximum brings End Turn to 503.9-558.6, fully on screen. So the button was
+   never unreachable. It was BELOW THE FOLD ON FIRST PAINT with nothing saying
+   so, which on the one screen where a player is taking turns is worse than it
+   sounds: the primary action of the whole screen requires a hunt.
+   The alternative was to shrink the arena floor from 183 to 129 on these phones,
+   which fixes the symptom by making the fighters small on exactly the devices
+   with the least room to lose. Tom's call, 2026-08-16: pin instead.
+   So the row sticks to the bottom of the scroller. Nothing shrinks, the boss
+   keeps his 183, and the arena and tray scroll behind a control that is always
+   there. 600px is the same breakpoint the discarded shrink used. */
+@media (max-height: 600px) {
+  .fight-body { position: relative; overflow-y: auto; }
+  .fight-body > .fight-endrow {
+    position: sticky; bottom: 0; z-index: 4;
+    /* opaque, or the tray scrolls through the button it is supposed to sit under */
+    background: var(--bg);
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 10px -6px rgba(0, 0, 0, .55);
+  }
+}
 /* container-type:size is what makes the cqh units below real. The figure rules
    have said "scales with the arena" since 2026-08-09, but nothing in this sheet
    ever declared a query container, so cqh silently resolved against the small
    viewport instead. Measured proof it was a no-op: .fstage came out 150px at
    390x844, 375x667 AND 430x932, three different arena heights, because 24cqh of
    the viewport clears the 150px cap at every one of them. The arena is the
-   container now, so the fighters answer to the box they stand in. */
+   container now, so the fighters answer to the box they stand in.
+   One precision note, because the numbers in the rules below are derived from
+   this and someone will re-derive them later: container-type:size resolves cqh
+   against the CONTENT box, and .arena carries a 2px border, so a 352px arena
+   offers 348px of cqh. The figures therefore land a fraction under their caps,
+   149.625px rather than 150 and 261px rather than 262, not exactly on them.
+   Measured, not assumed. */
 .arena {
   container-type: size;
   position: relative; height: 258px; border-radius: var(--radius); overflow: hidden;
@@ -1433,7 +1504,8 @@ body::before {
   /* 24 -> 43 because the percentage is measured against the arena now, not the
      viewport, and the arena is the smaller box. 43cqh holds the cap exactly
      where it already was on the phones that had room (150px at a 352px arena on
-     390x844, 150px at a 440px arena on 430x932) and lets the figure step down on
+     390x844, 150px at a 440px arena on 430x932, to within the border) and lets
+     the figure step down on
      a 375x667 phone, where the HUD's own row has to come out of the column.
      The floor moved 112 -> 130 deliberately: 112 is a WIDTH limit from the old
      comment (two columns 43px apart), not a height one, and at 130 the figure
@@ -1688,7 +1760,7 @@ body::before {
 /* ===== character sheet: game tabs + stat pills ===== */
 /* Five tabs in a 2-column grid meant three rows and ~430px of chrome before any
    content. One compact row instead, so the Wardrobe doll is visible on arrival. */
-.ch-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 14px 0 10px; }
+.ch-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 14px 0 10px; }
 .chip.ch-tab {
   position: relative; display: grid; justify-items: center; gap: 3px;
   padding: 9px 2px 7px; border-radius: 14px;
@@ -3195,7 +3267,7 @@ body::before {
   font-size: 9px; font-weight: 800; color: #201500;
   background: var(--amber); border-radius: 999px; padding: 1.5px 6px; pointer-events: none;
 }
-.gear-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.gear-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
 .gear-chip {
   background: var(--surface); border: 1px solid var(--line); border-radius: 13px;
   padding: 8px 9px; display: grid; gap: 2px; min-width: 0;
@@ -3595,7 +3667,7 @@ body::before {
 }
 
 /* ---- Trends: week recap ---- */
-.recap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 6px; }
+.recap-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .recap-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--surface-2); border-radius: 12px; padding: 12px 4px; text-align: center; }
 .recap-pill .rp-v { font-family: var(--display); font-weight: 400; letter-spacing: .5px; font-size: 25px; line-height: 1; }
 .recap-pill .rp-v small { font-size: 12px; font-weight: 700; opacity: .7; }
@@ -3634,7 +3706,10 @@ body::before {
    The slide-in needs its own keyframes because the shared one carries the
    -50% inside the transform it animates. */
 .sheet.takeover {
-  height: 100dvh; max-height: 100dvh; border-radius: 0; border-top: 0; z-index: 310;
+  /* vh first, dvh second: an old parser keeps the vh line and drops the dvh one,
+     a modern one takes both and the dvh wins. See tests/dvh-fallback-audit.mjs. */
+  height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh;
+  border-radius: 0; border-top: 0; z-index: 310;
   left: 0; right: 0; margin-inline: auto; transform: none;
   animation: slideupFlat .28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -3700,7 +3775,13 @@ body::before {
 .pack-reveal {
   /* the card is the unit of the whole scene. The third term keeps a tall card
      off the headline on a short phone. */
-  --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61));
+  /* vh here, dvh in the @supports below. A custom property accepts any token
+     sequence at parse time, so an old browser stores this line happily and only
+     fails when it is substituted, at which point the property using it is unset
+     rather than falling back: `width: var(--pc-w)` computed to `auto` in the
+     measurement, not to the previous declaration. A second --pc-w line would be
+     inert for the same reason. See tests/dvh-fallback-audit.mjs. */
+  --pc-w: min(61vw, 264px, calc((100vh - 300px) * .61));
   --rar: var(--text-2);
   --rar-rgb: 185, 172, 151;
   /* FASTER OFF THE MARK. Tom, 2026-08-08: "the initial open needs to happen a bit
@@ -3737,9 +3818,21 @@ body::before {
      The frame table sums to 400ms from --b-lid 1.12s, so the last pose lands at
      1.52s. Hold it 80ms, sink hard over 200ms, and the crate is fully gone at
      1.80 before the card starts at 1.82. Costs 0.10s of time-to-card. */
-  --b-sink: 1.60s; --b-card: 1.82s;
+  /* 1.64, not 1.60. The frame table ends at 1.52 and the last frame was getting
+     80ms on paper and 25-50ms in practice. Tom, 2026-08-17: the end of the
+     animation clips. Moving the sink 40ms later and making it 40ms quicker buys
+     the final frame 120ms and still has the crate GONE at 1.80, before the card
+     at 1.82, which is the ordering row in tests/crate-reveal-audit.mjs. Tom's
+     frame timings are untouched: the hold came out of the sink, not his art. */
+  --b-sink: 1.64s; --b-card: 1.82s;
   --b-count: 2.12s; --b-title: 2.74s; --b-foot: 2.94s;
   --b-sway: 2.94s; --b-spark: 3.04s;
+}
+/* The .co-sink.pix animation-duration longhand that used to sit here is gone on
+   purpose: it was cancelled by the shorthand further down and made the crate
+   look like it had been retimed when it had not. Do not put it back. */
+@supports (height: 100dvh) {
+  .pack-reveal { --pc-w: min(61vw, 264px, calc((100dvh - 300px) * .61)); }
 }
 .pack-reveal.r-uncommon { --rar: var(--mint); --rar-rgb: 162, 224, 166; }
 .pack-reveal.r-rare { --rar: var(--protein); --rar-rgb: 124, 196, 255; }
@@ -3801,7 +3894,7 @@ body::before {
    row in tests/crate-reveal-audit.mjs reading the animation's real duration off
    the element instead of trusting the stylesheet. The duration now lives in the
    shorthand, where nothing can quietly win against it. */
-.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .2s ease-in var(--b-sink) both; }
+.co-sink.pix { position: relative; will-change: auto; animation: crSinkPix .16s ease-in var(--b-sink) both; }
 /* THE EXIT IS NOT A SCALE EITHER. crSink ends on translateY() scale(.9), and a
    scale on an ancestor resamples the sprite exactly like the drop did: caught by
    tests/crate-palette-audit.mjs measuring the sprite at 143.508px wide mid-sink
@@ -4559,7 +4652,7 @@ body::before {
   font-style: normal; color: var(--text-3); font-weight: 700; letter-spacing: 0;
   text-transform: none; font-size: 11.5px; text-align: right;
 }
-.col-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.col-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .col-cell {
   position: relative; aspect-ratio: 1; border-radius: 11px; overflow: hidden; padding: 0;
   background: var(--surface-2); border: 2px solid var(--line);
@@ -4817,7 +4910,7 @@ body::before {
 /* ===== The Bone Garden (v259) ===== */
 /* Beds share the cauldron card language on purpose: both are things on a timer in
    the same room, so they should read as one status block, not two systems. */
-.plot-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.plot-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 6px; }
 .plot-card {
   position: relative; display: grid; gap: 3px; justify-items: center; text-align: center;
   padding: 11px 6px 10px; border-radius: 14px; background: var(--surface-2);
@@ -5386,7 +5479,7 @@ body::before {
 }
 
 /* ---- the four capture routes, one row ---- */
-.t1-routes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t1-routes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .t1-route {
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 3px 7px; min-height: 62px;
@@ -5455,7 +5548,7 @@ body::before {
 .t1-hero .k b { font-family: var(--display); font-size: var(--fs-7); font-weight: 400; line-height: .9; letter-spacing: .02em; color: var(--gold); font-variant-numeric: tabular-nums; }
 .t1-hero .k small { font-size: var(--fs-1); font-weight: 800; letter-spacing: .1em; color: var(--text-3); }
 .t1-hero .k .of { margin-left: auto; font-size: var(--fs-1); font-weight: 700; color: var(--text-3); text-align: right; }
-.t1-macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.t1-macros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .t1-macros small { display: block; font-size: 9px; font-weight: 800; letter-spacing: .09em; color: var(--text-3); margin-bottom: 4px; }
 .t1-macros b { display: block; font-size: var(--fs-3); font-weight: 800; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
 .t1-macros .tr { height: 8px; background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
@@ -5521,7 +5614,7 @@ body::before {
 .t1-field .lbl label { margin: 0; }
 .t1-field .lbl .t1-tag { padding: 0 5px; font-size: 9px; }
 .t1-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.t1-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.t1-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 
 /* ---- label-scan stage + rules ---- */
 .t1-stage {
@@ -6168,7 +6261,7 @@ body::before {
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
 .onb {
-  position: relative; min-height: 100dvh; display: flex; flex-direction: column;
+  position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
   align-items: center; padding: calc(var(--sat) + 22px) 22px calc(var(--sab) + 24px);
   max-width: 600px; margin: 0 auto;
 }
@@ -6222,7 +6315,7 @@ body::before {
   border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text-2);
 }
-.onb-earns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin: 14px 0 16px; }
+.onb-earns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 14px 0 16px; }
 .onb-earn {
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 10px 4px 8px; text-align: center;
@@ -6480,7 +6573,7 @@ body::before {
 .t3-row.done .t3-tx b { color: var(--text-2); text-decoration: line-through; }
 
 /* --- garden -------------------------------------------------------------- */
-.t3-beds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.t3-beds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .t3-bed {
   position: relative; background: #241d15; border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 12px 6px 9px; text-align: center; overflow: hidden;
@@ -6506,7 +6599,7 @@ body::before {
 .t3-bed:disabled { opacity: .55; }
 .t3-timer { height: 8px; margin-top: 6px; border-width: 1.5px; }
 .t3-timer > i { background: var(--mint); }
-.t3-pouch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.t3-pouch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .t3-seed {
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 4px 7px; text-align: center; color: var(--text); width: 100%; display: block;
@@ -7131,7 +7224,7 @@ body::before {
 .tz-h { font-family: var(--display); font-weight: 400; font-size: 34px; letter-spacing: .04em; margin: 12px 0 2px; }
 .tz-sub { color: var(--text-2); margin: 0 0 14px; }
 .tz-grid { display: none; /* replaced by .tz-wall */
-  grid-template-columns: repeat(3, 1fr); gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
   background: var(--surface-2); border: 2px solid #17151d; border-radius: 14px;
   padding: 10px; box-shadow: var(--sh-sm);
 }
@@ -7251,7 +7344,7 @@ body::before {
    across so a phone still shows a whole face per cell, and each cell pops in on
    a stagger so the grid assembles itself rather than appearing as a slab. */
 .boss-wall {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px;
   margin: 12px 0 10px;
 }
 .boss-cell {
@@ -7444,6 +7537,20 @@ body::before {
    by a screenful of empty floor (measured at ~450px before this) */
 .fight-body > .arena { transition: min-height .35s ease, height .35s ease, opacity .3s ease; }
 .fight-body.fight-settled > .arena { flex: 0 0 auto; min-height: 0; height: 0; opacity: 0; overflow: hidden; margin: 0; border: 0; }
+/* THE HUD COLLAPSES WITH THE ARENA. While it was absolutely positioned INSIDE
+   .arena it was collapsed for free, by the arena's own height:0 and
+   overflow:hidden. Moving it out of the arena took that away, and nothing here
+   replaced it: measured at 375x667 after a win, 94.4px of live HP bars stayed
+   on screen and pushed .fight-over from top 157.8 down to 260.2. Two dead bars
+   and an empty pet bar above a VICTORY banner is a smaller version of exactly
+   the complaint this class was written for (Tom, 2026-08-10, "huge blank gap at
+   the top of the screen"). It rides the same class flip as the arena and uses
+   the same transition, so the two leave together rather than in sequence. */
+.fight-body > .fight-hud { transition: height .35s ease, opacity .3s ease, margin .35s ease; }
+.fight-body.fight-settled > .fight-hud {
+  height: 0; opacity: 0; overflow: hidden; margin: 0; padding-top: 0; padding-bottom: 0; border: 0;
+}
+@media (prefers-reduced-motion: reduce) { .fight-body > .fight-hud { transition: none; } }
 .fight-body.fight-settled > .fight-actions,
 .fight-body.fight-settled > #fendrow { display: none; }
 @media (prefers-reduced-motion: reduce) { .fight-body > .arena { transition: none; } }
@@ -7724,7 +7831,7 @@ body::before {
 .pdk-teaser { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; background: #1d1b22; border: 2px solid #17151d; border-radius: 13px; box-shadow: 0 3px 0 #17151d; padding: 9px; }
 .pdk-teaser-tx small { display: block; color: #a5e847; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; }
 .pdk-teaser-tx b { display: block; color: #f2e9d7; font-size: 12.5px; font-weight: 700; margin-top: 2px; }
-.pdk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.pdk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pdk-tile { position: relative; aspect-ratio: 1; background: #201d28; border: 2px solid #17151d; border-radius: 13px; box-shadow: 0 3px 0 #17151d; display: grid; place-items: center; overflow: hidden; }
 .pdk-tile img { width: 84%; height: 84%; object-fit: contain; }
 .pdk-tile.r-legendary { box-shadow: 0 3px 0 #17151d, 0 0 14px rgba(255,201,97,.28); }

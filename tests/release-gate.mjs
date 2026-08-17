@@ -78,7 +78,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    imports ../js/pit.js and runs 400 seeded sims, exactly quest-daymore's shape,
    and BROWSER hands every entry a URL it would ignore. ~1s, 4/4 green on main,
    and it carries its own CONTROL row so it cannot pass vacuously. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs'];
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
@@ -102,7 +102,7 @@ const BROWSER = [
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
   'year-readout-audit.mjs',  // Walt: every Year bucket names a DIFFERENT month
   'notif-audit.mjs',         // Notification tiers do what they say (measured, not toggle-position); boot-asker webdriver-skip guard behaviourally verified
-  'notif-tier-audit.mjs',    // Essentials is a bounded strict subset of Everything, the toast copy and the payload agree both ways, and every silenced kind is driven through the real scheduler
+  'notif-tier-audit.mjs',    // Essentials is a bounded strict subset of Everything, the toast copy is graded against the DEVICE QUEUE both ways, fully off queues nothing, and every notifyNow call site names its kind
   'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
@@ -120,6 +120,7 @@ const BROWSER = [
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
   'crate-palette-audit.mjs', // the nine authored 48x48 crate frames render as the authored pixels: EXACT against the source PNG upscaled 3x nearest-neighbour, PALETTE, SCALE, ALIGN, MOTION, and a CONTROL row so a blank screenshot cannot pass by having nothing to compare. Landed with v388 and belonged to no tier, which failed the coverage assertion below before a browser started. Self-serving, 19s, 8 checks, green on four consecutive runs of fc9bb0f
   'xp-cap-audit.mjs',        // a repeatable action cannot pay forever: STATIC (no award() key built from a clock or a random source, so the bug class is caught in sources that do not exist yet) plus CAP, ROLLOVER and CONTROL driven through the real awardCapped against a real IndexedDB. Landed with #29 and belonged to no tier. Self-serving, 16s, 11 checks, green on four consecutive runs of fc9bb0f
+  'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
 ];
 
 function run(file, args) {
@@ -298,6 +299,8 @@ const DECLARED = {
   'db-upgrade-audit.mjs': ['full', 'IndexedDB v1->v3 and v2->v3 upgrades preserve every seeded row (js/db.js:2 says upgrades must be additive; this proves it). 20 assertions, per-run fresh scratch name, upgradeneeded oldVersion asserted directly.'],
   'db-export-completeness-lint.mjs': ['full', 'static lint: every createObjectStore in js/db.js must appear in exportAll and importAll. New store added later without export coverage = silent backup gap. Same class as the PRECACHE list bug of 2026-08-12. Fast (no browser).'],
   'importall-interrupt-finding.mjs': ['full', 'FINDING C demonstration (Reg-authorised 2026-08-13, no fix): interrupts importAll mid-loop, prints per-store distribution across N runs, boots the app on the mixed DB and observes what the player sees. Deliverable is the finding text; exit 0 as long as the demo runs.'],
+  'grid-min-width-audit.mjs': ['full', "no control lands outside a 320x568 viewport, and no equal-track grid spills its cells out of its own box: app.css had 22 `repeat(N, 1fr)` rules and zero minmax(0, 1fr), and a 1fr track's automatic minimum is min-content, so a long label widened the track past the equal share (.badge-grid reached x=347 in a 320 viewport). Carries its own canary, which plants an over-wide control and requires the detector to name it, because the first version of the exclusion rule excused every control on every screen. Three full walks of every route and hub tab at 320, 360 and 375: about 100s, and only tests/batch-audit.mjs otherwise ever sets a 320 viewport."],
+  'erase-completeness-audit.mjs': ['full', "Settings > Erase all data clears EVERY store js/db.js defines, and erase-then-start-over pays one welcome kit rather than one per cycle. The erase carried its own six-name literal that was missing 'inv', so the wardrobe survived a dialog promising it was gone and the kit was re-paid on every cycle, unbounded. Two virgin non-demo onboardings and a reload, so it is onb-audit-shaped and not FAST-shaped; ?demo is useless for it because boot re-seeds the demo DB on the reload the erase performs."],
   'db-quota-finding.mjs': ['full', 'C4 IndexedDB quota behaviour: measures real per-year growth (~2.4MB), extrapolates to device-realistic quotas (Chrome allocates ~60% of free disk; a 500MB-free budget phone hits quota inside ~4 years). Attempts to force a real failure via CDP Storage.overrideQuotaForOrigin, records honest outcome. Not a fail-if-red audit; the finding IS the deliverable.'],
   'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
   'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
@@ -320,6 +323,31 @@ const DECLARED = {
   'memory-census.mjs': ['full', 'the eight-layer memory ceiling on every screen that mounts art in a loop, sampled at the PEAK after a full scroll of every scroller, twice (tally/CLAUDE.md rules 11 and 12) - lb-memory-audit budgets ONE screen against a two-layer fixture, and that is how six more screens with the same defect stayed invisible. Drives and scrolls most of the app, so it is among the longest suites here. Its own header names what it cannot see (CSS backgrounds, off-DOM Images, the Boneyard map: no WebGL headless), so a pass is "not caught by this instrument", not "clean".'],
   'newcomers-audit.mjs': ['full', 'all six branches of hydrateNewcomers, so "the new player section of the Crew tab is gone" is answered by measurement instead of by picking one of three explanations. Six sequential seeded scenarios at ~3s of settle each; prove-red inverts playing() and rows A and E go red while B, C, D and F stay green.'],
   'race-results-audit.mjs': ['full', 'the settled step-race podium shown is the one that was PAID, which is why it reads /steps/settled and not /steps/week: measured on production 2026-08-14, three of the five paid players had already rolled into the new week and vanished from the live board, promoting 5th to 2nd. Plus VISIBLE-not-merely-present (three opacity-0 bugs in eight days), shows once, and never renders an empty podium. The fixture is the real production result byte for byte, so row 1 cannot be decorative.'],
+  /* THE ROAD EVERY FIX TAKES TO A PLAYER, and until 2026-08-17 nothing had ever
+     driven it. Serves this checkout as version A and version B out of one tree
+     over real https (the app registers its worker only on https, so an http run
+     would grade a page with no update machinery on it), installs the worker on
+     A, flips the server to B without clearing anything, and reports which of
+     index.html / js / css the player is running after a return visit, a reload,
+     a visibilitychange, and the Progress update banner.
+     'full' and not FAST for two reasons: it is six full boots plus onboarding
+     and an offline pass, about eight minutes, and it is DELIBERATELY RED on main
+     today. The reds are the deliverable and both are pre-existing:
+       - sw.js:174 serves a non-OK response as the answer instead of falling back
+         to the cache, so one 404 at deploy time is a dead shell for every
+         returning player while a good cached copy sits unused;
+       - app.js:519-520 promises "Update ready. Leave this screen to apply" and
+         nothing applies it on sheet close.
+     Declared 'full' rather than 'skip' precisely so those two stay visible on
+     every gate:all instead of being retired into silence, same reasoning as
+     suite-rot-audit. It goes green the moment either is fixed.
+     Prove-red: --prove-red=cache-first | stale-version | 404, each landing on a
+     different row; each verifies it really changed the served bytes before a
+     browser starts, so a prove-red that matches nothing cannot read as green. */
+  'map-offline-audit.mjs': ['full', "opening the Boneyard with the tile host blocked must give the offline message and throw NOTHING. Arrived with #33 and belonged to no tier, which is the same coverage failure my own two audits caused. 'full' rather than fast: 25s, and it boots MapLibre and aborts real tile requests. It earned the tier the hard way, failing 1 run in 2 on an intermittent null deref that read as flakiness and was a real error; six consecutive green runs after the fix."],
+
+  'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Deliberately red on main; see the block comment above for the two findings it pins.'],
+
   'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above."],
 };
 

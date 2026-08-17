@@ -5,6 +5,23 @@ const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
 
+/* THE STORE LIST, IN ONE PLACE, BECAUSE A HAND-COPIED ONE LOSES A STORE.
+ *
+ * Every place that has to act on "all of the player's data" reads this: the
+ * transactional importAll below, and Settings > Erase all data in js/app.js.
+ * The erase used to carry its own literal and it was missing 'inv', so an
+ * erase left the whole inventory (crates, gear, cosmetics, pets) standing
+ * while wiping the kv flag that says the welcome kit was already paid. The
+ * dialog promised the Bonehead was gone and it was not, and every
+ * erase-then-start-over cycle paid a second welcome kit on top of the gear it
+ * had failed to remove: unbounded, from the single most natural piece of
+ * support advice there is.
+ *
+ * Adding an eighth store means adding it HERE and to onupgradeneeded, and
+ * tests/erase-completeness-audit.mjs fails if those two ever disagree, so the
+ * next store cannot silently reintroduce the same hole. */
+export const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
+
 export function useDbName(name) { dbName = name; dbPromise = null; }
 
 function open() {
@@ -177,7 +194,10 @@ const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultCo
  * the only one. */
 export async function importAll(data, { replace = true } = {}) {
   if (!data || data.app !== 'tally' || !Array.isArray(data.log)) throw new Error('Not a Tally backup file');
-  const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
+  /* STORES is the module-level export above. importAll used to keep its own
+     copy of this list, and a second copy in js/app.js's erase loop is what
+     silently lost 'inv' and left the inventory behind on a full wipe. One
+     list, imported everywhere, is the fix for that whole class. */
   /* Shape check BEFORE anything opens a transaction, so "unchanged" is
      trivially true on this path. A store key that is present but is not an
      array is a damaged file, not an old one, and the two cases deserve

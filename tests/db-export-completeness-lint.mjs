@@ -86,14 +86,23 @@ if (importBlock) {
      (1) Literal per-store loop: `for (const _ of data.foo)` (pre-fix
          importAll shape, kept for future rewrites that go back to it).
      (2) Indexed loop over a STORES-like array: `for (const _ of data[s])`
-         paired with `const STORES = ['foo', 'bar', ...]` above it. This
-         is the transactional-import shape (ext/data-safety fix) and is
-         parsed by extracting the store-name literals from the STORES
-         array declaration. Either shape counts as "importAll consumes
-         this store". */
+         paired with `const STORES = ['foo', 'bar', ...]`. This is the
+         transactional-import shape (ext/data-safety fix) and is parsed by
+         extracting the store-name literals from the STORES array
+         declaration. Either shape counts as "importAll consumes this store".
+
+     THE STORES ARRAY MOVED OUT OF importAll (gwart/clientfix, the erase fix):
+     it is a module-level `export const STORES` now, because Settings > Erase
+     needs the same list and its hand-copied literal was missing 'inv'. So the
+     declaration is searched for in the WHOLE file when importAll's own body
+     does not carry it. Scoping the search to the function body was correct
+     while the array lived there and would have gone red on a change that only
+     made the file more correct, which is the failure mode of a check pinned to
+     where code happens to sit. */
   const forRe = /for\s*\(\s*const\s+[a-zA-Z_$][\w$]*\s+of\s+data\.([a-zA-Z_][a-zA-Z0-9_]*)/g;
   for (let m; (m = forRe.exec(body)); ) importedStores.add(m[1]);
-  const storesArr = body.match(/const\s+STORES\s*=\s*\[([\s\S]*?)\]/);
+  const storesArr = body.match(/const\s+STORES\s*=\s*\[([\s\S]*?)\]/)
+    || (/\bof\s+STORES\b/.test(body) ? dbSrc.match(/const\s+STORES\s*=\s*\[([\s\S]*?)\]/) : null);
   if (storesArr) {
     const litRe = /'([a-zA-Z_][a-zA-Z0-9_]*)'/g;
     for (let m; (m = litRe.exec(storesArr[1])); ) importedStores.add(m[1]);

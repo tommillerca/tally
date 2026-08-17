@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence } from './db.js';
+import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, STORES } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -2080,8 +2080,8 @@ async function checkFriendRequests() {
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
-      if (fresh.length === 1) await notifyNow('New friend request', `${fresh[0].name || 'A Bonehead'} wants to join your Crew.`);
-      else await notifyNow('New friend requests', `${fresh.length} Boneheadz want to join your Crew.`);
+      if (fresh.length === 1) await notifyNow('New friend request', `${fresh[0].name || 'A Bonehead'} wants to join your Crew.`, 'friends');
+      else await notifyNow('New friend requests', `${fresh.length} Boneheadz want to join your Crew.`, 'friends');
     }
     toast(fresh.length === 1 ? `${fresh[0].name || 'Someone'} wants to be friends. Open The Crew to accept.` : `${fresh.length} new friend requests. Open The Crew.`, 4200);
     if (currentTab() === 'friends') renderFriends($('#screen'));
@@ -2584,7 +2584,7 @@ async function renderToday(el) {
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
-    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.').catch(() => {});
+    notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
   }
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
@@ -8930,7 +8930,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Export backup</b><span>${exportAgo == null ? 'Never backed up yet' : exportAgo === 0 ? 'Last backup: today' : `Last backup: ${exportAgo} day${exportAgo === 1 ? '' : 's'} ago`}</span></div><button class="btn small ghost" id="exportBtn">Export</button></div>
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
-    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
   </div>
 
   ${notifPlat !== 'none' ? `
@@ -8957,7 +8957,11 @@ async function renderSettings(el) {
     <div class="card-title">REDEEM A CODE</div>
     <p class="note" style="margin:0 0 10px">Got a code from a friend? Redeem it for a pet.</p>
     <div style="display:flex;gap:8px">
-      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;text-transform:uppercase">
+      <!-- min-width:0, for the same reason every equal-track grid in app.css now
+           says minmax(0, 1fr): a flex item's automatic minimum is its min-content
+           width, and an <input> carries a default size of about 170px, so this row
+           was 2px wider than a 320 phone and the Redeem button ended at x=322. -->
+      <input id="redeemInput" type="text" placeholder="Enter code" autocapitalize="characters" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase">
       <button class="btn small" id="redeemBtn">Redeem</button>
     </div>
   </div>
@@ -9124,7 +9128,7 @@ async function renderSettings(el) {
     await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: reminders, streak saver + friend requests.');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
-    const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.');
+    const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.', 'any');
     toast(fired ? (notifPlatform() === 'native' ? 'Sent. Background the app to see it.' : 'Test notification sent.') : 'Could not send. Check permission.', 3200);
   });
   $('#redeemBtn', el)?.addEventListener('click', async () => {
@@ -9199,7 +9203,7 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
@@ -9209,7 +9213,13 @@ async function renderSettings(el) {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
       await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      for (const st of ['foods', 'log', 'weights', 'kv', 'xp', 'health']) await db.clear(st);
+      /* EVERY store db.js defines, never a hand-copied list. The literal that
+         used to sit here had six of the seven names: 'inv' was missing, so an
+         erase kept the entire inventory (crates, gear, cosmetics, pets) and
+         wiped only the kv flag recording that the welcome kit had been paid.
+         Inventory was strictly non-decreasing across an erase and every
+         erase-then-reonboard handed out another kit. See js/db.js STORES. */
+      for (const st of STORES) await db.clear(st);
       location.reload();
     });
   });
@@ -9469,7 +9479,15 @@ async function saveInitialSettings(np) {
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
-  initAnalytics(APP_SOCIAL_V); // start analytics from the first session too (boot's init is skipped by the onboarding return)
+  /* APP_BUILD, not APP_SOCIAL_V. appV is envelope-level in analytics.js, so
+     whatever this passes tags the WHOLE batch, and this is the onboarding path,
+     which means it tagged every first session in the app's life 'v68'. That is
+     the frozen social-protocol version, not a build that exists, so day-0
+     sessions landed in a bucket no build slice can match. The call at boot
+     already says this in its own comment: tag events with the real running
+     build, not the frozen social-protocol version. This is the path that did
+     the opposite. The first session is exactly the row retention work needs. */
+  initAnalytics(APP_BUILD); // start analytics from the first session too (boot's init is skipped by the onboarding return)
   location.hash = '#/today';
   route();
 }
@@ -10963,7 +10981,18 @@ function crateSeqHtml(kind = 'daily') {
    time rather than frame counts, so a 120Hz phone lands on them too. */
 const CRATE_SEQ_MS = [67, 50, 33, 33, 33, 50, 67, 67];
 
-function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
+/* tOpen is the moment the reveal mounted, which is when the CSS beats started
+   counting. Without it this function measures from whenever image decoding
+   happened to finish, and the sink and the card do not: two clocks, and the
+   difference between them comes out of the LAST FRAME. Tom, 2026-08-17: "the
+   first chest you open for both kind clips the end of the animation a little bit
+   but the second chest doesn't." The first open is the one that pays for decode.
+   Measured before the fix, one session, real teardown between opens: daily's
+   last frame landed at 1562ms on the first open and 1550ms on the second, with
+   the sink starting at 1600 either way. 38ms of final frame, then 50ms. On this
+   Mac decode costs 10-35ms; on a phone decoding nine PNGs it is enough to push
+   the tail past the sink entirely, which is the clip he is describing. */
+function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performance.now()) {
   const seq = $('#crateSeq', scope);
   if (!seq) return;
   const frames = [...seq.children];
@@ -10976,8 +11005,10 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
      than truncating keeps the shape of the timing when the budget changes. */
   const table = (CRATE_SEQ[kind]?.ms || CRATE_SEQ_MS).slice(0, frames.length - 1);
   const want = table.reduce((a, b) => a + b, 0);
-  const span = Math.max(240, secs('--b-card') - start - 60);
-  const holds = table.map(v => v * (want > span ? span / want : 1));
+  /* The deadline is the SINK, not the card. The crate has to have finished
+     opening before it starts leaving, and the old budget measured to --b-card,
+     which is 220ms after the sink begins. */
+  const HOLD = 100;   // the last authored frame gets READ, not glimpsed
   /* SNAP THE SPRITE ONTO THE DEVICE GRID BEFORE THE FIRST STEP.
      Every arithmetic argument about the crate's width assumes it is centred
      exactly, and it is not: .sheet.takeover centres with translateX(-50%), which
@@ -11008,6 +11039,15 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
+    /* Whatever decode cost, spend it on the pre-roll (a closed crate mid-drop,
+       where nobody can tell) instead of on the tail. If decode overran the whole
+       pre-roll, compress the frame table into what is left rather than running
+       past the sink: scaling keeps the shape of Tom's timing, truncating loses
+       the end of it, which is the very thing being fixed. */
+    const late = Math.max(0, performance.now() - tOpen);
+    const delay = Math.max(0, start - late);
+    const room = Math.max(200, secs('--b-sink') - (late + delay) - HOLD);
+    const holds = table.map(v => v * (want > room ? room / want : 1));
     /* ON THE DROP'S OWN animationend, not on the `at(start)` beat.
        The beat is 1.12s and the drop lands at 1.02s, so on a player's phone the
        two agree by 100ms of luck. Tie the snap to the thing it is correcting
@@ -11025,7 +11065,7 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
     snapToGrid();
     const dropEl = seq.closest('.co-drop');
     if (dropEl) dropEl.addEventListener('animationend', snapToGrid, { once: true });
-    at(start, snapToGrid);
+    at(delay, snapToGrid);
     /* ONE rAF LOOP, not eight setTimeouts. A timer per frame drifts, and a
        dropped frame on a mid-range phone silently shortens whichever hold it
        lands in. Reading performance.now() every frame means a slow frame skips
@@ -11045,7 +11085,7 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily') {
       }
       if (shown < frames.length - 1) requestAnimationFrame(tick);
     };
-    at(start, () => requestAnimationFrame(tick));
+    at(delay, () => requestAnimationFrame(tick));
   });
 }
 
@@ -11198,6 +11238,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const opening = !!crate && !reduced;
     let burst = null, burstTried = false;
     const timers = [];
+    const tOpen = performance.now();   // the CSS beats start counting here
     const at = (ms, fn) => timers.push(setTimeout(fn, ms));
     /* a TAKEOVER, not a sheet over a live screen: this is the payoff. */
     const wrap = openSheet(`
@@ -11326,7 +11367,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(beat('--b-land'), () => { dropSound(S.sounds); haptic.tap(); });   // it lands
         at(beat('--b-lid'), () => sparkleSound(S.sounds));                    // the lid goes
         at(beat('--b-card'), () => landed(tier));                             // the card is up
-        if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate);
+        if (CRATE_SEQ[crate]) playCrateSeq(reveal, wrap, crateSeqReady, at, crate, tOpen);
       } else {
         // Art first, THEN the entrance. The card used to fly in with an empty art
         // panel and fill itself a moment later, which robbed the payoff. Capped so
@@ -13344,7 +13385,7 @@ async function renderBoneyard(el) {
     };
     map.on('moveend', rerunPlacement);
     map.on('idle', rerunPlacement); // tiles loaded → placement can see water + roads
-    $('#mapRecenter', body).addEventListener('click', () => {
+    $('#mapRecenter', body)?.addEventListener('click', () => {
       follow = true; $('#mapRecenter', body).hidden = true;
       map.easeTo({ center: [lng, lat], zoom: MAP_START_ZOOM, duration: 700 });
     });
@@ -13506,7 +13547,33 @@ async function renderBoneyard(el) {
       for (const r of spawnMarkers.values()) if (r.el === el) return { label: (r.spawn.type === 'rare' ? 'Rare pile' : 'Bone pile'), lat: r.spawn.lat, lng: r.spawn.lng };
       return { label: 'Map marker', lat: null, lng: null };
     }
+    /* THE OFFLINE PATH DESTROYS THESE ELEMENTS AND CANNOT STOP THE FUNCTION.
+       map.once('error') above replaces body.innerHTML wholesale with the "needs a
+       network signal" message. It is an event handler, so it cannot return out of
+       the function that registered it, and everything below carries on against a
+       body whose children it just deleted. A player who opens the Boneyard
+       offline therefore gets the polite message AND an uncaught TypeError.
+       Found by the external session, which flagged it and deliberately left it.
+       Guarded rather than restructured: the offline message is already the right
+       outcome, the only bug is the throw behind it. */
     const mapEl = $('#mapCanvas', body);
+    /* THE ONE BAIL THAT COVERS THE REST OF SETUP.
+       map.once('error') replaces body.innerHTML with the offline message, and an
+       event handler cannot return out of the function that registered it, so
+       everything below carried on against a body whose children it had just
+       deleted. #33 guarded the attachments it could see with ?.; this is the
+       four pointer handlers underneath, which all dereference mapEl and would
+       each need their own guard. Stopping once is the fix, and it is also the
+       honest one: there is no map to wire up.
+       Caught by tests/map-offline-audit.mjs failing 1 run in 2 with
+       "Cannot read properties of null (reading 'addEventListener')", which
+       read as a flaky test and was an intermittent real error.
+       NOT sufficient on its own: this return is nested, so it does not stop the
+       five #mapDen/#mapSecret/#mapMini/#mapGlutton/#mapCollect handlers further
+       down, which get their own ?. for the same reason #33's did. The stack said
+       so (startMap, js/app.js:14166) after a guess said otherwise. */
+    if (!mapEl) return;
+    if (!mapEl) return;                 // the error handler already swapped the body
     mapEl.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
       // one long-press at a time: ignore secondary touch points (multi-touch),
@@ -14100,7 +14167,7 @@ async function renderBoneyard(el) {
     // a moving vehicle. Returns true (and nags) when you're going too fast.
     const tooFastToAct = () => { if (youSpeed > MAX_LOOT_SPEED) { toast('Slow down. You can\'t loot or fight from a moving vehicle.', 2800); return true; } return false; };
 
-    $('#mapDen', body).addEventListener('click', async () => {
+    $('#mapDen', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
@@ -14123,7 +14190,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapSecret', body).addEventListener('click', async () => {
+    $('#mapSecret', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const key = $('#mapSecret', body).dataset.secretKey;
       const s = secretsNear(scoutLat, scoutLng).find(x => x.key === key);
@@ -14135,7 +14202,7 @@ async function renderBoneyard(el) {
       });
     });
 
-    $('#mapMini', body).addEventListener('click', async () => {
+    $('#mapMini', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       const id = $('#mapMini', body).dataset.miniId;
       const rec = miniMarkers.get(id);
@@ -14151,7 +14218,7 @@ async function renderBoneyard(el) {
 
     // One button, three jobs, because a spire only ever wants one thing from you:
     // take it, collect from it, or keep it alive.
-    $('#mapSpire', body).addEventListener('click', async () => {
+    $('#mapSpire', body)?.addEventListener('click', async () => {   // same offline teardown as #mapCanvas above
       if (tooFastToAct()) return;
       if (!spireInRange) return;
       const { s, view, rival, siege } = spireInRange;
@@ -14184,7 +14251,7 @@ async function renderBoneyard(el) {
       await refreshSpires();
     });
 
-    $('#mapGlutton', body).addEventListener('click', () => {
+    $('#mapGlutton', body)?.addEventListener('click', () => {
       if (tooFastToAct()) return;
       // `gluttonBeaten` never existed: this threw ReferenceError on EVERY tap, so
       // Face The Glutton has never once opened. Beaten/out-of-window is already
@@ -14193,7 +14260,7 @@ async function renderBoneyard(el) {
       openGluttonSheet();
     });
 
-    $('#mapCollect', body).addEventListener('click', async () => {
+    $('#mapCollect', body)?.addEventListener('click', async () => {
       if (tooFastToAct()) return;
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
@@ -14487,7 +14554,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v389'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v390'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -14547,12 +14614,12 @@ async function maybeNotifyFriendGrants(gifts, cheers) {
     if (!gifts.length && !cheers.length) return;
     const prefs = await notifPrefs();
     if (!prefs.enabled || !prefs.friends) return;
-    if (gifts.length === 1) await notifyNow('🎁 A gift arrived', `${gifts[0].from || 'A friend'} sent you ${gifts[0].label}.`);
-    else if (gifts.length > 1) await notifyNow('🎁 Gifts arrived', `Your Crew sent you ${gifts.length} gifts.`);
+    if (gifts.length === 1) await notifyNow('🎁 A gift arrived', `${gifts[0].from || 'A friend'} sent you ${gifts[0].label}.`, 'friends');
+    else if (gifts.length > 1) await notifyNow('🎁 Gifts arrived', `Your Crew sent you ${gifts.length} gifts.`, 'friends');
     if (cheers.length === 1) {
       const c = cheers[0]; const ph = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
-      await notifyNow('📣 A cheer', `${c.from || 'A friend'}: ${ph}`);
-    } else if (cheers.length > 1) await notifyNow('📣 Cheers', `${cheers.length} cheers from your Crew.`);
+      await notifyNow('📣 A cheer', `${c.from || 'A friend'}: ${ph}`, 'friends');
+    } else if (cheers.length > 1) await notifyNow('📣 Cheers', `${cheers.length} cheers from your Crew.`, 'friends');
   } catch { /* noop */ }
 }
 
@@ -14665,7 +14732,10 @@ async function socialSnapshot() {
    starts one while we are here to see it, so the full 48h is always walkable. This
    is also the only new notification in the game: announced once on discovery
    (kv 'siegeSeen' keyed by id+deadline, so a re-open never re-announces), plus a
-   single native reminder 12h out. */
+   single native reminder 12h out. Both are gated on the `siege` pref: the
+   discovery push names its kind to notifyNow, the reminder is gated inside
+   scheduleSiegeReminder. The in-app toast below is not a push and is not gated,
+   because the player is looking at the app when it appears. */
 async function checkSieges() {
   try {
     if (navigator.webdriver && !window.__siegeForce) return;
@@ -14685,7 +14755,7 @@ async function checkSieges() {
     await kvSet('siegeSeen', [...seen].slice(-40));
     const a = announce[0];
     const hrs = Math.max(1, Math.round((a.until - Date.now()) / 3600000));
-    notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`).catch(() => {});
+    notifyNow('Your spire is under siege', `${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to walk out and break it.`, 'siege').catch(() => {});
     toast(`${a.siegeName || 'A siege'} is at ${a.name}. ${hrs}h to defend it.`, 5200);
     refresh();
   } catch { /* never let a siege check break a boot */ }
