@@ -157,6 +157,41 @@ not touched. His call:
    the wrong order and would be thrown away.
 3. The egg family needs a decision on whether egg art becomes per pet type.
 
+## 🧊 The Hollow: PARKED 2026-08-17 until Cam looks at it
+
+Tom, 2026-08-17, after the 3x ground render: *"hmm this is looking pretty bad
+still maybe we should park this until my brother can look at it."* Parked, not
+abandoned. Nothing further gets built on this scene until Cam has seen it.
+
+STATE WHEN PARKED. All of it lives on branch `reggie/chest-common`, PR #31,
+REOPENED 2026-08-17 after I wrongly closed it as superseded. 17 Hollow commits,
+unmerged, NOT on main and NOT live. Needs a rebase onto current main (it
+predates the v388 squash, v389, v390 and v391) before it can go anywhere.
+
+WHAT WAS ESTABLISHED, so Cam is not restarting from nothing:
+  - 1 metre = 76 stage px, anchored on hollow-fence, whose ink is exactly 76px
+    and which depicts a 1m picket fence. Every size question resolves against
+    this.
+  - The ground is Tom's own tiles, 92x64 native, drawn at a whole multiple.
+    Moved from 2x to 3x on 2026-08-17: at 2x the texture read as static, and it
+    was NOT a resampling defect (crop 28 colours vs source 28, so nothing was
+    being blended). 3x lowers the apparent frequency with the art untouched.
+  - Night is the hero tile per Tom and should run around the clock. NOT WIRED:
+    the app still picks a tile by time of day and the night look only exists in
+    the capture harness.
+  - Props all render into the same 48px cell regardless of what they depict,
+    which is why the crow reads crate-sized. They are SVGs, so resizing is
+    lossless. Targets measured but NOT APPLIED: crow ~15px ink, tuft 12,
+    crate 19, sack 23.
+  - Open and unfixed: too many dirt piles with no arrangement (reads as spill,
+    not beds); the lantern carries a baked halo instead of being lit by the
+    scene; the keeper is Cam's vector art in a pixel scene, which Tom has said
+    stays as-is for now.
+
+STANDING RULE that came out of this: the scene adapts to the art Tom supplies,
+never the reverse. A grass spec I sent asking him to regenerate tiles was
+withdrawn.
+
 ## 🎨 The Hollow: art redraws Tom owns — LOGGED 2026-08-16, not started
 
 From the Impeccable critique run 2026-08-16 (two isolated assessments plus my own

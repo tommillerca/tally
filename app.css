@@ -8038,7 +8038,14 @@ body::before {
      blades turned into noise, so this closes a gap that CSS could not. */
   background-image: url('assets/hollow/pix/hollow-ground-day.png');
   background-repeat: repeat;
-  background-size: 184px 128px;
+  /* 3x, not 2x. Tom, 2026-08-17, on the same "oversharpened" note for the third
+     time: the tiles are rendered perfectly (28 colours in the crop, 28 in the
+     source, so nothing is being resampled) and simply carry a lot of detail per
+     art pixel. At 2x that becomes a field of 2px marks with no larger shape to
+     rest on, which reads as static. 3x makes each art pixel bigger and drops the
+     apparent frequency without touching a single pixel of his art. 92x64 x3 =
+     276x192, still a whole multiple, so the pixel grid holds. */
+  background-size: 276px 192px;
   image-rendering: pixelated;
 }
 /* One field per band, wired to bandNow() in js/app.js. No tint, no overlay: the
