@@ -644,16 +644,26 @@ export async function awardDayCloseIfDue(targets) {
  * session, two samples each, because the container's own speed drifts by nearly
  * 2x between sessions and a table stitched from different ones reports the load
  * average rather than the code:
- *     origin/main   (award() rescanned the store)  1x 13.3-13.4s  4x 35.0-38.7s
- *     gwart/xpperf  (constant-cost award)          1x  2.8-3.0s   4x 10.0-11.1s  5x 13.3s  6x 14.2s
- *     this branch   (chunked and checkpointed)     1x  2.5-2.8s   4x  9.7-10.5s  5x 13.5s  6x 14.6s
- * The line that matters is 12,000ms. On main it is crossed at NO THROTTLE AT ALL:
- * 13.3s cold, on the fastest machine available, so a one-year legacy install
- * trips the dead-shell reload here with nothing slowing it down. The
- * constant-cost award() moves that line out to between 4x and 5x. That is a large
- * win and it is still not a fix: 4x is an ordinary mid-range phone, and
- * index.html's own boot curve is calibrated out to 40x. Speed moves the cliff, it
- * does not remove it, so the SHAPE is what changed here:
+ * Re-taken against origin/main = ddbb079 (v391); the v388 table this comment used
+ * to carry no longer holds, because v390 and v391 rewrote js/app.js. PAINT is the
+ * first sample where #screen has children, INIT is the moment kv 'game-init'
+ * lands:
+ *                                          PAINT                INIT
+ *   v391 main   (award() rescans store)  1x never / never    30.6s / 30.7s
+ *                                        4x never / never    65.8s / 65.2s
+ *   gwart/xpperf (constant-cost award)   1x never / never     3.6s /  3.7s
+ *                                        4x never / never    18.1s / 10.9s
+ *   this branch (chunked, checkpointed)  1x 347ms / 418ms     5.5s /  5.7s
+ *                                        4x 799ms / 1130ms   27.4s / 29.7s
+ * The line that matters is 12,000ms. On v391 main it is crossed at NO THROTTLE AT
+ * ALL, and by further than it was on v388: 30.6s cold, on the fastest machine
+ * available, so a one-year legacy install trips the dead-shell reload here with
+ * nothing slowing it down. The constant-cost award() takes 8x off that and still
+ * never paints before the flag, and at 4x it is back over the line. Speed moves
+ * the cliff, it does not remove it, so the SHAPE is what changed here. Note the
+ * cost, stated rather than buried: chunking yields between chunks, so this branch
+ * takes 5.5s where xpperf alone takes 3.6s. It buys the only property that ends
+ * the loop, which is that content is up in about a second, always before the flag:
  *
  *   - CHECKPOINTED. A cursor in kv ('game-init-at') is written after every chunk
  *     of awards, so an interrupted boot resumes where it stopped instead of
