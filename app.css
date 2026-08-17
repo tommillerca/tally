@@ -8033,5 +8033,5 @@ body::before {
    between the two keyframes, which is the same resampling the transform ban
    exists to stop: measured mid-hop at device y 587.188. Stepping makes the bird
    only ever occupy 122 or 118, both whole. */
-@keyframes hlwCrowHop { 0%, 100% { top: 122px } 50% { top: 118px } }
+@keyframes hlwCrowHop { 0%, 100% { top: 122px } 50% { top: 118px } }  /* both even, see hollow-scene.js on odd stage coordinates */
 .hlw-crowperch { animation: hlwCrowHop 5s steps(1, end) infinite }

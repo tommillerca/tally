@@ -137,6 +137,61 @@ else {
   else bad(`TILES path background-size is ${probe.path}, not 96px 96px`);
 }
 
+/* A SECOND PHONE, and specifically a SHORT one. At 393 the stage scale snaps to
+   1.0 and every integer stage coordinate is trivially on the grid; at 320 it
+   snaps to 0.75, so a sprite's device x is stageX * 0.75 * dpr, which at dpr 2
+   is stageX * 1.5 and is whole only when stageX is EVEN. That is a different
+   question from the one above and the first version of this file never asked it:
+   the fence at stage -37 and the crow at 25 were both off the device grid at
+   320x568 while reading perfect at 393.
+   RELOAD, do not just resize. Reopening the Hollow after a setViewport left the
+   stage at its old scale(1) and the new rows passed on a stage that was never
+   320 wide: measured, transform read matrix(1,0,0,1,0,0.25) at a 320 viewport.
+   The SANITY row below is what makes that impossible to repeat, because a stage
+   still at scale 1 is 390 css px wide inside a 307px viewport and overflows. */
+await page.setViewport({ width: 320, height: 568, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await page.reload({ waitUntil: 'domcontentloaded' });
+await sleep(1400);
+await page.evaluate(() => { location.hash = '#/today'; });
+await sleep(1000);
+await page.evaluate(() => { if (window.__openHollow) window.__openHollow(); });
+await sleep(1900);
+const small = await page.evaluate(() => {
+  const stage = document.querySelector('#hlwStage');
+  if (!stage) return { error: 'no #hlwStage at 320x568' };
+  const dpr = window.devicePixelRatio || 1;
+  const frac = v => Math.abs(v - Math.round(v));
+  const all = [...stage.querySelectorAll('img.hlw-pix')];
+  const bad = all.filter(el => {
+    const r = el.getBoundingClientRect();
+    return frac(r.left * dpr) > 0.02 || frac(r.top * dpr) > 0.02
+        || frac(r.width * dpr) > 0.02 || frac(r.height * dpr) > 0.02;
+  }).map(el => {
+    const r = el.getBoundingClientRect();
+    return `${(el.getAttribute('src') || '').split('/').pop()} @${(r.left * dpr).toFixed(3)},${(r.top * dpr).toFixed(3)}`;
+  });
+  const sr = stage.getBoundingClientRect();
+  return { n: all.length, bad, scale: getComputedStyle(stage).transform,
+           stageW: +sr.width.toFixed(2), vpW: document.documentElement.clientWidth };
+});
+if (small.error) bad(`CONTROL 320x568 ${small.error}`);
+else {
+  if (small.n >= 20) ok(`CONTROL 320x568 ${small.n} sprites sampled, stage ${small.scale}`);
+  else bad(`CONTROL 320x568 only ${small.n} sprites; the sample is too thin to grade`);
+  /* NON-VACUITY. If the stage is still at its 393 scale this row goes red, and
+     every INTEGER result below it was measured on the wrong layout.
+     WRITTEN AS if/else ON PURPOSE. This file's ok() is `m => out.push(...)`: it
+     takes a MESSAGE and nothing else. The first version of this row was
+     ok(msg, cond, detail), which reads like an assertion and is not one, because
+     the condition was an ignored second argument. It printed ok on a stage that
+     was still 390px wide inside a 307px viewport. */
+  const detail = `stage ${small.stageW}px in a ${small.vpW}px viewport, transform ${small.scale}`;
+  if (small.stageW <= small.vpW + 1) ok(`SANITY 320x568 the stage is scaled down to fit  ${detail}`);
+  else bad(`SANITY 320x568 the stage is NOT scaled down, so every measurement below it is on the wrong layout  ${detail}`);
+  if (!small.bad.length) ok(`INTEGER 320x568 all ${small.n} sprite boxes land on whole device pixels`);
+  else for (const b of small.bad) bad(`INTEGER 320x568 ${b} is off the device grid; at a fractional stage scale an ODD stage coordinate cannot land whole`);
+}
+
 await browser.close();
 srv.close();
 

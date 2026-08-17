@@ -129,7 +129,7 @@ export function hollowBackdropHtml({ band } = {}) {
     ${/* 2x, like everything else. The fence tile is 232 native and was drawn at
           232, so its pickets were half the pixel size of the beds standing behind
           them. One run of 464 covers the 390 stage with the seam off screen. */''}
-    ${hlwArt('hollow-fence', { x: -37, y: 104, w: 464, style: NONE })}
+    ${hlwArt('hollow-fence', { x: -36, y: 104, w: 464, style: NONE })}
   </div>
 
   ${/* THE CROW, PERCHED AND STATIC. It used to sit in a div carrying hlwCrowBob,
@@ -142,7 +142,7 @@ export function hollowBackdropHtml({ band } = {}) {
         than inherited from the vector comp: the scarecrow's crossbar is art rows
         15-18, which at 2x from y194 is y200-208, and the crow's feet are art row
         41, which puts its box top at 122. It now stands on the bar. */''}
-  <div class="hlw-crowperch" style="position:absolute;left:25px;top:122px;width:96px;height:96px;z-index:1;${NONE}">
+  <div class="hlw-crowperch" style="position:absolute;left:26px;top:122px;width:96px;height:96px;z-index:1;${NONE}">
     ${hlwArt('hollow-crow', { x: 0, y: 24, w: 96, style: NONE })}
   </div>
 
