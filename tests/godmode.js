@@ -138,7 +138,14 @@ export async function loadPuppeteer() {
        checked: a resolve that escaped ROOT/node_modules would be the exact bug
        this block exists to close, so it throws rather than being used. */
     const entry = createRequire(path.join(ROOT_DIR, 'package.json')).resolve('puppeteer');
-    const inRepo = entry.startsWith(path.join(ROOT_DIR, 'node_modules') + path.sep);
+    /* Compared through realpath on BOTH sides, because a symlinked node_modules
+       is a legitimate setup (pnpm, and a worktree pointed at the main clone's
+       install) and a plain prefix test rejects it: the resolver returns the
+       link's target, which is outside ROOT by construction. What matters is
+       that the file came from the package ROOT/node_modules/puppeteer names,
+       not that its bytes live under ROOT. */
+    const real = p => { try { return fs.realpathSync(p); } catch { return p; } };
+    const inRepo = real(entry).startsWith(real(path.join(ROOT_DIR, 'node_modules', 'puppeteer')) + path.sep);
     if (!inRepo) throw new Error(
       `puppeteer resolved OUTSIDE this repo despite ${repoPkg} existing:\n  ${entry}\n` +
       '  Refusing: an audit graded by a foreign puppeteer reports harness drift as app breakage.');
@@ -306,7 +313,13 @@ export function unclassifiedRows(fileUrl, groups, { after = null } = {}) {
   const named = new Set();
   for (const m of src.matchAll(/\bok(?:Map)?\(\s*'((?:[^'\\]|\\.)*)'/g)) named.add(m[1].replace(/\\'/g, "'"));
   const declared = new Set(groups.flat());
-  return { seen: named.size, missing: [...named].filter(n => !declared.has(n)) };
+  /* callSites counts EVERY row in the scanned region, including the ones whose
+     name is a template literal and therefore invisible to the matcher above.
+     A suite where every row is environment-dependent can assert against this
+     count instead of enumerating names, and a new row still cannot slip in
+     unclassified. boneyard-audit has 22 rows and 2 of them are templates. */
+  const callSites = (src.match(/^\s*ok(?:Map)?\(/gm) || []).length;
+  return { seen: named.size, names: [...named], callSites, missing: [...named].filter(n => !declared.has(n)) };
 }
 
 /* ---------------------------------------------------------------------
