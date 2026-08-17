@@ -54,8 +54,8 @@
  *      module is handed straight to the module loader while a good cached copy
  *      of that same file sits one line away. Measured with one PRECACHE entry
  *      404ing: the returning player gets the new index.html and the new CSS and
- *      NO app.js at all, #screen 0 children, a dead shell of exactly the 2026-08-12
- *      TestFlight shape. The same device with the network fully removed boots
+ *      NO app.js at all, #screen 0 children, a dead shell. The same device with the
+ *      network fully removed boots
  *      FINE, because only that path reads the cache.
  *   2. app.js:519-520 tells the player "Update ready. Leave this screen to
  *      apply" and then nothing applies it. Closing the sheet reloads nothing;

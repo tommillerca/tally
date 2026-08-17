@@ -207,8 +207,22 @@ self.addEventListener('fetch', e => {
     // no-cache: force revalidation against the server (bypass the browser HTTP
     // cache) so a stale HTTP-cached copy can't keep the app pinned to old code.
     e.respondWith(
-      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(async res => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); return res; }
+        /* A 404 IS A RESPONSE, AND RETURNING IT KILLS THE APP.
+           Only a THROWN fetch reached the .catch below, so an offline device was
+           handled and an online device receiving one bad status was not: the
+           status was handed to the page as the answer. Measured by
+           tests/sw-upgrade-audit.mjs: with js/app.js answering 404 and a good
+           14,480-byte cached copy sitting unused, the player got a new
+           index.html, a new app.css, no app.js at all and #screen with zero
+           children. The SAME device with the network fully removed booted fine,
+           which is the tell: it failed BECAUSE it was online.
+           One bad file during a deploy now falls back to the last good copy of
+           that file instead of taking the app down. */
+        const hit = await caches.match(e.request);
+        if (hit) return hit;
+        if (e.request.mode === 'navigate') return (await caches.match('./index.html')) || res;
         return res;
       }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
     );
