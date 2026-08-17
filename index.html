@@ -120,11 +120,23 @@
   function speak(head, lines) {
     var el = document.getElementById('screen');
     if (!el || el.children.length) return;
+    // PIN IT VISIBLE, AND DO NOT ASK THE APP'S PERMISSION.
     // app.css holds #screen at opacity 0 until the router adds `screen-in`, so a
-    // message written into it is present and INVISIBLE without this. Belt and
-    // brace: the class for when the stylesheet arrived, inline opacity for when
-    // the stylesheet is itself what went missing.
-    el.className += ' screen-in';
+    // message written into it is present and INVISIBLE without this. The first
+    // version of this line added that class, which was wrong twice over. It
+    // borrows a class the ROUTER owns and removes on every navigation, and the
+    // class only takes effect through the cascade, where app.css:513 turns it
+    // into an animation: under prefers-reduced-motion that rule forces
+    // `transition-duration: .001s !important` on `*`, and since the initial
+    // `transition-property` is `all`, the flip from 0 to 1 becomes a real
+    // CSSTransition rather than a snap. Measured, 1 run in 8: class present,
+    // `CSSTransition:opacity:running`, computed opacity 0, correct a second later.
+    // Inline-with-important is the only form nothing else can outrank: it beats
+    // the stylesheet, it beats that !important override, it cannot be undone by
+    // classList.remove, and it works when app.css never arrived at all.
+    // route() takes the pin back out if the app ever does come up.
+    el.style.setProperty('transition', 'none', 'important');
+    el.style.setProperty('opacity', '1', 'important');
     var h = '<div id="bootFail" style="opacity:1;min-height:70vh;display:flex;flex-direction:column;align-items:center;'
       + 'justify-content:center;gap:14px;padding:28px 22px;text-align:center;background:#14121c;color:#ece9f5;'
       + 'font-family:system-ui,-apple-system,sans-serif">'
