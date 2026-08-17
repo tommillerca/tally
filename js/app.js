@@ -9415,7 +9415,35 @@ function renderOnboarding(step = 0, ctx = {}) {
   });
 }
 
+/* THE BOOT REGISTRATIONS MUST RUN ONCE PER SESSION, AND THIS IS THE ONE PLACE
+ * THEY CAN RUN TWICE.
+ *
+ * saveInitialSettings is the whole tail of boot() for a brand new player: it
+ * binds hashchange, calls bindTabs() and calls initAnalytics(). boot() itself
+ * cannot double up (it returns at `if (!S.settings) renderOnboarding()`), but
+ * this function is wired to BOTH #onbSave and #onbSkip, neither disables
+ * anything, and it awaits four IndexedDB writes before route() finally replaces
+ * the screen. So the buttons stay live and tappable for the whole of that, and a
+ * second tap runs the lot again.
+ *
+ * MEASURED on a virgin profile, tapping Skip once versus twice:
+ *     taps 1  hashchange registrations 1, one FAB tap opens 1 sheet
+ *     taps 2  hashchange registrations 2, one FAB tap opens 2 SHEETS
+ * The doubled sheet is bindTabs() having wired #fab, #gearBtn and every tab a
+ * second time. initAnalytics() sits on the same line of the same function, so
+ * the same second tap leaves a duplicate 60s flush interval, a duplicate 45s
+ * session ping and a duplicate visibilitychange listener registered for the rest
+ * of the session, none of which anything ever removes. (Those three are invisible
+ * to any audit here: analytics is gated on BOT, which is navigator.webdriver OR
+ * ?demo, so every automated browser we own skips initAnalytics entirely. The
+ * duplicate is proven through bindTabs, which is not gated, in the same call.)
+ *
+ * A re-entry flag rather than a disabled button: the tap is a duplicate
+ * SUBMISSION of a one-time action, and the second one has nothing to do. */
+let onboardingSaved = false;
 async function saveInitialSettings(np) {
+  if (onboardingSaved) return;
+  onboardingSaved = true;
   const profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
   S.settings = {
     profile,
@@ -13037,6 +13065,37 @@ async function renderBoneyard(el) {
 
   async function startMap() {
     stopHuntWatch();
+    /* A RETRY IS A SECOND START, AND THE FIRST ONE IS STILL RUNNING.
+     *
+     * #mapRetry is bound to startMap from BOTH failure branches (no location
+     * fix, and the map erroring before `load`, which is every player with no
+     * signal). startMap then reassigns `map` with no teardown of the instance
+     * already there, so the old MapLibre keeps its WebGL context, its render
+     * loop, its ResizeObserver, its two setIntervals and its three window
+     * listeners, and cleanup() on the way out only ever knew about the last one.
+     *
+     * MEASURED on this build, driving the app's own Retry ten times with the
+     * tile host unreachable (tests/map-retry-leak-audit.mjs):
+     *     taps  0    1    2    3    4    5    6    7    8    9   10
+     *     GL    1    2    3    4    5    6    7    8    9   10   11
+     *     lstnr 58   97  151  205  259  298  337  376  415  454  493
+     *     nodes 366 570  775  980 1187 1391 1595 1799 2003 2207 2411
+     *     heap  5.55                                          11.07 MB
+     * and leaving the Boneyard released exactly ONE of the eleven contexts.
+     * Browsers cap live WebGL contexts near sixteen, so a player on a bad
+     * signal breaks their own map for the rest of the session, which is a
+     * sharper failure than the megabytes. The two intervals cannot save
+     * themselves either: they self-clear on `!body.isConnected` and `body` is
+     * #mapBody, which a retry keeps and merely refills.
+     *
+     * Tear the previous attempt down HERE, where the second start is. A no-op
+     * on the first run: cleanupExtras is still the empty function and map is
+     * null. cleanupExtras is read through the closure variable, so this drops
+     * exactly the chain the previous startMap built and nothing else. */
+    try { cleanupExtras(); } catch { /* teardown must never block a retry */ }
+    cleanupExtras = () => {};
+    try { map?.remove(); } catch { /* already gone */ }
+    map = null;
     if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {

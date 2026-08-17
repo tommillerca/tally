@@ -50,9 +50,19 @@ const sh = process.env.SHOTS ? path.resolve(process.env.SHOTS) : null;
 const results = [];
 const ok = (n, pass, d = '') => { results.push({ n, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); };
 
+/* Chrome refuses to start its sandbox as uid 0, so on a root container this
+   audit died at launch with "Running as root without --no-sandbox is not
+   supported" and no check ran at all, which reads as a broken app rather than a
+   machine it cannot start on. Same guard, same wording, as godmode.js boot():
+   a no-op on a normal machine, because the flags are only added when we are
+   already root, which is the only case where the sandbox was never coming up.
+   This file launches its own browser (it needs a virgin storage context per
+   run, which boot() does not give it), so it needs its own copy. */
+const rootArgs = process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : [];
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  args: rootArgs,
 });
 const errors = [];
 
@@ -184,6 +194,70 @@ ok('HONEST-SKIP saved profile IS the stated body', skipped.saved && skipped.h ==
    after it, the single toast slot belongs to the welcome kit. A defaults toast
    here was being stomped unread at +1.2s, so it was removed rather than queued. */
 ok('HONEST-SKIP the welcome kit still greets the skipper', /welcome kit/i.test(skipped.toast), skipped.toast.slice(0, 60));
+await p.browserContext().close();
+
+/* ---------- run 3: the double tap ----------
+ *
+ * saveInitialSettings is the whole tail of boot() for a new player: it binds
+ * hashchange, calls bindTabs() and calls initAnalytics(). It is wired to BOTH
+ * #onbSave and #onbSkip, neither button is disabled, and it awaits four
+ * IndexedDB writes before route() finally replaces the screen, so the buttons
+ * stay live and tappable throughout and a second tap ran the lot a second time.
+ *
+ * DIRECTION and BOUND: more than one is the failure, and the bound is exactly
+ * ONE. Not "the app still works after two taps": one tap of the FAB must open
+ * ONE Add sheet. bindTabs() wired it twice, so it opened two.
+ *
+ * MEASURED at 56c5058, taps of Skip versus sheets from one later FAB tap:
+ *     1 tap  -> 1 sheet      2 taps -> 2 SHEETS
+ * initAnalytics() sits on the same line of the same function, so the same
+ * second tap left a duplicate 60s flush interval, a duplicate 45s session ping
+ * and a duplicate visibilitychange listener for the rest of the session. Those
+ * three cannot be observed from here: analytics is gated on BOT, which is
+ * navigator.webdriver OR ?demo, so every automated browser skips initAnalytics
+ * outright. bindTabs is not gated, it is in the same call, and it is what this
+ * row reads. Do not replace it with an analytics assertion that can only ever
+ * measure zero.
+ *
+ * PROVE-RED: remove the `onboardingSaved` re-entry guard from
+ * saveInitialSettings (js/app.js) and DOUBLE-TAP fails with 2 sheets.
+ * AN UNDRIVEN PATH IS A FAILURE: DOUBLE-TAP-DROVE asserts both taps landed on a
+ * live button and that the app reached Today, because "the second tap did
+ * nothing because the button had vanished" would satisfy the row on its own. */
+p = await freshPage();
+await p.evaluate(() => document.getElementById('onbGo')?.click()); await sleep(700);
+await p.evaluate(() => document.getElementById('onbMe')?.click()); await sleep(900);
+const dbl = await p.evaluate(() => {
+  const b = document.getElementById('onbSkip');
+  if (!b) return { taps: 0, secondLandedOnScreen: false };
+  /* BOTH TAPS IN ONE TASK, deliberately. The window a real double tap lands in
+     is however long saveInitialSettings takes to reach `location.hash =
+     '#/today'`, which is four IndexedDB writes plus initLootIfNeeded: hundreds
+     of ms on a cold phone, and under 40ms on a warm headless container. Sleeping
+     between the taps therefore makes this row a race against the machine it runs
+     on, and it lost that race here while the app was genuinely broken. Nothing
+     can re-render between two statements in the same task, so this lands the
+     second tap on the button while it is provably still on screen, which is the
+     state a fast double tap creates and the only state this guard is about. */
+  b.click();
+  const secondLandedOnScreen = b.isConnected && document.getElementById('onbSkip') === b;
+  b.click();
+  return { taps: 2, secondLandedOnScreen };
+});
+await sleep(6000);
+await p.evaluate(() => { location.hash = '#/today'; });
+await sleep(1400);
+await p.evaluate(() => document.getElementById('fab')?.click());
+await sleep(1600);
+const dblState = await p.evaluate(() => ({
+  sheets: document.querySelectorAll('#sheets > *').length,
+  hash: location.hash,
+}));
+ok('DOUBLE-TAP-DROVE both taps of Skip landed on the button while it was still on screen, and the app reached Today',
+  dbl.taps === 2 && dbl.secondLandedOnScreen && dblState.hash.includes('today'),
+  `${dbl.taps} taps, second tap on an attached button: ${dbl.secondLandedOnScreen}, hash ${dblState.hash}`);
+ok('DOUBLE-TAP one tap of the FAB opens exactly ONE Add sheet after a double-tapped Skip',
+  dblState.sheets === 1, `${dblState.sheets} sheet(s) from one FAB tap (the bug opened 2: bindTabs ran twice)`);
 await p.browserContext().close();
 
 ok('NO page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
