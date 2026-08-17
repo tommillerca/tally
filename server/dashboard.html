@@ -111,17 +111,26 @@
         const meta = [l.label ? 'Crew: ' + esc(l.label) : '', l.geo ? esc(l.geo) : '', new Date(l.ts).toLocaleString()].filter(Boolean).join(' · ');
         return `<div class="rpt lead"><div class="lead-head"><b>${esc(who)}</b> · ${mail}</div>${featChips}${fb}${want}<div class="rmeta">${meta}</div></div>`;
       }).join('') : '<p class="note">No survey responses yet.</p>';
+      /* The events table is pruned on a cron, so every figure below that counts
+         events describes a WINDOW, not all of history. The label is built from
+         the window the server reports rather than typed in here, so it cannot
+         drift from EVENT_RETENTION_DAYS the day somebody changes it. "Testers
+         (all time)" was the worst of these: it read as a launch-to-date total
+         and quietly became "testers seen in the last 60 days". */
+      const win = Number(s.windowDays) || 0;
+      const inWin = win ? ` (last ${win}d)` : '';
       $('#out').innerHTML = `
         <div class="cards">
-          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers (all time)</div></div>
+          <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers seen${inWin}</div></div>
           <div class="card"><div class="n">${s.dau}</div><div class="l">Active today</div></div>
           <div class="card"><div class="n">${s.wau}</div><div class="l">Active this week</div></div>
-          <div class="card"><div class="n">${s.returnRate != null ? s.returnRate + '%' : '—'}</div><div class="l">Came back (retention)</div></div>
-          <div class="card"><div class="n">${s.playMinutes != null ? hrs(s.playMinutes) : '—'}</div><div class="l">Total play time</div></div>
-          <div class="card"><div class="n">${s.sessions ?? '—'}</div><div class="l">Sessions</div></div>
+          <div class="card"><div class="n">${s.returnRate != null ? s.returnRate + '%' : '—'}</div><div class="l">Came back${inWin}</div></div>
+          <div class="card"><div class="n">${s.playMinutes != null ? hrs(s.playMinutes) : '—'}</div><div class="l">Play time${inWin}</div></div>
+          <div class="card"><div class="n">${s.sessions ?? '—'}</div><div class="l">Sessions${inWin}</div></div>
           <div class="card"><div class="n">${s.avgSessionMin != null ? s.avgSessionMin + 'm' : '—'}</div><div class="l">Avg session</div></div>
-          <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Total events</div></div>
+          <div class="card"><div class="n">${s.totalEvents.toLocaleString()}</div><div class="l">Events${inWin}</div></div>
         </div>
+        ${win ? `<p class="note">Analytics events are pruned after <b>${win} days</b> to stay under D1's 10 GB limit, so every card above that counts events covers that window only, not launch to date. <b>New players by day</b> is the one to distrust hardest: it is each device's first surviving day, so a long-standing tester whose real first day has aged out reappears as new.</p>` : ''}
         <h2>Crashes</h2>
         ${(s.errors || []).length ? `
           <p class="note">Grouped by message, newest first. <b>devices</b> is the spread: 1 is one unlucky phone, several is everybody. Not filtered by the developer-device exclusion, because a crash is a crash.</p>

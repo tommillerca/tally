@@ -1950,7 +1950,41 @@ export default {
         return json({ ok: true });
       }
 
-      // Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
+      /* Admin dashboard aggregates. Gated by ADMIN_TOKEN (set via wrangler secret).
+       *
+       * WINDOW-LIMITED SINCE THE RETENTION PRUNE. Everything below that reads
+       * `events` now describes the last EVENT_RETENTION_DAYS days and nothing
+       * before that, because the cron deletes older rows. Calling any of it
+       * "total" or "all time" would be a lie, so `windowDays` ships in the
+       * response and dashboard.html labels these from it:
+       *
+       *   totalDevices   distinct devices SEEN IN THE WINDOW, not ever
+       *   totalEvents    events in the window
+       *   byName         per-name counts in the window
+       *   playMinutes / sessions / avgSessionMin  session_ping + session_start
+       *                  counted in the window
+       *   screenTime, featureOpens, featureTime, errors, errorsByBuild
+       *   newByDay       WORSE than narrowed: it is MIN(day) per device, so a
+       *                  device whose real first day has been pruned reappears
+       *                  as new on the oldest day it still has a row
+       *   returnRate     same shape of error, MIN/MAX day per device
+       *   testers        first / last / events, same
+       *   vault          firstDay / lastDay of the backfill spike
+       *
+       * NOT affected, and worth knowing: dau (today), wau (7 days) and
+       * activeByDay (14 days) all sit inside the window already, and byCountry /
+       * byCity / reports / leads read tables the pruner never touches.
+       *
+       * NO COUNTERS TABLE IS NEEDED for most of this, and one should not be
+       * built before this is used up: the `devices` table is never pruned, its
+       * ON CONFLICT clause deliberately does NOT overwrite first_seen, and
+       * rateLimitRecovery writes no row to it. So devices.first_seen /
+       * last_seen are honest ALL-TIME values, and totalDevices, newByDay,
+       * returnRate and testers.first/last can all be re-pointed at that table
+       * and become true again. Only the all-time COUNTS of raw events
+       * (totalEvents, byName, playMinutes, sessions) have no home once the rows
+       * are gone; those are the only figures a counters table would buy, and
+       * nobody has yet said they need them. */
       if (path === '/stats' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
         if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
@@ -2023,7 +2057,10 @@ export default {
           `SELECT name, COUNT(*) n, COUNT(DISTINCT device) devices, MAX(app_v) build,
                   MIN(day) firstDay, MAX(day) lastDay
            FROM events WHERE name IN ('vault_backfill','vault_recover') GROUP BY name`);
-        return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
+        // windowDays travels with the numbers so the dashboard cannot label them
+        // "all time" after this constant changes. See the block above for which
+        // figures it applies to.
+        return json({ windowDays: EVENT_RETENTION_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
       /* Admin: hand a specific player coins through the normal grants channel, so a
