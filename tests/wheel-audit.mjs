@@ -290,6 +290,43 @@ check('GATE  commit-date-gate: named + double-dip refused',
   spin2 && spin2.coinDelta === 0 && spin2.dateUnchanged,
   `coinDelta=${spin2 && spin2.coinDelta} dateUnchanged=${spin2 && spin2.dateUnchanged}`);
 
+/* 4. THE PIXEL ART IS ON THE WHEEL, AND DECODED.
+   Added 2026-08-17. wheel.js drew its own icons and was the last screen still
+   paying in flat vectors, and nothing here would have noticed: every gate above
+   passes on a wheel with the wrong art on it.
+   The art is DOM <img> siblings of the wheel svg (the svg is a 0..200 viewBox
+   scaled to a fluid box, so anything inside it lands on a fractional px size and
+   this art only survives 48/24/16). So the assertion is on rendered pixels:
+   each one measures 48 CSS px AND reports naturalWidth, because a decoded-size
+   check passes over a 404 that the CSS box hides.
+   The expected count is DERIVED from the module's own prize table, so removing a
+   coin wedge does not quietly shrink the bar, and an empty sample FAILS. */
+await reboot({ wheelForce: true });
+await cleanState();
+await page.evaluate(async () => {
+  const w = await import('./js/wheel.js');
+  window.__wheelPromise4 = w.maybeShowDailyWheel({ sounds: false, force: true });
+});
+const arrived4 = await waitForWheel(9000);
+const art = arrived4 ? await page.evaluate(() => {
+  const wrap = document.querySelector('.dw-wheel');
+  const tags = [...wrap.querySelectorAll('svg > text')].map(t => t.textContent);
+  /* every wedge whose label is a coin amount, plus the Charm wedge: the prizes
+     that have a 1:1 drawing. Crates and Scrap keep the vector on purpose. */
+  const want = tags.filter(t => /^\d+$/.test(t) || t === 'Charm').length;
+  const imgs = [...wrap.querySelectorAll('img.pix-cur')];
+  return {
+    want, got: imgs.length,
+    bad: imgs.filter(i => Math.round(i.getBoundingClientRect().width) !== 48 || !i.naturalWidth)
+      .map(i => `${i.getAttribute('src')}@${Math.round(i.getBoundingClientRect().width)}px/nat${i.naturalWidth}`),
+    srcs: imgs.map(i => i.getAttribute('src').split('/').pop()).join(','),
+  };
+}) : null;
+check('ART   every coin + charm wedge carries decoded 48px pixel art',
+  !!art && art.want > 0 && art.got === art.want && art.bad.length === 0,
+  art ? `${art.got}/${art.want} at 48px (${art.srcs})${art.bad.length ? ' BAD: ' + art.bad.join(' ') : ''}` : 'wheel never arrived');
+await page.evaluate(() => document.querySelectorAll('.dw').forEach(n => n.remove()));
+
 /* -------------- final -------------- */
 await browser.close();
 srv.kill();

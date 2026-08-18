@@ -15,6 +15,7 @@ import { coinsAdd, grantCrate, grantConsumable, coins } from './loot.js';
 import { grantIngredient, INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
 import { popSound, levelSound, reducedMotion } from './fx.js';
 import { bhIconRaw } from './icons-pack.js';
+import { pixCur } from './icons-pix.js';
 
 // the app's bone-coin (self-colored), so coin prizes match the rest of the UI
 const COIN_RAW = { vb: '0 0 24 24', tint: 'currentColor', inner: '<circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g>' };
@@ -33,6 +34,33 @@ function iconAt(p, cx, cy, size) {
 function iconHtml(p, size) {
   const r = prizeRaw(p);
   return `<svg viewBox="${r.vb}" width="${size}" height="${size}" style="color:${r.tint};filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))">${r.inner}</svg>`;
+}
+
+/* WHICH PRIZES HAVE PIXEL ART, and which honestly do not.
+   Coins and the Battle Charm map 1:1 onto Tom's 48px set. The two crate wedges
+   do NOT: the set has one crate drawing, and this wheel's whole point is that
+   the gold wedge is a DIFFERENT crate from the common one, a distinction it
+   currently carries in the tint (#e8c24d vs #f2e9d7) that a single PNG cannot.
+   The Fresh Scrap has no pixel drawing at all. Those three keep the vector. */
+const PIX_PRIZE = p => (p.coin ? 'coin' : p.iconId === 'charm' ? 'xp2' : null);
+// Ask for the ARTWORK, never just the kind: wheelSvg drops its vector only when
+// this returns something, so a helper that declines can never leave a bare wedge.
+const pixPrizeImg = p => { const k = PIX_PRIZE(p); return (k && pixCur(k, 48)) || null; };
+
+/* The pixel art is placed as DOM <img> SIBLINGS of the wheel svg, not inside it.
+   The svg is a 0..200 viewBox scaled to a fluid min(80vw,320px) box, so anything
+   drawn in svg units lands on a viewport-dependent fractional pixel size, and
+   this art only survives 48/24/16. Absolute-positioned children of .dw-wheel
+   ride the same rotate() transform, so they spin with their wedge exactly as the
+   nested svgs did. Percentages come from the same pt() geometry as the wedges,
+   so icon and label cannot drift apart. */
+function wheelIconsHtml() {
+  return PRIZES.map((p, i) => {
+    const img = pixPrizeImg(p);
+    if (!img) return '';
+    const [mx, my] = pt(100, 100, 60, i * SEG_DEG + SEG_DEG / 2);
+    return `<span class="dw-ico" style="left:${(mx / 2).toFixed(2)}%;top:${((my - 8) / 2).toFixed(2)}%">${img}</span>`;
+  }).join('');
 }
 
 // ---- prize table (wheel order; adjacent segments differ in value) ----
@@ -103,7 +131,7 @@ function wheelSvg() {
     // Same treatment in every wedge (no radial side-by-side), so it stays tidy.
     const [mx, my] = pt(cx, cy, 60, mid);
     const col = p.gold ? '#e8c24d' : '#f2e9d7';
-    labels += iconAt(p, mx, my - 8, 26);
+    if (!pixPrizeImg(p)) labels += iconAt(p, mx, my - 8, 26);   // the rest ride as DOM imgs, see wheelIconsHtml
     labels += `<text x="${mx.toFixed(1)}" y="${(my + 17).toFixed(1)}" font-size="9" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em">${p.tag}</text>`;
   }
   return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
@@ -127,7 +155,10 @@ const STYLE = `
 .dw-title{font-size:11px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;color:#a5e847;
   animation:dwFlicker 4s steps(1,end) infinite}
 .dw-wheelwrap{position:relative;width:min(80vw,320px);aspect-ratio:1;margin:2px auto}
-.dw-wheel{width:100%;height:100%;transform:rotate(0deg);filter:drop-shadow(0 12px 26px rgba(0,0,0,.6))}
+.dw-wheel{width:100%;height:100%;transform:rotate(0deg);filter:drop-shadow(0 12px 26px rgba(0,0,0,.6));position:relative}
+.dw-ico{position:absolute;transform:translate(-50%,-50%);line-height:0;pointer-events:none;
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))}
+.dw-result .ri img{display:block}
 .dw-wheel svg{width:100%;height:100%;display:block}
 .dw-spinning{transition:transform 4.4s cubic-bezier(.13,.72,.16,1)}
 .dw-hub{position:absolute;left:50%;top:50%;width:23%;aspect-ratio:1;transform:translate(-50%,-50%);
@@ -222,7 +253,7 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
     await prize.grant(rng);
     return { coinDelta: (await coins()) - before };
   };
-  const result = { iconHtml: iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta: 0 };
+  const result = { iconHtml: pixPrizeImg(prize) || iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta: 0 };
   return showWheel(idx, prize, result, commit, { sounds });
 }
 
@@ -242,7 +273,7 @@ function showWheel(idx, prize, result, commit, { sounds }) {
         <div class="dw-quote">${esc(quoteForDay(dateKey()))}</div>
         <div class="dw-wheelwrap">
           <div class="dw-pointer"></div>
-          <div class="dw-wheel">${wheelSvg()}</div>
+          <div class="dw-wheel">${wheelSvg()}${wheelIconsHtml()}</div>
           <div class="dw-hub">💀</div>
         </div>
         <button class="dw-cta" id="dwSpin">SPIN</button>

@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v396';
+const VERSION = 'tally-v397';
 const PRECACHE = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const PRECACHE = [
   './js/ocr.js',
   './js/game.js',
   './js/fx.js',
+  './js/icons-pix.js',
   /* THESE THREE WERE MISSING AND IT COST A NEW PLAYER THE WHOLE APP.
      app.js reaches 41 modules; this list carried 38. haptics.js, bosses.js and
      wraith-fx.js are STATIC imports of app.js, so if any one of them fails to

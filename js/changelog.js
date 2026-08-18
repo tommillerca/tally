@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 397, date: '2026-08-17', title: 'The daily wheel gets the drawn coins, and Backpack is called Backpack', items: [
+    "<b>The daily spin wheel is showing the drawn coins and Battle Charm now.</b> It had its own set of icons and never got the new artwork, so the wheel was the last screen still paying you in flat vector shapes. The prize you win is drawn bigger on the reveal too. The two crate wedges keep their old icons on purpose: the wheel tells the Common Crate and the Golden Crate apart by colour, and there is only one drawn crate.",
+    "<b>The Character tile on Today is called Backpack, and it opens your Backpack.</b> Tapping your Bonehead already went there; this tile went to the Wardrobe instead, so the same screen opened on two different tabs depending on where you pressed. Both go to the Backpack now, and the tile shows a crate with your unopened count on it.",
+  ] },
   { n: 396, date: '2026-08-17', title: 'Your Looks collection is reachable again', items: [
     "<b>The Looks collection was briefly unreachable, and it is back.</b> The last update tidied the Bonehead screen down to four tabs and took the Looks card off it. That card was the only way in, so for a few hours there was no way to open your collection at all. Nothing in it was lost or changed while it was hidden.",
     "<b>It opens from the Wardrobe now.</b> There is a pill at the top of the Wardrobe showing how many looks you have collected out of how many exist. Tap it for the full collection, the same one as before, with the locked pieces still kept a surprise.",
