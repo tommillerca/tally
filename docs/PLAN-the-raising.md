@@ -19,7 +19,7 @@ and, a few minutes later:
 
 ## 1. Where it goes
 
-Onboarding is three steps today (`renderOnboarding`, `js/app.js:7274`):
+Onboarding is three steps today (`renderOnboarding`, `js/app.js:9364`):
 
 | Step | Today | Proposed |
 |---|---|---|
@@ -87,7 +87,7 @@ two layers.
 
 ## 4. Three chests
 
-`initLootIfNeeded` (`js/game.js:546`) currently grants 1 golden + 1 daily, gated
+`initLootIfNeeded` (`js/game.js:584`) currently grants 1 golden + 1 daily, gated
 on kv `loot-init`, so it is already write-once.
 
 - **Proposed: 3 Common Crates, and keep the Golden.** The guided open uses a
@@ -145,7 +145,7 @@ nothing and can be re-asked in context.
 | Alerts | Sieges have deadlines. Twice a week at most | Nothing pings you |
 
 Every consequence verified in code: eggs hatch on `lifetimeStepsSum` and nothing
-else (`js/loot.js:258`); the Remote Den spends no energy (`js/app.js:11875`).
+else (`js/loot.js:258`); the Remote Den spends no energy (`js/app.js:14954`).
 
 **Branch by platform or it lies** (`platformTag()` already reports this): iOS app
 = HealthKit, Android app = Health Connect, iOS PWA = no health API at all (offer
@@ -192,13 +192,13 @@ punishment mechanic in this game. If you find one, it's a bug.*
 actions. Actions earn XP; the player spends points on the stat they want. Logged
 as item 9(b), 2026-08-04 batch in `ROADMAP.md`, never built.
 
-What ships today does both at once. `deriveStats` (`js/pit.js:16`) computes five
+What ships today does both at once. `deriveStats` (`js/pit.js:17`) computes five
 base stats straight from behaviour, and `STAT_META` tells the player which habit
 feeds which stat in as many words (`fedBy: 'hitting your protein target'`).
 Training points sit on top but are the smaller half of the number.
 
 Four of the five derived stats are cumulative counts and can only rise. **Marrow**
-is fed by `b.streak`, which `buildFighter` (`js/app.js:11363`) recomputes as the
+is fed by `b.streak`, which `buildFighter` (`js/app.js:14394`) recomputes as the
 **current** streak via `streakFrom`, and that resets to 0 on one missed day. A
 30-day streak is ~45 points of Marrow gone overnight, unexplained: the exact
 Habitica mechanic the research flags.
