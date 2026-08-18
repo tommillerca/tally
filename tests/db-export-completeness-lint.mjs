@@ -1,6 +1,6 @@
 /* THE EXPORT AND IMPORT FUNCTIONS COVER EVERY STORE THE DB DEFINES.
  *
- * js/db.js:84 (exportAll) and js/db.js:91 (importAll) hand-list the seven
+ * js/db.js:101 (exportAll) and js/db.js:195 (importAll) hand-list the seven
  * stores by name. If a future commit adds an eighth store to onupgradeneeded
  * without also adding it to exportAll and importAll, backups will silently
  * omit that store's data and restores will silently not restore it. Nobody

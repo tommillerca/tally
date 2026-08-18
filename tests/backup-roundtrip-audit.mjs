@@ -1,6 +1,6 @@
 /* EXPORT / IMPORT: the player's data, round-trip, deep-equal.
  *
- * Settings -> YOUR DATA fires exportAll (js/db.js:84) and importAll (js/db.js:91).
+ * Settings -> YOUR DATA fires exportAll (js/db.js:101) and importAll (js/db.js:195).
  * exportAll reads seven object stores and returns them all in one JSON payload;
  * importAll iterates each store's array and calls db.put on every row. Today,
  * the ONLY behavioural check anywhere near this is a toast reading counts from
@@ -19,7 +19,7 @@
  * a shallow equality.
  *
  * FINDINGS TO REPORT AS FINDINGS, NOT FIX (per brief):
- *   A. `#exportBtn` in js/app.js:7585 early-returns on `isNative()` with a
+ *   A. `#exportBtn` in js/app.js:9186 early-returns on `isNative()` with a
  *      toast, so tapping "Export" on iOS/Android does NOT run exportAll and
  *      DOES NOT produce a file. The comment says cloud backup covers this;
  *      the visible affordance is misleading either way. Static check + note.
