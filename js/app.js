@@ -14867,7 +14867,25 @@ async function renderBoneyard(el) {
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
       await kvSet('hunt-enabled', true);
-      confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
+      /* CEREMONY IS FOR THE THINGS YOU CAN OPEN. Tom, 2026-08-18: "ok then let's
+         lose the full screen reveal on the smaller items."
+         The rule is read off the DATA, not off a list of type names: a spawn that
+         hands you a `crate` (the Buried crate's Common Crate, the RARE's Step Egg)
+         hands you an OBJECT with its own art and its own next step, and a card is
+         the only place that reads. Bones, coins and herbs pay COUNTERS (XP,
+         coins, seeds, an ingredient), and a full-screen takeover to announce a
+         number is exactly what would turn a denser Boneyard into a tapping
+         treadmill. A new spawn type is therefore quiet unless it actually drops a
+         box, which is the direction that fails safe.
+         The other half is not cosmetic. openPackReveal is built on openSheet, and
+         openSheet fires feat_open on open and feat_time on close. The D1 `events`
+         table carries three indexes, so one insert is four row-writes: those two
+         events cost EIGHT of the free tier's 100k daily row-writes on every
+         single collect, purely as a side effect of which helper drew the reward.
+         The quiet path opens no sheet, so it writes none of them. Deliberate
+         analytics elsewhere is untouched: nothing here changes openSheet. */
+      const ceremony = !!SPAWN_TYPES[rec.spawn.type].crate;
+      if (ceremony) confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       coinSound(S.sounds);
       // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give Ectoplasm)
       const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
@@ -14881,12 +14899,26 @@ async function renderBoneyard(el) {
       const seedN = res.seeds || (rollSpawnSeed() ? 1 : 0);
       const gotSeed = seedN > 0;
       if (gotSeed) await grantSeed(ingId, seedN);
-      // reveal the item(s) earned as pack cards (ingredient always; crate if any)
       const ing = INGREDIENTS[ingId];
-      const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
-      if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: `${seedName(ingId)} seed${seedN > 1 ? ` x${seedN}` : ''}`, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
-      if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
-      openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
+      const ingLabel = `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`;
+      const seedLabel = `${seedName(ingId)} seed${seedN > 1 ? ` x${seedN}` : ''}`;
+      if (ceremony) {
+        // reveal the item(s) earned as pack cards (ingredient always; crate if any)
+        const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: ingLabel, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
+        if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: seedLabel, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
+        if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+        openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
+      } else {
+        /* The quiet collect. Everything the reveal would have told you, in the
+           toast the app already has: what it was, the amount, and the ingredient
+           that rides along on every collect. It goes away on its own. */
+        const got = [];
+        if (res.coins) got.push(`+${res.coins} coins`);
+        if (res.xp) got.push(`+${res.xp} XP`);
+        got.push(ingLabel);
+        if (gotSeed) got.push(seedLabel);
+        toast(`${res.label}: ${got.join(', ')}`, 2600);
+      }
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
       refreshWorld();
