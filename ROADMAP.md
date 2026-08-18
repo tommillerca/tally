@@ -113,6 +113,43 @@ not touched. His call:
 
 ---
 
+## 🔑 DECISION FOR TOM: should the friend code stay the recovery lookup key?
+
+Raised by gwart 2026-08-17, and he is right that it is separable from the "+ Add"
+button question. Recording it rather than deciding it.
+
+**THE FACT.** `server/src/index.js:355` looks a player up by `friend_code` and
+`:357-359` returns `{ wrapped, salt, iters }`, their encrypted vault material.
+So the friend code is the lookup key that hands out a recovery blob.
+
+**WHY THE BOARD MATTERS SEPARATELY.** `/leaderboard` published every player's
+code to every player, which turns a targeted request into a bulk harvest. That
+half is fixed by the add-by-player-id endpoint: the button stops needing codes,
+so the payload stops carrying them. Codes stay shareable person to person, which
+is Tom's decision, they just stop being broadcast. Shareable is not broadcast.
+
+**WHAT IS LEFT AFTER THAT.** Anyone you ever hand your code to can still fetch
+your encrypted blob. Not "accounts are open": PBKDF2 at 1,000,000 iterations, so
+a decent phrase holds. Rate limiting bounds the fetch, not what happens to a
+blob once someone has it.
+
+**THE TRADEOFF, WHICH IS WHY IT IS TOM'S CALL.**
+  - Splitting them (recovery keyed only on the chosen recovery_id) closes it
+    entirely, and costs nothing today: measured on production D1, 11 of 11
+    recovery rows already carry a recovery_id, so nobody is stranded.
+  - BUT the friend code is the only SOCIALLY RECOVERABLE identifier. A mate can
+    read your code off their Crew tab and text it to you. A recovery id exists
+    only in your head and on the phone you lost. Removing the friend-code path
+    removes the one way back in that does not depend on your own memory.
+  - Tom stopped an earlier version of this exact change for that reason.
+
+**OPTIONS:** (a) split them and accept the lost social recovery path;
+(b) keep both and accept that anyone holding your code can fetch your blob;
+(c) split them but first surface the recovery id somewhere durable so players
+    actually know theirs, then split in a later release.
+
+Reg's lean is (c). Not decided.
+
 ## ⚠️ gwart's 47 branches: merge order and one silent-collision hazard (2026-08-17)
 
 RESTORED AND PUSHED 2026-08-17. Push was blocked from gwart's container (403 at
