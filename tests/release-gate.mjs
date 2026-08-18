@@ -269,7 +269,7 @@ const DECLARED = {
      same failure the suite-rot entry exists to avoid. Now that the monotonic
      day guard exists (claimDay, js/db.js) everything the guard BOUNDS is a
      real assertion, and this goes red if the guard regresses.
-     v394 CLOSED THE ONE THAT WAS LEFT. The forward walk was the measurement
+     v397 CLOSED THE ONE THAT WAS LEFT. The forward walk was the measurement
      this comment used to say could never be asserted, at ~176 XP per reset,
      on the reasoning that Date.now() and dateKey() read the same device
      setting and performance.now() dies with the page. That reasoning ended

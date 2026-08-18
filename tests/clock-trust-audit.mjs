@@ -15,7 +15,7 @@
  * the guard regresses. What remains a FINDING is named below, with the reason
  * it cannot be asserted.
  *
- * WHAT CHANGED AGAIN, v394. The forward walk was a FINDING here, at 176.4 XP
+ * WHAT CHANGED AGAIN, v397. The forward walk was a FINDING here, at 176.4 XP
  * and 64.6 coins per reset, with the honest note that no LOCAL rule could ever
  * bound it: Date.now() and dateKey() read the same setting, so a day-long jump
  * moves both terms together, and `performance.now()` resets its origin on every
@@ -301,7 +301,7 @@ try {
   const guardCoveredTotal = r => r.questCoins + r.free + r.claimedQ +
     (r.closed || r.consoled ? 1 : 0) + (r.bonus ? 1 : 0);
 
-  /* ================= 1. THE FORWARD WALK (ASSERTED from v394) =============
+  /* ================= 1. THE FORWARD WALK (ASSERTED from v397) =============
      Was a FINDING, because rules 1 and 2 read the clock the farmer is moving
      and could not see a 24h jump. Rule 3 does not read that clock: it reads
      the newest day the SERVER has been witnessed on (js/db.js witnessServerDay,

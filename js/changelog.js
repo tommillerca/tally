@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 398, date: '2026-08-18', title: 'Winding the clock forward no longer farms daily rewards', items: [
+    "<b>Setting your phone's clock forward used to hand you a fresh day's rewards every time, over and over.</b> The wheel, the day-close crate, the daily quests and your free Pit fights all read the device clock, so jumping a day ahead paid out a full day, and you could keep doing it. The game now remembers the furthest date it has ever seen from our servers and will not open a day more than a week past it. Wind the clock forward and you get a week at most, once, and then it stops: the reward days you skipped are spent, not banked.",
+    "<b>Playing offline is untouched.</b> A week away with no signal still plays normally, and going back further only pauses the daily rewards. Logging food, the shop and the Pit keep working the whole time, and everything comes back the moment you next open the app with a connection.",
+  ] },
   { n: 397, date: '2026-08-17', title: 'The daily wheel gets the drawn coins, and Backpack is called Backpack', items: [
     "<b>The daily spin wheel is showing the drawn coins and Battle Charm now.</b> It had its own set of icons and never got the new artwork, so the wheel was the last screen still paying you in flat vector shapes. The prize you win is drawn bigger on the reveal too. The two crate wedges keep their old icons on purpose: the wheel tells the Common Crate and the Golden Crate apart by colour, and there is only one drawn crate.",
     "<b>The Character tile on Today is called Backpack, and it opens your Backpack.</b> Tapping your Bonehead already went there; this tile went to the Wardrobe instead, so the same screen opened on two different tabs depending on where you pressed. Both go to the Backpack now, and the tile shows a crate with your unopened count on it.",
