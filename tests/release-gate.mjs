@@ -267,19 +267,24 @@ const DECLARED = {
      reset 176.4". Reggie, 2026-08-17: a suite that documents a live exploit and
      reports success applies no pressure and gets scrolled past, which is the
      same failure the suite-rot entry exists to avoid. Now that the monotonic
-     day guard exists (claimDay, js/db.js:209) everything the guard BOUNDS is a
-     real assertion, 43 of them, and this goes red if the guard regresses.
-     WHAT IS STILL MEASUREMENT-ONLY, AND WHY, so nobody reads green as clean:
-     the forward walk. A plain forward clock move still pays ~176 XP per reset
-     and no local rule can stop it, because Date.now() and dateKey() read the
-     same device setting, so a day-long jump is arithmetically identical to a
-     day passing. performance.now() is monotonic but its origin dies with the
-     page, and a server timestamp is out (offline-first, and server/ is not
-     ours). The guard's claim is only that the move cannot be UNDONE, and that
-     half is asserted in both directions. Also still findings, unchanged and
-     unfixed: the date-seeded quest rotation is pre-computable a year ahead,
-     and the redeem-code one-shot is per-device kv that an erase resets. */
-  'clock-trust-audit.mjs': ['full', 'ASSERTS the monotonic day guard and MEASURES what is left. Installs a Date shim before any app module runs. Asserts: a never-visited day below the high-water mark pays zero of every daily gate (quest coins, quest claims, free Pit fights, day-close crate, all-quests bonus) with any coin/crate movement attributed to a level-up or it is a leak; an honest forward day more than 20h later still pays the full day; the DAY_GRACE ceiling on BOTH sides of the edge; that an idle month banks no allowance; and that the evening-then-morning player, the eastbound traveller, both NTP corrections and an existing player mid-migration are none of them refused. FINDINGs, not assertions: the 14-day forward walk (unboundable, see the comment above), the pre-computable quest rotation, and the redeem-code one-shot. Fails on an empty sample set. About 60s.'],
+     day guard exists (claimDay, js/db.js) everything the guard BOUNDS is a
+     real assertion, and this goes red if the guard regresses.
+     v397 CLOSED THE ONE THAT WAS LEFT. The forward walk was the measurement
+     this comment used to say could never be asserted, at ~176 XP per reset,
+     on the reasoning that Date.now() and dateKey() read the same device
+     setting and performance.now() dies with the page. That reasoning ended
+     "a server timestamp would work", and it does: rule 3 takes the newest day
+     GET /health has been seen to report as a ceiling, with WITNESS_GRACE days
+     of headroom so offline players keep playing. The walk is now asserted to
+     zero past that ceiling, both sides required to differ, and section 7
+     asserts the ceiling itself (wire, monotonicity, offline edge, heal, both
+     import paths). No server change and no migration: /health already existed.
+     STILL FINDINGS, unchanged and unfixed, so nobody reads green as clean: the
+     date-seeded quest rotation is pre-computable a year ahead, the redeem-code
+     one-shot is per-device kv that an erase resets, a refused day still pays
+     the per-ENTRY food-logging XP, and everything here is devtools-defeatable
+     client code, which the suite's closing FINDING states in full. */
+  'clock-trust-audit.mjs': ['full', 'ASSERTS the monotonic day guard and MEASURES what is left. Installs a Date shim before any app module runs, and owns a loopback /health so the real API is never contacted. Asserts: a never-visited day below the high-water mark pays zero of every daily gate (quest coins, quest claims, free Pit fights, day-close crate, all-quests bonus) with any coin/crate movement attributed to a level-up or it is a leak; an honest forward day more than 20h later still pays the full day; the DAY_GRACE ceiling on BOTH sides of the edge; that an idle month banks no allowance; that the evening-then-morning player, the eastbound traveller, both NTP corrections and an existing player mid-migration are none of them refused; that a 14-day forward clock walk pays ZERO of those same gates past witness + WITNESS_GRACE while every day inside the allowance still pays in full; and rule 3 on its own terms against a loopback /health it owns (the wire, monotonicity, both sides of the offline allowance, the heal, and that neither import path can lower the ceiling). FINDINGs, not assertions: the pre-computable quest rotation, the per-ENTRY food-logging XP, and the redeem-code one-shot. Fails on an empty sample set. About 60s.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
   'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases and removal, every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],

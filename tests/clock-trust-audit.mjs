@@ -15,16 +15,24 @@
  * the guard regresses. What remains a FINDING is named below, with the reason
  * it cannot be asserted.
  *
- * WHAT STAYS A MEASUREMENT, AND WHY. A plain forward clock move, a full ~24h
- * per day claimed, is NOT detectable and is not asserted down to zero. There
- * is no trustworthy clock on the device: Date.now() and dateKey() read the
- * same setting, so a day-long jump moves both terms together and no local rule
- * can tell it from a day passing. `performance.now()` is monotonic but its
- * origin resets on every page load, so a force-quit erases it. A server
- * timestamp would work; this app is offline-first and server/ is not ours.
- * So the forward-walk figure below stays a FINDING and the release-gate tier
- * description says so, per Reggie's option (b). The guard's value is that the
- * move cannot be UNDONE, and that half IS asserted, below, in both directions.
+ * WHAT CHANGED AGAIN, v397. The forward walk was a FINDING here, at 176.4 XP
+ * and 64.6 coins per reset, with the honest note that no LOCAL rule could ever
+ * bound it: Date.now() and dateKey() read the same setting, so a day-long jump
+ * moves both terms together, and `performance.now()` resets its origin on every
+ * page load so a force-quit erases it. That note ended "a server timestamp would
+ * work", and rule 3 (js/db.js witnessServerDay) is that server timestamp: the
+ * newest day `GET /health` has ever been seen to report becomes a ceiling, with
+ * WITNESS_GRACE days of headroom so an offline player is never blocked. No
+ * server change and no migration were needed; the endpoint and the response
+ * already existed and this is a read of them.
+ *
+ * So the forward walk is now an ASSERTION with both sides of the ceiling
+ * required to differ, and section 7 asserts rule 3 on its own terms: the wire
+ * (against a loopback /health this file owns, never the real API), the
+ * monotonicity, both sides of the offline allowance, the heal, and both import
+ * paths. What is NOT closed is stated in the closing FINDING and is honestly
+ * devtools-tier, plus the per-ENTRY food-logging XP that no day gate should be
+ * touching in the first place.
  *
  * HOW THE CLOCK IS MOVED, and why this way. puppeteer 24.43.1 ships no clock
  * API: there is no `page.emulateClock`, and `Emulation.setVirtualTimePolicy`
@@ -43,8 +51,11 @@
  * full end-to-end simulation.
  *
  * DIRECTION and BOUND, per surface:
- *   FORWARD WALK     direction: more per reset is worse.  BOUND: none assertable
- *                    (see above). Reported as a FINDING, 14 resets.
+ *   FORWARD WALK     direction: more per reset is worse.  BOUND: exactly zero
+ *                    guard-covered rewards on any day past witness +
+ *                    WITNESS_GRACE, asserted on BOTH sides of the ceiling.
+ *   SERVER WITNESS   direction: a movable ceiling is failure. BOUND: it rises
+ *                    only, it comes from the wire, and no restore lowers it.
  *   BACKWARDS HARVEST direction: any payout is failure.   BOUND: exactly zero
  *                    guard-covered rewards (crates, quests, day-close, free
  *                    fights, coins) on a never-before-visited day below the
@@ -63,6 +74,7 @@
  * not that the game is safe.
  */
 import { boot, sleep, serveTree } from './godmode.js';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -76,6 +88,22 @@ const HOUR = 3600000;
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 const finding = (l, d = '') => console.log(`FINDING ${l}${d ? '  ' + d : ''}`);
+
+/* A STAND-IN FOR THE SERVER'S /health, on loopback. The wire this guard hangs
+   off is `GET {apiBase}/health -> { ok, ts }`, and a test that pokes
+   witnessServerDay() directly would prove the arithmetic while proving nothing
+   about the plumbing. This answers a ts THIS FILE chose, so the assertion below
+   is that the number the server said is the number the ceiling moved to. It is
+   127.0.0.1 and it is ours: the real API is never contacted. */
+let healthTs = Date.now();
+let healthHits = 0;
+const health = http.createServer((req, res) => {
+  healthHits++;
+  res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+  res.end(JSON.stringify({ ok: true, ts: healthTs }));
+});
+await new Promise(r => health.listen(0, '127.0.0.1', r));
+const healthUrl = `http://127.0.0.1:${health.address().port}`;
 
 const { browser, page } = await boot(base);
 
@@ -121,6 +149,7 @@ try {
       await db.kvSet('dayHighWater', null);
       await db.kvSet('dayPaceKey', null);
       await db.kvSet('dayPaceAt', 0);
+      await db.kvSet(db.DAY_WITNESS_KEY, 0);   // a device with no history at all
       return true;
     }),
     claim: (key) => page.evaluate(async k => {
@@ -142,10 +171,34 @@ try {
       return db.dayGuardState();
     }, ms),
     grace: () => page.evaluate(async () => (await import('./js/db.js')).DAY_GRACE),
+    witnessGrace: () => page.evaluate(async () => (await import('./js/db.js')).WITNESS_GRACE),
+    /* Witness the server at a REAL instant `dayDelta` days from now. Deliberately
+       computed off window.__realNow(), never off the shimmed clock: the whole
+       point of rule 3 is that this number does not move when the device's clock
+       does, and reading it through the shim would quietly make it move. */
+    witnessAt: (dayDelta) => page.evaluate(async dd => {
+      const db = await import('./js/db.js');
+      return db.witnessServerDay(window.__realNow() + dd * 86400000);
+    }, dayDelta),
+    clearWitness: () => page.evaluate(async () => {
+      const db = await import('./js/db.js');
+      await db.kvSet(db.DAY_WITNESS_KEY, 0);
+      return db.dayGuardState();
+    }),
   };
+  /* The day key the app WILL report once shiftDays(dayDelta) is in force. It has
+     to use the same fixed-millisecond arithmetic shiftDays does, because that is
+     what dateKey() ends up seeing. This used to do calendar arithmetic instead
+     (new Date(y, m, d + dd)), and the two disagree by a day whenever the offset
+     span crosses a DST transition: fixed ms shifts the wall clock by an hour, so
+     between 00:00 and 01:00 local it lands on the previous calendar day while the
+     calendar version does not. The probes then seeded dayHighWater one day AHEAD
+     of the day runCycle() went on to play, claimDay() correctly called that day
+     backwards, and every daily reward paid zero. It reproduced for exactly one
+     hour a day, on exactly the offsets that straddle a DST boundary, which is why
+     it read as a stable pre-existing app fault rather than audit drift. */
   const keyFor = (dayDelta) => page.evaluate(dd => {
-    const b = new Date(window.__realNow());
-    const d = new Date(b.getFullYear(), b.getMonth(), b.getDate() + dd);
+    const d = new Date(window.__realNow() + dd * 86400000);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, dayDelta);
 
@@ -206,8 +259,11 @@ try {
     let free = 0;
     for (let i = 0; i < 10; i++) { const r = await energy.spendPitFight(); if (r.ok && r.used === 'free') free++; else break; }
 
-    // the wheel gate (js/wheel.js:198). Open == the spin is available again.
-    const wheelOpen = (await db.kvGet('wheelLastDate', null)) !== day;
+    /* The wheel gate (js/wheel.js:198), read as the wheel itself reads it:
+       BOTH the date row and claimDay, because the spin path is gated on both
+       (js/wheel.js:204). Asking only the date row reported ARMED on every
+       refused day, which was true of the row and false of the wheel. */
+    const wheelOpen = (await db.kvGet('wheelLastDate', null)) !== day && (await db.claimDay(day)).fresh;
 
     // daily quests: claim only the ones actually satisfied by the above
     const allXp = await db.db.all('xp');
@@ -229,7 +285,7 @@ try {
     const xp1 = await game.totalXp(), coin1 = await loot.coins();
     const inv1 = (await db.db.all('inv')).length;
     return {
-      day, xp: xp1 - xp0, coins: coin1 - coin0, inv: inv1 - inv0,
+      day, ord: nut.dayOrdinal(day), xp: xp1 - xp0, coins: coin1 - coin0, inv: inv1 - inv0,
       closed: !!closed?.closed, consoled: !!closed?.consoled,
       free, wheelOpen, claimedQ, questCoins, questXp, bonus: !!bonus,
       level0: game.levelFor(xp0).level, level: game.levelFor(xp1).level, totalXp: xp1,
@@ -255,12 +311,27 @@ try {
   const guardCoveredTotal = r => r.questCoins + r.free + r.claimedQ +
     (r.closed || r.consoled ? 1 : 0) + (r.bonus ? 1 : 0);
 
-  /* ================= 1. THE FORWARD WALK (FINDING, not assertion) =========
-     DIRECTION: forward. BOUND: 14 simulated days, the point where the per-day
-     figures stop moving. This is the measurement the guard CANNOT bound; see
-     the header. It is kept because the number is the argument for the guard,
-     and because a change in it is worth seeing. */
+  /* ================= 1. THE FORWARD WALK (ASSERTED from v397) =============
+     Was a FINDING, because rules 1 and 2 read the clock the farmer is moving
+     and could not see a 24h jump. Rule 3 does not read that clock: it reads
+     the newest day the SERVER has been witnessed on (js/db.js witnessServerDay,
+     fed by GET /health), so the walk has a ceiling for the first time.
+     DIRECTION: forward, more per reset is worse. BOUND: every simulated day
+     past witness + WITNESS_GRACE pays EXACTLY ZERO of every guard-covered
+     daily. Both sides of the edge are asserted, so "pays nothing" can never
+     pass by refusing everything. */
+  const W_GRACE = await guard.witnessGrace();
+  check('WITNESS_GRACE is a real, small number', Number.isInteger(W_GRACE) && W_GRACE >= 1 && W_GRACE <= 14,
+    `WITNESS_GRACE=${W_GRACE}`);
   await shiftDays(0);
+  /* The server is witnessed at TODAY, once, before the walk starts. This is
+     what an honest player's device has every time it has any network at all;
+     it is stated here rather than left to rule 3's first-run seed so the
+     ceiling below is a number the test chose, not one it inherited. */
+  const witnessed = await guard.witnessAt(0);
+  const ceiling = witnessed + W_GRACE;
+  check('witnessing the server sets a ceiling', Number.isFinite(witnessed) && witnessed > 20000,
+    `witness=${witnessed} ceiling=${ceiling} (UTC day ordinals)`);
   const day0 = await runCycle();
   const rows = [];
   const t0 = Date.now();
@@ -281,11 +352,35 @@ try {
       `  dayclose ${r.closed ? 'GOLDEN' : r.consoled ? 'common' : '-'}  quests ${r.claimedQ}${r.bonus ? '+bonus' : ''}`);
   }
 
+  /* THE ASSERTION. Split the walk at the witnessed ceiling and require the two
+     halves to behave differently: below it a normal day, above it nothing. */
+  const within = rows.filter(r => r.ord <= ceiling);
+  const beyond = rows.filter(r => r.ord > ceiling);
+  check('the walk really crossed the ceiling, so neither half is vacuous',
+    within.length > 0 && beyond.length > 0,
+    `${within.length} days within the ${W_GRACE}-day allowance, ${beyond.length} past it`);
+  check('CONTROL: days inside the allowance still pay in full (offline players are NOT blocked)',
+    within.every(r => guardCoveredTotal(r) > 0),
+    `min guard-covered payout within = ${Math.min(...within.map(guardCoveredTotal))}`);
+  const leaked = beyond.filter(r => guardCoveredTotal(r) > 0);
+  check('a day the SERVER has not reached pays ZERO of every daily gate',
+    leaked.length === 0,
+    leaked.length ? `LEAK on ${leaked.map(r => `${r.day} ${JSON.stringify(guardCovered(r))}`).join(', ')}`
+                  : `${beyond.length} days past the ceiling, every one of them 0 quest coins, 0 quest claims, 0 free fights, no day-close crate, no bonus crate`);
+  check('...and the refusal is BY NAME, not a side effect of something else',
+    beyond.length > 0 && beyond.every(r => r.guardAfter.witness === witnessed),
+    `witness unmoved at ${witnessed} across ${beyond.length} refused days`);
+  const beyondXp = beyond.reduce((a, r) => a + r.xp, 0);
+  check('the XP a refused day still pays is the ungated food-logging XP only',
+    beyond.every(r => r.xp <= 120), `max xp on a refused day = ${Math.max(...beyond.map(r => r.xp))}`);
+
   const perDay = k => (sum(k) / n).toFixed(1);
   finding('baseline day 0', `xp+${day0.xp} coins+${day0.coins} inv+${day0.inv} free-fights ${day0.free}`);
-  finding('XP per clock reset (FULL 24h forward jump, UNBOUNDABLE)',
-    `${perDay('xp')} (total ${sum('xp')} over ${n} resets). The guard does not and cannot reduce this: ` +
-    `Date.now() moves with dateKey(), so a day-long jump is indistinguishable from a day passing.`);
+  finding('XP per clock reset (FULL 24h forward jump, NOW BOUNDED)',
+    `${perDay('xp')} (total ${sum('xp')} over ${n} resets), of which ${beyondXp} came from the ` +
+    `${beyond.length} days past the ceiling and is ungated food-logging XP, not a daily gate. ` +
+    `Measured at 176.4 per reset (2470 over 14) before rule 3 existed. The walk no longer ` +
+    `scales with the number of resets: it scales with the number of days the SERVER has reached.`);
   finding('coins per clock reset', `${perDay('coins')} (total ${sum('coins')})`);
   finding('inventory rows per clock reset', `${perDay('inv')} (crates + consumables, total ${sum('inv')})`);
   finding('free Pit fights per clock reset', `${perDay('free')} (cap FREE_FIGHTS=3, js/energy.js:8)`);
@@ -294,8 +389,10 @@ try {
   finding('daily quests claimed', `${sum('claimedQ')} claims + ${rows.filter(r => r.bonus).length} all-quests bonus crates`);
   finding('level', `${day0.level} -> ${rows[rows.length - 1].level} on ${rows[rows.length - 1].totalXp} XP`);
   finding('what the forward walk NOW costs the farmer',
-    `the high-water mark ends at ${rows[rows.length - 1].guardAfter.highWater}, i.e. ${DAYS} days in the future. ` +
-    `Every real day until the calendar catches up pays zero, which is the assertion block below.`);
+    `the high-water mark ends at ${rows[rows.length - 1].guardAfter.highWater}. The ${W_GRACE}-day allowance is ` +
+    `a ONE-TIME bubble, not a rate: to open the day after the ceiling the server has to reach the day before it, ` +
+    `and the only way to make that happen is to wait a real day. Rule 1 then makes the bubble a debt, because the ` +
+    `mark is left in the future and every real day below it pays zero.`);
 
   const secsPerReset = wallMs / 1000 / n;
   finding('wall-clock cost', `${secsPerReset.toFixed(1)}s per reset in this harness ` +
@@ -429,6 +526,10 @@ try {
   await shiftDays(400);
   await guard.claim(await keyFor(400));
   await shiftDays(430);
+  /* Thirty days pass for the SERVER too, which is what makes this the honest
+     idle-month case rather than a walk. Without it rule 3 refuses +430 first
+     and this block would stop testing rule 2 at all. */
+  await guard.witnessAt(430);
   await guard.claim(await keyFor(430));            // 30 honest days pass
   await guard.anchorAtNow();                       // ANCHOR: from here, no time passes
   const banked = await guard.claim(await keyFor(430 + GRACE + 1));
@@ -577,6 +678,115 @@ try {
     `${seeded.allTrivial} of ${seeded.scanned} future dates hand out three quests a cheat can finish with taps alone ` +
     `(${(seeded.allTrivial / seeded.scanned * 100).toFixed(1)}%); a clock-mover skips to those dates`);
 
+  /* ================= 7. THE SERVER WITNESS (ASSERTED) =====================
+     Rule 3, on its own terms. Section 1 proved the forward walk now stops;
+     this proves the thing it stops on is the SERVER'S day and not an accident:
+     that the wire really carries it, that it only ever moves up, that both
+     sides of the offline allowance behave, that a refusal heals the moment the
+     server catches up, and that a restored backup cannot wind it back. */
+  console.log('\n--- the server witness: rule 3 on its own terms ---');
+
+  // 7a. THE WIRE. Reloaded with ?api= pointed at the loopback stub, which is
+  //     the app's own documented dev hook (js/social.js initFromQuery), so
+  //     nothing here can reach the production API by accident.
+  const serverDay = Date.now() + 500 * 86400000;
+  healthTs = serverDay;
+  await page.goto(`${base}?api=${encodeURIComponent(healthUrl)}`, { waitUntil: 'networkidle2' });
+  await sleep(1200);
+  await guard.clearWitness();
+  const hitsBefore = healthHits;
+  const wire = await page.evaluate(async () => {
+    const [social, db] = await Promise.all([import('./js/social.js'), import('./js/db.js')]);
+    const before = (await db.dayGuardState()).witness;
+    const got = await social.touchServerDay();
+    return { before, got, after: (await db.dayGuardState()).witness, api: await social.apiBase() };
+  });
+  check('touchServerDay actually called /health on the stub, not the real API',
+    healthHits > hitsBefore && wire.api === healthUrl, `${healthHits - hitsBefore} hit(s) on ${wire.api}`);
+  check('the ceiling moves to the day the SERVER said, and to nothing else',
+    wire.before === 0 && wire.after === Math.floor(serverDay / 86400000),
+    `${wire.before} -> ${wire.after}, server ts ${serverDay} = day ${Math.floor(serverDay / 86400000)}`);
+
+  // 7b. MONOTONIC. A replayed, stale or forged-backwards answer must not lower
+  //     the ceiling, or the farmer just serves themselves an old timestamp.
+  healthTs = Date.now() - 900 * 86400000;
+  const older = await page.evaluate(async () => {
+    const [social, db] = await Promise.all([import('./js/social.js'), import('./js/db.js')]);
+    await social.touchServerDay();
+    return (await db.dayGuardState()).witness;
+  });
+  check('an OLDER server answer cannot lower the ceiling', older === wire.after,
+    `witness still ${older} after a /health 900 days in the past`);
+
+  /* 7c. BOTH SIDES OF THE OFFLINE ALLOWANCE. The pace anchor is pushed back
+     nine days first so rule 2 has headroom and cannot be the thing that
+     refuses: this block must fail on rule 3 or not at all. */
+  await guard.reset();
+  await shiftDays(500);
+  const seededW = await guard.claim(await keyFor(500));
+  const wState = await guard.state();
+  check('an offline device with no witness at all SEEDS and is let through',
+    seededW.fresh === true && wState.witness > 0,
+    `reason=${seededW.reason} witness seeded at ${wState.witness}`);
+  await guard.anchorAgoMs(9 * 86400000);
+  const edgeIn = await guard.claim(await keyFor(500 + W_GRACE));
+  await guard.anchorAgoMs(9 * 86400000);
+  const hwBeforeEdge = (await guard.state()).highWater;
+  const edgeOut = await guard.claim(await keyFor(500 + W_GRACE + 1));
+  const hwAfterEdge = (await guard.state()).highWater;
+  check(`${W_GRACE} days offline is ALLOWED (the plane, the cabin, the dead SIM)`,
+    edgeIn.fresh === true, `fresh=${edgeIn.fresh} reason=${edgeIn.reason}`);
+  check(`${W_GRACE + 1} days past the last /health is REFUSED, by name`,
+    edgeOut.fresh === false && edgeOut.reason === 'unwitnessed',
+    `fresh=${edgeOut.fresh} reason=${edgeOut.reason} witness=${edgeOut.witness} ceiling=${edgeOut.ceiling} claimed=${edgeOut.claimed}`);
+  check('...and that refusal writes NOTHING, so rule 3 cannot latch either',
+    hwAfterEdge === hwBeforeEdge, `high-water unmoved at ${hwAfterEdge}`);
+
+  // 7d. HEALING. One successful /health, on any network, on any later day, and
+  //     the refused day opens. This is what makes the offline story bearable.
+  await guard.witnessAt(500 + W_GRACE + 1);
+  await guard.anchorAgoMs(9 * 86400000);
+  const healed = await guard.claim(await keyFor(500 + W_GRACE + 1));
+  check('one /health after the fact opens the refused day: the pause is not a loss',
+    healed.fresh === true, `fresh=${healed.fresh} reason=${healed.reason}`);
+
+  /* 7f. THE ONLINE PLAYER IS NEVER TOUCHED BY ANY OF THIS. The inverse of the
+     forward-walk assertion and the more important one: when the server's day
+     advances alongside the device's, which is every player with any network at
+     all, the ceiling is always ahead and never binds. Ten days, no refusals.
+     DIRECTION: a single refusal here is a FAILURE. */
+  await guard.reset();
+  await shiftDays(800);
+  await guard.witnessAt(800);
+  await guard.claim(await keyFor(800));
+  const online = [];
+  for (let d = 801; d <= 810; d++) {
+    await shiftDays(d);
+    await guard.witnessAt(d);                      // the server got there too
+    online.push(await guard.claim(await keyFor(d)));
+  }
+  check('ten days with the server advancing too: not one refusal',
+    online.length === 10 && online.every(r => r.fresh === true && r.reason === 'advanced'),
+    online.every(r => r.fresh) ? '10/10 advanced' : `refused: ${online.filter(r => !r.fresh).map(r => r.reason).join(', ')}`);
+
+  /* 7e. A RESTORE CANNOT WIND THE CEILING BACK. Named in the previous version
+     of this file as the hole that undoes any device-side mark: export, farm,
+     restore, mark reset, farmed rows kept. Asserted on BOTH import paths, the
+     Settings file restore (replace) and the cloud pull (merge). */
+  for (const replace of [false, true]) {
+    const roundTrip = await page.evaluate(async rep => {
+      const db = await import('./js/db.js');
+      await db.kvSet(db.DAY_WITNESS_KEY, 20000);
+      const backup = await db.exportAll();              // taken while the mark is low
+      await db.kvSet(db.DAY_WITNESS_KEY, 20050);        // 50 days of server time later
+      await db.importAll(backup, { replace: rep });
+      return { inFile: 20000, after: (await db.dayGuardState()).witness };
+    }, replace);
+    check(`restoring an older backup cannot lower the ceiling (${replace ? 'file restore' : 'cloud pull'})`,
+      roundTrip.after === 20050,
+      `file carried ${roundTrip.inFile}, device kept ${roundTrip.after}`);
+  }
+
   /* REDEEM CODES: confirm they are in the shipped bundle and that the one-shot
      is per-device kv, which is what an "erase everything" fix interacts with. */
   const redeem = await page.evaluate(async () => {
@@ -594,24 +804,35 @@ try {
       codes: Object.keys(loot.REDEEM_CODES),
       inShippedSource: /BONEHEADZ:\s*\{/.test(src) && /COSMICPET/.test(src),
       before, mid, after,
-      first: r1.ok, second: r2.ok, secondReason: r2.reason, afterErase: r3.ok,
+      first: r1.ok, second: r2.ok, secondReason: r2.reason,
+      afterErase: r3.ok, afterEraseReason: r3.reason,
     };
   });
   check('redeem codes ship in plaintext in js/loot.js', redeem.inShippedSource, redeem.codes.join(', '));
   check('a code pays the first time', redeem.first === true);
   check('the same code is refused the second time', redeem.second === false, `reason=${redeem.secondReason}`);
-  check('clearing kv `redeemed` makes the code pay AGAIN', redeem.afterErase === true,
-    'the one-shot is per-device state, not a server ledger');
+  /* This used to assert afterErase === true, back when the one-shot lived only in
+     the `redeemed` LIST and clearing that list handed the code back. PR #43 moved
+     the claim onto a per-code kv row taken with addIfAbsent, so the list is now a
+     legacy read and clearing it no longer reopens anything. Assert the hole is
+     CLOSED. FAILURE DIRECTION: afterErase goes true, meaning the per-code row
+     stopped being the thing that decides. */
+  check('clearing kv `redeemed` does NOT make the code pay again', redeem.afterErase === false,
+    `the claim is the per-code row redeemed:BONEHEADZ, not the list (reason=${redeem.afterEraseReason})`);
 
   finding('WHAT THIS GUARD DOES NOT STOP',
-    'devtools (kvSet the mark by hand); editing js/db.js in a local checkout; restoring an exported ' +
-    'backup over the top, because importAll merges kv rows and would put the mark back while leaving ' +
-    'the farmed xp/inv rows in place; a clean reinstall; and a plain forward clock walk, which still ' +
-    'pays what section 1 measured. It stops casual clock-toggling and it makes a forward walk a debt.');
+    'devtools (kvSet either mark by hand); editing js/db.js in a local checkout; pointing kv `apiBase` ' +
+    '(settable from the URL as ?api=) at a server the player controls, which hands the ceiling any day ' +
+    'they like; a clean reinstall or a full erase, which reseeds every mark and costs them their save; ' +
+    'and the ungated food-logging XP measured in section 2, which is keyed per ENTRY and is not a daily ' +
+    'limit. The backup-restore hole IS closed now, on both import paths (section 7e). What is left is ' +
+    'devtools-tier: this stops casual clock-toggling from Settings, it makes a forward walk a debt, and ' +
+    'it caps that walk at one bubble of WITNESS_GRACE days followed by the honest one-day-per-real-day rate.');
 
 } finally {
   await browser.close().catch(() => {});
   if (srvHandle) srvHandle.close();
+  health.close();
 }
 
 console.log(bad ? `\n${bad} FAIL` : '\nall checks ok (see FINDING lines for the measurements)');

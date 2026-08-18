@@ -817,7 +817,12 @@ async function boot() {
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+  /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
+     when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
+     is only as fresh as the last /health we saw. Unsigned, anonymous, fails
+     soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
   onAppResume(() => {
+    if (!NOSOCIAL) social.touchServerDay();
     rollDayIfNeeded(); nativeAutoSync();
     if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
     flushAnalytics(); refreshNotifSchedules();
@@ -15146,7 +15151,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v397'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v398'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

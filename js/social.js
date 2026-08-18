@@ -21,7 +21,7 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, kvUpdate, exportAll, importAll } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay } from './db.js';
 import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
 
@@ -966,8 +966,32 @@ export async function adoptIdentity(bundle) {
   return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts };
 }
 
+/* THE ONE CLOCK THE PLAYER CANNOT MOVE (js/db.js, RULE 3 of the day guard).
+   `GET /health` is unsigned and takes no identity, which is the only reason it
+   is usable for this: a device whose clock is a day out cannot make a SIGNED
+   call at all, because verifySigned refuses a timestamp more than five minutes
+   off, so the signed API goes dark at exactly the moment we most want to know
+   what day it really is. Nothing is sent: no id, no body, no headers of ours.
+   Fails soft in every direction (no api, no network, a 500, junk json), because
+   the guard treats "we learned nothing" as "do not tighten the ceiling", never
+   as a refusal. Deliberately NOT gated on cloudOff: opting out of cloud backup
+   is a decision about the player's DATA, and letting it also switch off the
+   ceiling would make "turn cloud off" the cheat this exists to stop. */
+export async function touchServerDay() {
+  const base = await apiBase();
+  if (!base) return null;
+  try {
+    const r = await fetch(base + '/health', { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return await witnessServerDay(j && j.ts);
+  } catch { return null; }
+}
+
 export async function bootSync() {
   try {
+    // before every gate below: the ceiling is not a cloud feature (see above)
+    touchServerDay().catch(() => {});
     /* fire-and-forget, deliberately BEFORE the cloud gates below: the mirror
        backfill protects local-only players too (cloud off / no api), and it is
        a no-op everywhere except "readable empty vault + existing local id". */

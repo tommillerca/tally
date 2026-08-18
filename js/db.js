@@ -406,6 +406,95 @@ const DAY_MS = 86400000;
    traveller. The farmer's prize for all of it is three days, ever, once. */
 export const DAY_GRACE = 3;
 
+/* ------------------------------------------------------------------------
+ * RULE 3: THE SERVER'S DAY. This is the part rules 1 and 2 could not do.
+ *
+ * Rules 1 and 2 are both read off the SAME clock the farmer is moving, so a
+ * plain forward walk (jump 24h, collect, jump 24h again) satisfies both: the
+ * day advances, and Date.now() advances with it, so "days claimed" never
+ * outruns "time elapsed". tests/clock-trust-audit.mjs measured that walk at
+ * 176.4 XP and 64.6 coins per reset with no ceiling in sight, and the header
+ * above says plainly that no local rule can see it. It cannot. There is
+ * exactly one clock in this system the player's Settings app cannot move, and
+ * it is the server's.
+ *
+ * WHAT IS WITNESSED. `GET /health` (server/src/index.js:190) already answers
+ * `{ ok, ts }` with the server's own Date.now(). It is UNSIGNED and takes no
+ * identity, which is what makes it usable here: a device whose clock is a day
+ * out cannot make a SIGNED call at all (verifySigned refuses a timestamp more
+ * than five minutes off, server/src/index.js:89), so the one call we need is
+ * the one that still works while the clock is wrong. js/social.js
+ * touchServerDay() does the fetch and calls witnessServerDay() below.
+ *
+ * NO SERVER CHANGE AND NO MIGRATION. The endpoint, the response and the
+ * client's fetch plumbing all already existed. This is a read.
+ *
+ * THE RULE. A day may be opened if its ordinal is at most WITNESS_GRACE days
+ * past the newest day the server has ever been seen to be on. The mark only
+ * ever RISES (Math.max on write), so a lying or replayed answer cannot lower
+ * the ceiling, and neither can restoring an old backup: importAll keeps the
+ * higher of the two.
+ *
+ * WHAT IT ACTUALLY BUYS. It converts the forward walk from unbounded into a
+ * ONE-TIME bubble of WITNESS_GRACE days followed by a hard stop. To open day
+ * N+8 the farmer needs the server to have reached day N+1, and the only way to
+ * make that happen is to wait a real day. The steady-state farm rate is
+ * therefore one day of dailies per real day, which is what an honest player
+ * gets. Paired with rule 1 the bubble is not even free: the high-water mark is
+ * left seven days in the future, so the next seven REAL days pay nothing and
+ * the farmer has borrowed a week rather than earned one.
+ *
+ * OFFLINE IS THE WHOLE REASON FOR THE GRACE. This is an offline-first app and
+ * people log food on planes. Inside the window nothing changes for anybody:
+ * the guard is a ceiling, never a requirement, so a player who has not seen
+ * the server in six days still opens every day normally. Past the window the
+ * DAILIES pause (wheel, day-close crate, daily quests, free Pit fights) and
+ * nothing else does: logging food, weight, steps, XP for what you logged, the
+ * shop, the Pit, and every screen keep working, because none of those are
+ * day-gated. The pause is stateless, like every other refusal here, so one
+ * successful /health, on any network, on any later day, restores full service
+ * immediately and permanently. The cost of a genuinely offline eighth day is
+ * that day's dailies, once. Deferring the payout instead of refusing it was
+ * considered and rejected: it would need a pending queue in front of every
+ * gate in the game to buy back a case that starts on the eighth day.
+ *
+ * THE OFFLINE-ONLY DEVICE. A device that has never once reached the server has
+ * nothing to be judged against, so the first call SEEDS the mark from whatever
+ * day it is standing on and lets it through, exactly as the high-water mark
+ * does. That is deliberate and it is bounded: the seed hands out a ceiling,
+ * not days, and rule 1 stops the farmer walking BACK to collect the days below
+ * it. A fresh install that seeds at some absurd future date therefore gets one
+ * day of rewards there and then stops dead until the calendar catches up.
+ *
+ * WHAT IT STILL DOES NOT STOP, and nobody should have to rediscover it: this
+ * is client code, so devtools still wins (kvSet the mark, or edit this file).
+ * kv `apiBase` is settable from the URL (?api=), so a player who points the
+ * app at a server they control can hand it any time they like; that is the
+ * same tier as devtools, not the same tier as the Settings clock toggle this
+ * closes. And a full "erase all data" or a clean reinstall reseeds everything,
+ * which is true of every mark in the app and costs the player their save.
+ * ------------------------------------------------------------------------ */
+/* 7 days: ONE is spent on timezones (a local date legitimately runs up to a
+   day ahead of the UTC date the server's ms lands on) and SIX is the offline
+   stretch an honest player gets for free. A week covers a flight, a cabin, a
+   cruise and a dead SIM. It is also the size of the farmer's one-time bubble,
+   and seven borrowed days repaid with seven dead ones is the right trade for
+   never blocking a real player who simply has no signal. */
+export const WITNESS_GRACE = 7;
+export const DAY_WITNESS_KEY = 'dayWitnessOrd';
+
+/* Record that the server was seen to be at `serverMs`. Monotonic by
+   construction: an older or forged-backwards answer is ignored rather than
+   trusted, so the ceiling can only ever go up. Returns the mark in force. */
+export async function witnessServerDay(serverMs) {
+  const ms = Number(serverMs);
+  const cur = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
+  if (!Number.isFinite(ms) || ms <= 0) return cur;
+  const o = Math.floor(ms / DAY_MS);   // UTC day ordinal, same scale as dayOrdinal()
+  if (o > cur) { await kvSet(DAY_WITNESS_KEY, o); return o; }
+  return cur;
+}
+
 export async function claimDay(key) {
   const o = dayOrdinal(key);
   if (!Number.isFinite(o)) return { fresh: true, reason: 'unparseable' };  // never judge what we cannot read
@@ -418,6 +507,9 @@ export async function claimDay(key) {
     await kvSet('dayHighWater', key);
     await kvSet('dayPaceKey', key);
     await kvSet('dayPaceAt', Date.now());
+    // ...and rule 3's mark with it, if the server has never been seen. A device
+    // that has only ever been offline gets a ceiling from here, not a free run.
+    if (!(Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0)) await kvSet(DAY_WITNESS_KEY, o);
     return { fresh: true, reason: 'seeded' };
   }
 
@@ -430,10 +522,14 @@ export async function claimDay(key) {
      evening-then-morning players. */
   if (o === oh) return { fresh: true, reason: 'same-day' };
 
-  // RULE 2. Days claimed since the anchor may not outrun days elapsed since it.
+  /* RULE 2. Days claimed since the anchor may not outrun days elapsed since it.
+     ITS WRITE IS DEFERRED to the bottom of the function. Rule 3 below can still
+     refuse, and "a refusal writes nothing" is the property that stops this
+     guard latching, so nothing may be committed until every rule has spoken. */
   const anchorKey = await kvGet('dayPaceKey', hw);
   const anchorAt = Number(await kvGet('dayPaceAt', 0)) || 0;
   const oa = dayOrdinal(anchorKey);
+  let movePace = false;
   if (Number.isFinite(oa) && anchorAt > 0) {
     const elapsedDays = Math.floor((Date.now() - anchorAt) / DAY_MS);
     const allowed = elapsedDays + DAY_GRACE;
@@ -442,12 +538,25 @@ export async function claimDay(key) {
     }
     /* Pull the anchor up when wall time has outrun the day count, so an idle
        month cannot be banked and spent in one sitting. */
-    if (elapsedDays > o - oa) { await kvSet('dayPaceKey', key); await kvSet('dayPaceAt', Date.now()); }
+    movePace = elapsedDays > o - oa;
   } else {
-    await kvSet('dayPaceKey', key);
-    await kvSet('dayPaceAt', Date.now());
+    movePace = true;
   }
 
+  /* RULE 3. A day the SERVER has not reached, plus an offline allowance. The
+     one rule here that is not read off the clock being moved. Seeds and lets
+     through when there is nothing to judge against; see the header.
+     LAST, deliberately: rule 2 catches the wild jumps (a decade-ahead RTC, a
+     banked idle month) and names them 'too-fast', which is the more specific
+     diagnosis. What is left for rule 3 is the one shape rule 2 is blind to and
+     was written to admit it is blind to, the patient one-day-at-a-time walk. */
+  const witness = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
+  if (witness && o > witness + WITNESS_GRACE) {
+    return { fresh: false, reason: 'unwitnessed', highWater: hw, witness, ceiling: witness + WITNESS_GRACE, claimed: o };
+  }
+  if (!witness) await kvSet(DAY_WITNESS_KEY, o);
+
+  if (movePace) { await kvSet('dayPaceKey', key); await kvSet('dayPaceAt', Date.now()); }
   await kvSet('dayHighWater', key);
   return { fresh: true, reason: 'advanced' };
 }
@@ -455,10 +564,12 @@ export async function claimDay(key) {
 /* Read-only view for UI and for tests. Never writes, so it can be called from
    a render path without opening a day as a side effect. */
 export async function dayGuardState() {
-  const [highWater, paceKey, paceAt] = await Promise.all([
-    kvGet('dayHighWater', null), kvGet('dayPaceKey', null), kvGet('dayPaceAt', 0),
+  const [highWater, paceKey, paceAt, witness] = await Promise.all([
+    kvGet('dayHighWater', null), kvGet('dayPaceKey', null), kvGet('dayPaceAt', 0), kvGet(DAY_WITNESS_KEY, 0),
   ]);
-  return { highWater, paceKey, paceAt: Number(paceAt) || 0, grace: DAY_GRACE };
+  const w = Number(witness) || 0;
+  return { highWater, paceKey, paceAt: Number(paceAt) || 0, grace: DAY_GRACE,
+    witness: w, witnessGrace: WITNESS_GRACE, ceiling: w ? w + WITNESS_GRACE : null };
 }
 
 export async function exportAll() {
@@ -576,10 +687,23 @@ export async function importAll(data, { replace = true } = {}) {
      queue and we would be back to piecewise commit, which is exactly what
      this function was rewritten to stop. */
   let keptKv = [];
-  if (replace && declared.has('kv')) {
+  if (declared.has('kv')) {
     const payloadKeys = new Set(data.kv.map(r => r && r.k));
-    try { keptKv = (await db.all('kv')).filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k)); }
+    let localKv;
+    try { localKv = await db.all('kv'); }
     catch (e) { throw new Error('the restore could not read storage. Your old data is unchanged. Try again.'); }
+    if (replace) keptKv = localKv.filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k));
+    /* THE DAY WITNESS ONLY EVER GOES UP, INCLUDING THROUGH A RESTORE, and
+       unlike DEVICE_KV above the payload does NOT get to win. Every other mark
+       in this app can be rewound by restoring an export taken before it moved
+       (see the clock-trust audit's closing FINDING), which for a ceiling on
+       future days is a one-click reset of the ceiling while the rows farmed
+       under it stay put. Keeping the higher of the two costs three lines and
+       takes that hole away on BOTH import paths, the Settings file restore and
+       the cloud pull, which is why this sits outside the `replace` branch. */
+    const localW = localKv.find(r => r.k === DAY_WITNESS_KEY);
+    const fileW = data.kv.find(r => r && r.k === DAY_WITNESS_KEY);
+    if (localW && (Number(localW.v) || 0) > (fileW ? Number(fileW.v) || 0 : 0)) keptKv.push(localW);
   }
   return new Promise((resolve, reject) => {
     let t;
