@@ -58,11 +58,13 @@
  *           This is the half that matters: it is the boot loop, reproduced.
  *           RED: lose the checkpoint, or trust one that no longer matches its item.
  *   WORK    And a resume must actually SKIP what it already did, or it is a loop
- *           with extra steps. Counted at the IndexedDB layer (reads of the xp
- *           store), outside every module, so it measures the same thing before and
- *           after the fix and survives a reload. DIRECTION: more reads is failure.
- *           BOUND: a resumed boot reads the xp store at most RESUME_BUDGET of what
- *           a cold one does. RED: delete the cursor, and the resume redoes ~1,980.
+ *           with extra steps. Counted at the IndexedDB layer (per-item requests
+ *           against the xp store: `get` AND the `add` that the atomic ledger claim
+ *           issues), outside every module, so it measures the same thing before and
+ *           after the fix and survives a reload. DIRECTION: more requests is
+ *           failure. BOUND: a resumed boot touches the xp store at most
+ *           RESUME_BUDGET of what a cold one does.
+ *           RED: delete the cursor, and the resume redoes ~1,980.
  *   LEVEL   A half-replayed level must not reach the shared leaderboard.
  *           gameInitSettled() stays PENDING while the replay runs and resolves
  *           after it, and socialSnapshot() awaits it before reading totalXp.
@@ -98,14 +100,28 @@ const THROTTLE = 6;         // the slowest device the 12s backstop was calibrate
 const RESUME_BUDGET = 0.75; // a resume may re-read at most this share of a cold run
 
 /* Counted at the IndexedDB layer so it is blind to which module did the reading.
-   db.all uses getAll and db.get uses get, so this counts exactly award()'s
-   existence check plus the badge and levelup lookups. */
+   db.all uses getAll, which is not counted: this is per-ITEM work, not a scan.
+
+   GET AND ADD, and the `add` half is not optional. award()'s per-item check used
+   to be `db.get('xp', key)` and is now `db.addIfAbsent`, which is a single `add`
+   request: the check and the insert are the same request, which is what stops two
+   tabs both being told they claimed one key. Counting only `get` therefore counts
+   the tail (badges, the levelup baseline) and NOTHING the replay does per item, so
+   cold and resumed both read 47 and the ratio below sits at 100% no matter how
+   much work the checkpoint saves. Measured on this tree: get-only gave cold 47 /
+   resumed 47; get+add gives cold 2029 / resumed 1199. The bound and the direction
+   are unchanged, only the name of the request award() issues. */
 const COUNT_XP_GETS = () => {
   window.__xpGets = 0;
   const g = IDBObjectStore.prototype.get;
   IDBObjectStore.prototype.get = function (...a) {
     if (this.name === 'xp') window.__xpGets++;
     return g.apply(this, a);
+  };
+  const add = IDBObjectStore.prototype.add;
+  IDBObjectStore.prototype.add = function (...a) {
+    if (this.name === 'xp') window.__xpGets++;
+    return add.apply(this, a);
   };
 };
 
@@ -323,9 +339,9 @@ try {
      resumed.flag === true && resumed.cursor === null,
      `flag=${resumed.flag} cursor=${JSON.stringify(resumed.cursor)}`);
 
-  ok(`WORK a resumed boot re-reads at most ${Math.round(RESUME_BUDGET * 100)}% of the xp store a cold one reads`,
+  ok(`WORK a resumed boot re-touches at most ${Math.round(RESUME_BUDGET * 100)}% of the xp store a cold one does`,
      cold.gets > 500 && resumed.gets > 0 && resumed.gets <= cold.gets * RESUME_BUDGET,
-     `cold ${cold.gets} xp-store reads over ${coldRun.ms}ms, resumed ${resumed.gets} over ${resumeRun.ms}ms = ` +
+     `cold ${cold.gets} xp-store requests over ${coldRun.ms}ms, resumed ${resumed.gets} over ${resumeRun.ms}ms = ` +
      `${cold.gets ? Math.round((resumed.gets / cold.gets) * 100) : '?'}% of cold`);
 } catch (e) {
   ok('AUDIT ran to completion', false, String(e && e.stack || e));
