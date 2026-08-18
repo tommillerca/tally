@@ -392,15 +392,15 @@ exposed veins, `T3` heavy plate, `P3` piston legs, `H13-x` pufferfish heads.
 The swamp monster Tom remembered is real and it is `SK14 + B14 + ES15 + MS11 + HS15`.
 
 **Finding 2: 28 named enemies already exist and all render as random skeletons.**
-Ladder rungs 1-8 + The Marrow King (`js/pit.js:1416`), the 8-name gauntlet cycle,
-6 Boneyard den bosses (`js/poi.js:66`), 5 spire wardens (`js/spires.js:62`).
+Ladder rungs 1-8 + The Marrow King (`js/pit.js:1566`), the 8-name gauntlet cycle,
+6 Boneyard den bosses (`js/poi.js:81`), 5 spire wardens (`js/spires.js:62`).
 One of them is **The Bog Body**, who guards **The Sour Marsh**, and who today
 turns up in whatever `foeOutfitFor()` rolled. Two more line up by name with no
 prompting: **Gravemaw** wants the gator jaw, **Calcite the Cruel** wants the
 frost build. The names are doing worldbuilding the art is not backing up.
 The artifact carries a full casting table.
 
-**Finding 3: it is a data change.** `foeOutfitFor(name)` (js/app.js:11860) hashes
+**Finding 3: it is a data change.** `foeOutfitFor(name)` (js/app.js:15012) hashes
 the name and coin-flips each of ten slots against the whole catalogue.
 `openFight` already prefers a fixed outfit (`foeCfg.foeOutfit || foeOutfitFor(...)`,
 js/app.js:11916), used today only by friend battles. A boss becomes a
@@ -474,7 +474,7 @@ never sees a balance. So escrow is consignment-by-removal: listing an item
 REMOVES it from inventory (the disenchant path: gearloadout slot cleared, inv
 row deleted, stats gone that moment), delist/expiry grants the item back, a
 sale grants coins to the seller. Every server message stays additive, and the
-`gearId` grant ingest the client already ships (js/social.js:487, currently
+`gearId` grant ingest the client already ships (js/social.js:591, currently
 minted by nothing) becomes the delivery mechanism. Boolean per-catalog-id gear
 ownership means dupes are structurally impossible and a buyer who already owns
 the piece has nothing to buy.
@@ -795,8 +795,8 @@ The two halves of WoW's system that v221 deliberately left out. Mock served its 
 Pay to move a gear piece's **look** onto whatever cosmetic you actually want, keeping its stats. Modelled on WoW's transmogrification.
 
 **Investigation finding: the game currently punishes taste.** Look and stats are welded together in two places.
-- `equipGear` (js/loot.js:799) writes **both** `gearloadout[slot]` and `equipped[slot] = g.artId`. Wearing the stats forces you to wear the art.
-- `equip` (js/loot.js:788) does the reverse: *"choosing a plain look drops the statted piece from that slot."* Pick the hat you like, lose the +6 POW.
+- `equipGear` (js/loot.js:1226) writes **both** `gearloadout[slot]` and `equipped[slot] = g.artId`. Wearing the stats forces you to wear the art.
+- `equip` (js/loot.js:1192) does the reverse: *"choosing a plain look drops the statted piece from that slot."* Pick the hat you like, lose the +6 POW.
 - An unused `keepGear` flag already exists on `equip()`. It is the seed of this feature.
 - Melting gear for dust currently destroys the look **permanently**. An appearance collection makes melting pure upside and unclogs the dust economy.
 
@@ -1276,13 +1276,13 @@ verbatim. Organised by what the answer actually is, not by the order raised.
 ### A. Already done. Close these.
 
 1. **Diminishing returns on steps past 10-15k.** Shipped. `STEP_MILESTONES`
-   (`js/game.js:341`) caps the real reward at 10,000 and `STEP_OVER` pays a
+   (`js/game.js:379`) caps the real reward at 10,000 and `STEP_OVER` pays a
    decaying tail at 12.5k / 15k / 17.5k / 20k for 12 / 10 / 8 / 6 coins. Nothing
    to build.
 2. **The Pokemon GO remote-raid trap** (removing remote play hurt rural and
    disabled players). Already avoided: the **Remote Den** gives one boss fight a
    day with no GPS and no energy cost, precisely because being unable to walk is
-   the reason it exists (`js/app.js:11875`).
+   the reason it exists (`js/app.js:14852`).
 3. **Crew shots / shareable studio / AR.** Planned in full, with mockups:
    `docs/PLAN-the-studio.md`. Buddy, squad and versus cards included.
 4. **Gentleness contract framing in the intro.** Planned:
@@ -1577,9 +1577,9 @@ investigate, log, plan, WAIT for approval before building.
 1. WARDROBE COUNT vs CRATE REVEAL. Tester opened a crate, saw 3 cards, then
    found the wardrobe reading "1/362 collected", with the coin total also not
    matching what the reveal showed.
-   INVESTIGATED, NOT YET DIAGNOSED. collectedLooks() (js/loot.js:973) unions
+   INVESTIGATED, NOT YET DIAGNOSED. collectedLooks() (js/loot.js:985) unions
    three sources (kv 'looks', ownedCosmeticIds, gear artIds) and looks correct on
-   reading. The denominator is BH_ITEMS.filter(i => !i.default) (js/app.js:8511).
+   reading. The denominator is BH_ITEMS.filter(i => !i.default) (js/app.js:9893).
    THE LIKELY INNOCENT EXPLANATION, which must be ruled out FIRST: a crate pays
    coins and dust as cards too, so "3 cards" is not "3 cosmetics", and 1/362 may
    be correct while being unreadable to a player. If so this is a COPY/UX bug,
