@@ -190,7 +190,7 @@ for (const [W, H] of SIZES) {
      AFFORDANCE both still printed PASS.
 
      The announcement clause is kept, because it can still fail on its own (drop
-     app.css:1324 and `masked` goes false while `scrolls` stays true), but it is
+     app.css:1373 and `masked` goes false while `scrolls` stays true), but it is
      now an AND, never an escape hatch from the floor below it.
 
      DIRECTION AND BOUND (anti-regression rule 11): failure is the resting tray

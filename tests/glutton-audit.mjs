@@ -154,7 +154,7 @@ check('reopening shows Cleansed, not the fight button', s.cleansed && !s.cta, JS
  * So call the payout function directly, twice more, in the already-satisfied
  * state, and assert the ledger and the wallet do not move. Measured on a clean
  * tree 2026-08-12: attempt 1 paid +140 coins and +70 xp, attempts 2 and 3 paid
- * +0 and +0, with the ledger stuck at one row. The guard is at js/poi.js:600,
+ * +0 and +0, with the ledger stuck at one row. The guard is at js/poi.js:637,
  * where claimGluttonWin returns null the moment its award yields 0 xp, before
  * coins, before gear, before the dust consolation.
  * PROVE-RED: delete that `if (xp === 0) return null;` line and the deltas below

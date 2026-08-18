@@ -227,9 +227,9 @@ await page.evaluate(async () => {
 await sleep(800);
 await page.evaluate(async () => { await window.__denFight(1.6, 0); });
 /* WAIT FOR THE PLAYER-TURN TRAY, not a fixed 1700ms sleep. renderActions()
-   at js/app.js:13964 early-returns with a "<foe> is acting..." placeholder
+   at js/app.js:15863 early-returns with a "<foe> is acting..." placeholder
    whenever `fight.active !== 'p'`, and #itemsOpen only exists inside the
-   player-turn branch (line 14077). A fixed sleep cannot distinguish "not
+   player-turn branch (line 15977). A fixed sleep cannot distinguish "not
    ready yet" from "never going to be ready"; waiting on the actual
    precondition can. Cap at 8s so a genuinely broken renderActions still
    surfaces as a real failure rather than an infinite hang.
