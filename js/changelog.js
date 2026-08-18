@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 391, date: '2026-08-17', title: 'One missing file can no longer take the app down', items: [
+    "<b>If a single file went missing while an update was being published, the app could open to nothing at all, but only if you were online.</b> Offline it was fine, which is the odd part: the app asked for the file, got an error back, and handed that error to the page instead of using the good copy already saved on your device. It falls back to the saved copy now, so one bad file during a release cannot take everything down.",
+    "<b>\"Update ready. Leave this screen to apply\" now actually applies it.</b> Closing the screen did nothing, so you kept running the old version until something else happened to reload it.",
+  ] },
   { n: 390, date: '2026-08-17', title: 'The crate finishes opening before it leaves', items: [
     "<b>The last frame of the crate opening was being cut off, worst on the first crate you opened.</b> The frames were timed from the moment their artwork finished loading, while the crate's exit was timed from the moment the reveal opened. Two different clocks, and the gap between them came out of the ending. On a phone loading nine frames that was enough to start the crate disappearing while it was still opening. Both crates now hold on their final frame before they go.",
     "<b>Opening the Boneyard with no signal threw an error behind the polite message.</b> You got the \"needs a network signal\" screen and a broken page underneath it. Now you just get the message and a Retry button.",
