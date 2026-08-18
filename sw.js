@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v394';
+const VERSION = 'tally-v395';
 const PRECACHE = [
   './',
   './index.html',
@@ -50,6 +50,20 @@ const PRECACHE = [
   /* 976 KB, and it never plays until the player unmutes, so it is precached
      for the visit AFTER they turn it on rather than fetched mid-scene. */
   './assets/audio/morning-dew-loop.m4a',
+  /* Tom's 48px currency set. 16px is the floor: at 12 the coin is a dot and
+     the eggs are a smear, which he confirmed looking at the render. Clean
+     steps from 48 are 12, 16, 24, 48. */
+  './assets/icons-pix/coin.png',
+  './assets/icons-pix/dust.png',
+  './assets/icons-pix/egg.png',
+  './assets/icons-pix/crate.png',
+  './assets/icons-pix/bone-dust.png',
+  './assets/icons-pix/pit.png',
+  './assets/icons-pix/wardrobe.png',
+  './assets/icons-pix/shop.png',
+  './assets/icons-pix/build.png',
+  './assets/icons-pix/battle-charm.png',
+  './assets/icons-pix/vigor-draught.png',
   './assets/crates/common/f0.png',
   './assets/crates/common/f0-24.png',
   './assets/crates/common/f1.png',
