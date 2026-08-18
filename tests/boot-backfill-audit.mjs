@@ -68,6 +68,9 @@
  *   LEVEL   A half-replayed level must not reach the shared leaderboard.
  *           gameInitSettled() stays PENDING while the replay runs and resolves
  *           after it, and socialSnapshot() awaits it before reading totalXp.
+ *           Read from INSIDE the replay, via initGameIfNeeded's onProgress hook,
+ *           so "mid-run" is an ORDER like PAINT is and not a millisecond bet on
+ *           how fast this machine happens to be.
  *           RED: drop the await in socialSnapshot, or resolve the gate early.
  *
  * WHAT A CONTAINER CANNOT SHOW YOU: this machine is the fast one in every number
@@ -137,8 +140,15 @@ const SEED = async (DAYS, PER_DAY) => {
   for (const k of ['game-init', 'game-init-at']) await db.del('kv', k);
 
   const d0 = new Date();
-  const dayKey = n => { const d = new Date(d0); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
-  const today = d0.toISOString().slice(0, 10);
+  /* LOCAL, NOT UTC. toISOString() is UTC while the app's dateKey() is local, so
+     west of UTC after about 17:00 the two disagree by a day and the reference
+     demanded protein/dayclose/meals3 for an in-progress day that
+     runInitBackfill correctly refuses to close. TOTAL and RESUME went red every
+     evening on healthy code, and a gate audit that cries wolf after 5pm is how a
+     real red gets waved through later. */
+  const localKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const dayKey = n => { const d = new Date(d0); d.setDate(d.getDate() - n); return localKey(d); };
+  const today = localKey(d0);
   const targets = { kcal: 2200, p: 140, c: 220, f: 70 };
 
   const logRows = [], wRows = [];
@@ -222,20 +232,45 @@ try {
   const seeded = await page.evaluate(SEED, DAYS, PER_DAY);
 
   /* --------- LEVEL: the gate that keeps a half-replayed level off the board. --------- */
+  /* SAMPLED FROM INSIDE THE REPLAY, NOT RACED AGAINST A CLOCK. This used to be
+     Promise.race(gameInitSettled(), setTimeout(400)) and expected 'pending' to
+     win. Two things are wrong with that. gameInitSettled() returns initInFlight,
+     which IS the promise initGameIfNeeded returned, so the race asks "does the
+     whole replay outlast 400ms" -- a question about this machine, not about the
+     gate. On this Mac the replay lands at ~402ms and the row coin-flipped; on a
+     slower container it took ~1800ms and passed. And widening the timer is
+     backwards: Promise.race settles the instant the gate does, so a LONGER
+     pending timer can only ever lose harder.
+     initGameIfNeeded already takes an onProgress hook, fired once at the start
+     and after every one of the ~33 chunks, with a separate complete:true call at
+     the end. Every non-complete call is a moment the replay is provably still
+     going, on any hardware, so the gate is read THERE. Same property, stated as
+     an ORDER like PAINT and RESUME are, with no millisecond in it. */
   const gate = await page.evaluate(async (targets) => {
+    let settled = false;
+    const mid = [];
     const game = await import('/js/game.js');
-    const run = game.initGameIfNeeded(targets);
-    const early = await Promise.race([
-      game.gameInitSettled().then(() => 'settled'),
-      new Promise(r => setTimeout(() => r('pending'), 400)),
-    ]);
-    const runningMid = game.gameInitRunning();
+    const run = game.initGameIfNeeded(targets, {
+      onProgress: p => { if (!p.complete) mid.push({ settled, running: game.gameInitRunning(), done: p.done, total: p.total }); },
+    });
+    /* Grabbed synchronously, with no await in between: this is the promise a
+       caller like socialSnapshot() is handed when it asks mid-boot. A gate that
+       was resolved early hands back an already-settled promise, and `settled`
+       flips one microtask later -- long before the first onProgress, which is
+       behind an IndexedDB read. */
+    game.gameInitSettled().then(() => { settled = true; });
     await run;
-    const late = await Promise.race([
-      game.gameInitSettled().then(() => 'settled'),
-      new Promise(r => setTimeout(() => r('pending'), 400)),
-    ]);
-    return { early, runningMid, late, runningAfter: game.gameInitRunning() };
+    /* One macrotask hop before reading runningAfter, because initGameIfNeeded
+       clears initInFlight from `p.catch(...).then(...)` -- two microtask hops
+       after p resolves, where `await run` resumes on the first. A setTimeout is
+       guaranteed by the language to run after the microtask queue drains, so
+       this is an ordering fact and not another millisecond bet. Every real
+       caller is past this point anyway: socialSnapshot awaits the gate and then
+       does async work. */
+    await new Promise(r => setTimeout(r, 0));
+    return { samples: mid.length, everSettledMidRun: mid.some(s => s.settled),
+             heldThroughout: mid.length > 0 && mid.every(s => s.running === true),
+             last: mid[mid.length - 1] || null, settledAfter: settled, runningAfter: game.gameInitRunning() };
   }, seeded.targets);
 
   const appSrc = await (await fetch(base + 'js/app.js')).text();
@@ -243,9 +278,11 @@ try {
   const snapAwaitsGate = /await gameInitSettled\(\)[\s\S]*?totalXp\(\)/.test(snapBody) && snapBody.includes('async function socialSnapshot()');
 
   ok('LEVEL the backfill gate stays pending while the replay runs, and socialSnapshot waits on it',
-     gate.early === 'pending' && gate.runningMid === true && gate.late === 'settled' &&
-     gate.runningAfter === false && snapAwaitsGate,
-     `mid-run gate=${gate.early}/running=${gate.runningMid}, after gate=${gate.late}/running=${gate.runningAfter}, ` +
+     gate.samples > 0 && gate.everSettledMidRun === false && gate.heldThroughout === true &&
+     gate.settledAfter === true && gate.runningAfter === false && snapAwaitsGate,
+     `${gate.samples} mid-replay samples (last at ${gate.last ? `${gate.last.done}/${gate.last.total}` : '?'} items), ` +
+     `gate seen settled mid-run: ${gate.everSettledMidRun}, running held at every sample: ${gate.heldThroughout}; ` +
+     `after: settled=${gate.settledAfter}/running=${gate.runningAfter}; ` +
      `socialSnapshot awaits gameInitSettled before totalXp: ${snapAwaitsGate}`);
 
   /* --------- COLD: one uninterrupted boot on the legacy save. --------- */
