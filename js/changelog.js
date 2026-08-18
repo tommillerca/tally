@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 395, date: '2026-08-17', title: 'Hand-drawn icons, and a tidier Bonehead screen', items: [
+    "<b>The coins, bone dust, crates, eggs, charms and draughts are hand-drawn pixel art now.</b> They used to be flat vector shapes. Same things, properly drawn, and they hold their crisp edges at every size the game uses them at.",
+    "<b>The Bonehead tabs got the same treatment.</b> Wardrobe, Backpack, Shop and Build each have their own drawn icon instead of a generic symbol, so you can find the one you want without reading.",
+    "<b>The Bonehead screen has four tabs instead of six.</b> Level and Looks were taking up space for things you rarely went looking for. Your collection lives in the Wardrobe, next to transmog, which is where you were already going to find it. Nothing was removed from the game, only from that row.",
+  ] },
   { n: 394, date: '2026-08-17', title: 'Two tabs can no longer be paid twice for the same reward', items: [
     "<b>With the game open in two places at once, the same reward could be handed over twice.</b> Both copies asked whether it was still waiting, both were told yes, and both paid it out. Claiming a reward is now a single step instead of a look followed by a grab, so exactly one of them wins it and the other gets nothing. Crates, eggs, codes, tributes, harvests, dishes, level rewards, badges and streaks all go through it.",
     "<b>Opening the app is quick again if you have been logging for a long time.</b> The first open after an update worked through your entire history before it would show you anything, and on a slow phone it could give up part way and start again from the beginning. It puts the app on screen first now and catches up in the background, remembering how far it got, so closing the app mid-way no longer throws that work away.",
