@@ -55,8 +55,15 @@ const argv = process.argv[2] || process.env.URL;
 const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const { browser, page } = await boot(argv || srvHandle.url);
 
-const VP = { width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
-await page.setViewport(VP);
+/* THE VIEWPORT OBJECT IS INLINE, NOT HOISTED INTO A CONST. unit.test.js's
+   viewport lint walks the parens of each call and reads the argument text
+   literally, so handing it a bare identifier hides isMobile and hasTouch from
+   the scan and the file goes red while genuinely carrying both. The 320x568
+   call further down was already inline; this one now matches it.
+   Note the lint scans raw source, comments included, so do not spell the call
+   itself out in prose here either: that is what made the first attempt at this
+   comment the offender it was describing. */
+await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 
 /* A LOADED TRAY, same seam and same build as fight-hint-audit: the talent moves
    are the ones whose detail was cut to fit one line, so they are the ones the
