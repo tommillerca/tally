@@ -47,6 +47,9 @@ const PRECACHE = [
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
      rather than left to the runtime cache for that reason. 36KB for all 9. */
+  /* 976 KB, and it never plays until the player unmutes, so it is precached
+     for the visit AFTER they turn it on rather than fetched mid-scene. */
+  './assets/audio/morning-dew-loop.m4a',
   './assets/crates/common/f0.png',
   './assets/crates/common/f0-24.png',
   './assets/crates/common/f1.png',

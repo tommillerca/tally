@@ -8083,3 +8083,31 @@ body::before {
   .co-seq img { opacity: 0 !important; }
   .co-seq img:last-child { opacity: 1 !important; }
 }
+
+/* ---- THE HOLLOW'S MUSIC CONTROL ----
+   Muted is the default state and the button is the only way out of it, so on a
+   first visit it has to read as "press me" rather than as a status light in a
+   corner. Tom asked for exactly that, twice. The invite is a slow breathing
+   ring, not a flash: it should catch the eye on a scene the player is looking
+   at anyway, and it stops the moment they answer either way.
+   Placed left so it never collides with the coin pill on the right. */
+.hlw-mute {
+  position: absolute; left: 14px; top: 14px; z-index: 20;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; padding: 0;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(13, 12, 18, .42); backdrop-filter: blur(10px);
+  color: #f2e9d7; -webkit-tap-highlight-color: transparent;
+}
+.hlw-mute:active { transform: scale(.94); }
+.hlw-mute svg { display: block; }
+.hlw-mute.invite { animation: hlwMuteInvite 2.2s ease-in-out infinite; }
+@keyframes hlwMuteInvite {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(165, 232, 71, .55); background: rgba(13, 12, 18, .42); }
+  50%      { box-shadow: 0 0 0 9px rgba(165, 232, 71, 0);  background: rgba(40, 58, 20, .62); }
+}
+/* An invitation that pulses forever is nagging, and a player who cannot see
+   motion gets no invitation at all, so it becomes a steady ring instead. */
+@media (prefers-reduced-motion: reduce) {
+  .hlw-mute.invite { animation: none; box-shadow: 0 0 0 3px rgba(165, 232, 71, .5); }
+}

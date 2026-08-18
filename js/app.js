@@ -4229,6 +4229,15 @@ function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, na
   return pick(HLW_SAY.idle);
 }
 
+/* Two states, drawn rather than pulled from the icon set: this control has to
+   read as a speaker at 22px on a busy garden, and the muted one needs the slash
+   to be the loudest thing in it. */
+const SPK_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8l6 8M22 8l-6 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
+const SPK_ON  = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a7.5 7.5 0 0 1 0 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>';
+/* webdriver-only seam so a capture can open the Hollow without walking the UI.
+   Same one the pixel branch carries; main never got it, so the music change had
+   no way to be rendered and checked. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openHollow = () => openHollow(() => {});
 function openHollow(after) {
   /* Read ONCE, on the way in, and written on the way out. See the firstEver
      comment in render(): reading it per render made the welcome line expire
@@ -4335,6 +4344,10 @@ function openHollow(after) {
        line least likely to be read. HlwSeen is written on CLOSE now, and
        firstEver is captured once when the sheet opens. */
     const firstEver = !seenAt;
+    /* Muted is the default and it is REMEMBERED, so the invite only ever rides
+       on a player who has not answered it yet. */
+    const musicOn = (await kvGet('hlwMusicOn', false)) === true;
+    const musicAsked = (await kvGet('hlwMusicAsked', false)) === true;
     const say = hlwLine({ ripe: ripeN, growing: growN, planted: ripeN + growN,
       owned: garden.plotsOwned, seeds: seedTotal, firstEver, daysAway, name: keeperName });
     body.innerHTML = `
@@ -4353,6 +4366,16 @@ function openHollow(after) {
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      ${/* MUSIC STARTS MUTED. Tom, twice: "it starts muted but there's an unmute
+            icon that shows it wants to be clicked the first time they go in the
+            hollow." Muted is the default state, not a paused track: nothing is
+            fetched until the player asks, which is also why preload is none.
+            The invite class only rides on the FIRST visit; after they choose
+            either way the button goes quiet and the choice is remembered. */''}
+      <audio id="hlwMusic" src="assets/audio/morning-dew-loop.m4a" loop preload="none"></audio>
+      <button class="hlw-mute${musicAsked ? '' : ' invite'}" id="hlwMute" type="button"
+        aria-pressed="${musicOn ? 'true' : 'false'}"
+        aria-label="${musicOn ? 'Turn the music off' : 'Turn the music on'}">${musicOn ? SPK_ON : SPK_OFF}</button>
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME_R.x, y: HLW_FRAME_R.y, w: HLW_FRAME_R.w, h: HLW_FRAME_R.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
@@ -4458,6 +4481,26 @@ function openHollow(after) {
     $$('#hlwStage svg, #hlwStage .hlw-signwrap, #hlwStage [class^="hlw-p-"]', body)
       .forEach(el => el.setAttribute('aria-hidden', 'true'));
 
+    /* THE TOAST HAS TO BE TRUE, same rule as the crate. The button both plays
+       and remembers, and the invite is cleared the moment the player answers it
+       EITHER way, because an invitation that survives being declined is nagging.
+       play() is called from inside the click so iOS treats it as user-gestured;
+       a rejected promise is swallowed rather than left to surface as an
+       unhandled rejection on a device that refuses autoplay anyway. */
+    const mus = $('#hlwMusic', body), mbtn = $('#hlwMute', body);
+    if (mus && mbtn) {
+      if (musicOn) { mus.play().catch(() => {}); }
+      mbtn.addEventListener('click', async () => {
+        const on = mus.paused;
+        if (on) mus.play().catch(() => {}); else mus.pause();
+        mbtn.innerHTML = on ? SPK_ON : SPK_OFF;
+        mbtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        mbtn.setAttribute('aria-label', on ? 'Turn the music off' : 'Turn the music on');
+        mbtn.classList.remove('invite');
+        await kvSet('hlwMusicOn', on);
+        await kvSet('hlwMusicAsked', true);
+      });
+    }
     const vp = $('.hlw-vp', body), st = $('#hlwStage', body);
     const s = vp.clientWidth / 390;
     st.style.transform = `scale(${s})`;
