@@ -137,9 +137,17 @@ before it is graded by a harness that cannot run:
     harness, hkintake, clocktrust, inputval, xpperf, bootblock,
     offline, denbound, census, cite, reconcile
 
-**FROZEN pending Tom's call on server access:** srvhard, concurrency, dbperf,
-dbprune. All four touch `server/`. gwart says Tom granted him that explicitly;
-Tom has not confirmed since. Nobody merges these until he does.
+**DECIDED 2026-08-17: gwart does NOT have server access.** Tom: "let's not give
+gwart server acess for now." srvhard, concurrency, dbperf and dbprune are mine.
+Reg asks gwart for his METHOD and repro, not his code, and re-derives.
+
+Note srvhard should not merge as written regardless of who owns it: it strips
+friend_code from the leaderboard payload, and that is the wrong direction. Tom's
+call is that codes stay public and shareable, so the fix is a server-side
+add-by-player-id endpoint, leaving both the codes and account recovery alone.
+The one real hazard there is that the same code is the lookup key for the
+encrypted recovery bundle, and 11 of 11 recovery rows already carry a
+recovery_id, so nobody is stranded either way.
 
 ## 🐾 The Paddock: pet playland on the Stable (BUILDING, assigned 2026-08-10)
 
