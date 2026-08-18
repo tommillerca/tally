@@ -4,7 +4,12 @@
 // health, or personal data. Queued locally and flushed to YOUR OWN backend
 // (the same Cloudflare Worker as social) only when an API base is configured.
 import { kvGet, kvSet } from './db.js';
-import { apiBase, socialMe } from './social.js';
+/* apiFetch, not bare fetch: these three POSTs are all awaited by a UI that has
+   already disabled its button ("Sending..."), so a server that accepts the
+   request and never answers leaves the feedback sheet and the map report sheet
+   dead with no message. Same deadline as every other call to our own Worker;
+   see the header on apiFetch in js/social.js. */
+import { apiBase, socialMe, apiFetch } from './social.js';
 import { platformTag } from './native.js';
 
 let appV = '';
@@ -70,7 +75,7 @@ export async function flush() {
     const label = me ? (me.name || me.handle || null) : null;
     while (q.length) {
       const batch = q.slice(0, 50);
-      const r = await fetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, plat: platformTag(), label, events: batch }) });
+      const r = await apiFetch(base + '/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device, appV, plat: platformTag(), label, events: batch }) });
       if (!r || !r.ok) break; // keep the queue; retry next flush
       q = q.slice(batch.length);
       await kvSet('evq', q);
@@ -96,7 +101,7 @@ export async function sendReport(kind, data = {}) {
       target: data.target ? String(data.target).slice(0, 60) : null,
       note: data.note ? String(data.note).slice(0, 280) : null,
     };
-    const r = await fetch(base + '/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await apiFetch(base + '/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return { ok: !!(r && r.ok) };
   } catch { return { ok: false, reason: 'error' }; }
 }
@@ -122,7 +127,7 @@ export async function sendSurvey(data = {}) {
       mostWanted: data.mostWanted ? String(data.mostWanted).slice(0, 280) : null,
       features: Array.isArray(data.features) ? data.features.slice(0, 20).map(f => String(f).slice(0, 24)) : [],
     };
-    const r = await fetch(base + '/survey', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await apiFetch(base + '/survey', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return { ok: !!(r && r.ok) };
   } catch { return { ok: false, reason: 'error' }; }
 }

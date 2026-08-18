@@ -222,6 +222,122 @@ check('MARKER  settings.hkConnected was set to true by the first steps ingest',
   afterMarker.hkConnected === true,
   `hkConnected=${afterMarker.hkConnected}`);
 
+/* -------- 6. THE SAME CLIPBOARD READING ACROSS A DAY ROLLOVER.
+ *
+ * THE BUG THIS WATCHES. The shipped Shortcut template (HK_TEMPLATE in js/app.js)
+ * is `tally-hk steps=[Steps Sum] active=[Active Sum] weightlb=[Latest Weight]`.
+ * It carries NO d=, so parseHkPayload stamps dateKey(), i.e. whatever local day
+ * it is when the player TAPS SYNC, not the day the reading was taken. The app's
+ * own guide then recommends a 9:00 PM automation and says "Boneheadz picks it up
+ * next time you open it and tap Sync". So the default flow is: the shortcut
+ * writes Monday's total at 21:00, the player syncs Monday night, and then opens
+ * the app on Tuesday morning and taps Sync again before the shortcut has re-run.
+ * The clipboard is byte-identical, dateKey() has rolled over, and Monday's 12,000
+ * steps are written a SECOND time onto Tuesday's row. One walk, two days, and
+ * raceWeekDates covers seven consecutive days so both rows are almost always
+ * inside the same race week: weekStepsNow doubles.
+ *
+ * WHY IT MATTERS MORE THAN A COSMETIC DRIFT. weekSteps is what socialSnapshot
+ * publishes and what the step race ranks, and the podium pays 5,000 / 2,500 /
+ * 1,500 / 600 / 400 coins plus Golden Crates and dust. It needs no dev tools and
+ * no bad intent: it favours precisely the player who syncs most diligently.
+ *
+ * WHY THE SERVER DOES NOT CATCH IT. The bounds on gwart/srvhard hold weekSteps
+ * monotone per week and cap it at MAX_STEPS_PER_DAY (100,000) per ELAPSED day of
+ * the week. A doubled honest total is an INCREASE (so monotone is satisfied) and
+ * is nowhere near 100,000 x elapsed days, so it is accepted in full. The server
+ * stops a forged total; it cannot tell an honestly doubled one from a real walk.
+ *
+ * DIRECTION AND BOUND. Failure is the total GROWING. The bound is an exact
+ * ceiling, not a trend: after re-syncing an unchanged clipboard on a new local
+ * day, exactly ONE health row may carry steps and the two dates must sum to the
+ * amount actually walked. Never "the total went up by less than X".
+ *
+ * HOW THE ROLLOVER IS DRIVEN. dateKey() reads local time only, so emulating a
+ * timezone crosses a local midnight without waiting for one. Two zones 25 hours
+ * apart always land on different local dates. */
+const tzOriginal = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+await page.evaluate(async () => {
+  const { db, kvSet } = await import('./js/db.js');
+  await db.clear('health');
+  await kvSet('hkClipLast', null);
+});
+const STALE_CLIP = 'tally-hk steps=12000 active=500';   // the shipped template's own output shape: no d=
+await setClipboard(STALE_CLIP);
+
+await page.emulateTimezone('Pacific/Midway');           // UTC-11
+await page.evaluate(() => document.querySelector('#hkSyncNow').click());
+await sleep(1200);
+const rollA = await page.evaluate(async () => {
+  const { dateKey } = await import('./js/nutrition.js');
+  const { db } = await import('./js/db.js');
+  return { day: dateKey(), rows: (await db.all('health')).filter(r => r.steps != null).map(r => [r.date, r.steps]) };
+});
+
+/* Drain the toast queue before the second sync. Toasts are serialised (js/app.js
+   nextToast hides #toast between messages), so a refusal raised while earlier
+   messages are still playing would not be on screen when we look, and the check
+   would report a missing refusal that was merely queued. */
+for (let i = 0; i < 80; i++) {
+  if (await page.evaluate(() => !!document.querySelector('#toast')?.hidden)) break;
+  await sleep(250);
+}
+
+await page.emulateTimezone('Pacific/Kiritimati');       // UTC+14: local midnight has now passed
+await page.evaluate(() => document.querySelector('#hkSyncNow').click());
+await sleep(1200);
+const rollB = await page.evaluate(async () => {
+  const { dateKey } = await import('./js/nutrition.js');
+  const { db } = await import('./js/db.js');
+  return { day: dateKey(), rows: (await db.all('health')).filter(r => r.steps != null).map(r => [r.date, r.steps]) };
+});
+await page.emulateTimezone(tzOriginal);
+
+console.log('rollover:', JSON.stringify({ a: rollA, b: rollB }));
+/* The rollover has to actually have happened, or every assertion below is
+   vacuously true and this check silently stops running (anti-regression rule 3:
+   an empty sample set is a FAILURE). */
+check('ROLLOVER  the two syncs really did land on different local days',
+  rollA.day !== rollB.day && !!rollA.day && !!rollB.day,
+  `first=${rollA.day} second=${rollB.day}`);
+check('ROLLOVER  the first sync of the stale clipboard wrote exactly one steps row',
+  rollA.rows.length === 1 && rollA.rows[0][1] === 12000,
+  JSON.stringify(rollA.rows));
+check('ROLLOVER  re-syncing an UNCHANGED clipboard on a new day writes NO second steps row',
+  rollB.rows.length === 1,
+  `rows=${JSON.stringify(rollB.rows)} (2 rows = the same walk counted on two days)`);
+check('ROLLOVER  the two days sum to what was walked (12,000), never double it',
+  rollB.rows.reduce((a, r) => a + r[1], 0) === 12000,
+  `summed=${rollB.rows.reduce((a, r) => a + r[1], 0)}, walked=12000`);
+/* The refusal must be VISIBLE. A silently dropped sync is indistinguishable from
+   a broken Sync button, and the player has to be told to re-run the shortcut. */
+/* Toasts are a QUEUE (js/app.js nextToast): the successful first sync is still
+   on screen for 3.6s, so the refusal is shown after it, not instead of it. Poll
+   rather than sampling once, and match on wording unique to THIS refusal so the
+   older "No sync data on the clipboard... shortcut first" toast from section 3b
+   cannot green it by accident. */
+let rollToast = '';
+for (let i = 0; i < 40; i++) {
+  rollToast = await page.evaluate(() => (document.querySelector('#toast')?.textContent || '').trim());
+  if (/same reading/i.test(rollToast)) break;
+  await sleep(250);
+}
+check('ROLLOVER  the refused re-sync tells the player to re-run the shortcut',
+  /same reading/i.test(rollToast) && /shortcut/i.test(rollToast),
+  `toast=${JSON.stringify(rollToast)}`);
+/* ...and a genuinely NEW reading on the new day must still go straight in, or
+   the guard has traded a double count for a player who can never sync again. */
+await setClipboard('tally-hk steps=13400 active=530');
+await page.evaluate(() => document.querySelector('#hkSyncNow').click());
+await sleep(1200);
+const rollC = await page.evaluate(async () => {
+  const { db } = await import('./js/db.js');
+  return (await db.all('health')).filter(r => r.steps != null).map(r => [r.date, r.steps]);
+});
+check('ROLLOVER  a genuinely new reading on the new day still ingests',
+  rollC.some(r => r[1] === 13400),
+  JSON.stringify(rollC));
+
 /* -------- Restore clipboard so subsequent test runs are clean. */
 await page.evaluate(() => {
   if (window.__origClipboardRead) {

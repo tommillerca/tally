@@ -81,7 +81,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
-  'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit
+  'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
   'foods-delete-audit.mjs',  // deleting a custom food must not take your logged history with it
@@ -107,7 +107,7 @@ const BROWSER = [
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
   'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
   'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
-  'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep
+  'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep, and a stale clipboard re-synced across a day rollover never counts the same walk twice
   'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
   'redeem-dupe-audit.mjs',   // redeeming a code for a species you ALREADY OWN: the stacked copy gets its own toast, and the dead consolation copy stays dead. Same Settings surface as redeem-audit above, self-serving, 23s. Prove-red: revert either half of the fix and PIN-1 goes red on two byte-equal toasts
   'weight-edit-audit.mjs',   // Log weight (kg + lb conversion) + entry edit/delete: real UI clicks, deep read-back
@@ -120,6 +120,7 @@ const BROWSER = [
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
   'crate-palette-audit.mjs', // the nine authored 48x48 crate frames render as the authored pixels: EXACT against the source PNG upscaled 3x nearest-neighbour, PALETTE, SCALE, ALIGN, MOTION, and a CONTROL row so a blank screenshot cannot pass by having nothing to compare. Landed with v388 and belonged to no tier, which failed the coverage assertion below before a browser started. Self-serving, 19s, 8 checks, green on four consecutive runs of fc9bb0f
   'xp-cap-audit.mjs',        // a repeatable action cannot pay forever: STATIC (no award() key built from a clock or a random source, so the bug class is caught in sources that do not exist yet) plus CAP, ROLLOVER and CONTROL driven through the real awardCapped against a real IndexedDB. Landed with #29 and belonged to no tier. Self-serving, 16s, 11 checks, green on four consecutive runs of fc9bb0f
+  'reward-sop-audit.mjs',    // every paying action against the rewarded-actions SOP: COVERAGE derives the paying call sites from js/*.js (158 sites in 53 actions across 44 modules) so a NEW payout nobody registered fails, UNDRIVEN prints the 34 registered-but-not-driven actions with their reasons every run, and REPEAT performs 20 actions twice against a real IndexedDB, sequentially AND concurrently. NO-OP pins the other half of a kv-backed claim: an action that decides nothing is owed must not write over the record it consulted, which every REPEAT row is blind to because the second attempt correctly pays nothing while destroying the record on its way out. Self-serving, measured 21s, 75 checks, green on the reconcile branch. Fast rather than full because it is the guard for the class that has now shipped three times, and every one of its eleven reintroductions was proven red on this tree
   'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
 ];
 
@@ -132,6 +133,37 @@ function run(file, args) {
     p.stderr.on('data', d => { out += d; });
     p.on('close', code => res({ file, code, out, secs: Math.round((Date.now() - t0) / 1000) }));
   });
+}
+
+/* THERE ARE THREE OUTCOMES, NOT TWO.
+ *
+ * This gate read every exit code as pass-or-fail, which forces any suite that
+ * CANNOT run on a given machine into one of two lies: exit 0 and be counted as
+ * evidence it never gathered, or exit 1 and be indistinguishable from a real
+ * defect. The first is how a suite retires into silence. The second is the
+ * false red that teaches people to ignore the gate, which is the failure mode
+ * this file's own header is written against.
+ *
+ * So exit 97 is UNPROVEN: the suite ran, measured that this machine lacks a
+ * property it needs, and graded nothing on that surface. See godmode.js
+ * (UNPROVEN_EXIT, boneyardCapability) for how a suite is allowed to claim it:
+ * only against a measurement taken in the same run, never against a hostname,
+ * an env var or a hand-set flag.
+ *
+ * UNPROVEN IS NEVER COUNTED AS GREEN. It gets its own column in the run, its
+ * own block in the summary, and it keeps the gate's own exit non-zero, because
+ * a gate that could not run part of itself has not certified a release. The
+ * exit is 97 rather than 1 when nothing actually failed, so the difference
+ * between "the app is broken" and "this machine cannot check it" survives all
+ * the way out to whatever is reading the exit code. */
+const UNPROVEN = 97;
+/* The suites print their own banner; this pulls it back out for the summary so
+   the reason is on screen next to the verdict rather than 200 lines above it. */
+function unprovenLines(out) {
+  const lines = out.split('\n');
+  const rows = lines.filter(l => l.startsWith('UNPRV ')).length;
+  const missing = lines.filter(l => /is UNREACHABLE|no webgl|will not link|read back as|measured NOTHING/.test(l));
+  return { rows, why: [...new Set(missing.map(l => l.trim()))].slice(0, 3) };
 }
 
 /* A SUITE THAT CRASHES MUST NOT LOOK LIKE A QUIET FAILURE. This printed only
@@ -196,6 +228,8 @@ const onDisk = (await readdir(here))
  * 1, in the gate itself. The complement cannot be computed AND have teeth. One line
  * per file is the price, and it puts each omission on the record as a decision. */
 const DECLARED = {
+  'boot-backfill-audit.mjs': ['full', "the first-v385-boot backfill is checkpointed, resumable and behind the paint: PAINT (#screen has content while the retroactive replay is still unfinished), RESUME (twice interrupted by a real page reload, the save still reaches the exact ledger and XP total of an uninterrupted run) and WORK (a resumed boot re-reads at most 75% of the xp store a cold one does). Seeds a 365-day diary and drives four throttled boots with reloads, several minutes, far too slow for the fast tier."],
+  'xp-total-audit.mjs': ['full', "the XP running total: SHAPE (full scans of the xp store do not grow with row count across a burst of awards) plus TRUTH (the cached total equals a from-scratch recount after every award), at 900 / 5400 / 10950 rows. Seeds ~17k rows across three browser passes, about 40s, too slow for the fast tier."],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
   'hollow-audit.mjs': ['full', 'drives the Hollow at two viewports with and without reduced motion, including a real harvest tap and the modal contract. About 90s, too slow for the fast tier.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
@@ -218,7 +252,7 @@ const DECLARED = {
   'glutton-audit.mjs': ['full', 'the Glutton farm stays closed, proven by fighting him and then re-claiming: no coins, no XP, no second ledger row.'],
 
   'paddock-card-audit.mjs': ['full', "the Paddock's per-copy cards: the bond reload round trip, the cap, the badge, the burst, scroll-driven dots. PROMOTE TO FAST when the Paddock ships to players; it is a daily affection surface, it is just not routed on main yet."],
-  'boneyard-audit.mjs': ['full', 'the Boneyard loading and its action bar; run it on any map or action-bar change.'],
+  'boneyard-audit.mjs': ['full', "the Boneyard loading and its action bar; run it on any map or action-bar change. All 22 rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17 on a container with no route to tiles.openfreemap.org it read 11 green and 11 red, and SEVEN of those greens were vacuous: three straggler rows on 0 stragglers, a beat row on 0 beats, a pop-time row on all-zero counts and two INTERACTED rows where false stays false because there is no map to interact with. Its own ARRIVAL-SLOW latency row carries the `stragglers.length > 0` empty-sample guard and went red correctly; the identical ARRIVAL row one section up never got that guard."],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
@@ -229,6 +263,23 @@ const DECLARED = {
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
+  /* WAS MEASUREMENT-ONLY AND EXITED 0 WHILE PRINTING "FINDING XP per clock
+     reset 176.4". Reggie, 2026-08-17: a suite that documents a live exploit and
+     reports success applies no pressure and gets scrolled past, which is the
+     same failure the suite-rot entry exists to avoid. Now that the monotonic
+     day guard exists (claimDay, js/db.js:209) everything the guard BOUNDS is a
+     real assertion, 43 of them, and this goes red if the guard regresses.
+     WHAT IS STILL MEASUREMENT-ONLY, AND WHY, so nobody reads green as clean:
+     the forward walk. A plain forward clock move still pays ~176 XP per reset
+     and no local rule can stop it, because Date.now() and dateKey() read the
+     same device setting, so a day-long jump is arithmetically identical to a
+     day passing. performance.now() is monotonic but its origin dies with the
+     page, and a server timestamp is out (offline-first, and server/ is not
+     ours). The guard's claim is only that the move cannot be UNDONE, and that
+     half is asserted in both directions. Also still findings, unchanged and
+     unfixed: the date-seeded quest rotation is pre-computable a year ahead,
+     and the redeem-code one-shot is per-device kv that an erase resets. */
+  'clock-trust-audit.mjs': ['full', 'ASSERTS the monotonic day guard and MEASURES what is left. Installs a Date shim before any app module runs. Asserts: a never-visited day below the high-water mark pays zero of every daily gate (quest coins, quest claims, free Pit fights, day-close crate, all-quests bonus) with any coin/crate movement attributed to a level-up or it is a leak; an honest forward day more than 20h later still pays the full day; the DAY_GRACE ceiling on BOTH sides of the edge; that an idle month banks no allowance; and that the evening-then-morning player, the eastbound traveller, both NTP corrections and an existing player mid-migration are none of them refused. FINDINGs, not assertions: the 14-day forward walk (unboundable, see the comment above), the pre-computable quest rotation, and the redeem-code one-shot. Fails on an empty sample set. About 60s.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
   'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases and removal, every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
@@ -246,7 +297,9 @@ const DECLARED = {
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
   'melt-ui-audit.mjs': ['full', 'the Salvage Bench: entrance visible without a tap, every row actionable, melt pays exactly once (SOP), every rarity meltable, and transmog on a stat-less slot is offered AND free AND actually changes the look.'],
-  'offline-boot-audit.mjs': ['full', "the other half of v197's network-first shell: the app has to boot with no network. RED on main today, and the red is the finding, not a flake: js/haptics.js and js/bosses.js are static imports of js/app.js that are not in sw.js PRECACHE, so a worker that has only precached serves index.html for them and the app is a dead shell. A returning visitor is fine, they get runtime-cached. Owns its server (it has to stop it), so it takes ~90s."],
+  'offline-boot-audit.mjs': ['full', "the other half of v197's network-first shell: the app has to boot with no network. The old note here said it was RED for a missing PRECACHE entry; that was fixed, and it stayed red for a second reason that was not the app at all. Its offline proof is 'the worker's cache did not grow', which assumes the worker only puts after a network response, and sw.js's static branch fetches at default cache mode so a warm Chrome HTTP cache answers with res.ok and the entry is put with nothing crossing the wire: measured 137 -> 156 with the server stopped and the origin refusing, 137 -> 137 with Network.clearBrowserCache first. setOffline now clears it, which is also the harsher test. 16/16, exit 0, 2026-08-17. Owns its server (it has to stop it), so it takes ~90s."],
+  /* THE NETWORK BETWEEN OFF AND ON, which nothing here had ever driven. */
+  'flaky-network-audit.mjs': ['full', "offline-boot proves the app BOOTS with no network; this drives what happens when you press things, in the three states that are not 'on': GONE, HANGING (accepted and never answered, which no catch in this app could ever reach) and FLAP (the server acts, the answer is lost). Grades what reached the store AND what the player was told, with an online CONTROL twin on every offline row and every gift row gated on the sheet having opened, so an empty sample set cannot read green. Proven red at ddbb079 with only this file copied into a throwaway tree: 11/31 there against 31/31 here, and the 20 red rows are the findings, not a broken harness (its OFFLINE-FIRST rows and every online CONTROL twin are green in BOTH trees). 32/32 and 191s measured on the final file, green on three consecutive runs. Self-serving, and it stops its own server and clears the browser HTTP cache, so 'full' rather than fast."],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
   'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
   'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen.'],
@@ -257,11 +310,11 @@ const DECLARED = {
   'race-audit.mjs': ['full', 'the step race shows one set of numbers everywhere.'],
   'respec-audit.mjs': ['full', 'refund-and-respend needs two taps and really returns the points.'],
   'reward-art-audit.mjs': ['full', 'the victory gear card, read as pixels.'],
-  'scout-audit.mjs': ['full', 'the world follows where you look and stays the same size.'],
+  'scout-audit.mjs': ['full', "the world follows where you look and stays the same size. All six rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17: three red, and both greens vacuous. 'BOUNDED: scouting does not grow the marker count' passed on `0 -> 0 markers`, which is tally/CLAUDE.md rule 11 in one line, a ceiling satisfied by an empty set; 'ANCHORED: a den you only looked at is not enterable' passed because there was no map, not because the distance rule held. window.__map is assigned before the map's error handler runs, so its presence proved nothing either."],
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
   'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
-  't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow.'],
+  't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow. Section 7 (the Boneyard, 11 rows) needs a reachable vector tile host and declares itself UNPROVEN with exit 97 where there is not one, rather than letting two `count(...) === 0` rows pass on a map with nothing on it. Sections 1 to 6 need no map and still grade there.'],
   't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],
   't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
@@ -305,7 +358,7 @@ const DECLARED = {
   'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
   'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
   'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
-  'spire-gate.mjs':       ['full', 'the spire day-gate, which is a rewarded action and has been exploited twice. RED under BOTH headless modes, so it is not the harness. Under triage; it stays declared so it cannot be forgotten.'],
+  'spire-gate.mjs':       ['full', "the spire day-gate, which is a rewarded action and has been exploited twice. The old 'RED under both headless modes' note was wrong about the cause: measured 2026-08-17, the reds were an unreachable vector tile host (https://tiles.openfreemap.org, net::ERR_CERT_AUTHORITY_INVALID from a sandboxed container), not the headless mode and not the GPU, and one row PASSED on `sheets 0 -> 0` because there was no map to open a sheet on. It now measures that property and reports its ten map rows as UNPROVEN with exit 97 where the host is unreachable, so a machine that cannot host it says so by name instead of producing a mixture of reds and vacuous greens. Green with 10 assertions on a connected machine."],
   'balance-audit.js':     ['skip', 'takes a URL argument and is run by hand against live; it has no self-served mode to give the gate.'],
   'fx-audit.js':          ['skip', 'the FX pixel audit, run by hand per tally/CLAUDE.md with a URL. Mandatory before FX work, but not gate-shaped.'],
   'ui-audit.js':          ['skip', 'pasted into the app console and awaited; it is not a node entry point.'],
@@ -346,9 +399,29 @@ const DECLARED = {
      browser starts, so a prove-red that matches nothing cannot read as green. */
   'map-offline-audit.mjs': ['full', "opening the Boneyard with the tile host blocked must give the offline message and throw NOTHING. Arrived with #33 and belonged to no tier, which is the same coverage failure my own two audits caused. 'full' rather than fast: 25s, and it boots MapLibre and aborts real tile requests. It earned the tier the hard way, failing 1 run in 2 on an intermittent null deref that read as flakiness and was a real error; six consecutive green runs after the fix."],
 
+  /* ONE ACCOUNT, TWO TABS, and until 2026-08-17 nothing in this repo had ever
+     opened the app twice. Every other suite here drives ONE page, and a single
+     page cannot produce this failure because the failure IS the second
+     consumer. Two puppeteer pages on one served tree, one origin, one
+     IndexedDB, plus a fake Worker on loopback so the grant rows run the real
+     social.pullGrants() rather than a re-implementation of it.
+     Measured on ddbb079 before the fix and all now assertions: 50 coin awards
+     across two tabs landed on 1280 instead of 1500; a 12-grant feed pulled by
+     both tabs paid 140 of an expected 120 while leaving exactly one ledger row
+     per key; ten gear ids granted twice left twenty inv rows, each melting for
+     full dust; a 12/day XP ceiling paid 190; and Erase all data with a second
+     tab writing left rows standing in three stores.
+     'full' rather than FAST for the ordinary reason: 34s measured, two
+     concurrent browser pages plus two node servers, and the erase block
+     navigates both tabs off ?demo mid-run so it must not race a parallel suite.
+     Seven prove-red modes, each reintroducing exactly one old shape in the
+     bytes on their way out of the server, and each verifying it really
+     substituted before the run is graded. */
+  'multitab-audit.mjs': ['full', "the app open TWICE: exact currency across two tabs, one payout per grant key, one inv row per ownable item, a daily XP ceiling that holds, a stale tab that cannot revert the other one's settings, a returning tab that shows the current balance without losing its open sheet, and an erase that leaves zero rows while the other tab is writing. 28 checks, 38s measured, two live pages, a fake Worker for the real pull path, ten prove-red modes."],
+
   'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Was deliberately red on main while it pinned two unfixed findings; both are fixed as of v391 and it is GREEN, 35 checks. Stays full rather than fast: it installs and upgrades a real service worker across two builds, which is slow and must not race a parallel suite.'],
 
-
+  'input-validation-audit.mjs': ['full', 'every number a player can type, driven through the real controls: weight (kg and lb), quick add, custom food, the portion sheet, daily targets and the plan form, each against empty, whitespace, a partial parse ("12abc"), scientific notation, a grouped thousands comma, an absurd integer, negative and zero. Grades what REACHES THE STORE (bound ZERO, not a trend), whether the player is TOLD, and that legitimate values including a decimal comma still land exactly, so it cannot pass on an app that refuses everything. Carries a COVERAGE half derived from js/app.js, so a new numeric field nobody drove FAILS. Eleven surfaces at ~25 sheet round trips each with toast-queue settles, so it is minutes, not seconds: full, never fast.'],
   'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above."],
 };
 
@@ -477,19 +550,31 @@ try {
   if (!/^no orphaned/.test(out)) console.log(out.split('\n').pop() + '\n');
 } catch { /* never block a gate run on housekeeping */ }
 
+/* WHICH BROWSER STACK IS ABOUT TO GRADE THIS RELEASE. Nothing printed this
+   before, and a stale puppeteer resolved out of an unrelated project on the
+   same machine reported its own missing API as an app defect (see
+   godmode.loadPuppeteer). A gate that cannot name its instrument is not
+   certifying anything. Never fatal here: the PURE tier needs no browser. */
+try {
+  const gm = await import('./godmode.js');
+  await gm.loadPuppeteer();
+  console.log(`instrument: ${gm.puppeteerOriginLine()}\n`);
+} catch (e) {
+  console.log(`instrument: puppeteer UNRESOLVED, so every browser suite below will die at launch:\n        ${String(e.message).split('\n')[0]}\n`);
+}
+
 const results = [];
-for (const f of PURE) {
-  const r = await run(f, []);
-  results.push(r);
-  console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(failLines(r.out));
+const verdict = r => (r.code === 0 ? 'PASS ' : r.code === UNPROVEN ? 'UNPRV' : 'FAIL ');
+function report(r) {
+  console.log(`${verdict(r)} ${r.file.padEnd(24)} ${r.secs}s`);
+  if (r.code === UNPROVEN) {
+    const u = unprovenLines(r.out);
+    console.log(`        ${u.rows} check(s) DID NOT RUN on this machine. Not a pass.`);
+    for (const w of u.why) console.log(`        ${w}`);
+  } else if (r.code !== 0) console.log(failLines(r.out));
 }
-for (const f of BROWSER) {
-  const r = await run(f, [base]);
-  results.push(r);
-  console.log(`${r.code === 0 ? 'PASS' : 'FAIL'}  ${f.padEnd(24)} ${r.secs}s`);
-  if (r.code !== 0) console.log(failLines(r.out));
-}
+for (const f of PURE) { const r = await run(f, []); results.push(r); report(r); }
+for (const f of BROWSER) { const r = await run(f, [base]); results.push(r); report(r); }
 
 if (own) own.server.close();
 if (!runAll && FULL.length) {
@@ -499,10 +584,31 @@ if (!runAll && FULL.length) {
   console.log('      in here silently: the COVERAGE assertion above refuses to start a');
   console.log('      browser until every file on disk is DECLARED with a reason.');
 }
-const bad = results.filter(r => r.code !== 0);
-console.log(`\n${results.length - bad.length}/${results.length} suites green against ${base}`);
+const unprv = results.filter(r => r.code === UNPROVEN);
+const bad = results.filter(r => r.code !== 0 && r.code !== UNPROVEN);
+/* GREEN IS COUNTED OUT OF WHAT WAS ACTUALLY GRADED, and the unproven suites are
+   never folded into either half of that fraction. "50/53 suites green" with
+   three unproven reads as three failures; "50/50 suites green" with three
+   unproven reads as a clean run. Both are wrong, so the count says how many
+   were run at all and the unproven ones are named on their own line. */
+const graded = results.length - unprv.length;
+console.log(`\n${graded - bad.length}/${graded} suites green against ${base}`);
 if (bad.length) console.log(`BLOCKED: ${bad.map(r => r.file).join(', ')}`);
+if (unprv.length) {
+  console.log(`\nUNPROVEN HERE: ${unprv.length} suite(s) did NOT run and are NOT green.`);
+  for (const r of unprv) {
+    const u = unprovenLines(r.out);
+    console.log(`        ${r.file.padEnd(26)} ${u.rows} check(s) not graded`);
+    for (const w of u.why) console.log(`          ${w}`);
+  }
+  console.log('        These guard shipped surfaces and this machine cannot host them.');
+  console.log('        Run the gate somewhere that can before calling a release checked.');
+}
 /* Release on the way out, pass or fail: a lock only ever left behind on a RED run
    trains everyone to ignore the line, which is how it stopped meaning anything. */
 await releaseLock();
-process.exit(bad.length ? 1 : 0);
+/* A real failure outranks an unproven suite: if something was driven and
+   misbehaved, that is the headline and it exits 1. With nothing failing but
+   something unrun, the gate exits 97, which is non-zero (this run certified
+   nothing) and distinguishable (nobody should go hunting for a defect). */
+process.exit(bad.length ? 1 : unprv.length ? UNPROVEN : 0);

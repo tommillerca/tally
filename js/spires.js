@@ -15,7 +15,7 @@
  * state is keyed by spire id in one kv record. Sparser cells than dens (2.2 km
  * vs 1.1 km) so each one reads as a monument rather than litter.
  */
-import { kvGet, kvSet } from './db.js';
+import { kvGet, kvSet, kvUpdate } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const SPIRE_CELL_DEG = 0.02;      // ~2.2 km cells: a couple within a good walk
@@ -257,18 +257,31 @@ export async function tendSpire(id, now = Date.now()) {
   return { ok: true };
 }
 
-/** Collect accrued tribute. In person only: that is the walk trigger. */
+/** Collect accrued tribute. In person only: that is the walk trigger.
+ *
+ * THE RECEIPT AND THE PAYOUT ARE ONE TRANSACTION. This used to read the record,
+ * work out the tribute, then write `collectedAt` back in a second transaction,
+ * so two overlapping collects on one tower both saw the same uncollected days
+ * and both returned the full amount: measured 2026-08-17 on this tree, two
+ * concurrent collectTribute('sp-1-1') each returned 120 coins for one lot of
+ * tribute, and the map's collect button has no re-entry guard on it. Moving
+ * `collectedAt` INSIDE the same transaction that reads it means the second
+ * caller reads a tower that has just been emptied and gets `empty`. */
 export async function collectTribute(id, now = Date.now()) {
-  const state = await spireState();
-  const rec = state[id];
-  if (!rec) return { ok: false, reason: 'not-held' };
-  const view = readSpire(state, { id, ...rec.meta }, now);
-  if (view.dormant) return { ok: false, reason: 'dormant' };
-  if (!view.tribute.days) return { ok: false, reason: 'empty' };
-  rec.collectedAt = now;
-  rec.tendedAt = now;                    // collecting IS a visit
-  await kvSet(KV, state);
-  return { ok: true, coins: view.tribute.coins, dust: view.tribute.dust, days: view.tribute.days };
+  let out = { ok: false, reason: 'not-held' };
+  await kvUpdate(KV, (state) => {
+    const st = state || {};
+    const rec = st[id];
+    if (!rec) { out = { ok: false, reason: 'not-held' }; return undefined; }
+    const view = readSpire(st, { id, ...rec.meta }, now);
+    if (view.dormant) { out = { ok: false, reason: 'dormant' }; return undefined; }
+    if (!view.tribute.days) { out = { ok: false, reason: 'empty' }; return undefined; }
+    rec.collectedAt = now;
+    rec.tendedAt = now;                  // collecting IS a visit
+    out = { ok: true, coins: view.tribute.coins, dust: view.tribute.dust, days: view.tribute.days };
+    return st;
+  }, {});
+  return out;
 }
 
 /** The NPC that holds an unclaimed spire, scaled to the player. */

@@ -1,0 +1,618 @@
+/* CLOCK TRUST. Every daily limit in this game is decided by the device's own
+ * clock via dateKey() (js/nutrition.js:132, `new Date()` in LOCAL time) and by
+ * the device's own IndexedDB, and the level that falls out of it is pushed to a
+ * SHARED leaderboard the server ranks by `json_extract(profile,'$.level')`
+ * (server/src/index.js:658, ORDER BY lvl DESC at :676).
+ *
+ * WHAT CHANGED, 2026-08-17. This file started life as a pure measurement: it
+ * moved a clock and counted what a player collects per reset, and it exited 0
+ * while printing "FINDING XP per clock reset 176.4". That was honest as a
+ * measurement and useless as a gate entry: a suite that documents a live
+ * exploit and reports success is the same failure the suite-rot entry exists
+ * to catch, because green is what people read. The monotonic day guard
+ * (claimDay, js/db.js:209) now exists, so everything the guard bounds is an
+ * ASSERTION here with a stated direction and a stated bound, and goes RED if
+ * the guard regresses. What remains a FINDING is named below, with the reason
+ * it cannot be asserted.
+ *
+ * WHAT STAYS A MEASUREMENT, AND WHY. A plain forward clock move, a full ~24h
+ * per day claimed, is NOT detectable and is not asserted down to zero. There
+ * is no trustworthy clock on the device: Date.now() and dateKey() read the
+ * same setting, so a day-long jump moves both terms together and no local rule
+ * can tell it from a day passing. `performance.now()` is monotonic but its
+ * origin resets on every page load, so a force-quit erases it. A server
+ * timestamp would work; this app is offline-first and server/ is not ours.
+ * So the forward-walk figure below stays a FINDING and the release-gate tier
+ * description says so, per Reggie's option (b). The guard's value is that the
+ * move cannot be UNDONE, and that half IS asserted, below, in both directions.
+ *
+ * HOW THE CLOCK IS MOVED, and why this way. puppeteer 24.43.1 ships no clock
+ * API: there is no `page.emulateClock`, and `Emulation.setVirtualTimePolicy`
+ * over CDP drives the RENDERING clock (it pauses/advances timers and starves
+ * IndexedDB callbacks), which is the wrong tool for a date gate. What is
+ * installed instead, in `page.evaluateOnNewDocument` so it is live before any
+ * app module runs, is a `Date` shim whose offset lives in localStorage and so
+ * survives reloads. That is a faithful stand-in: every gate below reads the
+ * date through `new Date()` / `Date.now()` in the page, which is exactly the
+ * surface an OS clock change moves. No traffic leaves 127.0.0.1.
+ *
+ * ONE THING THE SHIM CANNOT DO is separate the local calendar from UTC, which
+ * is what a TIMEZONE change does. Those cases (the eastbound traveller, the
+ * grace ceiling) are driven by moving the guard's own anchor row instead, and
+ * are labelled ANCHOR where that is what happened, so nobody reads them as a
+ * full end-to-end simulation.
+ *
+ * DIRECTION and BOUND, per surface:
+ *   FORWARD WALK     direction: more per reset is worse.  BOUND: none assertable
+ *                    (see above). Reported as a FINDING, 14 resets.
+ *   BACKWARDS HARVEST direction: any payout is failure.   BOUND: exactly zero
+ *                    guard-covered rewards (crates, quests, day-close, free
+ *                    fights, coins) on a never-before-visited day below the
+ *                    high-water mark.
+ *   HONEST DAY       direction: ZERO payout is failure.   BOUND: a genuine
+ *                    forward day more than 20h later pays the full day.
+ *   GRACE CEILING    direction: too permissive is failure. BOUND: DAY_GRACE
+ *                    days of headroom, asserted on BOTH sides of the edge.
+ *   HONEST PLAYER    direction: a refusal is failure.     BOUND: none of the
+ *                    evening-then-morning, traveller-east, or NTP-correction
+ *                    cases may be refused.
+ *
+ * Self-serves via godmode.serveTree(ROOT), so it never needs a server handed
+ * to it, and never points at the live production site. It FAILs on an empty
+ * sample set, because a cycle that collected nothing means the harness broke,
+ * not that the game is safe.
+ */
+import { boot, sleep, serveTree } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const argv = process.argv[2] || process.env.URL;
+const srvHandle = argv ? null : await serveTree(ROOT);
+const base = argv || srvHandle.url;
+const DAYS = Number(process.env.DAYS || 14);
+const HOUR = 3600000;
+
+let bad = 0;
+const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
+const finding = (l, d = '') => console.log(`FINDING ${l}${d ? '  ' + d : ''}`);
+
+const { browser, page } = await boot(base);
+
+try {
+  /* The shim. Declared before the reload so it is installed for the boot path
+     too, not bolted on after the app has already read the date once. */
+  await page.evaluateOnNewDocument(() => {
+    const Real = Date;
+    const off = () => Number(localStorage.getItem('__clockOffsetMs') || 0);
+    function Shim(...a) { return a.length ? new Real(...a) : new Real(Real.now() + off()); }
+    Shim.prototype = Real.prototype;
+    Shim.now = () => Real.now() + off();
+    Shim.parse = Real.parse; Shim.UTC = Real.UTC;
+    Object.setPrototypeOf(Shim, Real);
+    window.Date = Shim;
+    window.__realNow = () => Real.now();
+  });
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(2200);
+
+  const shiftDays = d => page.evaluate(n => {
+    localStorage.setItem('__clockOffsetMs', String(n * 86400000));
+    return new Date().toISOString();
+  }, d);
+
+  /* Put the page's local clock at a specific LOCAL day-offset and hour. Needed
+     for the evening-then-morning case, where the whole point is that only nine
+     hours pass across a real day boundary. */
+  const gotoLocal = (dayDelta, hour) => page.evaluate((dd, h) => {
+    const real = window.__realNow();
+    const b = new Date(real);
+    const target = new Date(b.getFullYear(), b.getMonth(), b.getDate() + dd, h, 0, 0, 0).getTime();
+    localStorage.setItem('__clockOffsetMs', String(target - real));
+    const n = new Date();
+    return { key: `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`,
+             now: Date.now(), local: n.toString() };
+  }, dayDelta, hour);
+
+  // Direct access to the guard, for the cases the reward path cannot express.
+  const guard = {
+    reset: () => page.evaluate(async () => {
+      const db = await import('./js/db.js');
+      await db.kvSet('dayHighWater', null);
+      await db.kvSet('dayPaceKey', null);
+      await db.kvSet('dayPaceAt', 0);
+      return true;
+    }),
+    claim: (key) => page.evaluate(async k => {
+      const [db, nut] = await Promise.all([import('./js/db.js'), import('./js/nutrition.js')]);
+      const r = await db.claimDay(k || nut.dateKey());
+      return { ...r, key: k || nut.dateKey(), state: await db.dayGuardState() };
+    }, key || null),
+    state: () => page.evaluate(async () => (await import('./js/db.js')).dayGuardState()),
+    // ANCHOR: pretend no UTC time has passed since the anchor, which is exactly
+    // what a timezone change does to the local calendar. The shim cannot.
+    anchorAtNow: () => page.evaluate(async () => {
+      const db = await import('./js/db.js');
+      await db.kvSet('dayPaceAt', Date.now());
+      return db.dayGuardState();
+    }),
+    anchorAgoMs: (ms) => page.evaluate(async v => {
+      const db = await import('./js/db.js');
+      await db.kvSet('dayPaceAt', Date.now() - v);
+      return db.dayGuardState();
+    }, ms),
+    grace: () => page.evaluate(async () => (await import('./js/db.js')).DAY_GRACE),
+  };
+  const keyFor = (dayDelta) => page.evaluate(dd => {
+    const b = new Date(window.__realNow());
+    const d = new Date(b.getFullYear(), b.getMonth(), b.getDate() + dd);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, dayDelta);
+
+  // Prove the shim actually moves the app's OWN date function, not just Date.
+  const proof = await page.evaluate(async () => {
+    const n = await import('./js/nutrition.js');
+    const before = n.dateKey();
+    localStorage.setItem('__clockOffsetMs', String(3 * 86400000));
+    const after = n.dateKey();
+    const ordStable = n.dayOrdinal('2026-01-05');
+    localStorage.setItem('__clockOffsetMs', '0');
+    return { before, after, ordStable, ordAfter: n.dayOrdinal('2026-01-05'),
+      ordDiff: n.dayOrdinal(after) - n.dayOrdinal(before) };
+  });
+  check('clock shim moves js/nutrition.js dateKey()', proof.before !== proof.after,
+    `${proof.before} -> ${proof.after}`);
+  /* dayOrdinal is the one date function the clock must not be able to move: if
+     it ever grows a `new Date()` inside, the whole guard becomes clock-relative
+     and silently stops guarding. FAILURE DIRECTION: the two readings differ. */
+  check('dayOrdinal() is clock-proof (same key, clock moved 3 days)',
+    proof.ordStable === proof.ordAfter && Number.isFinite(proof.ordStable),
+    `${proof.ordStable} == ${proof.ordAfter}`);
+  check('dayOrdinal() counts the shim move as exactly 3 days', proof.ordDiff === 3, `delta ${proof.ordDiff}`);
+
+  const GRACE = await guard.grace();
+  check('DAY_GRACE is a real, small number', Number.isInteger(GRACE) && GRACE >= 1 && GRACE <= 5, `DAY_GRACE=${GRACE}`);
+
+  /* One simulated day of the cheapest possible play: log three meals (three
+     taps), settle yesterday, take the free Pit fights, claim whatever daily
+     quests are genuinely satisfied, and read whether the wheel has re-armed.
+     Nothing here fakes progress: every claim goes through the app's real
+     award()/claimQuest() and would refuse a second time on the same date. */
+  const runCycle = () => page.evaluate(async () => {
+    const [nut, game, quests, loot, energy, db] = await Promise.all([
+      import('./js/nutrition.js'), import('./js/game.js'), import('./js/quests.js'),
+      import('./js/loot.js'), import('./js/energy.js'), import('./js/db.js'),
+    ]);
+    const targets = { kcal: 2200, p: 150, c: 220, f: 70 };
+    const day = nut.dateKey();
+    const xp0 = await game.totalXp(), coin0 = await loot.coins();
+    const inv0 = (await db.db.all('inv')).length;
+    const guardBefore = await db.dayGuardState();
+
+    // three meals, ordinary food, well inside budget -> an on-budget day
+    const meals = [0, 1, 2];
+    for (const m of meals) {
+      const e = { id: `ct-${day}-${m}`, date: day, meal: m, name: 'Chicken and rice',
+                  kcal: 600, p: 50, c: 60, f: 15, qty: 1, ts: Date.now() };
+      await db.db.put('log', e);
+      await game.onFoodLogged(e, { targets, entriesForDate: await db.db.byIndex('log', 'date', day) });
+    }
+
+    // settle yesterday: this is the day-close crate + XP (js/game.js:479)
+    const closed = await game.awardDayCloseIfDue(targets);
+
+    // free Pit fights (js/energy.js:48) — count how many the reset handed back
+    await energy.refreshPitEnergy();
+    let free = 0;
+    for (let i = 0; i < 10; i++) { const r = await energy.spendPitFight(); if (r.ok && r.used === 'free') free++; else break; }
+
+    // the wheel gate (js/wheel.js:198). Open == the spin is available again.
+    const wheelOpen = (await db.kvGet('wheelLastDate', null)) !== day;
+
+    // daily quests: claim only the ones actually satisfied by the above
+    const allXp = await db.db.all('xp');
+    const qs = quests.dailyQuests(day, { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false });
+    const ctx = quests.questCtx('day', {
+      date: day, entries: await db.db.byIndex('log', 'date', day), allXp,
+      allLog: await db.db.all('log'), healthRows: await db.db.all('health'),
+      targets, weighedToday: false, priorFoodIds: new Set(),
+    });
+    let claimedQ = 0, questCoins = 0, questXp = 0;
+    for (const q of qs) {
+      const st = quests.questState(q, ctx);
+      if (!st.done || st.claimed) continue;
+      const r = await quests.claimQuest(day, q, 'day');
+      if (r) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
+    }
+    const bonus = await quests.claimAllBonusIfDue(day, qs, await db.db.all('xp'));
+
+    const xp1 = await game.totalXp(), coin1 = await loot.coins();
+    const inv1 = (await db.db.all('inv')).length;
+    return {
+      day, xp: xp1 - xp0, coins: coin1 - coin0, inv: inv1 - inv0,
+      closed: !!closed?.closed, consoled: !!closed?.consoled,
+      free, wheelOpen, claimedQ, questCoins, questXp, bonus: !!bonus,
+      level0: game.levelFor(xp0).level, level: game.levelFor(xp1).level, totalXp: xp1,
+      wall: Date.now(),
+      guardBefore, guardAfter: await db.dayGuardState(),
+      questNames: qs.map(q => q.id),
+    };
+  });
+
+  /* EXACTLY the daily gates claimDay stands in front of, and nothing else. Two
+     things are deliberately excluded, because folding them in would make this
+     block either unstable or dishonest:
+       - food-logging XP: `log-<entryId>` is keyed by the ENTRY, not the date,
+         so it is not a daily limit and no day guard can or should touch it;
+       - the raw coin and inventory deltas: a LEVEL-UP fires off that logging
+         XP and pays coins and a crate through grantLevelRewards, which is a
+         progression reward, not a daily one. It is asserted separately below,
+         by attribution, so a real daily-gate leak can never hide inside it. */
+  const guardCovered = r => ({
+    questCoins: r.questCoins, freeFights: r.free, questClaims: r.claimedQ,
+    dayCloseCrate: r.closed || r.consoled, allQuestBonus: r.bonus,
+  });
+  const guardCoveredTotal = r => r.questCoins + r.free + r.claimedQ +
+    (r.closed || r.consoled ? 1 : 0) + (r.bonus ? 1 : 0);
+
+  /* ================= 1. THE FORWARD WALK (FINDING, not assertion) =========
+     DIRECTION: forward. BOUND: 14 simulated days, the point where the per-day
+     figures stop moving. This is the measurement the guard CANNOT bound; see
+     the header. It is kept because the number is the argument for the guard,
+     and because a change in it is worth seeing. */
+  await shiftDays(0);
+  const day0 = await runCycle();
+  const rows = [];
+  const t0 = Date.now();
+  for (let d = 1; d <= DAYS; d++) {
+    await shiftDays(d);
+    rows.push(await runCycle());
+  }
+  const wallMs = Date.now() - t0;
+
+  check('sample set is not empty', rows.length === DAYS, `${rows.length} simulated days`);
+  const sum = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const n = rows.length || 1;
+
+  console.log('\n--- per simulated day (DIRECTION: forward, BOUND: ' + DAYS + ' days) ---');
+  for (const r of rows) {
+    console.log(`  ${r.day}  xp+${String(r.xp).padStart(4)}  coins+${String(r.coins).padStart(4)}` +
+      `  inv+${r.inv}  free-fights ${r.free}  wheel ${r.wheelOpen ? 'ARMED' : 'spent'}` +
+      `  dayclose ${r.closed ? 'GOLDEN' : r.consoled ? 'common' : '-'}  quests ${r.claimedQ}${r.bonus ? '+bonus' : ''}`);
+  }
+
+  const perDay = k => (sum(k) / n).toFixed(1);
+  finding('baseline day 0', `xp+${day0.xp} coins+${day0.coins} inv+${day0.inv} free-fights ${day0.free}`);
+  finding('XP per clock reset (FULL 24h forward jump, UNBOUNDABLE)',
+    `${perDay('xp')} (total ${sum('xp')} over ${n} resets). The guard does not and cannot reduce this: ` +
+    `Date.now() moves with dateKey(), so a day-long jump is indistinguishable from a day passing.`);
+  finding('coins per clock reset', `${perDay('coins')} (total ${sum('coins')})`);
+  finding('inventory rows per clock reset', `${perDay('inv')} (crates + consumables, total ${sum('inv')})`);
+  finding('free Pit fights per clock reset', `${perDay('free')} (cap FREE_FIGHTS=3, js/energy.js:8)`);
+  finding('day-close crates', `${rows.filter(r => r.closed).length} golden, ${rows.filter(r => r.consoled).length} common, of ${n}`);
+  finding('daily wheel re-armed', `${rows.filter(r => r.wheelOpen).length} of ${n} resets`);
+  finding('daily quests claimed', `${sum('claimedQ')} claims + ${rows.filter(r => r.bonus).length} all-quests bonus crates`);
+  finding('level', `${day0.level} -> ${rows[rows.length - 1].level} on ${rows[rows.length - 1].totalXp} XP`);
+  finding('what the forward walk NOW costs the farmer',
+    `the high-water mark ends at ${rows[rows.length - 1].guardAfter.highWater}, i.e. ${DAYS} days in the future. ` +
+    `Every real day until the calendar catches up pays zero, which is the assertion block below.`);
+
+  const secsPerReset = wallMs / 1000 / n;
+  finding('wall-clock cost', `${secsPerReset.toFixed(1)}s per reset in this harness ` +
+    `=> ${Math.round(3600 / secsPerReset)} resets/hour, ` +
+    `${Math.round((sum('xp') / n) * (3600 / secsPerReset))} XP/hour, ` +
+    `${Math.round((sum('coins') / n) * (3600 / secsPerReset))} coins/hour if fully scripted`);
+
+  /* ================= 2. THE BACKWARDS HARVEST (ASSERTED) ==================
+     This is the exploit the guard exists to close, and it is the cheap one:
+     jump to +105, collect, then walk BACK through the days you skipped, every
+     one of which is an unvisited date and therefore a full set of unclaimed
+     award() keys. Days 100+ are used deliberately so they are nowhere near
+     the forward walk above: a "pays nothing" that is really the per-key ledger
+     refusing a day it already paid would be a pass for the wrong reason, which
+     is anti-regression rule 1.
+     DIRECTION: any guard-covered payout on the backwards day is a FAILURE.
+     BOUND: exactly zero. */
+  console.log('\n--- backwards harvest: +105, then back to an unvisited +102 ---');
+  await guard.reset();
+  /* Warm +104 first so the +105 control is a FULL day: awardDayCloseIfDue only
+     settles a yesterday that has log rows, so without this the control pays no
+     crate and no quests and "the backwards day is cheaper" compares two thin
+     days and means nothing. */
+  await shiftDays(104);
+  await runCycle();
+  await shiftDays(105);
+  const fwd = await runCycle();
+  check('CONTROL: the +105 day pays, so the guard is not simply refusing everything',
+    guardCoveredTotal(fwd) > 0 && fwd.xp > 0,
+    `xp+${fwd.xp} coins+${fwd.coins} inv+${fwd.inv} free ${fwd.free} quests ${fwd.claimedQ} guard=${fwd.guardAfter.highWater}`);
+
+  await shiftDays(102);
+  const backKey = await keyFor(102);
+  const backProbe = await guard.claim(backKey);
+  check('claimDay refuses a day below the high-water mark, BY NAME',
+    backProbe.fresh === false && backProbe.reason === 'backwards',
+    `fresh=${backProbe.fresh} reason=${backProbe.reason} highWater=${backProbe.highWater}`);
+  check('a refused day WRITES NOTHING: the mark is unmoved',
+    backProbe.state.highWater === fwd.guardAfter.highWater,
+    `${backProbe.state.highWater} still == ${fwd.guardAfter.highWater}`);
+
+  const back = await runCycle();
+  const bc = guardCovered(back);
+  check('backwards day pays ZERO quest coins', bc.questCoins === 0, `quest coins+${bc.questCoins}`);
+  check('backwards day hands back ZERO free Pit fights', bc.freeFights === 0, `free ${bc.freeFights} (FREE_FIGHTS=3)`);
+  check('backwards day claims ZERO daily quests', bc.questClaims === 0, `${bc.questClaims} claims`);
+  check('backwards day settles NO day-close crate', bc.dayCloseCrate === false, `closed=${back.closed} consoled=${back.consoled}`);
+  check('backwards day pays NO all-quests bonus crate', bc.allQuestBonus === false);
+  check('backwards day: every guard-covered daily reward is zero', guardCoveredTotal(back) === 0,
+    JSON.stringify(bc));
+  /* THE ATTRIBUTION CHECK, and it is the one that stops the block above being
+     comfortable. Coins and crates CAN still move on a refused day, because the
+     ungated logging XP can cross a level boundary and grantLevelRewards pays
+     out. That is progression, not a daily gate. So: either nothing moved, or a
+     level really was gained. FAILURE DIRECTION: coins or inventory appear on a
+     refused day with NO level-up behind them, which means a daily gate leaked. */
+  const levelled = back.level > back.level0;
+  check('any coins or crates on a refused day are a LEVEL-UP, not a leaked daily gate',
+    (back.coins === 0 && back.inv === 0) || levelled,
+    `coins+${back.coins} inv+${back.inv} level ${back.level0}->${back.level}`);
+  if (back.coins || back.inv) {
+    finding('level-up spillover on a refused day',
+      `coins+${back.coins} inv+${back.inv} from level ${back.level0}->${back.level}, paid by ` +
+      `grantLevelRewards off the ungated logging XP. Not a daily gate, so claimDay does not and ` +
+      `should not touch it; it is bounded by the levelling curve, not by the number of clock resets.`);
+  }
+  /* The residual is real and it is named rather than hidden. `log-<entryId>`
+     and the streak rows it feeds are keyed by the food entry, not by the date,
+     so logging three meals pays the same on any day and a day guard is the
+     wrong tool for it. Reported with its measured size so nobody reads
+     "guard-covered is zero" as "the clock is now worth nothing". */
+  finding('residual XP on a refused day (ungated food-logging path)',
+    `${back.xp} XP, against ${fwd.xp} on the honest +105 day. This is award('log-<entryId>') ` +
+    `plus the streak rows it feeds; those keys are per ENTRY, not per DATE, so they are not a ` +
+    `daily limit and claimDay is the wrong place to gate them. js/game.js:281 onFoodLogged is ` +
+    `the next call site if that residual is judged worth closing.`);
+  check('the backwards day is strictly cheaper than the honest one', back.xp < fwd.xp,
+    `${back.xp} < ${fwd.xp}`);
+
+  /* ================= 3. THE HONEST FORWARD DAY (ASSERTED) =================
+     A guard that refuses everything passes section 2 for entirely the wrong
+     reason. DIRECTION: a ZERO payout here is the FAILURE. BOUND: a genuine
+     forward day, more than 20 hours of wall clock after the last honest one,
+     pays the full day. */
+  console.log('\n--- honest forward day: +106, a real day after +105 ---');
+  await shiftDays(106);
+  const honestKey = await keyFor(106);
+  const honestProbe = await guard.claim(honestKey);
+  check('claimDay opens a genuine new day, BY NAME',
+    honestProbe.fresh === true && honestProbe.reason === 'advanced',
+    `fresh=${honestProbe.fresh} reason=${honestProbe.reason}`);
+  const honest = await runCycle();
+  const hoursSinceHonest = (honest.wall - fwd.wall) / HOUR;
+  check('the honest day really is more than 20 hours after the last one',
+    hoursSinceHonest > 20, `${hoursSinceHonest.toFixed(1)}h of wall clock`);
+  check('honest forward day still pays a day-close crate', honest.closed || honest.consoled,
+    `closed=${honest.closed} consoled=${honest.consoled}`);
+  check('honest forward day hands back the full free-fight floor', honest.free === 3, `free ${honest.free}`);
+  check('honest forward day still claims daily quests', honest.claimedQ > 0, `${honest.claimedQ} claims`);
+  check('honest forward day still pays coins', honest.coins > 0, `coins+${honest.coins}`);
+  check('honest forward day still pays XP', honest.xp > 0, `xp+${honest.xp}`);
+  check('honest forward day is worth as much as the pre-guard forward walk',
+    honest.xp >= Number(perDay('xp')) * 0.8,
+    `${honest.xp} vs measured mean ${perDay('xp')} per reset`);
+
+  /* ================= 4. THE GRACE CEILING (ASSERTED, BOTH SIDES) ==========
+     Rule 2: the local date may not outrun UTC elapsed by more than DAY_GRACE.
+     The shim cannot move the local calendar without moving UTC, because that
+     is a TIMEZONE change, so the anchor row is moved instead and the case is
+     labelled ANCHOR. DIRECTION: too permissive is the failure the farmer wants
+     and too strict is the failure the traveller feels, so BOTH sides of the
+     edge are asserted. BOUND: exactly DAY_GRACE. */
+  console.log(`\n--- ANCHOR: the grace ceiling, both sides of DAY_GRACE=${GRACE} ---`);
+  for (const delta of [GRACE, GRACE + 1]) {
+    await guard.reset();
+    await shiftDays(300);
+    await guard.claim(await keyFor(300));          // seed the mark at +300
+    await shiftDays(300 + delta);
+    await guard.anchorAtNow();                     // ANCHOR: zero UTC elapsed
+    const r = await guard.claim(await keyFor(300 + delta));
+    const shouldPass = delta <= GRACE;
+    check(`${delta} local days with ZERO elapsed time is ${shouldPass ? 'allowed' : 'REFUSED'}`,
+      r.fresh === shouldPass && (shouldPass || r.reason === 'too-fast'),
+      `fresh=${r.fresh} reason=${r.reason} allowed=${r.allowed} claimed=${r.claimed}`);
+  }
+
+  /* Idle allowance must not bank. A player away for a month must not come back
+     holding thirty days of headroom to spend in one sitting.
+     DIRECTION: an accepted jump here is the failure. */
+  await guard.reset();
+  await shiftDays(400);
+  await guard.claim(await keyFor(400));
+  await shiftDays(430);
+  await guard.claim(await keyFor(430));            // 30 honest days pass
+  await guard.anchorAtNow();                       // ANCHOR: from here, no time passes
+  const banked = await guard.claim(await keyFor(430 + GRACE + 1));
+  check('an idle month does NOT bank spendable allowance',
+    banked.fresh === false && banked.reason === 'too-fast',
+    `fresh=${banked.fresh} reason=${banked.reason} allowed=${banked.allowed} claimed=${banked.claimed}`);
+
+  /* ================= 5. THE HONEST PLAYER MUST NOT BE REFUSED ============
+     Every one of these is a real person, and every one of them is a FAILURE
+     if the guard says no. This block is the reason the first design (a rolling
+     "20 hours since the last day we saw") was thrown away: it refuses the very
+     first case here, every night, for every evening-then-morning player. */
+  console.log('\n--- the honest player: a refusal in this block is a FAILURE ---');
+
+  // 5a. 23:00 last night, 08:00 this morning. Nine hours across a real boundary.
+  await guard.reset();
+  const evening = await gotoLocal(200, 23);
+  const seed = await guard.claim(evening.key);
+  check('seeding: an existing player is let through on their first ever call',
+    seed.fresh === true && seed.reason === 'seeded', `reason=${seed.reason} key=${seed.key}`);
+  const morning = await gotoLocal(201, 8);
+  const gap = (morning.now - evening.now) / HOUR;
+  const morningClaim = await guard.claim(morning.key);
+  check('evening-then-morning player is NOT refused (9h across a real day boundary)',
+    morningClaim.fresh === true && morningClaim.reason === 'advanced',
+    `${gap.toFixed(1)}h gap, ${evening.key} -> ${morning.key}, fresh=${morningClaim.fresh} reason=${morningClaim.reason}` +
+    ` [the rejected 20h-rolling design returns fresh=false here]`);
+  check('...and that gap really is under 20 hours, so the check is not vacuous',
+    gap > 0 && gap < 20, `${gap.toFixed(1)}h`);
+
+  // 5b. Same day, twice. Must be free and must write nothing.
+  const st1 = await guard.state();
+  const again = await guard.claim(morning.key);
+  const st2 = await guard.state();
+  check('a second call on the SAME day is fresh and stateless',
+    again.fresh === true && again.reason === 'same-day' && st1.paceAt === st2.paceAt,
+    `reason=${again.reason} paceAt ${st1.paceAt} == ${st2.paceAt}`);
+
+  // 5c. The eastbound traveller. LA Monday 22:00 PDT -> Sydney Wednesday 06:00
+  //     AEST: two local dates for fifteen hours of flight. ANCHOR, because the
+  //     19-hour zone shift is exactly what the Date shim cannot express.
+  await guard.reset();
+  await shiftDays(500);
+  await guard.claim(await keyFor(500));
+  await shiftDays(502);
+  await guard.anchorAgoMs(15 * HOUR);              // ANCHOR: 15h of flight
+  const traveller = await guard.claim(await keyFor(502));
+  check('eastbound traveller crossing the date line is NOT refused (2 local days, 15h elapsed)',
+    traveller.fresh === true, `fresh=${traveller.fresh} reason=${traveller.reason} allowed=${traveller.allowed}`);
+
+  // 5d. The westbound traveller. This one DOES cost a day, and the cost is
+  //     bounded and stated rather than hidden.
+  await guard.reset();
+  await shiftDays(510);
+  await guard.claim(await keyFor(510));
+  const west = await guard.claim(await keyFor(509));
+  const westBack = await guard.claim(await keyFor(510));
+  const westNext = await guard.claim(await keyFor(511));
+  check('westbound traveller loses the day BELOW the mark (this is the stated cost)',
+    west.fresh === false && west.reason === 'backwards', `reason=${west.reason}`);
+  check('...and nothing more: the mark day and the next day both open normally',
+    westBack.fresh === true && westNext.fresh === true,
+    `same-day=${westBack.reason} next=${westNext.reason}`);
+  finding('what a traveller loses',
+    'eastbound: nothing. westbound across the date line: the dailies for the local dates that ' +
+    'fall below the high-water mark, which is at most one day, then normal service. That is the ' +
+    'deliberate trade for making "backwards" absolute.');
+
+  // 5e. NTP corrections, both directions, after a flat battery.
+  await guard.reset();
+  await shiftDays(600);
+  const trueDay = await guard.claim(await keyFor(600));
+  const stuckPast = await guard.claim(await keyFor(570));       // RTC stuck 30 days back
+  const stateAfterPast = await guard.state();
+  const ntpForward = await guard.claim(await keyFor(601));      // NTP lands, next real day
+  check('NTP: a clock stuck in the PAST is refused and heals on correction',
+    stuckPast.fresh === false && stuckPast.reason === 'backwards' &&
+    stateAfterPast.highWater === trueDay.state.highWater && ntpForward.fresh === true,
+    `stuck=${stuckPast.reason}, mark unmoved at ${stateAfterPast.highWater}, after=${ntpForward.reason}`);
+
+  await guard.reset();
+  await shiftDays(700);
+  const trueDay2 = await guard.claim(await keyFor(700));
+  await guard.anchorAtNow();
+  const garbageFuture = await guard.claim(await keyFor(700 + 3650));   // RTC reads a decade ahead
+  const stateAfterFuture = await guard.state();
+  const ntpBack = await guard.claim(await keyFor(700));
+  check('NTP: a garbage FUTURE clock is refused, writes nothing, and heals on correction',
+    garbageFuture.fresh === false && garbageFuture.reason === 'too-fast' &&
+    stateAfterFuture.highWater === trueDay2.state.highWater && ntpBack.fresh === true,
+    `future=${garbageFuture.reason}, mark unmoved at ${stateAfterFuture.highWater}, after=${ntpBack.reason}`);
+  check('the guard has no latch: every refusal is stateless',
+    stateAfterFuture.highWater === trueDay2.state.highWater &&
+    stateAfterPast.highWater === trueDay.state.highWater,
+    'a refusal can never leave a player permanently locked out');
+
+  /* ================= 6. MIGRATION (ASSERTED) =============================
+     An existing player must not lose a day to the update itself, wherever
+     their clock happens to be. DIRECTION: a refusal on the first ever call is
+     the failure. */
+  await guard.reset();
+  await shiftDays(-40);                              // a player whose clock is well behind
+  const migrateBehind = await guard.claim();
+  await guard.reset();
+  await shiftDays(900);                              // a player who already farmed
+  const migrateAhead = await guard.claim();
+  check('MIGRATION: the first call after the update always seeds, never penalises',
+    migrateBehind.fresh === true && migrateBehind.reason === 'seeded' &&
+    migrateAhead.fresh === true && migrateAhead.reason === 'seeded',
+    `behind=${migrateBehind.key} ahead=${migrateAhead.key}`);
+  finding('migration policy',
+    'dayHighWater starts null, so the mark seeds from wherever the player already is. Nobody is ' +
+    'retroactively penalised and nobody who already farmed is rolled back. The alternative would ' +
+    'punish a legitimate player whose device is a day off, to reclaim XP that is already spent.');
+
+  await shiftDays(0);
+
+  /* THE SEEDED-PRIZE CONSEQUENCE. Both the wheel prize (js/wheel.js:205,
+     mulberry32(hashStr('wheel:'+today))) and the day's three quests
+     (js/quests.js:221, 'quests:'+date) are PURE FUNCTIONS OF THE DATE STRING.
+     Date-seeding was chosen so a reload cannot reroll the prize. Under a
+     movable clock it inverts: the player can compute every future date's
+     outcome offline and set the clock only to the dates that pay. Measured by
+     asking the app's own wheel gate + quest picker about a year of dates.
+     STAYS A FINDING: the guard does not change it, because it is a property of
+     the seeding scheme, not of the day gate. Skipping to a chosen future date
+     still works; what the guard adds is that you cannot skip BACK afterwards. */
+  const seeded = await page.evaluate(async () => {
+    const quests = await import('./js/quests.js');
+    // the wheel's picker is module-private; the day's quests are not, and they
+    // are the same seeded-by-date shape, so measure the shape we can reach.
+    const trivial = new Set(['q-first', 'q-water', 'q-bed', 'q-weigh', 'q-log5', 'q-3meals']);
+    let allTrivial = 0, scanned = 0;
+    const d0 = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + i);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const qs = quests.dailyQuests(k, { hkConnected: true, huntEnabled: true, socialOn: true, pitTried: true, kitchenReady: true });
+      scanned++;
+      if (qs.every(q => trivial.has(q.id))) allTrivial++;
+    }
+    return { scanned, allTrivial };
+  });
+  check('seeded-quest scan produced a sample', seeded.scanned === 365, `${seeded.scanned} dates`);
+  finding('date-seeded quest rotation is pre-computable',
+    `${seeded.allTrivial} of ${seeded.scanned} future dates hand out three quests a cheat can finish with taps alone ` +
+    `(${(seeded.allTrivial / seeded.scanned * 100).toFixed(1)}%); a clock-mover skips to those dates`);
+
+  /* REDEEM CODES: confirm they are in the shipped bundle and that the one-shot
+     is per-device kv, which is what an "erase everything" fix interacts with. */
+  const redeem = await page.evaluate(async () => {
+    const loot = await import('./js/loot.js');
+    const db = await import('./js/db.js');
+    const src = await (await fetch('./js/loot.js')).text();
+    const before = await db.kvGet('redeemed', []);
+    const r1 = await loot.redeemCode('BONEHEADZ');
+    const mid = await db.kvGet('redeemed', []);
+    const r2 = await loot.redeemCode('BONEHEADZ');
+    await db.kvSet('redeemed', []);                 // exactly what an erase does
+    const r3 = await loot.redeemCode('BONEHEADZ');
+    const after = await db.kvGet('redeemed', []);
+    return {
+      codes: Object.keys(loot.REDEEM_CODES),
+      inShippedSource: /BONEHEADZ:\s*\{/.test(src) && /COSMICPET/.test(src),
+      before, mid, after,
+      first: r1.ok, second: r2.ok, secondReason: r2.reason, afterErase: r3.ok,
+    };
+  });
+  check('redeem codes ship in plaintext in js/loot.js', redeem.inShippedSource, redeem.codes.join(', '));
+  check('a code pays the first time', redeem.first === true);
+  check('the same code is refused the second time', redeem.second === false, `reason=${redeem.secondReason}`);
+  check('clearing kv `redeemed` makes the code pay AGAIN', redeem.afterErase === true,
+    'the one-shot is per-device state, not a server ledger');
+
+  finding('WHAT THIS GUARD DOES NOT STOP',
+    'devtools (kvSet the mark by hand); editing js/db.js in a local checkout; restoring an exported ' +
+    'backup over the top, because importAll merges kv rows and would put the mark back while leaving ' +
+    'the farmed xp/inv rows in place; a clean reinstall; and a plain forward clock walk, which still ' +
+    'pays what section 1 measured. It stops casual clock-toggling and it makes a forward walk a debt.');
+
+} finally {
+  await browser.close().catch(() => {});
+  if (srvHandle) srvHandle.close();
+}
+
+console.log(bad ? `\n${bad} FAIL` : '\nall checks ok (see FINDING lines for the measurements)');
+process.exit(bad ? 1 : 0);

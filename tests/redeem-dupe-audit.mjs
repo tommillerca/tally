@@ -37,6 +37,21 @@
  *     that did not take, exits non-zero rather than passing vacuously.
  *   - Direction and bound, not a trend: the owned run must move the instance
  *     count by EXACTLY 0 or EXACTLY 1, never "at least one".
+ *
+ * UN-REDEEMING TAKES TWO WRITES NOW, 2026-08-17. This file resets between runs
+ * by clearing the kv 'redeemed' LIST, because that list used to be the whole
+ * record of what a device had redeemed. It is not any more: redeemCode claims a
+ * per-code kv row `redeemed:<code>` with db.addIfAbsent, because the list is a
+ * read-modify-write and four concurrent redemptions of one code all read an
+ * empty list and all paid (measured 2026-08-17: BONEHEADZ redeemed 4/4 times
+ * from one tap window). The list is still read first, and still written, so
+ * devices that redeemed before the change stay redeemed and a restore still
+ * carries it. So a reset that clears only the list leaves the code redeemed,
+ * every run after the first is refused as 'used', and PIN-2 and PIN-4 go red
+ * for the reset's reason rather than the app's. unredeem() below clears BOTH
+ * halves. It does not soften either pin: PIN-4 still requires the code to be
+ * recorded after a redeem that actually went through, which is the only way it
+ * can be recorded at all.
  */
 import { boot, sleep, serveTree } from './godmode.js';
 import fs from 'node:fs';
@@ -108,6 +123,23 @@ check('SETUP  a pet-only code with an explicit species exists',
 if (!picked) await die(2);
 const SP = picked.def.pet;
 
+/* UN-REDEEM, BOTH HALVES. See the header note. Installed as a page global so
+   the three resets below cannot drift apart, and it ASSERTS that the per-code
+   row is really gone afterwards, because a reset that silently stopped working
+   would put PIN-2 and PIN-4 red for a reason that has nothing to do with the
+   app. */
+await page.evaluate(() => {
+  window.UNREDEEM = async (kvSet, db, code) => {
+    await kvSet('redeemed', []);            // the legacy list, still read first by redeemCode
+    await db.del('kv', `redeemed:${code}`); // the per-code claim row, which IS the authority now
+    const left = await db.get('kv', `redeemed:${code}`);
+    const list = await db.get('kv', 'redeemed');
+    if (left !== undefined || (list && list.v && list.v.length)) {
+      throw new Error(`UNREDEEM did not clear ${code}: row=${JSON.stringify(left)} list=${JSON.stringify(list && list.v)}`);
+    }
+  };
+});
+
 /* ---- drive the real button and report what the player got ---- */
 const snapshot = () => page.evaluate(async sp => {
   const { kvGet } = await import('./js/db.js');
@@ -156,10 +188,10 @@ async function redeemRun(label) {
 }
 
 /* ---- RUN 1: species NOT owned. This is the reference copy. ---- */
-await page.evaluate(async sp => {
+await page.evaluate(async ({ sp, code }) => {
   const { db, kvSet } = await import('./js/db.js');
   const { BH_BY_ID } = await import('./data/boneheadz.js');
-  await kvSet('redeemed', []);
+  await UNREDEEM(kvSet, db, code);
   await kvSet('petInst', []);
   await kvSet('pets', {});
   await kvSet('petEquipped', null);
@@ -169,7 +201,7 @@ await page.evaluate(async sp => {
     if (r.kind === 'cos' && (BH_BY_ID[r.itemId] || {}).slot === 'C') await db.del('inv', r.id);
   }
   void sp;
-}, SP);
+}, { sp: SP, code: picked.code });
 const pre1 = await snapshot();
 check(`SETUP  precondition for the FIRST-TIME run: ${SP} is owned 0 times`,
   pre1.species === 0, `${SP} count=${pre1.species}, instances=${pre1.instances}`);
@@ -178,12 +210,12 @@ const fresh = await redeemRun('FIRST-TIME');
 
 /* ---- RUN 2: the SAME species, now genuinely owned, through the app's own
    writer so the save shape is the real one. ---- */
-await page.evaluate(async sp => {
-  const { kvSet } = await import('./js/db.js');
+await page.evaluate(async ({ sp, code }) => {
+  const { db, kvSet } = await import('./js/db.js');
   const { addPetInstance } = await import('./js/loot.js');
-  await kvSet('redeemed', []);
+  await UNREDEEM(kvSet, db, code);
   await addPetInstance(sp, {});
-}, SP);
+}, { sp: SP, code: picked.code });
 const pre2 = await snapshot();
 check(`SETUP  precondition for the ALREADY-OWNED run: ${SP} is owned at least once`,
   pre2.species > 0, `${SP} count=${pre2.species}, instances=${pre2.instances}`);
@@ -193,9 +225,9 @@ const owned = await redeemRun('ALREADY-OWNED');
 /* Corroborating evidence the UI cannot show: the `dupe` flag redeemCode
    returns, taken in the same already-owned state. */
 const direct = await page.evaluate(async code => {
-  const { kvSet } = await import('./js/db.js');
+  const { db, kvSet } = await import('./js/db.js');
   const { redeemCode } = await import('./js/loot.js');
-  await kvSet('redeemed', []);
+  await UNREDEEM(kvSet, db, code);
   const r = await redeemCode(code);
   return { ok: !!r.ok, pet: r.pet ? r.pet.id : null, coins: r.coins, dupe: !!r.dupe };
 }, picked.code);

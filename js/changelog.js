@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 394, date: '2026-08-17', title: 'Two tabs can no longer be paid twice for the same reward', items: [
+    "<b>With the game open in two places at once, the same reward could be handed over twice.</b> Both copies asked whether it was still waiting, both were told yes, and both paid it out. Claiming a reward is now a single step instead of a look followed by a grab, so exactly one of them wins it and the other gets nothing. Crates, eggs, codes, tributes, harvests, dishes, level rewards, badges and streaks all go through it.",
+    "<b>Opening the app is quick again if you have been logging for a long time.</b> The first open after an update worked through your entire history before it would show you anything, and on a slow phone it could give up part way and start again from the beginning. It puts the app on screen first now and catches up in the background, remembering how far it got, so closing the app mid-way no longer throws that work away.",
+  ] },
   { n: 393, date: '2026-08-17', title: 'The Hollow music no longer restarts every time you tap', items: [
     "<b>The garden music started over from the beginning every time you touched anything.</b> Planting, watering, harvesting, all of it reset the track. It plays straight through now, and stops when you leave the Hollow.",
     "<b>It is also quieter.</b> The volume was never set, so it played at full blast. It sits under the game now instead of on top of it.",

@@ -101,15 +101,41 @@ const eraseBlock = appSrc.match(/\$\('#eraseBtn'\)[\s\S]*?location\.reload\(\)/)
 ok('SETUP  the #eraseBtn handler was located in js/app.js (if this fails the two rows below are checking nothing)',
   !!eraseBlock, eraseBlock ? `${eraseBlock[0].split('\n').length} lines` : 'no #eraseBtn handler found');
 
-const clearLoop = eraseBlock && eraseBlock[0].match(/for\s*\(\s*const\s+\w+\s+of\s+([^)]+)\)\s*await\s+db\.clear/);
-const clearsLiteral = !!(clearLoop && clearLoop[1].includes('['));
-const clearsStores = !!(clearLoop && /^\s*STORES\s*$/.test(clearLoop[1]));
-/* js/app.js has to be importing that identifier FROM db.js, or `STORES` could be
-   any local array with the same name and this would grade a coincidence. */
+/* THE ERASE MOVED, THE RULE DID NOT. 2026-08-17: the handler used to run its
+   own `for (const st of STORES) await db.clear(st)` loop. That loop is seven
+   separate transactions and it only stops THIS tab, so with the app open twice
+   the erase left rows behind (measured: 30 inv rows, 150 coins). It is now one
+   transaction inside db.js's eraseAll(), which also freezes the other tabs
+   first. So this row accepts EITHER shape, and in both cases insists the list
+   of stores comes from db.js's STORES export rather than a literal, because a
+   hand-copied literal is the specific thing that lost 'inv'. */
+const inHandler = eraseBlock ? eraseBlock[0] : '';
+const clearLoop = inHandler.match(/for\s*\(\s*const\s+\w+\s+of\s+([^)]+)\)\s*await\s+db\.clear/);
+const callsEraseAll = /\bawait\s+eraseAll\s*\(\s*\)/.test(inHandler);
+/* js/app.js has to be importing the identifier it uses FROM db.js, or it could
+   be any local array or function with the same name and this would grade a
+   coincidence. */
 const importsStores = /import\s*\{[^}]*\bSTORES\b[^}]*\}\s*from\s*'\.\/db\.js'/.test(appSrc);
+const importsEraseAll = /import\s*\{[^}]*\beraseAll\b[^}]*\}\s*from\s*'\.\/db\.js'/.test(appSrc);
+/* and when the work lives in db.js, db.js's own erase has to iterate STORES.
+   `eraseAll` is required to name STORES inside its body, not anywhere in the
+   file, so a stray mention elsewhere cannot carry this. */
+const eraseAllBody = dbSrc.match(/export async function eraseAll\s*\([\s\S]*?\n\}/);
+const eraseAllUsesStores = !!(eraseAllBody && /\bof\s+STORES\b/.test(eraseAllBody[0]));
+const viaLoop = !!clearLoop && /^\s*STORES\s*$/.test(clearLoop[1]) && importsStores && !clearLoop[1].includes('[');
+const viaEraseAll = callsEraseAll && importsEraseAll && eraseAllUsesStores;
 ok("ERASE-LIST  the erase clears js/db.js's STORES, not a literal it keeps its own copy of (the copy is what lost 'inv')",
-  clearsStores && importsStores && !clearsLiteral,
-  clearLoop ? `clears: ${clearLoop[1].trim()}  imported from db.js: ${importsStores}` : 'no `for (const st of ...) await db.clear` loop in the handler');
+  viaLoop || viaEraseAll,
+  viaEraseAll ? 'via db.js eraseAll(), which iterates STORES'
+    : clearLoop ? `clears: ${clearLoop[1].trim()}  imported from db.js: ${importsStores}`
+      : `no \`for (const st of STORES) await db.clear\` loop and no \`await eraseAll()\` in the handler (eraseAll imported: ${importsEraseAll}, eraseAll iterates STORES: ${eraseAllUsesStores})`);
+
+/* AND IT HAS TO BE ONE TRANSACTION, because "all of it or none of it" is the
+   only version of this promise that survives a reload, a quota error or a
+   second tab landing a write in the middle of the seven. */
+ok('ERASE-ATOMIC  the wipe commits as ONE transaction over every store, not one transaction per store',
+  !!(eraseAllBody && /transaction\(\s*STORES\s*,\s*'readwrite'\s*\)/.test(eraseAllBody[0])),
+  eraseAllBody ? 'db.js eraseAll' : 'no eraseAll in db.js');
 
 /* ========================== behavioural half ========================== */
 

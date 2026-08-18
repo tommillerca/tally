@@ -17,7 +17,7 @@
 // Nothing here can kill a crop or lose a seed. Missing the watering window costs
 // you the top yield, never the plant.
 
-import { kvGet, kvSet } from './db.js';
+import { kvGet, kvSet, kvUpdate } from './db.js';
 import { dateKey } from './nutrition.js';
 import { INGREDIENTS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, grantIngredient, ingredients } from './cooking.js';
 
@@ -46,8 +46,9 @@ export function growMinutes(id) { return isRareSeed(id) ? GROW_MIN_RARE : GROW_M
  * on an existing save without touching anything. */
 const EMPTY = { seeds: {}, plots: [], plotsOwned: PLOTS_FREE, composts: { date: '', used: 0 } };
 
-async function read() {
-  const raw = (await kvGet('garden', null)) || {};
+/* Pure so it can run INSIDE a kvUpdate transaction, where nothing may await. */
+function migrate(rawIn) {
+  const raw = rawIn || {};
   const g = { ...EMPTY, ...raw };
   g.seeds = { ...(raw.seeds || {}) };
   g.plotsOwned = Math.min(PLOTS_MAX, Math.max(PLOTS_FREE, raw.plotsOwned || PLOTS_FREE));
@@ -56,6 +57,7 @@ async function read() {
   g.composts = { date: raw.composts?.date || '', used: raw.composts?.used || 0 };
   return g;
 }
+async function read() { return migrate(await kvGet('garden', null)); }
 async function write(g) { await kvSet('garden', g); }
 
 /* ---------- seeds ---------- */
@@ -177,17 +179,29 @@ export function harvestYield({ rare, watered }, rand = Math.random) {
   return { n, bumper };
 }
 
+/* CLEARING THE BED IS THE CLAIM, AND IT HAPPENS IN ONE TRANSACTION.
+ * This used to bank the crop first and clear the bed afterwards, so that an
+ * interrupted harvest could not empty a plot and hand over nothing. The cost of
+ * that ordering is worse than the thing it avoided: two overlapping harvests of
+ * one bed both read a grown plot and both paid, measured 2026-08-17 on this
+ * tree (two concurrent harvestPlot(0) both returned ok, and only a SECOND bug,
+ * a lost update inside grantIngredient, kept the ingredient count from
+ * doubling). Reading the plot and nulling it are now the same transaction, so
+ * exactly one caller can take a bed, and the same remove-first rule openGift,
+ * hatchEgg, collectDish and claimDenLoot already follow applies here too: a
+ * crash between the take and the grant costs one crop, which is recoverable. */
 export async function harvestPlot(index, now = Date.now(), rand = Math.random) {
-  const g = await read();
-  const p = g.plots[index];
-  if (!p) return { ok: false, reason: 'empty' };
-  if (now < p.readyAt) return { ok: false, reason: 'growing' };
-  const { n, bumper } = harvestYield({ rare: isRareSeed(p.ing), watered: !!p.watered }, rand);
-  // bank the crop BEFORE clearing the bed: an interrupted harvest must not be able
-  // to empty the plot and hand over nothing
-  await grantIngredient(p.ing, n);
-  const g2 = await read();
-  g2.plots[index] = null;
-  await write(g2);
-  return { ok: true, ing: p.ing, name: INGREDIENTS[p.ing].name, n, bumper, watered: !!p.watered, rare: isRareSeed(p.ing) };
+  let out = { ok: false, reason: 'empty' };
+  await kvUpdate('garden', (raw) => {
+    const g = migrate(raw);
+    const p = g.plots[index];
+    if (!p || !INGREDIENTS[p.ing]) { out = { ok: false, reason: 'empty' }; return undefined; }
+    if (now < p.readyAt) { out = { ok: false, reason: 'growing' }; return undefined; }
+    const { n, bumper } = harvestYield({ rare: isRareSeed(p.ing), watered: !!p.watered }, rand);
+    out = { ok: true, ing: p.ing, name: INGREDIENTS[p.ing].name, n, bumper, watered: !!p.watered, rare: isRareSeed(p.ing) };
+    g.plots[index] = null;
+    return g;
+  }, null);
+  if (out.ok) await grantIngredient(out.ing, out.n);
+  return out;
 }
