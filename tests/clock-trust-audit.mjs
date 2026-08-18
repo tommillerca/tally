@@ -740,6 +740,25 @@ try {
   check('one /health after the fact opens the refused day: the pause is not a loss',
     healed.fresh === true, `fresh=${healed.fresh} reason=${healed.reason}`);
 
+  /* 7f. THE ONLINE PLAYER IS NEVER TOUCHED BY ANY OF THIS. The inverse of the
+     forward-walk assertion and the more important one: when the server's day
+     advances alongside the device's, which is every player with any network at
+     all, the ceiling is always ahead and never binds. Ten days, no refusals.
+     DIRECTION: a single refusal here is a FAILURE. */
+  await guard.reset();
+  await shiftDays(800);
+  await guard.witnessAt(800);
+  await guard.claim(await keyFor(800));
+  const online = [];
+  for (let d = 801; d <= 810; d++) {
+    await shiftDays(d);
+    await guard.witnessAt(d);                      // the server got there too
+    online.push(await guard.claim(await keyFor(d)));
+  }
+  check('ten days with the server advancing too: not one refusal',
+    online.length === 10 && online.every(r => r.fresh === true && r.reason === 'advanced'),
+    online.every(r => r.fresh) ? '10/10 advanced' : `refused: ${online.filter(r => !r.fresh).map(r => r.reason).join(', ')}`);
+
   /* 7e. A RESTORE CANNOT WIND THE CEILING BACK. Named in the previous version
      of this file as the hole that undoes any device-side mark: export, farm,
      restore, mark reset, farmed rows kept. Asserted on BOTH import paths, the
