@@ -74,7 +74,7 @@ const fight = await page.evaluate(async () => {
     mirrored: !!st.querySelector('.mirror-wrap'),
     flipped: im ? /matrix\(-|scaleX\(-/.test(getComputedStyle(im).transform) : false,
     w: Math.round(b.width), h: Math.round(b.height),
-    /* .bh-anim is what avatarLayersHtml actually returns (js/app.js:2564).
+    /* .bh-anim is what avatarLayersHtml actually returns (js/app.js:3305).
        This counted '.bh-layer, .tz-layer', and NEITHER STRING EXISTS ANYWHERE
        in the app, so the count was always 0 and "it is not built from
        cosmetics" was always true: a check that could not fail, sitting in the

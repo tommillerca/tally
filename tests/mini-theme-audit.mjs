@@ -112,7 +112,7 @@ if (reach.exists && reach.hidden === false) {
     const imgs = [...stage.querySelectorAll('img')];
     return {
       /* Foe name selector: the app emits `<div class="fname">${esc(foe.name)}</div>`
-         at js/app.js:13356 inside the fight sheet. The older `.hud-side .hud-name`
+         at js/app.js:15270 inside the fight sheet. The older `.hud-side .hud-name`
          markup this line used to query was retired; no js/ file emits it now
          (verified by grep 2026-08-13). suite-rot flagged this at line 114 as
          a STALE selector; this replaces both arms with the shape the fight
