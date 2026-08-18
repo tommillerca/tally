@@ -29,6 +29,7 @@ import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notif
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
+import { pixCur } from './icons-pix.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
@@ -405,25 +406,6 @@ function sparkIco(s = 14, fill = '#ffe08a') {
   return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 }
 
-/* TOM'S 48px PIXEL CURRENCY, SNAPPED TO WHOLE STEPS.
-   48 divides clean to 24, 16 and 12 and nothing else, so a request for 13 or 14
-   gets served the nearest step DOWN that is still whole rather than resampled.
-   12 is excluded on purpose: shown the render, Tom's verdict was "the 12 pixels
-   look fucked but the others are decent", so 16 is the floor and anything below
-   it keeps the vector, which still reads at 11px beside a line of text. */
-const PIX_CUR = {
-  coin: 'coin', dust: 'bone-dust', egg: 'egg', crate: 'crate',
-  pit: 'pit', wardrobe: 'wardrobe', shop: 'shop', build: 'build',
-  xp2: 'battle-charm', vigor: 'vigor-draught',
-};
-function pixCur(kind, s) {
-  const f = PIX_CUR[kind];
-  if (!f) return null;
-  const px = s >= 48 ? Math.floor(s / 48) * 48 : s >= 24 ? 24 : s >= 16 ? 16 : 0;
-  if (!px) return null;   // under 16: the vector is genuinely better
-  return `<img src="assets/icons-pix/${f}.png" alt="" class="ico pix-cur" width="${px}" height="${px}"`
-    + ` style="width:${px}px;height:${px}px" decoding="sync">`;
-}
 const ICONS = {
   mapmark: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#8fd0ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 21c-4.4-4.5-6.6-8-6.6-11A6.6 6.6 0 0 1 12 3.4 6.6 6.6 0 0 1 18.6 10c0 3-2.2 6.5-6.6 11z" fill="rgba(143,208,255,0.14)"/><circle cx="9.8" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><circle cx="14.2" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><path d="M10.4 12.6h3.2" stroke-width="1.6"/></svg>`,
   barcode: '<svg viewBox="0 0 24 24"><path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/></svg>',
@@ -2813,7 +2795,6 @@ async function renderToday(el) {
     mealSkipped: await kvGet('firstMealSkipped', false),
   }) : [];
   const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const wardAttn = unlocks.some(u => u.hero === 'ward');
   const topNudge = unlocks[0] || null;
   const hkStale = isToday ? await hkStaleInfo() : null;
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
@@ -2896,7 +2877,14 @@ async function renderToday(el) {
        paying for itself twice. The Kitchen's badge covers BOTH systems now: a
        dish ready or a crop ready lights the same dot. -->
   <div class="hero-actions four">
-    <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(23)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
+    ${/* BACKPACK, not "Character". Tom, 2026-08-17: the avatar tap already went
+         to the Backpack and this door still landed on the Wardrobe, so the same
+         hub opened on two different tabs depending on where you pressed. It is
+         named for where it lands now, which is also what its badge has always
+         counted: unopened crates. The wardrobe "!" that used to sit here is not
+         reassigned to a tile that no longer goes there; the unlock nudge card
+         above already carries it, in words, with its own Wardrobe route. */''}
+    <button class="hero-act" id="charBtn">${pixCur('crate', 24) || ICONS.bone(23)}<span>Backpack${crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
     <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
     <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
@@ -3049,7 +3037,7 @@ async function renderToday(el) {
   measureBubbleSide($('#bhStage'), eq).then(side => {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
   });
-  $('#charBtn')?.addEventListener('click', () => openCharacter('wardrobe')); // Character hub: Wardrobe + Backpack + Build + Progress
+  $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
@@ -15158,7 +15146,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v396'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v397'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
