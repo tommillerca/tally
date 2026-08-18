@@ -113,6 +113,23 @@ not touched. His call:
 
 ---
 
+## ✅ NOT A BUG: the crate's hardcoded 144px does not overflow small phones
+
+Carried on a task list as an open defect for weeks. Measured 2026-08-17 across
+three widths with the reveal actually open, rather than reasoned from the fact
+that 144 is a hardcoded number:
+
+    320x568   sprite 144px at left 109 right 253, viewport 320, 67px clear each side
+    360x640   sprite 144px at left 115.5 right 259.5
+    393x852   sprite 144px at left 124.5 right 268.5
+
+No overflow at any width, left or right, and the card never leaves the viewport
+either. The sprite is centred, so 144 needs a viewport under 144px to clip, and
+no phone is that narrow.
+
+Closed. If it is reopened it needs a measurement, not the observation that the
+number is hardcoded.
+
 ## 🎵 Hollow music: Morning Dew, STARTS MUTED (Tom, said twice)
 
 Tom, 2026-08-17: *"make sure once again i already talked about this with you it
