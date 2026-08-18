@@ -7495,3 +7495,114 @@ body::before {
 /* The takeover celebrates a badge; this line says what the player actually did,
    because the toast that confirms it is covered 380ms later by this screen. */
 .cele-note { margin: 14px 0 0; text-align: center; font-size: 13px; color: var(--text-2); }
+
+/* ================= MOCKUP ONLY: cosmetic shop shelves + auras =================
+   Visual prototype for Tom, 2026-08-18. Nothing here is wired to a purchase and
+   none of it ships from this worktree. */
+
+/* An AURA is a body-anchored halo drawn BEHIND the whole Bonehead. It slots
+   between .bh-backdrop (z 0) and .bh-anim (z 1), so it lights the figure without
+   touching a single pixel of Cam's art. No PNG, no per-item work, one element.
+   Sized in PERCENT of the stage, because .bh-stage is overflow:hidden: anything
+   authored in negative px is simply clipped away and the player sees a rectangle
+   of colour, not a halo. */
+.bh-aura {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 44% 34% at 50% 46%, var(--aura-core), transparent 72%),
+    radial-gradient(ellipse 78% 62% at 50% 54%, var(--aura-halo), transparent 76%);
+}
+/* PALETTE RULE: disjoint from every rarity signal in the game.
+   Taken already: gold #ffc961 (legendary), violet #9b92e8 (epic), coral #ff6b8b
+   (prestige), mint/slime green, and the app accent #fd6857. What is left and
+   free: bone white, deep denim blue, and darkness. */
+/* TUNED AGAINST THE 118px RENDER, not against the 300px one. The first pass used
+   core alpha .46 for Ashfall, which is perfectly legible zoomed and effectively
+   invisible at the size players actually see. */
+.bh-aura.a-ash   { --aura-core: rgba(240,236,225,.66); --aura-halo: rgba(178,186,198,.30); }
+.bh-aura.a-tide  { --aura-core: rgba(56,102,170,.70);  --aura-halo: rgba(22,44,86,.50); }
+/* Umbra is a NEGATIVE aura: the figure stands in its own shadow, so it paints
+   DARKNESS, and it is the only one of the three that reads by removing light.
+   The first pass gave it a bone rim at the edge of the shadow, which rendered as
+   a bright white ring: the single most eye-catching thing on the sheet, i.e. the
+   exact opposite of what "umbra" means. The ring is gone. What is left is a deep
+   pool under the figure and a hard vignette at the stage edge. */
+.bh-aura.a-umbra {
+  --aura-core: rgba(2,2,6,.92); --aura-halo: rgba(4,4,10,.86);
+  box-shadow: inset 0 0 30px 14px rgba(0,0,0,.85);
+}
+/* Trophy-tier auras move. One slow breath, never a sparkle loop. */
+@keyframes aura-breathe { 0%,100% { opacity: .78; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+.bh-aura.trophy { animation: aura-breathe 4.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .bh-aura.trophy { animation: none; } }
+
+/* --- the shelves --- */
+.rack-head { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 9px; flex-wrap: wrap; }
+.rack-theme { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .03em; color: var(--text); }
+.rack-when { font-size: 11.5px; color: var(--text-3); }
+.drop-item.rack-item::before { content: attr(data-tag); color: var(--text-3); }
+.drop-item.rack-item.aura::before { color: var(--text-2); }
+.rack-stage { width: 88px; height: 88px; margin: 4px auto 0; position: relative;
+  border-radius: 14px; overflow: hidden; background: var(--surface-3); border: 1px solid var(--line); }
+.rack-stage .bh-anim { position: absolute; inset: 0; }
+.rack-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.drop-item small.rack-slot { display: block; font-size: 11px; color: var(--text-3); margin: -4px 0 7px; }
+
+/* Reroll: the free state is the loud one, because "free reroll" is the thing
+   that makes a player tap. The ladder is printed in full so the hard stop is
+   legible BEFORE the first tap, not discovered at 500 coins a pull. */
+.rack-reroll { display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 14px; padding: 10px 12px; }
+.rack-reroll .rr-tx { flex: 1; min-width: 0; }
+.rack-reroll .rr-tx b { display: block; font-size: 13.5px; }
+.rack-reroll .rr-tx small { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.rack-reroll .rr-btn { flex: none; border: 0; border-radius: 10px; padding: 9px 13px; font-weight: 800; font-size: 13px;
+  background: var(--accent); color: var(--accent-ink); display: inline-flex; align-items: center; gap: 5px; }
+.rack-reroll .rr-btn.free { background: var(--mint); color: #16240f; }
+.rr-ladder { display: flex; gap: 4px; margin-top: 8px; }
+.rr-ladder span { flex: 1; text-align: center; font-size: 10px; font-weight: 800; color: var(--text-3);
+  background: var(--surface-3); border-radius: 6px; padding: 3px 0; }
+.rr-ladder span.now { background: var(--mint); color: #16240f; }
+.rr-ladder span.stop { background: transparent; border: 1px dashed var(--line-strong); color: var(--text-3); }
+
+/* The Dust Counter: coins buy whatever the rotation is offering, Dust buys the
+   exact thing you want. This is the shelf that answers "the piece I want has
+   never once appeared". */
+.dustc { background: var(--surface-2); border: 1px solid var(--violet); border-radius: 16px; padding: 12px 13px; }
+.dustc > p { margin: 0 0 10px; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.dustc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.dustc-row .art { flex: none; width: 42px; height: 42px; border-radius: 10px; background: var(--surface-3); display: grid; place-items: center; overflow: hidden; }
+.dustc-row .art img { width: 100%; height: 100%; object-fit: contain; }
+.dustc-row .tx { flex: 1; min-width: 0; }
+.dustc-row .tx b { display: block; font-size: 13px; }
+.dustc-row .tx small { display: block; font-size: 11px; color: var(--text-3); }
+.dustc-more { margin: 9px 0 0; font-size: 11.5px; color: var(--text-3); }
+
+/* The Trophy Case: two things nobody needs. Priced out of reach on purpose, and
+   the copy says so, so a player who never buys one is not behind. */
+.trophy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.trophy-card { background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 16px; padding: 11px; text-align: center; }
+.trophy-card b { display: block; font-size: 13.5px; margin: 7px 0 2px; }
+.trophy-card small { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 8px; line-height: 1.35; }
+.trophy-note { margin: 9px 2px 0; font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+.dustc-mini { position: relative; width: 42px; height: 42px; border-radius: 9px; overflow: hidden; background: var(--surface-2); }
+.dustc-mini .bh-anim { position: absolute; inset: 0; animation: none; }
+.dustc-mini .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Crop a worn preview to the part of the figure the piece actually occupies.
+   Centres and scales are MEASURED alpha bounding boxes (median over every asset
+   in the slot, scripts run 2026-08-18): H (0.417,0.206) w.352, T (0.455,0.508)
+   w.486, P (0.508,0.657) h.270, FW (0.494,0.832) w.278. A hat is ~35% of its
+   640 canvas and a grill is 8%, which is why the uncropped tile read as "the
+   same bonehead four times". transform: translate((50-cx)%, (50-cy)%) scale(k)
+   puts the measured centre at the tile centre. */
+/* animation:none is load-bearing. .bh-anim carries the bh-idle keyframes, which
+   animate `transform`, and a running animation outranks a plain declaration in
+   the cascade: the first build looked exactly like no crop at all. */
+.fit-head  .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim { animation: none; }
+.fit-head  .bh-anim { transform-origin: 46% 24%; transform: translate(4%, 26%) scale(2.3); }
+.fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
+.fit-hips  .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
+.fit-feet  .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }
+.drop-item.rack-item { padding-top: 22px; }

@@ -5186,6 +5186,127 @@ async function renderShop(el) {
   const dropCheapest = Math.min(...DROP.items.map(d => d.cost));
   const dropOwned = DROP.items.filter(d => ownedCos.has(d.id)).length;
   const shopDesc = { vigor: '+3 Pit fights right now', xp2: 'Next Pit wins pay more' };
+
+  /* ================= MOCKUP ONLY (2026-08-18) =================
+     The cosmetic-shop prototype, rendered so Tom can look at it. NOTHING here is
+     wired to a purchase: no handler is bound, buyDropItem is untouched, and no
+     shipped price constant is changed. Delete this whole block to revert. */
+  const MOCK_THEME = { name: 'COLD SNAP', month: 'August', next: 'New theme 1 September' };
+  // Curated pool, split by price rung so the rack ALWAYS offers 3 colourways and
+  // 1 aura, i.e. always something under 1,000 coins.
+  const MOCK_POOLS = {
+    hero:   [{ id: 'T9-1', cost: 3000 }, { id: 'FW7-2', cost: 3000 }, { id: 'P5-3', cost: 3000 }, { id: 'H6-1', cost: 3000 }],
+    second: [{ id: 'H10-6', cost: 1800 }, { id: 'H10-7', cost: 1800 }, { id: 'G8', cost: 1800 }, { id: 'T1', cost: 1800 }, { id: 'FW7-3', cost: 1800 }],
+    fun:    [{ id: 'P5-1', cost: 900 }, { id: 'P5-2', cost: 900 }, { id: 'FW6-2', cost: 900 }, { id: 'T10-3', cost: 900 }, { id: 'T10-4', cost: 900 }, { id: 'FW2-2', cost: 900 }, { id: 'P6-3', cost: 900 }],
+  };
+  const MOCK_AURAS = [
+    { cls: 'a-ash',   name: 'Ashfall',   cost: 700, blurb: 'Bone-white drift' },
+    { cls: 'a-tide',  name: 'Tidewater', cost: 700, blurb: 'Deep, cold and quiet' },
+    { cls: 'a-umbra', name: 'Umbra',     cost: 700, blurb: 'Stand in your own shadow' },
+  ];
+  // Same FNV-1a + week-key recipe the dens already refresh on (poi.js hashStr /
+  // isoWeekKey), so the rack turns over every Monday with zero server work.
+  const mockHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const mockWeek = isoWeekKey(new Date());
+  // RULE: never show a player a piece they already own. Filtering the pool before
+  // the pick is what kills "it is always the same fifteen items" for a whale.
+  const mockPick = (pool, slot) => { const free = pool.filter(x => !ownedCos.has(x.id)); const p = free.length ? free : pool; return p[mockHash(`${mockWeek}:rack:${slot}`) % p.length]; };
+  const mockEq = await equipped();
+  const mockRerollLadder = [0, 100, 200, 300, 400, 500, 500];
+  const mockRerollsUsed = 0;   // prototype: show the state that makes a player tap
+  const mockRerollCost = mockRerollLadder[mockRerollsUsed];
+  const mockAuraTile = (cls, extra = '') => `<div class="rack-stage"><div class="bh-aura ${cls} ${extra}"></div>${avatarLayersHtml(mockEq, { skip: ['BG', 'C', 'IL', 'IR'], thumb: 192 })}</div>`;
+  // A cosmetic is shown WORN, never as a loose PNG. Measured off the first render:
+  // a hat or a pair of trunks occupies a few percent of its 640 canvas, so a
+  // `contain` thumbnail of the raw asset is a speck. Dressing the player's own
+  // figure in it is both legible and the honest preview.
+  const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso', P: 'fit-hips', U: 'fit-hips', FW: 'fit-feet', S: 'fit-feet' };
+  const mockWorn = (itemId, cls = 'rack-stage') => `<div class="${cls} ${MOCK_FIT[BH_BY_ID[itemId].slot] || ''}">${avatarLayersHtml({ ...mockEq, [BH_BY_ID[itemId].slot]: itemId }, { skip: ['BG', 'C', 'IL', 'IR'], thumb: 192 })}</div>`;
+  const mockRackTags = ['HERO COLOURWAY', 'COLOURWAY', 'COLOURWAY', 'AURA'];
+  const mockRack = [mockPick(MOCK_POOLS.hero, 0), mockPick(MOCK_POOLS.second, 1), mockPick(MOCK_POOLS.fun, 2)].map((d, i) => {
+    const it = BH_BY_ID[d.id];
+    return `<div class="drop-item rack-item" data-tag="${mockRackTags[i]}">
+      ${mockWorn(d.id)}
+      <b>${esc(it.name)}</b>
+      <small class="rack-slot">${esc(BH_SLOTS.find(x => x.code === it.slot)?.label || it.slot)} · ${esc(it.rarity)}</small>
+      <button class="drop-buy">${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>
+    </div>`;
+  });
+  const mockAura = MOCK_AURAS[mockHash(`${mockWeek}:rack:3`) % MOCK_AURAS.length];
+  mockRack.push(`<div class="drop-item rack-item aura" data-tag="AURA">
+    ${mockAuraTile(mockAura.cls)}
+    <b>${esc(mockAura.name)}</b>
+    <small class="rack-slot">${esc(mockAura.blurb)}</small>
+    <button class="drop-buy">${ICONS.coin(12)} ${mockAura.cost.toLocaleString()}</button>
+  </div>`);
+
+  // The Dust Counter. Coins buy whatever the rotation is offering; Dust buys the
+  // EXACT thing you want. This is the answer to "the piece I want has never once
+  // appeared", and it runs on a currency and a rarity ladder the game already
+  // ships (transmogCost: legendary 60 / rare 25 / uncommon 12 / common 6).
+  const MOCK_DUST_MULT = 2.5;   // prototype premium over the transmog price
+  const mockOrderCost = id => Math.round(transmogCost(id) * MOCK_DUST_MULT / 5) * 5;
+  const mockDustRows = ['H6-1', 'T9-4', 'T7'].map(id => {
+    const it = BH_BY_ID[id];
+    return `<div class="dustc-row">
+      <span class="art">${mockWorn(id, 'dustc-mini')}</span>
+      <span class="tx"><b>${esc(it.name)}</b><small>${esc(it.rarity)} · ordered, not rolled</small></span>
+      <span class="t3-price dust">${ICONS.dust(13)} ${mockOrderCost(id)}</span>
+    </div>`;
+  }).join('');
+
+  const mockShelves = `
+  <div class="t3-sect"><b>This week's rack</b><i></i><span class="r chip" style="font-size:11px">${esc(mockWeek)}</span></div>
+  <div class="rack-head">
+    <span class="rack-theme">${esc(MOCK_THEME.month.toUpperCase())}: ${esc(MOCK_THEME.name)}</span>
+    <span class="rack-when">Four slots, new every Monday · ${esc(MOCK_THEME.next)}</span>
+  </div>
+  <div class="drop-grid">${mockRack.join('')}</div>
+  <div class="rack-reroll">
+    <div class="rr-tx"><b>Reroll the rack</b><small>${mockRerollCost ? `Reroll ${mockRerollsUsed + 1} of 6 today` : 'Your free reroll today'}</small></div>
+    <button class="rr-btn ${mockRerollCost ? '' : 'free'}">${mockRerollCost ? `${ICONS.coin(12)} ${mockRerollCost}` : 'FREE'}</button>
+  </div>
+  <div class="rr-ladder">${mockRerollLadder.map((c, i) => `<span class="${i === mockRerollsUsed ? 'now' : ''}">${c ? c : 'FREE'}</span>`).join('')}<span class="stop">STOP</span></div>
+  <p class="note" style="margin:6px 2px 0">Six rerolls a day, then the rack is what it is until tomorrow. The whole ladder costs 2,000 coins and there is no seventh.</p>
+
+  <div class="t3-sect"><b>The Dust Counter</b><i></i><span class="r chip" style="font-size:11px">No waiting</span></div>
+  <div class="dustc">
+    <p>Coins buy what the rack is offering this week. <b>Bone Dust buys the exact piece you want</b>, any look you have ever seen, whether or not it is in the rotation.</p>
+    ${mockDustRows}
+    <p class="dustc-more">Priced off the melt ladder you already know: legendary 150 · rare 65 · uncommon 30 · common 15. Melt gear at the Salvage Bench to earn it.</p>
+  </div>
+
+  <div class="t3-sect"><b>The Back Room</b><i></i><span class="r chip" style="font-size:11px">Every past drop</span></div>
+  <p class="note" style="margin:0 2px 10px">Everything that has ever dropped, permanently, at full price. Nothing here ever leaves and nothing here is ever discounted.</p>
+  <div class="drop-grid">
+    ${DROP.items.slice(0, 4).map(d => {
+      const it = BH_BY_ID[d.id];
+      return `<div class="drop-item">
+        <img src="${bhAsset(it)}" alt="" loading="lazy">
+        <b>${esc(it.name)}</b>
+        <button class="drop-buy">${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>
+      </div>`;
+    }).join('')}
+  </div>
+  <p class="note" style="margin:8px 2px 0">+ ${DROP.items.length - 4} more from The Puffer Pack ›</p>
+
+  <div class="t3-sect"><b>The Trophy Case</b><i></i></div>
+  <div class="trophy-grid">
+    <div class="trophy-card">
+      ${mockAuraTile('a-ash', 'trophy')}
+      <b>Perpetual Ashfall</b><small>Ashfall that never settles</small>
+      <button class="drop-buy">${ICONS.coin(12)} 45,000</button>
+    </div>
+    <div class="trophy-card">
+      ${mockAuraTile('a-tide', 'trophy')}
+      <b>The Deep</b><small>Tidewater, breathing</small>
+      <button class="drop-buy">${ICONS.coin(12)} 60,000</button>
+    </div>
+  </div>
+  <p class="trophy-note">These two are here for players who have bought everything else and still have coins. They are not better, they are not stronger, and nobody is behind for never owning one.</p>
+`;
+  /* ================= end MOCKUP ONLY ================= */
+
   // The mockup is a standalone screen with its own wallet row. In the app the
   // Shop is a hub tab whose header already carries the balances, so the dust
   // pill moved up there rather than printing the same two numbers twice.
@@ -5221,6 +5342,8 @@ async function renderShop(el) {
       </div>
     </div>
   </details>
+
+  ${mockShelves}
 
   <div class="t3-sect"><b>Coin shop</b><i></i></div>
   <div class="t3-cells">

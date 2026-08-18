@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aura options</title>
+<link rel="preload" href="assets/fonts/bangers.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+<style>
+  body { background: var(--bg); color: var(--text); font-family: var(--sans, system-ui); margin: 0; padding: 20px 18px 40px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: 26px; letter-spacing: .03em; margin: 0 0 4px; }
+  .sub { color: var(--text-2); font-size: 13px; margin: 0 0 22px; }
+  h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--coral); margin: 26px 0 10px; }
+  .row118 { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .unit { text-align: center; }
+  .unit .cap { font-size: 11px; color: var(--text-2); margin-top: 6px; }
+  .unit .cap b { display: block; font-size: 13px; color: var(--text); font-family: var(--display); font-weight: 400; letter-spacing: .03em; }
+  .big { width: 300px; height: 300px; }
+  .rowbig { display: flex; gap: 16px; flex-wrap: wrap; }
+  .strip { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .sw { width: 88px; }
+  .sw i { display: block; height: 56px; border-radius: 12px; border: 1px solid var(--line); }
+  .sw span { display: block; font-size: 10.5px; color: var(--text-2); margin-top: 5px; line-height: 1.3; }
+  .note { font-size: 12px; color: var(--text-3); max-width: 620px; line-height: 1.5; }
+</style></head>
+<body>
+<h1>AURA OPTIONS</h1>
+<p class="sub">Rendered on the real <code>.bh-stage</code> (118px, overflow hidden) and again at 300px. Same figure, same art, aura is the only difference.</p>
+
+<h2>None (control) &middot; at the size players see</h2>
+<div class="row118" id="r118"></div>
+
+<h2>Zoomed to 300px</h2>
+<div class="rowbig" id="rbig"></div>
+
+<h2>Trophy tier (breathing, captured mid-cycle)</h2>
+<div class="rowbig" id="rtrophy"></div>
+
+<h2>Confusion test: aura core colours vs every rarity signal already in the game</h2>
+<div class="strip" id="strip"></div>
+<p class="note" style="margin-top:12px">Rarity owns gold, violet, prestige coral and slime green, and the app's lead accent is coral-red. The three auras are bone white, deep denim and darkness: none of those is a rarity tier, a prestige marker or the accent.</p>
+<script type="module">
+import { BH_SLOTS, BH_BY_ID, bhAsset } from './data/boneheadz.js';
+const EQ = { B: 'B0-1', SK: 'SK0-1', T: 'T9-1', P: 'P5-3', FW: 'FW7-2', E: 'ES16' };
+const layers = () => [...BH_SLOTS].sort((a,b)=>a.z-b.z)
+  .map(s => EQ[s.code] && BH_BY_ID[EQ[s.code]] ? `<img src="${bhAsset(BH_BY_ID[EQ[s.code]])}" alt="">` : '').join('');
+const AURAS = [
+  { cls: '', name: 'None', blurb: 'control' },
+  { cls: 'a-ash', name: 'Ashfall', blurb: 'bone white' },
+  { cls: 'a-tide', name: 'Tidewater', blurb: 'deep denim' },
+  { cls: 'a-umbra', name: 'Umbra', blurb: 'negative / shadow' },
+];
+const unit = (a, cls, extra='') => `<div class="unit"><div class="bh-stage ${cls}">${a.cls ? `<div class="bh-aura ${a.cls} ${extra}"></div>` : ''}<div class="bh-anim">${layers()}</div></div><div class="cap"><b>${a.name}</b>${a.blurb}</div></div>`;
+r118.innerHTML = AURAS.map(a => unit(a, '')).join('');
+rbig.innerHTML = AURAS.map(a => unit(a, 'big')).join('');
+rtrophy.innerHTML = AURAS.filter(a=>a.cls).map(a => unit({...a, blurb:'trophy tier'}, 'big', 'trophy')).join('');
+const SWATCH = [
+  ['#eeeadc', 'AURA Ashfall'], ['#3866aa', 'AURA Tidewater'], ['#06060a', 'AURA Umbra'],
+  ['#ffc961', 'RARITY legendary'], ['#9b92e8', 'RARITY epic glow'], ['#c084fc', 'RARITY epic'],
+  ['#ff6b8b', 'RARITY prestige'], ['#4ade80', 'RARITY uncommon'], ['#6fd0ff', 'RARITY rare'],
+  ['#a2e0a6', 'slime / mint'], ['#fd6857', 'app accent'],
+];
+strip.innerHTML = SWATCH.map(([c,l]) => `<div class="sw"><i style="background:${c}"></i><span>${l}<br>${c}</span></div>`).join('');
+</script>
+</body></html>
