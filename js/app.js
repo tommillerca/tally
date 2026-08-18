@@ -513,6 +513,24 @@ function crateIcon(kind, s = 22) {
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
   return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
+/* A CRATE IN A PILL, WHERE THE 24px STEP DOES NOT FIT.
+   crateIcon's floor is 24 (the only whole steps the 48px chest art has are 48 and
+   24) so every caller asking for less has been silently drawing the old vector,
+   which is what Tom kept finding: "level up screen still doesnt have the pixel
+   art correct for coins and golden chest". A reward pill is 32px tall, and a 24px
+   sprite grows it to 38 and pushes the CTA off a 375x667 screen, measured.
+   Tom's call: "just use the backpack chest icon that is simpler for the crate in
+   that screen if it doesnt work shrunken" -- so this serves the plain 48px chest
+   at its 16px step, the same drawing already on the Backpack tab chip, and
+   carries the rarity the gold art used to carry as a GLOW instead: "ok make it
+   glow then to seem rarer". The glow is a pseudo-element BEHIND the sprite
+   (app.css .crate-chip), never a filter on it, because a bloom painted over the
+   pixel crate once erased its outline (see .pack-bloom.pix). */
+function crateChip(kind, s = 16) {
+  const pix = pixCur('crate', s);
+  return `<span class="crate-chip${kind === 'golden' ? ' rare' : ''}">${pix
+    || bhIcon(kind === 'golden' ? 'crate-golden' : 'crate-daily', s)}</span>`;
+}
 // The Boneyard map key: every marker type that can appear out there, rendered with
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
@@ -10191,9 +10209,9 @@ async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras 
           </div>
         </div>
         ${levelRewards ? `<div class="lu-rewards">
-          <span class="bh-pill">${ICONS.coin(15)} +${levelRewards.coins}</span>
-          <span class="bh-pill">${crateIcon('golden', 15)} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
-          ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(14)} +${levelRewards.dust}</span>` : ''}
+          <span class="bh-pill">${ICONS.coin(16)} +${levelRewards.coins}</span>
+          <span class="bh-pill">${crateChip('golden')} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+          ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(16)} +${levelRewards.dust}</span>` : ''}
           ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
         </div>` : ''}
         ${extras.length ? `<div class="lu-extras">${extras.join('<div style="height:12px"></div>')}</div>` : ''}

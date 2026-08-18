@@ -8136,3 +8136,17 @@ body::before {
 /* Tom's 48px currency art. Only ever drawn at 48, 24 or 16, so it is always a
    whole-number reduction and never resampled. */
 .ico.pix-cur { image-rendering: pixelated; vertical-align: middle; display: inline-block; }
+
+/* A CRATE CHIP, WITH RARITY CARRIED BY LIGHT INSTEAD OF DETAIL (js/app.js
+   crateChip). At 16px there is only one chest drawing, so gold and common would
+   read identically; the gold one gets a halo instead.
+   THE HALO IS A PSEUDO-ELEMENT BEHIND THE SPRITE, and it must stay one. A
+   filter: drop-shadow() or blur() on the <img> resamples the sprite, which is
+   the exact defect the 48/24/16 steps exist to avoid, and a bloom painted OVER
+   the pixel crate once erased its outline (see .pack-bloom.pix above). */
+.crate-chip { position: relative; display: inline-flex; align-items: center; line-height: 0; }
+.crate-chip > * { position: relative; z-index: 1; }
+.crate-chip.rare::before {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle, rgba(232, 194, 77, .55), rgba(232, 194, 77, 0) 70%);
+}

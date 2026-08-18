@@ -31,6 +31,13 @@
  *   XP        the bar reads the live carry-over, not the crossing-instant snapshot
  *   FITS      nothing overflows and the CTA is reachable, at the smallest phone
  *             the app supports as well as a normal one
+ *   PIX       the reward pills draw the PIXEL art, at a whole step, measured off
+ *             the render. Tom, 2026-08-18: "level up screen still doesnt have
+ *             the pixel art correct for coins and golden chest". They asked for
+ *             15, 15 and 14 against a pixel floor of 16, so all three fell back
+ *             to the vector while looking, in the source, exactly like the sites
+ *             that did not. A grep cannot tell those apart; this reads the src
+ *             and the rendered width off the live element.
  *   EMPTY     an empty sample set is a FAILURE, never a pass
  *
  * Usage: node tests/levelup-audit.mjs        (URL=... for live)
@@ -120,6 +127,52 @@ for (const [from, to] of [[1, 2], [1, 5], [1, 10]]) {
   const chips = await page.evaluate(() => (document.querySelector('.lu-chips, .lu-levels')?.textContent || '').replace(/\s+/g, ' ').trim());
   ok(`FROM the chips say ${from} -> ${to}, not a level you were never on`,
     new RegExp(`\\b${from}\\b`).test(chips) && new RegExp(`\\b${to}\\b`).test(chips), `chips: "${chips}"`);
+  await close();
+}
+
+/* ---- PIX: the reward pills draw pixel art, not the vector ------------------ */
+const pixOpen = await page.evaluate(async () => {
+  window.__motionForce = true;
+  await window.__levelUpMoment({
+    levelUp: { level: 5, into: 40, need: 500, name: 'Bonepile' },
+    levelRewards: { coins: 120, crates: 2, dust: 30, eggs: 1 },
+    fromLevel: 4, ms: 0, extras: [],
+  });
+  return true;
+}).catch(e => ({ err: String(e) }));
+if (pixOpen && pixOpen.err) {
+  ok('PIX the reward row could be driven at all', false, pixOpen.err);
+} else {
+  await sleep(900);
+  const pills = await page.evaluate(() => [...document.querySelectorAll('.lu-rewards .bh-pill')].map(p => {
+    const ic = p.querySelector('img, svg');
+    const r = ic ? ic.getBoundingClientRect() : null;
+    return { label: p.textContent.trim().slice(0, 24),
+      tag: ic ? ic.tagName.toLowerCase() : null,
+      src: ic && ic.tagName === 'IMG' ? ic.getAttribute('src') : null,
+      natural: ic && ic.tagName === 'IMG' ? ic.naturalWidth : 0,
+      w: r ? Math.round(r.width) : 0,
+      rare: !!(ic && ic.closest('.crate-chip.rare')) };
+  }));
+  /* An empty row would pass every per-pill assertion below by having nothing to
+     assert, which is the exact shape of vacuous green this suite exists against. */
+  ok('PIX the reward row rendered pills to grade (an empty sample is a failure)',
+    pills.length >= 3, JSON.stringify(pills));
+  const want = [/\+120/, /Golden Crate/, /\+30/];
+  for (const re of want) {
+    const p = pills.find(x => re.test(x.label));
+    /* WHOLE STEP, not just "an img". A pixel sprite drawn at 15 or 17 is resampled
+       and is the defect this whole 48/24/16 scheme exists to prevent, so the
+       rendered width is asserted, not merely the tag. */
+    ok(`PIX the ${re.source} pill draws pixel art at a whole step`,
+      !!p && p.tag === 'img' && p.natural === 48 && [16, 24, 48].includes(p.w),
+      JSON.stringify(p));
+  }
+  /* At 16px there is one chest drawing, so gold and common would read the same.
+     The rarity moved to a glow BEHIND the sprite (app.css .crate-chip.rare). */
+  ok('PIX the golden crate still reads as rare, by the glow behind the sprite',
+    !!pills.find(x => /Golden Crate/.test(x.label))?.rare,
+    JSON.stringify(pills.find(x => /Golden Crate/.test(x.label))));
   await close();
 }
 
