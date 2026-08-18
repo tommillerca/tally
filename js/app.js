@@ -10434,7 +10434,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
   const looksAll = BH_ITEMS.filter(i => !i.default);
   const looksHave = await collectedLooks();
-  const looksN = looksAll.filter(i => looksHave.has(i.id)).length;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -10474,7 +10473,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
     <div id="chContent"></div>`;
 
-  $$('#chTabs .chip, .looks-card', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  $$('#chTabs .chip', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 

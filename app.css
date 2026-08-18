@@ -1760,7 +1760,10 @@ body::before {
 /* ===== character sheet: game tabs + stat pills ===== */
 /* Five tabs in a 2-column grid meant three rows and ~430px of chrome before any
    content. One compact row instead, so the Wardrobe doll is visible on arrival. */
-.ch-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 14px 0 10px; }
+/* 4, not 5: the LEVEL chip came off this row on 2026-08-17 and a stale 5-column
+   grid left the four survivors stranded in 4/5 of the width with a visible hole
+   on the right. Count the chips in renderCharacter if this ever changes again. */
+.ch-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 14px 0 10px; }
 .chip.ch-tab {
   position: relative; display: grid; justify-items: center; gap: 3px;
   padding: 9px 2px 7px; border-radius: 14px;
@@ -4631,19 +4634,6 @@ body::before {
 .fit-chip.add { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
 .fit-note { text-align: center; margin: 2px 0 10px; }
 
-/* THE COLLECTION (v222): entry card sits under the four tab cards, full width
-   because a 2x2 grid has no natural fifth cell. */
-.looks-card { padding-block: 10px;
-  display: block; width: 100%; text-align: left; margin-top: 10px; padding: 12px 14px;
-  border-radius: 15px; background: var(--surface); border: 1.5px solid var(--line-strong);
-}
-.looks-card.on { border-color: var(--accent); box-shadow: 0 0 12px rgba(255, 201, 97, .16); }
-.looks-card .lc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.looks-card .lc-top b { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; }
-.looks-card .lc-top span { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.looks-card .lc-bar { display: block; height: 6px; border-radius: 99px; background: var(--surface-2); margin-top: 9px; overflow: hidden; }
-.looks-card .lc-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
-
 .col-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   margin: 16px 0 7px; font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
@@ -6189,7 +6179,6 @@ body::before {
    screen runs tighter than the others. The title is a SIBLING of #chBody, which
    is why an earlier `#chBody .page-h1` rule matched nothing. */
 .hub-title { font-size: 26px; margin-bottom: 4px; }
-.looks-card { margin-top: 6px; padding-block: 9px; }
 #chBody .fit-rail { margin-bottom: 4px; }
 
 /* ============================================================================
