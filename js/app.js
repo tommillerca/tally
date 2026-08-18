@@ -13585,7 +13585,6 @@ async function renderBoneyard(el) {
        five #mapDen/#mapSecret/#mapMini/#mapGlutton/#mapCollect handlers further
        down, which get their own ?. for the same reason #33's did. The stack said
        so (startMap, js/app.js:14166) after a guess said otherwise. */
-    if (!mapEl) return;
     if (!mapEl) return;                 // the error handler already swapped the body
     mapEl.addEventListener('pointerdown', ev => {
       if (ev.button && ev.button !== 0) return;
