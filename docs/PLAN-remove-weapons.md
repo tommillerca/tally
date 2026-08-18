@@ -64,7 +64,7 @@ and I will rewrite this**, because the plan changes substantially.
 | **Bonecrusher** | legendary | melee | **not for sale** | The Marrow King's prize |
 
 They plug into combat in exactly four places, all in `derived()` at
-`js/pit.js:237`:
+`js/pit.js:238`:
 
 - `weapon.apBonus` → action points
 - `weapon.magicBonus` → magic multiplier
@@ -81,9 +81,9 @@ That is a small, well-contained surface. The removal itself is not the risky par
 This is the single most important thing in this document, and it is easy to miss.
 
 ```js
-// js/pit.js:1426
+// js/pit.js:1576
 export const CHAMPION = { name: 'The Marrow King', ..., weaponId: 'bonecrusher', ... };
-// js/pit.js:1488
+// js/pit.js:1682
 weaponId: rank % 3 === 0 ? 'bonecrusher' : 'starter',
 ```
 
@@ -107,12 +107,12 @@ about this game's balance have been disproved by that sim before.
 
 | # | Thing | Where | Handling |
 |---|---|---|---|
-| 1 | `derived()` reads 4 weapon fields | `js/pit.js:237-250` | default them to zero; keep the parameter so foes can still carry a stat block |
-| 2 | Enemy Bonecrusher | `js/pit.js:1426, 1474, 1488` | **fold into foe stats, re-baseline with the sim** |
-| 3 | Champion prize (first ladder) | `js/app.js:12907` writes a `kind:'weapon'` inventory row | **remove the weapon grant (Tom's call).** Replacement prize, see §6 |
-| 4 | Shop merchant UI | `js/app.js:4445-4480` | delete the merchant block |
-| 5 | Buy flow | `buyWeapon`, `WEAPON_COST`, `weaponCoinCost`, `weaponDustCost` in `js/loot.js:844-870` | delete |
-| 6 | Equip flow | `kvSet('loadout', ...)` at `js/app.js:4557` | delete |
+| 1 | `derived()` reads 4 weapon fields | `js/pit.js:238-257` | default them to zero; keep the parameter so foes can still carry a stat block |
+| 2 | Enemy Bonecrusher | `js/pit.js:1576, 1638, 1682` | **fold into foe stats, re-baseline with the sim** |
+| 3 | Champion prize (first ladder) | `js/app.js:16336` writes a `kind:'weapon'` inventory row | **remove the weapon grant (Tom's call).** Replacement prize, see §6 |
+| 4 | Shop merchant UI | `js/app.js:5982-6110` | delete the merchant block |
+| 5 | Buy flow | `buyWeapon`, `WEAPON_COST`, `weaponCoinCost`, `weaponDustCost` in `js/loot.js:919-957` | delete |
+| 6 | Equip flow | `kvSet('loadout', ...)` at `js/app.js:6088` | delete |
 | 7 | Owned weapons in inventory | `db 'inv'` rows with `kind:'weapon'` | **refund, see §5** |
 | 8 | `loadout` pushed to the social profile | `pushProfileSoon()` after equipping | drop the field; server ignores unknown fields, so no migration |
 | 9 | `recommendArch` / `ARCH_META` | `js/app.js` | used for the merchant's grouping. Check for other consumers before deleting |
@@ -164,7 +164,7 @@ exactly the simplification you are asking for.
 
 **A Champion prize.** Beating The Marrow King (finishing the first Pit ladder)
 currently grants Bonecrusher, written as a `kind:'weapon'` inventory row at
-`js/app.js:12907`.
+`js/app.js:16336`.
 
 > **Tom's call, 2026-08-08:** "finishing the first ladder of fights in the pit
 > will no longer grant a weapon." Decided, not an open question.
