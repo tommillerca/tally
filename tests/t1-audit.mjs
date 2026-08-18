@@ -20,6 +20,12 @@
  *                   It is the no-shrink body that pushes the button off. Do not
  *                   re-document the delete as the proof; it passes.
  *   BUDGET, PAYOFF  make dayBudget() throw -> both fail (hidden/empty, null).
+ *   MARKER-ART      proven red twice on 2026-08-18, one per half:
+ *                   (a) `spawnIcon('coins') -> ''` -> 7/8, art-less: html "".
+ *                   (b) point pixCur's <img> at a missing PNG -> 7/8, the art is
+ *                   in the DOM and the row still fails, because naturalWidth is
+ *                   0. Half (b) is the one the old svg-only selector could never
+ *                   have expressed at all.
  *
  * Usage:  node tests/t1-audit.mjs                (serves this folder)
  *         URL=https://tommillerca.github.io/tally/ node tests/t1-audit.mjs
@@ -314,9 +320,28 @@ ok('BONEYARD old floating pill is gone', await count('.map-readout:not(.ma-body)
 
 const spawns = await count('.map-spawn');
 ok('BONEYARD draws spawn markers', spawns > 0, `${spawns} markers`);   // empty = failure
-const iconed = await page.evaluate(() =>
-  [...document.querySelectorAll('.map-spawn')].filter(m => m.querySelector('svg')).length);
-ok('BONEYARD every marker carries its art', spawns > 0 && iconed === spawns, `${iconed}/${spawns}`);
+/* A marker's art is an <svg> OR an <img>: v394 moved the coin pile onto the
+   48px pixel PNG, so `querySelector('svg')` started grading the one raster
+   marker type as art-less and this row went red on a map that was drawing fine.
+   Raster art is counted on naturalWidth, never on presence, because an
+   undecoded PNG is an INVISIBLE marker, which is the failure this row exists to
+   catch (and an <img> that 404s is exactly how it would arrive). An empty <svg>
+   does not count either. */
+const art = await page.evaluate(() => {
+  const out = { total: 0, drawn: 0, bad: [] };
+  for (const m of document.querySelectorAll('.map-spawn')) {
+    out.total++;
+    const svg = m.querySelector('svg');
+    const imgs = [...m.querySelectorAll('img')];
+    const drawn = (!!(svg && svg.children.length) || imgs.length > 0)
+      && imgs.every(i => i.naturalWidth > 0);
+    if (drawn) out.drawn++;
+    else out.bad.push({ cls: m.className.split(' ')[0], html: (m.innerHTML || '').slice(0, 70) });
+  }
+  return out;
+});
+ok('BONEYARD every marker carries its art', art.total > 0 && art.drawn === art.total,
+  `${art.drawn}/${art.total}${art.bad.length ? '  art-less: ' + JSON.stringify(art.bad) : ''}`);
 
 /* The deck bans soft glow on chrome, and the old markers had 14px-blur halos.
    Parse the computed shadow rather than trusting the stylesheet: a later rule
