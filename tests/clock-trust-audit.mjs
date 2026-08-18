@@ -186,9 +186,19 @@ try {
       return db.dayGuardState();
     }),
   };
+  /* The day key the app WILL report once shiftDays(dayDelta) is in force. It has
+     to use the same fixed-millisecond arithmetic shiftDays does, because that is
+     what dateKey() ends up seeing. This used to do calendar arithmetic instead
+     (new Date(y, m, d + dd)), and the two disagree by a day whenever the offset
+     span crosses a DST transition: fixed ms shifts the wall clock by an hour, so
+     between 00:00 and 01:00 local it lands on the previous calendar day while the
+     calendar version does not. The probes then seeded dayHighWater one day AHEAD
+     of the day runCycle() went on to play, claimDay() correctly called that day
+     backwards, and every daily reward paid zero. It reproduced for exactly one
+     hour a day, on exactly the offsets that straddle a DST boundary, which is why
+     it read as a stable pre-existing app fault rather than audit drift. */
   const keyFor = (dayDelta) => page.evaluate(dd => {
-    const b = new Date(window.__realNow());
-    const d = new Date(b.getFullYear(), b.getMonth(), b.getDate() + dd);
+    const d = new Date(window.__realNow() + dd * 86400000);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, dayDelta);
 
@@ -794,14 +804,21 @@ try {
       codes: Object.keys(loot.REDEEM_CODES),
       inShippedSource: /BONEHEADZ:\s*\{/.test(src) && /COSMICPET/.test(src),
       before, mid, after,
-      first: r1.ok, second: r2.ok, secondReason: r2.reason, afterErase: r3.ok,
+      first: r1.ok, second: r2.ok, secondReason: r2.reason,
+      afterErase: r3.ok, afterEraseReason: r3.reason,
     };
   });
   check('redeem codes ship in plaintext in js/loot.js', redeem.inShippedSource, redeem.codes.join(', '));
   check('a code pays the first time', redeem.first === true);
   check('the same code is refused the second time', redeem.second === false, `reason=${redeem.secondReason}`);
-  check('clearing kv `redeemed` makes the code pay AGAIN', redeem.afterErase === true,
-    'the one-shot is per-device state, not a server ledger');
+  /* This used to assert afterErase === true, back when the one-shot lived only in
+     the `redeemed` LIST and clearing that list handed the code back. PR #43 moved
+     the claim onto a per-code kv row taken with addIfAbsent, so the list is now a
+     legacy read and clearing it no longer reopens anything. Assert the hole is
+     CLOSED. FAILURE DIRECTION: afterErase goes true, meaning the per-code row
+     stopped being the thing that decides. */
+  check('clearing kv `redeemed` does NOT make the code pay again', redeem.afterErase === false,
+    `the claim is the per-code row redeemed:BONEHEADZ, not the list (reason=${redeem.afterEraseReason})`);
 
   finding('WHAT THIS GUARD DOES NOT STOP',
     'devtools (kvSet either mark by hand); editing js/db.js in a local checkout; pointing kv `apiBase` ' +
