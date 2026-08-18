@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 393, date: '2026-08-17', title: 'The Hollow music no longer restarts every time you tap', items: [
+    "<b>The garden music started over from the beginning every time you touched anything.</b> Planting, watering, harvesting, all of it reset the track. It plays straight through now, and stops when you leave the Hollow.",
+    "<b>It is also quieter.</b> The volume was never set, so it played at full blast. It sits under the game now instead of on top of it.",
+  ] },
   { n: 392, date: '2026-08-17', title: 'The Hollow has music', items: [
     "<b>The Hollow has a soundtrack now, and it starts muted.</b> There is a speaker button in the top corner of the garden; the first time you visit it gently pulses to tell you it is there. Tap it and the music plays and keeps playing on every visit after. Leave it alone and you will never hear a thing.",
   ] },

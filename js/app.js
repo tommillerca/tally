@@ -4232,6 +4232,33 @@ function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, na
 /* Two states, drawn rather than pulled from the icon set: this control has to
    read as a speaker at 22px on a busy garden, and the muted one needs the slash
    to be the loudest thing in it. */
+/* THE TRACK LIVES OUTSIDE THE DOM, and this is a fix not a preference.
+   v392 put an <audio> element inside #hlwStage, which is re-rendered on every
+   interaction in the garden. Every plant, water and harvest built a NEW element,
+   so playback restarted from zero. Tom, minutes after it shipped: "as i click
+   around it resets the song constantly." My own commit message called the
+   element living inside the sheet a feature, because it meant playback stopped
+   on close. It also meant it stopped on every tap.
+   One Audio object at module scope survives every re-render. It is created
+   lazily on the first unmute, so a player who never asks for music never
+   fetches 976 KB.
+   VOLUME. It was never set, so it defaulted to 1.0, full blast under a track
+   mastered at normal listening level. Tom: "is it tuned to have high volume?"
+   It was not tuned at all. 0.32 is a bed you can talk over, which is what a
+   garden loop is for. */
+let hlwTrack = null;
+/* webdriver-only: the ONLY way to observe that a re-render did not restart the
+   track, because the object deliberately no longer lives in the DOM. */
+if (typeof window !== 'undefined' && navigator.webdriver)
+  window.__hlwTrack = () => hlwTrack && ({ t: hlwTrack.currentTime, paused: hlwTrack.paused, vol: hlwTrack.volume, loop: hlwTrack.loop });
+function hollowTrack() {
+  if (!hlwTrack) {
+    hlwTrack = new Audio('assets/audio/morning-dew-loop.m4a');
+    hlwTrack.loop = true;
+    hlwTrack.volume = 0.32;
+  }
+  return hlwTrack;
+}
 const SPK_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8l6 8M22 8l-6 8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
 const SPK_ON  = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a7.5 7.5 0 0 1 0 10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>';
 /* webdriver-only seam so a capture can open the Hollow without walking the UI.
@@ -4246,7 +4273,10 @@ function openHollow(after) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`,
-    { cls: '', onClose: () => { kvSet('hlwSeen', Date.now()); after?.(); } });
+    /* Stopping the track on close used to be free, because the element went with
+       the sheet. Now that it outlives the sheet on purpose, leaving the Hollow
+       has to say so explicitly, or the garden follows you around the app. */
+    { cls: '', onClose: () => { hlwTrack?.pause(); kvSet('hlwSeen', Date.now()); after?.(); } });
   const body = $('#hollowBody', wrap);
   /* y 500, not 560. His box is 190 tall, so on the 740 stage 560 put his own
      contact shadow 6 units past the bottom edge, and on a 667-tall phone his
@@ -4372,7 +4402,6 @@ function openHollow(after) {
             fetched until the player asks, which is also why preload is none.
             The invite class only rides on the FIRST visit; after they choose
             either way the button goes quiet and the choice is remembered. */''}
-      <audio id="hlwMusic" src="assets/audio/morning-dew-loop.m4a" loop preload="none"></audio>
       <button class="hlw-mute${musicAsked ? '' : ' invite'}" id="hlwMute" type="button"
         aria-pressed="${musicOn ? 'true' : 'false'}"
         aria-label="${musicOn ? 'Turn the music off' : 'Turn the music on'}">${musicOn ? SPK_ON : SPK_OFF}</button>
@@ -4487,12 +4516,19 @@ function openHollow(after) {
        play() is called from inside the click so iOS treats it as user-gestured;
        a rejected promise is swallowed rather than left to surface as an
        unhandled rejection on a device that refuses autoplay anyway. */
-    const mus = $('#hlwMusic', body), mbtn = $('#hlwMute', body);
-    if (mus && mbtn) {
-      if (musicOn) { mus.play().catch(() => {}); }
+    const mbtn = $('#hlwMute', body);
+    if (mbtn) {
+      /* Resume only if it is not ALREADY playing: a re-render must not restart
+         the track, which is the whole bug. */
+      if (musicOn && (!hlwTrack || hlwTrack.paused)) hollowTrack().play().catch(() => {});
+      /* and the button shows what is actually audible right now */
+      const live = hlwTrack && !hlwTrack.paused;
+      mbtn.innerHTML = live ? SPK_ON : SPK_OFF;
+      mbtn.setAttribute('aria-pressed', live ? 'true' : 'false');
       mbtn.addEventListener('click', async () => {
-        const on = mus.paused;
-        if (on) mus.play().catch(() => {}); else mus.pause();
+        const t = hollowTrack();
+        const on = t.paused;
+        if (on) t.play().catch(() => {}); else t.pause();
         mbtn.innerHTML = on ? SPK_ON : SPK_OFF;
         mbtn.setAttribute('aria-pressed', on ? 'true' : 'false');
         mbtn.setAttribute('aria-label', on ? 'Turn the music off' : 'Turn the music on');
@@ -14610,7 +14646,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v392'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v393'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
