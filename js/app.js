@@ -405,6 +405,21 @@ function sparkIco(s = 14, fill = '#ffe08a') {
   return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 }
 
+/* TOM'S 48px PIXEL CURRENCY, SNAPPED TO WHOLE STEPS.
+   48 divides clean to 24, 16 and 12 and nothing else, so a request for 13 or 14
+   gets served the nearest step DOWN that is still whole rather than resampled.
+   12 is excluded on purpose: shown the render, Tom's verdict was "the 12 pixels
+   look fucked but the others are decent", so 16 is the floor and anything below
+   it keeps the vector, which still reads at 11px beside a line of text. */
+const PIX_CUR = { coin: 'coin', dust: 'dust', egg: 'egg', crate: 'crate' };
+function pixCur(kind, s) {
+  const f = PIX_CUR[kind];
+  if (!f) return null;
+  const px = s >= 48 ? Math.floor(s / 48) * 48 : s >= 24 ? 24 : s >= 16 ? 16 : 0;
+  if (!px) return null;   // under 16: the vector is genuinely better
+  return `<img src="assets/icons-pix/${f}.png" alt="" class="ico pix-cur" width="${px}" height="${px}"`
+    + ` style="width:${px}px;height:${px}px" decoding="sync">`;
+}
 const ICONS = {
   mapmark: (s = 20) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#8fd0ff" stroke-width="1.8" stroke-linecap="round"><path d="M12 21c-4.4-4.5-6.6-8-6.6-11A6.6 6.6 0 0 1 12 3.4 6.6 6.6 0 0 1 18.6 10c0 3-2.2 6.5-6.6 11z" fill="rgba(143,208,255,0.14)"/><circle cx="9.8" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><circle cx="14.2" cy="9.6" r="1.15" fill="#8fd0ff" stroke="none"/><path d="M10.4 12.6h3.2" stroke-width="1.6"/></svg>`,
   barcode: '<svg viewBox="0 0 24 24"><path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/></svg>',
@@ -416,7 +431,7 @@ const ICONS = {
     const on = typeof a === 'number' ? filled !== false : !!a;
     return `<svg class="ico" viewBox="0 0 24 24" style="width:${px}px;height:${px}px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`;
   },
-  coin: (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
+  coin: (s = 14) => pixCur('coin', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
   flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
   boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
@@ -432,7 +447,7 @@ ICONS.hidden = (s = 18) => t1Stroke(s, `<circle cx="12" cy="12" r="8.6"/><path d
 ICONS.warn = (s = 16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2l9 15.6H3z" fill="#ff6d5e" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8.6v4.6" stroke="#2a2d28" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.15" fill="#2a2d28"/></svg>`;
 /* Bone Dust: a violet sticker gem in the game's own style, replacing the ◆ text
    glyph it has used everywhere since launch. Flat fill + ink outline, like the coin. */
-ICONS.dust = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6l7.8 9.4-7.8 9.4-7.8-9.4z" fill="#9b92e8" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6.4l4.6 5.6-4.6 5.6" fill="none" stroke="#f2e9d7" stroke-width="1.3" opacity=".55"/></svg>`;
+ICONS.dust = (s = 14) => pixCur('dust', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6l7.8 9.4-7.8 9.4-7.8-9.4z" fill="#9b92e8" stroke="#2a2d28" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6.4l4.6 5.6-4.6 5.6" fill="none" stroke="#f2e9d7" stroke-width="1.3" opacity=".55"/></svg>`;
 /* a drawn tick, for the 18 places a ✓ text glyph marked something done */
 ICONS.check = (s = 14) => t1Stroke(s, `<path d="M4.5 12.5l5 5 10-11"/>`);
 ICONS.up = (s = 12) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 5l7 11H5z" fill="currentColor"/></svg>`;
@@ -500,7 +515,7 @@ function spawnIcon(type, s = 20) {
    chests". The 24px half reads as a grey pebble at tile size, where the vector
    egg cluster still reads as eggs. The chests survive the same reduction because
    their silhouette is a box with a lid; a smooth ovoid has no edges to keep. */
-const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0' };
+const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0', egg: 'icons-pix/egg' };
 function crateIcon(kind, s = 22) {
   const pix = CRATE_ICON_PIX[kind];
   if (pix && s >= 24) {
@@ -10417,8 +10432,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
     <div class="ward-head">
       <span class="ward-lv">Lv ${lvl.level}</span>
       <span class="ward-rank">${esc(lvl.name)}</span>
-      <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
-      <span class="bh-pill">${ICONS.dust(13)} ${dustBal.toLocaleString()}</span>
+      <span class="bh-pill">${ICONS.coin(16)} ${coinBal.toLocaleString()}</span>
+      <span class="bh-pill">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
     </div>` : `
@@ -10437,8 +10452,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
     </div>`}
     <div class="ch-tabs" id="chTabs">
       <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
-      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${crateIcon('golden', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(21)}<span>Shop</span></button>
+      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(24)}<span>Shop</span></button>
       <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Level</span></button>
     </div>
@@ -10906,7 +10921,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art">${crateIcon('egg', 46)}</span>
+          <span class="art">${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>

@@ -8111,3 +8111,6 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .hlw-mute.invite { animation: none; box-shadow: 0 0 0 3px rgba(165, 232, 71, .5); }
 }
+/* Tom's 48px currency art. Only ever drawn at 48, 24 or 16, so it is always a
+   whole-number reduction and never resampled. */
+.ico.pix-cur { image-rendering: pixelated; vertical-align: middle; display: inline-block; }
