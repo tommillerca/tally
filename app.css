@@ -1338,7 +1338,25 @@ body::before {
 /* 504, not 492: that is #28's short-phone value, and it wins. The vh line is
    the dvh branch's point, kept: a browser that does not parse svh drops the
    declaration entirely and the arena falls back to its intrinsic height. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - 504px), 600px); height: clamp(183px, calc(100svh - 504px), 600px); }
+/* 552, not 504. Tom, 2026-08-18: "it is too much scrolling right now we need to
+   decrease the height of the fighting section and give the buttons room to
+   breathe". Measured on a LOADED tray (a caster with three move talents plus
+   brewed potions: 9 buttons, the same case the ITEMS-door note above measured),
+   because that is the state the complaint comes from. A bare four-move tray does
+   not overflow at any viewport and would have graded this screen healthy.
+     504: 430x932 shows 6 of 9 moves, 83px hidden; 393x852 shows 6 of 9, 110px.
+     552: 430x932 shows 8 of 9, 35px hidden; 393x852 shows 8 of 9, 62px.
+   The tray's height is exactly this subtrahend minus 343.6 whatever the phone
+   is, because the arena eats the rest of the viewport: 160.4px at 504, 208.4px
+   at 552. So the subtrahend IS the tray, and nothing else in this rule set is.
+   The ceiling is fight-layout-audit's "the fight picture uses at least half the
+   screen": arena + hud >= 50% of 932, which puts the arena above 367 and the
+   subtrahend at or below 564. 552 sits 13px inside that rather than 5, and 564
+   buys 12px of tray with no extra button visible, so it is not worth the margin.
+   WHAT THIS DOES NOT FIX: at 375x667 and 320x568 the 183px floor already binds
+   (667 - 552 = 115, well under 183), so those phones are byte-for-byte unchanged
+   and still show 3 of 9. The short phone needs a different lever, not this one. */
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - 552px), 600px); height: clamp(183px, calc(100svh - 552px), 600px); }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
