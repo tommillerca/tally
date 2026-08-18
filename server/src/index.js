@@ -59,17 +59,23 @@ function rollFreeGift() {
    ciphertext. Keep this in step with RECOVERY_ID_RE in js/social.js. */
 const RECOVERY_ID_RE = /^[a-z0-9._-]{4,32}$/;
 
+/** The per-caller limiter key. Hashed, never the raw IP: the events table holds
+ *  anonymous ids by design, and a raw IP log would be a privacy regression for
+ *  an app that never uploads location. Truncated to 8 bytes, which is plenty to
+ *  separate callers and not enough to be a durable identifier. */
+async function clientKey(request) {
+  const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Returns a 429 Response when the caller is over budget, else null.
  *  `bucket` matters: handing out CIPHERTEXT has to be tight, but an availability
  *  check only reveals whether a name is taken. They shared one counter at first,
  *  which meant a player trying four candidate IDs in the setup sheet spent half
  *  the budget that their actual restore needs. Separate buckets, separate costs. */
 async function rateLimitRecovery(request, env, limit = 10, windowMs = 600000, bucket = 'rl_recovery') {
-  // hash the IP: the events table holds anonymous ids by design, and a raw IP
-  // log would be a privacy regression for an app that never uploads location
-  const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
-  const ipHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',
-    new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+  const ipHash = await clientKey(request);
   const now = Date.now();
   const hits = Number((await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ? AND ts > ?')
@@ -79,6 +85,42 @@ async function rateLimitRecovery(request, env, limit = 10, windowMs = 600000, bu
     .bind(ipHash, bucket, '{}', '', new Date(now).toISOString().slice(0, 10), now).run().catch(() => {});
   return null;
 }
+
+/* ---------------- analytics ingest budget ----------------
+   /events is unsigned (it has to be: it predates any account) and every accepted
+   event costs FOUR written rows, the row itself plus idx_events_day,
+   idx_events_device_day and idx_events_name. At 50 events per post that is ~200
+   rows a request, and the free plan allows 100,000 written rows per day for the
+   WHOLE api, a hard stop until 00:00 UTC. So ~500 scripted posts used to take
+   backups, profile sync and grants down with them for every real player.
+
+   WHY THIS DOES NOT REUSE rateLimitRecovery: that limiter records each hit by
+   INSERTing into `events`, 4 rows a go. Pointed at /events it would be a write
+   amplifier on the very table it is protecting. The counter therefore lives in
+   `rl`, a WITHOUT ROWID table whose primary key IS the table, so there is no
+   second b-tree to update and an upsert writes ONE row, charged once per
+   request rather than once per event: ~1 row of overhead against the 4 to 200
+   the request already costs.
+
+   The property that actually saves the budget is the refusal path: an over-cap
+   caller is answered from a pure SELECT and writes NOTHING at all, so hammering
+   the endpoint after the cap costs zero rows forever. Total damage from one
+   address is bounded by the cap, not by how many requests it sends.
+
+   The window is the UTC day because that is exactly when the Cloudflare quota
+   resets, so "spent today" means the same thing on both sides.
+
+   THE NUMBER, sized against the real client (js/analytics.js: flush on a 60s
+   interval plus on visibility change, <=50 events per post, and it keeps its
+   queue and retries on a non-ok response, so a 429 loses nothing immediately).
+   A heavy player emits roughly 160 events/hour (a session_ping every 45s, plus
+   screen/screen_time and gameplay), so ~240 events for a 90-minute day.
+   4,000/day/IP is therefore about sixteen heavy players sharing one NAT or
+   carrier address, against a measured ceiling of ~145 daily actives in TOTAL.
+   Deliberately generous: this exists to stop a script, not to throttle a
+   household. The cost ceiling it buys is 4,000 x 4 = 16,000 rows, ~16% of the
+   day's budget from any single address. */
+const EVENTS_DAILY_CAP = 4000;
 
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
@@ -923,6 +965,13 @@ export default {
         const appV = String(body.appV || '').slice(0, 16);
         const batch = body.events.slice(0, 50); // cap per request
         const now = Date.now();
+        // Per-IP daily write budget (see EVENTS_DAILY_CAP). Read first and bail
+        // before touching anything: a refused caller must cost zero written rows.
+        const rlKey = 'ev:' + await clientKey(request);
+        const rlDay = new Date(now).toISOString().slice(0, 10);
+        const spent = Number((await env.DB.prepare('SELECT n FROM rl WHERE k = ? AND day = ?')
+          .bind(rlKey, rlDay).first())?.n || 0);
+        if (spent >= EVENTS_DAILY_CAP) return json({ error: 'too many events, try again later' }, 429);
         const stmt = env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)');
         const ops = [];
         for (const e of batch) {
@@ -951,6 +1000,12 @@ export default {
              city = COALESCE(excluded.city, devices.city),
              last_seen = excluded.last_seen`
         ).bind(device, label, plat, cf.country || null, cf.region || cf.regionCode || null, cf.city || null, now, now).run();
+        // Charge the budget: one written row whatever the batch size. Minimum 1
+        // so an empty-batch flood still costs something, because the devices
+        // upsert above writes a row even when no event does.
+        await env.DB.prepare(
+          'INSERT INTO rl (k, day, n) VALUES (?,?,?) ON CONFLICT(k, day) DO UPDATE SET n = n + excluded.n')
+          .bind(rlKey, rlDay, Math.max(ops.length, 1)).run();
         return json({ ok: true, accepted: ops.length });
       }
 

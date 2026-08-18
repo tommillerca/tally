@@ -38,6 +38,16 @@ if ! git diff --quiet -- src/ ; then
   echo "  note: src/ has uncommitted changes; they are going live"
 fi
 
+echo "== 1b. does the live DB have what this tree queries?"
+# /events reads `rl` on every request, so deploying ahead of the migration turns
+# analytics ingest into a 500 for everyone. A missing migration must stop the
+# deploy, not surface as a live incident.
+if ! npx wrangler d1 execute bonez --remote --command "SELECT 1 FROM rl LIMIT 1" > /dev/null 2>&1; then
+  echo "REFUSING: table 'rl' is missing from the remote D1."
+  echo "  fix: npx wrangler d1 execute bonez --remote --file=migrations/2026-08-17-events-ratelimit.sql"
+  exit 1
+fi
+
 echo "== 2. tests before the deploy, not after"
 npx wrangler dev --local --port 8791 --var DEV:1 --var ADMIN_TOKEN:devtoken > /tmp/bonez-predeploy.log 2>&1 &
 DEV_PID=$!

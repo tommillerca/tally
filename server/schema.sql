@@ -193,3 +193,23 @@ CREATE TABLE IF NOT EXISTS spires (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_spires_owner ON spires (owner);
+
+-- Rate-limit / budget counters, keyed by hashed client IP. Currently just the
+-- /events daily write budget (EVENTS_DAILY_CAP in src/index.js).
+--
+-- WITHOUT ROWID is the whole point: the primary key IS the table, so there is no
+-- second b-tree to maintain and an upsert costs ONE written row. This table
+-- exists to defend the free plan's 100,000 written rows/day, and a counter that
+-- cost as much as the thing it counts would defend nothing. (The older recovery
+-- limiter counts by INSERTing into `events`, 4 rows a hit; that is affordable at
+-- 10 attempts per 10 minutes but would be absurd on the analytics firehose.)
+--
+-- Rows accumulate at roughly one per distinct address per day and are never
+-- swept, on purpose: a DELETE is also a written row, and a few hundred rows a
+-- day is nothing against D1's storage.
+CREATE TABLE IF NOT EXISTS rl (
+  k TEXT NOT NULL,        -- bucket + hashed ip ("ev:<8-byte hash>"), never a raw ip
+  day TEXT NOT NULL,      -- YYYY-MM-DD UTC: the same boundary the CF quota resets on
+  n INTEGER NOT NULL,     -- units spent today (accepted events, for the 'ev:' bucket)
+  PRIMARY KEY (k, day)
+) WITHOUT ROWID;
