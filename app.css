@@ -1264,7 +1264,13 @@ body::before {
   padding: 2px 12px;
 }
 .fight-log { min-height: 34px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); padding: 0 6px; }
-.fight-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+/* COLUMN GAP 6, ROW GAP 8. The row gap is load-bearing for the three-row
+   arithmetic below and does not move; the column gap is only separation between
+   two bordered boxes and 2px of it is worth more as text width. Measured at
+   393x852: 361px of tray, so 8px gaps give a 115px button and 6px gaps give
+   116.33, which is 1.33px of hint width per button, and the hints below are
+   losing by single digits. */
+.fight-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 6px; margin-top: 12px; }
 /* TIGHTER ROWS, the other half of Tom's 2026-08-13 call. 11/9 padding made a
    ten-button tray 317px on a 393x852 phone and left the boss 34% of the screen.
    8/7 plus a 44px floor keeps every button a legal tap target while giving the
@@ -1273,7 +1279,13 @@ body::before {
    app already has a standing complaint about tiles too small to judge. */
 .fight-act {
   min-height: 44px;
-  display: grid; gap: 2px; justify-items: center; padding: 8px 5px 7px;
+  /* 8/7 VERTICAL IS UNTOUCHED, 5 SIDE BECOMES 3. The v383 note above is about
+     the vertical squeeze and about type size, and both stay exactly as they
+     are. Side padding is the opposite lever: every pixel taken off it is a
+     pixel the hint gets to use, and the hint running out of width is what put
+     a second line under half these buttons. 101px of text box at 393x852
+     becomes 106.3 with this and the column gap together. */
+  display: grid; gap: 2px; justify-items: center; padding: 8px 3px 7px;
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm);
 }
@@ -8124,3 +8136,17 @@ body::before {
 /* Tom's 48px currency art. Only ever drawn at 48, 24 or 16, so it is always a
    whole-number reduction and never resampled. */
 .ico.pix-cur { image-rendering: pixelated; vertical-align: middle; display: inline-block; }
+
+/* A CRATE CHIP, WITH RARITY CARRIED BY LIGHT INSTEAD OF DETAIL (js/app.js
+   crateChip). At 16px there is only one chest drawing, so gold and common would
+   read identically; the gold one gets a halo instead.
+   THE HALO IS A PSEUDO-ELEMENT BEHIND THE SPRITE, and it must stay one. A
+   filter: drop-shadow() or blur() on the <img> resamples the sprite, which is
+   the exact defect the 48/24/16 steps exist to avoid, and a bloom painted OVER
+   the pixel crate once erased its outline (see .pack-bloom.pix above). */
+.crate-chip { position: relative; display: inline-flex; align-items: center; line-height: 0; }
+.crate-chip > * { position: relative; z-index: 1; }
+.crate-chip.rare::before {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle, rgba(232, 194, 77, .55), rgba(232, 194, 77, 0) 70%);
+}

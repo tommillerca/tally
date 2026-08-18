@@ -78,7 +78,11 @@ if (own) console.log(`serving this repo at ${base}\n`);
    imports ../js/pit.js and runs 400 seeded sims, exactly quest-daymore's shape,
    and BROWSER hands every entry a URL it would ignore. ~1s, 4/4 green on main,
    and it carries its own CONTROL row so it cannot pass vacuously. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs'];
+/* icon-inventory-audit is PURE for the same reason first-fight-audit is: it boots
+   nothing, reads js/*.js, and finishes in well under a second. It is the register
+   of every icon site in the game and it fails when a new one appears undeclared,
+   which is the class of leftover three separate icon sweeps have each shipped. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule

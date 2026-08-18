@@ -9,6 +9,85 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🧭 Four calls Tom made 2026-08-18 — DECISIONS RECORDED (two not built)
+
+Written down at the time they were made, per the standing rule that a decision
+only exists if a file says so. Two of these are build instructions for later and
+carry no code in v400; the other two are policy that governs how work ships.
+
+### 1. Garden bed compensation: REFUND AND CONVERT — DECISION, not built
+
+When the garden goes, players who paid for beds and are mid-grow must not simply
+lose it. Tom's call is refund and convert, both halves:
+
+  - **Refund the coins spent on beds.** `PLOT_PRICES` in js/garden.js is
+    `[1500, 4000]`, the 4th and 5th bed. Pay back what each player actually
+    bought, derived from their owned-plot count, not a flat amount.
+  - **Convert the growing stock.** Unplanted seeds AND crops still mid-grow both
+    become the ingredients they would have turned into. Nobody loses a harvest
+    for being caught halfway through one.
+
+**It is ONE migration behind a ONE-SHOT LEDGER KEY.** This is the load-bearing
+constraint, not a detail. The key must be a fixed string, no timestamp and no
+random id in it, so a second run finds it already written and pays nothing. This
+is the same rule as the rewarded-actions SOP in tally/CLAUDE.md: ask the ledger
+first, pay second, and prove the second attempt pays nothing before shipping it.
+A compensation migration that can run twice is a coin printer.
+
+Not built in v400. Garden work is held (see 2 below), and this ships with the
+removal, not before it.
+
+### 2. Release policy: ship the low-risk verified batch, hold the rest — POLICY
+
+Asked what to do with the queued branches, Tom: "Ship the safe ones now." The
+line he drew:
+
+  - **SHIPS:** work that is verified, low-risk and visual. The Pit label wrap,
+    the ingredient icons and the icon inventory went out as v400.
+  - **HELD:** anything touching the Boneyard economy, the Gauntlet or boss XP
+    curves, the balance guards (`ext/balance-endgame-tiers`), the garden or the
+    Hollow removal, `vigor.png` (a 24px asset in a 16px chip strip, undecided),
+    and the cooked-dish icons (they map to recipes and that mapping is not named
+    yet).
+
+**One release, one version bump.** Three approved branches shipped as a single
+v400 rather than three releases. Every `sw.js` VERSION bump forces open clients
+to reload, and players have already complained about the app flashing from too
+many releases back to back. Batch the safe ones; do not drip them.
+
+### 3. Small phones: 320 wide scrolls, and that is ACCEPTED — DECISION
+
+Tom, on the Pit tray at 320x568: "Accept it, scroll on SE." The move hints still
+wrap at 320 and roughly three buttons are visible before scrolling. That is the
+shipped, intended state, not an open defect, and it should not be reopened as a
+bug report.
+
+**The goal is stated against normal-and-larger phones:** three rows of three
+moves reachable without scrolling. That is met at 393x852 and up. 320 gets a
+readable label and a tappable button, and it scrolls. The alternative was
+shrinking the type below what is readable, which is worse.
+
+The 44px tap floor is NOT part of what was accepted. It holds everywhere,
+measured at 54.8px per row on the shipped build, and any change that drops a
+button under 44px is a regression at every width including 320.
+
+### 4. Levelling rate: reshape the GAUNTLET XP CURVE — DECISION, not built
+
+Levelling is too fast. The fix is the **Gauntlet XP curve**, reshaped so the
+later runs pay a flatter share of a level, not a cap on boss XP. Capping boss XP
+was considered and rejected: it makes the biggest fight in the game feel like the
+least rewarding one, which punishes the player for engaging with the content
+rather than adjusting the rate.
+
+**Levels themselves stay UNCAPPED. That earlier decision stands and is not
+reopened by this one.** The rate changes; the ceiling does not exist.
+
+Not built in v400: this is balance work, and balance is held per 2 above. When it
+is built, it gets measured through tests/fight-sim.mjs rather than reasoned about
+from the constants.
+
+---
+
 ## 🥚 Chest and egg art Tom authored 2026-08-16 evening — LOGGED, not wired in
 
 Written down because I keep failing to. Tom, 2026-08-16: "bro you gotta start
