@@ -9,6 +9,372 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 🧊 The Hollow and the Bone Garden are COMING OUT. DECISION 2026-08-18 (supersedes the 2026-08-17 park)
+
+Tom, 2026-08-18: *"I've decided that the hollow/garden is a feature that is
+taking us away from our major purpose here. we can revisit it down the road and
+i dont want to lose the progress but we should go back to just the kitchen and
+ingredients are found out in the boneyard. simple."*
+
+This SUPERSEDES the entry "The Hollow: PARKED 2026-08-17 until Cam looks at it",
+which was written on branch `reggie/chest-common` and never reached main. Its
+content is carried forward below so the record survives the branch. Nothing has
+been removed yet: this entry is the plan and the decision, and no code has been
+touched. Tom's release hold is in force.
+
+### THE ONE THING THAT ORDERS EVERYTHING ELSE
+
+**The Boneyard has to feed the Kitchen BEFORE the garden comes out, not after.**
+Measured with `tests/garden-sim.mjs` (30 days x 60 seeded runs, `FREE_FIGHTS` 3),
+median player at 1 app open a day, 3 beds, 1 pot, stacking policy:
+
+| | ingredients in /day | kitchen spend /day | fights with a buff up | 30-day stockpile |
+|---|---|---|---|---|
+| today: 3 beds + map at 2 per open | 9.1 (7.1 garden, 2.0 map) | 2.4 | **64%** | 199 |
+| garden gone, Boneyard unchanged | 2.0 | 1.5 | **43%** | 14 |
+| garden gone, Boneyard at 3 per open | 3.0 | 2.3 | 63% | 21 |
+| garden gone, Boneyard at 4 per open | 4.0 | 2.8 | 74% | 37 |
+| garden gone, Boneyard at 6 per open | 6.0 | 3.0 | 79% | 92 |
+
+At 2 opens a day the same comparison is 88% today against 72% with the garden
+gone and the map unchanged, 87% at 3 per open. At 4 opens a day it is 96%
+against 94%, so a heavy player barely feels it. **The gap is 21 points of buffed
+fights at the median player and it closes at roughly ONE extra ingredient per app
+open.** The garden is in permanent oversupply (7.1 produced against 2.4 eaten),
+so the raw totals are not the problem: the coverage is.
+
+Assumption stated rather than hidden: "2 per open" is `garden-sim.mjs`'s own
+`--walk` default and is not a measured production number. Every row above moves
+with it. There is no analytics event on a spawn collect that would settle it.
+
+**The cheapest lever is already on the map.** `hunt.js SPAWN_TYPES.herbs` (the
+Herb patch) is 1 of the 5 entries in `SPAWN_WEIGHTS`, so 20% of spawn slots, and
+its entire identity is `seeds: 2`, which is garden-only. With the garden gone it
+becomes the worst spawn in the game (25 XP against a bone cache's 40). Repointing
+that payout from seeds to ingredients is a one-line change to the spawn table
+plus the seed branch in the collect handler, and at 2 spawns per open it is worth
+about +0.8 per open. Re-measure, do not assume: the target is the median player
+back at or above 64% buffed fights with `beds: 0`.
+
+### BUNDLED WITH THE BONEYARD ECONOMY CHANGE: the three interactions
+
+Tom, same day: *"i think we are already giving people too much currency in game
+and splitting up the amount of food items and gold would help us curb that and
+make the boneyard seem more full."* That change and this one cannot be planned
+apart. Three couplings, with the numbers the Boneyard side needs.
+
+**1. Ingredient supply pulls two ways, and here is the hard demand number.**
+Removing the garden pushes required Boneyard supply UP; splitting food across
+more spawns pushes per-spawn supply DOWN. The Kitchen's demand, measured, at
+`FREE_FIGHTS` 3:
+
+| policy | total ingredients/day | Marrow | Sinew | Graveroot | Bog | Salt | Ember |
+|---|---|---|---|---|---|---|---|
+| median player, 1 open, stacking | 2.41 | 0.80 | 0.48 | 0.32 | 0.32 | 0.32 | 0.16 |
+| 2 opens a day, stacking | 4.95 | 1.65 | 0.99 | 0.66 | 0.66 | 0.66 | 0.33 |
+| 4 opens, 5 beds, 3 pots, stacking | 10.17 | 3.39 | 2.03 | 1.36 | 1.36 | 1.36 | 0.68 |
+| ceiling if pots and cadence were free | 18.0 (3.0 single-buff) | | | | | | |
+
+**Design target for the Boneyard: about 3 ingredients per app open, or roughly 3
+a day for the median player and 6 a day for a 2-open player.** That is the level
+at which the no-garden player matches today's 64% and 88% buffed-fight coverage.
+
+**The mix is wrong today and the split is the chance to fix it.** Derived by
+running the real `spawnIngredient` over 200,000 spawn ids against the real
+`SPAWN_WEIGHTS`:
+
+| ingredient | Boneyard drops | combat dishes need | drop / need |
+|---|---|---|---|
+| Marrow | 21.4% | 33.3% | **0.64x** |
+| Sinew | 21.4% | 20.0% | 1.07x |
+| Graveroot | 14.2% | 13.3% | 1.07x |
+| Bog Mushroom | 14.3% | 13.3% | 1.07x |
+| Grave Salt | 14.4% | 13.3% | 1.08x |
+| Ember Pepper | 14.4% | 6.7% | **2.16x** |
+
+Marrow is the bottleneck (three of the five common-only combat dishes want it,
+two of them x2) and Ember Pepper is the sink nobody needs. A split that keeps the
+current per-type pools reproduces this imbalance at higher spawn counts. Note
+also that `herbs` has NO entry in `SPAWN_INGREDIENTS`, so an Herb patch already
+drops uniformly across all six commons: it is the only spawn type whose payout is
+unbiased, which makes it the natural home for a demand-weighted table.
+
+**2. Removing the garden is NOT materially inflationary. Do not enlarge the coin
+curb to compensate.** The premise that seeds are bought is false: `grantSeed` is
+fed only by spawn collects, compost and the starter pouch, and compost costs an
+ingredient, never a coin. **The garden's entire coin sink is the two buyable beds:
+1,500 and 4,000, one time, lifetime.** So per-player exposure is 0, 1,500 or 5,500
+coins EVER, and it is **0 coins a week** for anybody who already owns five beds.
+Against the drop shop, where one cosmetic is 1,500 to 3,000 and new drops land
+regularly, plus crates at 150/400, Vigor at 90 and Battle Charms at 100, this is
+a rounding error in the sink column.
+
+The Kitchen's own sinks all SURVIVE: cauldrons at 1,000 and 3,000, and the Forage
+button at 45 coins for one random common. Forage gets MORE pressure once the map
+is the only ingredient source, so the recurring direction is toward more sink,
+not less. Net effect of the removal: a one-time bump of at most 5,500 coins for
+players who had not yet bought beds, and zero recurring change.
+
+**3. Seeds become dead currency, and settling them does NOT change
+`SPAWN_WEIGHTS`.** The important mechanical fact for the Boneyard tuning: the 30%
+seed roll (`SPAWN_SEED_CHANCE`) rides ON TOP of an existing collect at
+`js/app.js:14881`. **It is not a spawn slot and it consumes no weight.** Deleting
+it frees nothing and changes no density. The only weight-relevant question is the
+`herbs` type, and the recommendation is that it KEEPS its 1-in-5 slot and swaps
+its `seeds: 2` payout for a demand-weighted ingredient payout, which makes it the
+"food-rich" spawn the split-food design wants and fixes the Marrow shortfall in
+the same line. Existing seed counts in kv `garden` stay untouched and dormant; see
+the compensation options below for whether they get converted.
+
+### WHAT IS LIVE TODAY, AND EVERY WAY IN
+
+The vector Hollow ships. The pixel redesign does not (see the preserved state
+below). Entry points, all of them:
+
+1. `js/app.js:5271`: `#doorGrow` on the Kitchen's two-door landing. The primary
+   entrance. Removing it returns the Kitchen to a single COOK view.
+2. `js/app.js:3104`: `#gardenToKitchen` inside the Today ripe-crop banner. The
+   banner is rendered only when `cropsRipe > 0` (`js/app.js:3861`); the ungated
+   version from `ext/garden-reach` was deliberately re-gated for the quiet launch.
+3. `js/app.js:1920`: the Bone Garden intro popup's SEE THE GARDEN button.
+   Shows up to 5 times, counted in kv `gardenIntroSeen`.
+4. `js/app.js:9162`: the News tab row `id: 'garden'`, whose CTA reopens the
+   popup above.
+5. `js/app.js:4485`: `window.__openHollow`, a webdriver-only seam. Not player
+   reachable. **Keep it:** it is what lets the Hollow audits keep running after
+   the doors come out.
+
+No hash route and no deep link exist for the Hollow; it is a sheet only.
+Secondary signals that also have to go: the Kitchen door badge lights on
+`cropsRipe` (`js/app.js:2894`), and `speechLine` has a five-line ripe-crop block
+(`js/app.js:3281`).
+
+**Already dead on main, mentioned not deleted:** `openGardenSheet`
+(`js/app.js:4865`) and `gardenRowHtml` (`js/app.js:4268`) are the old list UI and
+have no caller anywhere. `tests/reward-sop-audit.mjs:185` already registers this.
+`assets/hollow/hollow-anim.css` is loaded by nothing on main.
+
+**The trap nobody would look for:** `openCompostSheet` is also reached from the
+COOK view (`#compostBtn2`, `js/app.js:5272`), and compost converts an ingredient
+into SEEDS. With the garden gone that button destroys a Kitchen ingredient for an
+item the player can never plant. It has to be hidden in the same change.
+
+### WHAT PLAYERS HAVE PUT INTO IT
+
+Everything the Hollow writes lives in exactly ONE key, kv `garden`:
+
+```
+{ seeds: { ingredientId: n },
+  plots: [ null | { ing, plantedAt, readyAt, watered } ],
+  plotsOwned: n,                       // 3 free, 4th = 1,500 coins, 5th = 4,000
+  composts: { date, used } }
+```
+
+- `plotsOwned` above 3 is the ONLY record of a coin spend. `PLOT_PRICES` in
+  `js/garden.js` is `[1500, 4000]`, so per-player exposure is 0, 1,500 or 5,500
+  coins. There is no real-money IAP anywhere in the app, so no cash is at stake.
+- `plots[]` can hold crops mid-grow: 3h for a common, 12h for an Ectoplasm spore.
+- `seeds{}` is never bought with coins. It comes from spawn collects (30% roll,
+  `SPAWN_SEED_CHANCE`), Herb patches (2 guaranteed), compost (1 to 3 per
+  ingredient, 3 a day) and the starter pouch.
+- kv `gardenIntroSeen` (0 to 5) and kv `seedpouch-backfill` (one-shot flag,
+  `js/game.js:backfillStarterSeedsIfNeeded`) are the only other garden keys.
+- kv `ingredients` is SHARED with the Kitchen. Do not touch it.
+- Store `xp` carries `type: 'garden'` rows, capped at 10 a day by
+  `XP_DAILY_CAP.garden` (`js/game.js:130`). Permanent history; keep the constant
+  so `tests/xp-cap-audit.mjs:80` stays green.
+- **No badge, cosmetic or achievement is gated on the garden.** Checked the whole
+  of `BADGES` in `js/game.js:335`.
+- **Preservation is already free.** `js/db.js:577` exports `db.all('kv')` whole,
+  with no allow-list, so `garden` already round-trips through cloud backup and
+  through JSON export/import. Nothing has to be added. `migrate()` in
+  `js/garden.js` tolerates a missing or short shape, so a save written today
+  reads back correctly after any gap.
+
+**Two quests become uncompletable** and must come out with the doors:
+`q-harvest` (`js/quests.js:133`) and `w-garden` (`js/quests.js:186`). A daily
+quest a player cannot finish is the same mistake as the day-one Pit card.
+
+### HIDE, NOT DELETE. THE RECOMMENDATION AND WHAT IT COSTS
+
+Remove the entry points, keep the modules, keep the data, keep the precache.
+
+Why: Tom said "i dont want to lose the progress" and "we can revisit it down the
+road", and a delete would strand the measured scale work and 52 pixel assets on
+an unmerged branch with no anchor on main. Deleting also buys less than it looks
+like: the Hollow and garden audits go red the moment the GROW door comes out
+whether you hide or delete, so the audit work is the same either way.
+
+What hidden-but-present actually costs, measured:
+
+| | size | on the critical path? |
+|---|---|---|
+| `js/hollow-art.js` + `-beds` + `-scene` + `js/garden.js` | 48.9 KB | yes, static imports, all four in `sw.js` PRECACHE (lines 157, 161-163) |
+| the `.hlw-*` block in `app.css` (from line 7976) | ~11 KB | yes |
+| `js/app.js` lines 4258 to 5136 | 879 lines / 57 KB | yes |
+| `assets/hollow/` | 116 KB of SVG | **no**, not precached, fetched only when the sheet opens |
+
+So about 117 KB of always-shipped payload against a 1.07 MB `app.js` and a 526 KB
+`app.css`: roughly 3% of the JS. The real cost is the 879 lines of `app.js` that
+every future session reads past, and this entry is the mitigation for that.
+
+`tests/precache-audit.mjs` only checks for MISSING modules, never extras, so
+leaving the four modules imported and precached keeps it green.
+
+### THE STAGES, ordered so the app is never broken
+
+**Stage 0 (this entry, no code).** Record the decision on MAIN. Also re-anchor
+the 2026-08-17 park record, which today exists only on `reggie/chest-common`: if
+that branch is deleted or force-pushed, the entire written record of the scale
+work disappears. Carried forward below.
+
+**Stage 1, supply, ships alone and first, and it is the SAME change as the
+Boneyard split.** Repoint the Herb patch payout from seeds to a demand-weighted
+ingredient payout (`js/hunt.js SPAWN_TYPES.herbs`, plus the seed branch at
+`js/app.js:14881`), sized against the demand table above rather than chosen.
+Success criterion, verified not assumed: re-run `node tests/garden-sim.mjs` plus a
+`beds: 0` sweep, and the median player is back at or above 64% buffed fights with
+about 3 ingredients a day reaching them. Re-pin
+`tests/garden-appetite-guard.mjs` to the new numbers. Let it sit live with the
+garden STILL PRESENT before anything comes out, so the supply change is proven on
+its own and a regression has only one candidate cause.
+
+**Stage 2, hide the doors.** One change, no data touched. Kitchen back to the
+single COOK view; hide `#compostBtn2`; drop the Today banner row, the
+`cropsRipe` half of the Kitchen badge, the ripe-crop speech lines,
+`maybeShowGardenPopup()` and the News row; drop `q-harvest` and `w-garden`; stop
+granting seeds on a spawn collect and in the starter pouch (a reveal card for an
+unplantable item is a lie) while leaving every existing seed count in kv
+untouched. Keep every import, every module, every precache line, `XP_DAILY_CAP`
+`.garden`, and `window.__openHollow`.
+
+**Stage 3, the audits, in the SAME commit as Stage 2 or the gate goes red.**
+Listed below.
+
+**Stage 4, revival.** What has to be true before the Hollow could come back:
+Cam has looked at the scene; `reggie/chest-common` is rebased onto whatever main
+is by then (it currently predates the v388 squash); the four open art items in
+the preserved record below are resolved; and the Boneyard supply change from
+Stage 1 is re-balanced, because by then the Kitchen is fed without a garden and
+turning it back on re-creates the oversupply the sim already measured.
+
+### AUDITS THAT GO RED OR STALE
+
+Every one of these opens the garden through `#doorGrow`, so all of them go red at
+Stage 2 unless repointed at the `window.__openHollow` seam:
+`tests/garden-doors.mjs`, `tests/garden-audit.mjs`,
+`tests/garden-intro-audit.mjs`, `tests/garden-reach-audit.mjs`,
+`tests/hollow-audit.mjs` (lines 59, 209, 267, 393), `tests/hollow-beds-audit.mjs`,
+`tests/hollow-backdrop-audit.mjs`. Repointing the three Hollow ones is the cheap
+move and it keeps the parked scene provably working while it sleeps.
+
+Also affected:
+- `tests/kitchen-queue-audit.mjs`: drives the compost sheet ordering and the
+  starter-pouch backfill. Both change.
+- `tests/out-there-audit.mjs`: writes a ripe crop into kv `garden` and asserts
+  the garden row AND the drop row both show on Today.
+- `tests/sheet-action-reachable-audit.mjs:361`: the `garden-buybed` row, action
+  `#buyBed, #hlwBuy`. Neither is reachable after Stage 2.
+- `tests/garden-appetite-guard.mjs`: a PURE test that pins the balance decision.
+  Re-pin at Stage 1, not Stage 2.
+- `tests/reward-sop-audit.mjs` lines 126, 156, 184, 185: the harvest, compost,
+  `openHollow` and `openGardenSheet` rows. Site counts move.
+- `tests/xp-cap-audit.mjs:80`: green as long as `XP_DAILY_CAP.garden` survives.
+- `tests/figure-audit.mjs:172`: the `hollow-pet` row. Survives if `openHollow`
+  survives.
+- `tests/mockup-parity.mjs:94`: the Garden row's markers (`t3-bed`, `t3-pouch`,
+  `t3-seed`) live in the already-dead `openGardenSheet`. It is green today
+  because dead code still emits them, which is worth knowing before anybody
+  deletes that function.
+- `tests/t3-audit.mjs:127`: its own comment says both Garden checks have been
+  failing since the route moved. Already stale.
+- `tests/suite-rot-audit.mjs`: exists to catch audits whose selectors no longer
+  emit. It SHOULD start naming the garden suites. That is the signal Stage 3 is
+  not finished, not a failure.
+- `tests/crate-reveal-audit.mjs:67`: seeds `gardenIntroSeen` to suppress the
+  takeover queue. Harmless either way.
+
+### THE COMPENSATION QUESTION: Tom's call, not taken here
+
+Facts: beds 4 and 5 cost 1,500 and 4,000 coins. Seeds are never bought. No real
+money is involved anywhere. So the exposure is 0, 1,500 or 5,500 coins a player.
+
+**How many players are affected cannot be answered from this repo.** There is no
+server-side garden state (`server/src/index.js` has none), and no analytics event
+fires on a bed purchase or a harvest. The only garden events are
+`garden_intro_shown` / `_cta` / `_later` / `_suppressed`, which count who was
+OFFERED it. Settling this needs either a production query or a one-line event on
+`addPlot()` shipped BEFORE the removal.
+
+The options:
+
+- **A. Do nothing.** Data stays dormant and returns intact if the feature comes
+  back. Zero work. A player watches a bed they paid 1,500 for disappear with no
+  acknowledgement.
+- **B. Refund the coins**, once, on next boot, guarded by a one-shot kv ledger
+  key exactly like `seedpouch-backfill`. The rewarded-actions SOP is already
+  written at `js/game.js:930-955` and pinned by `tests/reward-sop-audit.mjs`.
+  Refund is `1500 * (plotsOwned >= 4) + 4000 * (plotsOwned >= 5)`. Works without
+  knowing the count.
+- **C. Convert the holdings**: hand over every unplanted seed and every mid-grow
+  crop as the ingredient it would have become, once, same ledger shape. Turns a
+  dormant pouch into something the Kitchen can use on day one.
+- **D. Refund and ALSO leave the data.** Carries a real risk: if the garden comes
+  back, the player holds both the coins and the bed, so the revival has to charge
+  again or read the refund ledger.
+
+My read, labelled as a read: B plus C as one migration behind one ledger key,
+because it is the only option that costs a player nothing and does not need
+production data to execute. Not decided.
+
+### PRESERVED: the state when the scene was parked, 2026-08-17
+
+Tom, 2026-08-17, after the 3x ground render: *"hmm this is looking pretty bad
+still maybe we should park this until my brother can look at it."*
+
+All of it lives on branch `reggie/chest-common`, **PR #31, still OPEN**, reopened
+2026-08-17 after it was wrongly closed as superseded. 24 commits ahead of merge
+base `5ad37eb`, unmerged, NOT on main and NOT live. It predates the v388 squash
+and needs a rebase before it can go anywhere.
+
+What was established, so nobody restarts from nothing:
+
+- **1 metre = 76 stage px**, anchored on `hollow-fence`, whose ink is exactly
+  76px and which depicts a 1m picket fence. Every size question resolves against
+  this ruler.
+- **52 pixel assets under `assets/hollow/pix/`** on that branch: the five ground
+  tiles (day, dusk, night, olive, base), the crop family for all seven
+  ingredients at young and ripe, four soil states, the compost stages, fence,
+  shed, scarecrow, crow with two flap frames, and the props.
+- The ground is Tom's own tiles, 92x64 native, drawn at a whole multiple. Moved
+  from 2x to 3x on 2026-08-17: at 2x the texture read as static, and it was NOT a
+  resampling defect (crop 28 colours against source 28, so nothing was being
+  blended). 3x lowers the apparent frequency with the art untouched.
+- Night is the hero tile per Tom and should run around the clock. NOT WIRED: the
+  app still picks a tile by time of day and the night look exists only in the
+  capture harness.
+- Props all render into the same 48px cell regardless of what they depict, which
+  is why the crow reads crate-sized. They are SVGs, so resizing is lossless.
+  Targets measured but NOT APPLIED: crow ~15px ink, tuft 12, crate 19, sack 23.
+- Measured against a native-resolution Stardew render: p50 luminance 33 to 109
+  (Stardew 109), adjacent dL per screen px 12.4 to 5.6 (Stardew 5.6), identical
+  adjacent pairs 72% to 82% (Stardew 82%). One pixel scale for the whole scene,
+  held by `tests/hollow-scale-audit.mjs` (11 checks, on the branch only).
+- Open and unfixed: too many dirt piles with no arrangement (reads as spill, not
+  as beds); the lantern carries a baked halo (50.2% of its opaque pixels) instead
+  of being lit by the scene; four cameras in one frame (beds top-down, shed 3/4
+  isometric, fence straight-on, keeper front view); a shed at correct scale
+  (182px at 2.4m) covers two of the five plots, which is a layout question; and
+  the keeper is Cam's vector art at 12,085 colours in a pixel scene, which Tom
+  said stays as-is for now.
+- The 2026-08-16 art-redraw list Tom owns is the entry "The Hollow: art redraws
+  Tom owns" further down this file. It is unchanged by this decision and is the
+  work Cam would be looking at.
+
+**STANDING RULE that came out of this and outlives the feature: the scene adapts
+to the art Tom supplies, never the reverse.** A grass spec asking him to
+regenerate tiles was written and withdrawn.
+
 ## 🥚 Chest and egg art Tom authored 2026-08-16 evening — LOGGED, not wired in
 
 Written down because I keep failing to. Tom, 2026-08-16: "bro you gotta start
