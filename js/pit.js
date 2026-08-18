@@ -378,14 +378,20 @@ export const WEAPONS = {
 // It was vestigial: fights always started close, the AI never shoved or taunted,
 // so far-range moves were unreachable in real play. Every action is always legal
 // (AP/Stamina permitting); Kite and Heckle were repurposed onto Jab and Rattle.
+/* `desc` IS ONLY FOR THE MOVES NO TALENT NODE DESCRIBES. Every talent move
+   already carries its full sentence on its node in TALENT_TREES above, and the
+   Pit's press-and-hold popup reads THAT, so nothing here duplicates it. These
+   six (Jab, Swing, Haymaker, Bone Guard, Signature, Bone Spike) are the moves
+   with no node of their own, so their sentence has to live somewhere and beside
+   the numbers it describes is the place it cannot drift from. */
 export const ACTIONS = {
-  jab:      { label: 'Jab', ap: 1, wind: 8, base: 10, hype: 6 },
-  swing:    { label: 'Swing', ap: 1, wind: 18, base: 22, hype: 10 },
-  haymaker: { label: 'Haymaker', ap: 2, wind: 35, base: 40, hype: 15 },
+  jab:      { label: 'Jab', ap: 1, wind: 8, base: 10, hype: 6, desc: 'A fast, cheap poke. The least damage of your close moves, but it costs barely any Stamina and it never misses.' },
+  swing:    { label: 'Swing', ap: 1, wind: 18, base: 22, hype: 10, desc: 'Your workhorse strike: solid damage for 1 action point. It can miss, but rarely.' },
+  haymaker: { label: 'Haymaker', ap: 2, wind: 35, base: 40, hype: 15, desc: 'A committed haul that costs both action points and a lot of Stamina. Your biggest ordinary hit, and the easiest to whiff.' },
   // Active defense (no more passive Block/Dodge/Brace): a shield you raise and a
   // debuff you land. Both are proactive plays, not "turtle and wait".
-  guard:    { label: 'Bone Guard', ap: 1, wind: 12, shield: true, hype: 3 },
-  signature:{ label: 'Signature', ap: 2, wind: 0, base: 120 },
+  guard:    { label: 'Bone Guard', ap: 1, wind: 12, shield: true, hype: 3, desc: 'Raise a shield that absorbs the next hits (it scales with your Marrow) AND catch your breath: Bone Guard restores 22 Stamina.' },
+  signature:{ label: 'Signature', ap: 2, wind: 0, base: 120, desc: 'Your finisher, unlocked at full Hype and free of Stamina. It spends all your Hype for a huge hit, and each encore in the same fight lands a little softer.' },
   titan:    { label: 'Titan', ap: 2, wind: 30, base: 55, hype: 15, talent: 'titan' },
   flurry:   { label: 'Flurry', ap: 2, wind: 0, base: 10, talent: 'flurry' },
   bonebolt: { label: 'Bone Bolt', ap: 1, wind: 18, base: 16, hype: 6, talent: 'bonebolt', magic: true, school: 'shadow' },
@@ -412,7 +418,7 @@ export const ACTIONS = {
   peckeyes: { label: 'Peck the Eyes', ap: 1, wind: 18, base: 12, hype: 6, talent: 'peckeyes', magic: true, school: 'shadow' },
   murder:   { label: 'Unleash the Murder', ap: 2, wind: 30, base: 8, talent: 'murder', magic: true, school: 'shadow' },
   // universal bone moves (every fighter is a skeleton): flavor + utility, not talent-gated
-  bonespike:{ label: 'Bone Spike', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow' }, // necro-only, BLINDS on hit
+  bonespike:{ label: 'Bone Spike', ap: 1, wind: 16, base: 17, hype: 8, talent: 'bonebolt', magic: true, school: 'shadow', desc: 'Erupt a shard of bone under the enemy: shadow damage, and a landed hit BLINDS them for 2 turns so 30% of their attacks go wide.' }, // necro-only, BLINDS on hit
 };
 export const SHOWSTOPPER_HYPE = 80;
 
