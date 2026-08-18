@@ -1,15 +1,15 @@
 /* LOG A WEIGHT + EDIT/DELETE A LOG ENTRY: two of the app's oldest,
  * highest-consequence surfaces with no runtime coverage.
  *
- * openWeightSheet at js/app.js:5574 writes to the `weights` store, overwrites
+ * openWeightSheet at js/app.js:7004 writes to the `weights` store, overwrites
  * S.settings.profile.weightKg (which feeds every future target recalc), pays
- * XP through onWeighIn, and does an lb/kg conversion (line 5591) that is
+ * XP through onWeighIn, and does an lb/kg conversion (line 7021) that is
  * permanent history: a wrong kg is not just today's row, it skews every
  * future targetKcal downstream.
  *
- * openEntryEdit at js/app.js:4232 -> openQuickAdd(entry) at :4244 is the
+ * openEntryEdit at js/app.js:5607 -> openQuickAdd(entry) at :5614 is the
  * only way to fix or remove a mis-log. The delete branch (`#qaDel`, line
- * 4291) is the only path a player has to undo an entry. Neither has ever
+ * 5666) is the only path a player has to undo an entry. Neither has ever
  * been driven end-to-end in a test.
  *
  * This audit drives both, both directions, both units. Real controls: click

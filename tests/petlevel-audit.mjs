@@ -13,7 +13,7 @@
  *
  * DRIVE PATH. checkPetLevelUp fires from onHealthSync (via ingestHealth),
  * and boot itself schedules a checkPetLevelUp 1500 ms after `initGameIfNeeded`
- * (js/app.js:558). openPetLevelUp is module-scope, not exported to window.
+ * (js/app.js:622). openPetLevelUp is module-scope, not exported to window.
  * The natural player path is a Sync now: fill clipboard with a valid
  * payload, click #hkSyncNow, ingestHealth runs -> onHealthSync runs ->
  * checkPetLevelUp fires. That is what this audit drives. The pet's step
@@ -41,7 +41,7 @@ const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d 
 
 /* Seed a fresh equipped pet so we own the iid + starting level. Wipe any
  * open sheets so checkPetLevelUp does not fall through to the toast path
- * at app.js:9647. The seed jumps steps from L2 (needs 4000) to L3 (needs
+ * at app.js:11631. The seed jumps steps from L2 (needs 4000) to L3 (needs
  * 9000): seeded value 10000 puts cur = 3 and seen[iid] = 2 gives prev = 2. */
 const setup = await page.evaluate(async () => {
   const { db, kvSet, kvGet, newId } = await import('./js/db.js');
@@ -190,9 +190,9 @@ if (sheetShown) {
     dom.hasCta);
 }
 
-/* After the sheet opens, checkPetLevelUp wrote seen[iid] = 3 (line 9644).
+/* After the sheet opens, checkPetLevelUp wrote seen[iid] = 3 (line 11628).
  * Verify: a repeat sync must NOT re-open the sheet (cur === prev short-
- * circuits at line 9642), which is the same class of guard as the
+ * circuits at line 11626), which is the same class of guard as the
  * wheel/glutton "second attempt pays nothing" property. */
 await page.evaluate(() => document.querySelectorAll('.lvlup-stage').forEach(n => n.closest('#sheets > *')?.remove() || n.remove()));
 await sleep(400);

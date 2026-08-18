@@ -31,7 +31,7 @@ await page.evaluateOnNewDocument(() => { window.__teaserForce = 1; });
 await page.reload({ waitUntil: 'networkidle2' });
 await sleep(2600);
 
-/* No manual call: maybeShowCosmeticTeaser() is invoked by BOOT (js/app.js:591),
+/* No manual call: maybeShowCosmeticTeaser() is invoked by BOOT (js/app.js:652),
    which is the path that was broken. Driving it by hand would test a function
    nobody calls that way and would have passed on the shipped bug. */
 await page.waitForFunction(() => !!document.querySelector('.tz-pop'), { timeout: 20000, polling: 200 })
