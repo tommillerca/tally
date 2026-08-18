@@ -54,7 +54,7 @@ keeps a tall card off the headline on a short phone.
 ## What changed vs. ship
 
 1. **The crate opens instead of shaking.** `.crate-shake` / `@keyframes crateshake`
-   are no longer used by the reveal (the rule is left in `app.css` at L686 in case
+   are no longer used by the reveal (the rule is left in `app.css` at L741 in case
    another module wants it). The lid and box are two `clip-path`-clipped copies of
    the same icon; the box clip starts 5% *above* the cut so the halves overlap —
    abutting edges left a hairline seam on the closed crate. Per-kind lid ratios in

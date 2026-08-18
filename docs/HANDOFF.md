@@ -35,7 +35,7 @@ Boneheadz; never fake, relabel, or generate art in Cam's style and present it as
   them half-pixel), **33 radii, ~107 unique box-shadows**, 151 paddings. Tokens
   exist but govern roughly 15% of the surface.
 - **Two design systems are stacked.** The "MIDNIGHT LOOK v180" layer at
-  `app.css:709-750` redefines `.card` / `.btn` / `.page-h1` over their originals
+  `app.css:774-819` redefines `.card` / `.btn` / `.page-h1` over their originals
   ~600 lines earlier. Every component written since follows whichever half its
   author happened to read. **This is the root cause.**
 - The brand deck's hero coral **#FD6857 appears ZERO times** in the app. Only 2 of

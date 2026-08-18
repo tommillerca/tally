@@ -21,7 +21,7 @@ Decisions locked with Tom (2026-08-06):
 Visual system, app.css (3,940 lines):
 - 148 distinct hex colors, 52 font sizes (12 half-pixel), 33 radii, ~107 unique
   box-shadows, 151 paddings. Tokens exist but govern ~15% of the surface.
-- TWO design systems stacked: the "MIDNIGHT LOOK v180" layer (app.css:709-750)
+- TWO design systems stacked: the "MIDNIGHT LOOK v180" layer (app.css:774-819)
   redefines .card/.btn/.page-h1 etc. over their originals 600 lines earlier.
   Every component since follows whichever half its author read. Root cause.
 - The brand deck's hero coral #FD6857 appears ZERO times. Only 2 of 15 canonical
@@ -106,7 +106,7 @@ app.css restructure, no behavior changes:
   (replaces action-tile/hero-act/fight-act/pot-card), one .chip.
 - Extract sharedIntroPopup() (replaces the 3 copy-pasted drop-veil functions)
   and pinnedBanner() (replaces the 5 glutton-banner clones and the string
-  .replace class hack at app.js:1846).
+  .replace class hack at app.js:3623).
 - Inline-style sweep of app.js: the 157 inline margins and 29 inline font-sizes
   move to classes; the flex-row triplets become utility classes.
 - Touch/a11y floor in the same pass: every tappable >= 44px (fix .meal-add
@@ -118,7 +118,7 @@ app.css restructure, no behavior changes:
 
 - bhIcon()/ICONS everywhere: Bone Dust diamond, checks, chevrons, close x,
   map controls (recenter, key, compass), vigor bolt, achievement icons
-  (game.js:109-116), crate/consumable icons (loot.js), the 4 potion iconIds,
+  (game.js:178-212), crate/consumable icons (loot.js), the 4 potion iconIds,
   the drummer badge, CSS content: glyphs, the index.html rotate-lock skull
   (inline SVG skull instead of emoji).
 - Keep emoji ONLY as flavor inside prose/speech lines, never as a control or

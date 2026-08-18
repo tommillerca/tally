@@ -128,8 +128,8 @@ Everything lands in one `reports` table, distinguished by `kind`:
 
 | kind | what it is | who sends it |
 |---|---|---|
-| `feedback` | free-text bug report / tester feedback | `openFeedbackSheet`, `js/app.js:6206` |
-| `unreachable` | POI you cannot physically reach | map report sheet, `js/app.js:9918` |
+| `feedback` | free-text bug report / tester feedback | `openFeedbackSheet`, `js/app.js:8455` |
+| `unreachable` | POI you cannot physically reach | map report sheet, `js/app.js:13690` |
 | `den-nominate` | player nominating a landmark for a den | same sheet |
 
 ```sql
