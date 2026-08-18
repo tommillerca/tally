@@ -165,7 +165,13 @@ const ACTIONS = [
   { id: 'js/loot.js:grantPet', sites: 1, undriven: 'a grant helper' },
   { id: 'js/loot.js:addPetInstance', sites: 1, undriven: 'a grant helper' },
   { id: 'js/loot.js:migrateLegacyEggs', sites: 1, undriven: 'a migration that converts each legacy row and deletes it; conserves count' },
-  { id: 'js/game.js:initGameIfNeeded', sites: 7, undriven: "one-time retroactive backfill behind kv 'game-init', and every award inside is ledger-keyed anyway" },
+  /* runInitBackfill, not initGameIfNeeded: the backfill body was extracted into
+     its own function when the replay was chunked and checkpointed, and
+     initGameIfNeeded is now the one-at-a-time wrapper around it and holds no
+     paying site of its own. Re-graded on the move: the seven sites are the same
+     seven awards (log, firstlog, weigh, protein, dayclose, meals3, levelup),
+     byte for byte the same keys and amounts, so nothing was added or lost. */
+  { id: 'js/game.js:runInitBackfill', sites: 7, undriven: "one-time retroactive backfill behind kv 'game-init', reached only through initGameIfNeeded, and every award inside is ledger-keyed anyway" },
   { id: 'js/game.js:initLootIfNeeded', sites: 5, undriven: "the welcome kit, behind kv 'loot-init'" },
   { id: 'js/game.js:backfillStarterSeedsIfNeeded', sites: 2, undriven: 'one-time backfill behind its own kv flag' },
   { id: 'js/poi.js:backfillDenCeilingIfNeeded', sites: 1, undriven: "one-time backfill behind kv 'denceil-backfill'; mints 0-XP marker rows only" },
