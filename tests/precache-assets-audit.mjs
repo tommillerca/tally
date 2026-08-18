@@ -218,7 +218,7 @@ for (const c of CANDIDATES) {
 
 /* BYTE WEIGHT MEASUREMENT.
  *
- * sw.js's install is Promise.all over the full PRECACHE list (sw.js:135), so
+ * sw.js's install is Promise.all over the full PRECACHE list (sw.js:177), so
  * the whole worker fails to install if ANY entry cannot be fetched on a bad
  * line. Total install bytes is therefore the single number that predicts a
  * first-open failure rate: bigger install, higher chance one request drops.

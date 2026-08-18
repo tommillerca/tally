@@ -36,11 +36,11 @@
  * exact bug it exists to catch.
  *
  * The broken instrument was `getComputedStyle(img).opacity !== '0'`. That reads
- * the LIVE, mid-flight value of the crossfade declared at app.css:4069
+ * the LIVE, mid-flight value of the crossfade declared at app.css:4292
  * (`.strikefx img { transition: opacity .05s linear }`), so it only reports
  * non-zero once the compositor has actually committed a frame of that transition.
- * Meanwhile js/app.js:14722 sets `fast = !!navigator.webdriver`, so under any
- * automation the whole animation is played at 4x: js/app.js:15138 scales every JS
+ * Meanwhile js/app.js:15104 sets `fast = !!navigator.webdriver`, so under any
+ * automation the whole animation is played at 4x: js/app.js:15520 scales every JS
  * timing by s = 0.25, giving 15ms between frame swaps and a ~117ms total life for
  * jab. The 50ms CSS crossfade is NOT scaled by s. Traced:
  *
@@ -64,12 +64,12 @@
  *     place the crossfade cannot land. Anti-regression rule 12: this audit had
  *     been measuring in a state no player is ever in.
  *   - Cache was never involved. The six FX PNGs load at fight open via
- *     warmStrikeFx (js/app.js:16096) in ~40ms with transferSize > 0, and the audit
+ *     warmStrikeFx (js/app.js:15487) in ~40ms with transferSize > 0, and the audit
  *     waits 2.5s after that before the first strike.
  *
  * THE FIX. Never gate on a value that only exists once the compositor has drawn.
  * Every predicate below is either the app's OWN STATED INTENT (the inline opacity
- * strikeFx() writes at js/app.js:15139, which is exactly "this is the frame I am
+ * strikeFx() writes at js/app.js:15521, which is exactly "this is the frame I am
  * putting up") or a layout/decode fact (naturalWidth, offsetWidth, the element
  * box, display/visibility), none of which are animated here. The computed opacity
  * is still SAMPLED and PRINTED, because a human reading the log should be able to
@@ -108,16 +108,16 @@
  *                                                          (see the end of this
  *                                                          section)
  *
- * MECHANISM. warmStrikeFx (js/app.js:16096) fetches all six frames when the fight
+ * MECHANISM. warmStrikeFx (js/app.js:15487) fetches all six frames when the fight
  * opens. Under `cache-control: no-store` the browser may not reuse them, so the
- * <img> tags strikeFx builds at js/app.js:15117 go back to the network for the
+ * <img> tags strikeFx builds at js/app.js:15499 go back to the network for the
  * whole frame set, which on disk is 181KB for jab (19 + 50 + 112) and 232KB for
  * swing (31 + 66 + 136). Through 400ms of latency and a 200KB/s pipe that is well
- * over a second, while strikeFx's own safety net (js/app.js:15152-15158) gives up
+ * over a second, while strikeFx's own safety net (js/app.js:15535-15541) gives up
  * waiting after 400ms and plays anyway. So the animation runs over undecoded
  * images and the audit reports the v245 bug against an app without it. python's
  * http.server sends no cache-control at all, so Chrome heuristically caches from
- * Last-Modified and the same tree passes. tests/release-gate.mjs:53-54 sends
+ * Last-Modified and the same tree passes. tests/release-gate.mjs:52-53 sends
  * exactly the no-store header, and so do most dev static servers.
  *
  * That is the same class of defect as the flake above and worse in one way: the
@@ -132,9 +132,9 @@
  *      cacheable value, at the RESPONSE stage, so bytes still travel the real
  *      network stack and the throttle still applies to them. This is not hiding
  *      anything, and the evidence is in this repo rather than in a claim about
- *      the host: sw.js:55-60 precaches all six strike frames on install
- *      (sw.js:141-144) and its fetch handler is cache-first for non-navigations
- *      (sw.js:183-184), so a player who has opened the app once fights with these
+ *      the host: sw.js:88-96 precaches all six strike frames on install
+ *      (sw.js:173-183) and its fetch handler is cache-first for non-navigations
+ *      (sw.js:233-234), so a player who has opened the app once fights with these
  *      frames already in Cache Storage. A warm cache at strike time is the state
  *      a player is in (rule 12); no-store from a dev static server is the
  *      artifact. It is also why this audit is exposed to the header at all: on
@@ -387,7 +387,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
       const foe = document.querySelector('#foeStage');
       const vb = foe && foe.getBoundingClientRect();
       /* THE FRAME THE APP SAYS IT IS SHOWING. strikeFx()'s show() writes
-         style.opacity = '1' on exactly one img (js/app.js:15139). This is the
+         style.opacity = '1' on exactly one img (js/app.js:15521). This is the
          app's own intent and is not animated, unlike getComputedStyle().opacity,
          which is the mid-flight value of the .05s crossfade and is only non-zero
          once the compositor has drawn. Gating on that was the flake. */
@@ -442,7 +442,7 @@ const fail = m => { failures.push(m); console.log('  FAIL: ' + m); };
      passed this audit: the frames arrived inside the first 8ms sample. Proven, by
      doing exactly that in a throwaway tree and watching it come back green.
      So the audit now supplies the missing property itself, and only AFTER the
-     fight is up: by this point warmStrikeFx (js/app.js:16096) has long since
+     fight is up: by this point warmStrikeFx (js/app.js:15487) has long since
      fetched all six frames, so a correct app reads them from cache and never
      touches this pipe, while an app that fetches frames at strike time has to drag
      112KB across 400ms of latency against a 117ms animation and cannot win.

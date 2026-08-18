@@ -88,7 +88,7 @@ const dumpLog = tag => {
 };
 
 /* ---- 1. install the worker ------------------------------------------------
-   js/app.js:507 registers sw.js only when `!S.demo && location.protocol ===
+   js/app.js:542 registers sw.js only when `!S.demo && location.protocol ===
    'https:'`, so on a local http tree the app never registers it and an audit that
    only waited would time out having tested nothing. Register it explicitly:
    127.0.0.1 is a secure context, so this is the same worker running the same

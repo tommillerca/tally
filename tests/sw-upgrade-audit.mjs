@@ -205,7 +205,7 @@ async function serveVersioned() {
       'Content-Type': TYPES[path.extname(full)] || 'application/octet-stream',
       /* no-cache everywhere so the browser HTTP cache is not a second variable:
          this audit is about the SERVICE WORKER's delivery, and the shell handler
-         already forces revalidation for its own fetches (sw.js:174). */
+         already forces revalidation for its own fetches (sw.js:210). */
       'Cache-Control': 'no-cache',
     });
     res.end(body);
@@ -528,7 +528,7 @@ const SCENARIOS = {
       await sleep(6000);
     }
   },
-  /* the claim in app.js:519-520: with a sheet open the update is NOT applied and
+  /* the claim in app.js:551-558: with a sheet open the update is NOT applied and
      the player is told "Update ready. Leave this screen to apply". Open a sheet,
      MAKE THE UPDATE ARRIVE while it is open, then leave the screen and see
      whether anything applies it.
@@ -725,7 +725,7 @@ for (const [name, r] of Object.entries(all)) {
 }
 
 /* THE OFFLINE COPY, WHICH IS THE ONE THE PRECACHE ACTUALLY OWNS.
-   Online this whole question is moot: sw.js:174 answers every shell request from
+   Online this whole question is moot: sw.js:210 answers every shell request from
    the network. The precache is only ever read when the network is gone, so that
    is where a stale entry can still bite, and the shape of the bite is a MIX. */
 for (const [name, r] of Object.entries(all)) {
