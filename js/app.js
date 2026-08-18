@@ -411,7 +411,11 @@ function sparkIco(s = 14, fill = '#ffe08a') {
    12 is excluded on purpose: shown the render, Tom's verdict was "the 12 pixels
    look fucked but the others are decent", so 16 is the floor and anything below
    it keeps the vector, which still reads at 11px beside a line of text. */
-const PIX_CUR = { coin: 'coin', dust: 'dust', egg: 'egg', crate: 'crate' };
+const PIX_CUR = {
+  coin: 'coin', dust: 'bone-dust', egg: 'egg', crate: 'crate',
+  pit: 'pit', wardrobe: 'wardrobe', shop: 'shop', build: 'build',
+  xp2: 'battle-charm', vigor: 'vigor-draught',
+};
 function pixCur(kind, s) {
   const f = PIX_CUR[kind];
   if (!f) return null;
@@ -463,7 +467,7 @@ ICONS.labelIco = (s = 19) => t1Stroke(s, `<rect x="4" y="3" width="16" height="1
 ICONS.boltStroke = (s = 19) => t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
 ICONS.searchIco = (s = 18) => t1Stroke(s, `<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>`);
 
-ICONS.pit = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
+ICONS.pit = (s = 22) => pixCur('pit', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
 ICONS.water = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2s6.2 6.6 6.2 10.8A6.2 6.2 0 0 1 5.8 14C5.8 9.8 12 3.2 12 3.2z" fill="#7cc4ff" stroke="#173a52" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.4 13.6a2.6 2.6 0 0 0 2.6 2.6" fill="none" stroke="#e8f5ff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
@@ -549,6 +553,8 @@ function mapLegendHtml() {
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
 }
 function consumableIcon(type, s = 20) {
+  const pix = pixCur(type, s);
+  if (pix) return `<span class="bhi-wrap">${pix}</span>`;
   if (type === 'vigor') return ICONS.boltIco(s);
   return `<span class="bhi-wrap">${bhIcon('charm', s)}</span>`;
 }
@@ -2847,8 +2853,8 @@ async function renderToday(el) {
     <div class="hero-top">
       <button class="trend-dot" id="streakChip" aria-label="Open your trends and progress">${ICONS.trend(15)}</button>
       <div class="wallet-pill">
-        <button class="wp" id="coinBtn" aria-label="Coins">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b></button>
-        <button class="wp dust" id="dustBtn" aria-label="Bone Dust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b></button>
+        <button class="wp" id="coinBtn" aria-label="Coins">${ICONS.coin(16)}<b>${coinBal.toLocaleString()}</b></button>
+        <button class="wp dust" id="dustBtn" aria-label="Bone Dust">${ICONS.dust(16)}<b>${dustBal.toLocaleString()}</b></button>
         <button class="wp gold" id="vigorBtn" aria-label="Pit fights ready">${ICONS.boltIco(13)}<b>${pitEnergy.ready}</b></button>
         ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
@@ -2893,13 +2899,13 @@ async function renderToday(el) {
     <button class="hero-act${wardAttn ? ' attn' : ''}" id="charBtn">${ICONS.bone(23)}<span>Character${wardAttn ? ' <i class="hero-badge">!</i>' : crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
     <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
     <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
-    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(23)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
   ${isToday && topNudge ? `
   <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
   <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(20)}</span>
+    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(24)}</span>
     <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
       topNudge.action === 'logfood' ? 'Tap to log your first meal'
       : topNudge.action === 'pit' ? 'Tap to enter The Pit'
@@ -3032,9 +3038,13 @@ async function renderToday(el) {
   // this handler ran too. It always did; it used to be masked because
   // openCharacter opened a sheet on top, and once it navigated by hash instead it
   // started overwriting the chip's own destination. Buttons handle themselves.
+  /* Tapping the bonehead opens the BACKPACK, not the Wardrobe. Tom, 2026-08-17:
+     the Wardrobe already has two other doors (the bottom Bonehead tab and its own
+     chip), so spending the biggest tap target on it was a duplicate. The Backpack
+     is where the unopened crates are, which is what people come back for. */
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
-    openCharacter('wardrobe');
+    openCharacter('crates');
   });
   measureBubbleSide($('#bhStage'), eq).then(side => {
     $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
@@ -6483,7 +6493,7 @@ async function renderShop(el) {
   <div class="t3-sect"><b>Coin shop</b><i></i></div>
   <div class="t3-cells">
     ${SHOP.map(s => `<button class="t3-cell" data-buy="${s.id}" data-label="${esc(s.label)}" ${coinBal < s.cost ? 'disabled' : ''}>
-      <span class="art">${s.id === 'crate-daily' ? crateIcon('daily', 54) : s.id === 'crate-golden' ? crateIcon('golden', 54) : consumableIcon(s.id, 46)}</span>
+      <span class="art">${s.id === 'crate-daily' ? crateIcon('daily', 54) : s.id === 'crate-golden' ? crateIcon('golden', 54) : consumableIcon(s.id, 48)}</span>
       <b>${esc(s.label).toUpperCase()}</b>
       <span class="t3-price">${ICONS.coin(13)} ${s.cost}</span>
       ${shopDesc[s.id] ? `<small>${shopDesc[s.id]}</small>` : ''}
@@ -6493,7 +6503,7 @@ async function renderShop(el) {
   <div class="t3-sect"><b>Bone Dust shop</b><i></i><span class="r chip" style="font-size:11px">Melt gear to earn it</span></div>
   <div class="t3-cells">
     ${DUST_SHOP.map(d => `<button class="t3-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
-      <span class="art">${d.id === 'egg' ? crateIcon('egg', 54) : d.id === 'crate-daily' ? crateIcon('daily', 54) : consumableIcon(d.id, 46)}</span>
+      <span class="art">${d.id === 'egg' ? crateIcon('egg', 54) : d.id === 'crate-daily' ? crateIcon('daily', 54) : consumableIcon(d.id, 48)}</span>
       <b>${esc(d.label).toUpperCase()}</b>
       <span class="t3-price dust">${ICONS.dust(13)} ${d.cost}</span>
       <small>${esc(d.desc)}</small>
@@ -10451,16 +10461,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
     </div>`}
     <div class="ch-tabs" id="chTabs">
-      <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${ICONS.bone(21)}<span>Wardrobe</span></button>
+      <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${pixCur('wardrobe', 24) || ICONS.bone(21)}<span>Wardrobe</span></button>
       <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${ICONS.coin(24)}<span>Shop</span></button>
-      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'progress' ? 'on' : ''}" data-tab="progress">${ICONS.star(21)}<span>Level</span></button>
+      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span></button>
+      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${pixCur('build', 24) || ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
+      ${/* LEVEL and LOOKS both came off this hub 2026-08-17 on Tom's call. Level's
+            screen is NOT deleted, only its chip: tab === 'progress' still renders
+            and is still reachable, so nothing is orphaned and putting the chip
+            back is one line. Looks stays where people actually use it, in the
+            Wardrobe, which is also where transmog lives. */''}
     </div>
-    <button class="looks-card ${tab === 'looks' ? 'on' : ''}" data-tab="looks">
-      <span class="lc-top"><b>Looks</b><span>${looksN} / ${looksAll.length} collected</span></span>
-      <span class="lc-bar"><i style="width:${((looksN / looksAll.length) * 100).toFixed(1)}%"></i></span>
-    </button>
+    ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
     <div id="chContent"></div>`;
 
   $$('#chTabs .chip, .looks-card', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
@@ -10932,7 +10943,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       }).join('')}` : ''}
       <div class="t3-sect"><b>Consumables</b><i></i></div>
       <div class="t3-row">
-        <span class="t3-med">${consumableIcon('xp2', 20)}</span>
+        <span class="t3-med">${consumableIcon('xp2', 24)}</span>
         <div class="t3-tx"><b>Battle Charm</b><small>${CONSUMABLES.xp2.desc}</small></div>
         <span class="t3-lock">x${boosts}</span>
         <!-- The state that makes the action illegal must also hide the button
@@ -10941,7 +10952,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${boosts ? (boost ? '<button class="btn ghost" id="useBoost" disabled>ACTIVE</button>' : '<button class="btn" id="useBoost">USE</button>') : ''}
       </div>
       <div class="t3-row">
-        <span class="t3-med">${consumableIcon('vigor', 20)}</span>
+        <span class="t3-med">${consumableIcon('vigor', 24)}</span>
         <div class="t3-tx"><b>Vigor Draught</b><small>${CONSUMABLES.vigor.desc}</small></div>
         <span class="t3-lock">x${vigors}</span>
         ${vigors ? '<button class="btn" id="useVigor">USE</button>' : ''}
@@ -15414,7 +15425,7 @@ async function renderPit(wrap) {
   const sparringSect = `
     <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
-      <div class="t3-row"><span class="t3-med">${ICONS.pit(20)}</span>
+      <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}">FIGHT</button>
       </div>`).join('')}`;
@@ -15525,7 +15536,7 @@ async function renderPit(wrap) {
         <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · take a walk to earn Vigor' : ' · walk to earn more'}</small>
       </div>
     </div>
-    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${ICONS.pit(20)}<b>Shape your build</b><small>stats, weapon &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
+    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats, weapon &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
