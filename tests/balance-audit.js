@@ -3,7 +3,7 @@ import { escalateDen } from '../js/poi.js';
 // Balance audit: hunt for no-strategy exploit builds across the ladder.
 import {
   makeFighter, createFight, actionsFor, applyAction, endTurn,
-  aiTakeTurn, scaleStats, LADDER, CHAMPION, RUNG_TALENTS,
+  aiTakeTurn, scaleStats, LADDER, CHAMPION, RUNG_TALENTS, endlessFoe,
 } from '../js/pit.js';
 
 const MID = { marrow: 50, power: 50, wind: 50, reflex: 50, hype: 50 };
@@ -239,6 +239,67 @@ for (const b of WEAPONIZED) {
 }
 console.log(weaponBarOk ? '  PASS: all weaponized builds stay under the 90% exploit bar' : '  FAIL: a weaponized build exceeds 90% vs the Champion');
 if (!weaponBarOk) process.exitCode = 1;
+
+/* ---- v400: THE SAME CHECK, AT THE STATS A REAL CLIMBER ACTUALLY HAS ----
+ *
+ * Everything above runs at MID (50) or TOM (~35 avg). scaleStats clamps a FOE
+ * to 100 per stat; allocatedStats clamps a PLAYER to 150. So above roughly stat
+ * 66 the ladder's multiplier stops meaning anything: Gauntlet rank 50 is
+ * mult 5.69, rank 100 is 9.82, and both arrive as the identical 100/100/100
+ * statline. The 90% bar above is structurally incapable of seeing that,
+ * because at stat 50 the clamp never binds.
+ *
+ * MEASURED 2026-08-18, smart policy vs Gauntlet rank 50 (mult 5.69, ai 5):
+ *                        none  slab  warmaul+slab  immortal
+ *   stat  50 (foe 100)     0%    0%      0%           0%
+ *   stat 100 (foe 100)    11%   21%     35%          33%
+ *   stat 150 (foe 100)    99%  100%    100%         100%
+ *
+ * Stat 150 is the decisive tier: a character with NO TALENTS AND A STARTER
+ * WEAPON wins 99 of 100 fights against a foe the ladder bills as 5.69x its
+ * stats. Stat 100 is the weaker signal (it only catches the geared builds),
+ * kept because it shows the collapse is gradual rather than a cliff at 150.
+ *
+ * THE BAR IS 30%, matching BRUTAL_CEIL in tests/balance.mjs, and it is not a
+ * new number: everywhere the clamp does not bind (stat 17 and stat 50 here;
+ * stat 40/55/66 in balance.mjs) the strongest measured build tops out at 27%
+ * against a much stronger foe, and usually sits under 12%. 90% would be the
+ * wrong bar here: it would sign off on a no-talent character beating a foe
+ * nominally 5.7x its stats 85 times out of 100.
+ *
+ * The stat-50 row is kept in the loop on purpose. It is the control: it passes,
+ * which proves the guard is measuring the clamp rather than the sim.
+ *
+ * PROVE-RED: red on shipped balance (v399) at stat 100 and stat 150. It goes
+ * green when a foe can be scaled past the player's own ceiling. */
+const ENDGAME_BAR = 30;
+const ENDGAME_RANK = 50;
+const gFoe = endlessFoe(ENDGAME_RANK);
+const gauntletCfg = { key: 'rank50', mult: gFoe.mult, rung: gFoe.aiLevel, talents: gFoe.talents, weaponId: gFoe.weaponId };
+const ENDGAME_BUILDS = [
+  { name: 'no talents', talents: BUILDS.none, weaponId: 'starter' },
+  { name: 'slab', talents: BUILDS.slab, weaponId: 'starter' },
+  { name: 'warmaul+slab', talents: BUILDS.slab, weaponId: 'warmaul' },
+  { name: 'immortal', talents: BUILDS.immortal, weaponId: 'reliquary' },
+];
+console.log(`\n--- v400 endgame stat tiers (smart policy vs Gauntlet rank ${ENDGAME_RANK}, mult ${gFoe.mult.toFixed(2)}) ---`);
+let endgameOk = true;
+let endgameCells = 0;
+for (const lvl of [50, 100, 150]) {
+  const stats = { marrow: lvl, power: lvl, wind: lvl, reflex: lvl, hype: lvl };
+  const foeStat = scaleStats(stats, gFoe.mult).power;
+  for (const b of ENDGAME_BUILDS) {
+    const r = cell({ stats, talents: b.talents, foeCfg: gauntletCfg, policy: POLICIES.smart, weaponId: b.weaponId });
+    endgameCells++;
+    const over = r.win > ENDGAME_BAR;
+    if (over) endgameOk = false;
+    console.log(`  stat ${String(lvl).padStart(3)} (foe ${String(foeStat).padStart(3)})  ${b.name.padEnd(13)} ${String(r.win).padStart(3)}% win${over ? `  <<< OVER THE ${ENDGAME_BAR}% BAR` : ''}`);
+  }
+}
+// an empty sample is a FAILURE, not a pass: a guard that ran zero fights proves nothing
+if (!endgameCells) { console.log('  FAIL: the endgame tier ran no fights'); process.exitCode = 1; }
+else if (!endgameOk) { console.log(`  FAIL: a maxed player trivially beats Gauntlet rank ${ENDGAME_RANK}`); process.exitCode = 1; }
+else console.log(`  PASS: no tier walks over Gauntlet rank ${ENDGAME_RANK}`);
 
 // v123 boss scaling: a world boss must RAMP with dens beaten so it never runs dry.
 // Model a player carrying a maxed pet (the ally body that makes 2v1 survivable) and

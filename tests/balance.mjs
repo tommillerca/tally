@@ -115,6 +115,45 @@ for (const b of BUILDS.slice(1)) {
   ok(`HARDFOE ${b.name} does not walk over a foe 50% stronger`, brutal.winRate <= BRUTAL_CEIL, `${(brutal.winRate * 100).toFixed(0)}%`);
 }
 
+/* EVERY CHECK ABOVE RUNS AT STAT 55, WHERE THE FOE CLAMP NEVER BINDS.
+ *
+ * scaleStats clamps a foe to 100 per stat; allocatedStats clamps a PLAYER to
+ * 150. Below stat 66 a foe 50% stronger really is 50% stronger, so the whole
+ * guard above was measuring a regime a real endgame player has already left.
+ *
+ * MEASURED 2026-08-18 with measure() unchanged, varying ONLY the stat level:
+ *
+ *   foe 50% stronger      baseline  Slab  Alchemist  lifesteal  Crow  2-lives  stamina  Shaman
+ *   stat 40 (foe 60)          8%    27%       8%        20%      21%    20%      8%      8%
+ *   stat 55 (foe 83)          1%     8%       1%         9%      12%     9%      5%      1%
+ *   stat 66 (foe 99)          4%     3%       4%         7%       5%     7%      4%      4%
+ *   stat 100 (foe 100)       78%    88%      78%        89%      98%    89%     66%     78%
+ *   stat 150 (foe 100)      100%   100%     100%       100%     100%   100%    100%    100%
+ *
+ * At stat 150 a character with NO TALENTS AT ALL wins every single fight
+ * against a foe the game calls 50% stronger, because the foe is 100 and the
+ * player is 150. That is not a build exploit, it is the difficulty curve
+ * ending, and no assertion at stat 55 can ever see it.
+ *
+ * THE BAR IS BRUTAL_CEIL, THE SAME 0.30 ALREADY SHIPPED ABOVE. Not a new
+ * number: below the clamp the strongest build in the table tops out at 27%
+ * (Slab at stat 40) and typically sits under 12%, at every stat level tested.
+ * So this asserts only "the endgame is as hard as the game already is at stat
+ * 55". Anything looser would be inventing a difficulty cliff to excuse one.
+ *
+ * PROVE-RED: this is red on shipped balance (v399) at both new tiers, which is
+ * the point. It goes green when a foe can be built stronger than the player,
+ * i.e. when the scaleStats clamp stops binding below the allocatedStats clamp. */
+const ENDGAME_TIERS = [100, 150];
+for (const lvl of ENDGAME_TIERS) {
+  const stats = { power: lvl, marrow: lvl, wind: lvl, reflex: lvl, hype: lvl };
+  for (const b of BUILDS) {
+    const r = measure({ ...b, stats }, { foeMult: 1.5, seeds: SEEDS });
+    ok(`ENDGAME at stat ${lvl}, ${b.name} does not walk over a foe 50% stronger`,
+      r.winRate <= BRUTAL_CEIL, `${(r.winRate * 100).toFixed(0)}%`);
+  }
+}
+
 /* Action economy must be PAID FOR. A gear affix or a 4-piece set handing out a
    +1 AP talent was worth +45% damage on an engine build and cost nothing. */
 import { readFileSync } from 'node:fs';

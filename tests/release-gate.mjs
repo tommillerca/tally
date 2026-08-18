@@ -343,7 +343,7 @@ const DECLARED = {
      /-audit\.mjs$/ filter was blind to a *.test.mjs, so the two branches are
      green apart and red together. Landing them in either order now works. */
   'detach-guard.test.mjs': ['full', 'the harness-wide detached-frame retry, with its prove-red trio. Not FAST: it deliberately induces detaches and is slow.'],
-  'balance.mjs':          ['full', '35 assertions on the exact exploit class we keep re-finding (free lives, stamina, gear-granted action economy). Ran green; belongs in the release run.'],
+  'balance.mjs':          ['full', '51 assertions on the exact exploit class we keep re-finding (free lives, stamina, gear-granted action economy). The original 35 run green. The 16 ENDGAME assertions added 2026-08-18 are RED ON MAIN ON PURPOSE: they run the same builds at stat 100 and 150, where the scaleStats foe clamp (100) sits below the allocatedStats player clamp (150), so every Gauntlet rank above ~10 serves the identical statline and a no-talent character wins 100% against a foe billed as 50% stronger. This gate stays red until the difficulty curve is fixed; that is the guard working, not the guard broken.'],
   'talent-badge.mjs':     ['full', 'the talent badge updates in place after a spend. Ran green.'],
   'gift-open.mjs':        ['full', 'opening a gift, 9 assertions. Ran green.'],
   'lb-profile.mjs':       ['full', 'leaderboard profile cards. Ran green.'],
