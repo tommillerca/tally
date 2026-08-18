@@ -541,7 +541,7 @@ function consumableIcon(type, s = 20) {
   return `<span class="bhi-wrap">${bhIcon('charm', s)}</span>`;
 }
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
-function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
+function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; const pix = pixCur(id, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
 function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
 // badges: map the emoji to a pack icon where we have one (else keep the emoji)
 const BADGE_ICON = {
@@ -2890,8 +2890,8 @@ async function renderToday(el) {
          reassigned to a tile that no longer goes there; the unlock nudge card
          above already carries it, in words, with its own Wardrobe route. */''}
     <button class="hero-act" id="charBtn">${pixCur('crate', 24) || ICONS.bone(23)}<span>Backpack${crates.length ? ` <i class="hero-badge">${crates.length}</i>` : ''}</span></button>
-    <button class="hero-act" id="stableBtn">${ICONS.paw(23)}<span>Stable</span></button>
-    <button class="hero-act" id="kitchenActBtn">${bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
+    <button class="hero-act" id="stableBtn">${pixCur('stable', 24) || ICONS.paw(23)}<span>Stable</span></button>
+    <button class="hero-act" id="kitchenActBtn">${pixCur('kitchen', 24) || bhIcon('dish-broth', 23)}<span>Kitchen${(cook && cook.ready) || cropsRipe ? ' <i class="hero-badge">!</i>' : ''}</span></button>
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
@@ -15151,7 +15151,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v398'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v399'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -15,6 +15,10 @@ const PIX_CUR = {
   coin: 'coin', dust: 'bone-dust', egg: 'egg', crate: 'crate',
   pit: 'pit', wardrobe: 'wardrobe', shop: 'shop', build: 'build',
   xp2: 'battle-charm', vigor: 'vigor-draught',
+  stable: 'stable', kitchen: 'kitchen',
+  /* keyed by the INGREDIENTS id so ingIconHtml can look it up directly. Only
+     the rare one has art; every common ingredient stays on its pack icon. */
+  ectoplasm: 'ectoplasm',
 };
 export function pixCur(kind, s) {
   const f = PIX_CUR[kind];
