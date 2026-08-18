@@ -16472,6 +16472,25 @@ async function openFight(pitWrap, fighter, foeCfg) {
     }
     const legal = actionsFor(fight);
     const get = id => legal.find(a => a.id === id);
+    /* EVERY HINT FITS ONE LINE, and that is a hard budget, not a preference.
+       Tom, 2026-08-18: "fix the label wrapping". Measured on origin/main with a
+       loaded tray (three move talents + brewed potions, 9 buttons): the move
+       NAMES were never the problem, they fit at every viewport 375 and up. It
+       was this <small>, and a second line of it costs 13.5px, which is what put
+       the tray's rows at 68.3px instead of 54.8px. Three rows of three need
+       rowH*3 + 16, so 68.3 needs 220.8px in a 208.4px tray and 54.8 needs 180.4.
+       The whole three-row question was one line of 10px text.
+       The box is 106.3px wide at 393x852, which is about 18 characters at the
+       shipped 10px/700. Half these strings were written longer than that:
+       'bomb x3 · scales with Toxicity (40)' wanted 179.3px and
+       '+2 crows · Flock 4 pecks each turn' wanted 177.6px, so no amount of
+       padding or gap could have saved them. They are two-clause 'X · Y' now,
+       measured at three-digit damage because damage grows with the player.
+       Where a move had three facts, the damage NUMBER keeps its place and the
+       word 'dmg' gives way to the effect verb: '~124 burn · +tox' carries the
+       same three facts as '~124 dmg · burns · +tox' in 84px instead of 121.4.
+       tests/fight-hint-audit.mjs holds this line; a hint that outgrows the box
+       goes red there instead of quietly costing the tray a row. */
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
         <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
@@ -16486,7 +16505,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const defenseRow = () => {
       const g = get('guard');
       if (!g) return '';
-      const hint = `shield ~${guardAmt} · +stamina${player.talents.has('heckle') ? ' · weakens' : ''}`;
+      const hint = `shield ${guardAmt} · ${player.talents.has('heckle') ? 'weakens' : 'stamina'}`;
       return btn(g, { hint, glow: player.hp < player.d.maxHp * 0.4 || player.wind < 20 });
     };
 
@@ -16497,9 +16516,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
     const casterRow = () => {
       let h = '';
       const bolt = get('bonebolt');
-      if (bolt) h += btn(bolt, { hint: `~${expectedDamage('bonebolt', player, null, foe)} dmg · any range` });
+      if (bolt) h += btn(bolt, { hint: `~${expectedDamage('bonebolt', player, null, foe)} dmg · ranged` });
       const smiteA = get('smite');
-      if (smiteA) h += btn(smiteA, { hint: `~${expectedDamage('smite', player, null, foe)} dmg${foe.sunder || foe.stagger ? ' · JUDGED!' : ' · holy'}`, glow: player.talents.has('judgement') && (!!foe.sunder || !!foe.stagger) });
+      if (smiteA) h += btn(smiteA, { hint: `~${expectedDamage('smite', player, null, foe)} dmg${foe.sunder || foe.stagger ? ' · JUDGED' : ' · holy'}`, glow: player.talents.has('judgement') && (!!foe.sunder || !!foe.stagger) });
       const fbolt = get('frostbolt');
       if (fbolt) h += btn(fbolt, { hint: `~${expectedDamage('frostbolt', player, null, foe)} dmg · chills`, glow: player.talents.has('frostbite') && foe.wind < 30 });
       const fire = get('firebolt');
@@ -16509,33 +16528,33 @@ async function openFight(pitWrap, fighter, foeCfg) {
       const wardA = get('ward');
       if (wardA) h += btn(wardA, { hint: 'shield: absorbs 25' });
       const spike = get('bonespike');
-      if (spike) h += btn(spike, { hint: foe.blind ? 'blinds · already blind' : `~${expectedDamage('bonespike', player, null, foe)} dmg · blinds`, glow: !foe.blind });
+      if (spike) h += btn(spike, { hint: foe.blind ? 'already blind' : `~${expectedDamage('bonespike', player, null, foe)} dmg · blinds`, glow: !foe.blind });
       const hexA = get('hex');
-      if (hexA) h += btn(hexA, { hint: 'curse: -20% their dmg', weak: !!foe.weaken });
+      if (hexA) h += btn(hexA, { hint: '-20% their dmg', weak: !!foe.weaken });
       const raise = get('raisedead');
-      if (raise) h += btn(raise, { hint: player.minion ? 'minion already up' : 'raise a bone minion · 3t', glow: !player.minion });
+      if (raise) h += btn(raise, { hint: player.minion ? 'minion already up' : 'bone minion · 3t', glow: !player.minion });
       const tot = get('totem');
       if (tot) h += btn(tot, { hint: player.totem ? 'totem already up' : 'zaps + stamina · 3t', glow: !player.totem });
       // Alchemist potions (build Toxicity, which powers alchemy damage)
       const flask = get('fireflask');
-      if (flask) h += btn(flask, { hint: `~${expectedDamage('fireflask', player, null, foe)} dmg · burns · +tox`, weak: !!foe.burn });
+      if (flask) h += btn(flask, { hint: `~${expectedDamage('fireflask', player, null, foe)} burn · +tox`, weak: !!foe.burn });
       const acid = get('acidvial');
-      if (acid) h += btn(acid, { hint: `~${expectedDamage('acidvial', player, null, foe)} dmg · sunders · +tox`, weak: !!foe.sunder });
+      if (acid) h += btn(acid, { hint: `~${expectedDamage('acidvial', player, null, foe)} sunder · +tox`, weak: !!foe.sunder });
       const swal = get('swallow');
       if (swal) h += btn(swal, { hint: `heal · ${player.swallowUses} left`, glow: player.hp < player.d.maxHp * 0.45 && player.swallowUses > 0 });
       const dbomb = get('deathbomb');
-      if (dbomb) h += btn(dbomb, { hint: `bomb x3 · scales with Toxicity (${player.toxicity})`, glow: (player.toxicity || 0) >= 40 });
+      if (dbomb) h += btn(dbomb, { hint: `bomb x3 · tox ${player.toxicity || 0}`, glow: (player.toxicity || 0) >= 40 });
       // Crow Lord: grow the Flock, blind, then unleash the Murder
       const crows = get('callcrows');
-      if (crows) h += btn(crows, { hint: `+2 crows · Flock ${player.flock || 0} pecks each turn`, glow: (player.flock || 0) < 2 });
+      if (crows) h += btn(crows, { hint: `+2 crows · Flock ${player.flock || 0}`, glow: (player.flock || 0) < 2 });
       const peck = get('peckeyes');
-      if (peck) h += btn(peck, { hint: `~${expectedDamage('peckeyes', player, null, foe)} dmg · blinds · +1 crow`, weak: !!foe.blind });
+      if (peck) h += btn(peck, { hint: `~${expectedDamage('peckeyes', player, null, foe)} blind · +1 crow`, weak: !!foe.blind });
       const mrdr = get('murder');
-      if (mrdr) h += btn(mrdr, { hint: `unleash ${player.flock || 0} crows · once`, glow: (player.flock || 0) >= 4 });
+      if (mrdr) h += btn(mrdr, { hint: `${player.flock || 0} crows · once`, glow: (player.flock || 0) >= 4 });
       return h;
     };
     // Blood Rage (Slab): any-range self-buff, offered in both rows
-    const rageBtn = () => { const rg = get('rage'); return rg ? btn(rg, { hint: player.rage ? 'already raging' : '+35% dmg 3t · costs HP', glow: !player.rage && player.hp > player.d.maxHp * 0.5 }) : ''; };
+    const rageBtn = () => { const rg = get('rage'); return rg ? btn(rg, { hint: player.rage ? 'already raging' : '+35% dmg 3t · -HP', glow: !player.rage && player.hp > player.d.maxHp * 0.5 }) : ''; };
     const titan = get('titan');
     if (titan) html += btn(titan, { hint: 'big hit · once', glow: true });
     const storm = get('bonestorm');
