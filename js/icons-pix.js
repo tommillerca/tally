@@ -16,9 +16,11 @@ const PIX_CUR = {
   pit: 'pit', wardrobe: 'wardrobe', shop: 'shop', build: 'build',
   xp2: 'battle-charm', vigor: 'vigor-draught',
   stable: 'stable', kitchen: 'kitchen',
-  /* keyed by the INGREDIENTS id so ingIconHtml can look it up directly. Only
-     the rare one has art; every common ingredient stays on its pack icon. */
+  /* keyed by the INGREDIENTS id so ingIconHtml can look it up directly. All
+     seven now have drawn art; sites that ask under 16px still take the vector. */
   ectoplasm: 'ectoplasm',
+  marrow: 'marrow', graveroot: 'graveroot', ember: 'ember',
+  bog: 'bog', sinew: 'sinew', salt: 'salt',
 };
 export function pixCur(kind, s) {
   const f = PIX_CUR[kind];
