@@ -4469,6 +4469,19 @@ body::before {
 }
 .fchip-tip b { font-weight: 900; font-size: 13.5px; text-transform: capitalize; }
 .fchip-tip span { font-size: 12px; font-weight: 600; line-height: 1.35; }
+/* Press-and-hold a move in the Pit: the same bone bubble, wider, because it
+   carries a whole sentence rather than a status name. It reuses .fchip-tip
+   wholesale so there is one tooltip look in the fight, not two.
+   NO REDUCED-MOTION BLOCK OF ITS OWN, deliberately: bubblePop is inherited from
+   .fchip-tip and the global @media (prefers-reduced-motion: reduce) rule at the
+   top of this file already collapses it to one 0.001s cycle. A second rule here
+   would be a second thing to keep in step for no gain. */
+.fmove-tip { width: min(264px, calc(100vw - 24px)); }
+/* .fchip-tip capitalises because a status name arrives lower-case ("sunder").
+   A move LABEL is already cased by hand and the transform breaks it: measured on
+   the render, "Call the Murder" came out "Call The Murder". */
+.fmove-tip b { text-transform: none; }
+.fmove-tip .mt-now { font-size: 11px; font-weight: 800; color: #6a5f4a; text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* The Glutton (v215): announcement card + reveal, matching the direction Tom
    already approved (scratchpad/glutton.src.html) — near-monochrome, ONE muted
