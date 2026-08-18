@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 392, date: '2026-08-17', title: 'The Hollow has music', items: [
+    "<b>The Hollow has a soundtrack now, and it starts muted.</b> There is a speaker button in the top corner of the garden; the first time you visit it gently pulses to tell you it is there. Tap it and the music plays and keeps playing on every visit after. Leave it alone and you will never hear a thing.",
+  ] },
   { n: 391, date: '2026-08-17', title: 'One missing file can no longer take the app down', items: [
     "<b>If a single file went missing while an update was being published, the app could open to nothing at all, but only if you were online.</b> Offline it was fine, which is the odd part: the app asked for the file, got an error back, and handed that error to the page instead of using the good copy already saved on your device. It falls back to the saved copy now, so one bad file during a release cannot take everything down.",
     "<b>\"Update ready. Leave this screen to apply\" now actually applies it.</b> Closing the screen did nothing, so you kept running the old version until something else happened to reload it.",
