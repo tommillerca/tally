@@ -10445,6 +10445,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="bh-pill">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
+      ${/* THE DOOR TO THE LOOKS COLLECTION. v395 removed the hub's LOOKS card,
+            which was the only entry point, so tab === 'looks' still rendered and
+            nothing could reach it. It lives here because Tom asked for looks to
+            stay in the Wardrobe, which is also where transmog picks a look, and
+            because ward-head is unconditional on this screen: no state can hide
+            it. Same .bh-pill as the wallet chips beside it, so it costs no new
+            layout; it is a <button> with an accent edge so it reads as tappable
+            rather than as one more read-only tally. */''}
+      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
     </div>` : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
@@ -10473,7 +10482,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
     <div id="chContent"></div>`;
 
-  $$('#chTabs .chip', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
@@ -15149,7 +15158,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v395'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v396'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

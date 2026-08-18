@@ -6160,6 +6160,9 @@ body::before {
   letter-spacing: .05em; color: var(--text-2); text-transform: uppercase;
 }
 .ward-head .bh-pill:first-of-type { margin-left: auto; }
+/* the Wardrobe's door to the Looks collection: the same pill as the wallet chips
+   it sits with, given an accent edge so it reads as a control and not a tally. */
+.ward-head .ward-looks { color: var(--text); border-color: var(--accent); }
 
 /* A backdrop has no silhouette: show a swatch, not art stretched across the tile. */
 .pd-slot .pd-swatch {
