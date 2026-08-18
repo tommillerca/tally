@@ -7,12 +7,12 @@
  * at v307 ALREADY dead, a selector that could never match again, and every
  * Pit fight from then on left a stale FIGHT button behind. Tom hit it live:
  * "I beat the remote den and it still says FIGHT and my cap did not move"
- * (2026-08-11, the comment above the fix at js/app.js:12970 tells the story).
+ * (2026-08-11, the comment above the fix at js/app.js:15200 tells the story).
  * Months of a dead feature, zero errors. This sweep makes that shape of bug a
  * finding instead of an archaeology project.
  *
  * WHAT IT DOES. Statically extract every literal selector js/ queries -
- * $()/$$() (app.js:83), querySelector/All, closest, matches, getElementById -
+ * $()/$$() (app.js:87-88), querySelector/All, closest, matches, getElementById -
  * break each into class/id/data-attribute tokens, and flag any token that
  * appears NOWHERE else in the client source (js/, data/, index.html) outside
  * query positions. "Exactly once" from the task spec is generalised to

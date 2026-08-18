@@ -461,7 +461,7 @@ await slowPage.evaluateOnNewDocument(() => {
                   second wave); markers added pre-reveal fade in via the
                   markers-in class transition on the whole batch, which is a
                   different mechanism and outside this contract.
-     evaluateOnNewDocument survives seed()'s reload (see godmode.js:196). */
+     evaluateOnNewDocument survives seed()'s reload (see godmode.js:263). */
   window.__slow = { entry: null, reveal: null, tl: [], poiInEver: false, stragglers: [], revealCount: null };
   const POI = '.map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark';
   const KINDS = { '.map-spawn': 'spawn', '.map-den-mark': 'den', '.map-mini-mark': 'mini',

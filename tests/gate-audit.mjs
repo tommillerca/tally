@@ -13,17 +13,17 @@
  * mechanically: every helper below returns an {ok} result object, and its value
  * must be tested via `.ok`, never for bare truthiness.
  *
- * PROVE-RED (confirmed 2026-08-07): change app.js:2066 back to `if (!spent)` and
+ * PROVE-RED (confirmed 2026-08-07): change app.js:3968 back to `if (!spent)` and
  * this exits 1 naming spendPitFight.
  *
  * PROVE-RED (confirmed 2026-08-15, the audit's OWN blind spot): rewrite
- * js/app.js:13632 to `const { ok } = await spendPitFight();` and drop the guard.
+ * js/app.js:14967 to `const { ok } = await spendPitFight();` and drop the guard.
  * The version before this commit exits 0 "clean: 4 call site(s)" on that exploit,
  * because it counted the site before analysing it and its matcher could not see a
  * `{`. This version exits 1 naming spendPitFight. The same refactor WITH `if (!ok)`
  * still exits 0, so it is not simply failing on everything. Measured at the same
  * time: on shipped main the old matcher understood 3 of the 4 sites, and the one
- * it understood NOTHING about was js/app.js:14922, the spire claim, which is the
+ * it understood NOTHING about was js/app.js:16298, the spire claim, which is the
  * exact exploit this file exists for.
  *
  * Usage: node tests/gate-audit.mjs
@@ -72,7 +72,7 @@ for (const [file, text] of src) {
       sites++;
       const where = `${file}:${i + 1}`;
       /* Look-ahead window MEASURED, not guessed: the spire claim declares its
-         result at js/app.js:14922 and reads `r.ok` at :14933, eleven lines down,
+         result at js/app.js:16298 and reads `r.ok` at :16309, eleven lines down,
          so the old 4-line window would have called that site a failure the
          moment the matcher grew wide enough to see it. */
       const near = lines.slice(i, i + 14).join('\n');
