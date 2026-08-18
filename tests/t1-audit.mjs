@@ -27,7 +27,8 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs,
+  boneyardCapability, unproven, unprovenReport, exitFor, unclassifiedRows } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* puppeteer via godmode's loadPuppeteer: the repo's own node_modules first so a
@@ -60,7 +61,8 @@ const browser = await puppeteer.launch({
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   // MapLibre needs WebGL. Without these the Boneyard draws as a black rectangle,
   // attribution and all, which reads like a network failure rather than no GPU.
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  executablePath: chromePath(),
+  args: [...sandboxArgs(), '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage();
 const errors = [];
@@ -231,6 +233,59 @@ await footOnScreen('foodform');
 await shot('foodform');
 
 /* ---------- 7. the Boneyard ---------- */
+/* CAN THIS MACHINE HOST SECTION 7 AT ALL?
+ *
+ * Everything below drives MapLibre over a REMOTE vector tile host. With that
+ * host unreachable, js/app.js:13287 replaces the Boneyard with "The Boneyard
+ * needs a network signal to draw the map" and a Retry button, and these rows
+ * stop measuring the app. Two of them then PASS on nothing, measured on this
+ * container 2026-08-17: "BONEYARD old floating pill is gone" and "BONEYARD
+ * mini-boss uses drawn art, not a dingbat" are both `count(...) === 0`
+ * assertions, and a map with no markers satisfies them for the wrong reason.
+ * That is an empty sample read as a pass (tally/CLAUDE.md rule 3).
+ *
+ * So the capability is MEASURED (godmode.boneyardCapability) and, when absent,
+ * every row in this section is declared UNPROVEN BY NAME and the suite exits
+ * 97. Sections 1 to 6 are untouched: they need no map and they still grade.
+ *
+ * 'NO page errors' is unproven too, deliberately. The error stream collects
+ * console errors, and an unreachable tile host puts its own network error in
+ * there, so the row can only be graded by excluding errors by hand, which is a
+ * judgement rather than a measurement. */
+const MAP_ROWS = [
+  'BONEYARD has a plated top bar',
+  'BONEYARD top bar reports what is out there',
+  'BONEYARD readout and Collect share one card',
+  'BONEYARD old floating pill is gone',
+  'BONEYARD draws spawn markers',
+  'BONEYARD every marker carries its art',
+  'BONEYARD no soft-glow chrome',
+  'BONEYARD collect radius is drawn to scale',
+  'BONEYARD OSM attribution is not covered',
+  'BONEYARD mini-boss uses drawn art, not a dingbat',
+  'NO page errors',
+];
+/* Anti-rot, and it runs on EVERY machine including this one: every ok() row
+   written after this section marker must be in MAP_ROWS. A new Boneyard
+   assertion that nobody classified would otherwise be graded against a dead map
+   and pass on an empty set, which is the bug this whole block exists to end. */
+const cls = unclassifiedRows(import.meta.url, [MAP_ROWS, ['ROWS-CLASSIFIED every Boneyard row is declared map-dependent']],
+  { after: '/* ---------- 7. the Boneyard ---------- */' });
+ok('ROWS-CLASSIFIED every Boneyard row is declared map-dependent',
+  cls.missing.length === 0 && cls.seen > 0,
+  cls.missing.length ? `unclassified: ${cls.missing.join(' | ')}` : `${cls.seen} row names read from section 7`);
+
+const mapCap = await boneyardCapability(page);
+if (!mapCap.ok) {
+  for (const n of MAP_ROWS) unproven(n, 'the Boneyard could not draw on this machine');
+  await browser.close();
+  if (srv) srv.kill();
+  const f = results.filter(r => !r.pass);
+  console.log(`\n${results.length - f.length}/${results.length} of the checks that COULD run passed`);
+  unprovenReport('t1-audit.mjs', mapCap);
+  process.exit(exitFor(f.length));
+}
+
 await page.evaluate(() => { const n = document.querySelectorAll('.sheet').length; if (n) history.go(-n); });
 await sleep(700);
 await page.evaluate(() => { location.hash = '#/boneyard'; });
@@ -321,3 +376,4 @@ if (!results.length) { console.log('\nFAIL: no checks ran at all'); process.exit
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join(', ')); process.exit(1); }
 console.log('t1-audit clean');
+process.exit(exitFor(0));

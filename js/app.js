@@ -1,11 +1,11 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, newId, exportAll, importAll, useDbName, requestPersistence, STORES } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP,
 } from './game.js';
@@ -81,13 +81,96 @@ import {
   activeCalorieBonus, assumedActiveBurn,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { fetchOffProduct, fetchFdcByBarcode, searchOnline } from './sources.js';
+import { lookupBarcode, searchOnline } from './sources.js';
 import { parseNutritionText } from './labelparse.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const num = v => { const x = parseFloat(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
+/* ================= every number a player types =================
+ *
+ * parseFloat IS NOT A VALIDATOR, IT IS A SCANNER. It stops at the first
+ * character it does not like and hands back whatever it got so far, so
+ * `parseFloat('12abc')` is 12 and `parseFloat('1e9')` is a billion. This used
+ * to be the whole of the app's number handling, and in a food and weight
+ * tracker that is not a cosmetic problem: the value lands in a permanent log
+ * row, it feeds the day total, the weight trend, the XP payout and the shared
+ * leaderboard, and nothing on screen ever tells the player it happened.
+ *
+ * THE COMMA IS THE EXPENSIVE ONE, and it cuts both ways. The old line did
+ * `String(v).replace(',', '.')` unconditionally, which is right for `1,5`
+ * (most of the world writes 1.5 that way) and catastrophically wrong for
+ * `1,234`, which came back as 1.234. Measured on v387, 2026-08-17: a quick add
+ * typed as `1,234` stored kcal 1.234 and rendered on Today as "1". A 1000x
+ * loss, silent and permanent. That format is not exotic either, it is the
+ * format THIS APP prints: every kcal readout goes through toLocaleString().
+ *
+ * So the contract is: accept a plain decimal, accept ONE comma used as a
+ * decimal point, and REFUSE everything else rather than guess at intent. A
+ * refusal the player can see beats a number they can never find again.
+ *
+ * `numParse` returns { ok, value } or { why } so callers can say WHICH kind of
+ * wrong it was. `num` keeps the old null-or-number shape for the live-preview
+ * call sites that must not nag on every keystroke. */
+const NUM_SHAPE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
+/* `1,234` / `1,234.5` / `1,234,567`: digit grouping, and the exact shape where
+   the decimal-comma reading and the grouping reading disagree by 1000x. Never
+   guessed, always refused. */
+const NUM_GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
+function numParse(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return { why: 'empty' };
+  if (NUM_GROUPED.test(s)) return { why: 'grouped' };
+  const commas = (s.match(/,/g) || []).length;
+  const t = commas === 1 && !s.includes('.') ? s.replace(',', '.') : s;
+  if (!NUM_SHAPE.test(t)) return { why: 'shape' };
+  const x = Number(t);
+  return isFinite(x) ? { ok: true, value: x } : { why: 'shape' };
+}
+const num = v => { const r = numParse(v); return r.ok ? r.value : null; };
+
+/* READ A FIELD, OR TELL THE PLAYER WHY NOT.
+ *
+ * Silent coercion is the whole bug class this guards, so nothing here
+ * substitutes a fallback for something the player actually typed: only a
+ * genuinely blank field marked `optional` gets `blank`. `12abc` does not
+ * become 12, an empty required field does not become 0, and an out-of-range
+ * value does not get clamped into range behind the player's back.
+ *
+ * The ranges are domain bounds, not paranoia. Without them zero, negative and
+ * 1e20 all reached the store: weight 0 kg overwrote profile.weightKg and
+ * dropped the protein target to 0 g, a negative serving size minted a food
+ * whose per-100 g calories were permanently negative, and 1e308 calories times
+ * a 0.5 g serving overflowed to Infinity inside the food itself, after which
+ * its portion sheet read "NaN" and it could never be logged again. */
+function readNum(input, { name, min = null, max = null, optional = false, blank = 0, unit = '' } = {}) {
+  const r = numParse(input ? input.value : '');
+  const refuse = msg => { toast(msg, 3600); input?.focus(); return { ok: false }; };
+  if (!r.ok) {
+    if (r.why === 'empty') return optional ? { ok: true, value: blank } : refuse(`${name} is required`);
+    if (r.why === 'grouped') return refuse(`${name}: leave out the thousands comma, type 1234 not 1,234`);
+    return refuse(`${name}: digits only, like 1234 or 12.5`);
+  }
+  if (min != null && r.value < min) return refuse(`${name} must be at least ${min}${unit}`);
+  if (max != null && r.value > max) return refuse(`${name} cannot be more than ${max.toLocaleString()}${unit}`);
+  return { ok: true, value: r.value };
+}
+
+/* The domain bounds, in one place so a new surface cannot invent its own.
+   Deliberately generous: they exist to stop nonsense reaching permanent
+   history, not to argue with an outlier. */
+const LIMITS = {
+  kcalEntry: { min: 0, max: 20000 },      // one log row or one serving of one food
+  macroG: { min: 0, max: 2000 },          // grams of protein / carbs / fat / fibre / sugar
+  sodiumMg: { min: 0, max: 100000 },
+  servingG: { min: 0.1, max: 20000 },     // grams in a portion, and a food's serving size
+  servings: { min: 0.01, max: 1000 },     // the x-servings multiplier
+  weightKg: { min: 20, max: 500 },
+  weightLb: { min: 44, max: 1100 },
+  targetKcal: { min: 800, max: 20000 },
+  age: { min: 10, max: 120 },
+  heightCm: { min: 90, max: 250 },
+};
 // Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
 // social sync, so "online now" = within ~6 min (accurate at session boundaries).
 function onlineLabel(lastSeen) {
@@ -114,6 +197,51 @@ const S = {
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
 };
+
+/* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
+ *
+ * Every one of these used to be `S.settings.x = v; await kvSet('settings',
+ * S.settings)`. S.settings is a copy this document read at boot, so the write
+ * is the whole object as this tab last understood it, and with the app open
+ * twice the older tab's copy silently undoes the other's change. Measured with
+ * two real pages: tab A switched units to lb, tab B (which had loaded settings
+ * earlier and then changed the calorie goal) saved, and the stored row came
+ * back { units: 'kg', goal: 1800 }. Tab A's change was gone and nothing told
+ * anybody. It is not currency, but it is the player's plan, their units and
+ * their notification tiers, and "I set that and it went back" is a bug report
+ * nobody can reproduce.
+ *
+ * So: remember what was loaded, diff against it at save time, and merge ONLY
+ * the keys this tab actually touched into whatever is in the store at that
+ * instant, inside one transaction. A tab that changed nothing writes nothing
+ * over anybody. JSON compare rather than identity, because these values are
+ * nested objects (profile, targets) that get spread-rebuilt in place.
+ *
+ * snapSettings() must be called at every point S.settings is (re)loaded, or
+ * the diff is taken against a stale baseline and the merge widens back into a
+ * clobber. The reads are all in this file and all call it. */
+let settingsBase = null;
+function snapSettings() { try { settingsBase = JSON.parse(JSON.stringify(S.settings || {})); } catch { settingsBase = {}; } }
+async function saveSettings() {
+  const base = settingsBase || {}, now = S.settings || {};
+  const changed = {};
+  for (const k of new Set([...Object.keys(base), ...Object.keys(now)])) {
+    if (JSON.stringify(base[k]) !== JSON.stringify(now[k])) changed[k] = now[k];
+  }
+  S.settings = await kvUpdate('settings', cur => ({ ...(cur || {}), ...changed }), {});
+  snapSettings();
+  return S.settings;
+}
+/* Test hooks (webdriver only), same pattern as __crewDeliveries and friends.
+   The clobber this fixes only exists BETWEEN two documents, so a guard has to
+   drive the real S.settings and the real saveSettings in two live tabs; a
+   re-implementation of the merge in the page would grade a helper nothing
+   calls. */
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__settingsLoad = async () => { S.settings = await kvGet('settings', S.settings); snapSettings(); return S.settings; };
+  window.__settingsSave = async patch => { Object.assign(S.settings, patch); return saveSettings(); };
+}
+
 
 // PET_CROP (the measured ink bounding boxes) now lives in data/boneheadz.js next to
 // bhAsset, because the Paddock's cards need the same numbers and cannot import this
@@ -525,6 +653,7 @@ async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
   S.settings = await kvGet('settings');
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
+  snapSettings();
   S.userFoods = await db.all('foods');
 
   // One-off: players who claimed the Day One Lizard before v241 got it filed in
@@ -559,6 +688,7 @@ async function boot() {
     });
   }
   requestPersistence();
+  watchForWipe();   // listen for another tab wiping this save before it happens
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -579,6 +709,7 @@ async function boot() {
   const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
+    snapSettings();
     S.userFoods = await db.all('foods');
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
   } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
@@ -599,8 +730,66 @@ async function boot() {
 
   if (!S.settings) { renderOnboarding(); return; }
 
-  const init = await initGameIfNeeded(S.settings.targets);
-  if (init && init.xp > 0) setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
+  /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
+   *
+   * Everything below this block used to run first, and initGameIfNeeded at the
+   * head of it is a retroactive replay of an entire diary: for one year of
+   * history, measured on v391 at 30.6s with no throttle at all, and 65.8s at 4x.
+   * The constant-cost award() alone takes that to 3.6s and 18.1s and still never
+   * paints before the replay finishes, so it is not the fix on its own.
+   * index.html's dead-shell backstop reloads the page when #screen is still empty
+   * at 12s, and the replay's completion flag was written only at the very end, so
+   * a slow phone with an old save reloaded into the same replay forever. See the
+   * header comment on initGameIfNeeded in js/game.js for the full table.
+   *
+   * So the app paints its real screen (their actual food diary, not a spinner)
+   * and the backfill runs behind it, checkpointed, announcing itself. Two things
+   * this must not break, both handled rather than hoped for:
+   *   - the hash has to be normalised before the first route(), which is why
+   *     ingestHkFromUrl is now split into takeHkFromUrl (here) and the awarding
+   *     half (below);
+   *   - the screen is now live while the player's level is still climbing, so
+   *     socialSnapshot awaits gameInitSettled() and no half-replayed level can
+   *     reach the leaderboard.
+   */
+  const hkTaken = takeHkFromUrl();
+  /* THESE TWO STAY IN FRONT OF THE PAINT. They are not awards, they are figure
+     state: S.shinyPets and S.slimeSlots are read by avatarLayersHtml on every
+     render, so painting without them is the "shiny dropped on a new screen"
+     failure the figure contract exists to stop, on frame one of every boot. Two
+     small IndexedDB reads each, nothing like the replay below. */
+  await refreshShinyPets();
+  await refreshSlimedSlots();
+  window.addEventListener('hashchange', routeFromHash);
+  bindTabs();
+  route();
+  /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
+     and handlers before the scene shell exists, and after it lands too. A no-op in
+     every real session (navigator.webdriver !== true). */
+  installPaddockSeam();
+
+  /* The visible state, and it is deliberately not a blocking one. A resumed boot
+     says so, because "importing" that starts over every time is the symptom the
+     player would otherwise be reading. Toasts queue, so the line stays on screen
+     for the length of the run without any new chrome to go wrong. */
+  let backfillSpoke = false;
+  const init = await initGameIfNeeded(S.settings.targets, {
+    onProgress: ({ done, total, resumed, complete }) => {
+      if (complete || !total) return;
+      if (!backfillSpoke) {
+        backfillSpoke = true;
+        toast(resumed ? 'Still importing your history, picking up where it stopped…' : 'Importing your history…', 4200);
+        return;
+      }
+      // one line per quarter: enough to stay visible, never a backlog
+      const pct = Math.floor((done / total) * 4);
+      if (pct >= 1 && pct <= 3 && done - (pct * total / 4) < 40) toast(`Importing your history… ${pct * 25}%`, 4200);
+    },
+  });
+  if (init && init.xp > 0) {
+    setTimeout(() => toast(`Progress imported: Level ${init.level.level} · ${init.xp.toLocaleString()} XP`, 3200), 700);
+    route({ keepScroll: true }); // the screen painted at their old level; show the real one
+  }
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
@@ -611,30 +800,41 @@ async function boot() {
      after week banked one marker and is owed the rest. */
   const ceil = await backfillDenCeilingIfNeeded();
   if (ceil) setTimeout(() => toast(`Boss dens recounted: ${ceil.added} past clear${ceil.added === 1 ? '' : 's'} restored, Gauntlet ceiling +${ceil.ranks} ranks.`, 4600), 5600);
+  /* Again, because the loot backfills above can hand out a pet or slimed gear,
+     and the paint-time pass could not have seen those. */
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
-  await ingestHkFromUrl();
+  await ingestHkPayload(hkTaken);
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
-  onAppResume(() => { rollDayIfNeeded(); nativeAutoSync(); if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges); flushAnalytics(); refreshNotifSchedules(); });
+  onAppResume(() => {
+    rollDayIfNeeded(); nativeAutoSync();
+    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+    flushAnalytics(); refreshNotifSchedules();
+    /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
+       other tab has been spending and earning while this one sat there, and
+       nothing here re-read anything: measured with two real pages, tab A came
+       back to the foreground showing 500 coins while the store held 1500, and
+       stayed on 500 until something navigated. The arithmetic was never wrong
+       (every spend re-reads the balance at the moment it is taken, measured:
+       a 200 spend from that stale screen went 1500 -> 1300, not 500 -> 300) but
+       the number on the screen was a lie for as long as the tab was left alone.
+       Guarded on the sheet stack for the same reason the service worker's
+       reload is: refresh() re-routes, which closes every open sheet, and
+       yanking a player's sheet shut because they alt-tabbed would be a worse
+       bug than the one being fixed. */
+    if (!sheetStack.length) refresh();
+  });
   setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
-
-  window.addEventListener('hashchange', routeFromHash);
-  bindTabs();
-  route();
-  /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
-     and handlers before the scene shell exists, and after it lands too. A no-op in
-     every real session (navigator.webdriver !== true). */
-  installPaddockSeam();
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
@@ -5380,8 +5580,13 @@ function openAdd(meal = 0) {
       bindRows();
     } catch (e) {
       const sect = $('#onlineSect', results);
+      /* 'unreachable' is thrown only when NEITHER database answered, so this is
+         the no-signal case and it gets the no-signal words. Everything else
+         reached a server and got a real refusal. */
       if (sect) sect.innerHTML = `<p class="note" style="padding:8px 2px">${e.message === 'rate_limit'
         ? 'Online search limit reached for now. Add a free USDA key in Settings for 1,000 searches/hour.'
+        : e.message === 'unreachable'
+        ? 'No signal, so the food databases could not be searched. Your own foods are all still here, and this will work again when you are back online.'
         : 'Online search unavailable right now.'}</p>`;
     }
   }
@@ -5492,7 +5697,17 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   const qtyArea = $('#qtyArea', wrap);
 
+  /* THE LAST THING THE PLAYER TYPED INTO THE AMOUNT BOX, kept because the box
+     itself is about to lie about it. Tapping Add fires blur first, and the
+     blur handler repaints the field from `sel`, so by the time the Add handler
+     looks, "12abc" already reads "0.25". Without this, an unreadable amount
+     and an empty one collapse into the same silently-defaulted 0.25 of a
+     serving, and the coercion reaches the log. null means "not typed into":
+     the steppers and the chips set the amount themselves and clear it. */
+  let amtRaw = null;
+
   function renderQty() {
+    amtRaw = null;
     if (sel.mode === 'grams') {
       qtyArea.innerHTML = `
         <div class="t1-step">
@@ -5500,8 +5715,9 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
           <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams"><small>GRAMS</small></div>
           <button class="plus" data-d="10" aria-label="more"></button>
         </div>`;
-      $('#gramsIn', wrap).addEventListener('input', e => { sel.grams = num(e.target.value) || 0; preview(); });
+      $('#gramsIn', wrap).addEventListener('input', e => { amtRaw = e.target.value; sel.grams = num(e.target.value) || 0; preview(); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
+        amtRaw = null;
         sel.grams = Math.max(1, (sel.grams || 0) + Number(b.dataset.d));
         $('#gramsIn', wrap).value = fmtQty(sel.grams);
         preview();
@@ -5515,10 +5731,11 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
         </div>
         <div class="note" style="text-align:center;margin-top:8px">Tap the number to type any amount, e.g. 1.33</div>`;
       const qin = $('#qtyIn', wrap);
-      qin.addEventListener('input', e => { sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
+      qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
       qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
+        amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
         qin.value = fmtQty(sel.qty);
         preview();
@@ -5581,8 +5798,48 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   $('#addBtn', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
+    /* THE BOUND IS ENFORCED HERE, NOT IN THE FIELD.
+       #qtyIn and #gramsIn drive a live preview on every keystroke, so they
+       cannot toast per character without nagging a player halfway through
+       typing "12". The store is reached at THIS tap, so this is where the
+       amount has to be legal. Measured on v387: a negative grams typed here
+       logged -115 kcal against the day, an empty box logged 0 g of food, and
+       1e20 servings logged 1.98e22 kcal and then stuck to the food as its
+       remembered lastPortion, so every future log of it started there too. */
+    const amt = sel.mode === 'grams'
+      ? { v: sel.grams, name: 'Grams', ...LIMITS.servingG, unit: ' g' }
+      : { v: sel.qty, name: 'Servings', ...LIMITS.servings, unit: '' };
+    /* An UNREADABLE box is refused; a BLANK one keeps its visible default (the
+       servings field clamps to 0.25 on blur, in front of the player, on a live
+       preview). Those are different events and collapsing them is the whole
+       bug: "12abc" and an empty box both became 0.25 of a serving. */
+    const outOfRange = `${amt.name} must be between ${amt.min}${amt.unit} and ${amt.max.toLocaleString()}${amt.unit}`;
+    if (amtRaw != null) {
+      const raw = numParse(amtRaw);
+      const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
+      if (!raw.ok && raw.why !== 'empty') {
+        toast(raw.why === 'grouped'
+          ? `${amt.name}: leave out the thousands comma, type 1234 not 1,234`
+          : `${amt.name}: digits only, like 150 or 1.5`, 3600);
+        amtEl?.focus();
+        return;
+      }
+      /* Range-checked on the RAW TEXT, not on sel, because sel has already
+         lost the answer: the servings handler floors at 0 for the preview and
+         the blur clamp then lifts it to 0.25, so a typed -70 arrives here
+         looking exactly like a quarter serving. */
+      if (raw.ok && !(raw.value >= amt.min && raw.value <= amt.max)) {
+        toast(outOfRange, 3600);
+        amtEl?.focus();
+        return;
+      }
+    }
+    if (!(amt.v >= amt.min && amt.v <= amt.max)) { toast(outOfRange, 3600); return; }
     const n = nutrientsFor(food, sel);
-    if (!n || !isFinite(n.kcal)) { toast('Pick a portion first'); return; }
+    /* Every macro, not just kcal: a food carrying one poisoned key would
+       otherwise pass on kcal alone and write a NaN into the log, where it
+       poisons the day total, the protein ring and the trend it feeds. */
+    if (!n || !['kcal', 'p', 'c', 'f'].every(k => n[k] == null || isFinite(n[k]))) { toast('Pick a portion first'); return; }
     const e = {
       id: editing ? entry.id : newId(),
       date: editing ? entry.date : S.date,
@@ -5717,8 +5974,19 @@ function openQuickAdd(getMeal, entry = null) {
   $('#qaKcal', wrap).focus();
   $('#qaAdd', wrap).addEventListener('click', async (ev) => {
     const btn = ev.currentTarget; // capture now: currentTarget is nulled after awaits
-    const kcal = num($('#qaKcal', wrap).value);
-    if (kcal == null) { toast('Calories required'); return; }
+    /* One field at a time, and bail on the first refusal: readNum toasts, and
+       there is only one toast slot, so validating all four at once would stomp
+       three of the four messages unread. The macros are optional and BLANK
+       means 0, but `12abc` in a macro box is not blank and does not become 12. */
+    const k = readNum($('#qaKcal', wrap), { name: 'Calories', ...LIMITS.kcalEntry });
+    if (!k.ok) return;
+    const p = readNum($('#qaP', wrap), { name: 'Protein', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!p.ok) return;
+    const c = readNum($('#qaC', wrap), { name: 'Carbs', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!c.ok) return;
+    const f = readNum($('#qaF', wrap), { name: 'Fat', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!f.ok) return;
+    const kcal = k.value;
     const e = {
       id: entry ? entry.id : newId(),
       date: entry ? entry.date : S.date,
@@ -5727,7 +5995,7 @@ function openQuickAdd(getMeal, entry = null) {
       foodId: null,
       name: $('#qaName', wrap).value.trim() || 'Quick add',
       portionLabel: '',
-      kcal, p: num($('#qaP', wrap).value) || 0, c: num($('#qaC', wrap).value) || 0, f: num($('#qaF', wrap).value) || 0,
+      kcal, p: p.value, c: c.value, f: f.value,
     };
     await db.put('log', e);
     const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -5818,15 +6086,50 @@ async function openScanner(getMeal) {
     status.innerHTML = `<span class="plate"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Looking up ${esc(code)}</span>`;
     // 1. local (previously scanned / created)
     let food = S.userFoods.find(f => f.barcode && barcodeMatch(f.barcode, code));
-    // 2. Open Food Facts
-    if (!food) { food = await fetchOffProduct(code); }
-    // 3. USDA branded fallback
-    if (!food) { status.innerHTML = '<span class="plate">Checking USDA</span>'; food = await fetchFdcByBarcode(code, S.settings.fdcKey || 'DEMO_KEY'); }
+    // 2 + 3. Open Food Facts, then the USDA branded fallback. `reached` is the
+    // whole point: see lookupBarcode in js/sources.js.
+    let reached = true;
+    if (!food) {
+      const res = await lookupBarcode(code, S.settings.fdcKey || 'DEMO_KEY');
+      food = res.food; reached = res.reached;
+    }
     if (food) {
       openPortion(food, { meal: getMeal(), via: 'scan' });
       return;
     }
     status.textContent = '';
+    /* "NOT IN THE BOOKS" IS A CLAIM ABOUT THE BOOKS, SO WE HAVE TO HAVE READ THEM.
+       Measured 2026-08-17: with the network removed, this sheet told the player a
+       barcode that resolves perfectly well online "was never listed in the
+       databases" and pointed them at typing it in by hand. That costs them a
+       permanent duplicate custom food for a product Open Food Facts already has,
+       and it does it on the one screen a person uses standing in a supermarket
+       aisle with one bar. The look-up-failed case gets its own sheet, keeps the
+       label scanner (it runs entirely on the phone and still works), and offers
+       to try the lookup again. */
+    if (!reached) {
+      const miss = openSheet(`
+        <div class="sheet-head">
+          <div class="hd"><h2>Could not look that up</h2><div class="sub">Barcode ${esc(code)}</div></div>
+          <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Back">${ICONS.close(17)}</button></div>
+        </div>
+        <div class="sheet-body">
+          <p class="note" style="margin-bottom:14px">The food databases need a network signal and this phone cannot reach them right now. This barcode may well be in there. Nothing is lost: try again when you have signal, or scan the nutrition label, which is read entirely on your phone.</p>
+          <button class="btn" id="missRetry">Try again</button>
+          <div style="height:10px"></div>
+          <button class="btn ghost" id="missLabel">${ICONS.camera(18)}Scan the label</button>
+          <div style="height:10px"></div>
+          <button class="btn ghost" id="missManual">Type it in manually</button>
+        </div>`, { cls: 't1' });
+      /* Scoped to THIS sheet. The document-wide lookup below is the older
+         pattern and works because only one miss-sheet is ever open, but these
+         three ids now exist on two different sheets, so scoping is the honest
+         version rather than a bet on the stack being empty. */
+      $('#missRetry', miss).addEventListener('click', () => { history.back(); setTimeout(() => handleBarcode(code, getMeal), 240); });
+      $('#missLabel', miss).addEventListener('click', () => openLabelFlow(getMeal, code));
+      $('#missManual', miss).addEventListener('click', () => openFoodForm({ barcode: code, meal: getMeal() }));
+      return;
+    }
     openSheet(`
       <div class="sheet-head">
         <div class="hd"><h2>Not in the books</h2><div class="sub">Barcode ${esc(code)}</div></div>
@@ -5994,13 +6297,30 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
   $('#ffSave', wrap).addEventListener('click', async () => {
     const name = $('#ffName', wrap).value.trim();
-    const kcal = num($('#ffKcal', wrap).value);
     if (!name) { toast('Name required'); return; }
-    if (kcal == null) { toast('Calories required'); return; }
-    const grams = num($('#ffGrams', wrap).value);
+    /* A custom food is worse than a log row: it is a TEMPLATE, so a bad number
+       here is re-logged every time the player picks it, and the serving size
+       divides into per100, which is how a negative serving size minted a food
+       with permanently negative calories per 100 g and how 1e308 kcal over a
+       0.5 g serving overflowed per100.kcal to Infinity. That food then read
+       "NaN" in its own portion sheet and could never be logged again. */
+    const kc = readNum($('#ffKcal', wrap), { name: 'Calories', ...LIMITS.kcalEntry });
+    if (!kc.ok) return;
+    const g = readNum($('#ffGrams', wrap), { name: 'Grams', ...LIMITS.servingG, optional: true, blank: null, unit: ' g' });
+    if (!g.ok) return;
+    const macro = (sel, label, lim = LIMITS.macroG, unit = ' g') =>
+      readNum($(sel, wrap), { name: label, ...lim, optional: true, blank: null, unit });
+    const mp = macro('#ffP', 'Protein'); if (!mp.ok) return;
+    const mc = macro('#ffC', 'Carbs'); if (!mc.ok) return;
+    const mf = macro('#ffF', 'Fat'); if (!mf.ok) return;
+    const mfib = macro('#ffFib', 'Fiber'); if (!mfib.ok) return;
+    const msug = macro('#ffSug', 'Sugars'); if (!msug.ok) return;
+    const mna = macro('#ffNa', 'Sodium', LIMITS.sodiumMg, ' mg'); if (!mna.ok) return;
+    const kcal = kc.value;
+    const grams = g.value;
     const perServing = {
-      kcal, p: num($('#ffP', wrap).value) || 0, c: num($('#ffC', wrap).value) || 0, f: num($('#ffF', wrap).value) || 0,
-      fiber: num($('#ffFib', wrap).value), sugar: num($('#ffSug', wrap).value), sodium: num($('#ffNa', wrap).value),
+      kcal, p: mp.value || 0, c: mc.value || 0, f: mf.value || 0,
+      fiber: mfib.value, sugar: msug.value, sodium: mna.value,
     };
     const food = {
       id: f ? f.id : 'c-' + newId(),
@@ -6038,7 +6358,16 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
 function scaleToPer100(n, grams) {
   const k = 100 / grams; const out = {};
-  for (const key of Object.keys(n)) if (n[key] != null) out[key] = Math.round(n[key] * k * 100) / 100;
+  /* Belt and braces on top of the readNum bounds: this is a WRITE into a
+     permanent food template, and a non-finite value here does not fail loudly,
+     it renders as "NaN" in the portion sheet forever and makes the food
+     unloggable. Drop the key instead, so the food degrades to incomplete
+     rather than to poison (anti-regression rule 8, applied to data). */
+  for (const key of Object.keys(n)) {
+    if (n[key] == null) continue;
+    const v = Math.round(n[key] * k * 100) / 100;
+    if (isFinite(v)) out[key] = v;
+  }
   return out;
 }
 function scalePer100(per100, grams) {
@@ -7094,14 +7423,22 @@ function openWeightSheet() {
     </div>`);
   $('#wVal', wrap).focus();
   $('#wSave', wrap).addEventListener('click', async () => {
-    const v = num($('#wVal', wrap).value);
+    /* THE HIGHEST-CONSEQUENCE FIELD IN THE APP. This row is permanent history,
+       it feeds the smoothed trend and the per-week rate the player makes
+       decisions from, and it overwrites profile.weightKg, which every future
+       target recalc is derived from. Bounds are in the DISPLAY unit, so the
+       message names the number the player is looking at. */
+    const kgMode = S.settings.units === 'kg';
+    const lim = kgMode ? LIMITS.weightKg : LIMITS.weightLb;
+    const w = readNum($('#wVal', wrap), { name: 'Weight', ...lim, unit: kgMode ? ' kg' : ' lb' });
+    if (!w.ok) return;
     const d = $('#wDate', wrap).value;
-    if (v == null || !d) { toast('Enter a weight'); return; }
-    const kg = S.settings.units === 'kg' ? v : lbToKg(v);
+    if (!d) { toast('Pick a date'); return; }
+    const kg = kgMode ? w.value : lbToKg(w.value);
     await db.put('weights', { date: d, kg });
     // keep profile weight fresh for future target recalcs
     S.settings.profile.weightKg = kg;
-    await kvSet('settings', S.settings);
+    await saveSettings();
     const game = await onWeighIn(d);
     confettiBurst(innerWidth / 2, innerHeight * 0.4, 12);
     popSound(S.sounds);
@@ -7450,6 +7787,13 @@ async function renderFriends(el) {
         <p class="fe-title">No Crew yet</p>
         <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
       </div>
+      <!-- "We could not ask" gets its OWN box, because it is not the same news as
+           "you have nobody" and must never borrow that copy. See listFriends. -->
+      <div class="friends-empty" id="cfanUnreached" hidden>
+        <p class="fe-title">Could not reach the Crew server</p>
+        <p class="note">Your Crew is safe: this phone just cannot get to it right now. Everything else in the app works offline. Tap to try again.</p>
+        <button class="btn ghost" id="cfanRetry">Try again</button>
+      </div>
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
@@ -7757,7 +8101,34 @@ async function renderFriends(el) {
   const paintFan = () => {
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
-    $('#cfanCount', el).textContent = ` · ${data.friends.length}`;
+    /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
+       comes back with an empty list, so without this branch the tab tells a
+       player with a full crew that they have none and offers them the
+       make-a-friend copy. The count reads a dash rather than 0 for the same
+       reason: 0 is a claim about their crew, and we do not have one. */
+    const unreached = data.reached === false;
+    const unrBox = $('#cfanUnreached', el);
+    if (unrBox) unrBox.hidden = !unreached;
+    $('#cfanCount', el).textContent = unreached ? '' : ` · ${data.friends.length}`;
+    if (unreached) {
+      wrap.hidden = pager.hidden = true;
+      $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
+      $('#cfanEmpty', el).hidden = true;
+      const searchRow = $('#cfanSearchRow', el);
+      if (searchRow) searchRow.hidden = true;
+      /* Wired once: the box is in the static markup, so a second render must not
+         stack a second listener on the same button. */
+      if (unrBox && unrBox.dataset.wired !== '1') {
+        unrBox.dataset.wired = '1';
+        $('#cfanRetry', unrBox)?.addEventListener('click', async ev => {
+          const b = ev.currentTarget;
+          b.disabled = true; b.textContent = 'Trying...';
+          await paint();
+          if (b.isConnected) { b.disabled = false; b.textContent = 'Try again'; }
+        });
+      }
+      return;
+    }
     if (!data.friends.length) {
       wrap.hidden = pager.hidden = true;
       $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
@@ -7936,7 +8307,12 @@ async function renderFriends(el) {
     const btn = $('#friendAddBtn', el); btn.disabled = true; btn.textContent = '...';
     const r = await social.friendRequest(code);
     btn.disabled = false; btn.textContent = 'Add';
-    if (!r.ok) { toast(r.error === 'that is your own code' ? "That's your own code!" : 'No Bonehead has that code. Double-check it.', 3200); return; }
+    if (!r.ok) {
+      toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.'
+        : r.error === 'that is your own code' ? "That's your own code!"
+        : 'No Bonehead has that code. Double-check it.', 3200);
+      return;
+    }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
     else toast('Request sent. They just enter your code back to seal it.', 3600);
@@ -8394,7 +8770,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Sending...';
     const r = await social.friendRequest(f.friendCode);
-    if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast('Could not send that request. Try again.', 2600); return; }
+    if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.' : 'Could not send that request. Try again.', 3000); return; }
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
     else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
     b.outerHTML = `<p class="note" style="text-align:center;margin:6px 0 0">${r.status === 'accepted' ? 'Already in your Crew.' : 'Request sent.'}</p>`;
@@ -8966,8 +9342,9 @@ async function renderSettings(el) {
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
-  const incomingCount = crewData ? crewData.incoming.length : 0;
-  const friendCount = crewData ? crewData.friends.length : 0;
+  const crewReached = !!(crewData && crewData.reached !== false);
+  const incomingCount = crewReached ? crewData.incoming.length : 0;
+  const friendCount = crewReached ? crewData.friends.length : 0;
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
@@ -8998,7 +9375,10 @@ async function renderSettings(el) {
       <button class="crew-code" id="copyCode" title="Copy friend code">${esc(me.friendCode)} ⧉</button>
     </div>
     <button class="crew-friends" id="friendsBtn">
-      <span>${friendCount ? `${friendCount} friend${friendCount === 1 ? '' : 's'}` : 'Add friends'}</span>
+      <!-- Offline this row used to read "Add friends" to a player with a full
+           crew, for the same reason the fan did: an unreachable server and an
+           empty crew were the same value. -->
+      <span>${crewData && !crewReached ? 'Crew server unreachable' : friendCount ? `${friendCount} friend${friendCount === 1 ? '' : 's'}` : 'Add friends'}</span>
       <span class="crew-friends-r">${incomingCount ? `<span class="req-badge">${incomingCount} new</span>` : ''}<span class="crew-chev">›</span></span>
     </button>
     <div class="settings-row" style="margin-top:12px">
@@ -9131,10 +9511,23 @@ async function renderSettings(el) {
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {
-    const kcal = num($('#tKcal').value), p2 = num($('#tP').value), c = num($('#tC').value), f = num($('#tF').value);
-    if (!kcal || kcal < 800) { toast('Calorie target looks too low'); return; }
-    S.settings.targets = { ...S.settings.targets, kcal: Math.round(kcal), p: Math.round(p2 || 0), c: Math.round(c || 0), f: Math.round(f || 0) };
-    await kvSet('settings', S.settings);
+    /* The target is the denominator of the calorie ring, the "left today"
+       number and the over/under colour, so a nonsense target quietly recolours
+       the whole app. There was a floor here already; there was no ceiling, so
+       1e9 sailed through and every day read as 100% left. */
+    const k = readNum($('#tKcal'), { name: 'Calorie target', ...LIMITS.targetKcal, unit: ' kcal' });
+    if (!k.ok) return;
+    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!p2.ok) return;
+    const c = readNum($('#tC'), { name: 'Carb target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!c.ok) return;
+    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    if (!f.ok) return;
+    S.settings.targets = { ...S.settings.targets, kcal: Math.round(k.value), p: Math.round(p2.value || 0), c: Math.round(c.value || 0), f: Math.round(f.value || 0) };
+    /* saveSettings(), not a whole-snapshot write of S.settings: the snapshot
+       write is what let an older tab's copy undo another tab's change. The
+       validation above is unchanged; only the write is. */
+    await saveSettings();
     toast('Targets saved');
   });
   $('#recoveryBtn', el)?.addEventListener('click', () => openRecoverySheet());
@@ -9145,6 +9538,7 @@ async function renderSettings(el) {
     const r = await social.adoptIdentity(other);
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
+    snapSettings();
     toast(r.restored ? 'Switched. Welcome back.' : 'Switched, but there was no save to pull.', 4200);
     route();
   });
@@ -9247,11 +9641,11 @@ async function renderSettings(el) {
     renderSettings(el);
   });
   $('#recalc').addEventListener('click', () => openProfileSheet());
-  $('#uLb').addEventListener('click', async () => { S.settings.units = 'lb'; await kvSet('settings', S.settings); refresh(); });
-  $('#uKg').addEventListener('click', async () => { S.settings.units = 'kg'; await kvSet('settings', S.settings); refresh(); });
+  $('#uLb').addEventListener('click', async () => { S.settings.units = 'lb'; await saveSettings(); refresh(); });
+  $('#uKg').addEventListener('click', async () => { S.settings.units = 'kg'; await saveSettings(); refresh(); });
   $('#saveKey').addEventListener('click', async () => {
     S.settings.fdcKey = $('#fdcKey').value.trim() || null;
-    await kvSet('settings', S.settings);
+    await saveSettings();
     toast('Saved');
   });
   $('#sndOn').addEventListener('click', async () => { S.sounds = true; await kvSet('sounds', true); popSound(true); refresh(); });
@@ -9283,6 +9677,7 @@ async function renderSettings(el) {
     try {
       const counts = await importAll(JSON.parse(await file.text()));
       S.settings = await kvGet('settings') || S.settings;
+      snapSettings();
       S.userFoods = await db.all('foods');
       toast(`Imported ${counts.log} log entries, ${counts.foods} foods`);
       refresh();
@@ -9305,13 +9700,22 @@ async function renderSettings(el) {
       if (input.value.trim().toUpperCase() !== 'ERASE') return;   // belt and braces
       go.disabled = true; go.textContent = 'Erasing...';
       await social.forgetIdentity();   // else the vault re-adopts this account on the next boot
-      /* EVERY store db.js defines, never a hand-copied list. The literal that
-         used to sit here had six of the seven names: 'inv' was missing, so an
-         erase kept the entire inventory (crates, gear, cosmetics, pets) and
-         wiped only the kv flag recording that the welcome kit had been paid.
-         Inventory was strictly non-decreasing across an erase and every
-         erase-then-reonboard handed out another kit. See js/db.js STORES. */
-      for (const st of STORES) await db.clear(st);
+      /* EVERY store db.js defines, never a hand-copied list, and in ONE
+         transaction, and with every OTHER TAB stopped first.
+         The literal that used to sit here had six of the seven names: 'inv'
+         was missing, so an erase kept the entire inventory (crates, gear,
+         cosmetics, pets) and wiped only the kv flag recording that the welcome
+         kit had been paid. Inventory was strictly non-decreasing across an
+         erase and every erase-then-reonboard handed out another kit.
+         The seven-transaction loop that replaced it was still not true with the
+         app open twice: driven with a second tab writing, the erase finished
+         and left 30 inv rows, a kv row and 150 coins standing, and this tab
+         then reloaded onto a save it thought it had destroyed. db.js's
+         eraseAll() freezes the other tabs, waits for them to confirm it, clears
+         every store together, and tells them to reload. Measured against a
+         second tab writing continuously: zero rows in every store.
+         See js/db.js STORES and eraseAll. */
+      await eraseAll();
       location.reload();
     });
   });
@@ -9371,12 +9775,37 @@ function profileFormHtml(p, units) {
     </div>`;
 }
 
+/* The plan form's fields cannot toast as you type: get() runs on every
+   keystroke to redraw the live preview, so a message per character would be
+   unusable. It reports the problem instead, and the two Save handlers say it.
+   Without this the form took a negative body weight and computed a protein
+   target of -154 g, and took an age of 1e20 and pinned the calorie floor. */
+function profileProblem(np) {
+  const missing = [];
+  if (np.age == null) missing.push('age');
+  if (np.heightCm == null) missing.push('height');
+  if (np.weightKg == null) missing.push('weight');
+  if (missing.length) return `Fill in ${missing.join(', ')}`;
+  if (np.age < LIMITS.age.min || np.age > LIMITS.age.max) return `Age must be between ${LIMITS.age.min} and ${LIMITS.age.max}`;
+  if (np.heightCm < LIMITS.heightCm.min || np.heightCm > LIMITS.heightCm.max) return 'That height does not look right, check it';
+  const imp = np.units === 'lb';
+  const shown = imp ? kgToLb(np.weightKg) : np.weightKg;
+  const wl = imp ? LIMITS.weightLb : LIMITS.weightKg;
+  if (shown < wl.min || shown > wl.max) return `Weight must be between ${wl.min} and ${wl.max} ${imp ? 'lb' : 'kg'}`;
+  return null;
+}
+
 function bindProfileForm(wrap, initial, onChange) {
   const state = { units: initial.units || 'lb', sex: initial.sex || 'm', activity: initial.activity || 'moderate', goal: initial.goal || 'recomp' };
   const get = () => {
     const imp = state.units === 'lb';
     const age = num($('#pfAge', wrap).value);
-    const heightCm = imp ? ftInToCm(num($('#pfFt', wrap).value) || 0, num($('#pfIn', wrap).value) || 0) : (num($('#pfCm', wrap).value) || 0);
+    /* null, not 0, for an unreadable height: 0 is a number the maths will
+       happily use, and ftInToCm(0, 0) is a person 0 cm tall. */
+    const ft = num($('#pfFt', wrap).value), inch = num($('#pfIn', wrap).value);
+    const heightCm = imp
+      ? (ft == null && inch == null ? null : ftInToCm(ft || 0, inch || 0))
+      : num($('#pfCm', wrap).value);
     const w = num($('#pfW', wrap).value);
     const weightKg = w == null ? null : (imp ? lbToKg(w) : w);
     return { sex: state.sex, age, heightCm, weightKg, activity: state.activity, goal: state.goal, units: state.units };
@@ -9385,13 +9814,16 @@ function bindProfileForm(wrap, initial, onChange) {
     const p = get();
     const hint = GOALS.find(g => g.id === state.goal);
     $('#goalHint', wrap).textContent = hint ? hint.hint : '';
-    if (p.age && p.heightCm > 90 && p.weightKg) {
-      const t = computeTargets(p);
-      $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
-        <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
-        <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
-      onChange?.(p, t);
-    }
+    /* The preview is a promise about the plan, so it renders only for a plan
+       that would actually be accepted. It used to advertise "Protein -154 g"
+       off a negative body weight and then save exactly that. */
+    const problem = profileProblem(p);
+    if (problem) { $('#pfPreview', wrap).textContent = problem; return; }
+    const t = computeTargets(p);
+    $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
+      <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
+      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
+    onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
   $('#pfLb', wrap).addEventListener('click', e => { state.units = 'lb'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
@@ -9424,11 +9856,12 @@ function openProfileSheet() {
   const get = bindProfileForm(wrap, p);
   $('#pfSave', wrap).addEventListener('click', async () => {
     const np = get();
-    if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
+    const problem = profileProblem(np);
+    if (problem) { toast(problem, 3400); return; }
     S.settings.profile = { sex: np.sex, age: np.age, heightCm: np.heightCm, weightKg: np.weightKg, activity: np.activity, goal: np.goal };
     S.settings.units = np.units;
     S.settings.targets = computeTargets(S.settings.profile);
-    await kvSet('settings', S.settings);
+    await saveSettings();
     toast('Plan updated');
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
@@ -9533,7 +9966,8 @@ function renderOnboarding(step = 0, ctx = {}) {
   const get = bindProfileForm(el, { units: 'lb' });
   $('#onbSave').addEventListener('click', async () => {
     const np = get();
-    if (!np.age || !np.weightKg || np.heightCm < 90) { toast('Fill in age, height, weight'); return; }
+    const problem = profileProblem(np);
+    if (problem) { toast(problem, 3400); return; }
     trackEvent('onb_done', { skip: 0 });
     await saveInitialSettings(np);
   });
@@ -9557,7 +9991,11 @@ async function saveInitialSettings(np) {
     fdcKey: null,
     createdAt: Date.now(),
   };
-  await kvSet('settings', S.settings);
+  /* A brand new plan: everything in it is a change, and the store is empty, so
+     the diff has to be taken against nothing rather than against the previous
+     player's baseline. */
+  settingsBase = {};
+  await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
@@ -11665,7 +12103,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     await db.put('weights', { date: payload.date, kg: payload.weightKg });
     await onWeighIn(payload.date);
   }
-  if (!S.settings.hkConnected) { S.settings.hkConnected = true; await kvSet('settings', S.settings); }
+  if (!S.settings.hkConnected) { S.settings.hkConnected = true; await saveSettings(); }
   const game = await onHealthSync(payload.date, {
     steps: payload.steps, activeKcal: payload.activeKcal,
     exerciseMin: payload.exerciseMin, cycleKm: payload.cycleKm,
@@ -12784,9 +13222,15 @@ function openPetBreedResult(off) {
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
-async function ingestHkFromUrl() {
+/* Split in two on purpose. boot() now paints BEFORE it does any of its awarding
+   work, and the first route() reads location.hash, so the hash rewrite below has
+   to have already happened or the very first render is a `#/hk...` tab that does
+   not exist. takeHkFromUrl is the synchronous half (read the hash, normalise it,
+   hand back what it said); ingestHkPayload is the awarding half and runs behind
+   the paint with everything else. */
+function takeHkFromUrl() {
   const h = location.hash || '';
-  if (!h.startsWith('#/hk')) return;
+  if (!h.startsWith('#/hk')) return null;
   /* THE HASH IS PLAYER-SUPPLIED, SO THE DECODE HAS TO SURVIVE GARBAGE.
      decodeURIComponent throws URIError on any stray '%' ("#/hk%", "#/hk?n=100%"),
      this runs inside boot() BEFORE route() and bindTabs(), and boot() is called
@@ -12801,7 +13245,12 @@ async function ingestHkFromUrl() {
   try { decoded = decodeURIComponent(h); } catch { /* malformed escape: parse it raw */ }
   const payload = parseHkPayload(decoded);
   history.replaceState(null, '', location.pathname + location.search + '#/today');
-  if (payload) await ingestHealth(payload, { celebrate: true });
+  return { payload };
+}
+
+async function ingestHkPayload(taken) {
+  if (!taken) return;
+  if (taken.payload) await ingestHealth(taken.payload, { celebrate: true });
   else toast('Could not read the Health sync link');
 }
 
@@ -12829,7 +13278,7 @@ async function nativeSyncNow({ silent = false } = {}) {
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
       S.settings.hkConnected = true; S.settings.hkNative = true;
-      await kvSet('settings', S.settings);
+      await saveSettings();
     }
     return true;
   } catch { return false; }
@@ -12873,7 +13322,7 @@ async function connectNativeHealth() {
   const granted = await nativeRequestAuth();
   if (!granted) { toast('Health permission was not granted. You can enable it in iOS Settings > Health.', 3600); return; }
   S.settings.hkConnected = true; S.settings.hkNative = true;
-  await kvSet('settings', S.settings);
+  await saveSettings();
   // (deliberately NOT advancing hkScopesV here: asking is not evidence of a grant.
   // ingestHealth advances it once sleep data actually arrives.)
   await nativeSyncNow({ silent: false });
@@ -12891,7 +13340,35 @@ async function syncFromClipboard() {
       toast('No sync data on the clipboard. Run your "Sync Boneheadz" shortcut first.', 3400);
       return;
     }
+    /* A CLIPBOARD READING CARRIES NO TIMESTAMP, SO IT MUST NOT BE COUNTED TWICE.
+       HK_TEMPLATE has no d= in it, so parseHkPayload stamps dateKey(): the day
+       the player TAPS SYNC, not the day the reading was taken. The guide above
+       recommends a 9:00 PM automation and says Boneheadz picks it up next time
+       you open the app, so the ordinary flow is a Monday-night reading synced
+       again on Tuesday morning before the shortcut has re-run. Same bytes on the
+       clipboard, new dateKey(), and Monday's walk is written a second time onto
+       Tuesday's row. raceWeekDates spans seven consecutive days, so both rows sit
+       in the same race week almost every time and weekStepsNow doubles: one walk
+       paying twice into a podium worth 5,000 coins plus a Golden Crate.
+       The server cannot see this. Its bounds hold weekSteps monotone per week and
+       cap it per elapsed day; a doubled honest total is an increase and is far
+       under the cap, so it is accepted as real.
+       The identity of a reading is its own bytes. If they have not changed, the
+       shortcut has not re-run, and there is no new reading to ingest. Re-syncing
+       identical text on the SAME day is left alone: it rewrites the same numbers
+       and changes nothing, and refusing it would read as a broken Sync button. */
+    const clipKey = String(text || '').trim();
+    const clipId = { text: clipKey.slice(0, 512), len: clipKey.length };
+    const prevClip = await kvGet('hkClipLast', null);
+    if (prevClip && prevClip.text === clipId.text && prevClip.len === clipId.len &&
+        prevClip.date && prevClip.date !== payload.date) {
+      // A refusal the player can act on. Silence here is indistinguishable from a
+      // dead button, and the fix is one they can perform.
+      toast(`Same reading you already synced on ${prevClip.date}. Run your "Sync Boneheadz" shortcut again to pick up today's steps.`, 4600);
+      return;
+    }
     await ingestHealth(payload);
+    await kvSet('hkClipLast', { ...clipId, date: payload.date });
     refresh();
   } catch {
     toast('Clipboard not available. Run the shortcut, then tap Sync again.', 3200);
@@ -13058,6 +13535,7 @@ async function openRestoreSheet() {
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
     if (!r.ok) return err(r.reason || 'Could not restore.');
     S.settings = await kvGet('settings', S.settings);
+    snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
     toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
@@ -14795,6 +15273,14 @@ async function weekStepsNow(date = dateKey()) {
 }
 
 async function socialSnapshot() {
+  /* NEVER PUBLISH A HALF-REPLAYED LEVEL. The retroactive backfill walks a legacy
+     save from level 1 up to their real level over seconds, and since v385 it runs
+     BEHIND a painted, interactive screen (see boot()), so the player can equip
+     gear, open Crew or come back from background while it is mid-flight and push
+     a profile. Every one of those paths builds its payload here, so this single
+     await is the whole guard: a snapshot is only ever taken of a settled level.
+     A no-op (already-resolved) on every boot that has no backfill to do. */
+  await gameInitSettled();
   const [fighter, eq, xp, gOwned, earned, wk] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds(), weekStepsNow()]);
   const lvl = levelFor(xp);
   return {
@@ -16372,7 +16858,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
            re-farm: the payout was gated on "the request did not error" instead of
            on a state transition actually happening.
            A repeat pays the flat consolation and nothing else. See "Rewarded
-           actions" in tally/CLAUDE.md and tests/repeat-audit.mjs. */
+           actions" in tally/CLAUDE.md. The guards are the two NO-OP checks in
+           tests/unit.test.js (one of which pins THIS branch by name) and
+           tests/reward-sop-audit.mjs. `tests/repeat-audit.mjs`, named here
+           since v389, has never existed in this repo. */
         const already = !!(remote && remote.ok === true && remote.already === true);
         const r = (refused || already) ? { ok: false, reason: already ? 'already' : remote.reason } : await claimSpire(foeCfg.spire);
         if (already) {

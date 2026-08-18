@@ -2,7 +2,7 @@
 // XP events are append-only rows in the 'xp' store, keyed for idempotency:
 // awarding the same key twice is a no-op, so backfills and retries are safe.
 
-import { db, kvGet, kvSet } from './db.js';
+import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
 import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
 import { grantSeed, gardenState } from './garden.js';
@@ -44,9 +44,66 @@ export function levelFor(xp) {
   };
 }
 
-export async function totalXp() {
+/* THE RUNNING XP TOTAL, AND WHY IT IS ALLOWED TO EXIST.
+ *
+ * totalXp() used to be db.all('xp') plus a reduce, and award() called it on EVERY
+ * reward. Measured in Chrome on this container against the real store: a full scan
+ * cost 4.4ms at 900 rows (a month), 24ms at 5400 (six months) and 33ms at 10950
+ * (a year), and one award cost 4.9 / 28 / 35ms across the same three. Linear in
+ * rows, and rewards fire in BURSTS (a fight win is award plus coins plus gear plus
+ * quests plus badges), on a phone that is 5 to 8x slower than this machine. Worse,
+ * initGameIfNeeded replays ~1900 awards against a store that is growing under it,
+ * so the retroactive backfill was quadratic.
+ *
+ * So the sum is cached, IN MEMORY ONLY, stamped with the xp store's write epoch
+ * from js/db.js. Nothing is persisted, which deletes a whole class of bug up
+ * front: a cached total cannot outlive the process, so no interrupted write, no
+ * quota failure and no half-finished restore can ever leave a WRONG number sitting
+ * on disk for the next boot to believe. The worst case is a cold cache, and a cold
+ * cache costs exactly one full scan, once, and then rebuilds itself from the truth.
+ *
+ * A CACHED NUMBER THAT CANNOT BE CHECKED IS JUST A FAST WRONG NUMBER, so the cache
+ * is only used when its epoch still matches db.epoch('xp'). db.js stamps that epoch
+ * on every put, delete and clear against the store, before the write is dispatched,
+ * so a write that then fails still invalidates. That covers every way it can drift:
+ *   - interrupted write: db.put stamps a new epoch, so if the tab dies before the
+ *     running total is updated the cache is already disowned and the next read
+ *     rebuilds from the rows that actually committed.
+ *   - import: importAll stamps every store inside its own all-or-nothing
+ *     transaction, so a restored save recomputes from what it actually got.
+ *   - erase / clear / any raw db.del: same stamp, same rebuild.
+ *   - a different database (useDbName, the ?demo save): stamps move too.
+ * The two in-place puts in this file (friendbattle tagging, levelup claimed flag)
+ * re-put a row award() already counted, so they cost a rebuild and stay correct;
+ * neither changes .xp, and xp rows are append-only by design (see the file header).
+ *
+ * DIRECTION AND BOUND, measured in Chrome on this container against the REAL burst
+ * (award then coins, coins being kvSet, thirty in a row on a page with nothing else
+ * touching IndexedDB), at 900 / 5400 / 10950 xp rows:
+ *     original scan-per-award   4.9 / 28 / 35 ms, one full scan per award
+ *     shared-counter version    10.1 / 25.0 / 38.3 ms, 28 of 30 awards still scanned
+ *     now                       1.1 / 1.3 / 1.5 ms, ZERO scans
+ * award() does not scan the xp store on the warm path at any row count, and the
+ * cost stops tracking the store. The middle row is the version that looked fixed
+ * and was not: see the PER STORE note in js/db.js.
+ *
+ * tests/xp-total-audit.mjs pins both halves against that same interleaved burst:
+ * the SHAPE (full scans of the xp store do not grow with row count) and the TRUTH
+ * (the cached total equals a from-scratch recount after every single award).
+ */
+let xpCache = null; // { v, epoch }
+
+// The truth, and the only thing that ever produces a total it did not add up itself.
+export async function rebuildXpTotal() {
+  const epoch = db.epoch('xp');
   const rows = await db.all('xp');
-  return rows.reduce((a, r) => a + (r.xp || 0), 0);
+  xpCache = { v: rows.reduce((a, r) => a + (r.xp || 0), 0), epoch };
+  return xpCache.v;
+}
+
+export async function totalXp() {
+  if (xpCache && xpCache.epoch === db.epoch('xp')) return xpCache.v;
+  return rebuildXpTotal();
 }
 
 // Idempotent award. Returns the xp granted (0 if this key already exists).
@@ -83,20 +140,106 @@ export async function awardCapped(prefix, type, xp, label, cap, date) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
-    if (await db.get('xp', key)) continue;
-    return award(key, type, xp, label, d);
+    /* `claimed`, not the xp number, decides whether this slot was ours. A
+       second tab racing for the same n loses the addIfAbsent inside awardOnce
+       and must move on to n+1 rather than being paid for a row it did not
+       write. Measured before this: two tabs each pushing 12 awards against a
+       12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
+       of 120, because both were told they had granted the same key. */
+    const r = await awardOnce(key, type, xp, label, d);
+    if (r.claimed) return r.xp;
   }
   return 0;
 }
 
 export async function award(key, type, xp, label, date) {
-  const existing = await db.get('xp', key);
-  if (existing) return 0;
-  const before = await totalXp();
-  await db.put('xp', { key, type, xp, label, date: date || dateKey(), ts: Date.now() });
+  return (await awardOnce(key, type, xp, label, date)).xp;
+}
+
+/* THE LEDGER ROW IS THE RECEIPT, SO WRITING IT HAS TO BE THE TEST-AND-SET,
+ * AND THE RECEIPT ALSO HAS TO CARRY THE RUNNING TOTAL FORWARD.
+ *
+ * Two changes met here and neither one survives being dropped, so read both
+ * halves before touching this function.
+ *
+ * HALF ONE, THE CLAIM. This used to be `const existing = await db.get('xp',
+ * key); if (existing) return 0;` and then, several awaits later, a `db.put`.
+ * Every "the ledger is the authority" claim in this codebase rests on that
+ * pair, and a pair is not an authority: with the app open in two tabs both
+ * reads returned undefined, both writes landed on the same key, and both
+ * callers were told they had been granted the reward. The ROW count stayed
+ * correct (one key, one row) which is exactly why it is invisible to any check
+ * that counts rows: what doubled was everything the caller does on the strength
+ * of a non-zero return, which is coins, dust, crates, gear and level-ups.
+ *
+ * IT DOES NOT NEED TWO TABS EITHER. Measured against a real IndexedDB on this
+ * tree in ONE page, 2026-08-17: two concurrent claimGluttonWin('2099-01-01', 1)
+ * both returned a full claim, and two concurrent collectSpawn on one spawn both
+ * paid. Sequentially every one of them correctly refused, which is why five
+ * years of sequential checks never saw it. Two overlapping taps on one control,
+ * or two code paths reaching the same claim, are enough.
+ *
+ * addIfAbsent does the check and the insert in one IndexedDB request, so
+ * exactly one caller can ever be told `claimed: true` for a key. Returns the
+ * pair rather than just the xp because `xp` is ambiguous by design: award()
+ * pays 0 for a duplicate AND 0 for a legitimately zero-XP payload, and that
+ * ambiguity is precisely the v390 gift double-pay. Callers that gate money on
+ * "did I write this row" must read `claimed`.
+ *
+ * HALF TWO, THE RUNNING TOTAL. award() used to call totalXp() on every reward,
+ * which was a full scan of the xp store: 30.6s of retroactive backfill on a
+ * one-year save, past index.html's 12s dead-shell timer, which is a reload
+ * loop. The total is cached in memory and stamped with the xp store's write
+ * epoch (js/db.js), and THIS is the function that carries it forward instead of
+ * recomputing it.
+ *
+ * WHAT THE EPOCH DOES UNDER addIfAbsent, WHICH IS NOT WHAT IT DID UNDER put.
+ * db.js stamps SYNCHRONOUSLY before dispatching, and it stamps for addIfAbsent
+ * whether or not the row lands, because it cannot know yet. So across our own
+ * call the stamp always moves by at least one, and:
+ *   - WE WON. Our row landed. If the stamp moved by exactly one, that one move
+ *     was ours, nothing else touched the xp store, and the new total is the old
+ *     one plus our xp. Advance by exactly our own xp, never by anything else's.
+ *   - WE LOST (ConstraintError). Our insert did NOT land, so the total did not
+ *     change AT ALL and the cache must not be advanced by our xp. It can still
+ *     be re-stamped at the value it already held: if the stamp moved by exactly
+ *     one it was our own no-op move, so no xp write happened in this process
+ *     across our call, and whoever wrote the key we lost to must have written
+ *     it BEFORE our stamp, which means the cached value already counted it
+ *     (a cache is only live at an epoch if it was built at or after that
+ *     epoch's write, and IndexedDB serialises that write ahead of the scan that
+ *     built it). This branch is what keeps a duplicate award cheap. Dropping
+ *     the cache here instead would put a full scan behind every repeat award,
+ *     and a resumed backfill is nothing but repeat awards.
+ *   - ANYTHING ELSE (stamp moved by two or more, or the cache was not live when
+ *     we started): we cannot say what the total is, so we drop it and the next
+ *     read pays for one honest scan. Two concurrent awards land here on both
+ *     sides. Every unsure branch costs a scan; none of them bank drift.
+ * Writes to OTHER stores deliberately do not matter: a fight win pays coins
+ * through kvSet between awards and the XP total does not depend on kv. That is
+ * why the epoch is per store (see js/db.js) and not one global counter.
+ *
+ * `before` for the level-up check is derived by subtraction rather than read
+ * first: the row is already committed by the time we get there, so totalXp()
+ * includes it, and on the warm path it is the cache we just advanced rather
+ * than a scan. */
+export async function awardOnce(key, type, xp, label, date) {
+  const row = { key, type, xp, label, date: date || dateKey(), ts: Date.now() };
+  /* Read the stamp and the cache with no await between them, so the pair is
+     consistent: `live` means base IS the xp total as of epoch e0. */
+  const e0 = db.epoch('xp');
+  const live = !!xpCache && xpCache.epoch === e0;
+  const base = live ? xpCache.v : 0;
+  const claimed = await db.addIfAbsent('xp', row);
+  xpCache = live && db.epoch('xp') === e0 + 1
+    ? { v: base + (claimed ? (xp || 0) : 0), epoch: e0 + 1 }
+    : null;
+  if (!claimed) return { claimed: false, xp: 0 };
   // any XP source can cross a level: steps, quests, pit wins, the road
   if (type !== 'levelup' && !quietLevelups) {
-    const lvB = levelFor(before), lvA = levelFor(before + xp);
+    const after = await totalXp();
+    const before = after - (xp || 0);
+    const lvB = levelFor(before), lvA = levelFor(after);
     if (lvA.level > lvB.level) {
       const rewards = await grantLevelRewards(lvB.level, lvA.level);
       if (typeof dispatchEvent === 'function') {
@@ -104,7 +247,7 @@ export async function award(key, type, xp, label, date) {
       }
     }
   }
-  return xp;
+  return { claimed: true, xp };
 }
 
 // v136: battling a friend's AI bonehead. Pays ONCE per friend per day (win pays
@@ -115,9 +258,13 @@ export async function award(key, type, xp, label, date) {
 export async function claimFriendBattle(friendId, won, date) {
   const d = date || dateKey();
   const key = `friendbattle-${d}-${friendId}`;
-  if (await db.get('xp', key)) return { firstToday: false, coins: 0, xp: 0, won };
   const xp = won ? 12 : 5;
-  await award(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  /* The claim IS the check. `if (await db.get(...)) return firstToday:false`
+     followed by an award was two operations with an await between them, and
+     the caller pays 25 coins on firstToday, so two tabs battling the same
+     friend at the same moment were both paid. */
+  const claim = await awardOnce(key, 'friendbattle', xp, won ? "Beat a friend's bonehead" : 'Battled a friend', d);
+  if (!claim.claimed) return { firstToday: false, coins: 0, xp: 0, won };
   const row = await db.get('xp', key);
   if (row) { row.friendId = friendId; row.won = won ? 1 : 0; await db.put('xp', row); }
   return { firstToday: true, coins: won ? 25 : 8, xp, won };
@@ -152,10 +299,20 @@ export function levelMilestone(L) {
 export async function grantLevelRewards(fromLevel, toLevel) {
   let coins = 0, crates = 0, dust = 0, eggs = 0, milestone = null;
   for (let L = fromLevel + 1; L <= toLevel; L++) {
-    const got = await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
-    const row = await db.get('xp', `levelup-${L}`);
-    if (row && row.claimed) continue;
-    if (row) { row.claimed = true; await db.put('xp', row); }
+    await award(`levelup-${L}`, 'levelup', 0, `Reached level ${L}`);
+    /* THE PAYOUT CLAIM IS ITS OWN ROW, AND MINTING IT IS ATOMIC.
+       It used to be a `claimed` flag on the levelup row, set with a get and
+       then a put, which is two transactions: two overlapping level crossings
+       both read claimed=false and both paid. Measured 2026-08-17, two
+       concurrent grantLevelRewards(199, 200) paid 2290 coins and 300 dust for
+       one level. `levelpaid-<L>` is claimed with addIfAbsent, so exactly one
+       caller can ever take it. The old flag is still honoured so nobody who
+       already collected a level gets paid for it again, and initGameIfNeeded's
+       retroactive baseline (which sets the flag WITHOUT paying) keeps working
+       unchanged. */
+    const legacy = await db.get('xp', `levelup-${L}`);
+    if (legacy && legacy.claimed) continue;
+    if (!(await db.addIfAbsent('xp', { key: `levelpaid-${L}`, type: 'levelup', xp: 0, label: `Level ${L} rewards`, date: dateKey(), ts: Date.now() }))) continue;
     await coinsAdd(levelCoins(L));
     await grantCrate('golden', 'level-' + L);
     coins += levelCoins(L); crates += 1;
@@ -284,12 +441,15 @@ export async function evaluateBadges() {
   const st = await buildStats();
   const out = [];
   for (const b of BADGES) {
-    const key = 'badge-' + b.id;
-    const got = await db.get('xp', key);
-    if (!got && badgeCheck(b.id, st)) {
-      await award(key, 'badge', 25, b.name);
-      out.push(b);
-    }
+    /* The badge is announced only if THIS call minted it. The old shape read
+       the row, then awarded, then pushed regardless of what award() said, so
+       two overlapping evaluateBadges both announced the same badge and both
+       callers added 25 to the XP they report. awardOnce answers the same
+       question the read was asking, indivisibly, and `claimed` is the half of
+       its answer that is unambiguous: `xp` is 25 for a fresh badge and 0 for a
+       duplicate, but it is also 0 for any payload that legitimately pays no XP,
+       which is the v390 ambiguity this pair exists to end. */
+    if (badgeCheck(b.id, st) && (await awardOnce('badge-' + b.id, 'badge', 25, b.name)).claimed) out.push(b);
   }
   return out;
 }
@@ -515,7 +675,15 @@ export async function onHealthSync(date, { steps, activeKcal, exerciseMin, cycle
 // At boot: settle yesterday (day-close bonus and any missed day checks).
 export async function awardDayCloseIfDue(targets) {
   if (!targets) return null;
-  const y = addDays(dateKey(), -1);
+  /* MONOTONIC DAY GUARD (js/db.js claimDay). Settling yesterday is worth 50 XP
+     and a GOLDEN crate, and it becomes due the moment dateKey() rolls over, so
+     it is the single biggest prize a clock nudge buys. The mark is taken on
+     TODAY, not on the yesterday being settled: the question is whether the
+     device has honestly arrived at a new day, and yesterday's own key is what
+     the award() ledger already dedupes on. */
+  const today = dateKey();
+  if (!(await claimDay(today)).fresh) return null;
+  const y = addDays(today, -1);
   const es = await db.byIndex('log', 'date', y);
   if (!es.length) return null;
   const tot = dayTotals(es);
@@ -540,34 +708,183 @@ export async function awardDayCloseIfDue(targets) {
   return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
 }
 
+/* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
+ *
+ * This is the one-shot replay that honours a pre-RPG install's history: about
+ * 1,980 awards for a one-year diary (400 log rows, one first-log per date, 60
+ * weigh-ins, up to three per past date, streaks, badges, the level baseline).
+ *
+ * It had three properties and only together were they fatal:
+ *   1. app.js ran it BEFORE route(), so it blocked first paint;
+ *   2. the `game-init` flag was written at the very END, so nothing survived an
+ *      interruption;
+ *   3. index.html's dead-shell backstop reloads the page if #screen is still
+ *      empty at 12s.
+ * So on a slow phone with an old save the replay blocked paint past 12s, the
+ * shell reloaded, the flag had never been written, and the replay started again
+ * from zero: a loop no amount of waiting escapes, because waiting is the thing
+ * that triggers it.
+ *
+ * MEASURED, on this container, one year of diary (1,825 log rows, 60 weigh-ins,
+ * 1,982 awards), end to end. All three trees run back to back in one interleaved
+ * session, two samples each, because the container's own speed drifts by nearly
+ * 2x between sessions and a table stitched from different ones reports the load
+ * average rather than the code:
+ * Re-taken against origin/main = ddbb079 (v391); the v388 table this comment used
+ * to carry no longer holds, because v390 and v391 rewrote js/app.js. PAINT is the
+ * first sample where #screen has children, INIT is the moment kv 'game-init'
+ * lands:
+ *                                          PAINT                INIT
+ *   v391 main   (award() rescans store)  1x never / never    30.6s / 30.7s
+ *                                        4x never / never    65.8s / 65.2s
+ *   gwart/xpperf (constant-cost award)   1x never / never     3.6s /  3.7s
+ *                                        4x never / never    18.1s / 10.9s
+ *   this branch (chunked, checkpointed)  1x 347ms / 418ms     5.5s /  5.7s
+ *                                        4x 799ms / 1130ms   27.4s / 29.7s
+ * The line that matters is 12,000ms. On v391 main it is crossed at NO THROTTLE AT
+ * ALL, and by further than it was on v388: 30.6s cold, on the fastest machine
+ * available, so a one-year legacy install trips the dead-shell reload here with
+ * nothing slowing it down. The constant-cost award() takes 8x off that and still
+ * never paints before the flag, and at 4x it is back over the line. Speed moves
+ * the cliff, it does not remove it, so the SHAPE is what changed here. Note the
+ * cost, stated rather than buried: chunking yields between chunks, so this branch
+ * takes 5.5s where xpperf alone takes 3.6s. It buys the only property that ends
+ * the loop, which is that content is up in about a second, always before the flag:
+ *
+ *   - CHECKPOINTED. A cursor in kv ('game-init-at') is written after every chunk
+ *     of awards, so an interrupted boot resumes where it stopped instead of
+ *     restarting. The cursor is a fast-forward hint, never the source of truth:
+ *     award() is idempotent on its ledger key, so the worst a lost or stale
+ *     cursor can cost is a re-run, never a missed award. It is VERIFIED on
+ *     resume against the recomputed item list (see initCursorStart) because the
+ *     player can now log food while the backfill runs, which would shift every
+ *     index under it; a cursor that does not match its own item is discarded and
+ *     that phase restarts.
+ *   - YIELDING. Each chunk hands the task queue back so the page paints and
+ *     stays responsive while it works.
+ *   - The flag now lands AFTER the level baseline loop, not before it, so
+ *     'game-init' means finished rather than nearly finished.
+ *
+ * The chunking now costs nothing measurable: this branch lands inside xpperf's
+ * own run-to-run spread at every throttle, and came out FASTER at 1x and 4x. It
+ * used to cost real time. Each checkpoint is a kv write, and under the SHARED
+ * write counter db.js carried before the per-store fix, every one of those ~32
+ * writes invalidated the XP cache and forced a full rescan of a store averaging
+ * about 960 rows. That is gone, and it is why the earlier measurement of this
+ * branch showed a ~25% penalty that no longer exists.
+ *
+ * The visible-state and never-publish-a-half-level halves live in app.js and in
+ * gameInitSettled() below. tests/boot-backfill-audit.mjs is the guard.
+ */
+const INIT_CURSOR = 'game-init-at';
+/* Awards between checkpoints. A year of history is ~1,980 awards, so this is about
+   33 checkpoints: roughly every 600ms on a 10x-throttled CPU, which is the interval
+   of work an interruption can cost. Smaller values were measured and the extra kv
+   writes plus task-queue hops disappeared into run-to-run noise, so this is chosen
+   for checkpoint spacing in TIME, not for the overhead. */
+const INIT_CHUNK = 60;
+
+let initInFlight = null;
+
+/* Resolves when no retroactive backfill is running. socialSnapshot() awaits this,
+   which is what keeps a HALF-REPLAYED level off the shared leaderboard: the
+   backfill takes the player from level 1 to their real level over seconds, and
+   every profile push in the app (autoSync, pushProfileSoon, syncProfile) builds
+   its payload through socialSnapshot, so one await covers all of them. Never
+   rejects: a backfill that throws still settles this. */
+export function gameInitSettled() { return initInFlight || Promise.resolve(); }
+export function gameInitRunning() { return !!initInFlight; }
+
+// hand the task queue back so the page can paint between chunks
+const yieldToPaint = () => new Promise(r => setTimeout(r, 0));
+
+/* Where to resume. Verified, not trusted: the stored index only counts if the
+   item it claims to have finished is still sitting at that index. */
+function initCursorStart(cur, phases) {
+  if (!cur || !Number.isInteger(cur.p) || cur.p < 0) return { p: 0, i: 0 };
+  const p = Math.min(cur.p, phases.length);
+  const ph = phases[p];
+  if (ph && cur.i > 0 && cur.i <= ph.items.length && ph.key(ph.items[cur.i - 1]) === cur.k) return { p, i: cur.i };
+  return { p, i: 0 };
+}
+
 // One-time retroactive backfill so existing users start with their history honored.
-export async function initGameIfNeeded(targets) {
+export function initGameIfNeeded(targets, { onProgress = null } = {}) {
+  if (initInFlight) return initInFlight;   // one at a time; a second caller joins the first
+  const p = runInitBackfill(targets, onProgress);
+  initInFlight = p;
+  // settle the gate whatever happens, so nothing can wait on it forever
+  p.catch(() => {}).then(() => { if (initInFlight === p) initInFlight = null; });
+  return p;
+}
+
+async function runInitBackfill(targets, onProgress) {
   if (await kvGet('game-init')) return null;
   quietLevelups = true;
   try {
   const [log, weights] = await Promise.all([db.all('log'), db.all('weights')]);
   const today = dateKey();
   const dates = [...new Set(log.map(e => e.date))].sort();
+  // one pass instead of one filter per date: 365 dates over 1,825 rows was 666k
+  // comparisons before the first award even landed
+  const byDate = new Map();
+  for (const e of log) { const a = byDate.get(e.date); if (a) a.push(e); else byDate.set(e.date, [e]); }
 
-  for (const e of log.slice(-400)) await award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date);
-  for (const d of dates) await award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d);
-  for (const w of weights.slice(-60)) await award(`weigh-${w.date}`, 'weigh', 15, 'Weigh-in', w.date);
+  /* The replay, as ordered phases of idempotent items. Order is fixed and every
+     list is derived deterministically (IndexedDB key order for log and weights,
+     a sorted date set), which is what makes an index into one of them a
+     resumable position at all. */
+  const phases = [
+    { id: 'log', items: log.slice(-400),
+      key: e => `log-${e.id}`,
+      run: e => award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date) },
+    { id: 'firstlog', items: dates,
+      key: d => `firstlog-${d}`,
+      run: d => award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d) },
+    { id: 'weigh', items: weights.slice(-60),
+      key: w => `weigh-${w.date}`,
+      run: w => award(`weigh-${w.date}`, 'weigh', 15, 'Weigh-in', w.date) },
+    { id: 'days', items: dates.filter(d => d < today),
+      key: d => `day-${d}`,
+      run: async d => {
+        const es = byDate.get(d) || [];
+        const tot = dayTotals(es);
+        if (targets) {
+          if (targets.p && tot.p >= targets.p) await award(`protein-${d}`, 'protein', 40, 'Protein target hit', d);
+          if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) await award(`dayclose-${d}`, 'dayclose', 50, 'Closed the day on budget', d);
+        }
+        const meals = new Set(es.map(e => e.meal));
+        if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${d}`, 'meals', 20, 'All meals logged', d);
+      } },
+  ];
 
-  for (const d of dates) {
-    if (d >= today) continue;
-    const es = log.filter(e => e.date === d);
-    const tot = dayTotals(es);
-    if (targets) {
-      if (targets.p && tot.p >= targets.p) await award(`protein-${d}`, 'protein', 40, 'Protein target hit', d);
-      if (tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6) await award(`dayclose-${d}`, 'dayclose', 50, 'Closed the day on budget', d);
+  const total = phases.reduce((a, ph) => a + ph.items.length, 0);
+  const start = initCursorStart(await kvGet(INIT_CURSOR, null), phases);
+  let done = phases.slice(0, start.p).reduce((a, ph) => a + ph.items.length, 0) + start.i;
+  onProgress?.({ done, total, resumed: done > 0 });
+
+  for (let p = start.p; p < phases.length; p++) {
+    const ph = phases[p];
+    let i = p === start.p ? start.i : 0;
+    while (i < ph.items.length) {
+      const end = Math.min(i + INIT_CHUNK, ph.items.length);
+      for (; i < end; i++) await ph.run(ph.items[i]);
+      // the checkpoint is written only after its chunk's awards have landed, so
+      // resuming at it can never skip work that was not actually done
+      await kvSet(INIT_CURSOR, { p, i, k: ph.key(ph.items[i - 1]) });
+      done = phases.slice(0, p).reduce((a, q) => a + q.items.length, 0) + i;
+      onProgress?.({ done, total, resumed: false });
+      await yieldToPaint();
     }
-    const meals = new Set(es.map(e => e.meal));
-    if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${d}`, 'meals', 20, 'All meals logged', d);
+    await kvSet(INIT_CURSOR, { p: p + 1, i: 0, k: null });
   }
+
+  /* The tail is small and bounded (six streak keys, one badge sweep, one level
+     baseline loop), so it is not checkpointed: it simply re-runs on a resume,
+     which is correct because every step of it is idempotent. */
   const streak = streakFrom(dates, today);
   await streakAwards(streak);
   await evaluateBadges();
-  await kvSet('game-init', true);
   const xp = await totalXp();
   const lv = levelFor(xp);
   // baseline: levels reached before this feature never retro-drop rewards
@@ -576,6 +893,11 @@ export async function initGameIfNeeded(targets) {
     const row = await db.get('xp', `levelup-${L}`);
     if (row && !row.claimed) { row.claimed = true; await db.put('xp', row); }
   }
+  /* LAST, not first. It used to be set before this loop, which meant an
+     interruption here left the flag saying "done" over an unfinished baseline. */
+  await kvSet('game-init', true);
+  await db.del('kv', INIT_CURSOR);
+  onProgress?.({ done: total, total, complete: true });
   return { xp, level: lv };
   } finally { quietLevelups = false; }
 }

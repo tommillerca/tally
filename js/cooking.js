@@ -4,7 +4,7 @@
 // (stew / zombie-fajita flavor), fully separate from real calorie logging, and
 // buffs only ever ADD (wellbeing-safe: nothing here rewards eating less).
 
-import { kvGet, kvSet } from './db.js';
+import { kvGet, kvSet, kvUpdate } from './db.js';
 
 export const INGREDIENTS = {
   marrow:    { id: 'marrow',    name: 'Marrow',        icon: '🦴', iconId: 'ingr-marrow',    tier: 'common' },
@@ -140,9 +140,8 @@ export function potionCount(inv) { return Object.values(inv || {}).reduce((a, n)
 export async function ingredients() { return (await kvGet('ingredients', {})) || {}; }
 export async function grantIngredient(id, n = 1) {
   if (!INGREDIENTS[id]) return;
-  const inv = await ingredients();
-  inv[id] = (inv[id] || 0) + n;
-  await kvSet('ingredients', inv);
+  // one transaction: read-then-write lost grants when two landed at once
+  await kvUpdate('ingredients', inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + n }), {});
 }
 export function canCook(recipe, inv) {
   return Object.entries(recipe.needs).every(([id, n]) => (inv[id] || 0) >= n);
@@ -165,9 +164,8 @@ export async function addPot() { // caller charges coins; this just grows the co
   await kvSet('potsOwned', owned + 1);
   return owned + 1;
 }
-async function readSlots() {
-  const raw = await kvGet('cooking', null);
-  const n = await potsOwned();
+/* Pure so it can run INSIDE a kvUpdate transaction, where nothing may await. */
+function slotsFrom(raw, n) {
   let arr;
   if (Array.isArray(raw)) arr = raw.slice();
   else if (raw && raw.recipeId) arr = [raw]; // migrate the legacy single-pot object
@@ -176,6 +174,7 @@ async function readSlots() {
   if (arr.length > n) arr.length = n; // never expose more slots than pots owned
   return arr;
 }
+async function readSlots() { return slotsFrom(await kvGet('cooking', null), await potsOwned()); }
 async function writeSlots(arr) { await kvSet('cooking', arr); }
 
 /* ---------- the cook queue ----------
@@ -279,14 +278,26 @@ export async function startCook(recipeId, now = Date.now()) {
   await writeSlots(arr);
   return { ok: true, slot: free };
 }
+/* EMPTYING THE POT IS THE CLAIM. Reading the slot and nulling it used to be two
+   transactions, so two overlapping serves of one pot both found a finished dish
+   and both banked it: measured 2026-08-17, two concurrent collectDish(0) both
+   returned the recipe, and only a lost update inside addToPantry stopped the
+   Pantry gaining two. The read and the null are one transaction now. */
 export async function collectDish(slotIndex = null, now = Date.now()) {
-  const arr = await readSlots();
-  let idx = slotIndex;
-  if (idx == null) idx = arr.findIndex(c => c && now >= c.readyAt); // first ready
-  if (idx < 0 || !arr[idx]) return null;
-  const r = RECIPE_BY_ID[arr[idx].recipeId];
-  if (!r || now < arr[idx].readyAt) return null;
-  arr[idx] = null; await writeSlots(arr);
+  const pots = await potsOwned();
+  let r = null;
+  await kvUpdate('cooking', (raw) => {
+    const arr = slotsFrom(raw, pots);
+    let idx = slotIndex;
+    if (idx == null) idx = arr.findIndex(c => c && now >= c.readyAt); // first ready
+    if (idx < 0 || !arr[idx]) return undefined;
+    const rec = RECIPE_BY_ID[arr[idx].recipeId];
+    if (!rec || now < arr[idx].readyAt) return undefined;
+    r = rec;
+    arr[idx] = null;
+    return arr;
+  }, null);
+  if (!r) return null;
   if (r.potion) await grantPotion(r.id); // potions go to your satchel, drunk mid-fight
   else await addToPantry(r, now);         // dishes stockpile in the Pantry; activated on demand
   return r;
@@ -300,9 +311,9 @@ export async function collectDish(slotIndex = null, now = Date.now()) {
  * buffs (kv 'foodbuffs') are untouched; potions still go straight to the satchel. */
 export async function pantryDishes() { return (await kvGet('pantry', [])) || []; }
 async function addToPantry(recipe, now = Date.now()) {
-  const pantry = await pantryDishes();
-  pantry.push({ recipeId: recipe.id, name: recipe.name, icon: recipe.icon, iconId: recipe.iconId, cookedAt: now });
-  await kvSet('pantry', pantry);
+  // one transaction, same reason as grantIngredient
+  await kvUpdate('pantry', list => [...(list || []),
+    { recipeId: recipe.id, name: recipe.name, icon: recipe.icon, iconId: recipe.iconId, cookedAt: now }], []);
 }
 export async function activatePantryDish(index, now = Date.now()) {
   const pantry = await pantryDishes();

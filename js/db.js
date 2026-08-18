@@ -1,6 +1,8 @@
 // Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health, inv.
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
+import { dayOrdinal } from './nutrition.js';
+
 const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
@@ -22,7 +24,41 @@ let dbName = 'tally';
  * next store cannot silently reintroduce the same hole. */
 export const STORES = ['foods', 'log', 'weights', 'kv', 'xp', 'health', 'inv'];
 
-export function useDbName(name) { dbName = name; dbPromise = null; }
+/* WRITE EPOCHS. A strictly increasing stamp per store, bumped by every write that
+   goes through this module. It exists so a caller can cache something derived from
+   a whole store (js/game.js caches the XP total) and know, in constant time and
+   without re-reading the store, whether anything has touched THAT store since. Bumped
+   BEFORE the write lands, so a write that then FAILS still invalidates: the safe
+   direction is a needless rebuild, never a stale number.
+
+   PER STORE, NOT ONE GLOBAL SEQUENCE, and this is the whole point. The first
+   version of this used a single shared counter, so `epoch('xp')` moved when ANY
+   store was written. js/game.js checks that the xp store moved exactly once across
+   its own put, and with a shared counter an unrelated kv write in between broke
+   that check. A fight win is award plus COINS, and coins are kvSet, which is
+   db.put('kv', ...), so in the real app the xp cache was thrown away on almost
+   every award and the next read paid for a full scan anyway: measured at 11 cache
+   drops out of a 12-award burst, against 0 for a burst of bare awards. Making the
+   stamp belong to the store the cache is derived from is the fix. Do not merge
+   these counters back into one.
+
+   EVERY write path in this module stamps, and that includes the atomic
+   primitives below (addIfAbsent, take, kvUpdate) and eraseAll. A write that
+   does not stamp is a cache that goes stale silently, which is the one failure
+   mode this whole mechanism exists to make impossible. */
+const storeSeq = new Map();
+function bumpStore(store) { storeSeq.set(store, (storeSeq.get(store) || 0) + 1); }
+export function storeEpoch(store) { return storeSeq.get(store) || 0; }
+
+export function useDbName(name) {
+  dbName = name;
+  dbPromise = null;
+  /* A different database is different data, and no write to the new one has
+     happened yet to say so. Bump every store this process knows about: the
+     counters only ever climb, so no cache built against the old database can
+     still match. */
+  for (const s of new Set([...STORES, ...storeSeq.keys()])) bumpStore(s);
+}
 
 function open() {
   if (!dbPromise) {
@@ -62,7 +98,49 @@ function open() {
   return dbPromise;
 }
 
+/* ONE ACCOUNT, TWO TABS. Added 2026-08-17.
+ *
+ * Everything below this line exists because nothing in this app had ever been
+ * opened twice at once, and a second tab is not a hypothetical: it is what a
+ * shared link, a "open in new tab", or an installed PWA beside its own website
+ * produces. Two tabs share ONE IndexedDB. IndexedDB serialises `readwrite`
+ * transactions over a store across every connection, tab boundaries included,
+ * so a transaction IS a lock. What is NOT a lock is a read, an `await`, and
+ * then a write, and that is the shape almost every write in this app had.
+ *
+ * Measured on two real puppeteer pages against one served tree, before the fix
+ * (tests/multitab-audit.mjs carries all of these as assertions):
+ *   50 x coinsAdd(+10) from 1000 across two tabs   ended at 1280, not 1500
+ *   20 spends of 100 racing 20 earns of 100        ended at 2500, not 3000
+ *   one 100-coin grant delivered to both tabs      paid 200
+ *   one gear id granted in both tabs               left TWO inv rows, and each
+ *                                                  one disenchants for full dust
+ *   awardCapped with a 12/day ceiling              paid 190 XP against a 120 cap
+ *   30 additions to the grantsSeen list            kept 23 of them
+ * None of these need a modified client, a patched server or a second device.
+ * They need the app open twice.
+ *
+ * The primitives here are the whole answer: they do the read AND the write
+ * inside a single transaction, so the browser does the mutual exclusion. There
+ * is deliberately no lock, no leader election and no version counter to get
+ * wrong. Rules for using them:
+ *   - The updater function passed to kvUpdate must be SYNCHRONOUS. An `await`
+ *     inside it drains the microtask queue, IndexedDB auto-commits, and the
+ *     transaction is over before the write is issued. That is the same trap
+ *     importAll documents above.
+ *   - `addIfAbsent` is the test-and-set. It is what makes a ledger row a real
+ *     receipt rather than a hint: exactly one caller can ever get `true` for a
+ *     given key, no matter how many tabs ask at the same instant.
+ */
+
+/* Writes are refused while this is set. Only ever set by the wipe protocol
+   below, in the tabs that are NOT doing the wiping, so that "erase everything"
+   can be true rather than nearly true. A frozen tab is on its way to a reload. */
+let frozen = false;
+const FROZEN_MSG = 'this save was erased in another tab';
+
 function tx(store, mode, fn) {
+  if (frozen && mode === 'readwrite') return Promise.reject(new Error(FROZEN_MSG));
   return open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
     const s = t.objectStore(store);
@@ -74,12 +152,119 @@ function tx(store, mode, fn) {
   }));
 }
 
+/* ATOMIC INSERT-IF-ABSENT. Returns true only for the caller whose row landed.
+ *
+ * `add` (not `put`) fails with ConstraintError when the key is taken, and the
+ * check and the insert are the SAME request, so there is no window between
+ * them for a second tab to slip through. The preventDefault is load-bearing:
+ * an unhandled request error bubbles to the transaction and ABORTS it, which
+ * would turn "somebody else already has this key" into a rejected promise and
+ * a lost write for whatever else shared the transaction. */
+export function addIfAbsent(store, val) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  /* Same stamp discipline as db.put, and it has to be here: a LOSING caller's
+     add never lands, but the winner's did, and this process cannot tell which
+     it is until the transaction completes. Stamping before dispatch means the
+     losing case invalidates a cache that may be missing the winner's row, which
+     is the safe direction. js/game.js reads the stamp back and is written
+     against exactly this: see awardOnce. */
+  bumpStore(store);
+  return open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(store, 'readwrite');
+    let inserted = true;
+    const req = t.objectStore(store).add(val);
+    req.onerror = e => {
+      if (req.error && req.error.name === 'ConstraintError') {
+        inserted = false;
+        e.preventDefault();      // "already there" is an answer, not a failure
+        e.stopPropagation();
+      }
+    };
+    t.oncomplete = () => resolve(inserted);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('addIfAbsent aborted'));
+  }));
+}
+
+/* ATOMIC TAKE. Hands the row over and deletes it, in ONE transaction.
+ *
+ * An inventory row (a crate, an egg, a piece of gear) IS the right to one
+ * payout, so reading it and deleting it in a second transaction lets two
+ * overlapping callers both read it and both get paid. Two tabs melting the
+ * same gear cannot both be told they melted it.
+ *
+ * Resolves THE ROW when this call is the one that found it, and `undefined`
+ * when it was already gone. The row rather than a bare boolean because
+ * openCrate has to know WHAT it took before it can roll it, and every caller
+ * that only wants the yes/no reads the same answer off truthiness. */
+export function take(store, key) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore(store);
+  return open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(store, 'readwrite');
+    const os = t.objectStore(store);
+    const g = os.get(key);
+    let row;
+    g.onsuccess = () => { row = g.result; if (row !== undefined) os.delete(key); };
+    t.oncomplete = () => resolve(row);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('take aborted'));
+  }));
+}
+
+/* ATOMIC READ-MODIFY-WRITE on one kv row. `fn` MUST be synchronous, see above.
+   Returns the value that was actually stored. This is the replacement for every
+   `const v = await kvGet(k); v.push(x); await kvSet(k, v)` in the tree: that
+   shape loses one of two concurrent additions every time it interleaves.
+
+   RETURN `undefined` FROM `fn` TO WRITE NOTHING. That is how a caller says "on
+   looking at the real state inside the transaction, there is nothing to do
+   here": a collect on an empty pot, a harvest of a bed somebody else just took,
+   a tribute already claimed. It matters because those callers are the ones
+   whose whole job is to decide whether a payout is owed, and a no-op that still
+   wrote the record back would touch a row it never changed. kvUpdate then
+   resolves undefined, so `if (!out.ok)` and `if (next === undefined)` are both
+   honest readings of "I did not take the state". */
+export function kvUpdate(k, fn, fallback = null) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore('kv');
+  return open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction('kv', 'readwrite');
+    const os = t.objectStore('kv');
+    const g = os.get(k);
+    let next;
+    let threw = null;
+    g.onsuccess = () => {
+      const cur = g.result ? g.result.v : fallback;
+      try { next = fn(cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
+      if (next !== undefined) os.put({ k, v: next });
+    };
+    t.oncomplete = () => resolve(next);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error || new Error('kvUpdate aborted'));
+  }));
+}
+
+/* The currency primitive. `coins` and `bonedust` are plain numbers in kv and
+   every balance change in the game goes through here, so this one function is
+   the difference between an exact balance and a drifting one. The clamp is the
+   same `Math.max(0, ...)` the callers used to apply outside the transaction. */
+export function kvBump(k, n, { min = 0 } = {}) {
+  return kvUpdate(k, cur => Math.max(min, (Number(cur) || 0) + n), 0);
+}
+
 export const db = {
-  put: (store, val) => tx(store, 'readwrite', s => s.put(val)),
-  del: (store, key) => tx(store, 'readwrite', s => s.delete(key)),
+  put: (store, val) => { bumpStore(store); return tx(store, 'readwrite', s => s.put(val)); },
+  del: (store, key) => { bumpStore(store); return tx(store, 'readwrite', s => s.delete(key)); },
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
-  clear: (store) => tx(store, 'readwrite', s => s.clear()),
+  clear: (store) => { bumpStore(store); return tx(store, 'readwrite', s => s.clear()); },
   all: (store) => tx(store, 'readonly', s => s.getAll()),
+  count: (store) => tx(store, 'readonly', s => s.count()),
+  epoch: (store) => storeEpoch(store),
+  /* The two atomic ones, defined above and hung here so every caller that
+     already has `db` can reach them without a second import. */
+  addIfAbsent: (store, val) => addIfAbsent(store, val),
+  take: (store, key) => take(store, key),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');
     const req = t.objectStore(store).index(index).getAll(value);
@@ -96,6 +281,184 @@ export function kvSet(k, v) { return db.put('kv', { k, v }); }
 
 export function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ------------------------------------------------------------------------
+ * MONOTONIC DAY GUARD, part 2 of 2. Part 1 is dayOrdinal() in js/nutrition.js.
+ *
+ * WHAT IT IS FOR. Every daily limit in this app is decided by the device's own
+ * clock through dateKey() (js/nutrition.js:132, plain `new Date()` in LOCAL
+ * time): the daily wheel, the day-close crate, daily and period quests, the
+ * free Pit fights, the Glutton. Move the device clock forward a day and all of
+ * them re-arm, because the per-key award() ledger only refuses the SAME key
+ * twice and a new date makes a new key. tests/clock-trust-audit.mjs measured
+ * what that is worth on this build over 14 simulated resets: 176.4 XP, 64.6
+ * coins, 3.0 free Pit fights and 1.4 inventory rows per reset, with a golden
+ * crate in 13 of 14. That is level 50 in about 271 resets, and because
+ * socialSnapshot pushes level and buildFighter derives stats from the same xp
+ * rows, it all lands on the SHARED leaderboard.
+ *
+ * BE HONEST ABOUT WHAT THIS IS. This is a speed bump, not a lock. Everything
+ * in js/ is plain text served to the person it is trying to stop: anyone with
+ * devtools can call kvSet('dayHighWater', ...) themselves, edit this file in a
+ * local checkout, or restore an exported backup over the top of it. It stops
+ * casual clock-toggling from Settings, which is the cheap, no-skill version
+ * everybody can do, and it makes the expensive version actually expensive.
+ * It does not stop anyone who opens a console. A local-first offline app
+ * cannot, and pretending otherwise in a comment is how a guard rots.
+ *
+ * THE TWO RULES, and an honest account of what each one is worth.
+ *
+ *  1. BACKWARDS IS REFUSED. A day strictly before the high-water mark never
+ *     counts as fresh. THIS IS THE LOAD-BEARING RULE and very nearly the whole
+ *     guard. It does two things. It kills the cheap harvest outright: jump to
+ *     day D+5, collect, then walk back through D+1..D+4 collecting each day
+ *     you skipped, all of which are unclaimed keys the award() ledger is happy
+ *     to pay. And it makes a forward jump PERMANENT. The farmer cannot put the
+ *     clock back, so either the device stays that many days in the future,
+ *     which breaks calendars, reminders and TLS on the rest of the phone, or
+ *     they set it right and every real day until the calendar catches up pays
+ *     nothing. Fourteen farmed days now costs fourteen dead real ones.
+ *
+ *  2. THE LOCAL DATE MAY NOT OUTRUN UTC ELAPSED by more than DAY_GRACE days,
+ *     measured from a drifting anchor. BE CLEAR ABOUT ITS LIMIT: Date.now()
+ *     below is the SAME clock dateKey() reads, so moving the clock forward one
+ *     day moves both terms by one day and this rule cannot see it. It is not a
+ *     rate limiter on clock-moving and must never be described as one. What it
+ *     does catch is a local date that advances without UTC advancing, which is
+ *     what a TIMEZONE change does: switching region hands you tomorrow for
+ *     free, no clock movement at all. Rule 1 already caps that at one hop
+ *     (there is nowhere further east to go), so rule 2 is belt and braces
+ *     there. Its real job is the second half: capping banked allowance so an
+ *     idle month cannot be spent in one sitting. Cheap, and no false positive
+ *     a traveller can trip inside DAY_GRACE.
+ *
+ * WHAT NEITHER RULE CAN DO, stated so nobody has to rediscover it: nothing
+ * here detects a plain forward clock move, because there is no trustworthy
+ * clock on the device to compare against. `performance.now()` is monotonic but
+ * resets on every page load, so a force-quit erases it. A server timestamp
+ * would work and this app is offline-first, and server/ is not ours to change.
+ * The guard's value is entirely that the move cannot be undone.
+ *
+ * WHY NOT A ROLLING "20 HOURS SINCE THE LAST DAY WE SAW". It was the first
+ * design and it BRICKS HONEST PLAYERS, every day, for free. The stamp would be
+ * rewritten on the player's last interaction of the day, so somebody who opens
+ * the app at 23:00 and again at 08:00 the next morning has nine hours between
+ * a real day boundary, is refused, and loses a genuine day of rewards. Any
+ * evening-then-morning player hits it. The anchor below is not restamped on
+ * same-day activity and does not care WHERE in the day the anchor sat, because
+ * DAY_GRACE absorbs the partial day once rather than once per day.
+ *
+ * WHY THE ANCHOR DRIFTS FORWARD. If it never moved, a player who did not open
+ * the app for a month would bank thirty days of allowance and could then spend
+ * them in one sitting. So whenever real time has run AHEAD of the claimed day
+ * count, the anchor is pulled up to now. Headroom is therefore capped at
+ * DAY_GRACE permanently, and for a player who opens the app daily it sits at
+ * 2 to 3 days and never erodes toward zero.
+ *
+ * NTP / FLAT BATTERY, and why this cannot brick an honest player. A flat
+ * battery leaves a phone booting on its RTC default, and NTP corrects it a few
+ * seconds later, usually before the app is open at all.
+ *   - Corrected BACKWARDS (the RTC had run fast, or read a future default):
+ *     the wrong future day is refused by rule 2 only if it is more than
+ *     DAY_GRACE days out, and a refusal WRITES NOTHING, so the high-water mark
+ *     never learns the bad date. When NTP lands, the true date is still at or
+ *     above the mark and the player carries on with nothing lost. Inside
+ *     DAY_GRACE the bad day is accepted and the mark moves a day or two ahead,
+ *     which costs at most those days of dailies once, and never repeats.
+ *   - Corrected FORWARDS (the RTC was stuck in the past): the stale day is
+ *     refused by rule 1, so no rewards are paid while the clock is wrong; the
+ *     player would have got the wrong day's keys anyway. The moment NTP lands,
+ *     the true date is at or above the mark, real elapsed and the true date
+ *     have moved together, and the day opens normally.
+ * In every case the failure mode is a REFUSAL, which is stateless: the guard
+ * has no way to latch. It cannot leave a player permanently locked out, only
+ * unpaid for the window their clock was wrong. Nothing is ever clawed back.
+ *
+ * THE TRAVELLER. Flying EAST is free: the date jumps forward, rule 1 does not
+ * care and rule 2 has DAY_GRACE to spend, so an LA-to-Sydney flight (Monday
+ * 22:00 PDT to Wednesday 06:00 AEST, two local dates in fifteen hours) opens
+ * both days and pays normally. Flying WEST across the date line is the one
+ * honest case that costs something: you land on a local date BEFORE the mark,
+ * rule 1 refuses it, and you lose about one day of dailies before the calendar
+ * catches up. That is the price and it is deliberate, because "backwards is
+ * sometimes fine" is exactly the hole the whole guard exists to close. One day
+ * for the rare traveller is the cheaper mistake than an open farm for everyone.
+ *
+ * EXISTING PLAYERS. dayHighWater starts null, so the first call after this
+ * update seeds the mark from wherever that player's clock already is. Nobody
+ * is retroactively penalised, nobody who has already farmed is rolled back,
+ * and no existing save loses a day to the update itself. That is the right
+ * trade: the alternative is punishing a legitimate player whose device happens
+ * to be a day off, to reclaim XP that is already spent.
+ *
+ * THIS SITS IN FRONT OF award(), IT DOES NOT REPLACE IT. The per-key ledger
+ * still refuses a second claim on the same key. This only answers "is the
+ * device's idea of today trustworthy enough to open a new day at all".
+ * ------------------------------------------------------------------------ */
+const DAY_MS = 86400000;
+/* 3 days, and each one is spoken for: ONE for the partial day the anchor was
+   set in (an anchor at 23:00 is a whole day behind an anchor at 00:01), ONE
+   for the largest honest jump a calendar can make in no time at all, which is
+   an eastward date-line crossing from UTC-12 to UTC+14 and is worth up to two
+   local dates for 26 hours of offset, and ONE spare for DST, a manual timezone
+   change and the fact that this is a speed bump, so it should err toward the
+   traveller. The farmer's prize for all of it is three days, ever, once. */
+export const DAY_GRACE = 3;
+
+export async function claimDay(key) {
+  const o = dayOrdinal(key);
+  if (!Number.isFinite(o)) return { fresh: true, reason: 'unparseable' };  // never judge what we cannot read
+
+  const hw = await kvGet('dayHighWater', null);
+  const oh = dayOrdinal(hw);
+
+  // FIRST RUN, or a mark we cannot read: seed and let the player through.
+  if (!Number.isFinite(oh)) {
+    await kvSet('dayHighWater', key);
+    await kvSet('dayPaceKey', key);
+    await kvSet('dayPaceAt', Date.now());
+    return { fresh: true, reason: 'seeded' };
+  }
+
+  // RULE 1. Strictly before the mark is never a new day.
+  if (o < oh) return { fresh: false, reason: 'backwards', highWater: hw };
+
+  /* SAME DAY. Fresh, because the per-key ledger is what decides whether any
+     individual reward is still owed. Deliberately writes nothing: restamping
+     here is exactly the bug that made the rolling-window design refuse honest
+     evening-then-morning players. */
+  if (o === oh) return { fresh: true, reason: 'same-day' };
+
+  // RULE 2. Days claimed since the anchor may not outrun days elapsed since it.
+  const anchorKey = await kvGet('dayPaceKey', hw);
+  const anchorAt = Number(await kvGet('dayPaceAt', 0)) || 0;
+  const oa = dayOrdinal(anchorKey);
+  if (Number.isFinite(oa) && anchorAt > 0) {
+    const elapsedDays = Math.floor((Date.now() - anchorAt) / DAY_MS);
+    const allowed = elapsedDays + DAY_GRACE;
+    if (o - oa > allowed) {
+      return { fresh: false, reason: 'too-fast', highWater: hw, allowed, claimed: o - oa };
+    }
+    /* Pull the anchor up when wall time has outrun the day count, so an idle
+       month cannot be banked and spent in one sitting. */
+    if (elapsedDays > o - oa) { await kvSet('dayPaceKey', key); await kvSet('dayPaceAt', Date.now()); }
+  } else {
+    await kvSet('dayPaceKey', key);
+    await kvSet('dayPaceAt', Date.now());
+  }
+
+  await kvSet('dayHighWater', key);
+  return { fresh: true, reason: 'advanced' };
+}
+
+/* Read-only view for UI and for tests. Never writes, so it can be called from
+   a render path without opening a day as a side effect. */
+export async function dayGuardState() {
+  const [highWater, paceKey, paceAt] = await Promise.all([
+    kvGet('dayHighWater', null), kvGet('dayPaceKey', null), kvGet('dayPaceAt', 0),
+  ]);
+  return { highWater, paceKey, paceAt: Number(paceAt) || 0, grace: DAY_GRACE };
 }
 
 export async function exportAll() {
@@ -193,6 +556,7 @@ const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultCo
  * contract is a merge rather than a restore. js/social.js's cloud pull is
  * the only one. */
 export async function importAll(data, { replace = true } = {}) {
+  if (frozen) throw new Error('this save was erased in another tab. Reload and try again.');
   if (!data || data.app !== 'tally' || !Array.isArray(data.log)) throw new Error('Not a Tally backup file');
   /* STORES is the module-level export above. importAll used to keep its own
      copy of this list, and a second copy in js/app.js's erase loop is what
@@ -237,6 +601,9 @@ export async function importAll(data, { replace = true } = {}) {
         for (const row of (data[s] || [])) os.put(row);
         if (s === 'kv') for (const row of keptKv) os.put(row);
       }
+      /* An import replaces the contents of every store, so every derived cache
+         built on the old contents is now wrong. Stamp them all. */
+      for (const s of STORES) bumpStore(s);
     } catch (e) {
       /* LOAD-BEARING, do not delete. A synchronous throw out of `os.put`
          (malformed row, unclonable value) does NOT abort the transaction
@@ -247,6 +614,105 @@ export async function importAll(data, { replace = true } = {}) {
       try { t.abort(); } catch { /* already aborting */ }
     }
   });
+}
+
+/* ---------------- ERASE EVERYTHING, WITH A SECOND TAB OPEN ----------------
+ *
+ * THE MEASUREMENT. Settings > Erase all data used to be, in js/app.js:
+ *     for (const st of STORES) await db.clear(st);
+ *     location.reload();
+ * Seven separate transactions, then a reload of THIS tab only. Driven with a
+ * second tab in a plain write loop (30 x coinsAdd(5) + 30 inv rows), the erase
+ * finished and the database still held 30 inv rows, a kv row, and a coin
+ * balance of 150. The sheet says "Your log, foods, weights, XP, gear and
+ * Bonehead on this device will be gone". It was not gone, and the tab that did
+ * the erasing reloaded onto a save it believed it had destroyed. That is the
+ * 2026-08-13 'inv' shape again: a destructive dialog that is not true, and the
+ * welcome kit is re-paid on top of an inventory that survived.
+ *
+ * WHY IT NEEDS A HANDSHAKE AND NOT JUST ONE TRANSACTION. One transaction fixes
+ * the erase being piecewise. It does nothing about the other tab, which is
+ * still running, still holds the player's whole state in memory, and writes
+ * again a millisecond later. So:
+ *
+ *   1. Broadcast `freeze`. Every other tab sets `frozen` SYNCHRONOUSLY in its
+ *      message handler, which makes every readwrite in this module reject, and
+ *      acks.
+ *   2. Wait for the acks (bounded: WIPE_ACK_MS, so one wedged tab cannot hold
+ *      the erase hostage forever).
+ *   3. THEN open the clear transaction. Anything the other tab dispatched
+ *      before it froze was queued as a transaction earlier than this one, and
+ *      IndexedDB runs same-store readwrite transactions in creation order, so
+ *      those writes commit BEFORE the clear and the clear removes them. That
+ *      is the whole reason the ack has to come before the transaction opens
+ *      rather than after.
+ *   4. Broadcast `erased`, and the frozen tabs reload onto the empty save
+ *      instead of sitting there showing a Bonehead that no longer exists.
+ *
+ * Bound, measured with the other tab in a continuous write loop across the
+ * whole handshake: every store holds exactly ZERO rows afterwards. Not fewer.
+ * Zero. tests/multitab-audit.mjs asserts that number.
+ *
+ * BroadcastChannel is absent in no browser this app supports, but the whole
+ * protocol degrades to "one transaction, this tab only" if it is missing,
+ * which is still strictly better than the seven-transaction loop it replaces. */
+const WIPE_CH = 'tally-db-wipe';
+const WIPE_ACK_MS = 300;
+let wipeChannel = null;
+function chan() {
+  if (wipeChannel !== null) return wipeChannel;
+  try { wipeChannel = new BroadcastChannel(WIPE_CH); } catch { wipeChannel = false; }
+  if (wipeChannel) {
+    wipeChannel.onmessage = e => {
+      const m = e && e.data;
+      if (!m || typeof m !== 'object') return;
+      if (m.t === 'freeze') {
+        frozen = true;                       // synchronous: no write can slip past this
+        try { wipeChannel.postMessage({ t: 'frozen', id: m.id }); } catch { /* channel gone */ }
+      } else if (m.t === 'erased') {
+        frozen = true;
+        try { if (typeof location !== 'undefined') location.reload(); } catch { /* not a document */ }
+      }
+    };
+  }
+  return wipeChannel;
+}
+// Called once at boot so a tab is listening before any OTHER tab erases.
+export function watchForWipe() { chan(); }
+
+export async function eraseAll() {
+  const ch = chan();
+  if (ch) {
+    const id = Math.random().toString(36).slice(2);
+    await new Promise(resolve => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; ch.removeEventListener('message', onAck); resolve(); } };
+      /* Resolve on the FIRST ack rather than counting tabs: there is no way to
+         know how many are open, and a tab that never answers is covered by the
+         timeout and then by the `erased` reload. */
+      const onAck = e => { if (e && e.data && e.data.t === 'frozen' && e.data.id === id) finish(); };
+      ch.addEventListener('message', onAck);
+      try { ch.postMessage({ t: 'freeze', id }); } catch { finish(); return; }
+      setTimeout(finish, WIPE_ACK_MS);
+    });
+  }
+  const idb = await open();
+  /* Stamp every store before the clear opens: an erase invalidates every cache
+     derived from a store's contents (js/game.js's XP total is one), and the
+     stamp has to be in place before any of them can be rebuilt. */
+  for (const st of STORES) bumpStore(st);
+  await new Promise((resolve, reject) => {
+    /* ONE transaction over every store db.js defines. Same guarantee importAll
+       gives a restore: it all goes, or none of it does and the player is left
+       exactly where they were. STORES, never a literal: the literal is what
+       lost 'inv' and left the whole wardrobe standing. */
+    const t = idb.transaction(STORES, 'readwrite');
+    for (const st of STORES) t.objectStore(st).clear();
+    t.oncomplete = resolve;
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('erase aborted'));
+  });
+  if (ch) try { ch.postMessage({ t: 'erased' }); } catch { /* channel gone */ }
 }
 
 // Ask the browser to protect this origin's storage from automatic eviction.

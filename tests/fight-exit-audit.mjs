@@ -41,7 +41,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { loadPuppeteer, serveTree } from './godmode.js';
+import { loadPuppeteer, serveTree, chromePath, sandboxArgs,
+  boneyardCapability, unproven, unprovenReport, exitFor, unclassifiedRows } from './godmode.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, '..');
@@ -133,7 +134,8 @@ base = base.replace(/\/?$/, '/');
 const browser = await puppeteer.launch({
   headless: process.env.HEADLESS_MODE || 'new',
   defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+  executablePath: chromePath(),
+  args: [...sandboxArgs(), '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage();
 const pageErrors = [];
@@ -149,6 +151,60 @@ const spire = await page.evaluate(async () => {
   return s ? { id: s.id, lat: s.lat, lng: s.lng, name: s.name } : null;
 });
 ok('LIVE a real spire could be located (an empty locate is a FAILURE)', !!spire, spire ? `${spire.name} (${spire.id})` : 'none');
+
+/* CAN THIS MACHINE REACH THE SPIRE AT ALL?
+ *
+ * The only route to a spire fight is a tap on #mapSpire, which is a marker on
+ * the Boneyard, which is MapLibre over a REMOTE vector tile host. Where that
+ * host is unreachable, js/app.js:13287 swaps the whole Boneyard for "The
+ * Boneyard needs a network signal to draw the map", and this suite gets no
+ * button to press.
+ *
+ * The dishonesty here is not a wrong answer, it is a DISAPPEARING QUESTION.
+ * Four of the six rows below live inside `if (launcher)`, so on a machine with
+ * no map they do not fail, they are never written at all: measured on this
+ * container 2026-08-17, 22 assertions ran, and on a machine that can draw the
+ * map the same file runs 26. Nothing in the output said which four were
+ * missing, and 20/22 reads healthier than 20/26. A count that shrinks quietly
+ * is the same lie as a check that passes on an empty set.
+ *
+ * So the capability is MEASURED (godmode.boneyardCapability) and every one of
+ * the six is declared UNPROVEN BY NAME, including the four that would have
+ * vanished, and the suite exits 97. The static half above (COVERAGE derived
+ * from every openFight call site in js/app.js) needs no browser and keeps
+ * grading, which is the half that catches a new fight mode with no exit rule. */
+const MAP_ROWS = [
+  'LIVE the map offered the spire (no offer means the audit did not run)',
+  'LIVE the spire sheet offered the fight (no offer means the audit did not run)',
+  'LIVE the fight opened and exposed its test seam',
+  'LIVE the fight actually ended in a win (a fight that never ended proves nothing)',
+  'LIVE the Done button existed and was tapped',
+  'LIVE beating a spire does NOT drop you back on a live "Face the Warden" button',
+];
+/* These two need no map: spiresNear is pure seeded arithmetic, and the error
+   list here is pageerror only, which an unreachable host does not populate. */
+const NO_MAP_ROWS = [
+  'LIVE a real spire could be located (an empty locate is a FAILURE)',
+  'LIVE no page errors during the run',
+  'ROWS-CLASSIFIED every LIVE row is declared map-dependent or not',
+];
+const cls = unclassifiedRows(import.meta.url, [MAP_ROWS, NO_MAP_ROWS],
+  { after: '/* ---------- 3. LIVE: drive a real spire win and tap the real button ----- */' });
+ok('ROWS-CLASSIFIED every LIVE row is declared map-dependent or not',
+  cls.missing.length === 0 && cls.seen > 0,
+  cls.missing.length ? `unclassified: ${cls.missing.join(' | ')}` : `${cls.seen} row names read from section 3`);
+
+const mapCap = await boneyardCapability(page);
+if (!mapCap.ok) {
+  for (const n of MAP_ROWS) unproven(n, 'the Boneyard could not draw, so no spire could be reached on this machine');
+  ok('LIVE no page errors during the run', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
+  await browser.close();
+  srvHandle?.close();
+  const f = results.filter(r => !r.pass);
+  console.log(`\n${results.length - f.length}/${results.length} of the checks that COULD run passed`);
+  unprovenReport('fight-exit-audit.mjs', mapCap);
+  process.exit(exitFor(f.length));
+}
 
 let landed = null;
 if (spire) {
@@ -236,3 +292,4 @@ console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (!results.length) { console.log('EMPTY SAMPLE SET: the audit did not run'); process.exit(1); }
 if (failed.length) { console.log('fight-exit FAILED'); process.exit(1); }
 console.log('fight-exit clean');
+process.exit(exitFor(0));

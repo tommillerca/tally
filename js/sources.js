@@ -3,6 +3,49 @@
 
 import { kcalConsistent } from './nutrition.js';
 
+/* A LOOKUP THAT HANGS IS NOT A LOOKUP THAT FAILED, AND NEITHER IS "NOT FOUND".
+ *
+ * Two separate problems live in this file and they compound.
+ *
+ * 1. No deadline. Measured 2026-08-17 against a server that accepts the request
+ *    and never answers: the barcode sheet sat on "Looking up 5000112637922"
+ *    with the camera already stopped, forever, and the Add-food sheet's online
+ *    section sat on a spinner, forever. Same shape as js/social.js, same fix:
+ *    abort at a deadline so the caller's failure path can run at all.
+ *
+ * 2. Every failure was flattened to "nothing found". fetchOffProduct returned
+ *    null for a 404 AND for a dead network; searchOnline returned [] for both.
+ *    Measured on the same run, barcode 5000112637922: online it resolves to a
+ *    product and opens the portion sheet; with the network removed the app
+ *    said "Not in the books. Plenty of packaged food was never listed in the
+ *    databases" and offered to let the player type it in by hand. That is a
+ *    statement of fact about a database we never reached, and acting on it
+ *    costs the player a permanent duplicate custom food.
+ *
+ * So the *Ex functions below report whether the source was REACHED, and
+ * 'unreachable' is thrown rather than swallowed. The plain exports keep their
+ * old food-or-null shape because tests/unit.test.js and the mappers use them.
+ *
+ * 15s, not social.js's 12s: these are third-party hosts on a cold CDN edge, and
+ * Open Food Facts's search backend is measurably slower than our own Worker. */
+export const LOOKUP_DEADLINE_MS = 15000;
+/* ONE BUDGET FOR THE WHOLE LOOKUP, not one per request. A barcode consults Open
+   Food Facts (up to three code variants) and then USDA, sequentially, so a
+   per-request deadline would have added up to 60s of staring at "Looking up
+   5000112637922". The caller opens a budget once and every fetch underneath it
+   aborts at the same wall-clock instant. */
+export function fetchWithDeadline(deadlineAt) {
+  return (url, opts = {}) => {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(new DOMException('the food database did not answer in time', 'TimeoutError')),
+      Math.max(1, deadlineAt - Date.now()));
+    return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
+  };
+}
+export function timedFetch(url, opts = {}) {
+  return fetchWithDeadline(Date.now() + LOOKUP_DEADLINE_MS)(url, opts);
+}
+
 const OFF_FIELDS = 'code,product_name,brands,nutriments,serving_size,serving_quantity,quantity,nutrition_data_per';
 
 function n(v) { const x = typeof v === 'string' ? parseFloat(v) : v; return isFinite(x) ? x : null; }
@@ -69,21 +112,28 @@ export function mapOffP(p) {
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-export async function fetchOffProduct(code, fetchFn = fetch) {
+/* reached:false means we never got an answer out of Open Food Facts, so nothing
+   here is evidence about whether the product exists. */
+export async function fetchOffProductEx(code, fetchFn = timedFetch) {
   const tryCodes = [code];
   if (code.length === 12) tryCodes.push('0' + code); // UPC-A as EAN-13
   if (code.length === 13 && code.startsWith('0')) tryCodes.push(code.slice(1));
+  let reached = false;
   for (const c of tryCodes) {
     try {
       const r = await fetchFn(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(c)}.json?fields=${OFF_FIELDS}`);
+      reached = true;            // it answered: a 404 here IS "not in this book"
       if (r.status === 404) continue;
       if (!r.ok) continue;
       const j = await r.json();
       const food = mapOffProduct(j);
-      if (food) return food;
-    } catch { /* network issue, fall through */ }
+      if (food) return { food, reached: true };
+    } catch { /* no answer from this host; `reached` stays as it was */ }
   }
-  return null;
+  return { food: null, reached };
+}
+export async function fetchOffProduct(code, fetchFn = timedFetch) {
+  return (await fetchOffProductEx(code, fetchFn)).food;
 }
 
 // ---- USDA FoodData Central ----
@@ -163,10 +213,11 @@ export function rankFdcResults(foods, query) {
   return scored.map(s => s.f);
 }
 
-export async function searchFdc(query, apiKey = 'DEMO_KEY', fetchFn = fetch) {
+export async function searchFdc(query, apiKey = 'DEMO_KEY', fetchFn = timedFetch) {
   const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}` +
     `&query=${encodeURIComponent(query)}&dataType=Branded,Foundation,SR%20Legacy&pageSize=25`;
-  const r = await fetchFn(url);
+  let r;
+  try { r = await fetchFn(url); } catch { throw new Error('unreachable'); }
   if (r.status === 429) throw new Error('rate_limit');
   if (!r.ok) throw new Error(`fdc_http_${r.status}`);
   const j = await r.json();
@@ -175,13 +226,17 @@ export async function searchFdc(query, apiKey = 'DEMO_KEY', fetchFn = fetch) {
 
 // Open Food Facts TEXT search (not just barcodes). Huge named/branded coverage
 // (café drinks, brand items) that USDA misses. No API key, no per-user rate cap.
-export async function searchOff(query, fetchFn = fetch) {
+export async function searchOff(query, fetchFn = timedFetch) {
   const url = 'https://world.openfoodfacts.org/cgi/search.pl'
     + `?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1`
     + `&page_size=30&fields=${OFF_FIELDS}`;
   // OFF's search backend 503s intermittently under load — one quick retry.
-  let r = await fetchFn(url);
-  if (r.status >= 500) { await new Promise(res => setTimeout(res, 700)); r = await fetchFn(url); }
+  let r;
+  try { r = await fetchFn(url); } catch { throw new Error('unreachable'); }
+  if (r.status >= 500) {
+    await new Promise(res => setTimeout(res, 700));
+    try { r = await fetchFn(url); } catch { throw new Error('unreachable'); }
+  }
   if (!r.ok) throw new Error(`off_http_${r.status}`);
   const j = await r.json();
   const foods = (j.products || [])
@@ -194,15 +249,23 @@ export async function searchOff(query, fetchFn = fetch) {
 // One online search across BOTH sources, merged + ranked. Resilient: if one
 // source fails (USDA rate limit, OFF hiccup) the other still returns. Only
 // throws rate_limit when USDA is limited AND OFF gave nothing.
-export async function searchOnline(query, apiKey = 'DEMO_KEY', fetchFn = fetch) {
+export async function searchOnline(query, apiKey = 'DEMO_KEY', fetchFn = null) {
+  const fn = fetchFn || fetchWithDeadline(Date.now() + LOOKUP_DEADLINE_MS);
   const [fdc, off] = await Promise.allSettled([
-    searchFdc(query, apiKey, fetchFn),
-    searchOff(query, fetchFn),
+    searchFdc(query, apiKey, fn),
+    searchOff(query, fn),
   ]);
   const fdcFoods = fdc.status === 'fulfilled' ? fdc.value : [];
   const offFoods = off.status === 'fulfilled' ? off.value : [];
   if (!fdcFoods.length && !offFoods.length) {
     if (fdc.status === 'rejected' && fdc.reason && fdc.reason.message === 'rate_limit') throw new Error('rate_limit');
+    /* NOBODY ANSWERED IS NOT NOTHING FOUND. Returning [] here is what put
+       "Nothing found online. Try the barcode or label scanner." on screen for a
+       player whose phone had no signal, which sends them to a scanner that
+       needs the same network. Only claim an empty result when at least one
+       source actually answered. */
+    const unreachable = r => r.status === 'rejected' && r.reason && r.reason.message === 'unreachable';
+    if (unreachable(fdc) && unreachable(off)) throw new Error('unreachable');
     return [];
   }
   // OFF first (better for named café/brand items), then USDA; rank dedups.
@@ -210,21 +273,38 @@ export async function searchOnline(query, apiKey = 'DEMO_KEY', fetchFn = fetch) 
 }
 
 // Barcode fallback: FDC text search by GTIN digits.
-export async function fetchFdcByBarcode(code, apiKey = 'DEMO_KEY', fetchFn = fetch) {
+export async function fetchFdcByBarcodeEx(code, apiKey = 'DEMO_KEY', fetchFn = timedFetch) {
+  let reached = false;
   try {
     const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}` +
       `&query=${encodeURIComponent(code)}&dataType=Branded&pageSize=5`;
     const r = await fetchFn(url);
-    if (!r.ok) return null;
+    reached = true;
+    if (!r.ok) return { food: null, reached };
     const j = await r.json();
     const stripped = code.replace(/^0+/, '');
     for (const raw of j.foods || []) {
       const gtin = String(raw.gtinUpc || '').replace(/^0+/, '');
       if (gtin && (gtin === stripped || gtin.endsWith(stripped) || stripped.endsWith(gtin))) {
         const f = mapFdcFood(raw);
-        if (f) { f.barcode = stripped; return f; }
+        if (f) { f.barcode = stripped; return { food: f, reached: true }; }
       }
     }
-  } catch { /* offline or rate limited */ }
-  return null;
+  } catch { /* no answer, or an unreadable body */ }
+  return { food: null, reached };
+}
+export async function fetchFdcByBarcode(code, apiKey = 'DEMO_KEY', fetchFn = timedFetch) {
+  return (await fetchFdcByBarcodeEx(code, apiKey, fetchFn)).food;
+}
+
+/* THE WHOLE BARCODE LOOKUP, WITH ITS OWN VERDICT.
+ * `reached` is an AND across every source consulted: if EITHER book was
+ * unreachable, "not in the books" is not something we are entitled to say. */
+export async function lookupBarcode(code, apiKey = 'DEMO_KEY', fetchFn = null) {
+  const fn = fetchFn || fetchWithDeadline(Date.now() + LOOKUP_DEADLINE_MS);
+  const off = await fetchOffProductEx(code, fn);
+  if (off.food) return { food: off.food, reached: true, source: 'off' };
+  const fdc = await fetchFdcByBarcodeEx(code, apiKey, fn);
+  if (fdc.food) return { food: fdc.food, reached: true, source: 'fdc' };
+  return { food: null, reached: off.reached && fdc.reached, source: null };
 }
