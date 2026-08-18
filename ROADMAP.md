@@ -113,7 +113,44 @@ not touched. His call:
 
 ---
 
-## 🔑 DECISION FOR TOM: should the friend code stay the recovery lookup key?
+## 🎵 Hollow music: Morning Dew, STARTS MUTED (Tom, said twice)
+
+Tom, 2026-08-17: *"make sure once again i already talked about this with you it
+starts muted but there's an unmute icon that shows it wants to be clicked the
+first time they go in the hollow."* Second time he has specified it. Written
+down now so it is not asked for a third time.
+
+  TRACK   ~/Downloads/MorningDew-small/MorningDew-loop-81s.m4a
+          81.2s, 976 KB, m4a so it plays in WKWebView on iOS, which is Tom's
+          actual install path. The -x2-HEAR-THE-SEAM file is for checking the
+          loop join, not for shipping.
+  START   MUTED. Not paused, muted. Nothing plays until the player asks.
+  AFFORD  An unmute control that visibly INVITES a tap the first time a player
+          enters the Hollow. It has to read as "press me", not as a status icon
+          sitting in a corner.
+  AFTER   Once they have chosen, remember it. The invitation is first visit only.
+
+## 🔑 RESOLVED: the friend code stays as it is (2026-08-17)
+
+Tom: *"friendcode can tay as is i think it's fine? idk why you guys are freaking
+out about it."* He is right and both gwart and I escalated this past what the
+evidence supported.
+
+The app's own security model already says the lookup key is not the secret.
+js/app.js:12917, shown to the player: *"Anyone can guess a recovery ID, so the
+phrase is what actually protects you."* The recovery ID is a name the player
+picks (the UI calls it "the name you look yourself up by") and Settings shows it
+back to them. So a public lookup key was always the design, and the friend code
+being one is not a departure from it.
+
+NO SPLIT. Recovery keeps working exactly as it does. The only change that still
+stands is the add-by-player-id endpoint, which is a PRODUCT fix so the "+ Add"
+button does not need a code, and it happens to stop the leaderboard broadcasting
+them. srvhard must still not merge as written.
+
+Do not reopen this without new evidence.
+
+## 🔑 SUPERSEDED, kept for the reasoning: should the friend code stay the recovery lookup key?
 
 Raised by gwart 2026-08-17, and he is right that it is separable from the "+ Add"
 button question. Recording it rather than deciding it.
