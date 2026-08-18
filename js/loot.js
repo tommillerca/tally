@@ -860,15 +860,20 @@ function candidates(rarity, owned, slotBias) {
 
 // One cosmetic roll. Prefers unowned at the rolled rarity, walks down then up,
 // and falls back to a duplicate (converted to coins) when the collection is fat.
-function rollCosmetic(owned, floor, slotBias) {
+export function rollCosmetic(owned, floor, slotBias) {
   const rolled = RARITY_ORDER.indexOf(rollRarity(floor));
   const order = [...RARITY_ORDER.slice(0, rolled + 1).reverse(), ...RARITY_ORDER.slice(rolled + 1)];
   for (const r of order) {
     const pool = candidates(r, owned, slotBias);
     if (pool.length) return { item: pool[Math.floor(rng() * pool.length)], dupe: false };
   }
-  const any = BH_ITEMS.filter(i => !i.default);
-  const item = any[Math.floor(rng() * any.length)];
+  // Terminal fallback: everything is owned, so this roll is a coin conversion.
+  // Pick the dupe AT THE RARITY WE JUST ROLLED, not uniformly over the whole
+  // catalogue. The catalogue is 10.2% legendary against a 3% drop weight, so a
+  // uniform pick paid the 400-coin legendary dupe 3.41x too often and turned a
+  // finished collection into the game's biggest coin faucet.
+  const pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && i.rarity === RARITY_ORDER[rolled]);
+  const item = pool[Math.floor(rng() * pool.length)];
   return { item, dupe: true };
 }
 
@@ -914,8 +919,8 @@ export async function openCrate(invId) {
       continue;
     }
     const { item, dupe } = rollCosmetic(owned, floor, def.slotBias);
-    // gear-slot art has a 55% chance to drop as a STATTED variant of the same look
-    if (GEAR_SLOTS.includes(item.slot) && rng() < 0.55) {
+    // gear-slot art has a 30% chance to drop as a STATTED variant of the same look
+    if (GEAR_SLOTS.includes(item.slot) && rng() < 0.30) {
       // never drop gear gated more than 3 levels ahead (dead loot kills momentum);
       // if no variant qualifies, fall through to the plain cosmetic instead
       const { totalXp: _txp, levelFor: _lf } = await import('./game.js');
