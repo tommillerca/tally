@@ -113,6 +113,34 @@ not touched. His call:
 
 ---
 
+## ⚠️ gwart's 47 branches: merge order and one silent-collision hazard (2026-08-17)
+
+RESTORED AND PUSHED 2026-08-17. Push was blocked from gwart's container (403 at
+the git proxy) so a bundle was the only copy of 43 branches of work. Restored
+from it and pushed all 47 refs to origin as `gwart/*`. The bundle is no longer
+the only copy. Count differs from the 43 in his RESTORE.md; not chased.
+
+**THE HAZARD, and it is not a git conflict.** `gwart/econ` and `gwart/multidev`
+fix the same root cause and both define a function named `awardOnce`. Git will
+merge them silently and take one. `gwart/reconcile` IS the reconciliation of the
+two and supersedes both.
+
+    MERGE reconcile. DO NOT MERGE econ or multidev.
+
+Written here because a hazard that git cannot detect only exists if a human
+wrote it down, and this one costs a live money bug if it is forgotten.
+
+**Verified merge order, harness FIRST.** Four FAST-tier suites die at browser
+launch without it, including screen-sweep and onb-audit, so anything merged
+before it is graded by a harness that cannot run:
+
+    harness, hkintake, clocktrust, inputval, xpperf, bootblock,
+    offline, denbound, census, cite, reconcile
+
+**FROZEN pending Tom's call on server access:** srvhard, concurrency, dbperf,
+dbprune. All four touch `server/`. gwart says Tom granted him that explicitly;
+Tom has not confirmed since. Nobody merges these until he does.
+
 ## 🐾 The Paddock: pet playland on the Stable (BUILDING, assigned 2026-08-10)
 
 **Tom's ask:** "got a sick new feature for us, we are gonna attach this to the
