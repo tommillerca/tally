@@ -1,7 +1,7 @@
 /* DELETING A CUSTOM FOOD MUST NOT TAKE YOUR HISTORY WITH IT.
  *
  * A custom food is hand-entered: someone typed the macros off a packet. The
- * Foods tab can delete one permanently (js/app.js:4577, db.del('foods', id))
+ * Foods tab can delete one permanently (js/app.js:5952, db.del('foods', id))
  * and a coverage census on 2026-08-12 found nothing pointed at it.
  *
  * The interesting question is not whether the delete works. It is what happens
@@ -52,7 +52,7 @@ const setup = await page.evaluate(async id => {
   const today = dateKey();
   const older = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
   /* source 'custom' is what makes the editor (and therefore the delete)
-     reachable at all: js/app.js:4191 only offers it for custom foods. */
+     reachable at all: js/app.js:5382 only offers it for custom foods. */
   await db.db.put('foods', { id, name: 'Nan bread (from the packet)', brand: null, source: 'custom',
     per100: { kcal: 310, p: 9, c: 55, f: 5 },
     servings: [{ label: '1 piece (90 g)', grams: 90 }], lastUsedAt: Date.now() });
@@ -89,10 +89,10 @@ ok('SETUP the custom food and two entries referencing it exist', before.foodExis
    button in its editor. Calling db.del would prove the database works and
    nothing about the screen that fires it. */
 /* THE REAL PATH TO THE DELETE, which is not the obvious one. Tapping a food in
-   the Foods tab OPENS THE PORTION SHEET to log it (js/app.js:5635), it does not
+   the Foods tab OPENS THE PORTION SHEET to log it (js/app.js:7067), it does not
    edit it. The editor that carries the delete is reached from the portion
    sheet's own "edit" control, and only for a food whose source is 'custom'
-   (js/app.js:4191). So the delete is three taps deep behind logging, which is
+   (js/app.js:5382). So the delete is three taps deep behind logging, which is
    worth knowing on its own: it is hard to hit by accident, which softens the
    no-confirm finding below. */
 await page.evaluate(() => { location.hash = '#/foods'; });

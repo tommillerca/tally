@@ -2,7 +2,7 @@
  *
  * Settings -> NOTIFICATIONS has three buttons (#notifAll, #notifEss,
  * #notifTest) and a boot-time asker (maybeRequestNotifPermission at
- * js/app.js:1573). The retention lever, and it fails silently in both
+ * js/app.js:2101). The retention lever, and it fails silently in both
  * directions: a permission prompt that stops firing, or an "essentials"
  * tier that quietly means "none" (or, on this build, quietly means
  * "same as All"). A toggle that flips a boolean nothing reads is the
@@ -160,7 +160,7 @@ check('TEST  notifyNow returns true when permission is granted (web path)',
 
 /* Also verify the button itself fires the toast on success.
  *
- * DO NOT read #toast once and hope. `toast()` is a QUEUE (app.js:2244): each
+ * DO NOT read #toast once and hope. `toast()` is a QUEUE (app.js:2288): each
  * entry holds the screen for its own duration (2200ms default, 3200ms for
  * this button) before the next runs, and the app emits ambient toasts of its
  * own that sit AHEAD of the one we trigger. Measured on this build: the click

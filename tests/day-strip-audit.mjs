@@ -2,7 +2,7 @@
  * TESTED IT.
  *
  * Found by a coverage census on 2026-08-12: `#prevDay`, `#nextDay` and
- * `#datePick` (js/app.js:2138-2140) were referenced by ZERO test files, on the
+ * `#datePick` (js/app.js:2797-2799) were referenced by ZERO test files, on the
  * screen a player touches more than any other. They set `S.date`, and `S.date`
  * is the input to every read (which entries the day shows) and every write
  * (`date: S.date` on the row that gets saved). The XP ledger is keyed by date

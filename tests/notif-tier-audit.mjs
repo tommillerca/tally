@@ -129,7 +129,7 @@ check('SUBSET  Everything leaves every content kind on',
    needed: the COPY checks below used to be asserted against ess.merged, so they
    certified a promise the app did not keep. `siege` merged to false under
    Essentials and the check went green, while the DISCOVERY push at
-   js/app.js:14397 called notifyNow with no gate at all and the device queued it
+   js/app.js:14771 called notifyNow with no gate at all and the device queued it
    anyway. Measured before the fix: Essentials queued 1, and so did fully Off.
 
    Two paths per siege, and only one of them was ever driven here. DRIVERS now
@@ -155,7 +155,7 @@ check('DRIVE  every content kind has the immediate-push driver the copy contract
 
 /* Fully off. Built from the app's own key list so a sixth kind is covered the
    day it lands. 'any' is the kindless push (the HealthKit stall notice at
-   js/app.js:2555, the Settings test button): nothing but the master switch can
+   js/app.js:2600, the Settings test button): nothing but the master switch can
    silence it, so it is the sharpest probe of what Off means. */
 const OFF = Object.fromEntries(KINDS.map(k => [k, false]));
 const PROBED = [...CONTENT, 'any'];

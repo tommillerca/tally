@@ -2,8 +2,8 @@
  *
  * This is HOW STEPS ENTER THE APP on non-native builds. The clipboard path
  * (Settings -> APPLE HEALTH -> Sync from clipboard now) reads
- * navigator.clipboard, passes it to parseHkPayload (js/game.js:564), and
- * pipes the return through ingestHealth (js/app.js:9558) which writes a
+ * navigator.clipboard, passes it to parseHkPayload (js/game.js:655), and
+ * pipes the return through ingestHealth (js/app.js:11542) which writes a
  * `health` row and, when weightKg is present, also a `weights` row.
  *
  * Steps drive the egg, the map spawns, the step race, walk XP, per-pet
@@ -125,7 +125,7 @@ await page.evaluate(async () => {
 
 /* Stub navigator.clipboard.readText for the next attempts. Puppeteer's
    default context blocks clipboard for real reasons, and the app calls
-   navigator.clipboard.readText() at app.js:10729. Overriding the method
+   navigator.clipboard.readText() at app.js:12809. Overriding the method
    is the least invasive way to feed it a payload from a test. */
 async function setClipboard(text) {
   await page.evaluate(t => {
