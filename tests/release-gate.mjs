@@ -319,6 +319,7 @@ const DECLARED = {
   't3-audit.mjs': ['full', 'Tier 3 depth screens render their mockup language.'],
   'two-tap-audit.mjs': ['full', 'one tap must never spend coins.'],
   'wardrobe-audit.mjs': ['full', 'equipping does not flash the page; the background does not follow the character.'],
+  'looks-door-audit.mjs': ['full', "the Looks collection is REACHABLE. v395 took the LOOKS card off the hub and it was the only entry point, so tab === 'looks' rendered perfectly for nobody. Drives the Wardrobe door with a real mouse click and asserts the collection actually paints (tiles, locked tiles, the tally), and that the hub row is still 4 chips with LEVEL still gone. Proven red against origin/main at 7c36465, the shipped regression: 9 of 14 red there, 14 of 14 here, with the HUB rows green in both so a broken harness cannot read as the finding. Self-serves this checkout when given no URL."],
   /* REPORTS PRE-EXISTING ROT, so it exits 1 on a healthy tree and cannot sit in
      FAST. This project's own rule is that a gate people skip is worse than no
      gate, and a FAST tier that is permanently red is the fastest way to teach

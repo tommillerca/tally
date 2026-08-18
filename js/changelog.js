@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 396, date: '2026-08-17', title: 'Your Looks collection is reachable again', items: [
+    "<b>The Looks collection was briefly unreachable, and it is back.</b> The last update tidied the Bonehead screen down to four tabs and took the Looks card off it. That card was the only way in, so for a few hours there was no way to open your collection at all. Nothing in it was lost or changed while it was hidden.",
+    "<b>It opens from the Wardrobe now.</b> There is a pill at the top of the Wardrobe showing how many looks you have collected out of how many exist. Tap it for the full collection, the same one as before, with the locked pieces still kept a surprise.",
+  ] },
   { n: 395, date: '2026-08-17', title: 'Hand-drawn icons, and a tidier Bonehead screen', items: [
     "<b>The coins, bone dust, crates, eggs, charms and draughts are hand-drawn pixel art now.</b> They used to be flat vector shapes. Same things, properly drawn, and they hold their crisp edges at every size the game uses them at.",
     "<b>The Bonehead tabs got the same treatment.</b> Wardrobe, Backpack, Shop and Build each have their own drawn icon instead of a generic symbol, so you can find the one you want without reading.",
