@@ -817,7 +817,12 @@ async function boot() {
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
   if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+  /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
+     when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
+     is only as fresh as the last /health we saw. Unsigned, anonymous, fails
+     soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
   onAppResume(() => {
+    if (!NOSOCIAL) social.touchServerDay();
     rollDayIfNeeded(); nativeAutoSync();
     if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
     flushAnalytics(); refreshNotifSchedules();
