@@ -81,7 +81,7 @@ await page.waitForSelector('#redeemBtn', { timeout: 10000 });
    exactly the failure this whole file exists to catch.
 
    READ THE RECORDS, NOT THE ELEMENT STATE, and never skip a message equal to
-   the previous one. nextToast() (js/app.js:2264) does not clear #toast between
+   the previous one. nextToast() (js/app.js:2293) does not clear #toast between
    messages: it hides the old one, assigns textContent and unhides, all inside
    ONE synchronous task. A MutationObserver callback fires once per BATCH, so
    an observer that reads el.textContent at callback time never sees the hide,

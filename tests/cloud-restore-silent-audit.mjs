@@ -18,7 +18,7 @@
  * TWO THINGS THIS HAS TO DEFEAT TO RUN AT ALL, both documented so the next person
  * does not "simplify" them back out:
  *
- *  1. app.js:535 `const NOSOCIAL = S.demo || navigator.webdriver === true`, so
+ *  1. app.js:577 `const NOSOCIAL = S.demo || navigator.webdriver === true`, so
  *     under a normal godmode boot (?demo, webdriver) bootSync is NEVER CALLED and
  *     a browser check of it would be vacuous. So this boots WITHOUT ?demo and
  *     spoofs navigator.webdriver to false. That is also why it does not use

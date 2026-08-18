@@ -79,7 +79,7 @@ for (const C of CRATES) if (seam) {
      promise to page.evaluate, which then waits for a tap that is never coming:
      the first run of this file died on a protocol timeout rather than on a
      measurement. Braces, so the call is fired and not awaited. */
-  /* __crateForce OR THERE IS NO CRATE. js/app.js:11096 reads
+  /* __crateForce OR THERE IS NO CRATE. js/app.js:11248 reads
      `reducedMotion || (navigator.webdriver && !window.__crateForce)` and skips
      the whole opening sequence when it is true, so under an audit the reveal
      renders in browsing mode with no .pack-crate at all. Without this line every
@@ -109,7 +109,7 @@ for (const C of CRATES) if (seam) {
      measurement and the screenshot. */
   const FRAME = C.frame;
   /* PUT THE CRATE IN A DETERMINISTIC STATE, do not sleep a guessed number.
-     navigator.webdriver scales JS timing by 0.25 at js/app.js:14722 while CSS
+     navigator.webdriver scales JS timing by 0.25 at js/app.js:15104 while CSS
      animations are not scaled, so no single sleep is right in both worlds: the
      first version of this file slept 900ms and measured the sprite MID-DROP at
      device y 466.766, and the second waited for vertical stability and caught it

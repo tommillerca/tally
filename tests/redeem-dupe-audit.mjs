@@ -67,7 +67,7 @@ await page.waitForSelector('#redeemBtn', { timeout: 10000 });
         repeat is the whole subject of this file.
      2. Arming on hide and recording on show does not work either, because a
         MutationObserver callback fires ONCE PER BATCH, not per mutation, and
-        nextToast() (js/app.js:2264) hides the old message and shows the next
+        nextToast() (js/app.js:2293) hides the old message and shows the next
         one inside a single synchronous task. The callback sees only the final
         state, hidden=false, and never observes the hide at all.
    So read the RECORDS, not the element state. A `hidden` attribute record with
