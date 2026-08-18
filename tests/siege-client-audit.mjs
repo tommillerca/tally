@@ -131,7 +131,7 @@ check('the banner marks itself under siege and shows the siege tag on the row',
 
 // the map button must offer DEFEND before tend/collect. HARDENED, not fully
 // rewritten: fully driving the #mapSpire click requires the map screen to
-// populate `spireInRange` (app.js:11696), which is a closure local in the
+// populate `spireInRange` (app.js:13858), which is a closure local in the
 // render scope with no test hook; setting it from outside means either
 // simulating geolocation + POI generation for a spire in range, or exposing
 // a hook on window. Both are app-side plumbing that belongs on a separate

@@ -151,8 +151,8 @@ ok('UNCLAIMED and says so plainly', /nobody/i.test(empty.name || ''), String(emp
    local record still knows when. The sheet must render dormant-with-history
    honestly, not fall back to the never-been-taken branch.
 
-   The fix at js/app.js:12608 preserves heldSince from the local record even when
-   `held` flips false at dormancy; the fix at js/app.js:3521 branches the sub to
+   The fix at js/app.js:13937 preserves heldSince from the local record even when
+   `held` flips false at dormancy; the fix at js/app.js:3799 branches the sub to
    "Yours, gone dormant" instead of "Unclaimed" when the same condition holds.
    PROVE-RED: revert either edit and this run goes red naming which copy line
    broke. */

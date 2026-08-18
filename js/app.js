@@ -13931,7 +13931,7 @@ async function renderBoneyard(el) {
         // NOTE 2026-08-15: this used to gate on `held`, which flips false the
         // moment a tower goes dormant, so the sheet said "Never been taken" for
         // a tower the player HAD claimed. dormant=true requires a local record
-        // to exist (spires.js:102), so if we have one, read claimedAt from it
+        // to exist (spires.js:101), so if we have one, read claimedAt from it
         // regardless of held. This preserves the app's own promise: "never lost,
         // just quiet".
         const heldSince = rival ? (rival.claimedAt || 0) : (spireState_[s.id]?.claimedAt || 0);

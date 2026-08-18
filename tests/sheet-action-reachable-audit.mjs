@@ -6,7 +6,7 @@
  *      control at once.
  *   2. The breeding sheet, reported 2026-08-14: picking a precious spare raises a
  *      warning, and the warning pushes BREED out of `.breed-bar.sticky`, which is
- *      `max-height: 58vh; overflow-y: auto` (app.css:6432). So the control sits
+ *      `max-height: 58vh; overflow-y: auto` (app.css:6793). So the control sits
  *      outside its OWN clip and you must scroll a panel to reach it. The action
  *      behind that button permanently destroys a pet.
  *
@@ -35,13 +35,13 @@
  *             scrolling does not help, which happens for exactly two reasons and
  *             both are real bugs: the control lives in a NESTED scroller (a
  *             max-height panel pinned inside the sheet, which is `.breed-bar.sticky`
- *             at app.css:6432), or something is drawn OVER it.
+ *             at app.css:6787), or something is drawn OVER it.
  *
  * COVERAGE IS PRINTED, INCLUDING WHAT IS NOT COVERED. An unlisted sheet must not
  * read as a passing sheet, so the roster at the bottom names every sheet this file
  * drives AND every one it deliberately does not, with the reason. The risk surface
  * itself is not guessed: every destructive-or-paying control goes through
- * `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm(' js/*.js` IS the list,
+ * `armToConfirm` (js/app.js:437), so `grep -n 'armToConfirm(' js/*.js` IS the list,
  * and every line of it is accounted for down there.
  *
  * AND THE WORST CASE HAS TO BE MEASURABLY WORSE. A driver that claims a worst state
@@ -196,7 +196,7 @@ if (process.env.FIXTURE) {
 
    PRIORITISED BY DAMAGE, not by how easy the sheet is to open. The complete list
    of destructive-or-paying actions in this app is not a guess: every one of them
-   is wired through `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm('
+   is wired through `armToConfirm` (js/app.js:437), so `grep -n 'armToConfirm('
    js/*.js` enumerates them exactly. That inventory is printed in the COVERAGE
    block at the bottom, each line either covered here or given a reason. */
 
@@ -304,7 +304,7 @@ const SHEETS = [
       worst: 'a precious pair flagged, so the sticky breed panel is at full height under the same action row',
     },
     /* DESTROY shares `.cf-acts` with BREED, and `.breed-bar.sticky` is the thing
-       that once "sat over .cf-acts by 15px" (app.css:6425). So the tall panel is
+       that once "sat over .cf-acts by 15px" (app.css:6787). So the tall panel is
        the worst case for BOTH buttons in that row, and this one melts a pet. */
     action: '[data-destroy]',
     async drive(mode) {
@@ -473,7 +473,7 @@ for (const s of SHEETS) {
     if (!setup.reached) continue;
 
     /* A TOAST IS NOT A CONTENT STATE, AND IT IS NOT AN EXCUSE EITHER.
-       backupNudge (js/app.js:1969) fires ONCE a session, 4 seconds late, for
+       backupNudge (js/app.js:2128) fires ONCE a session, 4 seconds late, for
        3.4s, at `bottom: calc(var(--sab) + 96px)` — which is the middle of the
        fight tray on a 375x667 phone. It landed on the bottom potion row here and
        it would land on whatever any other sheet draws at that height, on a timer
@@ -568,7 +568,7 @@ await browser.close(); srv.close?.();
 
 /* ---- COVERAGE, stated so an unlisted sheet cannot read as a passing sheet ----
    The risk surface is not guessed. Every destructive-or-paying control in this app
-   goes through `armToConfirm` (js/app.js:396), so `grep -n 'armToConfirm(' js/*.js`
+   goes through `armToConfirm` (js/app.js:437), so `grep -n 'armToConfirm(' js/*.js`
    IS the list, and every line of it appears below with a verdict. */
 console.log(`\nCOVERAGE at ${VW}x${VH}`);
 for (const s of SHEETS) {
