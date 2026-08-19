@@ -298,6 +298,7 @@ const DECLARED = {
   'day-strip-audit.mjs': ['full', 'the day strip decides which day every food write lands on: arrows, picker, and the stored row read back.'],
   'readiness-audit.mjs': ['full', 'readiness is relative to YOUR baseline: calibrating instead of a made-up 72, a real spread between a good and a bad day, and a nap is not a night.'],
   'crate-reveal-audit.mjs': ['full', 'the crate cracks open and the lid is cut in the right place.'],
+  'crate-exit-flicker-audit.mjs': ['full', "a takeover leaves STRAIGHT DOWN. sheetOut carries the -50% the base .sheet centres with and .sheet.takeover has transform: none, so every takeover in the app used to drift half its own width to the left on the way out: measured on the Common Crate at 440x956, the sheet's right edge marched from x=436 to x=338 in ~100ms with a vertical seam up to 98% of the viewport height sweeping the Backpack behind it (Tom: \"leaving a common great seems kind of glitchy on the way out\"). Graded in decoded pixels off a CDP screencast, with a MIDSLIDE control that fails unless the takeover was genuinely caught half-gone, so a frozen clock or a blank page cannot pass it. Two boots, two viewports, a real Backpack OPEN click and real pointer taps per card, about 40s: full, not fast."],
   /* WAS MEASUREMENT-ONLY AND EXITED 0 WHILE PRINTING "FINDING XP per clock
      reset 176.4". Reggie, 2026-08-17: a suite that documents a live exploit and
      reports success applies no pressure and gets scrolled past, which is the
