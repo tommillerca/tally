@@ -6505,12 +6505,26 @@ body::before {
 /* ---- Phase 4: FEEL. Exits for things that only knew how to enter. ---- */
 .sheet.closing { animation: sheetOut .2s ease-in forwards; }
 @keyframes sheetOut { to { transform: translate(-50%, 105%); } }
+/* A TAKEOVER LEAVES STRAIGHT DOWN, and it needs its own keyframes for exactly
+   the reason the entrance already has slideupFlat: sheetOut carries the -50%
+   the base .sheet centres with, and .sheet.takeover sets transform: none. So
+   the shared exit interpolated from translate(0,0) and yanked the takeover half
+   its own width to the LEFT while it dropped. The entrance was fixed and the
+   exit was not. Measured on a Common Crate reveal at 440x956 (tests/
+   crate-exit-flicker-audit.mjs): the takeover's right edge marched from x=436
+   to x=338 in 100ms, a 100px vertical seam-front sweeping across the Backpack
+   you are returning to, up to 75% of the viewport height. Every takeover in the
+   app left this way, not just the crate. */
+.sheet.takeover.closing { animation: sheetOutFlat .2s ease-in forwards; }
+@keyframes sheetOutFlat { to { transform: translateY(105%); } }
 .sheet-backdrop.closing { animation: fadeout .2s ease-in forwards; }
 @keyframes fadeout { to { opacity: 0; } }
 .toast.out { animation: toastOut .18s ease-in forwards; }
 @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 8px); } }
 @media (prefers-reduced-motion: reduce) {
-  .sheet.closing, .sheet-backdrop.closing, .toast.out { animation: none; }
+  /* .sheet.takeover.closing is listed by name: it out-specifies .sheet.closing,
+     so the shorter selector alone would leave the takeover animating here. */
+  .sheet.closing, .sheet.takeover.closing, .sheet-backdrop.closing, .toast.out { animation: none; }
 }
 
 /* the tab you press acknowledges the press; the active state slides in instead
