@@ -9,6 +9,42 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## DECISION 2026-08-18: the garden refund pays the FULL 5,500, not a reduced amount
+
+Tom, asked directly after being shown what it costs: **"full refund of 5500"**.
+Decided, do not reopen. No code change was needed; the branch already paid in
+full, so this records the decision rather than implementing it.
+
+He chose it with the number in front of him. Measured on the integrated tree:
+
+- a five-bed player receives **+5,500 coins in one payment**, which is about
+  **55.5% of their thirty-day countable coin income**, or roughly two drop
+  cosmetics / thirteen Golden Crates handed over at once
+- a light or median player receives **+0**, because they never bought bed 4 or 5
+- it spikes day 1 and does NOT change the day-30 slope, which is the pass
+  condition set in docs/ECONOMY-INTERLOCK.md
+
+**Why it is defensible despite being the only upward pressure in the release.**
+The player paid those coins for a feature we are removing from their path. A
+partial refund charges them for our change of direction. And the surrounding
+release cuts income everywhere else: coins per cell 46.54 to 41.46 on the same
+integrated tree, plus the crate gear-variant cut to 0.30. The refund is a
+one-time settlement inside a release that is net contractionary.
+
+**The risk that is being accepted**, named so nobody is surprised later: heavy
+players get a lump sum at the same moment the cosmetic shop is being designed as
+their new sink. If the shop lands soon after, that 5,500 is immediately spendable
+on exactly the thing the shop exists to sell, which softens the shop's first
+week as a sink. That is a sequencing consideration, not a reason to reduce the
+refund.
+
+Paying once is guarded: `retireGardenIfNeeded()` claims through
+`db.addIfAbsent` on kv `garden-retired`, proven against ten repeat runs, a real
+page reload, and three concurrent callers. The naive `kvGet`/`kvSet` form was
+measured printing **16,500 coins** on that same race, which is why the atomic
+claim is not optional.
+
+
 ## 🧭 Four calls Tom made 2026-08-18 — DECISIONS RECORDED (two not built)
 
 Written down at the time they were made, per the standing rule that a decision
