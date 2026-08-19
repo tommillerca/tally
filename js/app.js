@@ -44,7 +44,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -5929,14 +5929,18 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
 /* Phase 4: window.prompt in a hand-illustrated game read like a fire alarm in a
    theatre. One small sheet replaces both fit-naming prompts; Enter submits. */
-function openTextSheet({ title, value = '', placeholder = '', cta = 'Save' }, onSave) {
+/* `note` is optional and additive (v403): the pet nickname is a PRIVATE field
+   and the sheet has to say so, the same way the friend-alias row says "only you
+   see this". No existing caller passes it and none change behaviour. */
+function openTextSheet({ title, value = '', placeholder = '', cta = 'Save', note = '' }, onSave) {
   const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd"><h2>${esc(title)}</h2></div>
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="t1-field"><input id="txIn" type="text" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off"></div>
+      <div class="t1-field"><input id="txIn" type="text" maxlength="40" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" dir="auto"></div>
+      ${note ? `<p class="note" style="text-align:center;margin:10px 2px 0">${esc(note)}</p>` : ''}
     </div>
     <div class="t1-foot"><button class="btn" id="txGo">${esc(cta)}</button></div>`, { cls: 't1', name: title });
   const input = $('#txIn', wrap);
@@ -12463,8 +12467,17 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped()]);
+    const [insts, eqIid, bank, st, eqOwn, nicks] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
+    /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
+       Same shape as nameWithAlias() for friends: the real identity stays the
+       headline, because breed, rarity and family are what this screen is FOR
+       and a pet called BISCUIT with no species is unreadable. dir="auto" so an
+       Arabic or Hebrew nickname renders in its own direction without dragging
+       the punctuation around it; bidi control characters are refused upstream
+       in nickProblem(). esc() because this is the only player-typed string that
+       reaches this screen's innerHTML. */
+    const nickTag = iid => (nicks[iid] ? ` <span class="alias-tag" dir="auto">${esc(nicks[iid])}</span>` : '');
     // expanded talent tree: default to the active pet so it's visible right away
     /* Default CLOSED (v317). The list layout opened the active pet's tree on
        arrival so it was "visible right away", but on the carousel an open panel
@@ -12565,7 +12578,7 @@ async function openStable(opts = {}) {
       if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
       if (focused.lineage) rows.push(['Lineage', `${focused.lineage} · +${Math.round(focused.lineage * 5)}% stats`]);
       return `<div class="cf-cap">
-          <b>${esc(it.name || focused.sp)}${focused.shiny ? ' ✦' : ''}</b>
+          <b>${esc(it.name || focused.sp)}${focused.shiny ? ' ✦' : ''}${nickTag(focused.iid)}</b>
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
@@ -12578,7 +12591,13 @@ async function openStable(opts = {}) {
       const inSel = sel.includes(focused.iid);
       const isOpen = focused.iid === openIid;
       const dustVal = petDustValue(it) + (focused.shiny ? 15 : 0) + (focused.lineage || 0) * 8;
+      /* NICKNAME sits FIRST and spans the row. First because it is the only
+         control here that is about who this animal is rather than what you do
+         with it, and the row's last button melts a pet permanently, so nothing
+         new goes near it. Full width because .cf-acts is a two-column grid and
+         a fifth button would otherwise leave a lone orphan in the bottom row. */
       return `<div class="cf-acts">
+          <button class="btn ghost cf-wide" data-petnick="${focused.iid}">${nicks[focused.iid] ? 'RENAME' : 'NICKNAME'}</button>
           <button class="btn${isEq ? ' ghost' : ''}" data-eq="${focused.iid}"${isEq ? ' disabled' : ''}>${isEq ? 'OUT WITH YOU' : 'EQUIP'}</button>
           <button class="btn ghost" data-pettree="${focused.iid}">${isOpen ? 'HIDE TALENTS' : 'TALENTS'}</button>
           <button class="btn ghost${inSel ? ' on' : ''}" data-breedsel="${focused.iid}">${inSel ? 'BREEDING' : 'BREED'}</button>
@@ -13082,7 +13101,7 @@ async function openStable(opts = {}) {
         const rows = [['Level', lvl], ['Power', bs.power], ['Health', bs.hp], ['Reflex', bs.reflex]];
         if (lvl < PET_MAX_LEVEL) rows.push(['Steps to next', toNext.toLocaleString()]);
         if (inst.lineage) rows.push(['Lineage', `${inst.lineage} · +${Math.round(inst.lineage * 5)}% stats`]);
-        $('b', cap).innerHTML = `${esc(it.name || inst.sp)}${inst.shiny ? ' ✦' : ''}`;
+        $('b', cap).innerHTML = `${esc(it.name || inst.sp)}${inst.shiny ? ' ✦' : ''}${nickTag(inst.iid)}`;
         const role = $('.role', cap);
         if (role) role.innerHTML = `<span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}`;
         const meta = $('.cf-meta', cap);
@@ -13091,6 +13110,11 @@ async function openStable(opts = {}) {
       const isEq = inst.iid === eqIid, inSel = sel.includes(inst.iid), isOpen = inst.iid === openIid;
       const dustVal = petDustValue(it) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
       const eqB = $('[data-eq]', body), trB = $('[data-pettree]', body), brB = $('[data-breedsel]', body), dsB = $('[data-destroy]', body);
+      /* The nickname button is repainted here for the same reason as the other
+         four: spinning the ring never re-runs render(), so a button left
+         pointing at the previous pet renames the wrong animal. */
+      const nkB = $('[data-petnick]', body);
+      if (nkB) { nkB.dataset.petnick = inst.iid; nkB.textContent = nicks[inst.iid] ? 'RENAME' : 'NICKNAME'; }
       if (eqB) { eqB.dataset.eq = inst.iid; eqB.textContent = isEq ? 'OUT WITH YOU' : 'EQUIP'; eqB.disabled = isEq; eqB.classList.toggle('ghost', isEq); }
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
@@ -13118,6 +13142,36 @@ async function openStable(opts = {}) {
       cfIid = btn.dataset.eq;
       popSound(S.sounds); pushProfileSoon();
       render();
+    }));
+    /* THE NICKNAME, and the refusal path is the interesting half. A rejected
+       name RE-OPENS the sheet carrying what the player typed: openTextSheet
+       closes before it calls back, so toasting and stopping would delete their
+       text and leave them with nothing to correct. Refuse with a sentence, hand
+       the words back. Never silently truncate: see nickProblem in js/loot.js. */
+    $$('[data-petnick]', body).forEach(btn => btn.addEventListener('click', () => {
+      const iid = btn.dataset.petnick;
+      const inst = insts.find(x => x.iid === iid);
+      if (!inst) return;
+      const species = (BH_BY_ID[inst.sp] || {}).name || 'your pet';
+      const ask = start => openTextSheet({
+        title: 'Nickname',
+        value: start,
+        placeholder: species,
+        cta: 'Save',
+        note: `Only you can see this. It never leaves your phone, and nobody in your Crew sees it. Leave it empty to go back to ${species}. Up to ${NICK_MAX} characters.`,
+      }, async typed => {
+        const r = await setPetNick(iid, typed);
+        if (!r.ok) { toast(r.message || 'Could not save that nickname.', 4200); setTimeout(() => ask(typed), 260); return; }
+        popSound(S.sounds);
+        /* The nickname is NOT quoted back here. #toast has no break opportunity
+           inside a single long token, and a 24-character name with no spaces
+           ran off the right edge of the toast at 393px, measured in the render.
+           The caption directly above already shows the saved name, so the
+           echo bought nothing and cost the one thing this message has to do. */
+        toast(r.nick ? 'Saved. Only you can see it.' : `Nickname cleared. Back to ${species}.`);
+        render();
+      });
+      ask(nicks[iid] || '');
     }));
     $$('[data-breedsel]', body).forEach(btn => btn.addEventListener('click', () => {
       const iid = btn.dataset.breedsel;
@@ -15243,7 +15297,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v405'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v406'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
