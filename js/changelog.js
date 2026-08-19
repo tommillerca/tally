@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 404, date: '2026-08-18', title: 'The Bone Garden closes, and the Boneyard feeds the Kitchen instead', items: [
+    'Ingredients now come off the map. There are far more things to find out there, each worth a little less, so a walk turns up more without handing you more coins.',
+    'The Boneyard looks the way it should: about three times as many finds on screen at once.',
+    'The Kitchen stands on its own. It tells you where ingredients come from and takes you straight there.',
+    'If you bought garden beds you get every coin back, and your seeds and half-grown crops convert into ingredients you can actually cook with.',
+    'Crates hand out a little less gear and a few more colourways, so the good stuff stays worth finding.',
+  ] },
   { n: 403, date: '2026-08-18', title: 'Holding down anywhere in the app no longer highlights text', items: [
     'Press and hold on any label, button or card and you get nothing, instead of the iPhone magnifier and a blue highlight.',
     'Your recovery code and every text box still work exactly as before, so you can still copy the code that restores your save.',
