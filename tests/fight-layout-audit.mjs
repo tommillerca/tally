@@ -1,9 +1,15 @@
-/* The fight screen: it must use the phone's height, and a consumable must not be
+/* The fight screen: a taller phone must spend its extra height on the MOVE TRAY,
+   the fighters must not be shrunk to buy that, and a consumable must not be
    spendable by one stray tap.
-   Tom, 2026-08-09: "let's see how the pit looks taller ... maximize the height of
-   a phone screen" and "using an item in a fight should take two taps so you dont
-   hit it by accident".
-   Proven red against v344: arena 258 on a 932 screen (28%), and one tap drank. */
+   Tom, 2026-08-18: "you stil lcant ge three rows of buttons fully in the frame
+   with your pit fix ? the fighting area is still the same height", and
+   2026-08-09: "using an item in a fight should take two taps so you dont hit it
+   by accident".
+   The height rule here USED to be Tom's other 2026-08-09 line, "maximize the
+   height of a phone screen", asserted as arena + hud >= 50% of the viewport.
+   That is superseded; section 6 carries the replacement and the full history.
+   Proven red against v400 (three of four checks in section 6, with the safe-area
+   insets emulated) and against v344 (one tap drank). */
 import { boot, sleep, settle, serveTree } from './godmode.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,28 +130,38 @@ const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileUR
 const base = argv || srvHandle.url;
 const { browser, page } = await boot(base);
 
-/* ---- 1. tall phone: the arena claims the slack, nothing falls off ---- */
+/* ---- 1. tall phone: nothing falls off the bottom ---- */
 await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 await page.evaluate(async () => { await window.__denFight(1.6, 0); });
 await sleep(1700);
 await settle(page);
 const tall = await page.evaluate(() => {
-  const a = document.querySelector('.arena').getBoundingClientRect();
   /* End Turn lives BELOW the tray now, so the bottom of the fight is its row. */
   const act = (document.getElementById('fendrow') || document.querySelector('.fight-actions')).getBoundingClientRect();
-  const hud = document.querySelector('.fight-hud')?.getBoundingClientRect();
-  const hudH = hud ? hud.height : 0;
-  const pictH = a.height + hudH;
-  return { vh: innerHeight, arenaH: Math.round(a.height), hudH: Math.round(hudH), pictH: Math.round(pictH),
-           pct: Math.round(a.height / innerHeight * 100), pictPct: Math.round(pictH / innerHeight * 100),
+  return { vh: innerHeight,
            actionsBottom: Math.round(act.bottom), belowActions: Math.round(innerHeight - act.bottom) };
 });
-/* THE PICTURE, NOT ONE BOX OF IT. This read .arena alone, which was right only
-   while the HUD lived inside the arena. The HUD is a sibling row now, so the
-   same layout scores 47% measured that way and 57% measured honestly, and the
-   assertion would have failed a change that took nothing away from the player. */
-ok('the fight picture uses at least half the screen', tall.pictPct >= 50,
-  `arena ${tall.arenaH} + hud ${tall.hudH} = ${tall.pictH}px = ${tall.pictPct}% of ${tall.vh}`);
+/* WHERE "THE FIGHT PICTURE USES AT LEAST HALF THE SCREEN" WENT, AND WHY.
+   That assertion stood here and read `arena + hud >= 50% of innerHeight`. It
+   encoded a real instruction, Tom on 2026-08-09: "let's see how the pit looks
+   taller ... maximize the height of a phone screen", given when the arena was
+   258px on a 932px phone and 42% of the screen under the buttons was dead. It
+   was right for that build.
+   IT IS SUPERSEDED, by Tom on 2026-08-18, third report of the same complaint,
+   from an iPhone 17 Pro Max: "you stil lcant ge three rows of buttons fully in
+   the frame with your pit fix ? the fighting area is still the same height".
+   The two cannot both hold. A 50% floor on the picture puts a ceiling of 564 on
+   the arena's subtrahend, and because the arena was defined as "the viewport
+   minus a constant", that ceiling WAS the tray: the tray measured the same
+   149px at 393x852, 402x874 and 440x956 while the arena grew 300 -> 322 -> 404.
+   Keeping the old rule would have kept forcing the fix back onto the number
+   that could not move.
+   So it is REPLACED, not deleted, by section 6 below, which pins what he asked
+   for instead: three complete rows of moves, and a taller phone spending its
+   extra height on the tray rather than on the boss. The 183px arena floor that
+   protects the fighters from being shrunk to buy buttons is asserted there and
+   in section 5, so nothing about the composition went unguarded in the trade.
+   The two checks the old section shared with it survive unchanged. */
 ok('the action buttons are on screen', tall.actionsBottom <= tall.vh, `bottom ${tall.actionsBottom} / ${tall.vh}`);
 ok('no dead band under the buttons', tall.belowActions < 60, `${tall.belowActions}px`);
 
@@ -385,6 +401,157 @@ for (const [W, H] of [[320, 568], [360, 640]]) {
     sm.arenaH >= 183, `arena ${sm.arenaH}px`);
   ok(`SMALL ${W}x${H}: the last move can be scrolled fully into the tray`, sm.lastMoveInView,
     `${sm.moves} buttons, tray ${sm.trayH}px, scroll range ${sm.trayRange}px`);
+}
+
+/* ---- 6. THE TRAY GETS THE SLACK, NOT THE ARENA ----
+
+   THIS IS THE REPLACEMENT FOR THE >=50% RULE REMOVED FROM SECTION 1. Both
+   instructions and both dates, so a future reader can see which one is live:
+     2026-08-09  "maximize the height of a phone screen"          SUPERSEDED
+     2026-08-18  "you stil lcant ge three rows of buttons fully in the frame
+                  with your pit fix ? the fighting area is still the same
+                  height"                                          LIVE
+   Tom had raised the same thing three times ("the pit still doesnt have enough
+   room for buttons", "make the pit so you can see three rows of three buttons
+   and scroll below after that if needed", then the line above) and two fixes
+   had missed, so the point of this section is to be the check that could have
+   caught it rather than another one that grades the screen healthy.
+
+   WHY EVERY EARLIER MEASUREMENT SAID IT WAS FINE: PUPPETEER HAS NO SAFE AREAS.
+   This is anti-regression rule 4, verify where the failure can exist, and the
+   fight screen depended on two environment properties nothing here modelled.
+     --sab  env(safe-area-inset-bottom), 34px on a home-indicator iPhone.
+            #fightBody used to carry an INLINE padding-bottom:10px, which beats
+            the stylesheet, so this was the one surface in the app that threw
+            the inset away. With contentInset:never in the Capacitor config,
+            env() is the only thing holding content off the indicator.
+     --sat  env(safe-area-inset-top), 59px on a Dynamic Island iPhone. The
+            arena was sized off the raw viewport while it lives inside
+            .sheet.full, which is calc(100dvh - var(--sat) - 24px), so the
+            arena claimed 59px the sheet had already spent and the tray, the
+            leftover, paid for it twice.
+   Measured on v400 with both forced: three complete rows at 440x956 with no
+   insets, TWO with them. That gap is the whole bug report. So this section
+   forces both, and says out loud that it is an EMULATION of a real device, not
+   a real device: it proves the layout arithmetic, and a real Pro Max is still
+   the only thing that proves the render.
+
+   DIRECTION AND BOUND (anti-regression rule 11), because "more tray" is a trend
+   and a trend is not a check:
+     ROWS     failure is FEWER than three complete rows of move buttons fully
+              inside the tray box at rest. Three, not "some", and it cannot
+              drift to two-and-a-half because a grid row's buttons share a
+              height. Measured after the fix: 3 at 440x956, 3 at 393x852.
+              Measured on v400 with the same insets: 2 and 2.
+     FLOOR    failure is the arena falling UNDER 183px, the derived floor from
+              app.css. This is the half of the old 50% rule worth keeping: it
+              is what stops the next person buying rows by shrinking the boss,
+              which is the fix Tom rejected on 2026-08-16. Bound, not trend:
+              183 exactly, no percentage of anything.
+     SLACK    failure is the 440x956 tray being NO TALLER than the 393x852 one.
+              This is the assertion the old rule made impossible: under a
+              subtrahend layout both measured 149px and every extra pixel of a
+              bigger phone went to the boss. It is the difference of two
+              measurements taken in the same run, so it cannot be satisfied by
+              a build that merely got lucky on one viewport.
+     CLEAR    failure is any part of the End Turn row rendering inside the
+              bottom --sab band the OS paints its home indicator over. On v400
+              24px of it did.
+   393x852 is named deliberately as the LOWER bound of the class: it is the
+   shortest Dynamic Island iPhone, so it is where three rows is hardest, and a
+   rule that only held on Tom's 956px phone would be a rule fitted to one
+   device. Below that height the 183px floor binds and the tray is expected to
+   scroll, which Tom accepted for 320x568 explicitly; section 5 owns those. */
+const SLACK_SIZES = [[440, 956, 59, 34, 'iPhone 17 Pro Max'], [393, 852, 59, 34, 'iPhone 15 Pro']];
+const slack = [];
+for (const [W, H, sat, sab, name] of SLACK_SIZES) {
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await sleep(500);
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await sleep(500);
+  /* the emulated insets, injected on :root exactly where app.css declares them
+     so every consumer in the sheet sees them */
+  await page.evaluate((sat, sab) => {
+    let s = document.getElementById('__insetEmu');
+    if (!s) { s = document.createElement('style'); s.id = '__insetEmu'; document.head.appendChild(s); }
+    s.textContent = `:root{--sat:${sat}px !important;--sab:${sab}px !important;}`;
+  }, sat, sab);
+  /* A LOADED TRAY OR NOTHING. A bare four-move fight fits at every viewport and
+     would grade this screen healthy, which is exactly how the earlier fixes
+     passed. Same seam and same build as fight-tray-audit and fight-hint-audit:
+     a caster with three move talents plus brewed potions, 8 moves in a 3+3+2
+     grid plus the ITEMS door. */
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    await db.kvSet('talents', ['callcrows', 'peckeyes', 'murder', 'bonebolt']);
+    await db.kvSet('potions', { 'vital-tonic': 3, 'fury-flask': 2 });
+    window.__denFight(1.4, 0, { mage: true });
+  });
+  await page.waitForFunction(() => {
+    const f = document.getElementById('factions');
+    return f && !/is acting/i.test(f.textContent || '') && f.querySelectorAll('.fight-act').length >= 6;
+  }, { timeout: 15000, polling: 50 }).catch(() => {});
+  await sleep(900);
+  await settle(page);
+  await page.evaluate(() => document.querySelectorAll('.toast, #floats > *, .drop-veil').forEach(n => n.remove()));
+  await sleep(200);
+
+  const s = await page.evaluate(sab => {
+    const tray = document.getElementById('factions');
+    const arena = document.querySelector('.arena');
+    const endrow = document.getElementById('fendrow') || document.querySelector('.fight-endrow');
+    if (!tray || !arena) return null;
+    const tr = tray.getBoundingClientRect();
+    /* the ITEMS door spans all three columns and is not a row of moves, so it
+       is excluded: Tom asked for three rows of three BUTTONS, and counting a
+       full-width door as one of them would let a two-row tray grade green. */
+    const moves = [...tray.querySelectorAll('button')].filter(b => !b.classList.contains('items'));
+    const tops = [...new Set(moves.map(b => Math.round(b.getBoundingClientRect().top)))].sort((a, b) => a - b);
+    const rows = tops.map(t => {
+      const inRow = moves.filter(b => Math.abs(b.getBoundingClientRect().top - t) < 2);
+      return { n: inRow.length, bottom: +Math.max(...inRow.map(b => b.getBoundingClientRect().bottom)).toFixed(1) };
+    });
+    const er = endrow ? endrow.getBoundingClientRect() : null;
+    return {
+      vh: innerHeight,
+      sat: getComputedStyle(document.documentElement).getPropertyValue('--sat').trim(),
+      sab: getComputedStyle(document.documentElement).getPropertyValue('--sab').trim(),
+      arenaH: +arena.getBoundingClientRect().height.toFixed(1),
+      trayH: +tray.clientHeight.toFixed(1),
+      moves: moves.length,
+      gridRows: rows.length,
+      shape: rows.map(r => r.n).join('+'),
+      rowsFull: rows.filter(r => r.bottom <= tr.bottom + 1).length,
+      endUnderIndicator: er ? +Math.max(0, er.bottom - (innerHeight - sab)).toFixed(1) : null,
+    };
+  }, sab);
+
+  /* an empty or thin sample is a FAILURE, never a pass (anti-regression rule 3):
+     a tray that rendered four buttons cannot say anything about three rows. */
+  ok(`SETUP ${W}x${H} (${name}): the loaded tray rendered enough moves to ask the question`,
+    !!s && s.moves >= 8 && s.gridRows >= 3,
+    s ? `${s.moves} moves in ${s.gridRows} grid rows (${s.shape}), insets --sat ${s.sat} / --sab ${s.sab} EMULATED` : 'no fight on screen');
+  if (!s) continue;
+  slack.push({ W, H, name, ...s });
+  ok(`ROWS ${W}x${H} (${name}): three complete rows of moves are inside the tray at rest`,
+    s.rowsFull >= 3,
+    `${s.rowsFull} of ${s.gridRows} rows fully inside a ${s.trayH}px tray (${s.shape}), arena ${s.arenaH}px, floor is 3 rows`);
+  ok(`FLOOR ${W}x${H} (${name}): the rows were not bought by shrinking the fighters`,
+    s.arenaH >= 183, `arena ${s.arenaH}px against the 183px floor`);
+  ok(`CLEAR ${W}x${H} (${name}): End Turn is out from under the home indicator`,
+    s.endUnderIndicator === 0,
+    `${s.endUnderIndicator}px of the End Turn row is inside the ${s.sab} indicator band`);
+}
+/* an empty sample here is a failure too: two viewports or the comparison below
+   is meaningless. */
+ok('SETUP: both phones in the class were measured, so the comparison means something',
+  slack.length === 2, `${slack.length} of 2 measured`);
+if (slack.length === 2) {
+  const [big, small] = slack;
+  ok('SLACK: a taller phone spends its extra height on the tray, not on the arena',
+    big.trayH > small.trayH,
+    `${big.W}x${big.H} tray ${big.trayH}px vs ${small.W}x${small.H} tray ${small.trayH}px ` +
+    `(arena ${big.arenaH} vs ${small.arenaH}). Equal trays mean the arena ate the difference, which is the v400 bug.`);
 }
 
 await browser.close();
