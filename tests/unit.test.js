@@ -2939,6 +2939,66 @@ test('every long-press target suppresses the iOS callout and text selection', ()
     'and user-select: none, the same three lines .map-den-mark already carries.');
 });
 
+/* THE APP-WIDE NO-SELECT RULE, AND THE TWO EXEMPTIONS THAT MAKE IT SAFE.
+ * Tom, 2026-08-18: "i noticed you can press and hold to highlight text all over
+ * the app though thats annoying". body now carries the suppression.
+ *
+ * THE EXEMPTIONS ARE THE POINT OF THIS TEST. Suppressing selection globally is
+ * one line and quietly breaks two things:
+ *   - form fields: user-select: none INHERITS into input/textarea, and on iOS
+ *     that interferes with selecting and editing what you typed.
+ *   - .code-line is the RECOVERY CODE, the one string a player must be able to
+ *     copy. Long-press "Copy" is the iOS affordance for it, so killing the
+ *     callout there loses people their save. That is a far worse bug than the
+ *     magnifier this rule exists to remove.
+ * Anyone tidying this rule later will be tempted to drop the exemptions. This
+ * fails when they do. Chromium does not implement -webkit-touch-callout, so no
+ * browser audit in this repo can catch any of it.
+ */
+test('the app-wide no-select rule keeps form fields and the recovery code usable', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  /* Collect the body of every rule whose PRELUDE mentions the selector. Walk the
+     braces rather than pattern-matching the prelude: an earlier version of this
+     test required a `}` before the selector and so never saw the rule sitting
+     directly under a comment, which is exactly where this one lives. It reported
+     green while looking at a different body rule entirely. */
+  const bodiesFor = (needle) => {
+    const out = [];
+    let i = 0;
+    while ((i = css.indexOf('{', i)) !== -1) {
+      const close = css.indexOf('}', i);
+      if (close === -1) break;
+      const preludeStart = Math.max(css.lastIndexOf('}', i - 1), css.lastIndexOf('*/', i - 1), 0);
+      const prelude = css.slice(preludeStart, i);
+      if (prelude.includes(needle)) out.push(css.slice(i + 1, close));
+      i = close + 1;
+    }
+    return out.join(' ');
+  };
+
+  const body = bodiesFor('body');
+  assert.ok(body.length > 0, 'found no body rule at all: the scan is broken, not the tree clean');
+  assert.match(body, /-webkit-touch-callout\s*:\s*none/,
+    'body must suppress the iOS callout, or a long press anywhere raises the magnifier');
+  assert.match(body, /user-select\s*:\s*none/,
+    'body must suppress text selection app-wide');
+
+  const fields = bodiesFor('textarea');
+  assert.ok(fields.length > 0, 'no rule mentions textarea: the exemption is missing entirely');
+  assert.match(fields, /user-select\s*:\s*text/,
+    'input/textarea must be put BACK to user-select: text. Without it the global none ' +
+    'inherits into every form field and iOS fights you editing what you typed.');
+  assert.match(fields, /-webkit-touch-callout\s*:\s*default/,
+    'input/textarea must restore the callout, or the paste menu goes with it');
+
+  const code = bodiesFor('.code-line');
+  assert.ok(code.length > 0, 'no rule mentions .code-line: the recovery code exemption is missing');
+  assert.match(code, /-webkit-touch-callout\s*:\s*default/,
+    '.code-line is the RECOVERY CODE and long-press Copy is how a player saves it. ' +
+    'It must keep the callout, or losing a phone means losing the save.');
+  assert.match(code, /user-select\s*:\s*all/, '.code-line must stay fully selectable');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

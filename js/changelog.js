@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 403, date: '2026-08-18', title: 'Holding down anywhere in the app no longer highlights text', items: [
+    'Press and hold on any label, button or card and you get nothing, instead of the iPhone magnifier and a blue highlight.',
+    'Your recovery code and every text box still work exactly as before, so you can still copy the code that restores your save.',
+  ] },
   { n: 402, date: '2026-08-18', title: 'Holding a Pit move no longer brings up the iPhone magnifier', items: [
     'Press and hold a move and you get the move detail, not the text-selection loupe and highlight.',
   ] },
