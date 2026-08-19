@@ -173,13 +173,23 @@ const ACTIONS = [
      byte for byte the same keys and amounts, so nothing was added or lost. */
   { id: 'js/game.js:runInitBackfill', sites: 7, undriven: "one-time retroactive backfill behind kv 'game-init', reached only through initGameIfNeeded, and every award inside is ledger-keyed anyway" },
   { id: 'js/game.js:initLootIfNeeded', sites: 5, undriven: "the welcome kit, behind kv 'loot-init'" },
-  { id: 'js/game.js:backfillStarterSeedsIfNeeded', sites: 2, undriven: 'one-time backfill behind its own kv flag' },
+  { id: 'js/game.js:backfillStarterSeedsIfNeeded', sites: 2, undriven: 'one-time backfill behind its own kv flag. Pays ingredients rather than seeds since 2026-08-18; the ledger key and the write-before-pay order are unchanged' },
+  /* THE GARDEN'S CLOSING PAYOUT. Transition: "this save still holds a live Bone
+     Garden" becomes "it has been settled", once per save, and nothing about play
+     can put it back because the garden has no door left. Authority: db.addIfAbsent
+     on kv 'garden-retired', asked and answered BEFORE a coin moves, so a second
+     tab or a second boot gets false and pays nothing. It refunds up to 5,500
+     coins on a boot path, which is the most dangerous payout in the app right
+     now, so it is not merely registered here: tests/garden-retire-audit.mjs
+     drives it twice, ten times, across a real reload and three-way concurrently,
+     and measures the coin balance every time. */
+  { id: 'js/game.js:retireGardenIfNeeded', sites: 2, undriven: 'the Bone Garden refund + conversion, behind an addIfAbsent claim on kv garden-retired. Driven to destruction by tests/garden-retire-audit.mjs (PAYS / ONCE / BOOT / RACE / NOTHING), which is where the second-attempt proof lives rather than here' },
   { id: 'js/poi.js:backfillDenCeilingIfNeeded', sites: 1, undriven: "one-time backfill behind kv 'denceil-backfill'; mints 0-XP marker rows only" },
   { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself" },
 
   // ---- app.js: the screens that pay ------------------------------------
   { id: 'js/app.js:openFight', sites: 13, undriven: 'the fight settlement: eleven modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js, and tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits' },
-  { id: 'js/app.js:renderBoneyard', sites: 5, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above' },
+  { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
   { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door opens openHollow). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },

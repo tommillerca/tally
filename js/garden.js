@@ -120,6 +120,22 @@ export async function addPlot() {   // caller charges the coins; this only grows
   return g.plotsOwned;
 }
 
+/* SETTLE THE GARDEN, in one transaction. Empties the pouch and every bed and
+ * hands the bought beds back, so that the payout in js/game.js
+ * retireGardenIfNeeded cannot pay twice for the same seeds and crops. Take
+ * first, pay second: the same ordering harvestPlot documents above, for the same
+ * reason. Nothing here reads or writes coins; the caller owns that.
+ * The kv row survives with its shape intact, so a revived garden reads back. */
+export async function clearGarden() {
+  await kvUpdate('garden', (raw) => {
+    const g = migrate(raw);
+    g.seeds = {};
+    g.plotsOwned = PLOTS_FREE;
+    g.plots = new Array(PLOTS_FREE).fill(null);
+    return g;
+  }, null);
+}
+
 export async function gardenState(now = Date.now()) {
   const g = await read();
   const plots = g.plots.map((p, index) => {

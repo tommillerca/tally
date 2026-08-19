@@ -115,7 +115,10 @@ const after = await page.evaluate(async () => {
   document.querySelector('[data-wntab="news"]')?.click();
   await new Promise(r => setTimeout(r, 400));
   const rows = document.querySelectorAll('.nw-row').length;
-  document.querySelector('[data-news="garden"]')?.click();
+  /* WAS the Bone Garden row until 2026-08-18, when the garden left the player's
+     path and its row came out of NEWS. Any announcement that opens a veil does
+     this job; 'drop' is the oldest surviving one. */
+  document.querySelector('[data-news="drop"]')?.click();
   await new Promise(r => setTimeout(r, 900));
   return { stray, rowsOnReturn: rows, secondOpened: !!document.querySelector('.drop-veil'),
            veilsStacked: document.querySelectorAll('.drop-veil').length };
@@ -133,7 +136,10 @@ const auto = await page.evaluate(async () => {
   if (!document.querySelector('.nw-row')) { location.hash = '#/friends'; await new Promise(r=>setTimeout(r,1600));
     document.getElementById('crewWhatsNew')?.click(); await new Promise(r=>setTimeout(r,1200));
     document.querySelector('[data-wntab="news"]')?.click(); await new Promise(r=>setTimeout(r,400)); }
-  document.querySelector('[data-news="garden"]')?.click();
+  /* WAS the Bone Garden row until 2026-08-18, when the garden left the player's
+     path and its row came out of NEWS. Any announcement that opens a veil does
+     this job; 'drop' is the oldest surviving one. */
+  document.querySelector('[data-news="drop"]')?.click();
   await new Promise(r => setTimeout(r, 1300));
   /* DISMISS, do NOT take the CTA. This used to prefer the CTA, and every row in
      NEWS opens a sheet, so it was really asserting "an announcement re-opens

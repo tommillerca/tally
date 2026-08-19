@@ -210,10 +210,11 @@ const openCook = async () => {
   await page.evaluate(() => document.querySelector('.dw')?.remove());
   await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
   await sleep(1700);
-  const door = await page.evaluate(() => { const d = document.getElementById('doorCook'); if (!d) return false; d.click(); return true; });
+  // the Kitchen lost its two-door landing on 2026-08-18 and IS the cook view now
+  const door = await page.evaluate(() => { const d = document.getElementById('doorCook'); if (!d) return 'no-door'; d.click(); return true; });
   await sleep(1400);
   await settle(page);
-  return door;
+  return door === 'no-door' ? true : door;
 };
 
 /* Stock or strip everything the Kitchen's COOK body renders. The body grows with
@@ -357,61 +358,16 @@ const SHEETS = [
         reached: door && seen.buyPot && (mode === 'worst' ? seen.pantryRows > 0 : seen.pantryRows === 0) };
     },
   },
-  {
-    id: 'garden-buybed',
-    what: 'The Bone Garden, dig a new bed',
-    risk: 'PAYS: coins on the confirm',
-    states: {
-      default: 'beds empty, nothing growing',
-      worst: 'every bed planted and the compost heap full, so the sheet carries its longest body',
-    },
-    // #buyBed is the old list UI's control; #doorGrow opens the Hollow now and
-    // its buy control is #hlwBuy. Both, so this survives either surface.
-    action: '#buyBed, #hlwBuy',
-    async drive(mode) {
-      await closeAll();
-      /* Through garden.js's own API, not by clicking the plant sheet: plantSeed is
-         the function the UI calls, so the state is the real one and the driver
-         does not depend on a second sheet's markup. */
-      const setup = await page.evaluate(async w => {
-        const g = await import('./js/garden.js');
-        const { kvSet } = await import('./js/db.js');
-        await kvSet('garden', { seeds: {}, plots: [], plotsOwned: g.PLOTS_FREE, composts: { date: '', used: 0 } });
-        if (!w) return { planted: 0 };
-        let planted = 0;
-        for (const id of g.SEED_IDS.slice(0, 3)) {
-          await g.grantSeed(id, 2);
-          const r = await g.plantSeed(id);
-          if (r && r.ok) planted++;
-        }
-        return { planted, seeds: await g.seeds() };
-      }, mode === 'worst');
-      await page.evaluate(async () => { await (await import('./js/loot.js')).coinsAdd(20000); });
-      await page.evaluate(() => { location.hash = '#/today'; });
-      await sleep(1500);
-      await page.evaluate(() => document.querySelector('.dw')?.remove());
-      await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
-      await sleep(1700);
-      const door = await page.evaluate(() => { const d = document.getElementById('doorGrow'); if (!d) return false; d.click(); return true; });
-      await sleep(1800);
-      await settle(page);
-      /* THE GARDEN MOVED. #doorGrow used to open openGardenSheet, a list of
-         .t3-bed cards with a #buyBed button; it opens the Hollow diorama now, so
-         every selector here matched nothing and the audit reported the state was
-         never built. That is drift, not a defect: the buy control is #hlwBuy and
-         the beds are .hlw-bed. Read both so this keeps working whichever surface
-         a future build points the door at. */
-      const seen = await page.evaluate(() => ({
-        buyBed: !!(document.getElementById('buyBed') || document.getElementById('hlwBuy')),
-        growing: document.querySelectorAll('.t3-bed.growing, .t3-bed.thirsty').length
-          + document.querySelectorAll('#hlwStage .hlw-chip').length,
-        empty: document.querySelectorAll('.t3-bed.empty').length
-          + [...document.querySelectorAll('#hlwStage .hlw-bed[data-bed]')]
-              .filter(b => /empty/i.test(b.getAttribute('aria-label') || '')).length,
-      }));
-      return { door, setup, ...seen, reached: door && seen.buyBed && (mode === 'worst' ? seen.growing > 0 : seen.growing === 0) };
-    },
-  },
+  /* THE 'garden-buybed' ROW WAS HERE, removed 2026-08-18. Both of its actions
+     (#buyBed on the old list UI, #hlwBuy in the Hollow) are UNREACHABLE from the
+     player's path now that the Bone Garden's doors are closed, so the row could
+     only ever report UNPROVEN: it needs to build two states through a door that
+     no longer opens, and an action nobody can reach is not an action this suite
+     has anything to say about. Nothing was deleted from the app; openHollow and
+     its buy control are intact behind window.__openHollow, and
+     tests/garden-closed-audit.mjs asserts neither control is reachable, which is
+     the opposite assertion and the one that now matters. Restore this block from
+     git history with the doors. */
   {
     id: 'fight-tray-potions',
     what: 'The fight tray',

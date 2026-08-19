@@ -54,10 +54,13 @@ const openKitchen = async () => {
 };
 const openCook = async () => {
   await openKitchen();
+  /* THE KITCHEN NO LONGER HAS DOORS. It landed on COOK and GROW until
+     2026-08-18, when the Bone Garden left the player's path and the landing
+     became the cook view itself. Tapping the door when it exists keeps this
+     runnable against an older tree; its absence is not a failure here, it is
+     garden-closed-audit.mjs's assertion. */
   const door = await page.$('#doorCook');
-  if (!door) throw new Error('the Kitchen has no COOK door');
-  await door.click();
-  await sleep(1300);
+  if (door) { await door.click(); await sleep(1300); }
 };
 
 /* ================= ITEM 1: the starter-pouch backfill ================= */
@@ -69,10 +72,20 @@ const asExistingInstall = () => page.evaluate(async () => {
   await db.kvSet('loot-init', true);
   await db.kvSet('garden', null);
   await db.kvSet('seedpouch-backfill', null);
+  /* AND AN EMPTY LARDER. The pouch pays ingredients since 2026-08-18 and the
+     welcome kit already put three of them there at boot, so without this the
+     "starts empty" row reads 3 and every delta below is measured off a floor
+     that is not zero. */
+  await db.kvSet('ingredients', {});
 });
+/* THE POUCH PAYS INGREDIENTS, NOT SEEDS, since 2026-08-18: the Bone Garden left
+   the player's path, so a seed cannot be planted and the pouch hands over the
+   ingredients the seeds would have grown into. Same ledger key, same
+   write-before-pay order, same one-shot; only the currency moved, so this reads
+   the Kitchen's larder where it used to read the garden's pouch. */
 const seedTotal = () => page.evaluate(async () => {
-  const s = await (await import('./js/garden.js')).seeds();
-  return Object.values(s).reduce((a, n) => a + n, 0);
+  const inv = await (await import('./js/cooking.js')).ingredients();
+  return Object.values(inv).reduce((a, n) => a + (n || 0), 0);
 });
 
 await asExistingInstall();
@@ -81,7 +94,7 @@ const run1 = await page.evaluate(async () => (await import('./js/game.js')).back
 const after1 = await seedTotal();
 const run2 = await page.evaluate(async () => (await import('./js/game.js')).backfillStarterSeedsIfNeeded());
 const after2 = await seedTotal();
-const pouch = await page.evaluate(async () => (await (await import('./js/garden.js')).seeds()));
+const pouch = await page.evaluate(async () => (await (await import('./js/cooking.js')).ingredients()));
 console.log('backfill:', JSON.stringify({ before, run1, after1, run2, after2, pouch }));
 check('ITEM 1 an existing install starts with an empty pouch', before === 0, String(before));
 check('ITEM 1 the first run pays the pouch', after1 === 3 && !!run1, `${before} -> ${after1}`);
@@ -93,13 +106,15 @@ check('ITEM 1 the second run pays nothing', after2 === after1 && run2 === null, 
    the key is deleted: three seeds are sitting there, so the "already gardening"
    rule refuses the second grant all by itself and a missing guard reads green.
    Deleting the guard was PROVEN not to turn that check red. This is the shape of
-   the farm: plant the pouch, spend it, reopen the app. Only the ledger key stands
-   between that player and a fresh three seeds every single boot. */
-await page.evaluate(async () => (await import('./js/db.js')).kvSet('garden', null));
+   the farm: cook the pouch, spend it, reopen the app. Only the ledger key stands
+   between that player and a fresh three ingredients every single boot.
+   Both stores are cleared: the garden (which the who-gets-it rule reads) and the
+   larder (which the payout lands in), so an empty read here really means empty. */
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.kvSet('garden', null); await db.kvSet('ingredients', {}); });
 const run3 = await page.evaluate(async () => (await import('./js/game.js')).backfillStarterSeedsIfNeeded());
 const after3 = await seedTotal();
 console.log('spent the pouch, ran again:', JSON.stringify({ run3, after3 }));
-check('ITEM 1 a player who SPENT the pouch is not paid a second one', after3 === 0 && run3 === null, `${after3} seeds, returned ${JSON.stringify(run3)}`);
+check('ITEM 1 a player who SPENT the pouch is not paid a second one', after3 === 0 && run3 === null, `${after3} ingredients, returned ${JSON.stringify(run3)}`);
 
 // it must not reach for 'loot-init', which guards two crates and a Draught
 const kitFlag = await page.evaluate(async () => (await import('./js/db.js')).kvGet('loot-init'));
@@ -108,14 +123,17 @@ check('ITEM 1 the welcome-kit guard is left alone', kitFlag === true, String(kit
 // a player already gardening is not paid, and is still marked so we never look again
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
-  await db.kvSet('garden', null); await db.kvSet('seedpouch-backfill', null);
+  await db.kvSet('garden', null); await db.kvSet('seedpouch-backfill', null); await db.kvSet('ingredients', {});
+  /* THE WHO-GETS-IT RULE STILL READS THE GARDEN, deliberately: it asks "did this
+     player ever find their own way in", and a seed in the pouch is still the
+     honest answer to that even now that the payout is ingredients. */
   await (await import('./js/garden.js')).grantSeed('bog', 1);
 });
 const gRun = await page.evaluate(async () => (await import('./js/game.js')).backfillStarterSeedsIfNeeded());
 const gAfter = await seedTotal();
 const gFlag = await page.evaluate(async () => (await import('./js/db.js')).kvGet('seedpouch-backfill'));
 console.log('already gardening:', JSON.stringify({ gRun, gAfter, gFlag }));
-check('ITEM 1 a player who already has seeds is not paid', gAfter === 1 && gRun === null, `${gAfter} seeds, returned ${JSON.stringify(gRun)}`);
+check('ITEM 1 a player who already has seeds is not paid', gAfter === 0 && gRun === null, `${gAfter} ingredients in the larder, returned ${JSON.stringify(gRun)}`);
 check('ITEM 1 and is still marked, so the check can never become a farm', gFlag === true, String(gFlag));
 
 /* THE END OF THE CHAIN: not "the function pays" but "an existing install that
@@ -127,8 +145,8 @@ await page.reload({ waitUntil: 'networkidle2' });
 await sleep(5200);
 const booted = await page.evaluate(async () => {
   const db = await import('./js/db.js');
-  const s = await (await import('./js/garden.js')).seeds();
-  return { seeds: Object.values(s).reduce((a, n) => a + n, 0), flag: await db.kvGet('seedpouch-backfill') };
+  const inv = await (await import('./js/cooking.js')).ingredients();
+  return { seeds: Object.values(inv).reduce((a, n) => a + (n || 0), 0), flag: await db.kvGet('seedpouch-backfill') };
 });
 console.log('after a real boot:', JSON.stringify(booted));
 check('ITEM 1 REACH: reopening the app actually delivers the pouch', booted.seeds === 3 && booted.flag === true, JSON.stringify(booted));
@@ -237,34 +255,13 @@ check('ITEM 2 the queue did not change how long a dish takes', handed.span === h
 // a dish the app collected for you still pays what a manual Serve pays
 check('ITEM 2 the auto-collected dish still paid its cook XP', cookXp >= 1, `${cookXp} rows`);
 
-/* ---- the compost sheet is ordered by what the cookbook is shortest of ---- */
-await page.evaluate(async () => {
-  const db = await import('./js/db.js');
-  const c = await import('./js/cooking.js');
-  const inv = {};
-  // a lopsided larder: fat on the first common, empty on the last
-  c.COMMON_INGREDIENT_IDS.forEach((id, i) => { inv[id] = i === 0 ? 40 : 5; });
-  inv[c.COMMON_INGREDIENT_IDS[c.COMMON_INGREDIENT_IDS.length - 1]] = 1;
-  await db.kvSet('ingredients', inv);
-});
-await openKitchen();
-await page.evaluate(() => document.getElementById('compostBtn2').click());
-await sleep(1300);
-const heap = await page.evaluate(async () => {
-  const c = await import('./js/cooking.js');
-  const inv = await c.ingredients();
-  const need = {};
-  for (const r of [...c.RECIPES, ...c.POTIONS]) for (const [id, n] of Object.entries(r.needs)) need[id] = (need[id] || 0) + n;
-  const rows = [...document.querySelectorAll('[data-compost]')].map(b => b.dataset.compost);
-  const want = c.COMMON_INGREDIENT_IDS.slice()
-    .sort((a, b) => ((inv[b] || 0) > 0) - ((inv[a] || 0) > 0) || ((need[b] || 0) - (inv[b] || 0)) - ((need[a] || 0) - (inv[a] || 0)));
-  return { rows, want, fattest: c.COMMON_INGREDIENT_IDS[0], stated: /shortest of/i.test(document.getElementById('compostBody')?.textContent || '') };
-});
-console.log('heap order:', JSON.stringify(heap));
-check('ITEM 2 the heap lists something (an empty sample is not a pass)', heap.rows.length >= 5, `${heap.rows.length} rows`);
-check('ITEM 2 the heap is ordered by what the recipes are shortest of', heap.rows.join(',') === heap.want.join(','), `${heap.rows.join(',')} vs ${heap.want.join(',')}`);
-check('ITEM 2 it is NOT the obvious "compost your biggest pile" order', heap.rows[0] !== heap.fattest, `top row ${heap.rows[0]}, fattest ${heap.fattest}`);
-check('ITEM 2 and the sheet says why', heap.stated);
+/* THE COMPOST SECTION WAS HERE, and it came out on 2026-08-18 with the Bone
+   Garden. It drove #compostBtn2 in the Kitchen and graded the heap's ordering;
+   compost turns an ingredient into SEEDS, which cannot be planted any more, so
+   the button was removed and the sheet has no route into it. openCompostSheet
+   and its ordering logic are UNTOUCHED in js/app.js for the revival, and
+   tests/garden-closed-audit.mjs asserts the button is gone. Restore this block
+   from git history alongside the button. */
 
 check('NO page errors during the run', errors.length === 0, errors.join(' | '));
 

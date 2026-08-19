@@ -5,7 +5,7 @@ import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSo
 import { mountCrateBurst } from './crate-fx.js';
 import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
-  initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, evaluateBadges, earnedBadgeIds,
+  initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP,
 } from './game.js';
@@ -464,7 +464,9 @@ ICONS.trend = (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="
 function spawnPays(type) {
   const def = SPAWN_TYPES[type] || {};
   if (def.crate === 'egg') return 'A Step Egg: walk it out and it hatches a pet';
-  if (def.seeds) return `${def.seeds} garden seeds, plus a cooking ingredient`;
+  // (a `def.seeds` branch lived here: the Bone Garden left the player's path
+  // 2026-08-18 and a collect no longer pays seeds, so an Herb patch reads by its
+  // XP like every other find until the Boneyard supply change repoints it.)
   if (def.crate) return 'A crate of loot, plus a cooking ingredient';
   if (def.coins) return `${def.coins} coins, plus a cooking ingredient`;
   return `${def.xp || 15} XP, plus a cooking ingredient`;
@@ -812,10 +814,15 @@ async function boot() {
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
-  if (pouch) setTimeout(() => toast(`${pouch.seeds} starter seeds in your pouch: exactly one Bone Broth. Plant them in the Kitchen.`, 4200), init && init.xp > 0 ? 4200 : 1400);
+  if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
+  /* THE BONE GARDEN'S CLOSING PAYOUT, once per save. See retireGardenIfNeeded:
+     the claim is an addIfAbsent ledger row, so a second boot, a second tab and a
+     restore all pay nothing. */
+  const settled = await retireGardenIfNeeded();
+  if (settled) setTimeout(() => toast(`The Bone Garden has closed. ${settled.coins ? `${settled.coins.toLocaleString()} coins back for your beds` : 'Your beds are cleared'}${settled.ingredients ? `, and ${settled.ingredients} ingredient${settled.ingredients === 1 ? '' : 's'} moved to the Kitchen` : ''}. Ingredients come off the Boneyard now.`, 5200), init && init.xp > 0 ? 5200 : 2400);
   /* Give back the Gauntlet ceiling the cell-scoped gate marker swallowed. See
      backfillDenCeilingIfNeeded: a player who beat the same cell's boss week
      after week banked one marker and is owed the rest. */
@@ -878,7 +885,8 @@ async function boot() {
   maybeShowCosmeticTeaser();
   maybeShowWhatsNew();
   maybeShowDropPopup();
-  maybeShowGardenPopup();
+  /* maybeShowGardenPopup() is NOT called: the Bone Garden left the player's path
+     on 2026-08-18. The function and its card are kept for revival. */
   maybeShowSpireIntro();
   maybeShowBossIntro();
   maybeShowMageIntro();
@@ -2757,7 +2765,13 @@ async function renderToday(el) {
   const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
   const cook = await cookState();
-  const cropsRipe = await cropsReady();
+  /* THE GARDEN IS OFF THE PLAYER'S PATH (2026-08-18). This is the single value
+     every garden signal on Today reads from: the ripe-crop banner and its
+     "Open the garden" CTA, the Kitchen button's ! badge, the ripe-crop speech
+     lines, and the Kitchen card's harvest line. Pinning it to 0 closes all four
+     at once and leaves the code they live in intact and unreachable.
+     REVIVAL: put `await cropsReady()` back here. */
+  const cropsRipe = 0;
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
@@ -5207,7 +5221,13 @@ async function openKitchen() {
     </div>`, { cls: '', onClose: () => refresh() });
   const body = $('#kitchenBody', wrap);
 
-  let view = 'doors';   // 'doors' | 'cook'. the Kitchen opens on its two doors
+  /* ONE ROOM. The Kitchen used to land on two doors, COOK and GROW, with GROW
+     opening the Bone Garden. The Hollow and the garden came out of the player's
+     path on 2026-08-18 (Tom: "go back to just the kitchen and ingredients are
+     found out in the boneyard"), so the landing IS the cook view and there is
+     nothing above it to go back to. REVIVAL: restore the `kd-doors` block and the
+     `kdBack` button from git history at this line; openHollow and every module
+     behind it are untouched. */
   async function render() {
     if (!body.isConnected) return;
     /* THE ONLY CALLER of advanceQueue, so the dishes it collected on the player's
@@ -5216,7 +5236,7 @@ async function openKitchen() {
     for (const [i, dish] of (await advanceQueue()).entries()) {
       await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
     }
-    const [inv, cook, buffs, potInv, coinBal, tmute, pantry, garden, compost] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes(), gardenState(), compostStatus()]);
+    const [inv, cook, buffs, potInv, coinBal, tmute, pantry] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes()]);
     const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
@@ -5238,60 +5258,8 @@ async function openKitchen() {
           : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small>`}
       </div>`;
     };
-    const seedTotal = SEED_IDS.reduce((a, id) => a + (garden.seeds[id] || 0), 0);
     const buyPrice = nextPotPrice(cook.potsOwned);
-    /* TWO DOORS, NOT A LIST WITH A ROW IN IT. Tom, 2026-08-07: "the garden feels
-       like an after thought that you wouldn't think to click into." It was one
-       thin row wedged between the cauldrons and the recipes, which read as an
-       accessory to cooking when it is where the ingredients come from. Built to
-       market-quality-mockups/garden-c-kitchen.html: COOK and GROW at equal
-       weight, each stating its own live state, ingredients shared between them
-       because that is what both doors are about. Cooking is one tap deeper than
-       it was; that is the trade, and Tom took it. */
-    const cookPills = [
-      cook.readyCount ? { go: true, ico: bhIcon('dish-broth', 13), txt: `${cook.readyCount} dish${cook.readyCount === 1 ? '' : 'es'} ready` } : null,
-      cook.slots.filter(x => !x.empty && !x.ready).length ? { txt: `${cook.slots.filter(x => !x.empty && !x.ready).length} on the fire` } : null,
-      cook.queue.length ? { wait: true, txt: `${cook.queue.length} lined up` } : null,
-      (() => { const n = RECIPES.filter(r => canCook(r, inv)).length;
-        return n ? { txt: `${n} you can cook now` } : { wait: true, txt: 'Not enough ingredients yet' }; })(),
-    ].filter(Boolean);
-    const growPills = [
-      garden.readyCount ? { go: true, ico: bhIcon('garden-sprout', 13), txt: `${garden.readyCount} crop${garden.readyCount === 1 ? '' : 's'} ready` } : null,
-      garden.thirsty ? { ico: bhIcon('garden-water', 13), txt: `${garden.thirsty} need${garden.thirsty === 1 ? 's' : ''} water` } : null,
-      garden.growing ? { txt: `${garden.growing} growing` } : null,
-      seedTotal ? { wait: true, txt: `${seedTotal} seed${seedTotal === 1 ? '' : 's'} unplanted` } : null,
-    ].filter(Boolean);
-    const pillHtml = ps => ps.map(x => `<span class="kd-pill${x.go ? ' go' : x.wait ? ' wait' : ''}">${x.ico || ''}${esc(x.txt)}</span>`).join('');
-    if (view === 'doors') {
-      body.innerHTML = `
-        <div class="kd-doors">
-          <button class="kd-door cook" id="doorCook">
-            <span class="kd-art">${bhIcon('dish-stew', 86)}</span>
-            <span class="kd-eye">Turn ingredients into buffs</span>
-            <b>COOK</b>
-            <p>Stews, skewers and potions. Cook now, eat when the fight needs it.</p>
-            <span class="kd-pills">${pillHtml(cookPills)}</span>
-          </button>
-          <button class="kd-door grow" id="doorGrow">
-            <span class="kd-art">${bhIcon('garden-sprout', 86)}</span>
-            <span class="kd-eye">Where the ingredients come from</span>
-            <b>GROW</b>
-            <p>${garden.plotsOwned} bed${garden.plotsOwned === 1 ? '' : 's'} in the Bone Garden. Seeds come off your walks.</p>
-            <span class="kd-pills">${pillHtml(growPills.length ? growPills : [{ wait: true, txt: 'Nothing planted yet' }])}</span>
-          </button>
-        </div>
-        <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="compostBtn2" style="font-size:11px">Compost</button></div>
-        <div class="ingredient-grid">
-          ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id, 26)}</span><b>${inv[id] || 0}</b></div>`).join('')}
-        </div>
-        <p class="note" style="margin:10px 2px 0">GROW makes them, COOK spends them.</p>`;
-      $('#doorCook', body)?.addEventListener('click', () => { view = 'cook'; render(); });
-      $('#doorGrow', body)?.addEventListener('click', () => openHollow(render));
-      $('#compostBtn2', body)?.addEventListener('click', () => openCompostSheet(render));
-      return;
-    }
     body.innerHTML = `
-      <button class="btn small ghost kd-back" id="kdBack">${ICONS.chev(14)} Kitchen</button>
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
@@ -5322,11 +5290,13 @@ async function openKitchen() {
       <div class="ingredient-grid">
         ${INGREDIENT_IDS.map(id => `<div class="ing-cell ${(inv[id] || 0) > 0 ? '' : 'empty'}"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${inv[id] || 0}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}
       </div>
+      <button class="btn ghost" id="kitchenToMap" style="width:100%;margin:8px 0 2px">Find ingredients in the Boneyard</button>
+      <p class="note" style="margin:2px 2px 10px">Ingredients come off the map. Walk to a find in the Boneyard and collect it, or forage one here for 45 coins when you are short.</p>
       <div class="sect-h">Dishes · cook, then eat from your Pantry when you want the buff</div>
       ${RECIPES.map(recipeCard).join('')}
       <div class="sect-h">Potions · drink one mid-fight, any class</div>
       ${POTIONS.map(recipeCard).join('')}`;
-    $('#kdBack', body)?.addEventListener('click', () => { view = 'doors'; render(); });
+    $('#kitchenToMap', body)?.addEventListener('click', () => { closeAllSheetsViaHistory(); setTimeout(() => { location.hash = '#/boneyard'; }, 200); });
     $$('[data-serve]', body).forEach(btn => btn.addEventListener('click', async () => {
       const dish = await collectDish(Number(btn.dataset.serve));
       if (dish) {
@@ -9177,13 +9147,9 @@ const NEWS = [
     blurb: 'Take a tower and it pays you tribute for visiting.',
     thumb: () => `<img class="nw-img" src="assets/brand/tomb.png" alt="">`,
     open: () => openSpireIntro() },
-  { id: 'garden', date: 'Aug 5', title: 'The Bone Garden',
-    blurb: 'Three beds in the Kitchen. Grow your own ingredients.',
-    /* the garden's art IS icon art (the popup's bed stages are icons), so this
-       row shows the sprout at a legible size rather than the three-stage strip
-       squeezed to 30% and rendered as unreadable labels */
-    thumb: () => `<span class="nw-ico">${bhIcon('garden-sprout', 34)}</span>`,
-    open: () => openGardenPopup() },
+  /* The Bone Garden row came out on 2026-08-18 with the rest of the garden's
+     player-facing routes: its CTA reopened openGardenPopup, whose own CTA opened
+     the Hollow. REVIVAL: restore the row from git history at this line. */
 ];
 
 function newsHtml(eq) {
@@ -10035,7 +10001,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.seeds} seeds in the garden`, 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -14228,7 +14194,8 @@ async function renderBoneyard(el) {
       for (const r of miniMarkers.values()) if (r.el === el) { const m = r.mini; return { name: m.name || 'Mini-boss', reward: 'A quick fight for coins + XP', distM: m.dist }; }
       for (const r of spawnMarkers.values()) if (r.el === el) {
         const s = r.spawn, def = SPAWN_TYPES[s.type] || {};
-        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.seeds ? `${def.seeds} seeds for the garden` : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
+        // (the `def.seeds` arm came out with the Bone Garden, 2026-08-18)
+        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
         return { name: def.label || 'Cache', reward: rw, distM: s.dist };
       }
       return null;
@@ -14893,16 +14860,15 @@ async function renderBoneyard(el) {
       // active feast buff boosts the spawn's coins too
       const fcm = await foodCoinMult();
       if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
-      // and sometimes a seed of the same thing. This is deliberately the best seed
-      // source in the game: the garden is meant to reward walking, not replace it.
-      // an Herb patch always pays seeds (that is what it IS); everything else rolls
-      const seedN = res.seeds || (rollSpawnSeed() ? 1 : 0);
-      const gotSeed = seedN > 0;
-      if (gotSeed) await grantSeed(ingId, seedN);
+      /* NO SEED. A collect used to also roll a garden seed (30%, or 2 guaranteed
+         off an Herb patch) and reveal it as a SEED card. With the Bone Garden off
+         the player's path a seed cannot be planted, so paying one and showing a
+         card that says "Plant it in the Bone Garden" is a lie about a place they
+         cannot reach. REVIVAL: restore the rollSpawnSeed branch and the SEED card
+         from git history here; grantSeed and rollSpawnSeed are untouched. */
       // reveal the item(s) earned as pack cards (ingredient always; crate if any)
       const ing = INGREDIENTS[ingId];
       const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
-      if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: `${seedName(ingId)} seed${seedN > 1 ? ` x${seedN}` : ''}`, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
       if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
       openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
       const badges = await evaluateBadges();
