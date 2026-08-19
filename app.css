@@ -8378,11 +8378,93 @@ body::before {
    One piece, on the player's own bonehead, over their real outfit. The grid is
    neutral on purpose and this is personal on purpose. Nothing here is wired to
    a purchase and closing the sheet writes nothing. */
-.ton-stage { position: relative; width: 100%; max-width: 300px; margin: 2px auto 0; aspect-ratio: 1 / 1;
+/* THE ITEM IS THE HERO AND IT IS SHOWN AT SIZE. Measured on the old render at
+   440x956: the stage was 300px, the whole sheet 499px tall on a 956px screen,
+   and the player's opaque BG plate covered 61.5% of the stage. So the piece a
+   player is deciding to buy was a third of a third of the screen, on the same
+   olive swatch whatever its rarity.
+   86vw with a 380px ceiling, which is the largest square that still leaves the
+   name, both prices and the reach line above the fold at 393x852 (measured,
+   see the report). */
+.ton-stage { position: relative; width: 86vw; max-width: 380px; margin: 2px auto 0; aspect-ratio: 1 / 1;
   border-radius: 18px; overflow: hidden;
   background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
+/* THE LIGHT IS BEHIND THE SPRITE, never on it. A separate stacking context at
+   z-index 0 with the figure at 1: no filter, no blur, nothing that resamples a
+   single pixel of Cam's art. Same rule the weapon halos already follow. */
+.ton-burst { position: absolute; inset: -14%; z-index: 0; pointer-events: none; }
+.ton-burst .burst-gl { display: block; width: 100%; height: 100%; }
+.ton-fig { position: absolute; inset: 0; z-index: 1; }
 .ton-stage .bh-anim { position: absolute; inset: 0; }
 .ton-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* DIRECTION A, SPOTLIGHT: the pack reveal's own vocabulary. The volumetric ray
+   fan from js/crate-fx.js, tinted by rarity from the same BURST table, behind
+   the figure. Reused rather than reinvented on purpose: a second language for
+   "this is exciting" in one app is one too many.
+   DIRECTION B, PLINTH: no burst. A floor the figure stands on, a contact
+   shadow under it and a vignette, so the stage is a place rather than a
+   swatch. Kept on the branch under ?ton=b so the comparison can be re-rendered.
+   Both share the ground, the size and the landing; only the light differs. */
+.ton-stage.d-b .ton-burst { display: none; }
+.ton-stage.d-b::before { content: ''; position: absolute; z-index: 0; left: 6%; right: 6%; bottom: 8%; height: 26%;
+  border-radius: 50%; background: radial-gradient(ellipse at 50% 50%, rgba(var(--rar-rgb), .38) 0%, rgba(var(--rar-rgb), .10) 58%, transparent 78%); }
+/* THE VIGNETTE IS SHARED, AND IT SITS BEHIND THE FIGURE. Measured on the first
+   pair of renders: direction A's burst lifted the stage corners from 32.7 to
+   47.0 mean luminance, so the light stopped being a light and became a wash,
+   and the figure's centre-to-corner separation fell from 2.61 to 1.78. B's
+   vignette is what fixed that, so it belongs to both.
+   z-index 0 is load-bearing and it is the reason this is legal: ::after is the
+   last child in paint order at that level, so it darkens the burst and the
+   ground and is then painted OVER by .ton-fig at z-index 1. Not one pixel of
+   Cam's art is darkened, tinted, filtered or resampled by it. */
+.ton-stage::after { content: ''; position: absolute; z-index: 0; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 40%, rgba(9, 8, 14, .62) 100%); }
+
+/* THE FIGURE LANDS. It does not cut in. `.sheet-in` is applied by
+   revealWhenReady once every layer has DECODED, so the landing can never start
+   on an undecoded frame, and the animation is finite with no fill beyond its
+   own end so nothing is left stuck if the sheet closes mid-beat. */
+#sheets .sheet-body.sheet-in .ton-fig { animation: tonLand .42s cubic-bezier(.18,.86,.26,1) both; }
+@keyframes tonLand {
+  0% { opacity: 0; transform: translateY(16px) scale(.93); }
+  100% { opacity: 1; transform: none; }
+}
+/* THE PIECE ARRIVES ON YOU. One layer of the stack, the piece being tried, on
+   its own opacity and transform. Delayed past the landing so it reads as
+   arriving rather than as having always been there. */
+#sheets .sheet-body.sheet-in .ton-new { animation: tonArrive .34s cubic-bezier(.2,.9,.3,1) .22s both; }
+@keyframes tonArrive {
+  0% { opacity: 0; transform: translateY(-9px) scale(1.05); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+/* The name, the badge and the price land last, so the buy is the conclusion of
+   the moment rather than a footer that was always sitting there. */
+#sheets .sheet-body.sheet-in .ton-name { animation: tonRise .34s ease-out .30s both; }
+#sheets .sheet-body.sheet-in .ton-buy { animation: tonRise .34s ease-out .40s both; }
+#sheets .sheet-body.sheet-in .ton-reach { animation: tonRise .34s ease-out .48s both; }
+@keyframes tonRise { 0% { opacity: 0; transform: translateY(9px); } 100% { opacity: 1; transform: none; } }
+
+/* THE FIGURE IS ALIVE HERE. bh-idle was already running on this stage and was
+   measured at a 4px translate, which on a 300px stage is 1.3% and read as
+   frozen. The rack tiles kill it outright so their crops sit still; the try-on
+   stage is not a crop, so it keeps it and gets a stage large enough for it to
+   read. Nothing about the keyframes changed. */
+
+/* REDUCED MOTION IS ALREADY HANDLED, AND ADDING A SECOND HANDLER WAS THE BUG.
+   The first version of this sheet shipped its own @media block capping bh-idle's
+   iteration count. The audit went red on it and was right: the app's global
+   reduce block (top of this file) already sets iteration-count 1, delay 0 and
+   the 0.001s collapse with !important, on `*`, and that combination is the
+   documented fix for the loop trap rather than an instance of it. A per-surface
+   copy could only ever disagree with it.
+   So there is nothing here. Every entrance above declares `both`, so the global
+   collapse lands them on their end state instantly: measured under reduce, the
+   figure, the piece and the price row all read opacity 1 with the art decoded.
+   The two things CSS cannot do are done in JS, both gated on `reducedMotion`:
+   the burst never mounts, and the aura's halo is on from the first frame
+   instead of switching on after a beat. */
 .ton-name { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 10px; }
 .ton-name b { font-size: var(--fs-3); }
 /* The status line sits against the name, where the eye already is, and it is
@@ -8397,9 +8479,19 @@ body::before {
    (46px of tile) does not apply. align-items is load-bearing: the OR is a 14px
    line between two 44px pills and without it the row stretches everything to
    the tallest item and the word lands against the top edge. */
-.ton-buy { flex-direction: row; align-items: center; gap: 8px; max-width: 300px; margin: 0 auto; min-height: 0; }
-.ton-buy > button { flex: 1; }
+/* THE BUY IS THE CONCLUSION, so it is the width of the stage above it and it is
+   the biggest control on the sheet. It is still the SAME pill in the SAME three
+   states as the rack, because that is what stops the sheet reading as a
+   receipt: a price tag, larger, not a checkout button. */
+.ton-buy { flex-direction: row; align-items: center; gap: 8px; width: 86vw; max-width: 380px; margin: 0 auto; min-height: 0; }
+.ton-buy > button { flex: 1; min-height: 52px; font-size: 16px; }
 .ton-buy .rk-or { flex: none; }
+/* WHERE A PLAYER WHO CANNOT AFFORD IT LANDS. Only drawn when NEITHER price is
+   reachable, states the gap in both currencies, and offers the one route the
+   rack already offers. No urgency, no second ask, nothing that reads as a
+   pitch, and nothing here is derived from health data of any kind. */
+.ton-reach { display: block; width: 86vw; max-width: 380px; margin: 10px auto 0; background: none; border: 0;
+  font-size: 11.5px; line-height: 1.35; color: var(--text-3); text-align: center; padding: 6px 4px; }
 
 /* ============ MOCKUP ONLY: what this wallet reaches ============
    A player at 340 coins could reach nothing on the old rack and the screen

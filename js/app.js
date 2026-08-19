@@ -6670,6 +6670,15 @@ async function renderShop(el) {
      Only what is ON THE RACK can be tried on. A full catalogue of every item in
      the game is the part of Finch's design that backfires: it lets a player find
      the exact colourway they want and then refuses to sell it to them. */
+  /* THE SHEET IS THE CONVERSION MOMENT, not a preview pane, and every beat in
+     it comes from the ART BEING BIG AND ALIVE ON THE PLAYER'S OWN CHARACTER.
+     Nothing here is pressure: no timer on the piece, no stock count, no
+     invented scarcity, no ad-speak. The honest version is the stronger one, and
+     it is also the only one that keeps "you have NOT bought this" true.
+     Two directions were built and rendered before one was chosen; ?ton=b keeps
+     the runner-up on the branch so the comparison can be re-rendered. See the
+     stage CSS for what each is and what the renders measured. */
+  const MOCK_TON_DIR = (new URLSearchParams(location.search).get('ton') || 'a').toLowerCase();
   const mockTryOn = (id, coin, dust) => {
     const aura = id === 'AURA';
     const it = aura ? null : BH_BY_ID[id];
@@ -6681,16 +6690,71 @@ async function renderShop(el) {
        holding nothing. */
     const fit = aura ? { ...mockEq, IR: mockEq.IR || MOCK_AURA.carrier } : { ...mockEq, [it.slot]: id };
     const owns = !aura && mockOwns(id);
-    openSheet(`
+    /* THE PLAYER'S BACKGROUND IS NOT PART OF THE FITTING. Measured on the
+       render: BG2-1 is an opaque 640² plate, so it covered 61.5% of the 300px
+       stage and painted every rarity the same olive. The stage's own
+       rarity-tinted ground and the aura's cyan halo were both rendering into a
+       green swatch. `skip: ['BG']` is the idiom the leaderboard already uses. */
+    const figHtml = eq => avatarLayersHtml(eq, { thumb: 384, skip: ['BG'],
+      ...(aura ? { wpnAura: MOCK_AURA.key } : {}) });
+    /* HONEST ABOUT REACH, and only when neither price is reachable. It states
+       the gap and points at the one route that closes it, which the rack
+       already offers on its dust chip. It is not a pitch and it is not a nudge:
+       no urgency, no comparison, no second ask. */
+    const shortBy = !owns && coinBal < coin && dustBal < dust
+      ? `<button class="ton-reach" id="tonSalvage">${(coin - coinBal).toLocaleString()} coins or ${(dust - dustBal).toLocaleString()} dust short · melt gear for dust ›</button>` : '';
+    const wrap = openSheet(`
       <div class="sheet-head">
         <div class="hd"><h2>Trying on</h2><div class="sub">Free, and it buys nothing</div></div>
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <div class="ton-stage r-${rarity}">${avatarLayersHtml(fit, { thumb: 512, ...(aura ? { wpnAura: MOCK_AURA.key } : {}) })}</div>
+        <div class="ton-stage d-${MOCK_TON_DIR} r-${rarity}${aura ? ' aura' : ''}">
+          <div class="ton-burst" id="tonBurst"></div>
+          <div class="ton-fig">${figHtml(fit)}</div>
+        </div>
         <div class="ton-name"><b>${esc(name)}</b><span class="ton-state${owns ? ' own' : ''}">${owns ? 'IN YOUR WARDROBE' : 'NOT YOURS YET'}</span></div>
         ${owns ? '' : `<div class="rk-buy ton-buy">${mockPrice('coin', coin, coinBal)}<i class="rk-or">or</i>${mockPrice('dust', dust, dustBal)}</div>`}
-      </div>`, { name: 'shop-tryon' });
+        ${shortBy}
+      </div>`, { name: 'shop-tryon', onClose: () => { clearTimeout(auraBeat); tonBurst?.destroy(); } });
+    $('#tonSalvage', wrap)?.addEventListener('click', () => { history.back(); openCharacter('crates'); });
+    /* THE PIECE ARRIVES, it does not appear. The garment's own layer is the one
+       that lands, so the beat is CSS with no timer: `.ton-new` is put on the
+       one <img> whose src is the piece being tried. Nothing is drawn ON the
+       art; the layer's own opacity and transform are what move. */
+    if (!aura) {
+      const layer = $(`.ton-fig img[src$="/${id}.png"]`, wrap);
+      if (layer) layer.classList.add('ton-new');
+    }
+    /* AN AURA'S ARRIVAL IS THE HALO SWITCHING ON, at the intensity the art
+       already ships (it is frozen and nothing here interpolates it). The
+       figure lands holding the weapon it always held, wearing that weapon's
+       own rarity halo, and one beat later the class swaps to the aura's. That
+       is the product demonstrating exactly what it does. */
+    let auraBeat = 0;
+    if (aura && !reducedMotion) {
+      const wpn = $('.ton-fig img[src*="/IR/"]', wrap);
+      if (wpn) {
+        const auraCls = wpn.className;
+        const before = mockEq.IR && BH_BY_ID[mockEq.IR] && (BH_BY_ID[mockEq.IR].rarity === 'epic' || BH_BY_ID[mockEq.IR].rarity === 'legendary')
+          ? `wpn-glow r-${BH_BY_ID[mockEq.IR].rarity}` : '';
+        wpn.className = before;
+        auraBeat = setTimeout(() => { wpn.className = auraCls; }, 520);
+      }
+    }
+    /* THE SAME LIGHT THE PACK REVEAL USES, and deliberately the same module:
+       borrowing the game's existing vocabulary for excitement is what makes
+       try-on feel like it belongs to Boneheadz rather than to a shopping app.
+       It is a WebGL canvas BEHIND the figure at z-index 0, never a filter and
+       never a blur, so no pixel of Cam's art is resampled.
+       The aura tints the light to the AURA'S OWN COLOUR rather than its rarity:
+       an aura is the one item whose entire value is the effect, so the scene
+       agrees with the halo instead of arguing with it. */
+    let tonBurst = null;
+    if (MOCK_TON_DIR === 'a' && !reducedMotion) {
+      const b = aura ? { light: '#7dc8ff', amp: .34, haze: .075 } : (BURST[rarity] || BURST.common);
+      tonBurst = mountCrateBurst($('#tonBurst', wrap), { color: b.light, amp: Math.max(b.amp, .12), haze: b.haze });
+    }
   };
   // Reroll is ONE control, not a printed ladder. ?rr=N renders the paid state.
   /* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A control reading
