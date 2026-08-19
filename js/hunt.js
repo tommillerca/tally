@@ -19,7 +19,21 @@ import { dateKey } from './nutrition.js';
 const CELL_DEG = 0.005;           // ~550 m grid
 export const COLLECT_RADIUS_M = 75;   // roomier again (Tom, 2026-08-07: ~33% more than 55)
 export const SPAWN_TTL_MIN = 45;      // each spawn slot lives this long, then relocates
-const SLOTS = 2;                      // spawn slots per cell (fewer coin/bone piles)
+/* DENSITY, 2026-08-18. Tom: "i think we need to add more coins and small things
+   to the bone yard and then decrease the amount each one gives so it evens out
+   and doesnt blow the economy but keeps the game interesting", and "splitting up
+   the amount of food items and gold would help us curb that and make the boneyard
+   seem more full."
+   So: 2.5x the spawns, and every per-spawn payout cut to match. Measured, not
+   guessed (scratchpad supply-sim.mjs, real generator + real drop tables): coins
+   per day 0.89x, crates per day 0.89x, XP per day 1.00x, ingredients per day
+   1.46x, and the count generated inside a phone viewport goes 4.2 -> 10.2. On
+   the RENDERED map (placeWalkable hides anything it cannot snap to walkable
+   ground, and anything off-screen) that is 2.5 -> 7.0 "nearby" over four
+   locations, which is the number Tom will actually see. Ingredients are
+   the one line that RISES, because the Bone Garden is coming out and the map has
+   to feed the Kitchen on its own (ROADMAP, Stage 1). */
+export const SLOTS = 5;               // spawn slots per cell
 export const NEAR_M = 1600;           // full-density hunt radius around you
 export const FAR_M = 6000;            // route-planning: crates/rares shown this far out
 export const RARE_CUE_M = 1500;       // a rare within this range earns a "stirs nearby" cue
@@ -68,19 +82,29 @@ export function bearingDeg(lat1, lng1, lat2, lng2) {
   return ((Math.atan2(y, x) / toR) + 360) % 360;
 }
 
+/* Per-spawn payouts are all DIVIDED BY THE DENSITY BUMP above, so the field got
+   busier without the faucet opening. `weight` is the real weight now (it used to
+   disagree with the hand-written SPAWN_WEIGHTS list below it: bones claimed 4 and
+   got 2, coins claimed 2 and got 1), and coin piles are the type that grew,
+   because "more coins and small things" is what Tom asked to see out there. */
 export const SPAWN_TYPES = {
-  bones: { label: 'Bone cache', xp: 40, weight: 4 },
-  coins: { label: 'Coin pile', coins: 60, weight: 2 },
-  crate: { label: 'Buried crate', crate: 'daily', weight: 1 },
+  bones: { label: 'Bone cache', xp: 16, weight: 5 },
+  coins: { label: 'Coin pile', coins: 12, xp: 6, weight: 5 },
+  crate: { label: 'Buried crate', crate: 'daily', xp: 6, weight: 1 },
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
-  // The garden's presence on the map. Every spawn already drops an ingredient
-  // and rolls a 30% seed, but nothing out there was ABOUT growing: Tom asked for
-  // more to interact with in the Boneyard, and this is the one that feeds a loop
-  // the map did not previously touch. Guaranteed seeds is the whole identity.
-  herbs: { label: 'Herb patch', xp: 25, seeds: 2, weight: 1 },
+  /* THE FOOD SPAWN. It used to be the garden's presence on the map and its whole
+     identity was `seeds: 2`. The Bone Garden is coming out, so seeds are on their
+     way to being worthless and this became the worst find in the game. It now
+     pays COOKING INGREDIENTS instead, demand-weighted against the cookbook
+     (cooking.js DEMAND_POOL), which is what the Kitchen needs once the garden
+     stops feeding it. How much food each type carries lives in cooking.js
+     SPAWN_FOOD, next to the pools, because cooking.js cannot import this module
+     without closing a cycle. */
+  herbs: { label: 'Herb patch', xp: 10, weight: 3 },
 };
 
-const SPAWN_WEIGHTS = ['bones', 'bones', 'coins', 'crate', 'herbs']; // lighter on piles; combat (minis/dens) carries the map
+// derived from the weights above, so the table is the only place a rate lives
+const SPAWN_WEIGHTS = Object.entries(SPAWN_TYPES).flatMap(([id, d]) => Array(d.weight).fill(id));
 
 // Spawns for one cell at time `mins`. Each slot re-rolls its type + position on
 // its own instance, and a rare occasionally surfaces on its own slow instance.
@@ -165,7 +189,7 @@ export async function collectSpawn(spawn, date = dateKey()) {
   const def = SPAWN_TYPES[spawn.type];
   const xp = await award(spawnKey(date, spawn), 'spawn', def.xp || 15, `Boneyard: ${def.label}`, date);
   if (xp === 0) return null; // already collected
-  const out = { xp, coins: 0, crate: null, type: spawn.type, label: def.label, seeds: def.seeds || 0 };
+  const out = { xp, coins: 0, crate: null, type: spawn.type, label: def.label };
   if (def.coins) { await coinsAdd(def.coins); out.coins = def.coins; }
   if (def.crate) { await grantCrate(def.crate, 'boneyard'); out.crate = def.crate; }
   return out;

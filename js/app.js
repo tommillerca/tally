@@ -54,7 +54,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -463,11 +463,14 @@ ICONS.trend = (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="
    ship without an answer. */
 function spawnPays(type) {
   const def = SPAWN_TYPES[type] || {};
+  // food is no longer on every spawn (cooking.js SPAWN_FOOD), so the line has to
+  // say which it is rather than promising an ingredient the find may not carry
+  const food = SPAWN_FOOD[type] ?? 1;
+  const ing = food >= 2 ? `${food} cooking ingredients` : food >= 1 ? 'a cooking ingredient' : 'sometimes a cooking ingredient';
   if (def.crate === 'egg') return 'A Step Egg: walk it out and it hatches a pet';
-  if (def.seeds) return `${def.seeds} garden seeds, plus a cooking ingredient`;
-  if (def.crate) return 'A crate of loot, plus a cooking ingredient';
-  if (def.coins) return `${def.coins} coins, plus a cooking ingredient`;
-  return `${def.xp || 15} XP, plus a cooking ingredient`;
+  if (def.crate) return `A crate of loot, plus ${ing}`;
+  if (def.coins) return `${def.coins} coins, plus ${ing}`;
+  return `${def.xp || 15} XP, plus ${ing}`;
 }
 
 function spawnIcon(type, s = 20) {
@@ -14228,7 +14231,8 @@ async function renderBoneyard(el) {
       for (const r of miniMarkers.values()) if (r.el === el) { const m = r.mini; return { name: m.name || 'Mini-boss', reward: 'A quick fight for coins + XP', distM: m.dist }; }
       for (const r of spawnMarkers.values()) if (r.el === el) {
         const s = r.spawn, def = SPAWN_TYPES[s.type] || {};
-        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.seeds ? `${def.seeds} seeds for the garden` : def.coins ? `${def.coins} coins` : def.xp ? `${def.xp} XP` : 'A find';
+        const food = SPAWN_FOOD[s.type] ?? 1;
+        const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : food >= 2 ? `${food} cooking ingredients` : def.xp ? `${def.xp} XP` : 'A find';
         return { name: def.label || 'Cache', reward: rw, distM: s.dist };
       }
       return null;
@@ -14887,24 +14891,31 @@ async function renderBoneyard(el) {
       await kvSet('hunt-enabled', true);
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       coinSound(S.sounds);
-      // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give Ectoplasm)
+      // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give
+      // Ectoplasm). ingN can now be 0: food is split across a denser field, so
+      // most finds carry none and the Herb patch carries two (cooking.js SPAWN_FOOD).
       const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
-      await grantIngredient(ingId, ingN);
+      if (ingN) await grantIngredient(ingId, ingN);
       // active feast buff boosts the spawn's coins too
       const fcm = await foodCoinMult();
       if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
-      // and sometimes a seed of the same thing. This is deliberately the best seed
-      // source in the game: the garden is meant to reward walking, not replace it.
-      // an Herb patch always pays seeds (that is what it IS); everything else rolls
-      const seedN = res.seeds || (rollSpawnSeed() ? 1 : 0);
+      // and sometimes a seed of the spot's crop. Untouched by the supply change:
+      // the garden is still live and this 30% roll is still its best source.
+      const seedN = rollSpawnSeed() ? 1 : 0;
       const gotSeed = seedN > 0;
       if (gotSeed) await grantSeed(ingId, seedN);
-      // reveal the item(s) earned as pack cards (ingredient always; crate if any)
+      // reveal the item(s) earned as pack cards (crate if any; ingredient if it carried one)
       const ing = INGREDIENTS[ingId];
-      const cards = [{ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }];
+      const cards = [];
+      if (ingN) cards.push({ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' });
       if (gotSeed) cards.push({ iconHtml: bhIcon('garden-seed', 130, BH_ICON_TINTS[ing.iconId] || undefined), name: `${seedName(ingId)} seed${seedN > 1 ? ` x${seedN}` : ''}`, rarity: isRareSeed(ingId) ? 'rare' : 'common', kind: 'SEED', stats: 'Plant it in the Bone Garden' });
       if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
-      openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
+      /* NEVER DEFAULT TO SILENCE (anti-regression rule 8). openPackReveal returns
+         immediately on an empty hand and no coins, and a Bone cache that carried
+         no food is now exactly that case, so without this a collect would pay XP
+         and say nothing at all. Whatever suppresses the reveal owns the feedback. */
+      if (cards.length || res.coins) openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
+      else toast(`${res.label}: +${res.xp} XP`, 2200);
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
       refreshWorld();
