@@ -44,6 +44,14 @@ import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, settle, serveTree, dismissOverlays, boneyardCapability,
   unproven, unprovenReport, exitFor } from './godmode.js';
 import { spawnsForCell, cellOf, distanceM, SPAWN_TYPES } from '../js/hunt.js';
+import { SPAWN_FOOD, INGREDIENTS } from '../js/cooking.js';
+/* WHICH SPAWNS ARE GUARANTEED TO CARRY FOOD, derived rather than named, so
+   renaming a spawn or retuning the table cannot silently retire this rule. Under
+   the Boneyard supply change most spawns carry food only sometimes (SPAWN_FOOD
+   below 1), and only the food spawn is guaranteed. A spawn that IS guaranteed
+   and delivers nothing is a real bug; one that is not guaranteed and delivers
+   nothing is correct. */
+const FOOD_GUARANTEED = new Set(Object.keys(SPAWN_FOOD || {}).filter(t => (SPAWN_FOOD[t] ?? 0) >= 1));
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fails = [];
@@ -349,30 +357,69 @@ for (const t of QUIET) {
   });
 }
 
-mapRow('QUIET the toast names the find, the amount and the ingredient it came with', () => {
+/* THE TOAST NAMES AN INGREDIENT IF AND ONLY IF ONE WAS GRANTED, and the "only
+   if" half is the one that matters. This row used to demand an ingredient in
+   EVERY toast, which was correct while every collect carried exactly one. The
+   Boneyard supply change made the count VARIABLE and about 63% of finds now
+   carry none, so the old form went red on healthy code.
+   It is NOT relaxed. It is now two-directional: a toast that omits an ingredient
+   the player DID receive fails, and a toast that names one they did NOT receive
+   also fails. That second direction is a real bug this repo shipped three
+   separate times in one merge (the reveal card, the removal branch's card, and
+   this toast), each branch correct against main on its own. */
+mapRow('QUIET the toast names the find, the amount, and an ingredient only when one was granted', () => {
   const rows = QUIET.map(t => runs[t]).filter(Boolean);
-  const named = r => {
+  const verdict = r => {
     const label = SPAWN_TYPES[r.type].label;
     const gained = Object.keys(r.after.ing).find(k => (r.after.ing[k] || 0) > (r.before.ing[k] || 0));
-    return r.saw.toasts.find(t => t.includes(label) && /\+\d+/.test(t) && gained && t.toLowerCase().includes(gained.slice(0, 4)));
+    const toast = r.saw.toasts.find(t => t.includes(label) && /\+\d+/.test(t));
+    if (!toast) return { ok: false, why: 'NO TOAST naming the find and an amount' };
+    const names = id => toast.toLowerCase().includes(String(id).slice(0, 4).toLowerCase());
+    /* The toast prints the DISPLAY NAME ("Ember Pepper"), not the id ("ember"),
+       so an id-only match misses every ingredient whose name does not start with
+       its id. Both are checked. */
+    const nameOf = id => {
+      const n = INGREDIENTS[id] && INGREDIENTS[id].name;
+      return !!n && toast.toLowerCase().includes(String(n).toLowerCase());
+    };
+    if (gained && !names(gained)) return { ok: false, why: `granted ${gained} but the toast never says so: "${toast}"` };
+    if (!gained) {
+      /* SEARCH THE WHOLE INGREDIENT TABLE, not the player's inventory. The first
+         version of this looked for the lie among `r.after.ing` keys, which are
+         only the ingredients the player ALREADY HAS. A toast naming something
+         they do not own therefore matched nothing and passed. Measured: with the
+         bug deliberately reintroduced the toasts read "Bone cache: +16 XP, Sinew"
+         and "Coin pile: +12 coins, +6 XP, Ember Pepper", both plainly wrong, and
+         this row still went green. A lie is by definition about a thing that is
+         NOT in the player's hand, so the inventory is exactly the wrong set. */
+      const lied = Object.keys(INGREDIENTS).find(k => names(k) || nameOf(k));
+      if (lied) return { ok: false, why: `granted NO ingredient but the toast names ${lied}: "${toast}"` };
+    }
+    return { ok: true, why: toast };
   };
-  const bad = rows.filter(r => !named(r));
-  return ok('QUIET the toast names the find, the amount and the ingredient it came with',
-    rows.length === 3 && bad.length === 0,
-    rows.map(r => `${r.type}: "${named(r) || r.saw.toasts.join(' / ') || 'NO TOAST'}"`).join(' | ') || 'no quiet collects');
+  const v = rows.map(verdict);
+  return ok('QUIET the toast names the find, the amount, and an ingredient only when one was granted',
+    rows.length === 3 && v.every(x => x.ok),
+    rows.map((r, i) => `${r.type}: ${v[i].why}`).join(' | ') || 'no quiet collects');
 });
 
-mapRow('GRANT a quiet collect still banks its XP, coins, ingredient and seeds', () => {
+mapRow('GRANT a quiet collect banks its XP and coins, never loses ingredients, and never pays a seed', () => {
   const rows = QUIET.map(t => runs[t]).filter(Boolean);
   const bad = rows.filter(r => {
     const def = SPAWN_TYPES[r.type];
-    const ingUp = Object.keys(r.after.ing).some(k => (r.after.ing[k] || 0) > (r.before.ing[k] || 0));
+    /* NO SEEDS ROW ANY MORE. The Bone Garden left the player's path, so a collect
+       that granted seeds would be the bug, not the proof. INGREDIENTS ARE NO
+       LONGER GUARANTEED EITHER: the supply change made the count variable, so
+       this asserts ingredients never go DOWN and that the food-carrying spawn
+       (the one whose SPAWN_FOOD is >= 1) does still deliver. XP and coins remain
+       hard requirements, because those are unconditional on every collect. */
+    const ingDelta = Object.keys(r.after.ing).reduce((a, k) => a + ((r.after.ing[k] || 0) - (r.before.ing[k] || 0)), 0);
+    const ingOk = ingDelta >= 0 && (FOOD_GUARANTEED.has(r.type) ? ingDelta > 0 : true);
     const coinsOk = def.coins ? r.after.coins >= r.before.coins + def.coins : true;
-    const seedsOk = def.seeds
-      ? Object.keys(r.after.seeds || {}).some(k => (r.after.seeds[k] || 0) >= (r.before.seeds[k] || 0) + def.seeds) : true;
-    return !(r.after.xp > r.before.xp && ingUp && coinsOk && seedsOk);
+    const seedsOk = Object.keys(r.after.seeds || {}).every(k => (r.after.seeds[k] || 0) <= (r.before.seeds[k] || 0));
+    return !(r.after.xp > r.before.xp && ingOk && coinsOk && seedsOk);
   });
-  return ok('GRANT a quiet collect still banks its XP, coins, ingredient and seeds',
+  return ok('GRANT a quiet collect banks its XP and coins, never loses ingredients, and never pays a seed',
     rows.length === 3 && bad.length === 0,
     rows.map(r => `${r.type}: xp ${r.before.xp}->${r.after.xp}, coins ${r.before.coins}->${r.after.coins}, ing ${JSON.stringify(r.before.ing)}->${JSON.stringify(r.after.ing)}, seeds ${JSON.stringify(r.before.seeds)}->${JSON.stringify(r.after.seeds)}`).join(' | '));
 });
