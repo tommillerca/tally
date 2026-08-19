@@ -14897,7 +14897,25 @@ async function renderBoneyard(el) {
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
       await kvSet('hunt-enabled', true);
-      confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
+      /* CEREMONY IS FOR THE THINGS YOU CAN OPEN. Tom, 2026-08-18: "ok then let's
+         lose the full screen reveal on the smaller items."
+         The rule is read off the DATA, not off a list of type names: a spawn that
+         hands you a `crate` (the Buried crate's Common Crate, the RARE's Step Egg)
+         hands you an OBJECT with its own art and its own next step, and a card is
+         the only place that reads. Bones, coins and herbs pay COUNTERS (XP,
+         coins, seeds, an ingredient), and a full-screen takeover to announce a
+         number is exactly what would turn a denser Boneyard into a tapping
+         treadmill. A new spawn type is therefore quiet unless it actually drops a
+         box, which is the direction that fails safe.
+         The other half is not cosmetic. openPackReveal is built on openSheet, and
+         openSheet fires feat_open on open and feat_time on close. The D1 `events`
+         table carries three indexes, so one insert is four row-writes: those two
+         events cost EIGHT of the free tier's 100k daily row-writes on every
+         single collect, purely as a side effect of which helper drew the reward.
+         The quiet path opens no sheet, so it writes none of them. Deliberate
+         analytics elsewhere is untouched: nothing here changes openSheet. */
+      const ceremony = !!SPAWN_TYPES[rec.spawn.type].crate;
+      if (ceremony) confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       coinSound(S.sounds);
       // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give
       // Ectoplasm). ingN can now be 0: food is split across a denser field, so
@@ -14907,28 +14925,50 @@ async function renderBoneyard(el) {
       // active feast buff boosts the spawn's coins too
       const fcm = await foodCoinMult();
       if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
-      /* NO SEED, AND THE INGREDIENT CARD IS CONDITIONAL. Two changes meet here
-         and each half is load-bearing.
-         The Bone Garden left the player's path 2026-08-18, so the 30% seed roll
-         and its SEED card are gone: paying a seed and showing a card reading
-         "Plant it in the Bone Garden" is a lie about a place they cannot reach.
-         The Boneyard supply change made a collect carry a VARIABLE number of
-         ingredients, sometimes none, so the card must stay behind `if (ingN)`.
-         Taking the garden-removal form wholesale would have pushed an ingredient
-         card for an ingredient the player did not receive, on the ~63% of finds
-         that carry no food. Neither branch could see that on its own.
+      /* THREE CHANGES MEET AT THIS ONE BLOCK and every part is load-bearing.
+         Whoever edits it next should read all three before touching it.
+
+         1. NO SEED (Bone Garden left the player's path 2026-08-18). Paying a
+            seed and showing a card reading "Plant it in the Bone Garden" is a
+            lie about a place they cannot reach. The 30% roll, the guaranteed
+            Herb-patch seeds and the SEED card are all gone.
+         2. THE INGREDIENT IS CONDITIONAL (Boneyard supply change). A collect now
+            carries a VARIABLE number of ingredients and about 63% of finds carry
+            NONE, where before every collect carried exactly one. So both the
+            card and the toast fragment sit behind `if (ingN)`.
+         3. CEREMONY ONLY FOR THINGS YOU CAN OPEN (quiet collect). Crate and rare
+            hand you an object with its own next step and keep the full reveal;
+            bones, coins and herbs pay counters and collect into a toast.
+
+         The trap, and it bit twice before this merge: the pre-supply forms
+         announce the ingredient UNCONDITIONALLY, once as a card and once as a
+         toast fragment. Either taken wholesale tells the player they got an
+         ingredient they did not get, on most finds. No single branch could see
+         it, because each was correct against main on its own.
+
          REVIVAL: restore the rollSpawnSeed branch and the SEED card from git
          history here; grantSeed and rollSpawnSeed are untouched. */
       const ing = INGREDIENTS[ingId];
-      const cards = [];
-      if (ingN) cards.push({ iconHtml: ingIconHtml(ingId, 130), name: `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}`, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' });
-      if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
-      /* NEVER DEFAULT TO SILENCE (anti-regression rule 8). openPackReveal returns
-         immediately on an empty hand and no coins, and a Bone cache that carried
-         no food is now exactly that case, so without this a collect would pay XP
-         and say nothing at all. Whatever suppresses the reveal owns the feedback. */
-      if (cards.length || res.coins) openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
-      else toast(`${res.label}: +${res.xp} XP`, 2200);
+      const ingLabel = ingN ? `${ing.name}${ingN > 1 ? ` x${ingN}` : ''}` : '';
+      if (ceremony) {
+        const cards = [];
+        if (ingN) cards.push({ iconHtml: ingIconHtml(ingId, 130), name: ingLabel, rarity: ingId === RARE_INGREDIENT ? 'rare' : 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' });
+        if (res.crate) cards.push({ iconHtml: crateIcon(res.crate, 130), name: res.crate === 'egg' ? 'Step Egg' : 'Common Crate', rarity: res.crate === 'egg' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+        /* NEVER DEFAULT TO SILENCE (anti-regression rule 8). openPackReveal
+           returns immediately on an empty hand and no coins, so a ceremony
+           collect that somehow carried nothing would pay XP and say nothing.
+           Whatever suppresses the reveal owns the feedback. */
+        if (cards.length || res.coins) openPackReveal(cards, { coins: res.coins || 0, footerNote: `+${res.xp} XP` });
+        else toast(`${res.label}: +${res.xp} XP`, 2200);
+      } else {
+        /* The quiet collect. Everything the reveal would have told you, in the
+           toast the app already has. It goes away on its own. */
+        const got = [];
+        if (res.coins) got.push(`+${res.coins} coins`);
+        if (res.xp) got.push(`+${res.xp} XP`);
+        if (ingN) got.push(ingLabel);
+        toast(`${res.label}: ${got.join(', ')}`, 2600);
+      }
       const badges = await evaluateBadges();
       if (badges.length) { queueCelebration({ newBadges: badges }); maybeCelebrate(); }
       refreshWorld();
