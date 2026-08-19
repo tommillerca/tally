@@ -1310,7 +1310,29 @@ body::before {
    collided at 216px each in a 398px-wide arena. The space above them is not
    waste: it is where a boss stands and where every spell happens, which is the
    whole reason a Wraith at 212x190 was getting its hood cut off. */
-.fight-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* THE FIGHT SCREEN RESPECTS THE HOME INDICATOR LIKE EVERY OTHER SHEET.
+   Tom, 2026-08-18, on an iPhone 17 Pro Max: "you stil lcant ge three rows of
+   buttons fully in the frame with your pit fix ? the fighting area is still the
+   same height". Part of why he saw something the emulator did not is here.
+   This padding used to live as an INLINE style="padding-bottom:10px" on
+   #fightBody in js/app.js. An inline declaration beats the stylesheet, so the
+   fight body was the only surface in the app that threw away
+   `calc(var(--sab) + 20px)` from .sheet-body, and --sab is
+   env(safe-area-inset-bottom). native/ios/App/App/capacitor.config.json sets
+   "contentInset": "never", so env() is the ONLY thing holding content off the
+   home indicator, and this screen had opted out of it. Measured with --sab
+   forced to the 34px a Pro Max reports: End Turn's row ran 24px into the
+   indicator band, on the one screen where the primary action is pressed every
+   turn. Puppeteer models no safe area at all, which is exactly why three
+   previous measurements of this screen said the tray was fine.
+   It is 10px + the inset rather than the sheet's own 20px + inset ON PURPOSE:
+   the 183px arena floor below was derived arithmetically from a 10px bottom
+   pad (see the derivation in the arena note), and 375x667 and 320x568 report no
+   inset at all, so writing it this way keeps both short phones byte-for-byte
+   identical to what shipped while giving inset phones the 34px they were owed.
+   Measured after: 120px of tray at 375x667 and 96px at 320x568, the same two
+   numbers as before the change. */
+.fight-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: calc(var(--sab) + 10px); }
 /* THE ARENA IS THE FIXED PART NOW, THE TRAY IS THE ELASTIC PART.
    Tom, 2026-08-15: "I don't like how the actual fighting section moved up and
    down based on how many buttons there are ... the fighters portion should be
@@ -1368,7 +1390,81 @@ body::before {
    WHAT THIS DOES NOT FIX: at 375x667 and 320x568 the 183px floor already binds
    (667 - 552 = 115, well under 183), so those phones are byte-for-byte unchanged
    and still show 3 of 9. The short phone needs a different lever, not this one. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - 552px), 600px); height: clamp(183px, calc(100svh - 552px), 600px); }
+/* 230, AND THE SUBTRAHEND STOPS BEING THE LEVER. Tom, 2026-08-18, third report,
+   on an iPhone 17 Pro Max: "you stil lcant ge three rows of buttons fully in
+   the frame with your pit fix ? the fighting area is still the same height".
+   Both halves of that sentence were literally true, and the note directly above
+   states the mechanism without noticing it is the bug: "the tray's height is
+   exactly this subtrahend minus 343.6 whatever the phone is, because the arena
+   eats the rest of the viewport." A subtrahend rule means the tray is a CONSTANT
+   and every pixel a bigger phone brings goes to the boss. Measured on v400 with
+   a loaded 9-button tray: the tray is the same 149px at 393x852, at 402x874 AND
+   at 440x956 while the arena grows 300 -> 322 -> 404. Buying a bigger phone
+   bought Tom nothing, which is precisely what he is describing.
+   So the relationship is inverted: the arena gets a CAP and the tray takes the
+   slack. Same shape Tom asked for on 2026-08-15 (a static fighting area, an
+   elastic tray), just with the arena no longer defined as "everything left
+   over".
+
+   AND --sat, WHICH WAS DOUBLE-CHARGED TO THE TRAY. The arena was derived from
+   the raw viewport while it lives inside `.sheet.full`, which is
+   `calc(100dvh - var(--sat) - 24px)`. So on any phone with a Dynamic Island the
+   arena claimed 59px the sheet had already given away, and the tray, being the
+   leftover, paid for it twice. Subtracting --sat here puts the arena on the same
+   ruler as the box it stands in: the expression now reads "the sheet's height,
+   less 528". That alone is worth 59px of tray on every notched iPhone and is a
+   correctness fix independent of the cap.
+
+   WHY 230 AND NOT A ROUNDER NUMBER. It is derived from the SMALLEST Dynamic
+   Island iPhone, 393x852, because that is where three rows is hardest. With
+   both insets honoured that phone has 415px to divide between arena and tray,
+   and three rows of moves need 3 * 54.6 + 2 * 8 = 179.8px. 415 - 230 = 185px of
+   tray, so the third row lands 5px inside the box with the scroll fade grazing
+   the bottom of its subtitle only. Verified by rendering, not by arithmetic:
+   scratchpad shots at 230 and at 210 were compared side by side and 210 bought
+   a sliver of the ITEMS door at the cost of 20px of boss, which is not a trade
+   worth making. Measured with --sat 59 / --sab 34 forced, an EMULATION of a
+   real Pro Max, since puppeteer reports no insets:
+     440x956  arena 404 -> 230, tray 149 -> 289, and the whole 243px tray fits
+              with no scrolling at all
+     402x874  arena 322 -> 230, tray 149 -> 207, three full rows
+     393x852  arena 300 -> 230, tray 149 -> 185, three full rows
+     375x667  arena 183, tray 120, UNCHANGED, the floor binds
+     320x568  arena 183, tray  96, UNCHANGED, the floor binds
+   The tray is now monotonic in phone height (289 > 207 > 185 > 120 > 96), which
+   is the property that was missing.
+
+   THIS NUMBER ASSUMES A ONE-LINE HINT. A move whose <small> wraps takes the row
+   from 54.6px to 68.3px, and three of those need 220.9px, which no cap this side
+   of the 183 floor can pay for at 393x852. That is not this rule's job to
+   absorb: tests/fight-hint-audit.mjs is the guard that keeps hints on one line,
+   and if it goes red this cap is not the thing to change.
+
+   THE FLOOR AND THE MIDDLE TERM ARE BOTH STILL LOAD-BEARING. 183 is the derived
+   floor from the note above and is what 375x667 and 320x568 get, unchanged. The
+   middle term now only binds between roughly 757 and 805 CSS px of usable
+   height, a narrow band, but it is what hands a short phone back to the floor
+   smoothly instead of stepping, and it keeps the arena honest on a tablet or in
+   landscape where a flat 230 would be arbitrary.
+   The vh line stays ahead of the svh line for the same reason it always has: a
+   browser that cannot parse svh drops that declaration and falls back. */
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - var(--sat) - 552px), 230px); }
+/* @SUPPORTS, NOT A SECOND DECLARATION, AND THIS RULE ONLY NEEDED IT TODAY.
+   The old arena height was `calc(100svh - 552px)` with no var() in it, so the
+   conventional two-declaration fallback worked: an old browser cannot parse svh,
+   drops that declaration at PARSE time, and keeps the vh one above it.
+   Subtracting var(--sat) to stop the arena double-counting the top inset changed
+   the shape into the blind spot documented at the .sheet rules above: a value
+   containing var() is assumed valid at parse time and only fails at
+   COMPUTED-VALUE time, which per CSS Variables makes the declaration UNSET
+   rather than ignored, and the earlier declaration is discarded with it. So the
+   two-line form would have left the arena with no height at all on any browser
+   without svh, which is worse than the layout it replaced.
+   Caught by tests/dvh-fallback-audit.mjs on the first gate run after that guard
+   was unblocked. It is the reason this pattern is a condition and not a pair. */
+@supports (height: 100svh) {
+  .fight-body > .arena { height: clamp(183px, calc(100svh - var(--sat) - 552px), 230px); }
+}
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
@@ -4469,6 +4565,19 @@ body::before {
 }
 .fchip-tip b { font-weight: 900; font-size: 13.5px; text-transform: capitalize; }
 .fchip-tip span { font-size: 12px; font-weight: 600; line-height: 1.35; }
+/* Press-and-hold a move in the Pit: the same bone bubble, wider, because it
+   carries a whole sentence rather than a status name. It reuses .fchip-tip
+   wholesale so there is one tooltip look in the fight, not two.
+   NO REDUCED-MOTION BLOCK OF ITS OWN, deliberately: bubblePop is inherited from
+   .fchip-tip and the global @media (prefers-reduced-motion: reduce) rule at the
+   top of this file already collapses it to one 0.001s cycle. A second rule here
+   would be a second thing to keep in step for no gain. */
+.fmove-tip { width: min(264px, calc(100vw - 24px)); }
+/* .fchip-tip capitalises because a status name arrives lower-case ("sunder").
+   A move LABEL is already cased by hand and the transform breaks it: measured on
+   the render, "Call the Murder" came out "Call The Murder". */
+.fmove-tip b { text-transform: none; }
+.fmove-tip .mt-now { font-size: 11px; font-weight: 800; color: #6a5f4a; text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* The Glutton (v215): announcement card + reveal, matching the direction Tom
    already approved (scratchpad/glutton.src.html) — near-monochrome, ONE muted
