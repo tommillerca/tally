@@ -87,6 +87,40 @@ is built, it gets measured through tests/fight-sim.mjs rather than reasoned abou
 from the constants.
 
 ---
+## DECISION 2026-08-18: gear-variant chance stays at 0.30, as measured
+
+Tom, asked to choose between 0.30 as built and a softer 0.40 after seeing the
+measured consequences: **"make the gear drop rate .3"**. Decided, do not reopen.
+
+He made the call with the light-player cost in front of him, so it is recorded
+here rather than argued again later. Measured over 500 days, 7 runs x 500 days,
+median:
+
+| profile | catalogue at day 500, today | at 0.30 |
+|---|---|---|
+| light   | 257/388 (66%) | **159/388 (41%)** |
+| median  | finishes day 495 | 357/388, does not finish |
+| heavy   | 100% at day 112 | 100% at day 164 |
+
+So a casual player loses 98 pieces over 500 days, a 38% cut, and the median
+player stops completing the catalogue inside 500 days. Heavy players slow from
+112 to 164 days, which is the outcome the change was asked for: Tom's words on
+2026-08-17 were that he was "worried about players once we go to the app store
+farming out too much of our gear".
+
+Total pieces per crate is essentially unchanged (0.618 to 0.638 on a Common
+Crate). The change converts gear into cosmetics roughly one for one, so a crate
+still opens into something; it is specifically the GEAR pace that halves.
+
+**Two reasons this is defensible despite the light-player cost.** The cosmetic
+shop is about to become a second, deterministic route to gear, so the crate is
+no longer the only path. And coins may never expire once a real-money pack ships
+(Apple guideline 3.1.1), which makes closing the faucet BEFORE monetisation the
+only time it can be done at all. See docs/IAP-SCOPING.md.
+
+**Re-measure after the shop ships.** These numbers assume crates are the only
+route. They stop being true the day the rack exists.
+
 
 ## 🥚 Chest and egg art Tom authored 2026-08-16 evening — LOGGED, not wired in
 
