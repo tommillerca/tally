@@ -5,7 +5,8 @@
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
 import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
-import { grantSeed, gardenState } from './garden.js';
+import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
+import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
 
 // Streak counts logged days PLUS days a Streak Freeze protected back when the
@@ -917,16 +918,20 @@ export async function initLootIfNeeded() {
      never been given the welcome kit" becomes "it has", recorded by the
      'loot-init' kv flag that guards the whole function above. There is no second
      transition, so a second call pays nothing at all: it returns null at the
-     guard before reaching any grant. grantSeed is purely additive and would
-     happily pay twice, so the guard is the only thing standing between this and
+     guard before reaching any grant. grantIngredient is purely additive and
+     would happily pay twice, so the guard is the only thing standing between this and
      a farm, which is why the grants stay INSIDE it.
      Two Marrow and one Grave Salt is not an arbitrary handful: it is exactly
-     Bone Broth, the first recipe, so three free beds plus this pouch is a
-     legible errand instead of an empty garden with a coach mark. */
-  await grantSeed('marrow', 2);
-  await grantSeed('salt', 1);
+     Bone Broth, the first recipe, so the pouch is a legible errand instead of an
+     empty Kitchen with a coach mark.
+     THESE USED TO BE SEEDS. The Bone Garden left the player's path on
+     2026-08-18, so a seed is unplantable: the pouch pays the INGREDIENTS the
+     seeds would have grown into, which is the same first errand one step
+     shorter. Strictly less generous than before (a seed harvested for 2). */
+  await grantIngredient('marrow', 2);
+  await grantIngredient('salt', 1);
   await kvSet('loot-init', true);
-  return { crates: 2, draught: true, seeds: 3 };
+  return { crates: 2, draught: true, ingredients: 3 };
 }
 
 /* THE STARTER POUCH, BACKFILLED TO INSTALLS THAT ALREADY EXIST.
@@ -943,8 +948,8 @@ export async function initLootIfNeeded() {
  *     becomes "it has". There is exactly one such transition per install, so
  *     there is exactly one payment. Nothing about play can put it back.
  *  2. ASK THE AUTHORITY FIRST. The ledger here is the 'seedpouch-backfill' key,
- *     and it is both read and WRITTEN before a single seed is granted. grantSeed
- *     is purely additive and would happily pay twice; writing the key first means
+ *     and it is both read and WRITTEN before a single ingredient is granted.
+ *     grantIngredient is purely additive and would happily pay twice; writing the key first means
  *     a failure halfway through costs the player a pouch, never pays them two.
  *  3. THE RULE ON WHO GETS IT: only a player with no seeds in the pouch and
  *     nothing in a bed. Anyone holding a seed, or growing one, found their own
@@ -954,14 +959,89 @@ export async function initLootIfNeeded() {
  *     empty and is paid; that is three seeds once, and the alternative is asking
  *     the ledger a question it does not store.
  */
+/* SEEDS BECAME INGREDIENTS, 2026-08-18, same reason as the pouch above: with the
+ * Bone Garden off the player's path a seed cannot be planted. The ledger key,
+ * the who-gets-it rule and the write-before-pay order are all unchanged. */
 export async function backfillStarterSeedsIfNeeded() {
   if (await kvGet('seedpouch-backfill')) return null;
   await kvSet('seedpouch-backfill', true);
   const g = await gardenState();
   if (Object.values(g.seeds).some(n => n > 0) || g.plots.some(p => !p.empty)) return null;
-  await grantSeed('marrow', 2);
-  await grantSeed('salt', 1);
-  return { seeds: 3 };
+  await grantIngredient('marrow', 2);
+  await grantIngredient('salt', 1);
+  return { ingredients: 3 };
+}
+
+/* THE BONE GARDEN'S CLOSING PAYOUT. Refund the beds, convert the holdings, ONCE.
+ *
+ * Tom, 2026-08-18, took the Hollow and the garden off the player's path. A
+ * player who spent 1,500 and 4,000 coins on beds 4 and 5 must not watch them
+ * disappear without a word, and seeds and half-grown crops must not be stranded
+ * as items with nowhere left to go.
+ *
+ * THIS PAYS COINS ON EVERY BOOT PATH, so it is the exact shape a farm is made
+ * of. Rewarded-actions SOP, in order:
+ *
+ * 1. THE STATE TRANSITION. "this device still holds a live Bone Garden" becomes
+ *    "it has been settled". There is exactly one such transition per save and
+ *    nothing about play can put it back: no route into the garden survives, so
+ *    no bed can be bought and no seed can be earned after this runs.
+ * 2. ASK THE AUTHORITY FIRST, PAY SECOND. The authority is db.addIfAbsent on the
+ *    kv row 'garden-retired', which is IndexedDB's own uniqueness constraint:
+ *    exactly one caller on the device is ever told true, however many tabs,
+ *    boots or restores ask in the same instant. The kvGet/kvSet pair the starter
+ *    pouch above uses has a window between the read and the write, and it hands
+ *    out three ingredients rather than 5,500 coins. This one gets the
+ *    indivisible primitive. Nothing is paid before the answer arrives.
+ * 3. A NO-OP ANSWER IS NOT A SUCCESS. `false` means another caller settled this
+ *    save; return null and pay nothing at all, not a consolation.
+ * 4. THE ENTRY POINT IS ALREADY CLOSED: the garden has no door, which is the
+ *    whole reason this exists.
+ * 5. PROVEN, not asserted: tests/garden-retire-audit.mjs drives it twice against
+ *    a real IndexedDB and measures the coin balance either side. The second run
+ *    moves it by 0.
+ *
+ * WHAT IT PAYS, all derived from the save, none of it from a server (there is no
+ * server-side garden state, so no migration is possible and none is needed):
+ *  - coins: PLOT_PRICES for every bed actually BOUGHT. Beds 1 to 3 are free.
+ *  - each unplanted seed: 1 ingredient of its kind. A seed is one plant.
+ *  - each occupied bed, ripe or mid-grow: HARVEST_BASE (2 for a common, 1 for an
+ *    Ectoplasm spore), which is the GUARANTEED floor of harvestYield. Not the
+ *    watered bonus and not the bumper roll: this settles a bed, it does not
+ *    gamble on one, and a deterministic payout is a payout an audit can pin.
+ *
+ * The beds go back to PLOTS_FREE and the pouch and plots are emptied, because
+ * the alternative is a player holding the coins AND the goods AND the beds if
+ * the garden ever comes back. kv 'garden' keeps its shape and reads back fine.
+ * The RECEIPT is the ledger row's value, so a revival can read exactly what was
+ * paid instead of guessing.
+ *
+ * NOT WRITTEN when there is nothing to settle (three free beds, empty pouch, no
+ * crops), which is most players. That is deliberate: a save restored later from
+ * cloud backup carries its own kv wholesale, so either it brings the receipt
+ * with it (already settled, addIfAbsent says false) or it brings an unsettled
+ * garden and its own pre-refund coin balance, and settling it then is correct.
+ */
+export const GARDEN_RETIRE_KEY = 'garden-retired';
+
+export async function retireGardenIfNeeded() {
+  const g = await gardenState();
+  const seeds = Object.entries(g.seeds).filter(([, n]) => n > 0);
+  const crops = g.plots.filter(p => !p.empty).map(p => [p.ing, p.rare ? HARVEST_BASE_RARE : HARVEST_BASE]);
+  const bought = Math.max(0, Math.min(PLOT_PRICES.length, g.plotsOwned - PLOTS_FREE));
+  const coinsBack = PLOT_PRICES.slice(0, bought).reduce((a, n) => a + n, 0);
+  if (!coinsBack && !seeds.length && !crops.length) return null;   // nothing was ever put in
+
+  const pay = [...seeds, ...crops];
+  const receipt = { coins: coinsBack, beds: g.plotsOwned, seeds: seeds.reduce((a, [, n]) => a + n, 0),
+    crops: crops.length, ingredients: pay.reduce((a, [, n]) => a + n, 0), at: Date.now() };
+  // THE CLAIM. Exactly one caller gets true; everybody else pays nothing.
+  if (!(await db.addIfAbsent('kv', { k: GARDEN_RETIRE_KEY, v: receipt }))) return null;
+
+  await clearGarden();                       // take first
+  if (coinsBack) await coinsAdd(coinsBack);  // pay second
+  for (const [id, n] of pay) await grantIngredient(id, n);
+  return receipt;
 }
 
 // XP rows for a given date (for the progress sheet).

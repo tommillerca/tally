@@ -22,9 +22,13 @@ const openCook = async () => {
   await sleep(1600);
   await page.evaluate(() => document.querySelector('.dw')?.remove());
   const b = await page.$('#kitchenActBtn'); await b.click(); await sleep(1700);
+  /* THE KITCHEN NO LONGER HAS DOORS. It landed on COOK and GROW until
+     2026-08-18, when the Bone Garden left the player's path and the landing
+     became the cook view itself. Tapping the door when it exists keeps this
+     runnable against an older tree; its absence is not a failure here, it is
+     garden-closed-audit.mjs's assertion. */
   const door = await page.$('#doorCook');
-  if (!door) throw new Error('the Kitchen has no COOK door');
-  await door.click(); await sleep(1200);
+  if (door) { await door.click(); await sleep(1200); }
 };
 await openCook();
 const before = await coins();

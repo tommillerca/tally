@@ -56,7 +56,7 @@ await page.evaluate(async base => {
 
 await page.evaluate(() => document.querySelector('#kitchenActBtn')?.click());
 await sleep(1500);
-await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+await page.evaluate(() => (window.__openHollow ? window.__openHollow() : document.querySelector('#doorGrow')?.click()));
 await sleep(2600);
 
 const fail = [];
@@ -206,7 +206,7 @@ const named = await page.evaluate(async () => {
   return (await kv.kvGet('hlwSeen', -1)) === 0;
 });
 note(named, 'could not seed a first visit: hlwSeen did not reset');
-await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+await page.evaluate(() => (window.__openHollow ? window.__openHollow() : document.querySelector('#doorGrow')?.click()));
 await sleep(2400);
 const nameState = await page.evaluate(() => {
   const say = document.querySelector('#hlwSay');
@@ -264,7 +264,7 @@ note(seenDuring === 0, `firstEver SELF-DESTRUCTS: hlwSeen was written to ${seenD
   });
   await page.evaluate(() => { document.querySelector('.sheet-close')?.click(); });
   await sleep(900);
-  await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+  await page.evaluate(() => (window.__openHollow ? window.__openHollow() : document.querySelector('#doorGrow')?.click()));
   await sleep(2600);
 
   const ripe = await page.evaluate(() => {
@@ -390,7 +390,7 @@ note(seenDuring === 0, `firstEver SELF-DESTRUCTS: hlwSeen was written to ${seenD
   note(gone, 'MODAL Escape does not close the sheet');
   // reopen for whatever runs after this
   if (gone) {
-    await page.evaluate(() => document.querySelector('#doorGrow')?.click());
+    await page.evaluate(() => (window.__openHollow ? window.__openHollow() : document.querySelector('#doorGrow')?.click()));
     await sleep(2400);
   }
 }
