@@ -2,13 +2,20 @@
 // Scene + card slider render from what THIS file derives. Design source:
 // ~/Downloads/design_handoff_the_paddock/README.md (2026-08-10).
 //
-// Names and flavor are DERIVED, not stored: the app has no per-pet naming UI
-// and the handoff specs none, so every copy gets a stable, deterministic
-// nickname from its instance id. Deriving beats persisting here: no migration,
-// no writes, renames impossible to lose, and the same iid always reads the
-// same name on every device that syncs the instance list.
+// Flavor is DERIVED, not stored: the handoff specs none, so every copy gets a
+// stable, deterministic line from its instance id. Deriving beats persisting
+// here: no migration, no writes, and the same iid always reads the same line on
+// every device that syncs the instance list.
+//
+// NAMES are derived the same way, but they are now a FALLBACK rather than the
+// answer. There IS a per-pet naming UI as of v403 (the Stable's NICKNAME
+// control), and Tom's call was that the player's name replaces the derived one
+// rather than sitting beside it, so assignNames() supplies a name only for the
+// copies the player has not named. That nickname is PRIVATE: it lives in kv
+// 'petNick', it is never uploaded, and tests/nickname-private-audit.mjs pins
+// that against the real wire, this render site included.
 
-import { petInstances, petBonds, petLevelBank, BOND_MAX, eggProgress, lifetimeStepsSum, inventory } from './loot.js';
+import { petInstances, petBonds, petLevelBank, petNicks, BOND_MAX, eggProgress, lifetimeStepsSum, inventory } from './loot.js';
 
 /* Nicknames, Bangers-register. Order matters: hashes index into it, so
    APPEND-ONLY once shipped (an insert re-names every pet in the world). */
@@ -76,7 +83,7 @@ export function motionFor(sp) {
 /* THE ROSTER. One row per owned COPY (instances, not species: figure-contract
    rule 1: shiny/level live on the copy). Sorted by iid for stable render order. */
 export async function paddockRoster() {
-  const [insts, bonds, bank] = await Promise.all([petInstances(), petBonds(), petLevelBank()]);
+  const [insts, bonds, bank, nicks] = await Promise.all([petInstances(), petBonds(), petLevelBank(), petNicks()]);
   const names = assignNames(insts.map(x => x.iid));
   return insts.map(x => ({
     iid: x.iid,
@@ -86,7 +93,7 @@ export async function paddockRoster() {
     bond: bonds[x.iid] | 0,
     maxed: (bonds[x.iid] | 0) >= BOND_MAX,
     levelSteps: bank[x.iid] | 0,
-    name: names[x.iid],
+    name: nicks[x.iid] || names[x.iid],   // the player's private nickname WINS over the derived one
     flavor: flavorFor(x.iid),
     motion: motionFor(x.sp),
   })).sort((a, b) => a.iid < b.iid ? -1 : 1);

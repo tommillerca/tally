@@ -41,6 +41,8 @@
  *      to the `pet:` block (or write the nickname into kv 'equipped', which
  *      uploads wholesale via `outfit: eq`). WIRE goes red naming the request.
  *   2. XSS: drop the esc() from nickTag() in openStable. HOSTILE goes red.
+ *      Same for esc(m.name) in js/paddock-cards.js cardHtml: PADDOCK-HOSTILE
+ *      goes red, including the row that watches for the handler executing.
  *   Proven red on a throwaway worktree off origin/main, 2026-08-19.
  *
  * Run: node tests/nickname-private-audit.mjs [baseUrl]
@@ -247,6 +249,80 @@ ok('RELOAD the Stable came back with the named pet reachable', await focusPet(na
 const afterReload = await capState();
 ok('RELOAD the nickname survives a full reload of the app',
   afterReload.tagText === SENTINEL, JSON.stringify(afterReload));
+
+/* ============================ PADDOCK ============================ */
+/* Tom, on the second pass: "yes it should replace the name". The Paddock used
+   to derive a name for every copy from a hash of its instance id (TANK,
+   MEATBALL, GILDA), because there was no naming UI. There is one now, so
+   paddockRoster() prefers the player's nickname and falls back to the derived
+   pool for copies nobody has named.
+   BOTH DIRECTIONS ARE GRADED. "The nickname shows up" would pass on a build
+   that threw the derived pool away and left every other pet blank, which is a
+   worse bug than the one being fixed: it is silent, it hits pets the player
+   never touched, and it looks like data loss. So a named pet must show the
+   nickname AND an unnamed one must still show a real derived name. */
+console.log('\n--- PADDOCK ---');
+const openPaddock = async sp => {
+  await page.evaluate(() => document.getElementById('stableToPaddock')?.click());
+  await sleep(2200);
+  const opened = await page.evaluate(() => !!document.getElementById('pdkScene'));
+  if (!opened) return false;
+  await page.evaluate(id => document.querySelector(`#pdkPanel .pdk-tile[data-sp="${id}"]`)?.click(), sp);
+  await sleep(1400);
+  return true;
+};
+const pdkNames = () => page.evaluate(() => [...document.querySelectorAll('#pdkCards .pdk-card')].map(c => {
+  const b = c.querySelector('.pdk-name');
+  return { iid: c.dataset.iid, name: b ? b.textContent : null, kids: b ? b.children.length : null };
+}));
+/* The derived pool, read out of the module rather than copied here, so this
+   still discriminates if the word list is ever appended to. */
+const derivedPool = await page.evaluate(async () => (await import('./js/paddock.js')).PADDOCK_NAMES);
+ok('CONTROL the derived name pool was readable (an empty pool would make every row below vacuous)',
+  Array.isArray(derivedPool) && derivedPool.length > 8, `${derivedPool && derivedPool.length} names`);
+
+await openStable();
+ok('PADDOCK the Paddock opened from the Stable and mounted the named pet\'s cards', await openPaddock(namedSp));
+const pdkRows = await pdkNames();
+const pdkNamed = pdkRows.find(r => r.iid === namedIid);
+ok('PADDOCK a card for the named pet is mounted (an empty card set is a FAILURE)',
+  !!pdkNamed, JSON.stringify(pdkRows));
+ok('PADDOCK the nickname REPLACES the derived one, it does not sit beside it',
+  pdkNamed && pdkNamed.name === SENTINEL, JSON.stringify(pdkNamed));
+
+/* The other direction, and the bound: every OTHER copy still gets a real name
+   out of the pool. Zero named-from-the-pool rows would mean the fallback died. */
+await page.evaluate(() => window.__pdkClose && window.__pdkClose());
+await sleep(500);
+const otherSp = (roster.find(r => r.iid === otherIid) || {}).sp;
+await page.evaluate(id => document.querySelector(`#pdkPanel .pdk-tile[data-sp="${id}"]`)?.click(), otherSp);
+await sleep(1400);
+const pdkOther = (await pdkNames()).find(r => r.iid === otherIid);
+ok('PADDOCK an UNNAMED copy still gets its derived name, so the fallback was not thrown away',
+  !!pdkOther && derivedPool.includes(pdkOther.name), JSON.stringify(pdkOther));
+
+/* And the escaping, at what is now the THIRD render site. The control itself is
+   driven in the Stable sections; this drives the RENDER, which is the half that
+   can be unescaped. paddock-cards.js has its own local esc() and this asserts
+   it is really applied rather than assuming it. */
+await page.evaluate(async (iid, payload) => {
+  const l = await import('./js/loot.js');
+  await l.setPetNick(iid, payload);
+}, namedIid, HOSTILE);
+await page.evaluate(() => { window.__pwn = false; window.z = () => { window.__pwn = true; }; });
+await page.evaluate(() => window.__pdkClose && window.__pdkClose());
+await sleep(400);
+await page.evaluate(id => document.querySelector(`#pdkPanel .pdk-tile[data-sp="${id}"]`)?.click(), namedSp);
+await sleep(1400);
+const pdkHostile = (await pdkNames()).find(r => r.iid === namedIid);
+ok('PADDOCK-HOSTILE the Paddock card holds the payload as TEXT, character for character',
+  pdkHostile && pdkHostile.name === HOSTILE, JSON.stringify(pdkHostile));
+ok('PADDOCK-HOSTILE no element was built from it there either',
+  pdkHostile && pdkHostile.kids === 0, JSON.stringify(pdkHostile && pdkHostile.kids));
+ok('PADDOCK-HOSTILE and the handler never fired', await page.evaluate(() => window.__pwn === false));
+await page.evaluate(async (iid, n) => (await import('./js/loot.js')).setPetNick(iid, n), namedIid, SENTINEL);
+await closeSheets();
+await sleep(600);
 
 /* ============================ HOSTILE ============================ */
 /* A nickname is the only player-typed string that reaches this screen's
@@ -521,8 +597,20 @@ ok('SNAPSHOT and it does not mention the nickname anywhere: the pet block stays 
    automatically a leak, but it is a thing nobody drove, so it stops the build. */
 const jsDir = path.join(ROOT, 'js');
 const touchers = readdirSync(jsDir).filter(f => f.endsWith('.js') && /petNick|setPetNick|petNicks/.test(readFileSync(path.join(jsDir, f), 'utf8'))).sort();
-ok('COVERAGE the nickname store is reachable from exactly two modules: loot.js owns it, app.js renders it',
-  touchers.join(',') === 'app.js,loot.js', `touched by: ${touchers.join(', ') || 'nothing (an empty scan is a FAILURE)'}`);
+ok('COVERAGE the nickname store is reachable from exactly three modules: loot.js owns it, app.js and paddock.js feed renders',
+  touchers.join(',') === 'app.js,loot.js,paddock.js', `touched by: ${touchers.join(', ') || 'nothing (an empty scan is a FAILURE)'}`);
+
+/* THE THIRD RENDER SITE. js/paddock-cards.js has its own local esc(), so the
+   nickname reaching it is only safe if pdk-name really goes through it. Driven
+   above as well; this row is what fails if a future edit drops the call. */
+const pdkSrc = readFileSync(path.join(ROOT, 'js/paddock-cards.js'), 'utf8');
+ok('COVERAGE the Paddock card name is interpolated through esc(), the only thing standing between it and innerHTML',
+  /<b class="pdk-name">\$\{esc\(m\.name\)\}<\/b>/.test(pdkSrc), 'pdk-name is no longer esc()-wrapped');
+ok('COVERAGE the Paddock card still takes its name from the roster row, so the nickname reaches it at all',
+  /name:\s*row\.name\s*\|\|\s*sp\.name/.test(pdkSrc), 'cardModel no longer prefers row.name');
+const pdkRosterSrc = readFileSync(path.join(ROOT, 'js/paddock.js'), 'utf8');
+ok('COVERAGE and paddockRoster prefers the private nickname over the derived pool',
+  /name:\s*nicks\[x\.iid\]\s*\|\|\s*names\[x\.iid\]/.test(pdkRosterSrc), 'paddockRoster no longer prefers the nickname');
 
 ok('NO PAGE ERRORS during the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 
