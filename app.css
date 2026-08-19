@@ -6512,9 +6512,9 @@ body::before {
    its own width to the LEFT while it dropped. The entrance was fixed and the
    exit was not. Measured on a Common Crate reveal at 440x956 (tests/
    crate-exit-flicker-audit.mjs): the takeover's right edge marched from x=436
-   to x=338 in 100ms, a 100px vertical seam-front sweeping across the Backpack
-   you are returning to, up to 75% of the viewport height. Every takeover in the
-   app left this way, not just the crate. */
+   to x=338 in 100ms, a vertical seam-front sweeping across the Backpack you are
+   returning to, and at its worst that seam ran the FULL height of the screen.
+   Every takeover in the app left this way, not just the crate. */
 .sheet.takeover.closing { animation: sheetOutFlat .2s ease-in forwards; }
 @keyframes sheetOutFlat { to { transform: translateY(105%); } }
 .sheet-backdrop.closing { animation: fadeout .2s ease-in forwards; }
