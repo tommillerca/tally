@@ -8150,3 +8150,61 @@ body::before {
   content: ''; position: absolute; inset: -5px; border-radius: 50%; z-index: 0; pointer-events: none;
   background: radial-gradient(circle, rgba(232, 194, 77, .55), rgba(232, 194, 77, 0) 70%);
 }
+
+/* ============ MOCKUP ONLY (2026-08-18): the rack ============
+   Visual prototype. Nothing here is wired to a purchase and none of it ships
+   from this worktree. */
+
+/* An aura is a BOUGHT halo on the weapon. It uses the same one property the
+   rarity halo uses (a single drop-shadow on the same <img>) and avatarLayersHtml
+   emits one class or the other, never both, so a weapon can never wear two
+   glows. Rarity has not gone anywhere: it is the tile border, below. */
+/* ONE drop-shadow, not two: a bought aura is stronger than a rarity halo (6px)
+   because it is the thing you paid for, but it is still a single glow, so
+   "exactly one glow on this object" stays a checkable number. */
+.bh-anim img.wpn-aura.a-tide { filter: drop-shadow(0 0 11px rgba(125, 200, 255, 1)); }
+.bh-anim img.wpn-aura.a-ash { filter: drop-shadow(0 0 11px rgba(240, 236, 225, 1)); }
+
+.rk-theme { display: flex; align-items: center; gap: 8px; margin: 2px 2px 10px; }
+.rk-theme b { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--text-2); }
+.rk-theme i { flex: 1; height: 1px; background: var(--line); }
+.rk-theme span { font-size: 11px; color: var(--text-3); }
+
+.rk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* One tile language, four times. Rarity is the border and nothing else, so the
+   tile carries a name, two prices and no third line of text. */
+.rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 16px;
+  padding: 8px 8px 10px; text-align: center; }
+.rk.r-uncommon { border-color: color-mix(in srgb, #9fac9f 60%, var(--line-strong)); }
+.rk.r-rare { border-color: color-mix(in srgb, #60a5fa 60%, var(--line-strong)); }
+.rk.r-epic { border-color: color-mix(in srgb, var(--violet) 62%, var(--line-strong)); }
+.rk.r-legendary { border-color: color-mix(in srgb, #ffc961 62%, var(--line-strong)); }
+.rk > b { display: block; font-size: 13.5px; margin: 7px 0 8px; }
+.rk-stage { position: relative; width: 100%; aspect-ratio: 1 / 0.86; border-radius: 12px;
+  overflow: hidden; background: var(--surface-3); }
+.rk-stage .bh-anim { position: absolute; inset: 0; }
+.rk-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rk-buy { display: flex; gap: 6px; }
+.rk-buy .t3-price { flex: 1; justify-content: center; padding: 4px 6px; font-size: 14px; }
+
+/* Crop each preview to the part of the figure the piece occupies. Centres and
+   scales are MEASURED alpha bounding boxes (median over every asset in the
+   slot): H (.425,.209) w.322, T (.455,.505) w.486, P (.509,.657) h.270,
+   FW (.495,.832) w.278, IR (.388,.670) w.508.
+   animation:none is load-bearing: .bh-anim carries the bh-idle keyframes, which
+   animate `transform`, and a running animation outranks a plain declaration in
+   the cascade. Without it the crop simply does not happen. */
+.fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim { animation: none; }
+.fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
+.fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
+.fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
+.fit-feet .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }
+/* The aura tile frames the weapon hand, not the whole body: the halo is on the
+   held item, so that is what the preview has to show. */
+.fit-hand .bh-anim { transform-origin: 42% 63%; transform: translate(8%, -13%) scale(1.9); }
+
+/* One control. No printed ladder: the price on the button IS the price. */
+.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
+.rk-reroll b { flex: 1; text-align: left; font-size: var(--fs-3); }

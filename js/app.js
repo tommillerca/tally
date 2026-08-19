@@ -3510,7 +3510,12 @@ function avatarLayersHtml(eq, opts = {}) {
     const cls = [
       // COSMETIC ONLY. S.glow never touches stats, gear bonuses or the slimed
       // ledger: it decides whether the halo is drawn, nothing else.
-      S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
+      // MOCKUP ONLY: a bought aura REPLACES the rarity halo on the same object
+      // rather than stacking a second glow on it. Both are one drop-shadow on
+      // one <img>, so emitting one class instead of the other is the whole
+      // mechanism. Rarity still reads off the card border, where it already is.
+      S.glow && (s.code === 'IR' || s.code === 'IL') && opts.wpnAura ? `wpn-aura a-${opts.wpnAura}`
+        : S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
       S.glow && slimed ? 'bh-slimed' : '',
       // EMBER EYES: the eye items drawn as lit coals get a slow breathing glow.
       // A set rather than a rarity test, because "does this art depict light?" is
@@ -6465,68 +6470,87 @@ async function renderShop(el) {
   const dropCheapest = Math.min(...DROP.items.map(d => d.cost));
   const dropOwned = DROP.items.filter(d => ownedCos.has(d.id)).length;
   const shopDesc = { vigor: '+3 Pit fights right now', xp2: 'Next Pit wins pay more' };
-  // The mockup is a standalone screen with its own wallet row. In the app the
-  // Shop is a hub tab whose header already carries the balances, so the dust
-  // pill moved up there rather than printing the same two numbers twice.
-  el.innerHTML = `
 
-  <details class="t3-dropsect" id="dropSect">
-    <summary class="t3-drop">
-      ${dropOwned < DROP.items.length ? '<span class="new">NEW</span>' : ''}
-      <span class="eyebrow">Fresh drop · ${DROP.items.length} pieces${dropOwned ? ` · ${dropOwned} yours` : ''}</span>
-      <h2>${esc(DROP.title).toUpperCase()}</h2>
-      <div class="row">
-        <div class="art"><canvas class="t3-art" width="220" height="220" data-art="${esc(bhAsset(BH_BY_ID[DROP.items[5].id]))}"></canvas></div>
-        <div class="tx">
-          <small>${esc(DROP.blurb)} Every piece also drops from crates like any legendary.</small>
-          <span class="t3-price">${ICONS.coin(13)} from ${dropCheapest.toLocaleString()}</span>
-        </div>
+  /* ============ MOCKUP ONLY (2026-08-18): THE RACK IS THE SHOP ============
+     Nothing below is wired to a purchase: no buy handler is bound, buyDropItem
+     is untouched and no shipped price constant is changed. Delete this block and
+     restore the old `el.innerHTML` template to revert.
+
+     One screen. Four pieces, worn. Two prices each. One reroll. The coin shop,
+     dust shop and Bone Merchant are hidden behind the row at the foot, because a
+     rack that has to share the screen with five other departments is not a rack.
+     No paragraph explains any of it: a rule a control cannot carry on its own is
+     a broken control, not an under-explained one. */
+  const MOCK_THEME = 'AUGUST · COLD SNAP';
+  // Three price rungs so the rack always spans cheap-to-dear, one BODY PART per
+  // rung so it never offers three of the same thing (the first render put two
+  // near-identical puffers side by side), and a themed pool, because "COLD SNAP"
+  // is a promise about what is on the rack.
+  const MOCK_POOLS = [
+    [3000, ['T9-1', 'T9-7', 'T9-6']],
+    [1800, ['H10-6', 'H10-7', 'H12-1']],
+    [900, ['FW6-3', 'FW7-6', 'FW8-3']],
+  ];
+  // Same FNV-1a + ISO-week recipe the dens already turn over on, so the rack
+  // changes every Monday with no server.
+  const mockHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const mockWeek = isoWeekKey(new Date());
+  const mockPick = (ids, slot) => { const free = ids.filter(id => !ownedCos.has(id)); const p = free.length ? free : ids; return p[mockHash(`${mockWeek}:rack:${slot}`) % p.length]; };
+  const mockEq = await equipped();
+  // Dust is the second price on every tile. It is priced off the piece's RARITY,
+  // where the coin price is priced off the rack slot: that difference is the
+  // whole idea, and it is the only place it is stated. The shipped melt ladder
+  // (transmogCost) pays epic and legendary the same 60, which rendered as three
+  // identical 150s down the rack, so the mockup carries its own ladder rather
+  // than touching a shipped constant.
+  const MOCK_DUST = { common: 15, uncommon: 30, rare: 65, epic: 120, legendary: 200 };
+  const mockDust = id => MOCK_DUST[(BH_BY_ID[id] || {}).rarity] || 30;
+  // Worn, never a loose PNG: a hat is ~32% of its 640 canvas, so a `contain`
+  // thumbnail of the raw asset is a speck. Centres/scales are MEASURED alpha
+  // bounding boxes, median over every asset in the slot.
+  const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso', P: 'fit-hips', U: 'fit-hips', FW: 'fit-feet', S: 'fit-feet' };
+  const mockTile = (id, i) => {
+    const it = BH_BY_ID[id];
+    // The held items are skipped on a garment tile. Measured off the first
+    // render: the equipped dagger crosses the whole feet crop, glowing, and wins
+    // the tile off the shoes that are actually for sale.
+    return `<div class="rk r-${it.rarity}">
+      <div class="rk-stage ${MOCK_FIT[it.slot] || ''}">${avatarLayersHtml({ ...mockEq, [it.slot]: id }, { skip: ['BG', 'C', 'IL', 'IR'], thumb: 384 })}</div>
+      <b>${esc(it.name)}</b>
+      <div class="rk-buy">
+        <button class="t3-price">${ICONS.coin(13)} ${MOCK_POOLS[i][0].toLocaleString()}</button>
+        <button class="t3-price dust">${ICONS.dust(13)} ${mockDust(id)}</button>
       </div>
-    </summary>
-    <div class="t3-dropbody">
-      <p class="drop-sub2">${esc(DROP.acquire)}</p>
-      <div class="drop-grid">
-        ${DROP.items.map(d => {
-          const it = BH_BY_ID[d.id];
-          const owned = ownedCos.has(d.id);
-          return `<div class="drop-item ${owned ? 'owned' : ''}">
-            <img src="${bhAsset(it)}" alt="" loading="lazy">
-            <b>${esc(it.name)}</b>
-            ${owned
-              ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
-              : `<button class="drop-buy" data-buydrop="${d.id}" ${coinBal < d.cost ? 'disabled' : ''}>${ICONS.coin(12)} ${d.cost.toLocaleString()}</button>`}
-          </div>`;
-        }).join('')}
-      </div>
+    </div>`;
+  };
+  // AURAS GO ON WEAPONS. The weapon already carries a rarity halo, so the aura
+  // replaces it (see avatarLayersHtml); rarity stays in the card border.
+  // The border is the AURA's rarity, not the weapon's: the tile is selling the
+  // aura. (The first render bordered it off the equipped dagger and put two gold
+  // tiles on a four-tile rack.)
+  const MOCK_AURA = { key: 'tide', name: 'Tidewater', rarity: 'epic', coin: 700, dust: MOCK_DUST.epic };
+  const mockAuraTile = () => `<div class="rk r-${MOCK_AURA.rarity} aura">
+    <div class="rk-stage fit-hand">${avatarLayersHtml(mockEq, { skip: ['BG', 'C', 'IL'], thumb: 384, wpnAura: MOCK_AURA.key })}</div>
+    <b>${esc(MOCK_AURA.name)}</b>
+    <div class="rk-buy">
+      <button class="t3-price">${ICONS.coin(13)} ${MOCK_AURA.coin}</button>
+      <button class="t3-price dust">${ICONS.dust(13)} ${MOCK_AURA.dust}</button>
     </div>
-  </details>
+  </div>`;
+  // Reroll is ONE control, not a printed ladder. ?rr=N renders the paid state.
+  const mockRerolls = +(new URLSearchParams(location.search).get('rr') || 0);
+  const mockRerollCost = [0, 100, 200, 300, 400, 500][Math.min(mockRerolls, 5)];
 
-  <div class="t3-sect"><b>Coin shop</b><i></i></div>
-  <div class="t3-cells">
-    ${SHOP.map(s => `<button class="t3-cell" data-buy="${s.id}" data-label="${esc(s.label)}" ${coinBal < s.cost ? 'disabled' : ''}>
-      <span class="art">${s.id === 'crate-daily' ? crateIcon('daily', 54) : s.id === 'crate-golden' ? crateIcon('golden', 54) : consumableIcon(s.id, 48)}</span>
-      <b>${esc(s.label).toUpperCase()}</b>
-      <span class="t3-price">${ICONS.coin(13)} ${s.cost}</span>
-      ${shopDesc[s.id] ? `<small>${shopDesc[s.id]}</small>` : ''}
-    </button>`).join('')}
+  el.innerHTML = `
+  <div class="rk-theme"><b>${esc(MOCK_THEME)}</b><i></i><span>New rack Monday</span></div>
+  <div class="rk-grid">
+    ${MOCK_POOLS.map(([, ids], i) => mockTile(mockPick(ids, i), i)).join('')}
+    ${mockAuraTile()}
   </div>
+  <button class="rk-reroll"><b>Reroll the rack</b>
+    ${mockRerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${mockRerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
+  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>`;
 
-  <div class="t3-sect"><b>Bone Dust shop</b><i></i><span class="r chip" style="font-size:11px">Melt gear to earn it</span></div>
-  <div class="t3-cells">
-    ${DUST_SHOP.map(d => `<button class="t3-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
-      <span class="art">${d.id === 'egg' ? crateIcon('egg', 54) : d.id === 'crate-daily' ? crateIcon('daily', 54) : consumableIcon(d.id, 48)}</span>
-      <b>${esc(d.label).toUpperCase()}</b>
-      <span class="t3-price dust">${ICONS.dust(13)} ${d.cost}</span>
-      <small>${esc(d.desc)}</small>
-    </button>`).join('')}
-  </div>
-  <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
-
-  <div class="t3-sect"><b>Bone Merchant</b><i></i><span class="r chip" style="font-size:11px">${ARCH_META[recArch].label} suits you</span></div>
-  <p class="note" style="margin:0 2px 10px">Weapons multiply your effort; they never replace it.</p>
-  ${merchantHtml}
-
-  <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
@@ -17562,9 +17586,13 @@ async function seedDemo() {
     });
   }
   await kvSet('coins', 340);
-  const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR1', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
+  // MOCKUP ONLY: the demo weapon is a LEGENDARY (Onyx Dagger) rather than the
+  // common flail, so the rack's aura tile can be checked against a weapon that
+  // actually carries a rarity halo to replace. Demo seed only; ?demo never
+  // touches a real player's data.
+  const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR10-3', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
   for (const id of demoCos) await db.put('inv', { id: 'demo-' + id, kind: 'cos', itemId: id, source: 'demo', ts: Date.now() });
-  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
+  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR10-3', C: 'C1', P: 'P1', BG: 'BG2-1' });
   await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
   await db.put('inv', { id: 'demo-xp2', kind: 'xp2', source: 'crate', ts: Date.now() });
