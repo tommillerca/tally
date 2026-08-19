@@ -6482,21 +6482,33 @@ async function renderShop(el) {
      No paragraph explains any of it: a rule a control cannot carry on its own is
      a broken control, not an under-explained one. */
   const MOCK_THEME = 'AUGUST · COLD SNAP';
-  // Three price rungs so the rack always spans cheap-to-dear, one BODY PART per
-  // rung so it never offers three of the same thing (the first render put two
-  // near-identical puffers side by side), and a themed pool, because "COLD SNAP"
-  // is a promise about what is on the rack.
+  /* THE NEUTRAL BASE. Tom: "items should just be styled on a base skeleton so
+     that the item doesnt clash with the not for sale items". Taken from the data
+     file's own slot defaults rather than invented, which is the same pair
+     randomOutfit() starts every splash figure from: body B0-1, skull SK0-1, and
+     nothing else. No pet, no background, no held item, nothing the player owns.
+     The only non-default thing in a tile is the piece for sale. */
+  const MOCK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+  // Eight slots, two per price rung, one body part per pair so no two tiles in a
+  // row sell the same kind of thing.
+  // Every coin price is DIFFERENT. Two tiles at 3,000 sitting side by side read
+  // as the grid having repeated itself, measured off the eight-tile render.
   const MOCK_POOLS = [
     [3000, ['T9-1', 'T9-7', 'T9-6']],
-    [1800, ['H10-6', 'H10-7', 'H12-1']],
-    [900, ['FW6-3', 'FW7-6', 'FW8-3']],
+    [2400, ['H13-4', 'H13-2', 'H13-3']],
+    [1800, ['P5-1', 'P5-2', 'P6-3']],
+    [1500, ['T1', 'T10-3', 'T10-4']],
+    [950, ['H10-6', 'H10-7', 'H12-1']],
+    [800, ['FW6-3', 'FW7-6', 'FW8-3']],
+    // Not grillz: rendered at tile size on a bare skull, a gold tooth is a few
+    // pixels and the tile reads as "buy a skull". A whole skull reads.
+    [450, ['SK18', 'SK0-7', 'SK14']],
   ];
   // Same FNV-1a + ISO-week recipe the dens already turn over on, so the rack
   // changes every Monday with no server.
   const mockHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const mockWeek = isoWeekKey(new Date());
   const mockPick = (ids, slot) => { const free = ids.filter(id => !ownedCos.has(id)); const p = free.length ? free : ids; return p[mockHash(`${mockWeek}:rack:${slot}`) % p.length]; };
-  const mockEq = await equipped();
   // Dust is the second price on every tile. It is priced off the piece's RARITY,
   // where the coin price is priced off the rack slot: that difference is the
   // whole idea, and it is the only place it is stated. The shipped melt ladder
@@ -6511,11 +6523,8 @@ async function renderShop(el) {
   const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso', P: 'fit-hips', U: 'fit-hips', FW: 'fit-feet', S: 'fit-feet' };
   const mockTile = (id, i) => {
     const it = BH_BY_ID[id];
-    // The held items are skipped on a garment tile. Measured off the first
-    // render: the equipped dagger crosses the whole feet crop, glowing, and wins
-    // the tile off the shoes that are actually for sale.
     return `<div class="rk r-${it.rarity}">
-      <div class="rk-stage ${MOCK_FIT[it.slot] || ''}">${avatarLayersHtml({ ...mockEq, [it.slot]: id }, { skip: ['BG', 'C', 'IL', 'IR'], thumb: 384 })}</div>
+      <div class="rk-stage ${MOCK_FIT[it.slot] || ''}">${avatarLayersHtml({ ...MOCK_BASE, [it.slot]: id }, { thumb: 384 })}</div>
       <b>${esc(it.name)}</b>
       <div class="rk-buy">
         <button class="t3-price">${ICONS.coin(13)} ${MOCK_POOLS[i][0].toLocaleString()}</button>
@@ -6523,14 +6532,19 @@ async function renderShop(el) {
       </div>
     </div>`;
   };
-  // AURAS GO ON WEAPONS. The weapon already carries a rarity halo, so the aura
-  // replaces it (see avatarLayersHtml); rarity stays in the card border.
-  // The border is the AURA's rarity, not the weapon's: the tile is selling the
-  // aura. (The first render bordered it off the equipped dagger and put two gold
-  // tiles on a four-tile rack.)
-  const MOCK_AURA = { key: 'tide', name: 'Tidewater', rarity: 'epic', coin: 700, dust: MOCK_DUST.epic };
+  /* AURAS GO ON WEAPONS, and the WEAPON IS A MANNEQUIN, not the product. Tom:
+     "i think the aura looked fine i just meant it wasnt clear in the UI ur
+     buying a cosmetic aura not a item". So the art is untouched and the fix is
+     framing: a plain common katana nobody is selling carries it, the tile is
+     tagged AURA / ANY WEAPON, and the name says Aura. "Any weapon" is the word
+     that kills "I am buying this sword", because a sword you buy is not a thing
+     that works on any weapon.
+     The halo itself REPLACES the rarity halo rather than stacking on it (see
+     avatarLayersHtml); the carrier is common, so there is nothing to replace
+     here and rarity keeps living in the tile border. */
+  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 700, dust: MOCK_DUST.epic };
   const mockAuraTile = () => `<div class="rk r-${MOCK_AURA.rarity} aura">
-    <div class="rk-stage fit-hand">${avatarLayersHtml(mockEq, { skip: ['BG', 'C', 'IL'], thumb: 384, wpnAura: MOCK_AURA.key })}</div>
+    <div class="rk-stage fit-hand"><span class="rk-tag">AURA · ANY WEAPON</span>${avatarLayersHtml({ ...MOCK_BASE, IR: MOCK_AURA.carrier }, { thumb: 384, wpnAura: MOCK_AURA.key })}</div>
     <b>${esc(MOCK_AURA.name)}</b>
     <div class="rk-buy">
       <button class="t3-price">${ICONS.coin(13)} ${MOCK_AURA.coin}</button>
@@ -6544,8 +6558,9 @@ async function renderShop(el) {
   el.innerHTML = `
   <div class="rk-theme"><b>${esc(MOCK_THEME)}</b><i></i><span>New rack Monday</span></div>
   <div class="rk-grid">
-    ${MOCK_POOLS.map(([, ids], i) => mockTile(mockPick(ids, i), i)).join('')}
+    ${MOCK_POOLS.slice(0, 6).map(([, ids], i) => mockTile(mockPick(ids, i), i)).join('')}
     ${mockAuraTile()}
+    ${mockTile(mockPick(MOCK_POOLS[6][1], 6), 6)}
   </div>
   <button class="rk-reroll"><b>Reroll the rack</b>
     ${mockRerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${mockRerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
