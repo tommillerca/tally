@@ -4,7 +4,41 @@
 
 export const MAP_MIN_ZOOM = 13.5;
 export const MAP_MAX_ZOOM = 18;
-export const MAP_START_ZOOM = 16.4;
+/* HOW MUCH GROUND THE SCREEN HOLDS, and therefore how full the Boneyard looks.
+ *
+ * Tom, 2026-08-18: "splitting up the amount of food items and gold would help us
+ * curb that and make the boneyard seem more full." econ/boneyard-supply did the
+ * splitting (2.5x the spawns, each worth less). It did not make the map look
+ * fuller, and measuring the RENDERED map said why.
+ *
+ * The field is ~24.7 spawns/km². At 16.4 a 440x956 phone screen covers
+ * 260 x 525 m = 0.14 km², so it can only ever hold ~3.4 of them. Measured on the
+ * real map at four Vancouver locations: 2.75 spawns generated inside the
+ * viewport, 2.75 of them placed, 3.75 markers visible. I looked at that
+ * screenshot and counted TWO. The gate that hides off-screen spawns is not what
+ * empties it: 0.00 of the in-view spawns failed the walkability snap, so every
+ * spawn the screen could hold was already drawn. There were only ever three.
+ *
+ * So the lever is ground per screen, not spawns per ground (that half is done,
+ * and touching it again would move the faucet). Measured across the same four
+ * locations, markers whose box meets the 440x956 screen, by start zoom:
+ *
+ *   16.4  3.75   0.14 km²   collect ring 254px    (before)
+ *   15.9  8.50   0.27 km²   collect ring 180px
+ *   15.4  15.75  0.55 km²   collect ring 127px    (chosen)
+ *   15.0  27.75  0.95 km²   collect ring  96px    markers start colliding
+ *   14.5  51.75  1.9 km²    collect ring  68px    a wall of pins
+ *
+ * Counted against the map CANVAS instead, which is the stricter box the header
+ * and tests/boneyard-density-audit.mjs both use, 16.4 gives 4.00 and 15.4 gives
+ * 13.75. Same story, two definitions of "on screen"; the ratio is what matters.
+ *
+ * 15.4 is where the map reads full and the markers still stand apart: at 15.0
+ * the screenshot has four overlapping pairs, and the 75 m ring, which is the one
+ * thing on this screen that tells you what "in reach" means, is down to 96px.
+ * Nothing generated, dropped or paid changes; this only moves the camera.
+ */
+export const MAP_START_ZOOM = 15.4;
 
 let maplibrePromise = null;
 

@@ -130,8 +130,10 @@ export const DAILY_POOL = [
      the app will not let them do. */
   { id: 'q-cook', name: 'Fire up the cauldron', desc: 'Cook a dish or brew a potion', coins: 50, ingredient: 'salt', need: 'kitchen',
     progress: c => clamp(c.cookedToday ? 1 : 0, 1) },
-  { id: 'q-harvest', name: 'Bring in a crop', desc: 'Harvest a bed in the Bone Garden', coins: 45, need: 'kitchen',
-    progress: c => clamp(c.harvestedToday ? 1 : 0, 1) },
+  /* q-harvest ("Harvest a bed in the Bone Garden") came out on 2026-08-18. The
+     garden is off the player's path, so it is uncompletable, which is the exact
+     mistake the day-one Pit card was. REVIVAL: restore it here from git history;
+     `harvestedToday` in the context above still works. */
   { id: 'q-water', name: 'Stay watered', desc: 'Drink 8 cups of water', coins: 45,
     progress: c => clamp(c.waterToday ? 1 : 0, 1) },
   { id: 'q-bed', name: 'Make your bed', desc: 'Start the day right: make your bed', coins: 40,
@@ -183,8 +185,25 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.logDays, 5) },
   { id: 'w-cook', name: 'Cauldron keeper', desc: 'Cook or brew 5 times this week', coins: 130, crate: 'golden',
     progress: c => clamp(c.cooksDone, 5) },
-  { id: 'w-garden', name: 'Green thumb, no thumbs', desc: 'Harvest 8 crops this week', coins: 140, crate: 'golden',
-    progress: c => clamp(c.harvests, 8) },
+  /* w-garden ("Harvest 8 crops this week", 140 coins + a golden crate) came out
+     with q-harvest, 2026-08-18.
+     THE MID-WEEK QUESTION, answered rather than skipped: a player holding it at
+     6/8 when this ships loses it, and no in-progress payout is made. Measured
+     first: pick() indexes into the filtered pool, so dropping one member
+     reshuffles 41 of 52 weekly slates, not only the 11 that carried w-garden.
+     That is not new. The same reshuffle already happens the first time any `need`
+     gate opens (connect Health, touch the Pit), so mid-period slate churn is a
+     property this design has always had and always tolerated.
+     What survives it: progress is DERIVED from cumulative week counters, so a
+     substitute weekly arrives at the player's real progress rather than at zero,
+     and `questState.claimed` is keyed by quest id, so nothing already claimed is
+     revoked. What is lost: the harvests themselves, which cannot be finished at
+     any price once the garden has no door.
+     No separate payout, deliberately. The closing payout in game.js
+     retireGardenIfNeeded already refunds real spend; paying 140 coins and a
+     golden crate for an unfinished weekly would pay a player at 1/8 the same as
+     one at 7/8, and the counter that would tell them apart (xp rows of type
+     'garden') is not read anywhere else. */
   { id: 'w-wellness', name: 'Look after yourself', desc: 'Hit a wellness habit (water/bed/sleep) on 5 days', coins: 150, crate: 'golden',
     progress: c => clamp(c.wellnessDays, 5) },
   { id: 'w-friends', name: 'Rival circuit', desc: 'Battle 3 different friends this week', coins: 170, crate: 'golden', need: 'social',

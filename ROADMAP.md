@@ -9,6 +9,42 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## DECISION 2026-08-18: the garden refund pays the FULL 5,500, not a reduced amount
+
+Tom, asked directly after being shown what it costs: **"full refund of 5500"**.
+Decided, do not reopen. No code change was needed; the branch already paid in
+full, so this records the decision rather than implementing it.
+
+He chose it with the number in front of him. Measured on the integrated tree:
+
+- a five-bed player receives **+5,500 coins in one payment**, which is about
+  **55.5% of their thirty-day countable coin income**, or roughly two drop
+  cosmetics / thirteen Golden Crates handed over at once
+- a light or median player receives **+0**, because they never bought bed 4 or 5
+- it spikes day 1 and does NOT change the day-30 slope, which is the pass
+  condition set in docs/ECONOMY-INTERLOCK.md
+
+**Why it is defensible despite being the only upward pressure in the release.**
+The player paid those coins for a feature we are removing from their path. A
+partial refund charges them for our change of direction. And the surrounding
+release cuts income everywhere else: coins per cell 46.54 to 41.46 on the same
+integrated tree, plus the crate gear-variant cut to 0.30. The refund is a
+one-time settlement inside a release that is net contractionary.
+
+**The risk that is being accepted**, named so nobody is surprised later: heavy
+players get a lump sum at the same moment the cosmetic shop is being designed as
+their new sink. If the shop lands soon after, that 5,500 is immediately spendable
+on exactly the thing the shop exists to sell, which softens the shop's first
+week as a sink. That is a sequencing consideration, not a reason to reduce the
+refund.
+
+Paying once is guarded: `retireGardenIfNeeded()` claims through
+`db.addIfAbsent` on kv `garden-retired`, proven against ten repeat runs, a real
+page reload, and three concurrent callers. The naive `kvGet`/`kvSet` form was
+measured printing **16,500 coins** on that same race, which is why the atomic
+claim is not optional.
+
+
 ## 🧭 Four calls Tom made 2026-08-18 — DECISIONS RECORDED (two not built)
 
 Written down at the time they were made, per the standing rule that a decision
@@ -87,6 +123,40 @@ is built, it gets measured through tests/fight-sim.mjs rather than reasoned abou
 from the constants.
 
 ---
+## DECISION 2026-08-18: gear-variant chance stays at 0.30, as measured
+
+Tom, asked to choose between 0.30 as built and a softer 0.40 after seeing the
+measured consequences: **"make the gear drop rate .3"**. Decided, do not reopen.
+
+He made the call with the light-player cost in front of him, so it is recorded
+here rather than argued again later. Measured over 500 days, 7 runs x 500 days,
+median:
+
+| profile | catalogue at day 500, today | at 0.30 |
+|---|---|---|
+| light   | 257/388 (66%) | **159/388 (41%)** |
+| median  | finishes day 495 | 357/388, does not finish |
+| heavy   | 100% at day 112 | 100% at day 164 |
+
+So a casual player loses 98 pieces over 500 days, a 38% cut, and the median
+player stops completing the catalogue inside 500 days. Heavy players slow from
+112 to 164 days, which is the outcome the change was asked for: Tom's words on
+2026-08-17 were that he was "worried about players once we go to the app store
+farming out too much of our gear".
+
+Total pieces per crate is essentially unchanged (0.618 to 0.638 on a Common
+Crate). The change converts gear into cosmetics roughly one for one, so a crate
+still opens into something; it is specifically the GEAR pace that halves.
+
+**Two reasons this is defensible despite the light-player cost.** The cosmetic
+shop is about to become a second, deterministic route to gear, so the crate is
+no longer the only path. And coins may never expire once a real-money pack ships
+(Apple guideline 3.1.1), which makes closing the faucet BEFORE monetisation the
+only time it can be done at all. See docs/IAP-SCOPING.md.
+
+**Re-measure after the shop ships.** These numbers assume crates are the only
+route. They stop being true the day the rack exists.
+
 
 ## 🥚 Chest and egg art Tom authored 2026-08-16 evening — LOGGED, not wired in
 

@@ -26,7 +26,19 @@ export const SPAWN_INGREDIENTS = {
   bones: ['marrow', 'sinew'],
   coins: ['salt', 'ember'],
   crate: ['graveroot', 'bog'],
+  // herbs is the food spawn and draws from DEMAND_POOL instead (see below)
 };
+
+/* HOW MUCH FOOD A SPAWN TYPE CARRIES. 2026-08-18, with the 2.5x density bump in
+   hunt.js. Tom: "splitting up the amount of food items and gold would help us
+   curb that and make the boneyard seem more full."
+   Food used to be on EVERY spawn, so tripling the field would have tripled the
+   pantry. It is split instead: the Herb patch is THE food spawn and always
+   carries two, everything else carries one about a fifth of the time. Net effect
+   measured, not guessed: ingredients per day 1.46x, which is what the Kitchen
+   needs once the Bone Garden stops feeding it. A value below 1 is a chance; 1 or
+   more is a guaranteed count. */
+export const SPAWN_FOOD = { herbs: 2, rare: 1, bones: 0.2, coins: 0.2, crate: 0.2 };
 // local copies, same as hunt.js/poi.js/spires.js: cooking.js is imported BY
 // loot.js, so importing poi.js here would close an import cycle.
 function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -57,9 +69,14 @@ export const THEME_ODDS = 0.7;   // chance the drop comes from the spawn type's 
 export function spawnIngredient(spawn) {
   if (spawn.type === 'rare') return { id: RARE_INGREDIENT, n: 1 };
   const rng = mulberry32(hashStr(`ingr:${spawn.id}`));
-  const themed = SPAWN_INGREDIENTS[spawn.type];
+  // how many, then which. `n` can be 0: most spawns no longer carry food.
+  const food = SPAWN_FOOD[spawn.type] ?? 1;
+  const n = food >= 1 ? food : (rng() < food ? 1 : 0);
+  // an id is returned even when n is 0, because the garden's seed roll still
+  // rides on this spawn and needs to know what kind of seed the spot grows.
+  const themed = spawn.type === 'herbs' ? DEMAND_POOL : SPAWN_INGREDIENTS[spawn.type];
   const pool = (themed && rng() < THEME_ODDS) ? themed : COMMON_INGREDIENT_IDS;
-  return { id: pool[Math.floor(rng() * pool.length)], n: 1 };
+  return { id: pool[Math.floor(rng() * pool.length)], n };
 }
 
 // buff kinds:
@@ -117,6 +134,20 @@ export const POTIONS = [
     effect: { dmgPct: 0.50, turns: 4, stamina: true }, desc: 'Drink in a fight: +50% damage for 4 turns and refill Stamina. Needs Ectoplasm.' },
 ];
 export const POTION_BY_ID = Object.fromEntries(POTIONS.map(p => [p.id, p]));
+
+/* WHAT THE COOKBOOK ACTUALLY WANTS, derived from the recipes rather than listed.
+   The Herb patch draws from this, so the food spawn hands you the thing three
+   recipes are waiting on instead of a sixth Ember Pepper you have no use for.
+   Rare-gated entries are skipped: you cannot cook them without Ectoplasm, so
+   their commons are not demand a walking player can act on. Adding a recipe
+   re-weights the map by itself; nothing here has to be edited to keep up. */
+export const INGREDIENT_DEMAND = [...RECIPES, ...POTIONS].reduce((acc, r) => {
+  if (Object.keys(r.needs).some(id => INGREDIENTS[id].tier !== 'common')) return acc;
+  for (const [id, n] of Object.entries(r.needs)) acc[id] = (acc[id] || 0) + n;
+  return acc;
+}, {});
+// one entry per unit demanded, so the uniform pick in spawnIngredient is weighted
+const DEMAND_POOL = Object.entries(INGREDIENT_DEMAND).flatMap(([id, n]) => Array(n).fill(id));
 
 // dishes + potions are both cooked in the pot; recipes list is the union.
 export const RECIPE_BY_ID = Object.fromEntries([...RECIPES, ...POTIONS].map(r => [r.id, r]));

@@ -82,7 +82,16 @@ if (own) console.log(`serving this repo at ${base}\n`);
    nothing, reads js/*.js, and finishes in well under a second. It is the register
    of every icon site in the game and it fails when a new one appears undeclared,
    which is the class of leftover three separate icon sweeps have each shipped. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs'];
+/* boneyard-supply-audit is PURE for the same reason: it boots nothing, runs the
+   real spawn generator and the real drop tables over a 40,000-cell grid in about
+   a second, and pins the Boneyard's faucet (coins and XP per cell as ratchets,
+   ingredients per cell as a floor) now that the map has to feed the Kitchen
+   without the Bone Garden. */
+/* loot-fallback-audit is PURE for the same reason again: no browser, ~1.5s. It
+   pins the terminal cosmetic fallback, which used to pick uniformly from 362
+   items and so paid legendaries 3.41x their drop weight, ignored the crate's
+   rarity floor, and handed back pet-slot items that cannot drop from crates. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
@@ -92,7 +101,6 @@ const BROWSER = [
   'recovery-audit.mjs',      // a FAILED restore must never destroy the save it was meant to replace
   'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
   'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
-  'newsrow-return-audit.mjs',// a news story puts you back where you were, not on a sheet you never opened
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
@@ -125,6 +133,8 @@ const BROWSER = [
   'crate-palette-audit.mjs', // the nine authored 48x48 crate frames render as the authored pixels: EXACT against the source PNG upscaled 3x nearest-neighbour, PALETTE, SCALE, ALIGN, MOTION, and a CONTROL row so a blank screenshot cannot pass by having nothing to compare. Landed with v388 and belonged to no tier, which failed the coverage assertion below before a browser started. Self-serving, 19s, 8 checks, green on four consecutive runs of fc9bb0f
   'xp-cap-audit.mjs',        // a repeatable action cannot pay forever: STATIC (no award() key built from a clock or a random source, so the bug class is caught in sources that do not exist yet) plus CAP, ROLLOVER and CONTROL driven through the real awardCapped against a real IndexedDB. Landed with #29 and belonged to no tier. Self-serving, 16s, 11 checks, green on four consecutive runs of fc9bb0f
   'reward-sop-audit.mjs',    // every paying action against the rewarded-actions SOP: COVERAGE derives the paying call sites from js/*.js (158 sites in 53 actions across 44 modules) so a NEW payout nobody registered fails, UNDRIVEN prints the 34 registered-but-not-driven actions with their reasons every run, and REPEAT performs 20 actions twice against a real IndexedDB, sequentially AND concurrently. NO-OP pins the other half of a kv-backed claim: an action that decides nothing is owed must not write over the record it consulted, which every REPEAT row is blind to because the second attempt correctly pays nothing while destroying the record on its way out. Self-serving, measured 21s, 75 checks, green on the reconcile branch. Fast rather than full because it is the guard for the class that has now shipped three times, and every one of its eleven reintroductions was proven red on this tree
+  'garden-closed-audit.mjs', // the Hollow and the Bone Garden are off the player's path and the Kitchen stands alone without them: every known entrance (the GROW door, the compost button, the Today ripe-crop banner and its CTA, the Kitchen badge, the speech lines, the boot popup, the News row, two quests, the seed on a map collect) operated on a real boot, plus a Kitchen with ZERO seeds and ZERO plots that renders, names the Boneyard, routes there and really cooks a dish. Its CONTROL row opens the Hollow through window.__openHollow first, so it is grading closed doors and not a deleted feature; the ripe-crop rows are graded on a save seeded with three ripe crops, because on an empty save they are absent on main too. Proven red at 405b5df: 26 FAILED. FAST because every row is a player-facing route and the whole suite is a list of ABSENT selectors, which is the class that rots into a vacuous green
+  'garden-retire-audit.mjs', // the garden's closing payout pays EXACTLY once. It refunds up to 5,500 coins on BOOT, which is the shape a coin printer is made of. PAYS asserts specific non-zero numbers first so the no-op rows cannot be vacuous, then ONCE, ten repeats, a real page reload and three CONCURRENT callers each measure the coin and ingredient deltas. Proven red three ways at 405b5df: absent function (1 FAILED), an unguarded payout (10 FAILED, +16,500 coins on the race), and a non-atomic kvGet/kvSet ledger that passes ONCE and BOOT and still prints 16,500 coins on the race (4 FAILED)
   'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
 ];
 
@@ -234,6 +244,27 @@ const onDisk = (await readdir(here))
 const DECLARED = {
   'boot-backfill-audit.mjs': ['full', "the first-v385-boot backfill is checkpointed, resumable and behind the paint: PAINT (#screen has content while the retroactive replay is still unfinished), RESUME (twice interrupted by a real page reload, the save still reaches the exact ledger and XP total of an uninterrupted run) and WORK (a resumed boot re-reads at most 75% of the xp store a cold one does). Seeds a 365-day diary and drives four throttled boots with reloads, several minutes, far too slow for the fast tier."],
   'xp-total-audit.mjs': ['full', "the XP running total: SHAPE (full scans of the xp store do not grow with row count across a burst of awards) plus TRUTH (the cached total equals a from-scratch recount after every award), at 900 / 5400 / 10950 rows. Seeds ~17k rows across three browser passes, about 40s, too slow for the fast tier."],
+  /* FOUND UNDECLARED ON PRISTINE origin/main AT 405b5df, 2026-08-18, by replaying
+     this file's own coverage assertion. Both files exist in tests/ and neither is
+     named anywhere in this gate, which means the assertion below has been RED on
+     main and the whole gate has been exiting 1 before a browser started. That is
+     the third time (see the crate-palette and xp-cap entries below, both landed
+     the same way). Declared here rather than left for somebody else, because
+     every audit in this branch runs behind that assertion. Tiers chosen from what
+     each file does; move them if their authors disagree. */
+  'fight-hint-audit.mjs': ['full', "the move tray's hint labels fit ONE line, measured on real buttons at 375 and 393 wide: a hint two words too long silently costs a whole row off the bottom of a three-row tray. Proven red by its own header against v399 (33a2dc0). Boots and drives a loaded tray, so it is not FAST-shaped; self-serves through serveTree."],
+  'version-stamp-audit.mjs': ['full', 'the three version stamps (sw.js VERSION, js/app.js APP_BUILD, js/changelog.js n) agree. Pure source reading, no browser, and it is a RELEASE check rather than a per-push one: it is meaningless until a renumber has happened, and it goes red on every branch that has not renumbered on purpose. Belongs in the pre-release --all run, next to the release ritual it guards.'],
+  /* PULLED OUT OF FAST 2026-08-18, NOT BECAUSE IT BROKE. Its whole subject is
+     an announcement whose CTA opens a SHEET instead of navigating, and the Bone
+     Garden's row was the only one in NEWS that did that. With the row gone the
+     suite has nothing to drive, and it says so honestly: its SETUP rows go red
+     rather than passing on an empty sample. The guard it pins (the
+     `if (sheetStack.length) return;` early exit in the news-return poll,
+     js/app.js) is UNTOUCHED, and this goes back in FAST the moment another
+     sheet-opening announcement ships. Leaving it in FAST red would teach people
+     to ignore the gate, which is the failure this file's header is written
+     against. */
+  'newsrow-return-audit.mjs': ['skip', "a news story puts you back where you were, not on a sheet you never opened. Needs an announcement whose CTA opens a sheet; the Bone Garden's row was the only one and it left NEWS on 2026-08-18. Restore to FAST when another one lands."],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
   'hollow-audit.mjs': ['full', 'drives the Hollow at two viewports with and without reduced motion, including a real harvest tap and the modal contract. About 90s, too slow for the fast tier.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
@@ -298,11 +329,19 @@ const DECLARED = {
   'faq-audit.mjs': ['full', 'the FAQ copy still matches what the engine does.'],
   'feel-audit.mjs': ['full', 'toast queue, exits, dialogs, haptics.'],
   'figure-audit.mjs': ['full', 'THE FIGURE CONTRACT, 32 checks. Mandatory per tally/CLAUDE.md before any figure work.'],
-  'garden-audit.mjs': ['full', 'the garden driven through real controls with a clock skip.'],
-  'garden-intro-audit.mjs': ['full', 'the garden intro popup, its retirement, and the Kitchen landing.'],
-  'garden-reach-audit.mjs': ['full', 'the reach batch: the Today banner reaching players who never planted, the starter pouch (and its second-grant no-op), seed labels, the bumper reveal, and the food-log boundary line under the diary. Self-serves this checkout when given no URL.'],
+  /* THE FOUR GARDEN-DOOR SUITES BELOW ARE RETIRED, NOT BROKEN. 2026-08-18: the
+     Hollow and the Bone Garden left the player's path, so every one of them opens
+     a door that is deliberately gone and would report a fix as a defect. They are
+     'skip' rather than deleted because the feature is PARKED, not removed: the
+     modules, the art and the data all survive, and reviving it means reviving
+     these. tests/garden-closed-audit.mjs is the guard that replaces them, and it
+     asserts the OPPOSITE: that no door is open. suite-rot-audit.mjs is expected to
+     start naming these files; that is the signal working, not a failure. */
+  'garden-audit.mjs': ['skip', 'drives #doorGrow, which was removed with the garden on 2026-08-18. Kept for the revival, replaced by garden-closed-audit.mjs.'],
+  'garden-intro-audit.mjs': ['skip', 'the garden intro popup no longer fires from boot (2026-08-18) and the Kitchen no longer lands on two doors. garden-closed-audit.mjs pins both absences instead.'],
+  'garden-reach-audit.mjs': ['skip', 'its whole subject is REACH into the garden: the Today banner, the GROW door and the seed pouch, all removed 2026-08-18. Its one surviving row (the food-log boundary line) is not worth a boot on its own; if it ever matters again it moves to a diary suite.'],
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
-  'kitchen-queue-audit.mjs': ['full', 'the cook queue fired from the real Cook button (a SECOND cook really starts with one pot in one visit, and the queued one takes the pot on its own with the dish time untouched), the compost sheet ordered by what the cookbook is shortest of, and the starter-pouch backfill including its second-run no-op (rewarded-actions SOP). Self-serves this checkout when given no URL.'],
+  'kitchen-queue-audit.mjs': ['full', 'the cook queue fired from the real Cook button (a SECOND cook really starts with one pot in one visit, and the queued one takes the pot on its own with the dish time untouched), plus the starter-pouch backfill including its second-run no-op (rewarded-actions SOP). Its compost-ordering section came out on 2026-08-18 with the compost button; the pouch half now reads the larder rather than the seed pouch, because the pouch pays ingredients. Self-serves this checkout when given no URL.'],
   'hide-glow-audit.mjs': ['full', 'hidden garments keep their stats; the glow toggle stays cosmetic.'],
   'levelup-audit.mjs': ['full', 'the level-up moment plays and shows the right numbers.'],
   'fight-hint-audit.mjs': ['full', "pins the width of every move-button hint string against the box it has to fit in, at 393/375/320. It is what caught the wrapping v400 fixed, and it goes red again the moment a hint string grows. ~68s, which is why it is full and not FAST."],
@@ -322,6 +361,7 @@ const DECLARED = {
   'respec-audit.mjs': ['full', 'refund-and-respend needs two taps and really returns the points.'],
   'reward-art-audit.mjs': ['full', 'the victory gear card, read as pixels.'],
   'scout-audit.mjs': ['full', "the world follows where you look and stays the same size. All six rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17: three red, and both greens vacuous. 'BOUNDED: scouting does not grow the marker count' passed on `0 -> 0 markers`, which is tally/CLAUDE.md rule 11 in one line, a ceiling satisfied by an empty set; 'ANCHORED: a den you only looked at is not enterable' passed because there was no map, not because the distance rule held. window.__map is assigned before the map's error handler runs, so its presence proved nothing either."],
+  'spawn-quiet-audit.mjs': ['full', "the quiet Boneyard collect: bones, coins and herbs must never regain the full-screen reveal, and crate + rare must keep it. Four STATIC rows grade everywhere and pin the write-cost arithmetic to its sources (openSheet is the only emitter of feat_open/feat_time; the D1 events table carries 3 indexes, so one sheet is 2 events is 8 row-writes of the 100k/day free tier). The driven half walks onto a real spawn of each of the five types on a real map, so it needs a reachable vector tile host and declares itself UNPROVEN with exit 97 without one rather than passing on an empty sample. Counts analytics by serving a one-line patched js/analytics.js over request interception, because the real queue refuses to record under ?demo; the two ceremony collects are the control that proves the zero on the quiet path is a measurement."],
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
   'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
@@ -367,7 +407,7 @@ const DECLARED = {
   'grid-min-width-audit.mjs': ['full', "no control lands outside a 320x568 viewport, and no equal-track grid spills its cells out of its own box: app.css had 22 `repeat(N, 1fr)` rules and zero minmax(0, 1fr), and a 1fr track's automatic minimum is min-content, so a long label widened the track past the equal share (.badge-grid reached x=347 in a 320 viewport). Carries its own canary, which plants an over-wide control and requires the detector to name it, because the first version of the exclusion rule excused every control on every screen. Three full walks of every route and hub tab at 320, 360 and 375: about 100s, and only tests/batch-audit.mjs otherwise ever sets a 320 viewport."],
   'erase-completeness-audit.mjs': ['full', "Settings > Erase all data clears EVERY store js/db.js defines, and erase-then-start-over pays one welcome kit rather than one per cycle. The erase carried its own six-name literal that was missing 'inv', so the wardrobe survived a dialog promising it was gone and the kit was re-paid on every cycle, unbounded. Two virgin non-demo onboardings and a reload, so it is onb-audit-shaped and not FAST-shaped; ?demo is useless for it because boot re-seeds the demo DB on the reload the erase performs."],
   'db-quota-finding.mjs': ['full', 'C4 IndexedDB quota behaviour: measures real per-year growth (~2.4MB), extrapolates to device-realistic quotas (Chrome allocates ~60% of free disk; a 500MB-free budget phone hits quota inside ~4 years). Attempts to force a real failure via CDP Storage.overrideQuotaForOrigin, records honest outcome. Not a fail-if-red audit; the finding IS the deliverable.'],
-  'garden-doors.mjs':     ['full', 'the Kitchen opens on COOK and GROW. Same story: growBottom reads 531 under shell and 1027 under headless new, on the same build.'],
+  'garden-doors.mjs':     ['skip', 'asserts the Kitchen opens on COOK and GROW. It opens on the Kitchen now (2026-08-18); garden-closed-audit.mjs asserts the doors are gone.'],
   'hero-flash.mjs':       ['full', 'no coral frame behind an equipped backdrop, sampled as pixels. Needs HEADLESS_MODE=shell: page.screenshot never returns under headless new on macOS.'],
   'race-you.mjs':         ['full', 'your own lane in the step race. Red on main for a date reason tracked separately; declared rather than hidden.'],
   'spire-gate.mjs':       ['full', "the spire day-gate, which is a rewarded action and has been exploited twice. The old 'RED under both headless modes' note was wrong about the cause: measured 2026-08-17, the reds were an unreachable vector tile host (https://tiles.openfreemap.org, net::ERR_CERT_AUTHORITY_INVALID from a sandboxed container), not the headless mode and not the GPU, and one row PASSED on `sheets 0 -> 0` because there was no map to open a sheet on. It now measures that property and reports its ten map rows as UNPROVEN with exit 97 where the host is unreachable, so a machine that cannot host it says so by name instead of producing a mixture of reds and vacuous greens. Green with 10 assertions on a connected machine."],
@@ -409,6 +449,18 @@ const DECLARED = {
      Prove-red: --prove-red=cache-first | stale-version | 404, each landing on a
      different row; each verifies it really changed the served bytes before a
      browser starts, so a prove-red that matches nothing cannot read as green. */
+  /* THE MAP LOOKS FULL, AND THE HEADER AGREES WITH IT. The pure supply audit
+     cannot answer either question: it counts what the generator produces, and
+     its own viewport model was four times the real screen because it used the
+     256px-tile metres-per-pixel constant against a 512px-tile zoom. So the
+     rendered claim lives in a browser audit and the pure one keeps the faucet.
+     'full' for the same reason as map-offline-audit: it boots MapLibre and
+     fetches real tiles at four locations, ~70s, far too slow for fast.
+     Prove-red on the parent commit bfacd28: VISIBLE 4.00 against a floor of 10,
+     the emptiest location 3 against a floor of 5, and HEADER saying 6, 6, 8, 8
+     over 4, 3, 6, 3 markers, with all four CONTROL rows still green. */
+  'boneyard-density-audit.mjs': ['full', "the Boneyard reads full on a 440x956 phone and the 'N nearby' header equals the markers actually inside the canvas. VISIBLE has a floor (an empty map is the complaint), BUDGET has a ceiling of 100 live DOM markers (measured: 60fps to ~84, first dropped frames near 107), and CONTROL fails the run if the canvas, the markers or the count line are missing so the other three cannot pass on a blank screen."],
+
   'map-offline-audit.mjs': ['full', "opening the Boneyard with the tile host blocked must give the offline message and throw NOTHING. Arrived with #33 and belonged to no tier, which is the same coverage failure my own two audits caused. 'full' rather than fast: 25s, and it boots MapLibre and aborts real tile requests. It earned the tier the hard way, failing 1 run in 2 on an intermittent null deref that read as flakiness and was a real error; six consecutive green runs after the fix."],
 
   /* ONE ACCOUNT, TWO TABS, and until 2026-08-17 nothing in this repo had ever
@@ -434,7 +486,7 @@ const DECLARED = {
   'sw-upgrade-audit.mjs': ['full', 'the end-to-end upgrade: two versions served from one tree, and the player must end up fully on the new one. Was deliberately red on main while it pinned two unfixed findings; both are fixed as of v391 and it is GREEN, 35 checks. Stays full rather than fast: it installs and upgrades a real service worker across two builds, which is slow and must not race a parallel suite.'],
 
   'input-validation-audit.mjs': ['full', 'every number a player can type, driven through the real controls: weight (kg and lb), quick add, custom food, the portion sheet, daily targets and the plan form, each against empty, whitespace, a partial parse ("12abc"), scientific notation, a grouped thousands comma, an absurd integer, negative and zero. Grades what REACHES THE STORE (bound ZERO, not a trend), whether the player is TOLD, and that legitimate values including a decimal comma still land exactly, so it cannot pass on an app that refuses everything. Carries a COVERAGE half derived from js/app.js, so a new numeric field nobody drove FAILS. Eleven surfaces at ~25 sheet round trips each with toast-queue settles, so it is minutes, not seconds: full, never fast.'],
-  'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above."],
+  'sheet-action-reachable-audit.mjs': ['full', "a primary action must be tappable in the WORST content state, hit-tested with elementFromPoint at the button's centre rather than by rectangle, because a clipped button still measures 132x44 at a fine position. DELIBERATELY RED as of today: gwart/REG-PLAN-2026-08-15.md item 2B parks it outside FAST until 1B and 1C land, at which point it goes green or what remains gets written down. Declared 'full' and not 'skip' precisely so that deadline is visible on every gate:all instead of being retired into silence, which is the same reasoning as suite-rot-audit above. 2026-08-18: it now exits 0. Its only remaining failures were the three garden-buybed rows, and that action left the player's path with the Bone Garden, so the row came out. The 1B/1C deadline in REG-PLAN still stands on its own; this entry no longer proves it."],
 };
 
 /* COVERAGE, BEFORE A SINGLE BROWSER STARTS. An undeclared audit is a one-second
