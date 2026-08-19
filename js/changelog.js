@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 402, date: '2026-08-18', title: 'Holding a Pit move no longer brings up the iPhone magnifier', items: [
+    'Press and hold a move and you get the move detail, not the text-selection loupe and highlight.',
+  ] },
   { n: 401, date: '2026-08-18', title: 'Press and hold a move in the Pit to read what it really does', items: [
     'Hold any move for a moment and the full description opens, instead of the short line that had to fit on the button.',
     'Screen readers now read the same description straight after the move name, with no gesture at all.',
