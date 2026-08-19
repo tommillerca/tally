@@ -6509,27 +6509,54 @@ async function renderShop(el) {
   const mockHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const mockWeek = isoWeekKey(new Date());
   const mockPick = (ids, slot) => { const free = ids.filter(id => !ownedCos.has(id)); const p = free.length ? free : ids; return p[mockHash(`${mockWeek}:rack:${slot}`) % p.length]; };
-  // Dust is the second price on every tile. It is priced off the piece's RARITY,
-  // where the coin price is priced off the rack slot: that difference is the
-  // whole idea, and it is the only place it is stated. The shipped melt ladder
-  // (transmogCost) pays epic and legendary the same 60, which rendered as three
-  // identical 150s down the rack, so the mockup carries its own ladder rather
-  // than touching a shipped constant.
-  const MOCK_DUST = { common: 15, uncommon: 30, rare: 65, epic: 120, legendary: 200 };
-  const mockDust = id => MOCK_DUST[(BH_BY_ID[id] || {}).rarity] || 30;
+  const mockIds = MOCK_POOLS.map(([, ids], i) => mockPick(ids, i));
+  /* DUST IS THE SECOND PRICE, and it has to be worth reading. The first
+     eight-tile build priced dust off rarity alone: eight distinct coin prices
+     against FOUR distinct dust values, 120 printed four times and two 200s side
+     by side in row one, so the second number read as decoration while the first
+     one varied. That defeats the whole mechanic.
+     Dust now converts the rack's coin rung at a RARITY-DEPENDENT rate (coins per
+     one dust). Both halves survive: dust still says something about the PIECE
+     (the rate is the rarity), coins still say what the RACK is charging, and the
+     two prices still do not track each other, because a cheap rare costs more
+     dust than a dearer epic. And it says the thing worth saying out loud: dust
+     goes furthest on the pieces actually worth targeting.
+     Rounded to 5 so no price on the screen is a number nobody would print. */
+  const MOCK_DUST_RATE = { common: 4, uncommon: 6, rare: 9, epic: 12, legendary: 15 };
+  const mockDust = (id, coin) => Math.round(coin / (MOCK_DUST_RATE[(BH_BY_ID[id] || {}).rarity] || 6) / 5) * 5;
+  /* OWNED. A rack keeps a piece you already bought on it for the rest of the
+     week, so this screen has a state where a tile is not for sale. MOCKUP ONLY:
+     the demo owns the rung-4 piece so the state is on the screen; a real build
+     reads it off ownedCos, which the picker already consults. */
+  const mockOwnedId = mockIds[3];
+  const mockOwns = id => id === mockOwnedId || ownedCos.has(id);
   // Worn, never a loose PNG: a hat is ~32% of its 640 canvas, so a `contain`
   // thumbnail of the raw asset is a speck. Centres/scales are MEASURED alpha
   // bounding boxes, median over every asset in the slot.
   const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso', P: 'fit-hips', U: 'fit-hips', FW: 'fit-feet', S: 'fit-feet' };
+  /* THE BUY ROW. Three states, and the middle one is the whole point.
+     - owned: one marker instead of two prices. A price on something you already
+       own is noise.
+     - affordable: the filled pill, unchanged. Filled is what says "press me".
+     - out of reach: the SAME pill, same size, same digits, hollow. Not the
+       shipped [disabled] grey-out, which turns a number into a dead control and,
+       at a 380-coin wallet where nothing on the rack is in reach, teaches "this
+       screen is broken" rather than "this is what it costs". The hollow state
+       does not lose contrast: measured off the render, a hollow coin pill's
+       digits read 10.4:1 against their own ground and a filled one 10.1:1. What
+       it drops is the button affordance, not the price. */
+  const mockPrice = (kind, amount, bal) =>
+    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}">${
+      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}</button>`;
+  const mockBuyRow = (id, coin) => mockOwns(id)
+    ? '<div class="rk-buy"><span class="rk-owned">IN YOUR WARDROBE</span></div>'
+    : `<div class="rk-buy">${mockPrice('coin', coin, coinBal)}${mockPrice('dust', mockDust(id, coin), dustBal)}</div>`;
   const mockTile = (id, i) => {
     const it = BH_BY_ID[id];
-    return `<div class="rk r-${it.rarity}">
+    return `<div class="rk r-${it.rarity}${mockOwns(id) ? ' owned' : ''}">
       <div class="rk-stage ${MOCK_FIT[it.slot] || ''}">${avatarLayersHtml({ ...MOCK_BASE, [it.slot]: id }, { thumb: 384 })}</div>
       <b>${esc(it.name)}</b>
-      <div class="rk-buy">
-        <button class="t3-price">${ICONS.coin(13)} ${MOCK_POOLS[i][0].toLocaleString()}</button>
-        <button class="t3-price dust">${ICONS.dust(13)} ${mockDust(id)}</button>
-      </div>
+      ${mockBuyRow(id, MOCK_POOLS[i][0])}
     </div>`;
   };
   /* AURAS GO ON WEAPONS, and the WEAPON IS A MANNEQUIN, not the product. Tom:
@@ -6542,14 +6569,12 @@ async function renderShop(el) {
      The halo itself REPLACES the rarity halo rather than stacking on it (see
      avatarLayersHtml); the carrier is common, so there is nothing to replace
      here and rarity keeps living in the tile border. */
-  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 700, dust: MOCK_DUST.epic };
+  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 700 };
   const mockAuraTile = () => `<div class="rk r-${MOCK_AURA.rarity} aura">
     <div class="rk-stage fit-hand"><span class="rk-tag">AURA · ANY WEAPON</span>${avatarLayersHtml({ ...MOCK_BASE, IR: MOCK_AURA.carrier }, { thumb: 384, wpnAura: MOCK_AURA.key })}</div>
     <b>${esc(MOCK_AURA.name)}</b>
-    <div class="rk-buy">
-      <button class="t3-price">${ICONS.coin(13)} ${MOCK_AURA.coin}</button>
-      <button class="t3-price dust">${ICONS.dust(13)} ${MOCK_AURA.dust}</button>
-    </div>
+    <div class="rk-buy">${mockPrice('coin', MOCK_AURA.coin, coinBal)}${
+      mockPrice('dust', Math.round(MOCK_AURA.coin / MOCK_DUST_RATE[MOCK_AURA.rarity] / 5) * 5, dustBal)}</div>
   </div>`;
   // Reroll is ONE control, not a printed ladder. ?rr=N renders the paid state.
   const mockRerolls = +(new URLSearchParams(location.search).get('rr') || 0);
@@ -6558,13 +6583,14 @@ async function renderShop(el) {
   el.innerHTML = `
   <div class="rk-theme"><b>${esc(MOCK_THEME)}</b><i></i><span>New rack Monday</span></div>
   <div class="rk-grid">
-    ${MOCK_POOLS.slice(0, 6).map(([, ids], i) => mockTile(mockPick(ids, i), i)).join('')}
+    ${mockIds.slice(0, 6).map((id, i) => mockTile(id, i)).join('')}
     ${mockAuraTile()}
-    ${mockTile(mockPick(MOCK_POOLS[6][1], 6), 6)}
+    ${mockTile(mockIds[6], 6)}
   </div>
   <button class="rk-reroll"><b>Reroll the rack</b>
     ${mockRerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${mockRerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
-  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>`;
+  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
+  <div class="rk-tail"></div>`;
 
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
