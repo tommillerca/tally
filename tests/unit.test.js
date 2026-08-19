@@ -2891,6 +2891,115 @@ test('every gear stat is a finite number (no NaN can reach a player)', async () 
   assert.deepEqual(bad, [], 'gear carrying a non-finite stat would render "+NaN POW"');
 });
 
+/* EVERY LONG-PRESS TARGET SUPPRESSES iOS's OWN LONG-PRESS.
+ *
+ * v401 gave the Pit's move buttons a 750ms hold to open a move's detail. On a
+ * real iPhone that same hold ALSO raises the text-selection magnifier and the
+ * callout menu, so the player gets a loupe and highlighted words on top of the
+ * popup. Tom, 2026-08-18: "it's magnifying with force click and highlighting
+ * text on the iphone can we turn that iphone feature off?"
+ *
+ * The Boneyard map hit this first and already carries the three lines. The Pit
+ * inherited the GESTURE (LP_MS/LP_MOVE are literally the map's constants) but
+ * not the SUPPRESSION, which is exactly the kind of half-copy nobody notices
+ * until it is on a device. Chromium does not implement -webkit-touch-callout,
+ * so no browser audit in this repo can catch it: a static check is the only
+ * thing that can.
+ *
+ * COVERAGE IS THE POINT. This counts the long-press sites in js/app.js. A THIRD
+ * one fails here on the day it is written, which forces whoever adds it to name
+ * its target and give that target the suppression.
+ */
+test('every long-press target suppresses the iOS callout and text selection', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+
+  const sites = [...app.matchAll(/const LP_MS\s*=/g)].length;
+  assert.ok(sites > 0, 'found no long-press sites at all: the scan is broken, not the tree clean');
+  assert.equal(sites, 2,
+    `${sites} long-press sites in js/app.js, expected 2 (the Boneyard map and the Pit move tray). ` +
+    'A new one must add its target selector to the list in this test AND give that ' +
+    'target -webkit-touch-callout: none, or iOS will raise the magnifier over it.');
+
+  /* The selector each site presses on. Kept literal on purpose: a rule that
+     tried to derive these would drift silently, and the whole failure mode here
+     is a target that nobody remembered to cover. */
+  const TARGETS = ['.map-den-mark', '.map-mini-mark', '.map-spawn', '.fight-act'];
+  const missing = TARGETS.filter(sel => {
+    /* find any rule whose prelude names the selector, then look inside it */
+    const re = new RegExp(`[^}]*\\${sel}\\b[^{]*\\{([^}]*)\\}`, 'g');
+    for (const m of css.matchAll(re)) {
+      if (/-webkit-touch-callout\s*:\s*none/.test(m[1])) return false;
+    }
+    return true;
+  });
+  assert.deepEqual(missing, [],
+    'these long-press targets can still raise the iOS magnifier and text selection: ' +
+    `${missing.join(', ')}. Each needs -webkit-touch-callout: none, -webkit-user-select: none ` +
+    'and user-select: none, the same three lines .map-den-mark already carries.');
+});
+
+/* THE APP-WIDE NO-SELECT RULE, AND THE TWO EXEMPTIONS THAT MAKE IT SAFE.
+ * Tom, 2026-08-18: "i noticed you can press and hold to highlight text all over
+ * the app though thats annoying". body now carries the suppression.
+ *
+ * THE EXEMPTIONS ARE THE POINT OF THIS TEST. Suppressing selection globally is
+ * one line and quietly breaks two things:
+ *   - form fields: user-select: none INHERITS into input/textarea, and on iOS
+ *     that interferes with selecting and editing what you typed.
+ *   - .code-line is the RECOVERY CODE, the one string a player must be able to
+ *     copy. Long-press "Copy" is the iOS affordance for it, so killing the
+ *     callout there loses people their save. That is a far worse bug than the
+ *     magnifier this rule exists to remove.
+ * Anyone tidying this rule later will be tempted to drop the exemptions. This
+ * fails when they do. Chromium does not implement -webkit-touch-callout, so no
+ * browser audit in this repo can catch any of it.
+ */
+test('the app-wide no-select rule keeps form fields and the recovery code usable', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  /* Collect the body of every rule whose PRELUDE mentions the selector. Walk the
+     braces rather than pattern-matching the prelude: an earlier version of this
+     test required a `}` before the selector and so never saw the rule sitting
+     directly under a comment, which is exactly where this one lives. It reported
+     green while looking at a different body rule entirely. */
+  const bodiesFor = (needle) => {
+    const out = [];
+    let i = 0;
+    while ((i = css.indexOf('{', i)) !== -1) {
+      const close = css.indexOf('}', i);
+      if (close === -1) break;
+      const preludeStart = Math.max(css.lastIndexOf('}', i - 1), css.lastIndexOf('*/', i - 1), 0);
+      const prelude = css.slice(preludeStart, i);
+      if (prelude.includes(needle)) out.push(css.slice(i + 1, close));
+      i = close + 1;
+    }
+    return out.join(' ');
+  };
+
+  const body = bodiesFor('body');
+  assert.ok(body.length > 0, 'found no body rule at all: the scan is broken, not the tree clean');
+  assert.match(body, /-webkit-touch-callout\s*:\s*none/,
+    'body must suppress the iOS callout, or a long press anywhere raises the magnifier');
+  assert.match(body, /user-select\s*:\s*none/,
+    'body must suppress text selection app-wide');
+
+  const fields = bodiesFor('textarea');
+  assert.ok(fields.length > 0, 'no rule mentions textarea: the exemption is missing entirely');
+  assert.match(fields, /user-select\s*:\s*text/,
+    'input/textarea must be put BACK to user-select: text. Without it the global none ' +
+    'inherits into every form field and iOS fights you editing what you typed.');
+  assert.match(fields, /-webkit-touch-callout\s*:\s*default/,
+    'input/textarea must restore the callout, or the paste menu goes with it');
+
+  const code = bodiesFor('.code-line');
+  assert.ok(code.length > 0, 'no rule mentions .code-line: the recovery code exemption is missing');
+  assert.match(code, /-webkit-touch-callout\s*:\s*default/,
+    '.code-line is the RECOVERY CODE and long-press Copy is how a player saves it. ' +
+    'It must keep the callout, or losing a phone means losing the save.');
+  assert.match(code, /user-select\s*:\s*all/, '.code-line must stay fully selectable');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
+

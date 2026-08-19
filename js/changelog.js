@@ -3,6 +3,17 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 403, date: '2026-08-18', title: 'Holding down anywhere in the app no longer highlights text', items: [
+    'Press and hold on any label, button or card and you get nothing, instead of the iPhone magnifier and a blue highlight.',
+    'Your recovery code and every text box still work exactly as before, so you can still copy the code that restores your save.',
+  ] },
+  { n: 402, date: '2026-08-18', title: 'Holding a Pit move no longer brings up the iPhone magnifier', items: [
+    'Press and hold a move and you get the move detail, not the text-selection loupe and highlight.',
+  ] },
+  { n: 401, date: '2026-08-18', title: 'Press and hold a move in the Pit to read what it really does', items: [
+    'Hold any move for a moment and the full description opens, instead of the short line that had to fit on the button.',
+    'Screen readers now read the same description straight after the move name, with no gesture at all.',
+  ] },
   { n: 400, date: '2026-08-18', title: 'More of your moves fit on screen in the Pit, and the rewards are drawn', items: [
     "<b>The move buttons in the Pit say the same thing in fewer words, so more of them fit.</b> Every move hint used to run long enough to wrap onto a second and sometimes a third line, which made each button tall and pushed the rest of the tray off the bottom. The hints are shorter now and sit on one line, so the buttons are shorter and you see more of your moves without scrolling. On a normal phone the tray goes from six moves visible to eight, and three rows fit where two did. <b>The smallest phones are not changed by this.</b> On a 320 wide screen the labels still wrap and you still scroll to reach every move; there is not enough width to fix it there without making the text too small to read. Every button is still comfortably above the size a thumb needs.",
     "<b>The level-up screen shows the real artwork for what you earned.</b> Your coins, bone dust and crate were still being drawn as flat shapes on that one screen while the rest of the game had moved to the drawn set, so the moment you level up was the moment the game looked oldest. They are the drawn artwork now, and a rare crate gets a glow behind it that matches its rarity.",

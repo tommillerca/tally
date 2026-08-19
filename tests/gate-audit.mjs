@@ -53,9 +53,20 @@ for (const fn of OK_HELPERS) {
   // missing, which would have read as "the list is stale" forever.
   const def = new RegExp(`(?:export\\s+)?async function ${fn}\\s*\\(`, 'm');
   if (!def.test(all)) { problems.push(`${fn}: no definition found; the OK_HELPERS list is stale`); continue; }
-  const body = all.slice(all.search(def));
-  if (!/return\s*\{\s*ok\s*:/.test(body.slice(0, 1600))) {
-    problems.push(`${fn}: no \`return { ok: ... }\` near its definition; it may no longer be an {ok} helper`);
+  const body = all.slice(all.search(def), all.search(def) + 1600);
+  /* TWO SHAPES ARE HONEST {ok} HELPERS, and only one used to be recognised.
+     collectTribute became `let out = {ok:false}; await kvUpdate(... out = {ok:true...})
+     ; return out;` in v394, which is the FIX for the concurrent double-pay, and
+     this check called that a stale list. Follow the returned BINDING when the
+     function returns a name, exactly as the call-site half already does. */
+  const direct = /return\s*\{\s*ok\s*:/.test(body);
+  /* ALL returned names, not the first: collectTribute's updater returns
+     `undefined` and `st` before the function returns `out`, so taking the first
+     match graded the wrong binding and still called this helper stale. */
+  const rets = [...body.matchAll(/\breturn\s+([A-Za-z_$][\w$]*)\s*;/g)].map(m => m[1]);
+  const viaVar = rets.some(n => new RegExp(`\\b${n}\\s*=\\s*\\{\\s*ok\\s*:`).test(body));
+  if (!direct && !viaVar) {
+    problems.push(`${fn}: no \`{ ok: ... }\` result near its definition; it may no longer be an {ok} helper`);
   }
 }
 
@@ -64,7 +75,14 @@ for (const fn of OK_HELPERS) {
    Only the second one is evidence (see the empty-sample guard at the bottom). */
 let sites = 0, analysed = 0;
 for (const [file, text] of src) {
-  const lines = text.split('\n');
+  /* COMMENTS ARE NOT CALL SITES. js/spires.js:266 is the doc comment describing
+     the double-pay this audit exists for, and quoting `collectTribute('sp-1-1')`
+     in it made the audit report its own subject as an unclassifiable call.
+     Blank comment bodies while KEEPING newlines, so line numbers stay true.
+     ponytail: this also blanks `//` inside string literals; no call site in this
+     tree shares a line with one, and the empty-sample guard below catches it if
+     that ever stops being true. */
+  const lines = text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, m => m.replace(/[^\n]/g, ' ')).split('\n');
   lines.forEach((line, i) => {
     for (const fn of OK_HELPERS) {
       if (!line.includes(`${fn}(`)) continue;

@@ -11224,6 +11224,16 @@ function openProgressSheet() { return openCharacter('progress'); }
 
 // what each gear-granted talent actually DOES (so loot can be compared, not just named)
 const TALENT_DESC = Object.fromEntries(TALENT_TREES.flatMap(t => t.nodes.map(n => [n.id, n.desc])));
+/* ONE COPY OF EACH MOVE'S FULL SENTENCE, shared by the Talents sheet, the Pit's
+   press-and-hold popup and the move button's title/description. A talent move's
+   sentence is its NODE's, so nothing is re-authored; the six moves with no node
+   (Jab, Swing, Haymaker, Bone Guard, Signature, Bone Spike) carry theirs on
+   ACTIONS in js/pit.js. "NEW MOVE: " is a talent-tree prefix and reads as noise
+   on a button you are already holding down. */
+const moveDetail = id => (((ACTIONS[id] || {}).desc) || TALENT_DESC[id] || '')
+  /* the sentence after the prefix starts lower-case on the tree ("NEW MOVE:
+     summon 2 crows"), so re-capitalise it or the popup opens mid-sentence */
+  .replace(/^NEW MOVE:\s*(.)/i, (_, c) => c.toUpperCase());
 /* The player-facing three-letter stat codes. Mirrors the KEY table inside
    gearLabel() in js/gear.js, which is the only other place they exist . 
    STAT_META carries the long names and prose labels, not these. If a third
@@ -15233,7 +15243,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v400'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v403'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -15842,7 +15852,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
-    <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
+    <div class="sheet-body fight-body" id="fightBody"></div>`,
     { cls: 'full', onClose: () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
@@ -16024,6 +16034,124 @@ async function openFight(pitWrap, fighter, foeCfg) {
     showChipTip(b);
   }));
   body.addEventListener('click', (e) => { if (!e.target.closest('.fchip') && !e.target.closest('.fchip-tip')) hideChipTip(); });
+
+  /* ============ PRESS AND HOLD A MOVE FOR WHAT IT ACTUALLY DOES ============
+     Tom, 2026-08-18: "maybe players can press and hold in the pit to learn more
+     about the move with a pop up?"
+
+     WHY IT IS WORTH THE RISK. The <small> hint is a ~18-character box (measured
+     at 393x852: 106.3px at 10px/700) and tests/fight-hint-audit.mjs now holds it
+     to one line, so every third fact about a move had to be cut. Bone Guard with
+     Heckle is the honest casualty: "shield 31 · weakens" no longer says that
+     guarding also gives you 22 Stamina back, because three facts do not fit at
+     any wording. This popup is where the cut facts went.
+
+     750ms AND 8px ARE NOT NEW NUMBERS. They are LP_MS/LP_MOVE from the Boneyard
+     map's long-press (js/app.js, startMap), which has shipped since the report/
+     nominate feature and is the app's one existing long-press. A second
+     threshold would mean the same gesture means different things on two screens.
+     750 is also comfortably clear of a real tap: this build's own two-tap potion
+     arm/confirm sequence and every drive-through tap in tests/ land far under
+     it, and tests/fight-press-audit.mjs pins a 120ms tap as "must use the move".
+
+     THE DANGEROUS PART, AND HOW IT IS ACTUALLY CLOSED. In the Pit a tap COMMITS
+     a move, so a misread hold either spends the player's turn or eats the move
+     they meant to make. So the popup is only the DISPLAY; the decision is made
+     from pointer event timestamps, never from whether the timer happened to run:
+
+       - lpHeld is set at POINTERUP, from ev.timeStamp - the pointerdown's
+         timeStamp. Those are the times the events OCCURRED, so a stalled main
+         thread cannot turn a 120ms tap into a hold. Deciding it inside the
+         setTimeout was the obvious version and it is wrong: block the thread for
+         a second and the 750ms timer and a 200ms pointerup are both pending at
+         once, and if the timer wins the player's tap is swallowed by a popup for
+         a press that had already ended. Timestamps have no such race.
+       - the click handler consumes lpHeld (takeHeld) and returns before
+         playerAct, so a completed hold never commits the move.
+       - lpHeld is cleared at every POINTERDOWN, so a hold whose click never
+         arrives (iOS suppresses it after some long presses) cannot leave a
+         stale flag that eats the NEXT genuine tap.
+       - closing the popup is a plain hide with no queued action, so dismissing
+         it cannot fire the move either.
+       - >8px of movement cancels the hold, which is the tray being scrolled. It
+         deliberately does NOT suppress the click: a shaky 10px tap must still
+         use the move, and a drag that really scrolls gets its click suppressed
+         by the browser, not by us.
+
+     The popup sits ABOVE the button (below it only when there is no room above),
+     so it never covers the move being read about, and it is pointer-events:none
+     so the tap that dismisses it lands on whatever is underneath. */
+  const LP_MS = 750, LP_MOVE = 8;
+  const moveTip = document.createElement('div');
+  moveTip.className = 'fchip-tip fmove-tip'; moveTip.hidden = true;
+  body.appendChild(moveTip);
+  const hideMoveTip = () => { moveTip.hidden = true; };
+  let lpTimer = null, lpBtn = null, lpDownTs = 0, lpPointer = null, lpHeld = false, lpX = 0, lpY = 0;
+  const lpCancel = () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; lpBtn = null; lpPointer = null; };
+  /* consumed by the click handler in renderActions: true exactly once per
+     completed hold, and false for every tap. */
+  const takeHeld = () => { const h = lpHeld; lpHeld = false; return h; };
+
+  function showMoveTip(b) {
+    const full = moveDetail(b.dataset.act);
+    if (!full) return false;
+    const name = (b.querySelector('b')?.textContent || '').trim();
+    const hint = (b.querySelector('small')?.textContent || '').trim();
+    moveTip.innerHTML = `<b>${esc(name)}</b>${hint ? `<span class="mt-now">${esc(hint)}</span>` : ''}<span>${esc(full)}</span>`;
+    moveTip.hidden = false;
+    const m = b.getBoundingClientRect();
+    const tw = moveTip.offsetWidth, th = moveTip.offsetHeight;
+    const left = Math.max(8, Math.min(window.innerWidth - tw - 8, m.left + m.width / 2 - tw / 2));
+    let top = m.top - th - 9;
+    if (top < 8) top = Math.min(window.innerHeight - th - 8, m.bottom + 9);
+    /* POSITION:FIXED IS NOT VIEWPORT-RELATIVE HERE, and that is measured, not
+       assumed. The fight lives in `.sheet.full`, which carries a transform
+       (matrix(1,0,0,1,-196.5,0) at 393x852), and a transformed ancestor becomes
+       the containing block for fixed children: setting top:0 on this bubble puts
+       it at viewport y=25. Everything above is in viewport coordinates because
+       it came from getBoundingClientRect, so pin 0,0 first, read where it landed
+       and subtract. Caught by tests/fight-press-audit.mjs, which measured the
+       popup at 541.6..649.3 overlapping a button whose top was 633.6, i.e. the
+       one thing the popup is not allowed to do: cover the move being read. */
+    moveTip.style.left = '0px'; moveTip.style.top = '0px';
+    const origin = moveTip.getBoundingClientRect();
+    moveTip.style.left = (left - origin.left) + 'px';
+    moveTip.style.top = (top - origin.top) + 'px';
+    return true;
+  }
+
+  const factionsEl = el('factions');
+  factionsEl.addEventListener('pointerdown', ev => {
+    if (ev.button && ev.button !== 0) return;
+    lpHeld = false;                       // never let a previous press decide this one
+    hideMoveTip();
+    if (ev.isPrimary === false || lpTimer) return;   // one press at a time
+    const b = ev.target.closest?.('[data-act]');
+    if (!b || b.disabled) return;
+    lpBtn = b; lpDownTs = ev.timeStamp; lpPointer = ev.pointerId; lpX = ev.clientX; lpY = ev.clientY;
+    lpTimer = setTimeout(() => {
+      lpTimer = null;
+      if (lpBtn && lpBtn.isConnected) showMoveTip(lpBtn);
+    }, LP_MS);
+  });
+  factionsEl.addEventListener('pointermove', ev => {
+    if (!lpBtn || (lpPointer != null && ev.pointerId !== lpPointer)) return;
+    // the tray scrolls, so this WILL happen: a scroll is not a hold
+    if (Math.abs(ev.clientX - lpX) > LP_MOVE || Math.abs(ev.clientY - lpY) > LP_MOVE) { lpCancel(); hideMoveTip(); }
+  }, { passive: true });
+  factionsEl.addEventListener('pointerup', ev => {
+    if (lpPointer != null && ev.pointerId !== lpPointer) return;
+    // the press's own clock, not the timer's: immune to a stalled frame
+    if (lpBtn && ev.timeStamp - lpDownTs >= LP_MS) lpHeld = true;
+    else hideMoveTip();                    // a late timer opened it on a short tap
+    lpCancel();
+  });
+  ['pointercancel', 'pointerleave'].forEach(t => factionsEl.addEventListener(t, ev => {
+    if (lpPointer != null && ev.pointerId !== lpPointer) return;
+    lpCancel(); hideMoveTip();
+  }));
+  // dismissible by tapping ANYWHERE: a modal in the middle of a fight is a trap
+  body.addEventListener('pointerdown', e => { if (!e.target.closest?.('#factions')) hideMoveTip(); });
 
   function positionFighters() {
     // the Glutton's stage is much wider than a normal fighter, so give both
@@ -16573,8 +16701,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
        same three facts as '~124 dmg · burns · +tox' in 84px instead of 121.4.
        tests/fight-hint-audit.mjs holds this line; a hint that outgrows the box
        goes red there instead of quietly costing the tray a row. */
+    /* THE SAME DETAIL WITHOUT THE GESTURE. A long press has no keyboard and no
+       screen-reader equivalent, and shipping information that only one input
+       method can reach is not acceptable, so the identical string is also the
+       button's `title`. That makes it the button's accessible DESCRIPTION (the
+       name still comes from the label), so VoiceOver and TalkBack read it after
+       the move name with no gesture at all, and a desktop mouse gets it on
+       hover. It is the same title= pattern the wardrobe, gear and Crew tiles
+       already use. The third route needs no code: the Talents sheet renders the
+       very same sentence at full width, which is where it comes from. */
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
-      <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" ${a.enabled ? '' : 'disabled'}>
+      <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
         <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
       </button>` : '';
     const dmgHint = id => {
@@ -16593,7 +16730,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small></button>`;
 
     const casterRow = () => {
       let h = '';
@@ -16723,7 +16860,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
     $('#itemsOpen', factions)?.addEventListener('click', () => { fight.itemsOpen = true; renderActions(); });
     $('#itemsBack', factions)?.addEventListener('click', () => { fight.itemsOpen = false; renderActions(); });
     renderEndTurn();
-    $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => playerAct(b.dataset.act)));
+    /* takeHeld() FIRST: a completed press-and-hold opened the move's detail
+       popup, and it must not also commit the move. See the long-press block
+       above for why the decision is made from pointer timestamps rather than
+       from whether the popup's timer ran. */
+    $$('[data-act]', factions).forEach(b => b.addEventListener('click', () => { if (takeHeld()) return; playerAct(b.dataset.act); }));
     /* Tom, 2026-08-09: "using an item in a fight should take two taps so you dont
        hit it by accident." A potion is a one-shot consumable sitting in the same
        grid as the attack buttons, so a mis-tap costs a brewed item AND an AP.

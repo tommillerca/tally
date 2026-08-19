@@ -167,12 +167,26 @@ ok('the daily remote den can be him', surfaces.remote.share >= 8 && surfaces.rem
    drifted, and the sheet is really opened rather than reasoned about. */
 const mapAndSheet = await page.evaluate(async () => {
   const mine = window.__denPinHtml('mage');
-  const other = window.__denPinHtml('gate');
+  /* ASK FOR A THEME THAT IS ACTUALLY ON THE MAP THIS WEEK, using the same week
+     and spot __denPinHtml itself resolves against. Naming 'gate' was a calendar
+     coin flip: non-mage den themes reroll weekly (js/poi.js wkRng is seeded on
+     week+cell) while mage cells are seeded on the cell alone and never rotate,
+     so this spot has a gate den in only 26 of 2026's 52 weeks. In the other 26
+     __denPinHtml returned null, and /tombstone/.test(null || '') is false, so an
+     EMPTY SAMPLE scored as "the pin changed". Written 2026-08-09 in week W32,
+     which has a gate den; measured red 2026-08-18 in W34, which does not. It was
+     a 50/50 the whole time and only surfaced when the release gate was unblocked
+     and actually ran this suite. */
+  const poi = await import('./js/poi.js');
+  const otherKey = poi.densNear(poi.isoWeekKey(new Date()), -50, -175)
+    .find(d => !d.roaming && d.theme.key !== 'mage')?.theme.key || null;
+  const other = otherKey ? window.__denPinHtml(otherKey) : null;
   const opened = await window.__openDen('mage');
   await new Promise(r => setTimeout(r, 900));
   const hero = document.querySelector('.den-hero .art img');
   if (hero) await hero.decode().catch(() => {});
   return {
+    otherKey,
     pinTellsNothing: /tombstone/.test(mine || '') && !/mage/.test(mine || ''),
     otherPinUnchanged: /tombstone/.test(other || '') && !/mage/.test(other || ''),
     pinsIdentical: (mine || '').replace(/mage/g, '') === (other || '').replace(/gate/g, '') || undefined,
@@ -190,7 +204,11 @@ ok('his den is a real place with a name', !!mapAndSheet.denName && !!mapAndSheet
    thing he objected to, so it is inverted rather than deleted: a future edit that
    puts a drawing back on the map fails here. */
 ok('his pin gives nothing away', mapAndSheet.pinTellsNothing, JSON.stringify(mapAndSheet).slice(0, 140));
-ok('every other den pin is untouched', mapAndSheet.otherPinUnchanged, 'a tombstone, as before');
+/* A MISSING SAMPLE FAILS AS A MISSING SAMPLE, not as a regression. Without the
+   otherKey half, "no non-mage den was on the map" and "the pin changed" printed
+   the identical message, which is what made this take a full gate run to read. */
+ok('every other den pin is untouched', !!mapAndSheet.otherKey && mapAndSheet.otherPinUnchanged,
+  `${mapAndSheet.otherKey || 'NO NON-MAGE DEN IN THE SAMPLE'}: a tombstone, as before`);
 ok('the den sheet shows him, drawn', /mage\.png/.test(mapAndSheet.heroSrc || '') && mapAndSheet.heroDrawn,
   `${mapAndSheet.heroSrc} drawn=${mapAndSheet.heroDrawn}`);
 /* his dens are permanent, so the sheet must not promise a Monday reroll */
