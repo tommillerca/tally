@@ -8170,16 +8170,25 @@ body::before {
 .rk-theme i { flex: 1; height: 1px; background: var(--line); }
 .rk-theme span { font-size: 11px; color: var(--text-3); }
 
-.rk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* THREE WIDE, NINE TILES (Tom, after the Finch shop). Measured on the render:
+   a tile is 115px at 393x852 and 129px at 440x956, against 176/198 two-wide.
+   Everything below is what that width forced, and each of it was measured, not
+   guessed. */
+.rk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 /* One tile language, four times. Rarity is the border and nothing else, so the
    tile carries a name, two prices and no third line of text. */
-.rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 16px;
-  padding: 8px 8px 10px; text-align: center; }
+.rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 13px;
+  padding: 6px 6px 8px; text-align: center; }
 .rk.r-uncommon { border-color: color-mix(in srgb, #9fac9f 60%, var(--line-strong)); }
 .rk.r-rare { border-color: color-mix(in srgb, #60a5fa 60%, var(--line-strong)); }
 .rk.r-epic { border-color: color-mix(in srgb, var(--violet) 62%, var(--line-strong)); }
 .rk.r-legendary { border-color: color-mix(in srgb, #ffc961 62%, var(--line-strong)); }
-.rk > b { display: block; font-size: 13.5px; margin: 7px 0 8px; }
+/* Two lines, reserved whether the name uses them or not, so a one-line name and
+   a two-line name do not produce two different tile heights in the same row.
+   Measured at 393: the longest name on the rack wraps to 2 lines and 0 of 9 are
+   truncated. line-clamp is the backstop, not the plan. */
+.rk > b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 11.5px; line-height: 1.25; height: 28px; margin: 5px 0 6px; }
 /* PRESENCE. Measured off the eight-tile render, clipped to each stage: the
    selected Shop chip is a solid coral fill at 89% saturated area, while White
    Hi-Tops measured 0.0% and Yellow X Tee 2.0%. The nav chip is shipped global
@@ -8197,11 +8206,16 @@ body::before {
   background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
 .rk-stage .bh-anim { position: absolute; inset: 0; }
 .rk-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.rk-buy { display: flex; gap: 6px; }
+/* STACKED, not side by side. Two pills across a 115px tile leaves 46px each,
+   and a pill is an icon plus up to five digits: measured, the coin pill needs
+   72px to render "3,000" without wrapping. So the prices stack. They keep the
+   full tile width each, which makes them BIGGER tap targets than the two-wide
+   build had (115x44 against 76x44 at 393). */
+.rk-buy { display: flex; flex-direction: column; gap: 5px; }
 /* 44px minimum, measured: the first build shipped 31px-tall buy buttons. On the
    owned tile the marker is the thing that has to clear 44, so the rule is on
    every child of the row, not on the price pill alone. */
-.rk-buy > * { flex: 1; justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
+.rk-buy > * { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
 
 /* OUT OF REACH IS STILL A PRICE. The shipped [disabled] grey-out was rejected:
    with 380 coins and no dust every price on this rack is out of reach, and 16
@@ -8237,7 +8251,8 @@ body::before {
    animation:none is load-bearing: .bh-anim carries the bh-idle keyframes, which
    animate `transform`, and a running animation outranks a plain declaration in
    the cascade. Without it the crop simply does not happen. */
-.fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim { animation: none; }
+.fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim,
+.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim { animation: none; }
 .fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
 .fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
 .fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
@@ -8249,6 +8264,17 @@ body::before {
    first carrier, IR7-1, dangles a bright yellow smiley that out-shouted the
    thing for sale. */
 .fit-hand .bh-anim { transform-origin: 40% 73%; transform: translate(10%, -23%) scale(1.6); }
+/* The four crops the nine-tile rack added. Same recipe as the five above:
+   transform-origin IS the slot's measured alpha-bbox centre, the translate is
+   (50 - centre)%, and the scale is chosen so the piece fills the stage rather
+   than the canvas. fit-hand-l is not a mirror of fit-hand: the left hand's ink
+   sits at .698,.341, high and to the right, where the right hand's sits at
+   .388,.670, low and to the left, so the two hand tiles do not show the same
+   corner of the same skeleton. */
+.fit-hand-l .bh-anim { transform-origin: 70% 34%; transform: translate(-20%, 16%) scale(1.6); }
+.fit-body .bh-anim { transform-origin: 50% 63%; transform: translate(0%, -13%) scale(1.35); }
+.fit-shin .bh-anim { transform-origin: 49% 82%; transform: translate(1%, -32%) scale(2.5); }
+.fit-waist .bh-anim { transform-origin: 51% 60%; transform: translate(-1%, -10%) scale(2.8); }
 /* The one tile that is not selling an object says so, in a FULL WIDTH strip no
    other tile has. The first pass was an 8px corner chip: the smallest type on
    the screen carrying the only thing that stops a player reading the katana as
@@ -8259,9 +8285,17 @@ body::before {
    near-achromatic signal on the screen (saturation .11) against gold .62,
    violet .37, coral .66, mint .71, blue .56 and accent .69, so it cannot be
    read as a rarity or a price. The strip is what changed; the aura did not. */
+/* Measured, not guessed, and the first guess was wrong. The two-wide build's
+   10px/.1em needs 128.9px of text width; a three-wide stage is 101px at 393, so
+   it wrapped onto THREE lines and buried a third of the art. At 8px/.04em the
+   text measures 96.9px against 101px available. nowrap makes an overflow a
+   visible defect rather than a silent reflow.
+   (scrollWidth cannot measure this: with overflow visible it reports the
+   padding box, so every font size came back "fits" and the check proved
+   nothing. The number above is a Range over the text node.) */
 .rk-tag { position: absolute; top: 0; left: 0; right: 0; z-index: 2; text-align: center;
-  font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--ink);
-  background: var(--text); padding: 4px 0; }
+  font-size: 8px; font-weight: 800; letter-spacing: .04em; color: var(--ink);
+  white-space: nowrap; background: var(--text); padding: 3px 0; }
 
 /* One control. No printed ladder: the price on the button IS the price. */
 /* WHERE THE LAST ROW LANDS. Two pieces of shipped chrome float over this
@@ -8274,10 +8308,10 @@ body::before {
    land on tile chrome and empty tail rather than on product art. Mid-scroll
    transit under a fixed gear is app-wide behaviour and no rack padding removes
    it; see the report.
-   120px is the middle of the only window clean at BOTH 393 and 440 (118, 120,
-   122). Below 54 the gear is back on tile 3 at 393; below 118 it is back on
-   tile 3 at 440. */
-.rk-tail { height: 120px; }
+   Re-solved for the three-wide grid, which changed every row's pitch: the
+   window clean at BOTH 393 and 440 is 78 to 116px, and 96 is its middle. The
+   two-wide build's 120 is outside it and puts the gear back on tile 5. */
+.rk-tail { height: 96px; }
 
 .rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);

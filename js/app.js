@@ -6493,17 +6493,47 @@ async function renderShop(el) {
   // row sell the same kind of thing.
   // Every coin price is DIFFERENT. Two tiles at 3,000 sitting side by side read
   // as the grid having repeated itself, measured off the eight-tile render.
+  /* NINE RUNGS, BUILT BY BODY PART, NOT BY PRICE. The eight-tile rack picked
+     rungs by price and ended up with three head crops out of eight, two of which
+     (a bandana skull and a bare skull) measured 0.59 silhouette overlap: the same
+     skull twice. Measured alpha bounding boxes say how many genuinely different
+     crops the art can supply, median over every asset in the slot:
+       H  .416,.212   T  .455,.505   P  .509,.657   U  .511,.602
+       FW .495,.832   S  .495,.825   IL .698,.341   IR .388,.670   B .500,.634
+     which is SEVEN distinct regions, not nine: S sits on top of FW and U sits on
+     top of P. So nine tiles cannot all have a different crop, and the layout is
+     the answer instead: the two lookalike pairs are placed so that neither is
+     adjacent to its twin, across or down, in the three-wide grid.
+     Exactly ONE head crop (the hat), and no bare-skull tile at all.
+     Every pool is ONE rarity, so the dust price of a rung does not depend on
+     which item that week's hash lands on and the ladder can be checked by hand. */
+  /* NO KATANA IN THE SALE POOLS. The first nine-tile render put a legendary
+     Nightfall Katana in the left-hand rung while the aura's mannequin is a
+     common katana, so the rack showed a bone hand holding a katana TWICE, one
+     for sale and one not. That is the exact confusion the AURA strip exists to
+     kill, and it was invisible until the tiles were rendered side by side. The
+     left-hand rung is a flail, a fish and an egg now. */
   const MOCK_POOLS = [
-    [3000, ['T9-1', 'T9-7', 'T9-6']],
-    [2400, ['H13-4', 'H13-2', 'H13-3']],
-    [1800, ['P5-1', 'P5-2', 'P6-3']],
-    [1500, ['T1', 'T10-3', 'T10-4']],
-    [950, ['H10-6', 'H10-7', 'H12-1']],
-    [800, ['FW6-3', 'FW7-6', 'FW8-3']],
-    // Not grillz: rendered at tile size on a bare skull, a gold tooth is a few
-    // pixels and the tile reads as "buy a skull". A whole skull reads.
-    [450, ['SK18', 'SK0-7', 'SK14']],
+    [3000, ['T9-1', 'T9-7', 'T9-6']],       // legendary tops        torso
+    [2400, ['H10-4', 'H1', 'H4']],          // rare hats             head, the only one
+    [2000, ['IL14', 'IL8-1', 'IL12-2']],    // legendary left hand   left hand
+    [1500, ['B1', 'B12', 'B18']],           // uncommon bodies       whole figure
+    [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks            feet
+    [900, ['P5-1', 'P5-2', 'P6-3']],        // epic pants            hips
+    [700, ['S4-1', 'S5', 'S8']],            // uncommon socks        ankle
+    [500, ['U2', 'U4', 'U7']],              // common undies         waist
   ];
+  /* Where each rung lands, and it is a seating plan, not an order. The aura
+     takes the CENTRE cell, the one position a 3x3 has and a 2-wide does not.
+       row 1   tops       hats      left hand
+       row 2   body       AURA      kicks
+       row 3   pants      socks     undies
+     Three things are held apart by this seating, each of which repeated on an
+     earlier render: the two lookalike CROPS (kicks/socks, pants/undies) are
+     never side by side or one above the other; no two touching tiles share a
+     RARITY, so no row is three of the same tinted ground; and coins still run
+     strictly downhill 3,000 to 500 as you read. */
+  const MOCK_AURA_CELL = 4;
   // Same FNV-1a + ISO-week recipe the dens already turn over on, so the rack
   // changes every Monday with no server.
   const mockHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -6528,12 +6558,13 @@ async function renderShop(el) {
      week, so this screen has a state where a tile is not for sale. MOCKUP ONLY:
      the demo owns the rung-4 piece so the state is on the screen; a real build
      reads it off ownedCos, which the picker already consults. */
-  const mockOwnedId = mockIds[3];
+  const mockOwnedId = mockIds[5];
   const mockOwns = id => id === mockOwnedId || ownedCos.has(id);
   // Worn, never a loose PNG: a hat is ~32% of its 640 canvas, so a `contain`
   // thumbnail of the raw asset is a speck. Centres/scales are MEASURED alpha
   // bounding boxes, median over every asset in the slot.
-  const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso', P: 'fit-hips', U: 'fit-hips', FW: 'fit-feet', S: 'fit-feet' };
+  const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
+    P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
   /* THE BUY ROW. Three states, and the middle one is the whole point.
      - owned: one marker instead of two prices. A price on something you already
        own is noise.
@@ -6569,7 +6600,7 @@ async function renderShop(el) {
      The halo itself REPLACES the rarity halo rather than stacking on it (see
      avatarLayersHtml); the carrier is common, so there is nothing to replace
      here and rarity keeps living in the tile border. */
-  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 700 };
+  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200 };
   const mockAuraTile = () => `<div class="rk r-${MOCK_AURA.rarity} aura">
     <div class="rk-stage fit-hand"><span class="rk-tag">AURA · ANY WEAPON</span>${avatarLayersHtml({ ...MOCK_BASE, IR: MOCK_AURA.carrier }, { thumb: 384, wpnAura: MOCK_AURA.key })}</div>
     <b>${esc(MOCK_AURA.name)}</b>
@@ -6583,9 +6614,9 @@ async function renderShop(el) {
   el.innerHTML = `
   <div class="rk-theme"><b>${esc(MOCK_THEME)}</b><i></i><span>New rack Monday</span></div>
   <div class="rk-grid">
-    ${mockIds.slice(0, 6).map((id, i) => mockTile(id, i)).join('')}
+    ${mockIds.slice(0, MOCK_AURA_CELL).map((id, i) => mockTile(id, i)).join('')}
     ${mockAuraTile()}
-    ${mockTile(mockIds[6], 6)}
+    ${mockIds.slice(MOCK_AURA_CELL).map((id, i) => mockTile(id, i + MOCK_AURA_CELL)).join('')}
   </div>
   <button class="rk-reroll"><b>Reroll the rack</b>
     ${mockRerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${mockRerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
