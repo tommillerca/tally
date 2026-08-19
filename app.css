@@ -7220,6 +7220,9 @@ body::before {
 .cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
 .cf-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 0 0; }
 .cf-acts .btn { width: 100%; }
+/* The nickname button spans the two-column grid: a fifth button would otherwise
+   sit alone in the bottom row beside a gap. */
+.cf-acts .btn.cf-wide { grid-column: 1 / -1; }
 .cf-acts .btn.on { background: var(--violet); color: var(--text); }
 /* A coverflow shows ONE thing, which is right for talents (they belong to the pet
    in front) and wrong for breeding (it needs two). So neither becomes a separate
