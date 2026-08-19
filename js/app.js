@@ -15778,7 +15778,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
-    <div class="sheet-body fight-body" id="fightBody" style="padding-bottom:10px"></div>`,
+    <div class="sheet-body fight-body" id="fightBody"></div>`,
     { cls: 'full', onClose: () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
