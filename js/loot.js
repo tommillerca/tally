@@ -441,6 +441,7 @@ export async function breedPets(keepIid, feedIid) {
   const bank = await petLevelBank();
   delete bank[feedIid];
   await clearBond(feedIid);          // the fed pet's affection goes with it
+  await clearNick(feedIid);          // and its nickname, so the next pet minted cannot inherit it
   await kvSet('petLvlSteps', bank);
 
   // if you fed away the pet you had out, the keeper takes its place
@@ -497,13 +498,16 @@ export async function petInstances() {
          owns it. Raw kv reads, because petLevelBank() calls back into here. */
       const bank = await kvGet('petLvlSteps', null);
       const bonds = await kvGet('petBonds', null);
+      const nicks = await kvGet('petNick', null);
       for (const row of healed) {
         if (!row || !row.healedFrom) continue;
         if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
         if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
+        if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
       }
       if (bank) await kvSet('petLvlSteps', bank);
       if (bonds) await kvSet('petBonds', bonds);
+      if (nicks) await kvSet('petNick', nicks);
       await kvSet('petInst', healed);
       const dupIids = healed.filter(r => r && r.healedFrom).map(r => r.healedFrom);
       import('./analytics.js').then(a => a.track('pet_iid_heal', {
@@ -570,6 +574,72 @@ async function clearBond(iid) {
   if (iid in bonds) { delete bonds[iid]; await kvSet('petBonds', bonds); }
 }
 
+/* ---------- Private pet nicknames (kv 'petNick' = {iid: 'GRAVY'}) ----------
+ * Tom, 2026-08-19: "can we add the ability to give your pet a nickname only you
+ * can see?" ONLY YOU is the feature, so the storage shape is the guard.
+ *
+ * Its OWN kv map keyed by instance id, exactly like petBonds and petLvlSteps.
+ * Never a new field on the instance rows and never a new key in kv 'equipped'.
+ * That is not tidiness, it is the whole reason this cannot leak. Traced
+ * 2026-08-19, the two payloads that carry pet data to other players:
+ *   - socialSnapshot() in js/app.js picks `pet:` off petMeta by name (id, level,
+ *     shiny, lineage), so a new field on the instance row would not leak either.
+ *   - `outfit: eq` in the same snapshot is `{ ...base, ...saved }` over kv
+ *     'equipped' (see equipped() below), uploaded verbatim to friends, the
+ *     leaderboard, the step race and any spire rival. ANY key written into that
+ *     object ships itself to strangers with no code change. A separate map is
+ *     the only shape that is safe by construction rather than by review.
+ * The nickname does ride the encrypted backup, because exportAll() dumps every
+ * kv row. That is wanted: it is the player's own save, sealed with a key the
+ * server never receives, so the nickname follows them to a new device and
+ * nobody else can read it.
+ *
+ * Precedent for the whole idea: setFriendAlias in js/social.js, the player's
+ * private name for a friend, which is also stored locally and never uploaded.
+ * Guarded by tests/nickname-private-audit.mjs. */
+export const NICK_MAX = 24;
+/* PURE. null when `s` is a legal nickname, otherwise the sentence the player is
+ * shown. It REFUSES rather than coercing: the v387 sweep found eleven numeric
+ * surfaces quietly storing a coerced value, and a silently truncated name is
+ * that same defect in a different type. setFriendAlias slices to 24; this does
+ * not, it says so.
+ * LENGTH is counted in CODE POINTS, not UTF-16 units, so an emoji costs what it
+ * looks like it costs and no truncation can ever split a surrogate pair into
+ * mojibake. 24 to match the friend-alias cap, the app's existing answer to
+ * "how long is a private nickname".
+ * EMOJI are allowed, including ZWJ sequences, so 👨‍👩‍👧 stays one picture.
+ * RIGHT-TO-LEFT TEXT is allowed and rendered with dir="auto" at every call
+ * site. Bidi CONTROL characters are refused: an unpaired U+202E reorders
+ * everything drawn after it, so it is a spoofing tool, not a language. */
+export function nickProblem(s) {
+  const t = String(s ?? '').trim();
+  if (!t) return null;                                    // empty = clear, always legal
+  const n = [...t].length;
+  if (n > NICK_MAX) return `That nickname is ${n} characters. Keep it to ${NICK_MAX} or fewer.`;
+  if (/[\p{Cc}\u200E\u200F\u202A-\u202E\u2066-\u2069]/u.test(t)) {
+    return 'That nickname has hidden control characters in it. Letters, numbers, spaces and emoji are fine.';
+  }
+  return null;
+}
+export function cleanNick(s) { return String(s ?? '').trim().replace(/\s+/g, ' '); }
+export async function petNicks() { return (await kvGet('petNick', {})) || {}; }
+export async function setPetNick(iid, nick) {
+  // never name a ghost: the iid must be a live instance (same guard as bondUp)
+  const list = await petInstances();
+  if (!list.some(x => x.iid === iid)) return { ok: false, reason: 'unknown' };
+  const problem = nickProblem(nick);
+  if (problem) return { ok: false, reason: 'invalid', message: problem };
+  const map = await petNicks();
+  const clean = cleanNick(nick);
+  if (clean) map[iid] = clean; else delete map[iid];
+  await kvSet('petNick', map);
+  return { ok: true, nick: clean };
+}
+async function clearNick(iid) {
+  const map = await petNicks();
+  if (iid in map) { delete map[iid]; await kvSet('petNick', map); }
+}
+
 // Destroy ONE specific pet instance for Bone Dust (the Stable's "Destroy"). Drops
 // ownership + clears the legacy anchor when its species' last copy is gone, and
 // re-points the equipped pet if you just scrapped the one you had out.
@@ -582,6 +652,7 @@ export async function salvageInstance(iid) {
   await savePetInstances(next);
   const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
   await clearBond(iid);              // a destroyed pet takes its affection with it
+  await clearNick(iid);              // and its nickname
   if ((await kvGet('petEquipped', null)) === iid) {
     const repl = bestInstance(next, inst.sp) || next[0] || null;
     await kvSet('petEquipped', repl ? repl.iid : null);

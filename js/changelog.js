@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 406, date: '2026-08-19', title: 'Name your pets, and see the whole card in the Stable', items: [
+    'Give any pet a nickname only you can see. It shows in the Stable and out in the Paddock, and it never leaves your phone.',
+    'The pet card in the Stable was having its bottom cut off, which hid its lower edge and the OUT WITH YOU ribbon on the pet you have equipped. You can see the whole card now.',
+  ] },
   { n: 405, date: '2026-08-19', title: 'Closing a crate reveal no longer slides off sideways', items: [
     'Leaving a crate, a level-up or any full-screen moment now drops straight down instead of sliding down and to the left across whatever is behind it.',
   ] },

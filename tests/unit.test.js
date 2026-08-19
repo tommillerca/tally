@@ -34,7 +34,8 @@ import {
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
-  removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE } from '../js/loot.js';
+  removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE,
+  nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -2937,6 +2938,74 @@ test('every long-press target suppresses the iOS callout and text selection', ()
     'these long-press targets can still raise the iOS magnifier and text selection: ' +
     `${missing.join(', ')}. Each needs -webkit-touch-callout: none, -webkit-user-select: none ` +
     'and user-select: none, the same three lines .map-den-mark already carries.');
+});
+
+/* THE PRIVATE PET NICKNAME accepts and refuses the right things.
+   Pure, so it is graded here rather than in a browser; the rendering, the
+   reload and the "in ZERO outbound payloads" claim are in
+   tests/nickname-private-audit.mjs, which drives the real screen and reads the
+   real wire. Both halves are needed: this file would pass on a validator
+   nobody called, and that one would pass on a validator that refused
+   everything. */
+test('nickname: an ordinary name, emoji and right-to-left text are all accepted', () => {
+  assert.equal(nickProblem('Biscuit'), null);
+  assert.equal(nickProblem('BISCUIT THE THIRD'), null);
+  assert.equal(nickProblem('\u{1F436}‍\u{1F9B4} Bones'), null, 'a zero-width-joiner emoji sequence is one picture, not a control character');
+  assert.equal(nickProblem('عظمة'), null, 'Arabic is a language, not an attack');
+  assert.equal(nickProblem(''), null, 'empty is how you clear a nickname');
+  assert.equal(nickProblem('   '), null, 'and whitespace-only is empty');
+  assert.equal(nickProblem(null), null);
+});
+test('nickname: over-length is REFUSED in words, never silently truncated', () => {
+  const at = 'W'.repeat(NICK_MAX);
+  assert.equal(nickProblem(at), null, `${NICK_MAX} characters is the limit, not one under it`);
+  const over = nickProblem('W'.repeat(NICK_MAX + 1));
+  assert.ok(over, 'one character over the limit must be refused');
+  assert.match(over, new RegExp(`\\b${NICK_MAX}\\b`), 'the refusal has to tell the player the actual limit');
+  /* The bug this pins is the v387 shape: coercing garbage into the store
+     instead of refusing it. cleanNick must never shorten a name to fit. */
+  assert.equal(cleanNick('W'.repeat(NICK_MAX + 6)).length, NICK_MAX + 6,
+    'cleanNick must not truncate: refusing is the product decision, guessing at intent is what caused the v387 losses');
+});
+test('nickname: length is counted in CODE POINTS, so an emoji costs what it looks like', () => {
+  const eight = '\u{1F480}'.repeat(8);       // 8 skulls = 16 UTF-16 units, 8 code points
+  assert.equal(eight.length, 16, 'the fixture really is a surrogate-pair string');
+  assert.equal(nickProblem(eight), null, 'counting UTF-16 units here would refuse a name well inside the limit');
+  /* And why it matters beyond arithmetic: a naive slice(0, N) can cut a
+     surrogate pair in half and store a lone surrogate, which renders as a
+     replacement glyph forever. Nothing here truncates, so nothing can. */
+  assert.equal(cleanNick(eight), eight);
+});
+test('nickname: bidi control characters are refused, because they reorder everything drawn after them', () => {
+  for (const ch of ['‮', '‪', '‏', '⁦', '']) {
+    const p = nickProblem(`BOB${ch}exe`);
+    assert.ok(p, `U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')} must be refused: it is a spoofing tool, not a language`);
+  }
+  assert.equal(nickProblem('BOB‍exe'), null, 'but the zero-width JOINER stays legal, or every compound emoji breaks');
+});
+test('nickname: cleanNick trims and collapses runs of whitespace, and that is ALL it does', () => {
+  assert.equal(cleanNick('  Old   Bones  '), 'Old Bones');
+  assert.equal(cleanNick('Old\tBones'), 'Old Bones');
+  assert.equal(cleanNick(''), '');
+  assert.equal(cleanNick(undefined), '');
+  assert.equal(cleanNick('<img src=x>'), '<img src=x>',
+    'cleanNick does not sanitise markup: escaping belongs to the render layer (esc() in js/app.js) and doing it in both places would double-encode');
+});
+test('nickname: it is stored in its OWN kv map, never on the instance row or in kv equipped', () => {
+  const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  /* WHY THIS IS A TEST AND NOT A COMMENT. socialSnapshot() uploads
+     `outfit: eq`, and equipped() builds that with `{ ...base, ...saved }` over
+     kv 'equipped'. Any key written into that object ships itself to every
+     friend, the leaderboard and the step race with no code change at all. The
+     nickname is private, so its storage SHAPE is the guard, and a guard that
+     nothing checks is a comment. */
+  assert.match(loot, /kvSet\('petNick'/, 'the nickname must live in its own kv key');
+  const from = loot.indexOf('export async function setPetNick');
+  const to = loot.indexOf('async function clearNick');
+  assert.ok(from > 0 && to > from, 'found no setPetNick body to inspect: this check has drifted, it has not passed');
+  const setter = loot.slice(from, to);
+  assert.doesNotMatch(setter, /kvSet\('equipped'|kvSet\('petInst'/,
+    'setPetNick must not write into either object that is uploaded wholesale to other players');
 });
 
 /* THE APP-WIDE NO-SELECT RULE, AND THE TWO EXEMPTIONS THAT MAKE IT SAFE.

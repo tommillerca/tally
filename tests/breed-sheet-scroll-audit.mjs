@@ -101,16 +101,32 @@ await sleep(300);
 const box = await page.evaluate(() => {
   const bo = document.getElementById('stableBody').getBoundingClientRect();
   const pr = document.querySelector('.breed-bar.sticky').getBoundingClientRect();
-  return { cx: Math.round(bo.left + bo.width / 2), top: Math.round(bo.top),
+  const cx = Math.round(bo.left + bo.width / 2);
+  /* CLAMP THE START INTO THE WINDOW. The bar is ~387px tall and sticky-clamped,
+     so its rect can begin BELOW the bottom of the viewport: measured panelTop
+     713 in a 667px window on 2026-08-19, once the Stable grew by one row. The
+     old `panelTop - 12` was then 34px off screen, elementFromPoint returned
+     nothing, and touchStart touched nowhere, so this row went red saying the
+     sheet does not scroll on a build where it scrolled 463px instead of 381.
+     A thumb cannot reach y=701 on a 667px phone either, so the unclamped point
+     was testing a gesture no player can make. Clamped, and the landing is
+     asserted below so it can never silently drift off screen again. */
+  const startY = Math.min(Math.round(pr.top) - 12, window.innerHeight - 12);
+  const el = document.elementFromPoint(cx, startY);
+  return { cx, top: Math.round(bo.top), startY,
+    startOnSheet: !!(el && (el.id === 'stableBody' || el.closest('#stableBody'))),
+    startTag: el ? el.tagName + (el.id ? '#' + el.id : '') : null,
     panelTop: Math.round(pr.top), panelBottom: Math.round(pr.bottom) };
 });
+ok('SWIPE the gesture starts on the sheet and inside the window (a start point off screen touches nothing and reads as "it does not scroll")',
+  box.startOnSheet, JSON.stringify({ startY: box.startY, panelTop: box.panelTop, on: box.startTag }));
 const swipe = async (x, y1, y2) => {
   await page.touchscreen.touchStart(x, y1);
   for (let i = 1; i <= 8; i++) await page.touchscreen.touchMove(x, y1 + (y2 - y1) * i / 8);
   await page.touchscreen.touchEnd();
   await sleep(600);
 };
-await swipe(box.cx, box.panelTop - 12, box.top + 10);
+await swipe(box.cx, box.startY, box.top + 10);
 const bodyAfter = await page.evaluate(() => Math.round(document.getElementById('stableBody').scrollTop));
 ok('SWIPE a swipe on the sheet ABOVE the breed panel scrolls the sheet (the surface the report says did nothing)',
   bodyAfter > 0, `#stableBody 0 -> ${bodyAfter}  (panel occupies ${box.panelTop}..${box.panelBottom} of ${VH})`);

@@ -7146,9 +7146,27 @@ body::before {
    content-cropped by PET_CROP and mass-normalised: a flat lizard and the round
    cloud read as the same size animal in the same square tile. */
 .cf { --card: 176px; width: 100%; }
+/* THE FRAME HAS TO BE TALL ENOUGH TO HOLD THE CARD IT FRAMES.
+   Tom, 2026-08-19: "fix that the UI comes up too much over top the album cover
+   style frame for the pet."
+   Measured before the fix, at 440x956 AND 393x852, identical both times: the
+   frame is 176px tall, box-sizing is border-box (app.css line 54), and the
+   padding is 22 + 14 = 36, so the content box is 140px. The track inside is
+   `height: var(--card)` = 176px and starts 22px down, so it runs to 198px in a
+   box that clips at 176. The bottom 22px of the focused card was cut off: no
+   bottom border, no bottom corners, and the "OUT WITH YOU" ribbon (.cf-eq,
+   bottom: 0) sliced in half. The caption's top edge measured MINUS 22px from
+   the card's real bottom, which is precisely "the UI comes up over the frame".
+   The other reading was measured too and cleared: the rarity chip and the LV
+   pill cover 7.03% of the card between them and overlap the drawn animal by
+   397px of 15,167, i.e. 2.6% of the sprite box, in the two corners where the
+   art is transparent anyway. The chrome was never the problem.
+   --cf-pad carries the padding into the height so BOTH states stay exact
+   rather than the panelled one inheriting 36px of slack; height is what
+   transitions, so an unregistered property inside the calc is fine here. */
 .cf-frame {
-  position: relative; overflow: hidden; padding: 22px 0 14px;
-  height: calc(var(--card) * var(--cf-scale));
+  position: relative; overflow: hidden; padding: 22px 0 14px; --cf-pad: 36px;
+  height: calc(var(--card) * var(--cf-scale) + var(--cf-pad));
   /* the ring is a 3D subtree; contain it so scrolling the sheet past it does not
      force the whole thing to re-rasterise on every scroll frame */
   contain: layout paint;
@@ -7266,6 +7284,9 @@ body::before {
 .cf-dots i.on { opacity: 1; transform: scale(1.25); background: var(--accent); }
 .cf-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 16px 0 0; }
 .cf-acts .btn { width: 100%; }
+/* The nickname button spans the two-column grid: a fifth button would otherwise
+   sit alone in the bottom row beside a gap. */
+.cf-acts .btn.cf-wide { grid-column: 1 / -1; }
 .cf-acts .btn.on { background: var(--violet); color: var(--text); }
 /* A coverflow shows ONE thing, which is right for talents (they belong to the pet
    in front) and wrong for breeding (it needs two). So neither becomes a separate
@@ -7302,7 +7323,7 @@ body::before {
   max-height: 260px; opacity: 1;
 }
 .cf.panelled { --cf-scale: .62; }
-.cf.panelled .cf-frame { padding: 10px 0 6px; }
+.cf.panelled .cf-frame { padding: 10px 0 6px; --cf-pad: 16px; }
 .cf.panelled .cf-meta, .cf.panelled .cf-dots { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; }
 .cf.panelled .cf-cap b { font-size: 21px; }
 /* the panel arrives rather than appearing */
