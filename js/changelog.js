@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 405, date: '2026-08-19', title: 'Closing a crate reveal no longer slides off sideways', items: [
+    'Leaving a crate, a level-up or any full-screen moment now drops straight down instead of sliding down and to the left across whatever is behind it.',
+  ] },
   { n: 404, date: '2026-08-18', title: 'The Bone Garden closes, and the Boneyard feeds the Kitchen instead', items: [
     'Ingredients now come off the map. There are far more things to find out there, each worth a little less, so a walk turns up more without handing you more coins.',
     'The Boneyard looks the way it should: about three times as many finds on screen at once.',
