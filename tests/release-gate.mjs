@@ -412,6 +412,18 @@ const DECLARED = {
      Prove-red: --prove-red=cache-first | stale-version | 404, each landing on a
      different row; each verifies it really changed the served bytes before a
      browser starts, so a prove-red that matches nothing cannot read as green. */
+  /* THE MAP LOOKS FULL, AND THE HEADER AGREES WITH IT. The pure supply audit
+     cannot answer either question: it counts what the generator produces, and
+     its own viewport model was four times the real screen because it used the
+     256px-tile metres-per-pixel constant against a 512px-tile zoom. So the
+     rendered claim lives in a browser audit and the pure one keeps the faucet.
+     'full' for the same reason as map-offline-audit: it boots MapLibre and
+     fetches real tiles at four locations, ~70s, far too slow for fast.
+     Prove-red on the parent commit bfacd28: VISIBLE 4.00 against a floor of 10,
+     the emptiest location 3 against a floor of 5, and HEADER saying 6, 6, 8, 8
+     over 4, 3, 6, 3 markers, with all four CONTROL rows still green. */
+  'boneyard-density-audit.mjs': ['full', "the Boneyard reads full on a 440x956 phone and the 'N nearby' header equals the markers actually inside the canvas. VISIBLE has a floor (an empty map is the complaint), BUDGET has a ceiling of 100 live DOM markers (measured: 60fps to ~84, first dropped frames near 107), and CONTROL fails the run if the canvas, the markers or the count line are missing so the other three cannot pass on a blank screen."],
+
   'map-offline-audit.mjs': ['full', "opening the Boneyard with the tile host blocked must give the offline message and throw NOTHING. Arrived with #33 and belonged to no tier, which is the same coverage failure my own two audits caused. 'full' rather than fast: 25s, and it boots MapLibre and aborts real tile requests. It earned the tier the hard way, failing 1 run in 2 on an intermittent null deref that read as flakiness and was a real error; six consecutive green runs after the fix."],
 
   /* ONE ACCOUNT, TWO TABS, and until 2026-08-17 nothing in this repo had ever

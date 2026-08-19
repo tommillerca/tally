@@ -14137,8 +14137,32 @@ async function renderBoneyard(el) {
       if (!map || !map.loaded()) return null;         // gone or not ready → hide for now, retry
       const c = map.getCanvas();
       const pt = map.project([raw.lng, raw.lat]);
-      const onScreen = pt.x > -120 && pt.y > -120 && pt.x < c.clientWidth + 120 && pt.y < c.clientHeight + 120;
-      if (!onScreen) return null;                    // can't query off-screen tiles → hide until it pans in
+      /* THE HALO IS THE SNAP QUERY'S REACH, not a performance budget.
+         queryRenderedFeatures can only answer from the rendered scene, so a POI
+         far outside it snaps to nothing, returns null, is never cached, and is
+         re-queried on every refresh forever. 120px was well inside that reach,
+         so markers popped into existence half a swipe after they should have.
+         MEASURED at 440x956 / zoom 15.4 over four locations, by how far outside
+         the canvas the point projects (spawns / query returned features / snapped):
+           <=0px    54 / 100% / 100%
+           <=120    51 / 100% / 100%
+           <=300   113 / 100% / 100%
+           <=600   100 /  85% /  84%
+           <=1200   54 /  48% /  26%
+           >1200   148 /   4% /   2%
+         300 is the last margin where the query still answers every time, so it
+         is the widest halo that buys anything. Cost: the marker count grows with
+         the halo area. Ceiling measured the same way, by driving three real
+         touch drags and sampling rAF intervals under software GL (slower than
+         Tom's phone), median/p95 ms per frame: 17 markers 16.6/16.7,
+         39 markers 16.6/16.7, 69 markers 16.6/16.7, 84 markers 16.6/16.7,
+         107 markers 16.6/24.9. So 60fps holds to ~84 and the first dropped
+         frames appear near 107. spawnsForRoute caps the near field at 80, and a
+         300px halo at 15.4 draws ~60 of them plus a handful of dens and spires:
+         inside the ceiling by construction, not by hope. */
+      const HALO_PX = 300;
+      const onScreen = pt.x > -HALO_PX && pt.y > -HALO_PX && pt.x < c.clientWidth + HALO_PX && pt.y < c.clientHeight + HALO_PX;
+      if (!onScreen) return null;                    // beyond the query's reach → hide until it pans in
       // query box sized from the snap radius (a fixed 95px was smaller than the
       // radius at street zoom, so real paths just outside the box were invisible
       // and reachable POIs got hidden). +25% margin covers projection skew.
@@ -14719,7 +14743,20 @@ async function renderBoneyard(el) {
       // it is the only number on this screen that walking actually moves.
       const cnt = $('#mapCount', body);
       if (cnt) {
-        const near = live.filter(s => !s.far).length;
+        /* THE COUNT MEANS WHAT THE SCREEN SHOWS. It used to count every placed
+           marker, which includes the halo above: the header read "7 nearby" over
+           a screen with three markers on it, and after the halo widened to 300px
+           it would have read 26 over 15. A number the player can look at and see
+           is wrong costs more than it tells them. This counts the markers inside
+           the canvas, so the header and the map are the same claim. Runs on the
+           same 5s refresh plus every moveend/idle, so it follows a pan. */
+        const cv = map && map.getCanvas();
+        const onCanvas = s => {
+          if (!cv) return true;                 // no map to ask: don't invent a filter
+          const p = map.project([s.lng, s.lat]);
+          return p.x >= 0 && p.y >= 0 && p.x <= cv.clientWidth && p.y <= cv.clientHeight;
+        };
+        const near = live.filter(s => !s.far && onCanvas(s)).length;
         /* THE STANDING LEADS. Tom, 2026-08-08, on replacing the floating bar:
            "do the combo of 1 plus 3." This is a walking screen, so the line that
            changes what you do out here is where you sit in the step race. The

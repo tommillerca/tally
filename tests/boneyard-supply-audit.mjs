@@ -131,8 +131,20 @@ check(`only ${(carryShare * 100).toFixed(0)}% of spawns carry food`,
 
 /* ---- 5. THE MAP READS FULL, and is bounded. A floor AND a ceiling: every
      spawn is a live DOM marker, so "as many as possible" is a memory bug. ---- */
-const mPerPx = 156543.03392 * Math.cos(LAT * Math.PI / 180) / Math.pow(2, MAP_START_ZOOM);
-const HALF_W = 440 * mPerPx / 2, HALF_H = 700 * mPerPx / 2;   // iPhone 17 Pro Max, map stage
+/* THE PROJECTION WAS OFF BY 2x PER AXIS, so this row modelled a viewport four
+   times the real one and reported 10.2 spawns where the rendered map generates
+   4.25. 156543.03 is the metres per pixel of a 256px tile scheme; MapLibre's
+   zoom is defined against 512px tiles (world = 512 * 2^z px), which is half
+   that. Measured against the real map to settle it, at zoom 15.4 and lat 49.28:
+   map.getBounds() spans 259.8 x 524.6 m across a 440 x 891 canvas, i.e.
+   0.5905 m/px; this formula now yields 0.5913 and the old one yielded 1.1825.
+   With the constant and the real canvas height, the model produces 13.3 spawns
+   in view and the browser counts 13.25 generated in view (tests/boneyard-
+   density-audit.mjs, four locations), so the model and the renderer finally
+   describe the same screen. Floor and ceiling below are the parent branch's own
+   numbers, unchanged; only the arithmetic under them was wrong. */
+const mPerPx = 78271.51696 * Math.cos(LAT * Math.PI / 180) / Math.pow(2, MAP_START_ZOOM);
+const HALF_W = 440 * mPerPx / 2, HALF_H = 891 * mPerPx / 2;   // iPhone 17 Pro Max, real map canvas
 let viewSum = 0, viewSamples = 0;
 for (const date of ['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22']) {
   for (const mins of [420, 600, 780, 960, 1140]) {
@@ -151,7 +163,8 @@ for (const date of ['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '202
 }
 check('the viewport was actually sampled', viewSamples > 0, `${viewSamples} samples`);
 const inView = viewSum / viewSamples;
-check(`${inView.toFixed(1)} spawns sit in a phone viewport`, inView >= 8, 'floor 8, v400 was 4.2');
+check(`${inView.toFixed(1)} spawns sit in a phone viewport`, inView >= 8,
+  'floor 8; with the projection corrected, v400 was 1.4 and zoom 16.4 was 3.4');
 check(`${inView.toFixed(1)} spawns is still a drawable number of markers`, inView <= 24, 'ceiling 24');
 
 /* ---- 6. THE FOOD SPAWN DROPS WHAT THE COOKBOOK WANTS ----
