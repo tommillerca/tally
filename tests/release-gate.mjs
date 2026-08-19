@@ -82,9 +82,22 @@ if (own) console.log(`serving this repo at ${base}\n`);
    nothing, reads js/*.js, and finishes in well under a second. It is the register
    of every icon site in the game and it fails when a new one appears undeclared,
    which is the class of leftover three separate icon sweeps have each shipped. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs'];
+/* version-stamp-audit is PURE for the same reason again: it boots nothing, reads
+   three files off disk, and finishes in 30ms, so BROWSER's URL argument would be
+   noise to it. It asserts FOUND (all three stamps are still where it looks, so a
+   rename cannot make it pass by finding nothing to compare) and AGREE (sw.js
+   VERSION, APP_BUILD and the newest changelog entry are the same build). Nothing
+   else in tests/ can catch a half-done renumber: every other suite passes on a
+   correctly built tree with the wrong number stamped on it, which is exactly what
+   a renumber that ran for some files and not others produces, and it has shipped
+   twice (v391 went out stamped v390, aa4359b shipped 385/385/386).
+   FAST rather than full because the defect it catches is a MERGE, not a release
+   step: --all runs before a release, which is after the push that stamped it
+   wrong. At 30ms there is nothing to trade away for that. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
+  'fight-hint-audit.mjs',    // the same tray one layer down: every move LABEL fits one line at 375, 393 and 430, every button clears the 44px tap floor, and three rows of moves are visible with none cut off. Lines are counted on TEXT NODES, because .fight-act is a stretching grid (so a 13.5px line reads as 30.4px on a button matched to a taller neighbour) and Range over the whole button counts the AP pips as a line of their own. It is not the tray-scroll claim above: the hint, not the name, is what wraps, and a second line of 10px text costs 13.5px, which is the entire difference between a 208px tray holding three rows and holding two. FAST because it guards the same shipped, every-fight surface as fight-tray-audit, and because it is proven red on the regression that actually shipped: on v399 (33a2dc0) 8 of 8 move buttons carried a two-line label at 393x852 and the tray showed 6 of 8 moves. Self-serving (serveTree) and argv-pointable, measured 14s, 13 checks, green on 405b5df
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
   'precache-assets-audit.mjs', // non-module assets: blocks each and grades FATAL vs BOOTS-WITHOUT + records install byte-weight
