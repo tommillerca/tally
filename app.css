@@ -54,6 +54,38 @@
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { color-scheme: dark; }
 html, body { height: 100%; }
+/* NO LONG-PRESS TEXT SELECTION ANYWHERE IN THE APP.
+   Tom, 2026-08-18, after v402 fixed it on the Pit's move buttons: "i noticed you
+   can press and hold to highlight text all over the app though thats annoying".
+
+   This is a GAME, not a document. iOS treats every run of text as selectable, so
+   a hold anywhere raises the magnifier, the blue highlight and the callout menu,
+   over labels and buttons nobody would ever want to copy. v402 fixed one screen
+   at a time; there are dozens, and .map-* and .fight-act had already each been
+   patched individually, which is the pattern that says the rule belongs here.
+
+   TWO EXEMPTIONS, AND BOTH ARE LOAD-BEARING. A blanket rule here is easy and
+   quietly breaks two things that matter:
+
+   1. FORM FIELDS. `user-select: none` inherits into <input> and <textarea>, and
+      on iOS that interferes with selecting and editing what you have typed. Every
+      numeric and text field in the app is downstream of this, so they are put
+      back to `text` explicitly rather than being left to luck.
+   2. .code-line IS THE RECOVERY CODE. That is the one string in the app a player
+      MUST be able to copy, and losing it loses their save. It already carries
+      `user-select: all`, which survives inheritance, but `-webkit-touch-callout`
+      is how iOS offers "Copy" on a long press, so it is restored to default here.
+      Killing the callout globally without this exemption would make the recovery
+      code uncopyable, which is a far worse bug than the one being fixed.
+
+   Guarded in tests/unit.test.js: Chromium does not implement
+   -webkit-touch-callout, so no browser audit in this repo can see any of it. */
+body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable] {
+  -webkit-touch-callout: default; -webkit-user-select: text; user-select: text;
+}
+.code-line { -webkit-touch-callout: default; }
+
 body {
   /* Midnight backdrop: on-brand near-black with a faint purple/blue depth + glow */
   background:
