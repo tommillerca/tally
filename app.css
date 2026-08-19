@@ -1898,9 +1898,26 @@ body::before {
   color: var(--text-2);
 }
 .chip.ch-tab svg, .chip.ch-tab img { opacity: 0.75; }
+/* A SOLID ACCENT FILL MADE NAVIGATION THE LOUDEST THING ON A SHOPPING SCREEN.
+   Measured on Shop at 440x956: the selected chip was 89.8% saturated pixels by
+   its own area, against 3.7% for its siblings and 14.2% for the most colourful
+   PRODUCT on the same screen. A full-bleed fill is ~88% saturated by
+   construction, so nothing on a merchandising screen can out-shout it without
+   putting a solid fill behind the goods, which is worse. Its label was also the
+   least readable text in the row: 2.39:1 cream-on-coral, a WCAG failure, while
+   the UNSELECTED siblings sat at 8.12:1.
+   The tint is not invented here: `.chip.on` (line ~360) has always been a
+   low-alpha accent wash + accent border + brighter label, so this is the row
+   joining the idiom it was the only exception to. Selection is carried by FOUR
+   signals, only one of which is hue: the coral ring (2.02:1 greyscale against
+   the siblings' ring), the label brightness step (13.46:1 vs 8.12:1), the icon
+   at full opacity vs 0.75, and the hard sticker shadow, which no sibling has.
+   Guarded by tests/tab-chip-audit.mjs, which pins the fill CEILING so nobody
+   can reinstate the block. Do not raise the fill without moving that ceiling
+   and saying why. */
 .chip.ch-tab.on {
-  color: var(--text); border-color: var(--ink);
-  background: var(--coral);
+  color: var(--text); border-color: var(--coral);
+  background: var(--coral-soft);
   box-shadow: var(--sh-sm);
 }
 .chip.ch-tab.on svg, .chip.ch-tab.on img { opacity: 1; }
