@@ -2891,6 +2891,55 @@ test('every gear stat is a finite number (no NaN can reach a player)', async () 
   assert.deepEqual(bad, [], 'gear carrying a non-finite stat would render "+NaN POW"');
 });
 
+/* EVERY LONG-PRESS TARGET SUPPRESSES iOS's OWN LONG-PRESS.
+ *
+ * v401 gave the Pit's move buttons a 750ms hold to open a move's detail. On a
+ * real iPhone that same hold ALSO raises the text-selection magnifier and the
+ * callout menu, so the player gets a loupe and highlighted words on top of the
+ * popup. Tom, 2026-08-18: "it's magnifying with force click and highlighting
+ * text on the iphone can we turn that iphone feature off?"
+ *
+ * The Boneyard map hit this first and already carries the three lines. The Pit
+ * inherited the GESTURE (LP_MS/LP_MOVE are literally the map's constants) but
+ * not the SUPPRESSION, which is exactly the kind of half-copy nobody notices
+ * until it is on a device. Chromium does not implement -webkit-touch-callout,
+ * so no browser audit in this repo can catch it: a static check is the only
+ * thing that can.
+ *
+ * COVERAGE IS THE POINT. This counts the long-press sites in js/app.js. A THIRD
+ * one fails here on the day it is written, which forces whoever adds it to name
+ * its target and give that target the suppression.
+ */
+test('every long-press target suppresses the iOS callout and text selection', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+
+  const sites = [...app.matchAll(/const LP_MS\s*=/g)].length;
+  assert.ok(sites > 0, 'found no long-press sites at all: the scan is broken, not the tree clean');
+  assert.equal(sites, 2,
+    `${sites} long-press sites in js/app.js, expected 2 (the Boneyard map and the Pit move tray). ` +
+    'A new one must add its target selector to the list in this test AND give that ' +
+    'target -webkit-touch-callout: none, or iOS will raise the magnifier over it.');
+
+  /* The selector each site presses on. Kept literal on purpose: a rule that
+     tried to derive these would drift silently, and the whole failure mode here
+     is a target that nobody remembered to cover. */
+  const TARGETS = ['.map-den-mark', '.map-mini-mark', '.map-spawn', '.fight-act'];
+  const missing = TARGETS.filter(sel => {
+    /* find any rule whose prelude names the selector, then look inside it */
+    const re = new RegExp(`[^}]*\\${sel}\\b[^{]*\\{([^}]*)\\}`, 'g');
+    for (const m of css.matchAll(re)) {
+      if (/-webkit-touch-callout\s*:\s*none/.test(m[1])) return false;
+    }
+    return true;
+  });
+  assert.deepEqual(missing, [],
+    'these long-press targets can still raise the iOS magnifier and text selection: ' +
+    `${missing.join(', ')}. Each needs -webkit-touch-callout: none, -webkit-user-select: none ` +
+    'and user-select: none, the same three lines .map-den-mark already carries.');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
+

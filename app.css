@@ -1278,6 +1278,17 @@ body::before {
    its container had shrunk to 289px). Shrinking type was NOT the lever: this
    app already has a standing complaint about tiles too small to judge. */
 .fight-act {
+  /* iOS FIRES ITS OWN LONG-PRESS ON TOP OF OURS. v401 gave these buttons a
+     750ms hold to open a move's detail; on a real iPhone that same hold also
+     raises the text-selection magnifier and the callout menu, so Tom got a
+     loupe and highlighted words over the popup he asked for.
+     This is not a new idea: .map-den-mark / .map-mini-mark / .map-spawn already
+     carry exactly these three lines, because the Boneyard map is the app's OTHER
+     long-press and hit this first. The Pit inherited the gesture without
+     inheriting the suppression. Any future long-press target needs this too.
+     Reported by Tom 2026-08-18: "it's magnifying with force click and
+     highlighting text on the iphone can we turn that iphone feature off?" */
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   min-height: 44px;
   /* 8/7 VERTICAL IS UNTOUCHED, 5 SIDE BECOMES 3. The v383 note above is about
      the vertical squeeze and about type size, and both stay exactly as they
