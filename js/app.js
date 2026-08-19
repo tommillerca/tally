@@ -10455,11 +10455,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
         </div>
       </div>
     </div>`}
-    <div class="ch-tabs" id="chTabs">
-      <button class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${pixCur('wardrobe', 24) || ICONS.bone(21)}<span>Wardrobe</span></button>
-      <button class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span></button>
-      <button class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${pixCur('build', 24) || ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
+    <div class="ch-tabs" id="chTabs" role="tablist">
+      ${/* role/aria-selected, matching the wn-tabs tablist above: with the solid
+            accent fill gone the visual cues are a coral ring, a brighter label,
+            a full-opacity icon and a sticker shadow, and none of those reach a
+            screen reader. aria-selected is the half of "never by colour alone"
+            that CSS cannot carry. */''}
+      <button role="tab" aria-selected="${tab === 'wardrobe'}" class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${pixCur('wardrobe', 24) || ICONS.bone(21)}<span>Wardrobe</span></button>
+      <button role="tab" aria-selected="${tab === 'crates'}" class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
+      <button role="tab" aria-selected="${tab === 'shop'}" class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span></button>
+      <button role="tab" aria-selected="${tab === 'talents'}" class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${pixCur('build', 24) || ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       ${/* LEVEL and LOOKS both came off this hub 2026-08-17 on Tom's call. Level's
             screen is NOT deleted, only its chip: tab === 'progress' still renders
             and is still reachable, so nothing is orphaned and putting the chip
@@ -15297,7 +15302,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v406'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v407'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

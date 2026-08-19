@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 407, date: '2026-08-19', title: 'The selected tab is easier to read', items: [
+    'The tab you are on no longer sits under a solid red block, so its label is legible instead of washed out, and it reads as "you are here" rather than as a warning.',
+  ] },
   { n: 406, date: '2026-08-19', title: 'Name your pets, and see the whole card in the Stable', items: [
     'Give any pet a nickname only you can see. It shows in the Stable and out in the Paddock, and it never leaves your phone.',
     'The pet card in the Stable was having its bottom cut off, which hid its lower edge and the OUT WITH YOU ribbon on the pet you have equipped. You can see the whole card now.',
