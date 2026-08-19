@@ -8292,9 +8292,12 @@ body::before {
    visible defect rather than a silent reflow.
    (scrollWidth cannot measure this: with overflow visible it reports the
    padding box, so every font size came back "fits" and the check proved
-   nothing. The number above is a Range over the text node.) */
+   nothing. The number above is a Range over the text node.)
+   8.5px with the tracking dropped measures 96.6px, so it buys a larger glyph
+   for the same width as 8px/.04em at 96.9px. It is still the smallest type on
+   the rack, which is a real cost and is called out in the report. */
 .rk-tag { position: absolute; top: 0; left: 0; right: 0; z-index: 2; text-align: center;
-  font-size: 8px; font-weight: 800; letter-spacing: .04em; color: var(--ink);
+  font-size: 8.5px; font-weight: 800; letter-spacing: 0; color: var(--ink);
   white-space: nowrap; background: var(--text); padding: 3px 0; }
 
 /* One control. No printed ladder: the price on the button IS the price. */
@@ -8308,6 +8311,12 @@ body::before {
    land on tile chrome and empty tail rather than on product art. Mid-scroll
    transit under a fixed gear is app-wide behaviour and no rack padding removes
    it; see the report.
+   PARTIAL, and knowingly so: three columns widened the price pills to the full
+   tile, so the top-right PILL now reaches under the gear where the two-wide
+   76px pill did not (measured 31x36px at 393, 31x18px at 440, at scroll
+   bottom). There is no tail height that clears both the art and the pills at
+   both viewports: 393 has exactly one clean value, 0, and 440 has exactly one,
+   78. The art is what this value protects.
    Re-solved for the three-wide grid, which changed every row's pitch: the
    window clean at BOTH 393 and 440 is 78 to 116px, and 96 is its middle. The
    two-wide build's 120 is outside it and puts the gear back on tile 5. */
