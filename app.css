@@ -1448,7 +1448,23 @@ body::before {
    landscape where a flat 230 would be arbitrary.
    The vh line stays ahead of the svh line for the same reason it always has: a
    browser that cannot parse svh drops that declaration and falls back. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - var(--sat) - 552px), 230px); height: clamp(183px, calc(100svh - var(--sat) - 552px), 230px); }
+.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - var(--sat) - 552px), 230px); }
+/* @SUPPORTS, NOT A SECOND DECLARATION, AND THIS RULE ONLY NEEDED IT TODAY.
+   The old arena height was `calc(100svh - 552px)` with no var() in it, so the
+   conventional two-declaration fallback worked: an old browser cannot parse svh,
+   drops that declaration at PARSE time, and keeps the vh one above it.
+   Subtracting var(--sat) to stop the arena double-counting the top inset changed
+   the shape into the blind spot documented at the .sheet rules above: a value
+   containing var() is assumed valid at parse time and only fails at
+   COMPUTED-VALUE time, which per CSS Variables makes the declaration UNSET
+   rather than ignored, and the earlier declaration is discarded with it. So the
+   two-line form would have left the arena with no height at all on any browser
+   without svh, which is worse than the layout it replaced.
+   Caught by tests/dvh-fallback-audit.mjs on the first gate run after that guard
+   was unblocked. It is the reason this pattern is a condition and not a pair. */
+@supports (height: 100svh) {
+  .fight-body > .arena { height: clamp(183px, calc(100svh - var(--sat) - 552px), 230px); }
+}
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
