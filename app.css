@@ -8393,8 +8393,13 @@ body::before {
 .ton-state.own { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 /* Side by side here: a sheet is full width, so the reason the rack stacks them
    (46px of tile) does not apply. */
-.ton-buy { flex-direction: row; gap: 8px; max-width: 300px; margin: 0 auto; }
-.ton-buy > * { flex: 1; }
+/* Side by side here: a sheet is full width, so the reason the rack stacks them
+   (46px of tile) does not apply. align-items is load-bearing: the OR is a 14px
+   line between two 44px pills and without it the row stretches everything to
+   the tallest item and the word lands against the top edge. */
+.ton-buy { flex-direction: row; align-items: center; gap: 8px; max-width: 300px; margin: 0 auto; min-height: 0; }
+.ton-buy > button { flex: 1; }
+.ton-buy .rk-or { flex: none; }
 
 /* ============ MOCKUP ONLY: what this wallet reaches ============
    A player at 340 coins could reach nothing on the old rack and the screen
