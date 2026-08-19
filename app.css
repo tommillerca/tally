@@ -8187,7 +8187,7 @@ body::before {
    a two-line name do not produce two different tile heights in the same row.
    Measured at 393: the longest name on the rack wraps to 2 lines and 0 of 9 are
    truncated. line-clamp is the backstop, not the plan. */
-.rk > b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.rk > b { display: -webkit-box; margin-top: 2px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   font-size: 11.5px; line-height: 1.25; height: 28px; margin: 5px 0 6px; }
 /* PRESENCE. Measured off the eight-tile render, clipped to each stage: the
    selected Shop chip is a solid coral fill at 89% saturated area, while White
@@ -8197,12 +8197,17 @@ body::before {
    copies of the same flat --surface-3. A bone-white sneaker now has a colour to
    be seen against, and the grid reads as eight tiles rather than one texture.
    Same --rar-rgb ladder the pack reveal already uses; nothing new invented. */
-.rk { --rar-rgb: 185, 172, 151; }
-.rk.r-uncommon { --rar-rgb: 162, 224, 166; }
-.rk.r-rare { --rar-rgb: 124, 196, 255; }
-.rk.r-epic { --rar-rgb: 155, 146, 232; }
-.rk.r-legendary { --rar-rgb: var(--gold-rgb); }
-.rk-stage { position: relative; width: 100%; aspect-ratio: 1 / 0.86; border-radius: 12px; overflow: hidden;
+.rk, .ton-stage { --rar-rgb: 185, 172, 151; }
+.rk.r-uncommon, .ton-stage.r-uncommon { --rar-rgb: 162, 224, 166; }
+.rk.r-rare, .ton-stage.r-rare { --rar-rgb: 124, 196, 255; }
+.rk.r-epic, .ton-stage.r-epic { --rar-rgb: 155, 146, 232; }
+.rk.r-legendary, .ton-stage.r-legendary { --rar-rgb: var(--gold-rgb); }
+/* THE STAGE IS THE TRY-ON CONTROL. Not a 44px icon parked in a corner of a
+   101px tile, which would have eaten 43% of its width: the art itself is the
+   button, so the target is the whole 101x87 stage and the tile gains no chrome
+   for it. The magnifier is a hint sitting on top, not the hit area. */
+.rk-stage { display: block; border: 0; padding: 0; font: inherit; color: inherit;
+  position: relative; width: 100%; aspect-ratio: 1 / 0.86; border-radius: 12px; overflow: hidden;
   background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
 .rk-stage .bh-anim { position: absolute; inset: 0; }
 .rk-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -8211,11 +8216,29 @@ body::before {
    72px to render "3,000" without wrapping. So the prices stack. They keep the
    full tile width each, which makes them BIGGER tap targets than the two-wide
    build had (115x44 against 76x44 at 393). */
-.rk-buy { display: flex; flex-direction: column; gap: 5px; }
+.rk-try { position: absolute; right: 3px; bottom: 3px; z-index: 2; width: 17px; height: 17px;
+  display: grid; place-items: center; border-radius: 50%; pointer-events: none;
+  background: rgba(22, 21, 29, .72); color: var(--text-2); }
+.rk-try svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; }
+
+/* min-height is load-bearing: an owned card carries ONE inert marker where the
+   others carry two pills and the word between them, and without a floor the
+   owned card would be 70px shorter than its neighbours and the row would go
+   ragged. The runner asserts every tile in a viewport is the same height, so
+   drift here goes red rather than silent. */
+.rk-buy { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 106px; }
+/* The word that says these are ALTERNATIVES. Two identical full-width pills
+   stacked read as "3,000 AND 200", a bill in two parts, and the whole mechanic
+   is that they are two ways to pay for one thing. */
+.rk-or { display: block; font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  line-height: 14px; height: 14px; color: var(--text-2); text-transform: uppercase; }
 /* 44px minimum, measured: the first build shipped 31px-tall buy buttons. On the
    owned tile the marker is the thing that has to clear 44, so the rule is on
    every child of the row, not on the price pill alone. */
-.rk-buy > * { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
+/* The 44px floor is for CONTROLS, not for the word between them. Scoping this
+   to `> *` made the "or" a 44px-tall element, which added 49px to every tile
+   and made the runner report it as a tap target. */
+.rk-buy > button, .rk-buy > .rk-owned { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
 
 /* OUT OF REACH IS STILL A PRICE. The shipped [disabled] grey-out was rejected:
    with 380 coins and no dust every price on this rack is out of reach, and 16
@@ -8229,20 +8252,21 @@ body::before {
   color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
 .rk-buy .t3-price.dust.cant { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
 
-/* A piece you already own stays on the rack until it rerolls, so it needs a
-   state. One marker instead of two prices: a price on something you own is
-   noise. Accent green, which is neither a currency (gold, violet) nor a rarity
-   (gold, violet, blue, mint, coral). */
-.rk.owned { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
-/* Soft, not solid. Measured on the first version: a solid --accent fill put
-   84.6% saturated area on the marker against 82.2% for a payable price and
-   ~20% for an out-of-reach one, which made the loudest pill on a shop rack the
-   one tile that is not for sale. It stays green and filled, so it still reads
-   as "yours" rather than as "you cannot afford this"; it just stops shouting. */
-.rk-owned { display: inline-flex; align-items: center; justify-content: center;
-  background: var(--accent-soft); color: var(--accent); border-radius: 9px;
-  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  font-size: 10.5px; font-weight: 800; letter-spacing: .08em; }
+/* OWNED IS INERT, and it used to be the loudest thing on a shop rack. It was a
+   solid --accent pill in the same shape as the buy prices, sitting on the one
+   card a player cannot act on, and it collided with the reroll's --mint FREE
+   pill besides: two different greens both meaning "good" on one screen. It is a
+   check and a dimmed card now. No fill, no border, no green, and the card's art
+   drops to half opacity so the eye skips it on the way to the eight for sale. */
+.rk.owned .rk-stage { opacity: .45; }
+.rk.owned > b { color: var(--text-3); }
+/* --text-2, not --text-3: measured off the render at --text-3 this was 4.38:1
+   against its own card, an actual WCAG AA failure at 11px. Inert is a job for
+   shape and colour (no fill, no border, no green, dimmed art), never for
+   contrast. At --text-2 it reads 7.5:1 and is still plainly not a button. */
+.rk-owned { display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  color: var(--text-2); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.rk-owned svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6; }
 
 /* Crop each preview to the part of the figure the piece occupies. Centres and
    scales are MEASURED alpha bounding boxes (median over every asset in the
@@ -8296,9 +8320,29 @@ body::before {
    8.5px with the tracking dropped measures 96.6px, so it buys a larger glyph
    for the same width as 8px/.04em at 96.9px. It is still the smallest type on
    the rack, which is a real cost and is called out in the report. */
+/* EVERY CARD CARRIES ONE, which is why this stopped being the AURA strip. As
+   the only tag on the rack it made the other eight cards look untagged by
+   mistake, and rarity was separately illegible: a faint tinted border and a
+   tinted ground, with nothing naming the code and no legend to look it up in.
+   The strip spells the rarity in the rarity's OWN colour, so the card teaches
+   the code itself, and the aura's keeps ANY WEAPON and stays the only INVERTED
+   one, bone fill and ink text against dark-on-tint everywhere else, so it is
+   still structurally the odd card out rather than one more label.
+   Shrinking the type was the wrong lever and the phrase was the right one. This
+   label had been cut to 8.5px, smaller than the tile names at 11.5px, which
+   made the most load-bearing words on the rack the hardest to read. Largest
+   size fitting the 101px stage at 393, measured with a Range over the text
+   node: "AURA . ANY WEAPON" 8.5px, "FITS ANY WEAPON" 9px, "ON ANY WEAPON"
+   9.5px, "ANY WEAPON" 12px. The word AURA moved to the name directly beneath,
+   which was always going to carry it. LEGENDARY, the longest rarity, is shorter
+   than ANY WEAPON, so nothing else has to shrink to keep it company. */
 .rk-tag { position: absolute; top: 0; left: 0; right: 0; z-index: 2; text-align: center;
-  font-size: 8.5px; font-weight: 800; letter-spacing: 0; color: var(--ink);
-  white-space: nowrap; background: var(--text); padding: 3px 0; }
+  font-size: 12px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; padding: 3px 0;
+  color: var(--ink); background: var(--text); }
+/* Rarity, on every card, under the art rather than over it, in the rarity's own
+   colour so the tinted ground and border stop being a code with no key. */
+.rk-rar { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+  margin: 5px 0 0; color: rgb(var(--rar-rgb)); }
 
 /* One control. No printed ladder: the price on the button IS the price. */
 /* WHERE THE LAST ROW LANDS. Two pieces of shipped chrome float over this
@@ -8317,12 +8361,63 @@ body::before {
    bottom). There is no tail height that clears both the art and the pills at
    both viewports: 393 has exactly one clean value, 0, and 440 has exactly one,
    78. The art is what this value protects.
-   Re-solved for the three-wide grid, which changed every row's pitch: the
-   window clean at BOTH 393 and 440 is 78 to 116px, and 96 is its middle. The
-   two-wide build's 120 is outside it and puts the gear back on tile 5. */
-.rk-tail { height: 96px; }
+   Re-solved again after the buy row grew the "or" line and the head grew a
+   wallet row, both of which move every row's pitch: the window clean at BOTH
+   393 and 440 is now 6 to 66px, and 36 is its middle. It was 96, which is
+   outside that window and puts the gear back on a stage. The
+   A smaller tail is also less dead space under the rack, which was a separate
+   note. */
+.rk-tail { height: 16px; }
 
 .rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
-.rk-reroll b { flex: 1; text-align: left; font-size: var(--fs-3); }
+.rk-reroll b { text-align: left; font-size: var(--fs-3); }
+
+/* ============ MOCKUP ONLY: the try-on sheet ============
+   One piece, on the player's own bonehead, over their real outfit. The grid is
+   neutral on purpose and this is personal on purpose. Nothing here is wired to
+   a purchase and closing the sheet writes nothing. */
+.ton-stage { position: relative; width: 100%; max-width: 300px; margin: 2px auto 0; aspect-ratio: 1 / 1;
+  border-radius: 18px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
+.ton-stage .bh-anim { position: absolute; inset: 0; }
+.ton-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.ton-name { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 10px; }
+.ton-name b { font-size: var(--fs-3); }
+/* The status line sits against the name, where the eye already is, and it is
+   the plainest sentence on the screen because it is the one a player must not
+   get wrong. Coral, which is neither a currency (gold, violet) nor a rarity. */
+.ton-state { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; border-radius: 9px; padding: 4px 8px;
+  color: var(--coral); background: var(--coral-soft); border: 1.5px solid color-mix(in srgb, var(--coral) 45%, transparent); }
+.ton-state.own { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+/* Side by side here: a sheet is full width, so the reason the rack stacks them
+   (46px of tile) does not apply. */
+.ton-buy { flex-direction: row; gap: 8px; max-width: 300px; margin: 0 auto; }
+.ton-buy > * { flex: 1; }
+
+/* ============ MOCKUP ONLY: what this wallet reaches ============
+   A player at 340 coins could reach nothing on the old rack and the screen
+   never said so. The out-of-reach pills were real and their contrast was
+   measured, but a state with nothing to compare against is not perceived as a
+   state, so the count is now printed and the rack always stocks one piece a
+   starting wallet can buy. The dust half carries its own route, because a
+   currency shown as 0 with no way to earn any is decoration. It reuses the
+   shipped #shopSalvage handler, which still routes to the Salvage Bench. */
+.rk-wallet { display: flex; gap: 8px; margin: 0 2px 10px; }
+.rk-w { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left;
+  background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 10px;
+  padding: 6px 8px; font-size: 11px; color: var(--text-2); }
+.rk-w b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--text); }
+.rk-w i { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-w svg { flex: none; }
+
+/* The reroll's LIMIT, which the simplification pass cut along with the printed
+   price ladder. The ladder was clutter; the limit is the mechanic, and without
+   it the control reads as unlimited, which would let anyone spam the rack until
+   their piece appears and turn the countdown beside the theme into noise. */
+.rk-rr { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.rk-rr b { font-size: var(--fs-3); }
+.rk-rr small { font-size: 10.5px; color: var(--text-3); }
+.rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
+  background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }

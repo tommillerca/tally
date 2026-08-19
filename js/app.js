@@ -6481,7 +6481,22 @@ async function renderShop(el) {
      rack that has to share the screen with five other departments is not a rack.
      No paragraph explains any of it: a rule a control cannot carry on its own is
      a broken control, not an under-explained one. */
-  const MOCK_THEME = 'AUGUST · COLD SNAP';
+  /* THE BANNER AND THE RACK NOW AGREE, and the banner says one thing, not two.
+     Three separate faults were in the old line. It read AUGUST . COLD SNAP while
+     row three sold trunks, socks and briefs. It was monthly and weekly at once,
+     a month name beside "New rack Monday", with no statement of how they nest.
+     And a cold snap in August is a southern-hemisphere winter sold to a mostly
+     northern audience: a puffer promo during a heat wave. Tom's call was "just
+     pick a warmer august theme", so the theme is HEATWAVE, the nine pieces are
+     stocked to match it (tank tops, a bucket hat, a caught fish, slides, swim
+     trunks, briefs), and the nesting is stated outright: a month-long theme,
+     four racks inside it, this is rack N.
+     The right-hand side is a COUNTDOWN, not a weekday. "New rack Monday" is
+     ambiguous across timezones and reads as nonsense when you open the app on a
+     Monday. */
+  const MOCK_THEME = 'HEATWAVE';
+  const mockRackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
+  const mockDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
   /* THE NEUTRAL BASE. Tom: "items should just be styled on a base skeleton so
      that the item doesnt clash with the not for sale items". Taken from the data
      file's own slot defaults rather than invented, which is the same pair
@@ -6489,6 +6504,10 @@ async function renderShop(el) {
      nothing else. No pet, no background, no held item, nothing the player owns.
      The only non-default thing in a tile is the piece for sale. */
   const MOCK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+  // The player's ACTUAL outfit. Used by try-on and by nothing else: the grid
+  // stays on the neutral base so nine pieces can be compared without the
+  // player's own gear joining in.
+  const mockEq = await equipped();
   // Eight slots, two per price rung, one body part per pair so no two tiles in a
   // row sell the same kind of thing.
   // Every coin price is DIFFERENT. Two tiles at 3,000 sitting side by side read
@@ -6514,25 +6533,22 @@ async function renderShop(el) {
      kill, and it was invisible until the tiles were rendered side by side. The
      left-hand rung is a flail, a fish and an egg now. */
   const MOCK_POOLS = [
-    [3000, ['T9-1', 'T9-7', 'T9-6']],       // legendary tops        torso
-    [2400, ['H10-4', 'H1', 'H4']],          // rare hats             head, the only one
-    [2000, ['IL14', 'IL8-1', 'IL12-2']],    // legendary left hand   left hand
-    [1500, ['B1', 'B12', 'B18']],           // uncommon bodies       whole figure
-    [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks            feet
-    [900, ['P5-1', 'P5-2', 'P6-3']],        // epic pants            hips
-    [700, ['S4-1', 'S5', 'S8']],            // uncommon socks        ankle
-    [500, ['U2', 'U4', 'U7']],              // common undies         waist
+    // coin, ids (all ONE rarity), and the rarity is seated so no two touching
+    // tiles share a tint. Every piece is stocked for a HEATWAVE.
+    [3000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head, the only one
+    [2400, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
+    [2000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
+    [1500, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
+    [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
+    [900, ['P5-1', 'P5-2', 'P6-3']],        // epic swim trunks         hips
+    [700, ['S4-1', 'S5', 'S8']],            // uncommon socks           ankle
+    // THE ANCHOR, and it is the point of this rung. At 340 coins a player could
+    // reach nothing on the old rack: the cheapest piece was 500 and every one of
+    // the eighteen prices rendered out of reach, so the screen had no affordable
+    // state on it to see and read as broken rather than expensive. Every rack
+    // carries one piece a starting wallet can actually buy.
+    [300, ['U2', 'U4', 'U7']],              // common briefs            waist
   ];
-  /* Where each rung lands, and it is a seating plan, not an order. The aura
-     takes the CENTRE cell, the one position a 3x3 has and a 2-wide does not.
-       row 1   tops       hats      left hand
-       row 2   body       AURA      kicks
-       row 3   pants      socks     undies
-     Three things are held apart by this seating, each of which repeated on an
-     earlier render: the two lookalike CROPS (kicks/socks, pants/undies) are
-     never side by side or one above the other; no two touching tiles share a
-     RARITY, so no row is three of the same tinted ground; and coins still run
-     strictly downhill 3,000 to 500 as you read. */
   const MOCK_AURA_CELL = 4;
   // Same FNV-1a + ISO-week recipe the dens already turn over on, so the rack
   // changes every Monday with no server.
@@ -6540,20 +6556,20 @@ async function renderShop(el) {
   const mockWeek = isoWeekKey(new Date());
   const mockPick = (ids, slot) => { const free = ids.filter(id => !ownedCos.has(id)); const p = free.length ? free : ids; return p[mockHash(`${mockWeek}:rack:${slot}`) % p.length]; };
   const mockIds = MOCK_POOLS.map(([, ids], i) => mockPick(ids, i));
-  /* DUST IS THE SECOND PRICE, and it has to be worth reading. The first
-     eight-tile build priced dust off rarity alone: eight distinct coin prices
-     against FOUR distinct dust values, 120 printed four times and two 200s side
-     by side in row one, so the second number read as decoration while the first
-     one varied. That defeats the whole mechanic.
-     Dust now converts the rack's coin rung at a RARITY-DEPENDENT rate (coins per
-     one dust). Both halves survive: dust still says something about the PIECE
-     (the rate is the rarity), coins still say what the RACK is charging, and the
-     two prices still do not track each other, because a cheap rare costs more
-     dust than a dearer epic. And it says the thing worth saying out loud: dust
-     goes furthest on the pieces actually worth targeting.
-     Rounded to 5 so no price on the screen is a number nobody would print. */
-  const MOCK_DUST_RATE = { common: 4, uncommon: 6, rare: 9, epic: 12, legendary: 15 };
-  const mockDust = (id, coin) => Math.round(coin / (MOCK_DUST_RATE[(BH_BY_ID[id] || {}).rarity] || 6) / 5) * 5;
+  /* DUST, REBUILT. The rarity-rate version did what it was asked (dust visibly
+     disagreeing with coins) and produced something indefensible: the implied
+     coin-to-dust rate swung from 15:1 to 4:1 and REVERSED, so plain white briefs
+     cost 25% more dust than the Tidewater Aura. That reads as a bug or a
+     rip-off, and it is not a mechanic.
+     Dust is the CERTAINTY premium: coins buy whatever the rack happens to offer,
+     dust buys the exact piece you just tried on. So the rate may be kinder on
+     the pieces worth targeting, but it must never turn around. This is an
+     explicit per-rung ladder rather than a formula, because a formula over nine
+     rungs is what produced the inversion, and the implied rate is now strictly
+     single-directional: 15.0, 13.7, 12.5, 11.5, 10.9, 10.5, 10.0, 9.3, 8.6 coins
+     per dust, dearest to cheapest, checked on every render. */
+  const MOCK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
+  const mockDust = i => MOCK_DUST[i];
   /* OWNED. A rack keeps a piece you already bought on it for the rest of the
      week, so this screen has a state where a tile is not for sale. MOCKUP ONLY:
      the demo owns the rung-4 piece so the state is on the screen; a real build
@@ -6565,29 +6581,58 @@ async function renderShop(el) {
   // bounding boxes, median over every asset in the slot.
   const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
     P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
-  /* THE BUY ROW. Three states, and the middle one is the whole point.
-     - owned: one marker instead of two prices. A price on something you already
-       own is noise.
-     - affordable: the filled pill, unchanged. Filled is what says "press me".
+  /* THE BUY ROW. Two prices for one piece are ALTERNATIVES, and two identical
+     full-width pills stacked on top of each other do not say so: they read as
+     "3,000 AND 200", a bill in two parts. The word between them is the whole
+     fix and it costs one 10px line.
+     Three states, and the middle one is the whole point.
+     - owned: inert. Not a pill, not green, no price. See the marker below.
+     - affordable: the filled pill. Filled is what says "press me", and the rack
+       always stocks one piece a starting wallet can reach so that state is
+       always on the screen to compare against.
      - out of reach: the SAME pill, same size, same digits, hollow. Not the
-       shipped [disabled] grey-out, which turns a number into a dead control and,
-       at a 380-coin wallet where nothing on the rack is in reach, teaches "this
-       screen is broken" rather than "this is what it costs". The hollow state
-       does not lose contrast: measured off the render, a hollow coin pill's
-       digits read 10.4:1 against their own ground and a filled one 10.1:1. What
-       it drops is the button affordance, not the price. */
+       shipped [disabled] grey-out, which turns a number into a dead control.
+       Contrast does not drop: measured off the render, the hollow pill's digits
+       read 10.4:1 against their own ground and a filled one 10.1:1. What it
+       drops is the button affordance, not the price. */
   const mockPrice = (kind, amount, bal) =>
     `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}">${
       kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}</button>`;
-  const mockBuyRow = (id, coin) => mockOwns(id)
-    ? '<div class="rk-buy"><span class="rk-owned">IN YOUR WARDROBE</span></div>'
-    : `<div class="rk-buy">${mockPrice('coin', coin, coinBal)}${mockPrice('dust', mockDust(id, coin), dustBal)}</div>`;
+  const mockBuyRow = (id, coin, dust) => mockOwns(id)
+    ? '<div class="rk-buy"><span class="rk-owned">' + ICONS.check(13) + ' Owned</span></div>'
+    : `<div class="rk-buy">${mockPrice('coin', coin, coinBal)}<i class="rk-or">or</i>${mockPrice('dust', dust, dustBal)}</div>`;
+  /* EVERY CARD CARRIES A TAG, which fixes two findings with one element.
+     The AURA strip used to be the only tag on the rack, so the other eight cards
+     read as untagged by mistake rather than as ordinary. And rarity was
+     illegible: a faint tinted border and a tinted ground with nothing anywhere
+     saying what the colours meant, and no legend to look it up in.
+     So the strip spells the RARITY on the eight ordinary cards, in the rarity's
+     own colour, which teaches the colour code on the card itself and needs no
+     legend. The aura's strip keeps ANY WEAPON and stays the only INVERTED one,
+     bone on ink against dark on tint, so it is still structurally the odd card
+     out. It did not have to give up its size to gain company: the rarity words
+     are the same 12px. */
+  /* RARITY SITS UNDER THE STAGE, NOT ON IT. Putting the rarity word in the same
+     full-width strip the aura uses did fix "only one card is tagged", and it
+     covered 28% of every card's art to do it: the blowfish hat, the skull and
+     the fish were all behind a label on the render. That is trading the goods
+     for the labels, not solving both.
+     So rarity is a line UNDER the art, in the rarity's own colour, on all nine
+     cards including the aura. Every card is tagged, rarity is legible and
+     teaches its own colour code with no legend, no art is covered, and the
+     aura's ANY WEAPON strip goes back to being the only thing overlaid on a
+     stage anywhere on the rack, which is what made it read as a category badge
+     rather than one label among nine. */
+  const mockTag = r => `<span class="rk-rar">${r.toUpperCase()}</span>`;
   const mockTile = (id, i) => {
     const it = BH_BY_ID[id];
+    const coin = MOCK_POOLS[i][0];
+    const dust = mockDust(i);
     return `<div class="rk r-${it.rarity}${mockOwns(id) ? ' owned' : ''}">
-      <div class="rk-stage ${MOCK_FIT[it.slot] || ''}">${avatarLayersHtml({ ...MOCK_BASE, [it.slot]: id }, { thumb: 384 })}</div>
-      <b>${esc(it.name)}</b>
-      ${mockBuyRow(id, MOCK_POOLS[i][0])}
+      <button class="rk-stage ${MOCK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
+        >${avatarLayersHtml({ ...MOCK_BASE, [it.slot]: id }, { thumb: 384 })}<span class="rk-try">${ICONS.search}</span></button>
+      ${mockTag(it.rarity)}<b>${esc(it.name)}</b>
+      ${mockBuyRow(id, coin, dust)}
     </div>`;
   };
   /* AURAS GO ON WEAPONS, and the WEAPON IS A MANNEQUIN, not the product. Tom:
@@ -6600,29 +6645,101 @@ async function renderShop(el) {
      The halo itself REPLACES the rarity halo rather than stacking on it (see
      avatarLayersHtml); the carrier is common, so there is nothing to replace
      here and rarity keeps living in the tile border. */
-  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200 };
+  const MOCK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
   const mockAuraTile = () => `<div class="rk r-${MOCK_AURA.rarity} aura">
-    <div class="rk-stage fit-hand"><span class="rk-tag">AURA · ANY WEAPON</span>${avatarLayersHtml({ ...MOCK_BASE, IR: MOCK_AURA.carrier }, { thumb: 384, wpnAura: MOCK_AURA.key })}</div>
-    <b>${esc(MOCK_AURA.name)}</b>
-    <div class="rk-buy">${mockPrice('coin', MOCK_AURA.coin, coinBal)}${
-      mockPrice('dust', Math.round(MOCK_AURA.coin / MOCK_DUST_RATE[MOCK_AURA.rarity] / 5) * 5, dustBal)}</div>
+    <button class="rk-stage fit-hand" data-tryon="AURA" data-coin="${MOCK_AURA.coin}" data-dust="${MOCK_AURA.dust}" aria-label="Try on ${esc(MOCK_AURA.name)}"
+      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...MOCK_BASE, IR: MOCK_AURA.carrier }, { thumb: 384, wpnAura: MOCK_AURA.key })}<span class="rk-try">${ICONS.search}</span></button>
+    ${mockTag(MOCK_AURA.rarity)}<b>${esc(MOCK_AURA.name)}</b>
+    <div class="rk-buy">${mockPrice('coin', MOCK_AURA.coin, coinBal)}<i class="rk-or">or</i>${mockPrice('dust', MOCK_AURA.dust, dustBal)}</div>
   </div>`;
+  /* TRY-ON, and it is the deliberate opposite of the grid. The grid is neutral
+     so nine pieces can be compared without clashing with what the player owns;
+     this is ONE piece, on the player's OWN bonehead, over what they are actually
+     wearing. Both are right, at different moments.
+     THE FAILURE TO DESIGN AGAINST is a player trying on a 3,000-coin jacket,
+     closing the sheet and believing they own it. Four things say otherwise and
+     none of them is a paragraph:
+       - the title is a verb in progress, "Trying on", never a past tense
+       - a status line names ownership outright, NOT YOURS YET or IN YOUR
+         WARDROBE, and it sits against the piece's name where the eye already is
+       - the prices are the SAME pills in the SAME states as on the rack, so the
+         sheet reads as a price tag and not as a receipt
+       - there is no equip control anywhere on it, and closing writes nothing
+     And it ends somewhere, which is the point of having Dust at all: coins buy
+     whatever the rack offers this week, Dust buys the exact piece just tried on.
+     Only what is ON THE RACK can be tried on. A full catalogue of every item in
+     the game is the part of Finch's design that backfires: it lets a player find
+     the exact colourway they want and then refuses to sell it to them. */
+  const mockTryOn = (id, coin, dust) => {
+    const aura = id === 'AURA';
+    const it = aura ? null : BH_BY_ID[id];
+    const name = aura ? MOCK_AURA.name : it.name;
+    const rarity = aura ? MOCK_AURA.rarity : it.rarity;
+    /* An aura lands on the weapon the player is ALREADY holding, which is the
+       exact claim the tile's ANY WEAPON strip makes, so trying it on is what
+       proves the claim. The rack's own mannequin only stands in for a player
+       holding nothing. */
+    const fit = aura ? { ...mockEq, IR: mockEq.IR || MOCK_AURA.carrier } : { ...mockEq, [it.slot]: id };
+    const owns = !aura && mockOwns(id);
+    openSheet(`
+      <div class="sheet-head">
+        <div class="hd"><h2>Trying on</h2><div class="sub">Free, and it buys nothing</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
+      </div>
+      <div class="sheet-body">
+        <div class="ton-stage r-${rarity}">${avatarLayersHtml(fit, { thumb: 512, ...(aura ? { wpnAura: MOCK_AURA.key } : {}) })}</div>
+        <div class="ton-name"><b>${esc(name)}</b><span class="ton-state${owns ? ' own' : ''}">${owns ? 'IN YOUR WARDROBE' : 'NOT YOURS YET'}</span></div>
+        ${owns ? '' : `<div class="rk-buy ton-buy">${mockPrice('coin', coin, coinBal)}<i class="rk-or">or</i>${mockPrice('dust', dust, dustBal)}</div>`}
+      </div>`, { name: 'shop-tryon' });
+  };
   // Reroll is ONE control, not a printed ladder. ?rr=N renders the paid state.
-  const mockRerolls = +(new URLSearchParams(location.search).get('rr') || 0);
-  const mockRerollCost = [0, 100, 200, 300, 400, 500][Math.min(mockRerolls, 5)];
+  /* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A control reading
+     "Reroll the rack / FREE" with nothing beside it says unlimited, and an
+     unlimited reroll destroys the rack: you spam it until your piece appears
+     and the countdown beside the theme becomes noise. The ladder is free, then
+     100 to 500, six a day, 2,000 coins to exhaust. The simplification pass that
+     cut the printed price ladder cut the LIMIT with it, which was the mistake:
+     the ladder was clutter, the limit is the mechanic.
+     Two words carry it, "6 left today", and the small line under the label says
+     what a reroll draws from, which is the thing a curated theme and a random
+     reroll otherwise fight about: another nine FROM THE SAME THEME, never a
+     random pull out of the whole game. */
+  const MOCK_RR_LADDER = [0, 100, 200, 300, 400, 500];
+  const mockRerolls = Math.min(+(new URLSearchParams(location.search).get('rr') || 0), MOCK_RR_LADDER.length);
+  const mockRerollCost = MOCK_RR_LADDER[Math.min(mockRerolls, MOCK_RR_LADDER.length - 1)];
+  const mockRerollsLeft = MOCK_RR_LADDER.length - mockRerolls;
+  // what this wallet actually reaches, counted rather than implied
+  const mockAllCoins = [...MOCK_POOLS.map(p => p[0]), MOCK_AURA.coin];
+  const mockAllDust = [...MOCK_DUST, MOCK_AURA.dust];
+  const mockCheapest = Math.min(...mockAllCoins);
+  const mockAfford = { coins: mockAllCoins.filter(c => c <= coinBal).length, dust: mockAllDust.filter(d => d <= dustBal).length };
 
   el.innerHTML = `
-  <div class="rk-theme"><b>${esc(MOCK_THEME)}</b><i></i><span>New rack Monday</span></div>
+  <div class="rk-theme"><b>${esc(MOCK_THEME)} · RACK ${mockRackNo} OF 4</b><i></i><span>New rack in ${mockDaysLeft}d</span></div>
+  <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
+       from which pills happen to be filled. A player at 340 coins could not buy
+       one of the nine and the screen never said so; the out-of-reach pills were
+       measured for contrast and still went unnoticed, because a state you have
+       to compare against nothing is not a state. And the dust column was
+       decoration at 0 dust with no route to any, so the route is attached to the
+       number that is zero. -->
+  <div class="rk-wallet">
+    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${mockAfford.coins ? `buys ${mockAfford.coins} of 9` : `${(mockCheapest - coinBal).toLocaleString()} short of the cheapest`}</i></span>
+    <button class="rk-w link" id="shopSalvage">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${mockAfford.dust ? `buys ${mockAfford.dust} of 9` : 'melt gear to earn it'} ›</i></button>
+  </div>
   <div class="rk-grid">
     ${mockIds.slice(0, MOCK_AURA_CELL).map((id, i) => mockTile(id, i)).join('')}
     ${mockAuraTile()}
     ${mockIds.slice(MOCK_AURA_CELL).map((id, i) => mockTile(id, i + MOCK_AURA_CELL)).join('')}
   </div>
-  <button class="rk-reroll"><b>Reroll the rack</b>
+  <button class="rk-reroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(MOCK_THEME[0] + MOCK_THEME.slice(1).toLowerCase())}</small></span>
+    <span class="rk-left">${mockRerollsLeft} left today</span>
     ${mockRerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${mockRerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
   <div class="rk-tail"></div>`;
 
+
+  el.querySelectorAll('[data-tryon]').forEach(b => b.addEventListener('click', () => mockTryOn(b.dataset.tryon, +b.dataset.coin, +b.dataset.dust)));
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
