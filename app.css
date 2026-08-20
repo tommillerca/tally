@@ -3568,7 +3568,13 @@ body::before {
 .map-legend .leg-h { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 6px; }
 .leg-row { display: flex; align-items: center; gap: 11px; margin: 7px 0; }
 .leg-ico { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; }
-.leg-ico .map-spawn { transform: scale(0.82); }
+/* NO SCALE ON THE SPAWN OR MINI SWATCHES. Both discs are 42px and the cell is
+   44, so they fit as drawn. The old `transform: scale(0.82)` was the only real
+   RESAMPLE anywhere on this path: it rendered a 16px pixel sprite at 13.1 actual
+   px, a fractional downscale of art that only survives whole steps, in the one
+   panel whose whole job is to show you what a marker looks like. The dens keep
+   their 0.66 because .map-den-mark is 46x52 and genuinely does not fit, and
+   Cam's tombstone is a smooth drawing that scales without stepping. */
 .leg-ico .map-den-mark { transform: scale(0.66); }
 .leg-ico .map-den-mark .den-fx { animation: none; }
 .leg-txt { display: flex; flex-direction: column; line-height: 1.2; }
@@ -6216,16 +6222,29 @@ body::before {
 /* Mini-boss marker: same die-cut treatment as the loot discs, and the ☠ dingbat
    swapped for a real drawn skull (JS side). The purple was Tailwind's #c084fc;
    the deck's violet replaces it. Glow filters dropped. */
+/* 42, UP FROM 34, and the skull inside it 24 up from 16 (MINI_SKULL_PX in
+   js/app.js). Tom: "mini boss den scale up skill it's too small". Measured off
+   the rendered map at 440x956 before the change: a 16px skull in a 34px disc,
+   which is 16 of 28px of inner room, while a plain coin pile next to it was 24
+   of 36. So the marker that starts a FIGHT was both a smaller disc and a
+   slacker fill than a marker that pays 40 coins. 42/24 is not a new number: it
+   is exactly .map-spawn, so the mini joins the sticker family at the same
+   proportion instead of getting an invented size, and it still sits under the
+   dens (46x52, 56x64) which are the bigger event.
+   SIZE, NOT TRANSFORM. This element is the MapLibre marker root and maplibre
+   owns its transform on every frame, so growing it goes through width/height,
+   the same way .map-den-mark.big does. A scale() here would be overwritten (or
+   would fight) the moment the map moved. */
 .map-mini-mark {
   position: relative;
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 42px; height: 42px; border-radius: 50%;
   background: var(--surface); border: 3px solid var(--violet);
   box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 rgba(0, 0, 0, 0.5);
   filter: none;
 }
 .map-mini-mark::after {
-  content: ''; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
-  width: 22px; height: 5px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
+  content: ''; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  width: 26px; height: 6px; border-radius: 50%; background: rgba(0, 0, 0, 0.45);
 }
 .map-mini-mark.t2 { border-color: var(--gold); background: var(--surface); filter: none; }
 .map-mini-mark.inrange { border-width: 4px; animation: poiReady 1.4s ease-in-out infinite; }

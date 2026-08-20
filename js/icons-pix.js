@@ -39,6 +39,32 @@
    icons-pack, so a site below 16 renders nothing at all. */
 const PIX_CUR = {
   coin: 'coin', dust: 'bone-dust', egg: 'egg', crate: 'crate',
+  /* THE BASIC EGG, for the steps the egg STACK cannot survive. Tom, on the
+     Boneyard's 24px rare marker: "egg stack looks bad scale that small use a
+     basic one ive made from pixel lab", then "try this egg for the boneyard".
+     It is his own PixelLab object "simple egg", copied byte for byte from
+     tally-refs/pixellab/egg-simple-48.png. A SINGLE egg where `egg` is three
+     stacked lobes. Only crateIcon's small steps ask for it; every site 48px and
+     up still takes the stack, which Tom already signed off ("i feel like the
+     step egg looks worse for the icon maybe we keep the egg icon").
+
+     CHOSEN ON THE NUMBERS AT THE SIZE THAT RENDERS, not at 48. At 48 it has MORE
+     colours than the stack (15 vs 11) which looks like the wrong direction, and
+     that was the open question when it arrived. At 24, which is what the map
+     asks for, it wins on both measures that decide legibility on a near-black
+     basemap:
+                            cols  ink  c/100ink  medianL  single-egg body
+       simple egg    @24     12    199    6.0      234       14x17
+       egg stack     @24      9    174    5.2      194       13x21
+     Median luminance 234 against 194 is 21% brighter, and 14x17 is the biggest
+     single egg of the candidates (the stack is only taller because it is three
+     lobes, not because the subject is bigger). The 3 extra colours describe ONE
+     ovoid instead of three overlapping ones, and it is the competing silhouettes
+     inside 21px, not the colour count, that turned the stack to porridge. Same
+     result at 16 (9 cols, medianL 234, body 11x12).
+     A third candidate, PixelLab `egg-with-glow`, measured worse than both on
+     brightness (medianL 176) and body (11x15) and was dropped. */
+  'egg-basic': 'egg-basic',
   pit: 'pit', wardrobe: 'wardrobe', shop: 'shop', build: 'build',
   xp2: 'battle-charm', vigor: 'vigor-draught',
   stable: 'stable', kitchen: 'kitchen',

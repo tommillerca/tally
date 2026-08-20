@@ -64,6 +64,7 @@ const PRECACHE = [
   './assets/icons-pix/dust.png',
   './assets/icons-pix/egg.png',
   './assets/icons-pix/egg-24.png',
+  './assets/icons-pix/egg-basic.png',
   './assets/icons-pix/crate.png',
   './assets/icons-pix/bone-dust.png',
   './assets/icons-pix/pit.png',
