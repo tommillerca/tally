@@ -3,7 +3,6 @@
 // stays portable (no DOM, no web-only APIs).
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
-import { dateKey } from './nutrition.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -136,12 +135,20 @@ export async function rack() {
   // lazy import: poi.js imports this module, so a top-level import is a cycle
   const { isoWeekKey } = await import('./poi.js');
   const week = isoWeekKey(new Date());
-  const day = dateKey();
   const cur = await kvGet('rack', null);
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
-    return { ...cur, rr: cur.rrDay === day ? (cur.rr || 0) : 0 };
+    /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
+       mechanism: a record that survives to here belongs to THIS week, so its
+       reroll count stands, and a new week rebuilds the record from scratch with
+       rr: 0. It used to reset on rrDay, which made the first reroll free EVERY
+       DAY. Seven free full-rack draws a week against 3-deep rungs surfaces any
+       specific piece 94% of weeks (1 - (2/3)^7) for nothing, which is exactly
+       what the comment beside RACK_REROLL_LADDER says a reroll must not do:
+       "you spam it until your piece appears and the countdown becomes noise".
+       Tom approved weekly on 2026-08-20. `day` is no longer read here. */
+    return { ...cur, rr: cur.rr || 0 };
   }
-  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0, rrDay: day };
+  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -158,12 +165,14 @@ export async function rerollRack() {
   const cost = RACK_REROLL_LADDER[st.rr];
   const bal = await coins();
   if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
-  const day = dateKey();
   const next = await kvUpdate('rack', cur => {
-    const used = (cur && cur.rrDay === day) ? (cur.rr || 0) : 0;
+    /* Weekly, per above. The `cur.week !== st.week` guard on the next line is
+       what makes reading cur.rr straight off the record safe: a record from
+       another week never gets this far. */
+    const used = (cur && cur.rr) || 0;
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
-    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1, rrDay: day };
+    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1 };
   });
   if (!next) return { ok: false, reason: 'race' };
   if (cost) await coinsAdd(-cost);
