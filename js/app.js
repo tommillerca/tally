@@ -2480,8 +2480,8 @@ function route({ keepScroll = false } = {}) {
      * changing the day, closing a sheet) and hiding the screen for that would
      * flash the whole tab on every small edit. */
     const child = el.firstElementChild;
-    if (!isNav) { el.classList.add('screen-in'); child?.classList.add('route-in'); return; }
-    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => child?.classList.add('route-in'));
+    if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
+    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => { markBooted(); child?.classList.add('route-in'); });
   });
 }
 
@@ -3630,6 +3630,16 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
        (anti-regression rule 8: degrade to ugly, never to invisible).
      - decode() can REJECT on a broken or cancelled image, and one rejection must
        not hold the whole screen hostage, so every promise swallows its own error. */
+/* THE APP HAS PUT A SCREEN IN FRONT OF THE PLAYER. One-shot, never removed.
+   app.css holds #tabbar and #gearBtn back until this lands, because they are
+   static markup in index.html and otherwise paint at first paint, before the
+   module graph has even run: an empty Today with the bottom bar on it, every
+   boot, ahead of the splash. It must fire with the REVEAL and not with the
+   render, or the furniture returns over a screen still at opacity 0. That CSS
+   carries its own 8s failsafe, so a boot that never gets here degrades to the
+   old picture rather than to a permanently hidden shell. */
+const markBooted = () => document.documentElement.classList.add('booted');
+
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
@@ -9899,6 +9909,9 @@ function renderOnboarding(step = 0, ctx = {}) {
      #screen measured at opacity 0 while .onb inside it measured opacity 1.
      Anti-regression rule 8: whatever hides content must own un-hiding it. */
   el.classList.add('screen-in');
+  /* Onboarding is the one screen that does not route, so it has to latch the
+     shell itself or the gear stays behind app.css's failsafe for 8 seconds. */
+  markBooted();
   $('#tabbar').style.display = 'none';
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
