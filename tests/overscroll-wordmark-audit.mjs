@@ -49,11 +49,28 @@
  * to the safe inset and a desktop viewport has none, so grading at --sat: 0 would
  * grade a geometry no phone has.
  *
- * PROVE-RED, all four verified in a throwaway worktree:
- *   top: calc(-54px - var(--sat)) -> top: 8px     REST + ABOVE red (it peeks)
- *   position: absolute -> position: fixed          MECHANISM red (dead feature)
- *   .screen--today::before -> .screen::before      TODAY red (every screen)
- *   opacity: .55 -> opacity: 1                     INK red (full cream)
+ * PROVE-RED. Five mutations in a throwaway worktree, each asserting the edit
+ * really applied before the result was read (guard-hygiene-lint's failure 3):
+ *   app.css  top: calc(-54px - var(--sat)) -> top: 8px    4 FAILED, the 3 REST
+ *            rows and ABOVE: the mark peeks at rest
+ *   app.css  position: absolute -> position: fixed        1 FAILED, MECHANISM:
+ *            "shift 0px (want -100)". Silent to every other row, and the feature
+ *            would be dead on the device.
+ *   app.css  .screen--today::before -> .screen::before    1 FAILED, TODAY:
+ *            "today:MARK bonehead:MARK progress:MARK ..." on all six screens
+ *   app.css  opacity: .55 -> opacity: 1                   1 FAILED, INK:
+ *            mean rgb(237,225,197) against --text-3's rgb(143,133,120)
+ *   js/app.js  the classList.toggle('screen--today') line deleted
+ *                                                         7 FAILED, including
+ *            TODAY "today:- bonehead:- ..." and INK "no ink pixels found at all"
+ *
+ * The third mutation is the reason to insist on this. The first version of TODAY
+ * required the CLASS and a painted pseudo-element, and route() still adds that
+ * class on Today, so the selector rewrite that put the wordmark on all six
+ * screens left the row GREEN at 18/18. The fifth is the reason the rows now check
+ * Number.isFinite before comparing: with no pseudo-element at all, NaN geometry
+ * came back as null, node added two nulls to 0, and both REST-geometry and ABOVE
+ * passed while reporting "bottom 0px" about an element that did not exist.
  *
  * Usage: node tests/overscroll-wordmark-audit.mjs [baseUrl]
  */
@@ -165,18 +182,21 @@ const restStats = await stats(b1);
 ok('REST      at scrollTop 0 not one pixel above the ink threshold is in the band: nothing of the mark is on screen',
   g0.scrollTop === 0 && restStats.n === 0,
   `scrollTop ${g0.scrollTop}, ${restStats.n} of ${restStats.total} px over lum ${INK_LUM}`);
+/* Finite, THEN above. With the mark absent both numbers come back NaN, which
+   JSON turns into null and node adds to 0: `0 <= 0` passed, and the row said
+   "bottom 0px" about an element that did not exist. Caught by running the
+   prove-red that deletes the class toggle in route(). */
 ok('REST      the mark\'s bottom edge sits above the scrollport, so the overflow clip owns it',
-  g0.top + g0.h <= 0, `top ${g0.top}px + height ${g0.h}px = bottom ${g0.top + g0.h}px (must be <= 0)`);
+  Number.isFinite(g0.top) && Number.isFinite(g0.h) && g0.top + g0.h <= 0,
+  `top ${g0.top}px + height ${g0.h}px = bottom ${g0.top + g0.h}px (must be a real number <= 0)`);
 
-/* Feature off, same instant: the band is unchanged. Catches a mark that paints
-   at rest through anything the geometry row cannot see. */
-await page.evaluate(() => document.getElementById('screen').classList.remove('screen--today'));
-await sleep(400);
-const bandOff = await band();
-ok('REST      the band is byte-identical with the feature ON and OFF: at rest the wordmark changes nothing',
-  bandOff === b1, bandOff === b1 ? 'identical' : 'the feature paints something at rest');
-await page.evaluate(() => document.getElementById('screen').classList.add('screen--today'));
-await sleep(300);
+/* The feature-off comparison lives at the BOTTOM of this file, not here. Taking
+   the class off and putting it back by hand is exactly how a guard lies: with the
+   toggle in route() deleted (a real way to break this feature) nothing was left to
+   remove the hand-added class, so it survived every later navigation and the tab
+   sweep reported the mark on all six screens. It still went red, for the wrong
+   reason, on evidence that was the audit's own doing. Nothing here sets that class
+   until every row that reads it has been graded. */
 
 /* ---------- CLAMP + ABOVE ---------- */
 const clamp = await page.evaluate(() => {
@@ -194,7 +214,7 @@ const clamp = await page.evaluate(() => {
 });
 ok('CLAMP     scrollTop cannot be driven negative, so ordinary scrolling can never reach the mark',
   clamp.negative === 0, `set -400, engine reported ${clamp.negative}`);
-const notAbove = clamp.out.filter(r => r.bottom > 0);
+const notAbove = clamp.out.filter(r => !Number.isFinite(r.bottom) || r.bottom > 0);
 ok('ABOVE     at every scroll position the mark stays above the scrollport top edge',
   clamp.out.length === 4 && notAbove.length === 0,
   clamp.out.map(r => `scrollTop ${r.got}: bottom ${Math.round(r.bottom)}px`).join(', '));
@@ -236,10 +256,15 @@ ok(`MECHANISM the mark rides the scrolled content layer: ${DELTA}px of scroll mo
 /* ---------- INK ---------- */
 /* Same displaced capture, graded on colour. The mark must read as --text-3, not
    as the cream the source PNG is drawn in (#fff3d3). */
-const off = TEXT3.map((c, i) => Math.abs(at0.mean[i] - c));
+/* No ink at all is a FAILED row, never a thrown TypeError: a suite that dies
+   mid-run prints a stack instead of the remaining rows, which reads like a broken
+   app rather than a broken feature. */
+const off = at0.mean ? TEXT3.map((c, i) => Math.abs(at0.mean[i] - c)) : null;
 ok('INK       the revealed mark composites to --text-3, not to full cream',
-  Math.max(...off) <= 14 && at0.maxCh <= 200,
-  `mean rgb(${at0.mean.join(',')}) vs --text-3 rgb(${TEXT3.join(',')}) delta ${off.join('/')}, brightest channel ${at0.maxCh} (source ink is 255,243,211)`);
+  !!off && Math.max(...off) <= 14 && at0.maxCh <= 200,
+  off
+    ? `mean rgb(${at0.mean.join(',')}) vs --text-3 rgb(${TEXT3.join(',')}) delta ${off.join('/')}, brightest channel ${at0.maxCh} (source ink is 255,243,211)`
+    : 'no ink pixels found at all: there is nothing to grade the colour of');
 await DISP.evaluate(n => n.remove());
 await sleep(300);
 
@@ -251,15 +276,27 @@ for (const t of tabs) {
   await sleep(1500);
   seen.push({ t, ...await page.evaluate(() => {
     const el = document.getElementById('screen');
-    return { cls: el.className, content: getComputedStyle(el, '::before').content, kids: el.children.length };
+    const cs = getComputedStyle(el, '::before');
+    /* THE MARK, NOT THE CLASS. The first version of this row required BOTH the
+       class and a painted pseudo-element, and the class is applied by route() in
+       js/app.js, which a CSS mutation does not touch: rewriting the selector to
+       `.screen::before` gave the wordmark to all six screens and this row stayed
+       green, 18/18. The class was doing all the deciding and the actual mark was
+       never graded, which is guard-hygiene-lint's failure 4. Ask the renderer what
+       it PAINTS on this screen and nothing else. */
+    return {
+      cls: el.className, kids: el.children.length,
+      mark: cs.content !== 'none' && /wordmark\.png/.test(cs.backgroundImage) && parseFloat(cs.width) > 0,
+    };
   }) });
 }
 const empty = seen.filter(s => !s.kids);
-const wrong = seen.filter(s => (s.t === 'today') !== (/screen--today/.test(s.cls) && s.content !== 'none'));
+const wrong = seen.filter(s => (s.t === 'today') !== s.mark);
 ok('SETUP     every tab in the sweep actually rendered something (an empty screen would make the row below vacuous)',
   seen.length === tabs.length && empty.length === 0, `${seen.length} tabs, empty: ${empty.map(s => s.t).join(',') || 'none'}`);
-ok('TODAY     the mark exists on Today and on no other screen',
-  wrong.length === 0, seen.map(s => `${s.t}:${/screen--today/.test(s.cls) ? 'mark' : '-'}`).join(' '));
+ok('TODAY     the wordmark is PAINTED on Today and on no other screen',
+  wrong.length === 0,
+  seen.map(s => `${s.t}:${s.mark ? 'MARK' : '-'}`).join(' '));
 
 /* ---------- NO LAYOUT SHIFT ---------- */
 /* Today's idle Bonehead animation moves 31 of 400 rects between two samples on
@@ -283,16 +320,21 @@ ok('FROZEN    with animations frozen Today holds still, so the comparison below 
 
 const onGeo = await geo();
 const on = await rects();
+const bandOn = await band();
 await page.evaluate(() => document.getElementById('screen').classList.remove('screen--today'));
 await sleep(400);
 const offGeo = await geo();
 const offRects = await rects();
+const bandOff = await band();
+ok('REST      the band above the first card is byte-identical with the feature ON and OFF: at rest the wordmark changes nothing',
+  bandOn === bandOff, bandOn === bandOff ? 'identical' : 'the feature paints something at rest');
 const moved = on.filter((v, i) => v !== offRects[i]);
 ok('NO-SHIFT  every element rect on Today is identical with the mark present and absent: it costs nothing above the first card, and `position: relative` on the scroller re-parents nothing',
-  on.length === offRects.length && moved.length === 0,
+  on.length > 100 && on.length === offRects.length && moved.length === 0,
   `${on.length} elements, ${moved.length} differ${moved.length ? ': ' + moved.slice(0, 3).join(' | ') : ''}`);
 ok('NO-SHIFT  the first card\'s y and the scroll height are EXACTLY equal with the mark present and absent',
-  onGeo.firstY === offGeo.firstY && onGeo.scrollH === offGeo.scrollH,
+  Number.isFinite(onGeo.firstY) && onGeo.firstY === offGeo.firstY
+  && onGeo.scrollH > 0 && onGeo.scrollH === offGeo.scrollH,
   `first card y ${onGeo.firstY} -> ${offGeo.firstY}, scrollHeight ${onGeo.scrollH} -> ${offGeo.scrollH}`);
 
 await dec.close();
