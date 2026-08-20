@@ -9115,8 +9115,10 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    bbox is [183, 202, 1821, 1689] in the 2048 square, so:
      --gw-k     384 / 1638   the scale that makes his ink 384 CSS px wide
      --gw-side  2048 * k     the square the animation needs (Cam: aspect-ratio 1)
-     --gw-off   1002 * k     his ink's x-centre, so he centres on 50% and not
-                             the art file's own middle, which is 5px off him
+     (--gw-off is GONE. It was 1002 * k, the x-centre of the UNION of both
+      layers' ink, and centring on that leaned the wizard 3px right because the
+      stars layer's ink sits 28.5px left of centre in its own square while his
+      sits half a pixel off dead centre. .gw-art centres the square instead.)
      --gw-top   70 - 202*k   drops the art so the top of the sparkle arc lands
                              exactly on the wordmark band's floor
      --gw-panel top + 1240*k + 14.5   the cut row plus the opaque floor
@@ -9151,7 +9153,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    Guard: tests/emporium-audit.mjs. */
 .gw-hero {
   --gw-side: 480.117px;
-  --gw-off: 234.901px;
   --gw-top: 22.645px;
   --gw-panel: 327.841px;
   --gw-band: 70px;
@@ -9185,7 +9186,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
     rgba(calc(43 * var(--gw-dim)), calc(10 * var(--gw-dim)), calc(19 * var(--gw-dim)), 0.7) 72%,
     rgba(13, 12, 18, 0) 100%);
 }
-.gw-art { position: absolute; left: calc(50% - var(--gw-off)); top: calc(var(--sat) + var(--gw-top)); width: var(--gw-side); }
+/* CENTRE THE SQUARE, because Cam already centred Gwart inside it. This used to
+   be calc(50% - var(--gw-off)) with --gw-off derived from 1002*k, the x-centre
+   of the UNION of both layers' ink. That union is dragged left by the stars
+   layer, whose ink centre sits at 995.5 in its own 2048 square while the
+   WIZARD's sits at 1023.5, half a pixel off dead centre. So centring the union
+   leaned the subject right, measured 3.0px off centre on the rendered pixels at
+   393 and spotted by Tom on sight. Expressed as half of --gw-side rather than as
+   a second constant so it cannot drift if the scale is ever retuned. */
+.gw-art { position: absolute; left: calc(50% - var(--gw-side) / 2); top: calc(var(--sat) + var(--gw-top)); width: var(--gw-side); }
 /* rgba(13,12,18,0) is var(--bg) at zero alpha: naming `transparent` here would
    still be correct in every engine that ships today, but spelling the colour out
    is what makes the top of the fade provably the same hue as its bottom. */
