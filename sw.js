@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v420';
+const VERSION = 'tally-v421';
 const PRECACHE = [
   './',
   './index.html',
@@ -42,6 +42,7 @@ const PRECACHE = [
   './js/hunt.js',
   './js/native.js',
   './js/pit.js',
+  './js/mimic.js',
   './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
@@ -167,6 +168,13 @@ const PRECACHE = [
   './assets/bh/mage/fx/zigzag.png',
   './assets/bh/mage/fx/sparks.png',
   './assets/bh/mage/mage-fight.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
+  // the two bosses added with the Mimic. Same rule as the line above: a
+  // cold-cache miss draws a broken image where a monster should be.
+  './assets/bh/mimic/mimic.png',
+  './assets/bh/mimic/mimic-eyes-2.png',
+  './assets/bh/mimic/mimic-eyes-3.png',
+  './assets/bh/mimic/mimic-loop.gif',   // the reveal IS this file; without it the chest never opens
+  './assets/bh/wanderer/wanderer.png',
   './assets/bh/glutton/idle.png',
   './assets/bh/glutton/tongue.png',
   './assets/bh/glutton/middle.png',

@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 421, date: '2026-08-20', title: 'Not every chest is a chest', items: [
+    'One in three buried crates out in the Boneyard is a Mimic. Tap it to collect and the lid opens on a mouthful of teeth, and you are in a fight.',
+    'Beat him and you still get the crate. He was sitting on it. Run, and he is still there when you come back, so bring a plan.',
+    'The Mimic joins the Glutton, the Live Wire and the Wanderer in the Gauntlet, so the endless ladder now has four faces you will learn instead of two.',
+    'The Wanderer has come in from the dark. He turns up every thirteen rungs and he is the hardest thing on the ladder, and he pays like it.',
+  ] },
   { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
     'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
     'It fades up as you pull, so how far you pull is what decides how much of it you see.',

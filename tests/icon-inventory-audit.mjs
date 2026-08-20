@@ -227,6 +227,8 @@ const EMITTERS = {
   'js/glutton.js:gluttonStageHtml': ['scene', 'the Glutton combat plates.'],
   'js/graverise.js:mountGraveRise': ['scene', 'the grave-rise intro layers.'],
   'js/gateintro.js:showGateIntro':  ['scene', 'the Boneyard gate intro.'],
+  'js/mimic.js:mimicPlateHtml':     ['scene', "the Mimic's three blink plates, drawn art not an icon."],
+  'js/mimic.js:showMimicReveal':    ['scene', 'the Mimic chest-opening reveal.'],
   'js/hollow-art.js:hlwArt':        ['scene', 'a Hollow scene element, placed in stage coordinates.'],
   'js/hollow-beds.js:hlwPriceSignHtml': ['scene', 'the Hollow plot price sign.'],
   'js/hollow-scene.js:hollowBackdropHtml': ['scene', 'the Hollow backdrop.'],

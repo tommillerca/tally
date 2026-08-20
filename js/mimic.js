@@ -158,8 +158,13 @@ function ensureStyle() {
 @keyframes mimicRevealOut { from { opacity: 1 } to { opacity: 0 } }
 /* REDUCED MOTION DISABLES, IT DOES NOT SPEED UP. animation-duration:0.001s is
    the trap: it does not stop a loop, it runs it a thousand times a second. */
+/* The selectors below MUST match .e2/.e3's specificity or they lose to them:
+   both live in this one stylesheet, and specificity beats source order across a
+   media query. The first build of this rule used the bare .mimic-eye selector
+   and measured animation-name "mimicHalf" with reduce emulated, i.e. it did
+   nothing at all. Guard: tests/mimic-audit.mjs REDUCED. */
 @media (prefers-reduced-motion: reduce) {
-  .mimic-plate .mimic-eye { animation: none; opacity: 0; }
+  .mimic-plate .mimic-eye.e2, .mimic-plate .mimic-eye.e3 { animation: none; opacity: 0; }
   .mimic-reveal, .mimic-reveal.out { animation: none; }
 }`;
   document.head.appendChild(st);
