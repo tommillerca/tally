@@ -21,13 +21,23 @@ const PIX_CUR = {
   ectoplasm: 'ectoplasm',
   marrow: 'marrow', graveroot: 'graveroot', ember: 'ember',
   bog: 'bog', sinew: 'sinew', salt: 'salt',
-  /* keyed by the RECIPES iconId so recipeIconHtml can look it up directly. The
-     six POTIONS have no iconId and all key on 'potion': they share ONE vial
-     drawing, which is a real gap waiting on recolours, not a finished state. */
+  /* keyed by the RECIPES iconId so recipeIconHtml can look it up directly. */
   'dish-broth': 'dish-broth', 'dish-hash': 'dish-hash', 'dish-stew': 'dish-stew',
   'dish-skewer': 'dish-skewer', 'dish-fajita': 'dish-fajita',
   'dish-feast': 'dish-feast', 'dish-kibble': 'dish-kibble',
-  potion: 'potion',
+  /* THE POTIONS ARE KEYED BY POTION ID, not by one shared 'potion' key, so this
+     table IS the record of which ones still share a drawing. Four have their own
+     vial; the two ECTOPLASM potions do not and point at the shared one, which is
+     visible here rather than hidden in a fallback branch. */
+  'vital-tonic': 'potion-vital',      // heal        -> red
+  'fury-flask': 'potion-fury',        // damage      -> orange
+  stoneskin: 'potion-stone',          // shield      -> blue
+  'second-wind': 'potion-wind',       // stamina     -> yellow
+  'revenant-draught': 'potion',       // STILL DOUBLED with spectral-fury
+  'spectral-fury': 'potion',          // STILL DOUBLED with revenant-draught
+  /* the generic cookbook, for the empty pot's "pick a recipe" slot */
+  recipe: 'recipe',
+  tombstone: 'tombstone',
   /* keyed by the icons-pack id, so badgePixHtml can look it up directly. */
   'badge-skull': 'badge-skull', 'badge-trophy': 'badge-trophy',
   'badge-crown': 'badge-crown', 'badge-signpost': 'badge-signpost',

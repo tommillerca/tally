@@ -5074,8 +5074,13 @@ body::before {
 .map-spire.mine .spire-flag { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .map-spire.free .spire-flag, .map-spire.dormant .spire-flag { font-size: 11px; color: var(--text-2); }
 .spire-tribute:empty { display: none; }
+/* Tom, 2026-08-20: "i noticed the coin icon on the boneyard is too small as
+   well". The coin went 11 -> 16 (the pixel floor), so the NUMBER beside it has
+   to come up too or the label reads as one big coin and one tiny figure. The
+   label is absolutely positioned, centred and nowrap, so growing it pushes
+   nothing around. */
 .spire-tribute { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; font-weight: 800; color: var(--gold); white-space: nowrap;
+  font-size: 13px; font-weight: 800; color: var(--gold); white-space: nowrap;
   text-shadow: 0 1px 0 #17151d, 0 0 5px rgba(0, 0, 0, 0.9); }
 /* the in-range action button, sitting above the other map CTAs */
 /* NOTE the distinct class: the marker is .map-spire and this is .map-spire-btn.

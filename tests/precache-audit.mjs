@@ -64,6 +64,14 @@ ok('every module the app imports is precached', missing.length === 0,
 const pix = fs.readFileSync(path.join(ROOT, 'js/icons-pix.js'), 'utf8');
 const pixArt = [...(pix.match(/const PIX_CUR = \{([\s\S]*?)\};/) || [, ''])[1]
   .matchAll(/:\s*'([^']+)'/g)].map(m => `assets/icons-pix/${m[1]}.png`);
+/* crateIcon is the OTHER pixel drawer and it builds its own paths, including a
+   `-24` variant for the 24..47 step. The map spawn markers started asking 24 on
+   2026-08-20, so those files went live in the same session; covering only
+   PIX_CUR would have left half the class unguarded. */
+const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+for (const m of (app.match(/const CRATE_ICON_PIX = \{([\s\S]*?)\};/) || [, ''])[1].matchAll(/:\s*'([^']+)'/g)) {
+  pixArt.push(`assets/${m[1]}.png`, `assets/${m[1]}-24.png`);
+}
 const precachedArt = new Set([...arr.matchAll(/['"]\.\/(assets\/[\w./-]+)['"]/g)].map(m => m[1]));
 ok('SETUP the pixel-art table was actually parsed', pixArt.length > 20, `${pixArt.length} paths pixCur can build`);
 const artMissing = [...new Set(pixArt)].filter(a => !precachedArt.has(a)).sort();
