@@ -166,6 +166,7 @@ const CANDIDATES = [
   { key: 'app.css',           pattern: /\/app\.css(\?|$)/,                          precacheKey: 'app.css' },
   { key: 'manifest',          pattern: /\/manifest\.webmanifest(\?|$)/,             precacheKey: 'manifest.webmanifest' },
   { key: 'bangers.woff2',     pattern: /\/assets\/fonts\/bangers\.woff2(\?|$)/,     precacheKey: 'assets/fonts/bangers.woff2' },
+  { key: 'boldpixels.woff2',  pattern: /\/assets\/fonts\/boldpixels\.woff2(\?|$)/,  precacheKey: 'assets/fonts/boldpixels.woff2' },
   { key: 'icon-192.png',      pattern: /\/icons\/icon-192\.png(\?|$)/,              precacheKey: 'icons/icon-192.png' },
   { key: 'apple-touch-icon',  pattern: /\/icons\/apple-touch-icon\.png(\?|$)/,      precacheKey: 'icons/apple-touch-icon.png' },
   { key: 'maplibre.mjs',      pattern: /\/vendor\/maplibre\/maplibre\.mjs(\?|$)/,   precacheKey: 'vendor/maplibre/maplibre.mjs',    then: '#/boneyard' },
