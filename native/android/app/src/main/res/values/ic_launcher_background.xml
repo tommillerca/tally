@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The same near-black the iOS icon uses, so the adaptive background and the
-         circular foreground art meet with no visible seam. Was #FFFFFF, the
-         Capacitor default, which is why Android shipped a generic white tile. -->
-    <color name="ic_launcher_background">#0D0C12</color>
+         foreground art meet with no visible seam under launcher parallax. Was
+         #FFFFFF, the Capacitor default, which is why Android shipped a generic
+         white tile; #0D0C12 before Cam's skull, whose own ground is #21211E. -->
+    <color name="ic_launcher_background">#21211E</color>
 </resources>
