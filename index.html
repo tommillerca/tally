@@ -17,9 +17,10 @@
      the stylesheet asks for it, or "EAT." renders in the fallback face and swaps
      a beat later. -->
 <link rel="preload" href="assets/fonts/bangers.woff2" as="font" type="font/woff2" crossorigin>
-<!-- BoldPixels is the talk box, and the talk box is on Today, so it is needed on
-     the first screen after the splash. 4KB. Credited in Settings (CC BY-SA 4.0). -->
-<link rel="preload" href="assets/fonts/boldpixels.woff2" as="font" type="font/woff2" crossorigin>
+<!-- BoldPixels (the talk box's face) is NOT preloaded any more: v418 took the box
+     off Today, so nothing on the first screen has a glyph to draw and a preload
+     fetches 4KB for a face nobody uses. It stays in @font-face and in the service
+     worker's PRECACHE, ready for Gwart; put the preload back with the surface. -->
 <link rel="stylesheet" href="app.css">
 </head>
 <body>

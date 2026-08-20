@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>talk box harness</title>
+<!-- THE MODULE ON A BENCH. js/talkbox.js is the app's one typing-dialogue path and
+     it currently has no surface: Today's line came off in v418 and Gwart's is not
+     built yet. A module that ships with no caller still needs a guard, or the next
+     surface to use it inherits an untested typewriter, so tests/talkbox-audit.mjs
+     drives THIS page instead of a screen.
+
+     The real app.css, deliberately: the four states are enforced STRUCTURALLY by
+     those rules (the caret hangs off the absence of .tb-done, the chevron off its
+     presence), so a harness with its own stylesheet would grade nothing that
+     ships. The only thing this page adds is PLACEMENT, which is what every caller
+     owns anyway. -->
+<link rel="stylesheet" href="../app.css">
+<style>
+  /* An opaque olive plate under the box, the same job Today's artwork did: the
+     pixel counts in the audit need a background that is nowhere near lime or gold
+     so a stray backdrop pixel cannot be read as a caret or a chevron. */
+  body { margin: 0; background: #17151d; }
+  #stage { position: relative; width: 390px; height: 320px; margin: 24px auto; background: #7a8a4a; }
+  /* --tb-size 11px and a max-width in the same band as a real hero surface, so
+     the line WRAPS the way it does in the app and the caret ends up in the same
+     awkward place at full length. A one-line box would not exercise that. */
+  #stage .talkbox { position: absolute; left: 14px; top: 52px; max-width: 172px; width: max-content; text-align: left; --tb-size: 11px; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script type="module">
+import { talkBoxHtml, runTalkBox, TALK_MS } from '../js/talkbox.js';
+const stage = document.getElementById('stage');
+/* mount() is the markup half and say()/start() the run half, kept separate so the
+   audit can grade a box that has been rendered but not yet started (which is the
+   state Today's reveal path put every box in). */
+window.tbMount = (text, opts = {}) => { stage.innerHTML = talkBoxHtml(text, opts); return !!stage.querySelector('.talkbox'); };
+window.tbStart = (text = null, opts = {}) => { runTalkBox(stage.querySelector('.talkbox'), text, opts); return true; };
+window.TALK_MS = TALK_MS;
+window.__tbHarness = true;
+</script>
+</body>
+</html>

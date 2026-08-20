@@ -5,6 +5,18 @@
  * instead of the chat bubbles everywhere in the app". Approved in the canvas
  * "The Raising and the Talk Box", artboard "The talk box".
  *
+ * WHAT CHANGED IN v418, and why this audit no longer drives Today. Tom: "let's
+ * remove the text bubble until we have gwart in the scene floating and talking
+ * that will replace the bonehead talking and gwart will be more the coach
+ * character." Today's line came off, so the app currently has ZERO talkBoxHtml()
+ * surfaces. js/talkbox.js still ships, still precaches, and is what Gwart will
+ * speak through, so deleting this audit with the surface would hand the next
+ * author an untested typewriter. It grades the MODULE instead, on a harness page
+ * (tests/talkbox-harness.html) that imports js/talkbox.js and calls
+ * talkBoxHtml() + runTalkBox() against the REAL app.css, because the four states
+ * are enforced by those rules and a harness with its own stylesheet would grade
+ * nothing that ships.
+ *
  * WHAT THIS PINS, and every one of these is a thing that can break silently:
  *   TYPE       the line arrives character by character, not all at once. Both a
  *              DOM sample (the exact prefix sequence) and a PIXEL sample (the ink
@@ -18,49 +30,60 @@
  *              between the first character and the last.
  *   EXCLUSIVE  the caret and the gold chevron are never both on screen, or the
  *              box says "wait" twice. Graded on PIXELS across every frame of a
- *              held box, which is the only surface where both states occur.
+ *              held box, which is the only shape where both states occur.
  *   REDUCED    prefers-reduced-motion prints the whole line at once and drops the
- *              blink. Graded from the FIRST frame after render, because "it ends
- *              up complete" is true of the animated version too.
+ *              blink. Graded from the FIRST frame after the run starts, because
+ *              "it ends up complete" is true of the animated version too.
+ *   TODAY      the Today screen carries no talk box. One row on the REAL app, so
+ *              this removal cannot be silently undone, with a SETUP row so the
+ *              absence cannot pass on a screen that never rendered.
  *
  * HOW IT IS GRADED, and why not a computed style. tally/CLAUDE.md: fire the real
  * control and assert pixels. getComputedStyle would happily report a visible
  * caret over a frame nobody painted. So the box is screenshotted at its own
  * clipped rect and every frame is reduced to three counts:
  *
- *   ink    pixels of --text (#f2e9d7) inside .tb-line: the characters themselves.
- *   caret  pixels of --accent (#a5e847) inside .tb-line.
- *   chev   pixels of --gold (#ffc961) anywhere in the box.
+ *   ink    pixels of --text (#f2e9d7) in the caret region: the characters.
+ *   caret  pixels of --accent (#a5e847) in the caret region.
+ *   chev   pixels of --gold (#ffc961) in the chevron's corner.
  *
- * THREE CONTROLS, BECAUSE A CHECK THAT CANNOT FAIL IS NOT A CHECK. Every count
+ * THE CARET REGION, and the caveat the previous version of this file admitted to.
+ * It used to be .tb-line's own rect, and at FULL line length the caret falls
+ * OUTSIDE that: .tb-reveal is absolutely positioned over .tb-line, so once the
+ * text fills the ghost, `text + caret` is wider than `text` alone and the caret
+ * wraps onto a line below the rect. That is exactly the moment EXCLUSIVE is about
+ * (the chevron only appears on a FINISHED box), so the row was narrower than its
+ * description: it could not have seen the violation it claims to forbid. FIXED
+ * HERE, two ways. The region now runs from .tb-line's top down to the box's inner
+ * bottom, so a wrapped caret is inside it. And CONTROL-EXCLUSIVE-REACH forces the
+ * caret visible on a finished held box and requires the SAME frame to score both
+ * a caret and a chevron: the detector pair is proven able to see the failure
+ * before EXCLUSIVE is allowed to report that it did not happen.
+ *
+ * FOUR CONTROLS, BECAUSE A CHECK THAT CANNOT FAIL IS NOT A CHECK. Every count
  * above is a detector that could simply never fire, and two of them are asserted
  * to be ZERO somewhere, which is exactly the shape that passes on a blank frame:
- *   CONTROL-CARET      some frame of a typing box scores caret pixels. Without
- *                      this, "the caret is never on at the same time as the
- *                      chevron" is satisfied by a caret nobody can see.
+ *   CONTROL-CARET      some frame of a typing box scores caret pixels.
  *   CONTROL-CHEVRON    some frame of a FINISHED HELD box scores chevron pixels.
- *                      Same argument from the other side.
  *   CONTROL-ISOLATION  the speaker's NAME is the same #a5e847 as the caret, so the
  *                      caret count is only a caret count if the measured region
  *                      excludes the label. Measured on a finished held box, which
- *                      HAS a name and has NO caret: the count must be zero. If the
- *                      name bleeds in (the box is rotated 2 degrees, so it could),
- *                      this goes red instead of EXCLUSIVE passing while blind.
+ *                      HAS a name and has NO caret: the count must be zero.
+ *   CONTROL-EXCLUSIVE-REACH  see above: both detectors firing in one frame.
  * plus SAMPLE rows: an empty frame set, an empty sample list or a zero-length
  * line is a FAILURE, never a pass (anti-regression rule 3).
  *
- * HITTEST is anti-regression rule 6 as an assertion. The box floats over #bhStage,
- * whose job is to open the Backpack. While the line is live the box must own the
- * tap (or it can never be skipped); once a line that leaves on its own has
- * finished, the box must hand the tap back (or it eats a 42%-wide target for the
- * rest of the render). BOTH directions, because either one alone is satisfiable by
- * a mistake.
+ * HITTEST is anti-regression rule 6 as an assertion, and it is module CSS, not a
+ * surface's: while the line is live the box must own the tap (or it can never be
+ * skipped); once a line that leaves on its own has finished, the box must hand
+ * the tap back (or it eats whatever it is floating over for the rest of the
+ * render). BOTH directions, because either one alone is satisfiable by a mistake.
  *
  * COVERAGE derives the graded set from js/*.js rather than from a list somebody
  * remembers to update: every talkBoxHtml() call site in the app must appear in
- * SITES below, so the NEXT chat bubble converted to a talk box fails this audit
- * until it is either driven or given a written reason. This is the half that stops
- * the audit rotting into a green that covers one screen out of seventeen.
+ * SITES below, so the NEXT surface converted to a talk box fails this audit until
+ * it is either driven or given a written reason. SITES is empty right now and
+ * that is the point: Gwart's line will fail this until it is registered.
  *
  * Usage: node tests/talkbox-audit.mjs [baseUrl]   (serves this repo if omitted)
  *        --frames DIR   also writes the captured frames, for a visual strip
@@ -83,6 +106,7 @@ const framesDir = fi >= 0 ? argv[fi + 1] : null;
 const argUrl = argv.find((a, i) => !a.startsWith('--') && i !== fi + 1) || process.env.URL;
 const srv = argUrl ? null : await serveTree(ROOT);
 const base = (argUrl || srv.url).replace(/\/?$/, '/');
+const HARNESS = base + 'tests/talkbox-harness.html';
 
 const results = [];
 const ok = (name, pass, detail = '') => {
@@ -91,20 +115,18 @@ const ok = (name, pass, detail = '') => {
 };
 
 /* MEASURED ON THIS TREE, not guessed, and both floors sit in the middle of a gap.
-   At 440x956, deviceScaleFactor 2, Today's box:
+   At 440x956, deviceScaleFactor 2, --tb-size 11px (the harness uses the same size
+   Today's box did, so these floors carry over unchanged):
      caret    present 241 - 242 px    absent (finished box, name visible)   0
      chevron  present  32 -  46 px    absent (a plain, un-held line)      0 - 8
    The absent side is a true zero because the box fill is opaque and nothing else
    inside it carries either colour, so the floors exist only to absorb a stray
    anti-aliased pixel. The chevron count is small because it is a 2.2px stroke on
    an 11px glyph; the FIRST version of this measured gold across the WHOLE box and
-   scored up to 14 px on a box with no chevron at all (artwork showing past the
+   scored up to 14 px on a box with no chevron at all (backdrop showing past the
    rotated corners mid-pop), which left a 14-to-32 gap I was not willing to grade
    on. Restricting it to the corner the chevron actually occupies moved the absent
-   side to a real 0 and cost nothing: every gold pixel of a real chevron is in
-   there (32 of 32, measured both ways). The 0-8 on the absent side is backdrop
-   showing past the rotated corner during the box's entry pop; the floor is 20,
-   which is the middle of the 8-to-32 gap rather than the edge of it. */
+   side to a real 0 and cost nothing. */
 const CARET_MIN = 40;
 const CHEV_MIN = 20;
 /* The chevron's corner, as a fraction of the box: right 38%, bottom 40%. app.css
@@ -116,21 +138,25 @@ const MIN_LEVELS = 4;
 const MIN_FRAMES = 6;
 /* Colour match, per channel. The caret and the chevron are flat fills, so their
    cores match exactly; 28 is loose enough for the compositor's own rounding and
-   tight enough that the olive backdrop (#7a8a4a-ish) is nowhere near lime. */
+   tight enough that the olive plate (#7a8a4a) is nowhere near lime. */
 const TOL = 28;
 const ACCENT = [165, 232, 71];   // --accent  #a5e847
 const GOLD = [255, 201, 97];     // --gold    #ffc961
 const INK = [242, 233, 215];     // --text    #f2e9d7
 
+/* Long enough to wrap onto three lines at the harness width, so the caret spends
+   the run in the same awkward end-of-wrapped-line place it does in a real box. */
+const LINE = 'Crack that crate open already, chief, it is not going to do it by itself.';
+const HELD_LINE = 'Woof. (Feed him.) Bark. Bones. Bark.';
+const SPEAKER = 'BONEHOUND';
+
 /* EVERY talkBoxHtml() CALL SITE IN THE APP. A site that is not here fails
    COVERAGE below; a site that is here and undriven prints its reason on every
-   run so it cannot rot into "covered". */
-const SITES = {
-  'js/app.js:hero-bubble': { driven: true, why: 'Today, the default home screen: the most-seen line of prose in the app. Driven by every run below.' },
-};
-/* The pet line reuses the SAME box element through runTalkBox(), so it is not a
-   second talkBoxHtml() site; it is driven anyway, because it is the only surface
-   that carries a name and the only one that waits. */
+   run so it cannot rot into "covered". EMPTY ON PURPOSE as of v418: Today's line
+   came off and Gwart's is not built. The rows below still grade the module, and
+   the moment Gwart (or anything else) renders a box, COVERAGE goes red until it
+   is registered here. */
+const SITES = {};
 
 const puppeteer = await loadPuppeteer();
 const browser = await puppeteer.launch({
@@ -157,7 +183,7 @@ const measure = (b64, sub, goldRegion) => meterPage.evaluate(async (data, region
   g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, c.width, c.height).data;
   const near = (i, t) => Math.abs(d[i] - t[0]) <= tol && Math.abs(d[i + 1] - t[1]) <= tol && Math.abs(d[i + 2] - t[2]) <= tol;
-  // region is the .tb-line box in IMAGE pixels, already insetted by the caller
+  // region is the caret region in IMAGE pixels, already insetted by the caller
   const x0 = Math.max(0, Math.round(region.x)), x1 = Math.min(c.width, Math.round(region.x + region.w));
   const y0 = Math.max(0, Math.round(region.y)), y1 = Math.min(c.height, Math.round(region.y + region.h));
   const gx0 = Math.max(0, Math.round(goldReg.x * c.width)), gx1 = Math.min(c.width, Math.round((goldReg.x + goldReg.w) * c.width));
@@ -180,22 +206,51 @@ const measure = (b64, sub, goldRegion) => meterPage.evaluate(async (data, region
 const page = await browser.newPage();
 const pageErrors = [];
 page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR', e.message); });
-await page.goto(base + '?demo', { waitUntil: 'networkidle2' });
-await sleep(2400);
-// the demo profile opens with a spin and first-run cards; they are not the subject
-for (let i = 0; i < 6; i++) {
-  const hit = await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find(x => /^(spin|nice|done|collect|claim|continue|ok|got it|next|skip)$/i.test(x.textContent.trim()));
-    if (b) { b.click(); return true; } return false;
-  });
-  if (!hit) break;
+
+/* ==================== TODAY CARRIES NO TALK BOX ============================
+   The one row on the real app, and it comes first so a failure here is the first
+   thing printed. v418 took the line off Today; without this row putting it back
+   is silent, and the audit that used to guard it now looks at a harness. */
+{
+  await page.goto(base + '?demo', { waitUntil: 'networkidle2' });
+  await sleep(2400);
+  // the demo profile opens with a spin and first-run cards; they are not the subject
+  for (let i = 0; i < 6; i++) {
+    const hit = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => /^(spin|nice|done|collect|claim|continue|ok|got it|next|skip)$/i.test(x.textContent.trim()));
+      if (b) { b.click(); return true; } return false;
+    });
+    if (!hit) break;
+    await sleep(1400);
+  }
+  await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(1400);
+  const t = await page.evaluate(() => ({
+    /* THE PREMISE. An absence passes on a screen that never rendered, so this
+       row has to be true before the next one means anything. The hero card is
+       the specific thing the box used to float over. */
+    rendered: (document.getElementById('screen')?.textContent || '').trim().length > 200,
+    hero: !!document.querySelector('.hero-card #bhStage'),
+    boxes: document.querySelectorAll('.talkbox').length,
+    bubbles: document.querySelectorAll('.hero-bubble').length,
+  }));
+  ok('SETUP Today really rendered, with the hero card the box used to sit on (an empty screen would pass the row below for free)',
+    t.rendered && t.hero, JSON.stringify({ rendered: t.rendered, hero: t.hero }));
+  ok('TODAY the Today screen carries no talk box: the line is off until Gwart is in the scene to say it',
+    t.boxes === 0 && t.bubbles === 0, `${t.boxes} .talkbox, ${t.bubbles} .hero-bubble`);
 }
+
+/* ==================== THE MODULE, ON ITS HARNESS ========================== */
+await page.goto(HARNESS, { waitUntil: 'networkidle2' });
+await page.evaluate(() => document.fonts.ready);
+const harnessUp = await page.evaluate(() => !!window.__tbHarness && typeof window.tbMount === 'function');
+ok('SETUP the harness loaded js/talkbox.js and exposes the real emitter and runner',
+  harnessUp, harnessUp ? HARNESS : `${HARNESS} did not come up`);
 
 /* Read everything this audit grades off the live box in ONE evaluate, so a sample
    is one coherent moment rather than four reads drifting apart. */
 const GEO = () => page.evaluate(() => {
-  const b = document.querySelector('.hero-bubble');
+  const b = document.querySelector('.talkbox');
   if (!b) return null;
   const line = b.querySelector('.tb-line'), txt = b.querySelector('.tb-txt'), name = b.querySelector('.tb-name');
   const r = b.getBoundingClientRect(), l = line.getBoundingClientRect();
@@ -217,10 +272,11 @@ const GEO = () => page.evaluate(() => {
 });
 
 /* One sample = the geometry AND the pixels of that same moment. The clip is the
-   box's own axis-aligned rect, outset 2px so the border survives rounding; the
-   caret region is .tb-line inside it, with the TOP pulled in 4px because the box
-   is rotated 2 degrees and the speaker's name sits directly above the line in the
-   same colour as the caret (see CONTROL-ISOLATION). */
+   box's own axis-aligned rect, outset 2px so the border survives rounding.
+   THE CARET REGION runs from .tb-line's top (pulled in 4px, because the speaker's
+   name sits directly above the line in the same colour as the caret: see
+   CONTROL-ISOLATION) down to the box's inner bottom, so the caret that wraps
+   below .tb-line at full line length is inside it. See the header. */
 async function sample() {
   const g = await GEO();
   if (!g) return null;
@@ -232,22 +288,24 @@ async function sample() {
     SCALE = probe.w / clip.width;
     console.log(`(image scale ${SCALE} px per CSS px)`);
   }
+  const top = g.line.y - clip.y + 4;
+  const bottom = g.box.y + g.box.h - 2 - clip.y;
   const m = await measure(b64, {
     x: (g.line.x - clip.x) * SCALE,
-    y: (g.line.y - clip.y + 4) * SCALE,
+    y: top * SCALE,
     w: g.line.w * SCALE,
-    h: (g.line.h - 4) * SCALE,
+    h: Math.max(0, bottom - top) * SCALE,
   }, CHEV_REGION);
   return { ...g, ...m, b64 };
 }
 
-/* Force a fresh Today render, which is what starts a line from zero. Real
-   navigation, so the whole route + reveal path runs and the typing begins where
-   the player actually sees it begin. */
-async function freshToday() {
-  await page.evaluate(() => { location.hash = '#/progress'; });
-  await sleep(800);
-  await page.evaluate(() => { location.hash = '#/today'; });
+/* Mount a fresh box and start it, which is what starts a line from zero. The two
+   halves are separate on purpose: talkBoxHtml() renders the markup and
+   runTalkBox() begins the typing, exactly the way the app's reveal path does it. */
+async function freshLine(text, opts = {}) {
+  const mounted = await page.evaluate((t, o) => window.tbMount(t, o), text, opts);
+  await page.evaluate(() => window.tbStart());
+  return mounted;
 }
 
 async function capture({ ms = 2600, every = 80 } = {}) {
@@ -273,8 +331,15 @@ console.log(`grading ${base}\n`);
 
 /* ---- FONT ------------------------------------------------------------------ */
 {
+  await freshLine(LINE);
+  /* A @font-face is only fetched once something on the page asks for a glyph in
+     it, so this waits AFTER the first box is mounted, and awaits inside the page:
+     page.evaluate cannot serialise the FontFaceSet that document.fonts.ready
+     resolves to, and returning it read as "already settled" while the face was
+     still loading. */
+  await page.evaluate(async () => { await document.fonts.ready; return true; });
   const f = await page.evaluate(() => {
-    const b = document.querySelector('.hero-bubble');
+    const b = document.querySelector('.talkbox');
     const face = [...document.fonts].find(x => x.family === 'BoldPixels');
     return {
       family: b ? getComputedStyle(b).fontFamily : '(no box)',
@@ -287,10 +352,11 @@ console.log(`grading ${base}\n`);
   ok('FONT the box asks for BoldPixels first', /^['"]?BoldPixels/.test(f.family), f.family);
 }
 
-/* ---- RUN 1: the plain line (Today's own, auto-dismissing, no chevron) ------- */
+/* ---- RUN 1: the plain line (no speaker, no chevron, leaves on its own) ------ */
 let plain = [];
 {
-  await freshToday();
+  const mounted = await freshLine(LINE);
+  ok('SAMPLE talkBoxHtml() rendered a box for the plain line', mounted);
   plain = await capture({ ms: 2600, every: 80 });
   await dumpFrames(plain, 'plain');
 
@@ -330,9 +396,9 @@ let plain = [];
        real typing produces one per sample. */
     const inks = plain.map(f => f.ink);
     /* PAINTED finished frames only. A `done` frame that scores zero ink is one
-       where the box has not been painted yet (the route is still in flight), and
-       letting it into the noise measurement inflates the floor, which loosens the
-       band. Excluding it makes this row STRICTER, not weaker. */
+       where the box has not been painted yet, and letting it into the noise
+       measurement inflates the floor, which loosens the band. Excluding it makes
+       this row STRICTER, not weaker. */
     const tail = plain.filter(f => f.done && f.ink > 0).map(f => f.ink);
     ok('SAMPLE enough finished frames to measure this run\'s pixel noise floor from',
       tail.length >= 3, `${tail.length} finished frames`);
@@ -352,22 +418,24 @@ let plain = [];
       withCaret.length > 0, `${withCaret.length}/${plain.length} frames scored >= ${CARET_MIN}, max ${Math.max(...plain.map(f => f.caret))}`);
     ok('CONTROL-CHEVRON-NEGATIVE a line that leaves on its own never shows the chevron, and nothing else in the box is gold',
       plain.every(f => f.chev < CHEV_MIN), `max ${Math.max(...plain.map(f => f.chev))} gold px (floor ${CHEV_MIN})`);
-    ok('STATE the plain line has no speaker label (this is you, not a character)',
+    ok('STATE the plain line has no speaker label (a label is what marks a character)',
       plain.every(f => f.name === ''), `saw "${plain[0].name}"`);
 
-    /* HITTEST, both directions (anti-regression rule 6). */
+    /* HITTEST, both directions (anti-regression rule 6). This is module CSS
+       (.talkbox.tb-done:not(.tb-hold) goes pointer-events:none), so it is the
+       module's promise to every surface, not Today's. */
     const live = plain.find(f => !f.done);
     const settled = plain[plain.length - 1];
     ok('HITTEST while the line is live the box owns its own centre, so the skip tap can land',
       !!live && live.hit === 'box', live ? `hit=${live.hit}` : 'no live frame captured');
-    ok('HITTEST once a self-dismissing line is finished the box hands the tap back to the stage',
+    ok('HITTEST once a self-dismissing line is finished the box hands the tap back to what it floats over',
       settled.done && settled.hit !== 'box', `done=${settled.done} hit=${settled.hit}`);
   }
 }
 
 /* ---- RUN 2: SKIP ----------------------------------------------------------- */
 {
-  await freshToday();
+  await freshLine(LINE);
   /* MEASURE IN THE STATE THE PLAYER IS COMPLAINING ABOUT. Wait for the line to be
      genuinely mid-flight before tapping: a tap at 0 characters or at the last one
      proves nothing about skipping. */
@@ -401,51 +469,72 @@ let plain = [];
 /* ---- RUN 3: the HELD line (named speaker, chevron) ------------------------- */
 let held = [];
 {
-  await freshToday();
-  await sleep(2200);   // let the plain line settle so this run is only about the pet's
-  const pet = await page.$('#heroPetBtn');
-  ok('SAMPLE the pet control exists, so the held/named states can be reached at all', !!pet);
-  if (pet) {
-    await pet.click();               // THE REAL CONTROL
-    held = await capture({ ms: 2200, every: 70 });
-    await dumpFrames(held, 'held');
+  const mounted = await freshLine(HELD_LINE, { name: SPEAKER, hold: true });
+  ok('SAMPLE talkBoxHtml() rendered a NAMED, HELD box, so those two states can be reached at all', mounted);
+  held = await capture({ ms: 2200, every: 70 });
+  await dumpFrames(held, 'held');
 
-    ok('SAMPLE the held line was captured', held.length >= MIN_FRAMES, `${held.length} frames`);
-    if (held.length >= MIN_FRAMES) {
-      ok('STATE the pet is a NAMED SPEAKER: the label is what makes a line a character',
-        held.every(f => f.name.length > 0), `name="${held[0].name}"`);
-      ok('STATE the pet line WAITS instead of leaving on its own',
-        held.every(f => f.hold), `${held.filter(f => !f.hold).length} frame(s) not held`);
+  ok('SAMPLE the held line was captured', held.length >= MIN_FRAMES, `${held.length} frames`);
+  if (held.length >= MIN_FRAMES) {
+    ok('STATE a named speaker carries its label: the label is what makes a line a character',
+      held.every(f => f.name.length > 0), `name="${held[0].name}"`);
+    ok('STATE a held line WAITS instead of leaving on its own',
+      held.every(f => f.hold), `${held.filter(f => !f.hold).length} frame(s) not held`);
 
-      const done = held.filter(f => f.done);
-      const typing = held.filter(f => !f.done);
-      ok('CONTROL-CARET the caret detector fires on the held box too, above the name label',
-        typing.some(f => f.caret >= CARET_MIN),
-        `${typing.length} typing frames, max caret ${typing.length ? Math.max(...typing.map(f => f.caret)) : 0}`);
-      ok('CONTROL-CHEVRON the chevron detector fires on a finished held box',
-        done.some(f => f.chev >= CHEV_MIN),
-        `${done.length} finished frames, max gold ${done.length ? Math.max(...done.map(f => f.chev)) : 0}`);
-      /* The name is the SAME #a5e847 as the caret. On a finished box the caret is
-         gone and the name is not, so a non-zero count here means the region is
-         reading the label and the caret count means nothing. */
-      ok('CONTROL-ISOLATION the caret region excludes the speaker label, so a caret count is a caret',
-        done.length > 0 && done.every(f => f.caret < CARET_MIN),
-        `${done.length} finished frames (name "${held[0].name}" visible), max caret ${done.length ? Math.max(...done.map(f => f.caret)) : 'n/a'}`);
+    const done = held.filter(f => f.done);
+    const typing = held.filter(f => !f.done);
+    ok('CONTROL-CARET the caret detector fires on the held box too, below the name label',
+      typing.some(f => f.caret >= CARET_MIN),
+      `${typing.length} typing frames, max caret ${typing.length ? Math.max(...typing.map(f => f.caret)) : 0}`);
+    ok('CONTROL-CHEVRON the chevron detector fires on a finished held box',
+      done.some(f => f.chev >= CHEV_MIN),
+      `${done.length} finished frames, max gold ${done.length ? Math.max(...done.map(f => f.chev)) : 0}`);
+    /* The name is the SAME #a5e847 as the caret. On a finished box the caret is
+       gone and the name is not, so a non-zero count here means the region is
+       reading the label and the caret count means nothing. */
+    ok('CONTROL-ISOLATION the caret region excludes the speaker label, so a caret count is a caret',
+      done.length > 0 && done.every(f => f.caret < CARET_MIN),
+      `${done.length} finished frames (name "${held[0].name}" visible), max caret ${done.length ? Math.max(...done.map(f => f.caret)) : 'n/a'}`);
 
-      const both = held.filter(f => f.caret >= CARET_MIN && f.chev >= CHEV_MIN);
-      ok('EXCLUSIVE the caret and the chevron are never both on screen, or the box says "wait" twice',
-        both.length === 0,
-        `${both.length} of ${held.length} frames showed both` + (both.length ? ` (first: caret ${both[0].caret}, gold ${both[0].chev})` : ''));
+    /* CAN THIS ROW SEE THE FAILURE IT FORBIDS? The chevron only appears on a
+       FINISHED box, and on a finished box the caret is display:none, so nothing in
+       the frames above ever had the chance to score both. The previous version of
+       this audit stopped there and admitted the row was narrower than its
+       description. This forces the caret back on at exactly that moment (the one
+       state where both would collide) and requires ONE frame to score both
+       detectors. If the caret at full line length falls outside the measured
+       region, this goes red and EXCLUSIVE below is not allowed to claim a clean
+       sweep. */
+    await page.evaluate(() => {
+      const s = document.createElement('style');
+      s.id = 'tbReach';
+      s.textContent = '.talkbox.tb-done .tb-caret { display: inline-block !important; animation: none !important; }';
+      document.head.appendChild(s);
+    });
+    await sleep(120);
+    const reach = await sample();
+    await page.evaluate(() => document.getElementById('tbReach')?.remove());
+    ok('CONTROL-EXCLUSIVE-REACH with the caret forced on over a finished held box, ONE frame scores a caret AND a chevron, so EXCLUSIVE can see the collision it forbids',
+      !!reach && reach.caret >= CARET_MIN && reach.chev >= CHEV_MIN,
+      reach ? `caret ${reach.caret} (floor ${CARET_MIN}), gold ${reach.chev} (floor ${CHEV_MIN})` : 'no frame captured');
+    await sleep(120);
+    const restored = await sample();
+    ok('CONTROL-EXCLUSIVE-REACH the forced caret was taken back off again, so the rows after this one grade the real box',
+      !!restored && restored.caret < CARET_MIN, restored ? `caret ${restored.caret}` : 'no frame captured');
 
-      /* The chevron's promise: a box that asks for a tap answers one. */
-      const g = await GEO();
-      if (g) {
-        await page.mouse.click(g.centre[0], g.centre[1]);
-        await sleep(320);
-        const after = await GEO();
-        ok('DISMISS tapping a finished, waiting box closes it (that is what the chevron is asking for)',
-          !!after && after.gone, `gone=${after ? after.gone : 'no box'}`);
-      }
+    const both = held.filter(f => f.caret >= CARET_MIN && f.chev >= CHEV_MIN);
+    ok('EXCLUSIVE the caret and the chevron are never both on screen, or the box says "wait" twice',
+      both.length === 0,
+      `${both.length} of ${held.length} frames showed both` + (both.length ? ` (first: caret ${both[0].caret}, gold ${both[0].chev})` : ''));
+
+    /* The chevron's promise: a box that asks for a tap answers one. */
+    const g = await GEO();
+    if (g) {
+      await page.mouse.click(g.centre[0], g.centre[1]);
+      await sleep(320);
+      const after = await GEO();
+      ok('DISMISS tapping a finished, waiting box closes it (that is what the chevron is asking for)',
+        !!after && after.gone, `gone=${after ? after.gone : 'no box'}`);
     }
   }
 }
@@ -453,14 +542,14 @@ let held = [];
 /* ---- RUN 4: REDUCED MOTION ------------------------------------------------- */
 {
   /* fx.js reads matchMedia ONCE at module load, so the emulation has to be in
-     place before the app's modules run. Emulate, then reload. */
+     place before the module runs. Emulate, then reload. */
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await page.reload({ waitUntil: 'networkidle2' });
-  await sleep(2400);
+  await page.evaluate(() => document.fonts.ready);
   const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   ok('SAMPLE the page really is in reduced motion, or this whole run is about nothing', reduced === true, `matches=${reduced}`);
 
-  await freshToday();
+  await freshLine(LINE);
   /* THE FIRST FRAME IS THE POINT. "It ends up complete" is true of the animated
      version too, so this samples fast and from the start: EVERY sample must
      already carry the whole line. */
@@ -471,14 +560,8 @@ let held = [];
   ok('SAMPLE the reduced-motion line was captured', fast.length >= MIN_FRAMES, `${fast.length} frames`);
   const rfull = fast.length ? fast[0].full : 0;
   ok('SAMPLE the reduced-motion line has something to say', rfull > 0, `${rfull} characters`);
-  /* FROM THE MOMENT THE LINE STARTS. Samples at zero characters are the window
-     between the markup landing and the screen being revealed, where the box is not
-     on screen yet and revealWhenReady has not started it: grading those is grading
-     the wrong moment, and it made this row red on a correct build. The assertion
-     stays sharp, because a line that types on is partial on its FIRST started
-     sample and every one after it until it finishes. */
   const started = fast.filter(f => f.len > 0);
-  ok('SAMPLE the reduced-motion line was captured after it started (a pre-reveal frame grades nothing)',
+  ok('SAMPLE the reduced-motion line was captured after it started (a frame before the run grades nothing)',
     started.length >= MIN_FRAMES, `${started.length} of ${fast.length} samples had the line started`);
   if (started.length >= MIN_FRAMES && rfull > 0) {
     const fast2 = started;
@@ -503,26 +586,39 @@ let held = [];
 
 /* ---- COVERAGE: the graded set is derived from the app, not remembered ------ */
 {
+  const CALL = /\btalkBoxHtml\s*\(/g;
+  const scan = src => {
+    const out = [];
+    for (const m of src.matchAll(CALL)) {
+      const before = src.slice(0, m.index);
+      const lineStart = before.lastIndexOf('\n') + 1;
+      if (/^\s*(\*|\/\/)/.test(src.slice(lineStart, m.index))) continue;   // a mention in a comment
+      out.push({ line: before.split('\n').length, window: src.slice(m.index, m.index + 400).replace(/\s+/g, ' ') });
+    }
+    return out;
+  };
   const files = (await readdir(path.join(ROOT, 'js'))).filter(f => f.endsWith('.js') && f !== 'talkbox.js');
   const found = [];
   for (const f of files) {
     const src = await readFile(path.join(ROOT, 'js', f), 'utf8');
-    /* A WINDOW, NOT A LINE. The one real call site in the app spans two lines,
-       with the surface's own class in the options object on the second, so a
-       line-at-a-time matcher could not see it and reported the site it had just
-       counted as unregistered. That is the same shape of blindness as the CSS
+    /* A WINDOW, NOT A LINE. The one real call site the app used to have spanned
+       two lines, with the surface's own class in the options object on the second,
+       so a line-at-a-time matcher could not see it and reported the site it had
+       just counted as unregistered. That is the same shape of blindness as the CSS
        check that required a closing brace before its selector. 400 characters is
        comfortably more than one call and less than the next one. */
-    for (const m of src.matchAll(/\btalkBoxHtml\s*\(/g)) {
-      const before = src.slice(0, m.index);
-      const line = before.split('\n').length;
-      const lineStart = before.lastIndexOf('\n') + 1;
-      if (/^\s*(\*|\/\/)/.test(src.slice(lineStart, m.index))) continue;   // a mention in a comment
-      found.push({ file: `js/${f}`, line, window: src.slice(m.index, m.index + 400).replace(/\s+/g, ' ') });
-    }
+    for (const s of scan(src)) found.push({ file: `js/${f}`, ...s });
   }
-  ok('COVERAGE the app has talk-box call sites to grade (zero would make this audit vacuous)',
-    found.length > 0, `${found.length} call site(s)`);
+  ok('SAMPLE the coverage scan really read the app (zero files would make every row here vacuous)',
+    files.length >= 5, `${files.length} module(s) scanned`);
+  /* THE SCANNER'S OWN POSITIVE CONTROL. There are ZERO call sites in the app right
+     now (that is the point of v418), so "nothing unregistered" is exactly the
+     shape that passes while blind. This proves the matcher would see a site if
+     there were one, and that a mention in a comment is still skipped. */
+  const probe = scan('const a = 1;\n// talkBoxHtml( in a comment\nfoo(talkBoxHtml(x, { cls: "gwart-line" }));\n');
+  ok('CONTROL-SCANNER the call-site matcher finds a real call and skips a commented one, so "no unregistered sites" is not blindness',
+    probe.length === 1 && probe[0].window.includes('gwart-line'),
+    `${probe.length} hit(s): ${probe.map(p => p.window.slice(0, 40)).join(' | ')}`);
 
   /* A site is matched by the class it renders into, which is how a converted
      surface identifies itself. Anything unmatched is an unregistered surface. */
@@ -531,7 +627,7 @@ let held = [];
     const [file, cls] = k.split(':');
     return f.file === file && f.window.includes(cls);
   }));
-  ok('COVERAGE every talkBoxHtml() call site in the app is registered in SITES, so the NEXT converted bubble fails until it is driven or excused',
+  ok('COVERAGE every talkBoxHtml() call site in the app is registered in SITES, so the NEXT surface to render a box (Gwart) fails until it is driven or excused',
     unregistered.length === 0,
     unregistered.length ? unregistered.map(u => `${u.file}:${u.line} ${u.window.slice(0, 90)}`).join(' | ') : `${found.length} site(s), all registered`);
   /* The matcher itself can go blind: if a SITES key stops matching anything, the
@@ -544,6 +640,7 @@ let held = [];
   console.log(`\nregistered talk-box surfaces: ${keys.length}, driven ${keys.length - undriven.length}, undriven ${undriven.length}`);
   for (const k of undriven) console.log(`  UNDRIVEN ${k}: ${SITES[k].why}`);
   ok('COVERAGE every registered surface states a reason', keys.every(k => (SITES[k].why || '').length > 10));
+  if (!keys.length) console.log('  (no app surface renders a talk box right now: Today\'s came off in v418, Gwart\'s is not built. The module is graded on tests/talkbox-harness.html.)');
 }
 
 ok('the app threw nothing while the talk box ran', pageErrors.length === 0, pageErrors.join(' | ') || 'clean');
@@ -555,5 +652,5 @@ const failed = results.filter(r => !r.pass);
 if (!results.length) { console.log('\nFAIL: no checks ran'); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join(' | ')); }
-else console.log('the talk box types, skips, and never says "wait" twice');
+else console.log('the talk box types, skips, and never says "wait" twice; Today stays quiet');
 process.exit(exitFor(failed.length));

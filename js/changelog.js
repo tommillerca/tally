@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 418, date: '2026-08-20', title: 'Your Bonehead has gone quiet', items: [
+    'The line above your Bonehead on the home screen is gone for now. This is a step back on purpose: the talking is coming back as a proper character who floats in the scene and coaches you, rather than your Bonehead narrating himself.',
+    'Tapping your pet still gets you a wiggle and a noise. It just has nothing to say for the moment.',
+  ] },
   { n: 417, date: '2026-08-20', title: 'Your Bonehead talks now', items: [
     'The line on your home screen types itself out, one letter at a time, in a chunky pixel face. Tap it if you already know what it says and it jumps to the end.',
     'Tap your Bonehead and it answers you by name, and waits for you to tap before it goes.',

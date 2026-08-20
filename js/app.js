@@ -38,7 +38,12 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
-import { talkBoxHtml, runTalkBox } from './talkbox.js';
+/* runTalkBox only: no screen emits talk-box markup of its own right now (Today's
+   came off in v418), and the reveal path still has to start any box that appears.
+   The emitter comes back with Gwart. Do not write the emitter's name in here: the
+   COVERAGE row in tests/talkbox-audit.mjs greps js/*.js for it and counts a
+   mention on a /* line as a real call site, on purpose. */
+import { runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
@@ -2914,14 +2919,15 @@ async function renderToday(el) {
         ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
-    <!-- THE TALK BOX, not a comic bubble. Same left column, same tail to the jaw,
-         same side-docking and the same auto-dismiss; what changed is that the line
-         TYPES ON and it is drawn by the one shared dialogue path in js/talkbox.js.
-         No name label (this is you, and the design's name label IS what marks a
-         character) and no chevron, because a line that leaves on its own must not
-         also sit there asking to be tapped. -->
-    ${talkBoxHtml(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }),
-      { cls: `hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}` })}
+    <!-- NO TALK BOX HERE FOR NOW. Tom, 2026-08-20: "let's remove the text bubble
+         until we have gwart in the scene floating and talking that will replace
+         the bonehead talking and gwart will be more the coach character." So the
+         scene is quiet on purpose until Gwart is in it; the Bonehead narrating
+         himself is not the voice this card is getting. js/talkbox.js stays (it is
+         the one dialogue path, and it is what Gwart will speak through), and
+         tests/talkbox-audit.mjs now guards the module plus the fact that this
+         surface is gone. speechLine() and PET_LINES are still in this file: they
+         are the source material Gwart's coach lines get rewritten from. -->
     <!-- A GRADIENT CAPTION, not an opaque band. The 92px plate used to eat the
          bottom of the art; this fades into it instead. The 13px XP bar becomes
          20 pips, and the "Lv N unlocks a Golden Crate" sentence moves to
@@ -3089,27 +3095,14 @@ async function renderToday(el) {
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
-  /* TAP THE PET. From the handoff: it is the one thing on the card that is alive
-     and had nothing to say. Routed through the same bubble the Bonehead uses, so
-     there is one speech component rather than two. */
+  /* TAP THE PET. It pops and it makes a noise; it no longer says a line, because
+     the talk box has come off this card until Gwart is in the scene to speak.
+     PET_LINES is still in this file, unspoken for now. */
   $('#heroPetBtn')?.addEventListener('click', e => {
     e.stopPropagation();                       // the plate itself opens the Wardrobe
     const el = e.currentTarget;
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
     popSound(S.sounds);
-    const b = $('.hero-bubble');
-    if (!b) return;
-    /* THE PET IS A NAMED SPEAKER, and it WAITS. Two things follow from the design:
-       the label is what makes a line a character rather than narration, and this
-       line is one the player asked for, so the player closes it (gold chevron,
-       tap to dismiss) instead of it vanishing on a timer. `.again` has always
-       replaced the animation shorthand and so has never carried bubbleOut, which
-       used to mean the pet's line had no way out at all. */
-    b.classList.remove('again'); void b.offsetWidth; b.classList.add('again');
-    runTalkBox(b, PET_LINES[(Math.random() * PET_LINES.length) | 0], {
-      hold: true,
-      name: (BH_BY_ID[heroPet?.id] || {}).name || 'Your pet',
-    });
   });
   // Tapping the scene opens the Wardrobe, but the Trends chip and the
   // coin/dust/vigor/crate chips live INSIDE it, so their clicks bubbled here and
@@ -3123,9 +3116,6 @@ async function renderToday(el) {
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
     openCharacter('crates');
-  });
-  measureBubbleSide($('#bhStage'), eq).then(side => {
-    $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
   });
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
@@ -15740,7 +15730,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v417'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v418'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
