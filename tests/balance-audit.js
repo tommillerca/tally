@@ -240,7 +240,7 @@ for (const b of WEAPONIZED) {
 console.log(weaponBarOk ? '  PASS: all weaponized builds stay under the 90% exploit bar' : '  FAIL: a weaponized build exceeds 90% vs the Champion');
 if (!weaponBarOk) process.exitCode = 1;
 
-/* ---- v400: THE SAME CHECK, AT THE STATS A REAL CLIMBER ACTUALLY HAS ----
+/* ---- 2026-08-18: THE SAME CHECK, AT THE STATS A REAL CLIMBER ACTUALLY HAS ----
  *
  * Everything above runs at MID (50) or TOM (~35 avg). scaleStats clamps a FOE
  * to 100 per stat; allocatedStats clamps a PLAYER to 150. So above roughly stat
@@ -282,7 +282,7 @@ const ENDGAME_BUILDS = [
   { name: 'warmaul+slab', talents: BUILDS.slab, weaponId: 'warmaul' },
   { name: 'immortal', talents: BUILDS.immortal, weaponId: 'reliquary' },
 ];
-console.log(`\n--- v400 endgame stat tiers (smart policy vs Gauntlet rank ${ENDGAME_RANK}, mult ${gFoe.mult.toFixed(2)}) ---`);
+console.log(`\n--- endgame stat tiers (smart policy vs Gauntlet rank ${ENDGAME_RANK}, mult ${gFoe.mult.toFixed(2)}) ---`);
 let endgameOk = true;
 let endgameCells = 0;
 for (const lvl of [50, 100, 150]) {
