@@ -9,8 +9,8 @@ const CORS = {
   'Access-Control-Allow-Headers': 'content-type,x-bh-player,x-bh-ts,x-bh-sig,x-bh-admin',
   'Access-Control-Max-Age': '86400',
 };
-const json = (obj, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...CORS } });
+const json = (obj, status = 200, extraHeaders = null) =>
+  new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...CORS, ...(extraHeaders || {}) } });
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
@@ -42,6 +42,84 @@ function makeFriendCode() {
 function newId() { return crypto.randomUUID(); }
 function pairKey(x, y) { return x < y ? [x, y] : [y, x]; } // canonical a<b for friendships
 
+/* A per-isolate fallback secret, for the keyed hashes below when nothing is
+   provisioned (local dev). LAZY, not a module-level const: the Workers runtime
+   forbids generating random values in global scope, so a `crypto.randomUUID()`
+   at the top of this file fails the whole Worker at startup rather than at the
+   line that wanted it. Never a security claim -- it only means a dev box gets
+   keyed values rather than silently unkeyed ones. */
+let ephemeralSecret = null;
+function fallbackSecret() {
+  if (!ephemeralSecret) ephemeralSecret = crypto.randomUUID();
+  return ephemeralSecret;
+}
+
+/* ---------------- add tokens ----------------
+   WHY THESE EXIST. /leaderboard used to publish every top-100 player's
+   friend_code so the board's "+ Add" button had something to send, and that was
+   documented as deliberate on the grounds that codes are share-keys rather than
+   secrets. It was not safe, because a friend code is ALSO the lookup handle for
+   GET /recovery/<code>, which is unsigned by necessity and returns {wrapped,
+   salt, iters}: the AES-GCM-wrapped identity bundle. So one signed /leaderboard
+   call harvested 100 codes, and 100 wrapped bundles could then be pulled and
+   attacked offline forever. Cracking one yields the ECDSA signing key AND the
+   AES backup key, which is full account takeover plus decryption of the E2E
+   backup. The PBKDF2 work factor (1,000,000 iterations, js/social.js) is
+   genuinely strong and is not the defect. The free availability of the
+   ciphertext is.
+
+   An add token replaces the code on the board. It is:
+   - OPAQUE: it carries no share-key, and cannot be typed into the friend-code
+     box or looked up anywhere else.
+   - BEARER-SAFE: the only thing it authorises is a friend REQUEST, which the
+     other player still has to accept.
+   - EXPIRING: ADD_TOKEN_TTL_MS, so a scraped board goes stale instead of
+     becoming a permanent directory.
+   - STATELESS: an HMAC over (playerId, expiry), so no table and no cleanup.
+
+   The secret: ADD_TOKEN_SECRET if set, else ADMIN_TOKEN (already a deployed
+   secret, so an un-provisioned deploy still issues unforgeable tokens rather
+   than silently issuing forgeable ones), else a per-isolate random value so
+   local dev works and nothing weaker ever reaches production by default. */
+const ADD_TOKEN_TTL_MS = 24 * 3600000;
+
+function addTokenSecret(env) {
+  return env.ADD_TOKEN_SECRET || env.ADMIN_TOKEN || fallbackSecret();
+}
+async function addTokenMac(env, playerId, exp) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(addTokenSecret(env)),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hexOf(await crypto.subtle.sign('HMAC', key, enc.encode(`bh-add:${playerId}|${exp}`)), 16);
+}
+async function makeAddToken(env, playerId, nowMs) {
+  const exp = nowMs + ADD_TOKEN_TTL_MS;
+  return `${exp.toString(36)}.${await addTokenMac(env, playerId, exp)}.${playerId}`;
+}
+/** Length-safe, value-independent comparison. The tag is an HMAC so an early
+ *  return would leak a byte at a time to a patient caller. */
+function sameSecret(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+/** playerId, or null when the token is malformed, expired or forged. */
+async function readAddToken(env, token, nowMs) {
+  if (typeof token !== 'string') return null;
+  const dot1 = token.indexOf('.');
+  const dot2 = token.indexOf('.', dot1 + 1);
+  if (dot1 <= 0 || dot2 <= dot1 + 1) return null;
+  const exp = parseInt(token.slice(0, dot1), 36);
+  const mac = token.slice(dot1 + 1, dot2);
+  const playerId = token.slice(dot2 + 1);
+  if (!Number.isFinite(exp) || !playerId) return null;
+  if (exp <= nowMs) return null;
+  // bound the horizon too, so a leaked secret cannot mint a token good forever
+  if (exp > nowMs + ADD_TOKEN_TTL_MS) return null;
+  return sameSecret(mac, await addTokenMac(env, playerId, exp)) ? playerId : null;
+}
+
 // The free daily friend-gift roll (server-authoritative so it can't be forged).
 // Mostly coins, sometimes a crate/charm, rarely an egg.
 function rollFreeGift() {
@@ -59,25 +137,145 @@ function rollFreeGift() {
    ciphertext. Keep this in step with RECOVERY_ID_RE in js/social.js. */
 const RECOVERY_ID_RE = /^[a-z0-9._-]{4,32}$/;
 
-/** Returns a 429 Response when the caller is over budget, else null.
- *  `bucket` matters: handing out CIPHERTEXT has to be tight, but an availability
- *  check only reveals whether a name is taken. They shared one counter at first,
- *  which meant a player trying four candidate IDs in the setup sheet spent half
- *  the budget that their actual restore needs. Separate buckets, separate costs. */
-async function rateLimitRecovery(request, env, limit = 10, windowMs = 600000, bucket = 'rl_recovery') {
-  // hash the IP: the events table holds anonymous ids by design, and a raw IP
-  // log would be a privacy regression for an app that never uploads location
-  const ipRaw = request.headers.get('cf-connecting-ip') || 'unknown';
-  const ipHash = [...new Uint8Array(await crypto.subtle.digest('SHA-256',
-    new TextEncoder().encode('bh-rl:' + ipRaw)))].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+/* ---------------- rate limiting ----------------
+
+   THE BUG THIS REPLACES, because the shape of it is the reason for every choice
+   below. There was one limiter in this file and it counted its budget by
+   querying `events` -- the table the UNAUTHENTICATED /events ingest writes to --
+   keyed on SHA-256('bh-rl:' + ip) truncated to 8 bytes. Every ingredient of that
+   key is published in this source. So anyone could compute the bucket for any
+   IP, POST ten forged rows to /events with that device id and name='rl_recovery',
+   and lock that IP out of account recovery for ten minutes. About six requests
+   an hour held it there indefinitely. Recovery is the ONLY path that saves an
+   account whose keychain is gone, so a public ingest route could permanently
+   deny the one thing standing between a player and a lost account.
+
+   Two changes, and they are not alternatives. Both, because they fix different
+   halves:
+
+   1. ITS OWN TABLE (`rate_limits`). This is the fix. The limiter's counters are
+      no longer reachable from any request body, on any route, because no route
+      writes to that table except the limiter itself with a bucket it derived
+      server-side. Keying alone would NOT have fixed it: a secret bucket still
+      counted in a table an attacker can insert into is only obscure, and one
+      leaked bucket (or one future route that logs into `events` with a guessable
+      device id) brings the whole attack back. Separation removes the capability
+      rather than hiding the target.
+
+   2. A KEYED HMAC over the subject, when RL_SECRET is set. This is defence in
+      depth and does a second, different job: it stops the bucket being a
+      REVERSIBLE label. An unkeyed hash of an IP is a rainbow table away from the
+      IP itself, and these rows sit in the same database the admin dashboard
+      reads, so an unkeyed bucket is effectively an IP log for an app that
+      deliberately never keeps one. Keyed, the counter is unlinkable, and a
+      future route that did write here still could not aim at a chosen IP.
+      Falls back to the unkeyed digest when no secret is provisioned: the private
+      table already makes it correct, and a deploy without the secret must not
+      lose rate limiting altogether.
+
+   Fixed windows, one row per (bucket, name, window), upserted with RETURNING so
+   a check is ONE D1 write instead of a read plus a row per hit. The counters
+   must not become the write amplification they exist to prevent. The known cost
+   of a fixed window is a 2x burst across a boundary; every limit below is set
+   with that doubling already assumed. */
+
+/* Every limiter, with the traffic it has to survive. `limit` is per `windowMs`
+   per subject. */
+const RATE_LIMITS = {
+  // --- unsigned recovery lookups (budgets unchanged: these were already tuned) ---
+  rl_recovery:    { limit: 10,  windowMs: 600000 },   // hands out CIPHERTEXT: tight on purpose
+  rl_ridcheck:    { limit: 60,  windowMs: 600000 },   // only reveals whether a name is taken
+
+  /* --- analytics ingest ---
+     A normal client POSTs about 28 times a day (js/analytics.js flushes on a
+     60s interval, but only when the queue is non-empty). The worst HONEST burst
+     is a queue drain: QCAP is 300 events and each POST carries 50, so a client
+     that was offline sends ceil(300/50) = 6 back-to-back POSTs on reconnect.
+     120/hour per device is 100x the steady rate and 20x the worst burst.
+     The IP bucket has to survive carrier CGNAT, where thousands of real players
+     share one address, so it is deliberately loose and is a backstop against
+     device-id rotation, not the primary control. */
+  rl_events_dev:  { limit: 120, windowMs: 3600000 },
+  rl_events_ip:   { limit: 600, windowMs: 3600000 },
+
+  /* --- account creation ---
+     A device registers ONCE, ever, and again on a reinstall. 10/hour per IP
+     still covers a household or a demo table setting up several phones at once,
+     and stops bulk minting of accounts (which is also bulk minting of rows in
+     `players`, each holding a UNIQUE friend code out of a finite space). */
+  rl_register_ip: { limit: 10,  windowMs: 3600000 },
+
+  /* --- map feedback ---
+     A player files a handful of den nominations in a session at most. */
+  rl_report_dev:  { limit: 20,  windowMs: 3600000 },
+  rl_report_ip:   { limit: 60,  windowMs: 3600000 },
+
+  /* --- the survey ---
+     Described in its own comment as a ONE-TIME in-app survey. 3/day per device
+     leaves room to submit, notice a typo and resubmit. The IP bucket allows a
+     household or a test session. This one also takes an email address, so it is
+     the row a spammer would most want to flood. */
+  rl_survey_dev:  { limit: 3,   windowMs: 86400000 },
+  rl_survey_ip:   { limit: 10,  windowMs: 86400000 },
+
+  /* --- the signed profile push ---
+     Key-holder only, so this is not abuse control, it is a ceiling on how fast
+     an account can walk its level up against the bounds in sanitizeSnapshot.
+     js/app.js syncs on a 5-minute background throttle plus a ~1.2s debounced
+     push whenever the player changes what friends see, so a busy dressing-room
+     session is a few dozen an hour. 120/hour leaves that alone. */
+  rl_profile:     { limit: 120, windowMs: 3600000 },
+};
+
+function hexOf(buf, bytes) {
+  return [...new Uint8Array(buf)].slice(0, bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** The subject of a limit, hashed. `kind` is part of the input, so an IP bucket
+ *  and a device bucket can never collide even when the two values are equal. */
+async function rlBucket(env, kind, value) {
+  const enc = new TextEncoder();
+  const material = `${kind}:${value}`;
+  const secret = env.RL_SECRET || fallbackSecret();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hexOf(await crypto.subtle.sign('HMAC', key, enc.encode(material)), 12);
+}
+
+const clientIp = request => request.headers.get('cf-connecting-ip') || 'unknown';
+
+/** Returns a 429 Response when the subject is over budget, else null.
+ *  Counts FIRST and refuses after, so a refused request still costs the caller
+ *  budget: a limiter that stops counting once you are over is one you can
+ *  outrun by simply continuing. */
+async function rateLimit(env, name, kind, value) {
+  const cfg = RATE_LIMITS[name];
+  if (!cfg) throw new Error(`no rate limit named ${name}`);
+  const bucket = await rlBucket(env, kind, value);
   const now = Date.now();
-  const hits = Number((await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ? AND ts > ?')
-    .bind(ipHash, bucket, now - windowMs).first())?.n || 0);
-  if (hits >= limit) return json({ error: 'too many attempts, try again later' }, 429);
-  await env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
-    .bind(ipHash, bucket, '{}', '', new Date(now).toISOString().slice(0, 10), now).run().catch(() => {});
-  return null;
+  const windowStart = Math.floor(now / cfg.windowMs) * cfg.windowMs;
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,1,?)
+     ON CONFLICT(bucket, name, window_start) DO UPDATE SET hits = hits + 1
+     RETURNING hits`)
+    .bind(bucket, name, windowStart, windowStart + cfg.windowMs * 2).first();
+  const hits = Number(row?.hits || 1);
+  // Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
+  // per bucket per window) and it keeps the table proportional to live traffic
+  // rather than to all traffic ever.
+  if (hits === 1) {
+    await env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(now).run().catch(() => {});
+  }
+  if (hits <= cfg.limit) return null;
+  const resetMs = windowStart + cfg.windowMs - now;
+  return json({ error: 'too many requests, try again later', retryAfterMs: resetMs }, 429,
+    { 'retry-after': String(Math.max(1, Math.ceil(resetMs / 1000))) });
+}
+
+/** The unsigned recovery routes, limited per IP. Kept as its own name because
+ *  the point of a shared limiter here is that adding a recovery route can never
+ *  accidentally ship an unthrottled way to harvest ciphertext. */
+function rateLimitRecovery(request, env, name = 'rl_recovery') {
+  return rateLimit(env, name, 'ip', clientIp(request));
 }
 
 /* ---------------- signature auth ---------------- */
@@ -86,7 +284,19 @@ async function verifySigned(request, env, bodyText) {
   const ts = request.headers.get('x-bh-ts');
   const sig = request.headers.get('x-bh-sig');
   if (!playerId || !ts || !sig) return { err: 'missing auth headers' };
-  if (Math.abs(Date.now() - Number(ts)) > MAX_SKEW_MS) return { err: 'stale timestamp' };
+  /* THE SKEW CHECK USED TO FAIL OPEN. It was
+       if (Math.abs(Date.now() - Number(ts)) > MAX_SKEW_MS) ...
+     and Number('abc') is NaN, so `NaN > 300000` is false and the request was
+     NOT rejected. Any non-numeric x-bh-ts skipped the freshness bound entirely,
+     which removed the five-minute replay window from a captured signed request
+     for as long as the signature stayed valid, which is forever.
+     Number.isFinite first: it rejects NaN, Infinity, '' (Number('') is 0, and an
+     empty ts is caught by the header check above but not by the arithmetic) and
+     anything else that is not a real instant. The comparison is only reached
+     once the value is known to be a number. */
+  const tsNum = Number(ts);
+  if (!Number.isFinite(tsNum)) return { err: 'bad timestamp' };
+  if (Math.abs(Date.now() - tsNum) > MAX_SKEW_MS) return { err: 'stale timestamp' };
   const row = await env.DB.prepare('SELECT pubkey FROM players WHERE id = ?').bind(playerId).first();
   if (!row) return { err: 'unknown player' };
   const url = new URL(request.url);
@@ -140,6 +350,305 @@ const RACE_RULES = 2;
    twenty minutes after the fix was serving and pushed 33,608, because that phone
    is still running the old bundle. A timestamp cannot tell you what version did
    the arithmetic. Only the stamp can. */
+
+/* ================= SNAPSHOT BOUNDS =================================
+   The race week, mirrored from js/app.js (raceWeekKey / RACE_EPOCH / RACE_DAYS).
+   KEEP IN SYNC, exactly like ADJ/NOUN and RACE_RULES above.
+
+   The client computes its week key in LOCAL time and the server computes it in
+   UTC, so the two disagree for up to a day around a boundary. That skew is why
+   validateWeek() accepts the previous and next key as well as the current one,
+   and why each of the three gets a different rule rather than a blanket pass. */
+const RACE_EPOCH = '2026-08-07';
+const RACE_DAYS = 7;
+const RACE_PERIOD_MS = RACE_DAYS * 86400000;
+const dayKeyUTC = ms => new Date(ms).toISOString().slice(0, 10);
+function raceWeekStartMs(atMs) {
+  const epoch = Date.parse(RACE_EPOCH + 'T00:00:00Z');
+  if (!(atMs >= epoch)) return epoch;            // before launch: everything is period one
+  return epoch + Math.floor((atMs - epoch) / RACE_PERIOD_MS) * RACE_PERIOD_MS;
+}
+const raceWeekKey = atMs => dayKeyUTC(raceWeekStartMs(atMs));
+
+/* ---- the level curve, mirrored from js/game.js (xpForLevel / levelFor) ----
+   KEEP IN SYNC. Only the level number is needed here, so levelForXp returns the
+   integer rather than the whole descriptor the client builds. */
+function xpForLevel(L) {
+  if (L <= 1) return 0;
+  return Math.round((120 * Math.pow(L - 1, 1.55) + 80 * (L - 1)) / 10) * 10;
+}
+function levelForXp(xp) {
+  let L = 1;
+  while (L < 100000 && xpForLevel(L + 1) <= xp) L++;
+  return L;
+}
+
+/* ---- what one day of play can pay, from the game's own award tables ----
+   Every number below is a literal lifted from js/game.js, not a guess, so a
+   change to the economy shows up here as a conflict rather than as a silent
+   drift. Sources are named per line.
+
+   These are the DAILY-IDEMPOTENT awards: each one is keyed by date in
+   js/game.js, so the game itself will not pay them twice in a day however many
+   times it is asked. */
+const XP_HEALTH_DAY =
+  10 +          // 'hk', the Apple Health sync itself           (js/game.js onHealthSync)
+  3 * 15 +      // 'stepms', one per STEP_MILESTONES tier (3)   (js/game.js STEP_MILESTONES)
+  15 +          // 'egg', the big-day Step Egg                  (js/game.js EGG_STEP_THRESHOLD)
+  4 * 5 +       // 'stepx', one per STEP_OVER tier (4)          (js/game.js STEP_OVER)
+  3 * 15 +      // 'actms', one per ACTIVE_MILESTONES tier (3)  (js/game.js ACTIVE_MILESTONES)
+  15 +          // 'actcrate', workout of the day               (js/game.js ACTIVE_WORKOUT_KCAL)
+  3 * 5 +       // 'actx', one per ACTIVE_OVER tier (3)         (js/game.js ACTIVE_OVER)
+  3 * 15 +      // 'wk', WORKOUT_CAP rewarded sessions          (js/game.js WORKOUT_CAP = 3)
+  20 +          // 'exring', the Apple Exercise ring            (js/game.js EXERCISE_RING_MIN)
+  8 * 8 +       // 'cyc', CYCLE_KM_CAP / CYCLE_KM_STEP = 8 steps(js/game.js CYCLE_KM_CAP = 40, STEP = 5)
+  3 * 10;       // 'wtype', one per discipline (3)              (js/game.js DISCIPLINE_REWARD)
+const XP_DAY_CLOSE =
+  50 +          // 'dayclose'   (js/app.js)
+  25 +          // 'dayeffort'  (js/app.js)
+  40 +          // 'protein'    (js/app.js)
+  20 +          // 'meals'      (js/app.js)
+  15 +          // 'firstlog'   (js/app.js)
+  15;           // 'weigh'      (js/game.js onWeighIn)
+const XP_STREAK_DAY = 100;   // 'streakms', at most one milestone a day (js/game.js)
+
+/* The OPEN-ENDED sources are the honest part of this estimate. A Pit win pays
+   10 XP on a key containing Date.now() (js/app.js) and a food log pays 10 on a
+   per-entry key, so neither has a daily cap in the game at all. 100 such actions
+   in one day is far past any real session (a Pit fight is a whole animation, and
+   a hundred logged foods is not a day anyone has) and it is the only term here
+   that is a judgement rather than a constant, so it is named as one. */
+const XP_OPEN_ENDED_ACTIONS_DAY = 100;
+const XP_OPEN_ENDED_DAY = XP_OPEN_ENDED_ACTIONS_DAY * 10;
+
+/** The most XP a day of play can plausibly produce: 1,589. For scale, the
+ *  heaviest real account on record was level 27, which is 20,800 XP on the curve
+ *  above; spread over the two months that account existed that is about 350 XP a
+ *  day, so this ceiling is roughly 4.5x the busiest genuine player. */
+const DAILY_XP_CEILING = XP_HEALTH_DAY + XP_DAY_CLOSE + XP_STREAK_DAY + XP_OPEN_ENDED_DAY;
+
+/** Every badge in the game, awarded once each, ever. BADGES in js/game.js has 29
+ *  rows and evaluateBadges pays 25 XP per badge. This is also the hard clamp on
+ *  the `badges` count itself: the leaderboard's secondary sort key cannot exceed
+ *  the number of badges that exist. KEEP IN SYNC with BADGES in js/game.js. */
+const MAX_BADGES = 29;
+const XP_ALL_BADGES = MAX_BADGES * 25;
+
+/* A first sync legitimately carries history the account row has never seen. Two
+   real cases: a first Apple Health authorisation BACKFILLS past days, each worth
+   up to XP_HEALTH_DAY, and a player who installed a pre-social build registers
+   only when they update, so created_at is the day they came online rather than
+   the day they started playing. 90 days of allowance covers both with room to
+   spare: at DAILY_XP_CEILING that is 143,010 XP, which is level 94 on the curve,
+   against a heaviest-real-account level of 27. */
+const PRIOR_HISTORY_DAYS = 90;
+
+/** The largest single jump the game itself can produce: the level
+ *  DAILY_XP_CEILING reaches from a standing start, which is 5. Levels only get
+ *  more expensive further up the curve, so 5 is the maximum anywhere, and any
+ *  claim that moves further than this in a day did not come from playing. */
+const BURST_LEVELS = levelForXp(DAILY_XP_CEILING);
+
+/** Steps. The game's own top recognised tier is the last STEP_OVER entry at
+ *  20,000 in a day (js/game.js STEP_OVER), past which it stops paying at all.
+ *  Five times that is the ceiling here: 100,000 steps in a single day is roughly
+ *  50 miles on foot, beyond any player and well past anything the game rewards,
+ *  yet it leaves five times the game's own maximum as headroom so no real walker
+ *  is ever clipped. This is the number that makes 200,000 steps in an hour
+ *  impossible: a week's total may not exceed this per ELAPSED day of that week,
+ *  so on the Monday of a race week the most anyone can claim is 100,000. */
+const STEP_OVER_TOP = 20000;
+const MAX_STEPS_PER_DAY = 5 * STEP_OVER_TOP;
+
+/** The client caps its own gear list at 400 ids (js/app.js socialSnapshot,
+ *  `[...gOwned].slice(0, 400)`). The leaderboard publishes json_array_length of
+ *  it, so an unbounded array is an unbounded number on the board. */
+const MAX_GEAR_IDS = 400;
+
+const intOrNull = v => (typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : null);
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+/** Which race week a claimed key is, relative to the server's own clock.
+ *  Returns 'current' | 'previous' | 'next' | null (null = not a real week start,
+ *  or too far away to be clock skew). */
+function classifyWeekKey(key, nowMs) {
+  if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
+  const t = Date.parse(key + 'T00:00:00Z');
+  if (!Number.isFinite(t)) return null;
+  const cur = raceWeekStartMs(nowMs);
+  if (t === cur) return 'current';
+  if (t === cur - RACE_PERIOD_MS) return 'previous';
+  if (t === cur + RACE_PERIOD_MS) return 'next';
+  return null;
+}
+
+/* THE FIX FOR THE UNVALIDATED CLIENT ASSERTION.
+ *
+ * /profile used to check three things: the body is under 24 KB, the signature is
+ * valid, and body.snapshot is a non-null object. Then it JSON.stringify'd it
+ * straight into players.profile. Everything downstream reads that as fact:
+ * /leaderboard ranks on json_extract(profile,'$.level') and '$.badges', the step
+ * race reads '$.weekSteps' / '$.weekKey' / '$.raceV', and the same blob is
+ * copied into spires.defender for every tower the caller holds. So one signed
+ * PUT of {level: 999999, badges: 999999} was rank 1 permanently, and setting
+ * weekKey to last week with any weekSteps took a podium that pays 5,000 coins
+ * plus a Golden Crate.
+ *
+ * WHY CLAMP AND NOT REJECT. A 400 here would take a player's whole snapshot
+ * offline -- outfit, pet, gear, spire defender -- over one bad field, and the
+ * likeliest cause of a bad field is our own bug, not an attacker. Clamping keeps
+ * the account working and publishes only defensible numbers. `bounded` in the
+ * response names every field that was pulled down, so a client (or a test) can
+ * see it happened instead of guessing.
+ *
+ * WHAT THIS DOES NOT CLAIM. The trust model of this game is stated plainly
+ * elsewhere in this file: the client wins its own fights. These bounds do not
+ * make the snapshot trustworthy, they make it PLAUSIBLE, which is a different
+ * and achievable thing. A fresh key can still assert a believable level once,
+ * because the server has no prior observation of an account it has never seen.
+ * What it can no longer do is assert an impossible one, walk up without the
+ * elapsed time to justify it, or take a paying podium it did not walk for.
+ */
+function sanitizeSnapshot(rawSnap, row, nowMs) {
+  const snap = { ...rawSnap };
+  const bounded = [];
+
+  /* ---- level ----
+     Two independent ceilings, and the lower of the two wins.
+
+     (a) PLAUSIBLE: the level the curve reaches from the most XP this account
+         could ever have earned, which is DAILY_XP_CEILING for every day it has
+         existed, plus PRIOR_HISTORY_DAYS of backfillable history, plus every
+         badge in the game. Time-anchored, so it cannot be outrun by making more
+         requests.
+     (b) NO TELEPORTING: max_level plus BURST_LEVELS for the current day and for
+         each day since max_level was last raised. This is what stops a long
+         quiet account jumping in one PUT; it is measured against a value the
+         SERVER stored, which is the whole reason max_level exists. */
+  const ageDays = Math.max(0, (nowMs - (row.created_at || nowMs)) / 86400000);
+  const plausibleCeiling = levelForXp(DAILY_XP_CEILING * (ageDays + PRIOR_HISTORY_DAYS) + XP_ALL_BADGES);
+  const prevMax = intOrNull(row.max_level) || 0;
+  let ceiling = plausibleCeiling;
+  /* THE JUMP RULE NEEDS A PRIOR OBSERVATION THAT MEANS SOMETHING, and an
+     account less than a day old has not got one. A real first day is not a
+     sequence of small climbs: the player onboards at level 1, authorises Apple
+     Health, and a BACKFILL imports months of history in one step (js/game.js
+     onHealthSync pays every past day it is handed). Applying a
+     five-levels-a-day ratchet to that pins an honest new player at level 6 and
+     makes them climb back over the next half hour, with a wrong level on the
+     board and a weaker spire defender the whole time.
+     Skipping the rule for day one costs nothing: a day-old account is bounded
+     by plausibleCeiling either way, and that is the same bound a brand new key
+     would face on its very first PUT regardless. */
+  if (prevMax > 0 && ageDays >= 1) {
+    const sinceRaiseDays = Math.max(0, (nowMs - (row.max_level_at || row.created_at || nowMs)) / 86400000);
+    ceiling = Math.min(ceiling, prevMax + BURST_LEVELS * (1 + Math.floor(sinceRaiseDays)));
+  }
+  const claimedLevel = intOrNull(snap.level);
+  // a missing or non-numeric level is the client's own COALESCE(...,1) default,
+  // not an attack: leave the field absent rather than inventing a number
+  if (claimedLevel !== null) {
+    const level = clamp(claimedLevel, 1, ceiling);
+    if (level !== claimedLevel) bounded.push('level');
+    snap.level = level;
+  } else if (snap.level !== undefined) {
+    delete snap.level;
+    bounded.push('level');
+  }
+
+  /* ---- badges ----
+     A count of a fixed list. There is no derivation to argue about: you cannot
+     have earned more badges than the game defines. */
+  const claimedBadges = intOrNull(snap.badges);
+  if (claimedBadges !== null) {
+    const badges = clamp(claimedBadges, 0, MAX_BADGES);
+    if (badges !== claimedBadges) bounded.push('badges');
+    snap.badges = badges;
+  } else if (snap.badges !== undefined) {
+    delete snap.badges;
+    bounded.push('badges');
+  }
+
+  /* ---- gear ----
+     Display-only (the board publishes its length), but unbounded length is an
+     unbounded number, so hold it to the client's own cap. */
+  if (Array.isArray(snap.gear) && snap.gear.length > MAX_GEAR_IDS) {
+    snap.gear = snap.gear.slice(0, MAX_GEAR_IDS);
+    bounded.push('gear');
+  }
+
+  /* ---- raceV ----
+     The rules stamp. Ranking requires raceV >= RACE_RULES, so a forged high
+     value is only a way of passing that gate; normalise it to the newest rules
+     the server actually knows about. */
+  const claimedRaceV = intOrNull(snap.raceV);
+  if (claimedRaceV !== null) snap.raceV = clamp(claimedRaceV, 0, RACE_RULES);
+
+  /* ---- the step race ----
+     This is the one that pays money: STEP_RACE_PODIUM is 5,000 coins plus a
+     Golden Crate plus 200 dust for first, settled lazily by whoever calls
+     /steps/week first in a new week. Three rules, and each closes a different
+     half of the same exploit.
+
+     1. THE WEEK KEY MUST BE A WEEK. Not a real period start, or further away
+        than one period, and the race fields are dropped entirely: an arbitrary
+        key was how you claimed a week nobody could contest.
+     2. A PAST WEEK IS FROZEN. The previous key is accepted only up to the total
+        the server already recorded WHILE that week was current. That is what
+        the client legitimately sends across a rollover boundary, and it means a
+        fresh account cannot claim last week at all, because the server recorded
+        nothing for it. This is the rule that closes the podium theft.
+     3. A LIVE WEEK IS MONOTONE AND RATE-BOUNDED. Never below what was already
+        accepted for the same key (steps do not un-walk), and never above
+        MAX_STEPS_PER_DAY for each day of that week that has actually elapsed.
+        The elapsed-day term IS the per-day delta ceiling: on the Monday of a
+        race week the cap is 100,000, and it only reaches 700,000 once the whole
+        week has been walked, so no hour can ever add 200,000. */
+  const claimedKey = typeof snap.weekKey === 'string' ? snap.weekKey : null;
+  const when = classifyWeekKey(claimedKey, nowMs);
+  const storedKey = typeof row.week_key === 'string' ? row.week_key : null;
+  const storedSteps = Math.max(0, intOrNull(row.week_steps) || 0);
+  const claimedSteps = Math.max(0, intOrNull(snap.weekSteps) || 0);
+  let acceptedKey = null, acceptedSteps = 0;
+
+  if (!when) {
+    if (snap.weekKey !== undefined || snap.weekSteps !== undefined) bounded.push('weekKey');
+    delete snap.weekKey;
+    delete snap.weekSteps;
+  } else if (when === 'previous') {
+    const frozen = storedKey === claimedKey ? storedSteps : 0;
+    acceptedKey = claimedKey;
+    acceptedSteps = Math.min(claimedSteps, frozen);
+    if (acceptedSteps !== claimedSteps) bounded.push('weekSteps');
+    snap.weekKey = acceptedKey;
+    snap.weekSteps = acceptedSteps;
+  } else {
+    // 'current' or 'next'. 'next' is a phone whose local midnight has crossed
+    // before the server's, so it is day one of a week and gets one day's budget.
+    const weekStart = Date.parse(claimedKey + 'T00:00:00Z');
+    const elapsedDays = clamp(Math.ceil((nowMs - weekStart) / 86400000), 1, RACE_DAYS);
+    const floor = storedKey === claimedKey ? storedSteps : 0;
+    const cap = MAX_STEPS_PER_DAY * elapsedDays;
+    acceptedKey = claimedKey;
+    acceptedSteps = clamp(claimedSteps, floor, Math.max(floor, cap));
+    if (acceptedSteps !== claimedSteps) bounded.push('weekSteps');
+    snap.weekKey = acceptedKey;
+    snap.weekSteps = acceptedSteps;
+  }
+
+  const level = intOrNull(snap.level) || 0;
+  const raisesMax = level > prevMax;
+  return {
+    snap,
+    bounded,
+    maxLevel: Math.max(prevMax, level),
+    maxLevelAt: raisesMax ? nowMs : (row.max_level_at || null),
+    weekKey: acceptedKey,
+    weekSteps: acceptedSteps,
+  };
+}
+/* =============== end snapshot bounds =============== */
+
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -156,6 +665,73 @@ function siegeNameFor(id, at) {
   return SIEGE_NAMES[(h >>> 0) % SIEGE_NAMES.length];
 }
 
+/* The friendship edge, shared by /friends/request (by friend code) and
+   /friends/add (by leaderboard add token). One body so the two handles cannot
+   drift into different rules: reciprocation auto-accepts, and a repeat is a
+   no-op rather than a second row.
+
+   ONE upsert, because the three cases are one decision about one row and the
+   row is the only thing that can arbitrate it.
+
+   It used to be SELECT-then-INSERT, and the two friendliest players in the game
+   broke it: when both press Add at the same moment, both read "no row", both
+   INSERT, and the loser hits PRIMARY KEY (a, b) and falls out of the outer catch
+   as a 500. Measured locally on 2026-08-17: [200, 500], with a
+   "UNIQUE constraint failed: friendships.a, friendships.b" detail handed to the
+   client. Worse than the 500 is what it left behind: the reciprocation rule that
+   turns "they already asked me" into an accepted friendship never ran, so two
+   people who both asked to be friends end up merely pending, each looking at an
+   OUTGOING request and waiting for the other to accept something their client is
+   not showing them.
+
+   The upsert says all of it at once: insert pending if there is no row, promote
+   to accepted if the existing row was requested by the OTHER player, and leave
+   my own repeat alone. RETURNING is the row's own answer, so the status the
+   caller is told is the status that is stored. */
+async function requestFriendship(env, meId, otherId) {
+  const [a, b] = pairKey(meId, otherId);
+  const now = Date.now();
+  const row = await env.DB.prepare(
+    `INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,'pending',?,?)
+     ON CONFLICT(a, b) DO UPDATE SET
+       status = CASE WHEN friendships.requested_by <> excluded.requested_by THEN 'accepted' ELSE friendships.status END,
+       ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
+     RETURNING status`).bind(a, b, meId, now).first();
+  return { ok: true, status: row?.status === 'accepted' ? 'accepted' : 'pending' };
+}
+
+/* ---------------- daily-capped grants ----------------
+   Gifts and cheers are capped per sender per recipient per day, and the cap used
+   to be read with a COUNT and then used TWICE across an await: once to refuse
+   over the cap, and once to build the grant key as `${prefix}${n}`.
+
+   Both halves broke under concurrency, and the second half broke silently, which
+   is the worse of the two. Measured locally on 2026-08-17, eight concurrent
+   spend-gifts from one sender: every one read n = 0, every one built the key
+   `...-0`, every one was answered `{ok:true}` -- and ONE grant reached the
+   recipient. The client deducts the sender's coins on that ok, so seven gifts
+   were paid for and never delivered. That is exactly the "my coins went weird"
+   report, weeks later, with nothing in any log. Eight cheers landed two. And the
+   cap itself never applied: all eight passed a limit of five.
+
+   The count now lives INSIDE the insert. SQLite evaluates the subqueries and the
+   insert as one statement against one snapshot, and D1 has a single writer, so
+   the second concurrent call sees the first call's row: it gets the next `n`, and
+   the (n+1)th is refused by the WHERE rather than by a stale read. The key format
+   is unchanged and still deterministic (no timestamp, no random id -- the client
+   ledger's idempotence depends on that).
+
+   Returns true when a row landed, false when the cap refused it. */
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now }) {
+  const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
+  const r = await env.DB.prepare(
+    `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
+     SELECT ?, ? || (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?), ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?) < ?`)
+    .bind(to, prefix, to, prefix, hi, type, payload, now, to, prefix, hi, cap).run();
+  return !!(r.meta && r.meta.changes);
+}
+
 /* Expire any siege whose 48h has run out. NEVER destructive: the tower is not
    lost, it is backdated into DORMANT, which is the state the whole client already
    understands (and which frees a cap slot). Idempotent: the grant key carries the
@@ -167,14 +743,24 @@ async function sweepSieges(env, rows, now) {
     // dormancy line in SQL and again in JS let the response describe a state the
     // database was not in, which is how a test can pass over a broken write.
     const dormantAt = Math.min(r.tended_at, now - SPIRE_DORMANT_MS);
-    await env.DB.prepare(
-      `UPDATE spires SET tended_at = ?, siege_until = NULL, siege_name = NULL, updated_at = ?
-       WHERE id = ? AND siege_until IS NOT NULL`)
-      .bind(dormantAt, now, r.id).run();
-    await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-      .bind(r.owner, `siege-lost-${r.id}-${r.siege_until}`, 'spire', JSON.stringify({
-        note: `${r.siege_name || 'The siege'} broke through at ${r.name}. It stands dormant, not lost: walk back and take it again.`,
-      }), now).run();
+    /* ONE batch: losing the tower and being TOLD you lost it must land together
+       or not at all. As two awaited .run() calls the first could land alone,
+       and the owner would find a dormant tower with nothing in Deliveries to
+       explain it -- and no later sweep would ever try again, because the guard
+       below sees siege_until already NULL. The pair stays idempotent whichever
+       way it races: the UPDATE is guarded on siege_until IS NOT NULL so only one
+       sweeper changes the row, and the grant key carries the window so a second
+       sweeper's OR IGNORE is a no-op rather than a second delivery. */
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE spires SET tended_at = ?, siege_until = NULL, siege_name = NULL, updated_at = ?
+         WHERE id = ? AND siege_until IS NOT NULL`)
+        .bind(dormantAt, now, r.id),
+      env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+        .bind(r.owner, `siege-lost-${r.id}-${r.siege_until}`, 'spire', JSON.stringify({
+          note: `${r.siege_name || 'The siege'} broke through at ${r.name}. It stands dormant, not lost: walk back and take it again.`,
+        }), now),
+    ]);
     r.siege_until = null; r.siege_name = null; r.tended_at = dormantAt;
   }
   return rows;
@@ -192,24 +778,71 @@ export default {
       // Register a device pubkey -> player. Idempotent: re-registering the same
       // key (reinstall from backup) returns the existing account.
       if (path === '/register' && request.method === 'POST') {
+        const limitedR = await rateLimit(env, 'rl_register_ip', 'ip', clientIp(request));
+        if (limitedR) return limitedR;
         const body = await request.json().catch(() => null);
         const jwk = body && body.pubkey;
         if (!jwk || jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) return json({ error: 'bad pubkey' }, 400);
         const pub = JSON.stringify({ kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y });
+        /* POSSESSION OF THE PRIVATE KEY.
+           This route proves only that the caller can TYPE a public key, not that
+           they hold the matching private one, so anyone can mint an account
+           around a key they do not own. The impact is small in this design --
+           registration is idempotent on the pubkey, so the rightful owner
+           registering later gets the SAME account back rather than a stolen one,
+           and every other route is signature-checked -- but it does mean the
+           account table can be filled with keys nobody can sign for.
+           `proof` is a signature over the canonical string below. It is VERIFIED
+           when present and recorded, and it is deliberately not yet REQUIRED,
+           because requiring it would 400 every client in the field: js/social.js
+           goOnline() posts {pubkey} and nothing else. Enforcement is a one-line
+           flip here once a client that sends it has shipped, and the client
+           change is written up in the fix report. */
+        let keyProven = false;
+        if (typeof body.proof === 'string' && body.proof) {
+          try {
+            const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+            const sigBytes = Uint8Array.from(atob(body.proof), c => c.charCodeAt(0));
+            keyProven = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes,
+              new TextEncoder().encode(`bh-register\n${pub}`));
+          } catch { keyProven = false; }
+          if (!keyProven) return json({ error: 'bad key proof' }, 400);
+        }
+        const asExisting = row => json({ playerId: row.id, handle: row.handle, friendCode: row.friend_code, name: row.name || null, existing: true });
         const existing = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
-        if (existing) return json({ playerId: existing.id, handle: existing.handle, friendCode: existing.friend_code, name: existing.name || null, existing: true });
+        if (existing) return asExisting(existing);
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
           try {
-            await env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen) VALUES (?,?,?,?,?,?)')
-              .bind(id, pub, handle, code, now, now).run();
-            // welcome grant: a little hello the client ingests as a ledger event
-            await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-              .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now).run();
-            return json({ playerId: id, handle, friendCode: code });
+            /* ONE batch, so the account and its welcome grant land together or
+               not at all. As two awaited .run() calls they were not a
+               transaction: a failure between them left a player who had joined
+               the Crew and was never welcomed, and no later call would notice. */
+            await env.DB.batch([
+              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen) VALUES (?,?,?,?,?,?)')
+                .bind(id, pub, handle, code, now, now),
+              // welcome grant: a little hello the client ingests as a ledger event
+              env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+                .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now),
+            ]);
+            return json({ playerId: id, handle, friendCode: code, ...(keyProven ? { keyProven: true } : {}) });
           } catch (e) {
             if (!String(e).includes('UNIQUE')) throw e;
+            /* NOT EVERY UNIQUE HERE IS A FRIEND-CODE COLLISION, and treating it
+               as one is why this route 500'd on the most ordinary thing a client
+               does. players.pubkey is UNIQUE too, and the SELECT above is a read
+               across an await, so two goOnline() calls from one reinstalling
+               device both saw "no account" and both inserted. Retrying with a
+               fresh id/handle/code cannot help: the pubkey collides again, five
+               times over, and the player was handed "could not allocate friend
+               code" 500 instead of the account that had just been created for
+               them one millisecond earlier. Measured locally on 2026-08-17:
+               three concurrent registers of one pubkey gave 200, 200, 500.
+               Re-read on the pubkey: if the account now exists, the race is the
+               ANSWER, not a failure. */
+            const raced = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
+            if (raced) return asExisting(raced);
           }
         }
         return json({ error: 'could not allocate friend code' }, 500);
@@ -221,18 +854,48 @@ export default {
         if (bodyText.length > MAX_PROFILE_BYTES) return json({ error: 'profile too large' }, 413);
         const auth = await verifySigned(request, env, bodyText);
         if (auth.err) return json({ error: auth.err }, 401);
+        const limitedP = await rateLimit(env, 'rl_profile', 'player', auth.playerId);
+        if (limitedP) return limitedP;
         const body = JSON.parse(bodyText || '{}');
-        if (!body.snapshot || typeof body.snapshot !== 'object') return json({ error: 'missing snapshot' }, 400);
-        const snap = JSON.stringify(body.snapshot);
+        if (!body.snapshot || typeof body.snapshot !== 'object' || Array.isArray(body.snapshot)) {
+          return json({ error: 'missing snapshot' }, 400);
+        }
         const nowP = Date.now();
-        await env.DB.prepare('UPDATE players SET profile = ?, app_v = ?, last_seen = ? WHERE id = ?')
-          .bind(snap, String(body.appV || ''), nowP, auth.playerId).run();
-        // Keep every tower I hold defended by my CURRENT build. The snapshot used
-        // to be frozen at claim time, so a rival months later fought the weaker
-        // version of me that first took the spire. Cheap: indexed by owner.
-        await env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
-          .bind(snap, nowP, auth.playerId).run();
-        return json({ ok: true });
+        /* BOUND IT BEFORE IT IS STORED, in ONE place. Every consumer of this
+           column reads it as fact (the leaderboard's ORDER BY, the step race
+           board, spires.defender), so the only honest place to enforce a bound
+           is the write. Sanitising at each read would mean four chances to
+           forget, and the copy into spires.defender below would still carry the
+           raw claim. */
+        const prior = await env.DB.prepare(
+          'SELECT created_at, max_level, max_level_at, week_key, week_steps FROM players WHERE id = ?')
+          .bind(auth.playerId).first();
+        const checked = sanitizeSnapshot(body.snapshot, prior || {}, nowP);
+        const snap = JSON.stringify(checked.snap);
+        /* ONE batch. The player row and every tower that row defends are one
+           fact, and two awaited .run() calls are not a transaction in D1: the
+           first could land and the second not, leaving towers defended by a build
+           the player's own profile says they do not have. Nothing here needs a
+           value from the other statement, so a batch costs nothing and removes
+           the torn state.
+
+           Keep every tower I hold defended by my CURRENT build. The snapshot used
+           to be frozen at claim time, so a rival months later fought the weaker
+           version of me that first took the spire. Cheap: indexed by owner. */
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
+               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ? WHERE id = ?`)
+            .bind(snap, String(body.appV || ''), nowP,
+                  checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  auth.playerId),
+          env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
+            .bind(snap, nowP, auth.playerId),
+        ]);
+        // `bounded` names any field that was pulled down to its ceiling. Empty
+        // on every honest sync, so a client that starts seeing entries here is
+        // telling us something (a real cheat, or one of our own bugs).
+        return json({ ok: true, ...(checked.bounded.length ? { bounded: checked.bounded } : {}) });
       }
 
       // Signed: store the full ENCRYPTED save backup (client-side AES-GCM; the
@@ -313,7 +976,7 @@ export default {
         if (!RECOVERY_ID_RE.test(rid)) return json({ error: 'bad recovery id' }, 400);
         // Its own generous bucket: the setup sheet checks as you type, and this
         // must never eat the budget a real restore depends on.
-        const limited = await rateLimitRecovery(request, env, 60, 600000, 'rl_ridcheck');
+        const limited = await rateLimitRecovery(request, env, 'rl_ridcheck');
         if (limited) return limited;
         const row = await env.DB.prepare('SELECT 1 AS x FROM recovery WHERE recovery_id = ?').bind(rid).first();
         return json({ available: !row });
@@ -342,11 +1005,27 @@ export default {
         return json({ set: !!row, updatedAt: row ? row.updated_at : null });
       }
 
-      // UNSIGNED by necessity: a device restoring an account has no key yet, so
-      // it cannot sign. Looked up by friend code, which is semi-public, so this
-      // hands out ciphertext to anyone who knows a code. That is acceptable only
-      // because the phrase is never sent and the wrap is PBKDF2-hardened, but it
-      // does mean an offline attack is possible, so it is rate limited per IP.
+      /* UNSIGNED by necessity: a device restoring an account has no key yet, so
+         it cannot sign. Looked up by friend code, which is semi-public.
+
+         LEGACY ONLY, from 2026-08-16. The friend code was never meant to be a
+         secret -- it is printed in the app, copied into chats, and it used to be
+         published for the whole top 100 by /leaderboard -- so making it the
+         lookup handle for the wrapped identity bundle meant the ciphertext was
+         effectively public. That is the harvest this fix closes, and removing
+         codes from the board is only half of it: the other half is that a code
+         must stop being a handle to a bundle at all.
+
+         It cannot be deleted outright, because it is the ONLY way in for a
+         pre-v231 account: those rows have no recovery_id, and the player has
+         wiped the phone that held it, so refusing them here would strand exactly
+         the people this whole subsystem exists for.
+
+         So it is narrowed to precisely that population. An account that has a
+         recovery_id has a lookup handle that is not a share-key, and for that
+         account the code path is closed and answers as though nothing is set.
+         The legacy set only shrinks: the next PUT /recovery from an updated
+         client attaches a recovery_id and closes this door behind it. */
       if (path.startsWith('/recovery/') && request.method === 'GET') {
         const code = decodeURIComponent(path.slice('/recovery/'.length)).toUpperCase().trim();
         if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return json({ error: 'bad code' }, 400);
@@ -354,8 +1033,12 @@ export default {
         if (limited) return limited;
         const p = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
         if (!p) return json({ error: 'no account' }, 404);
-        const row = await env.DB.prepare('SELECT wrapped, salt, iters FROM recovery WHERE player_id = ?').bind(p.id).first();
+        const row = await env.DB.prepare('SELECT wrapped, salt, iters, recovery_id FROM recovery WHERE player_id = ?').bind(p.id).first();
         if (!row) return json({ error: 'no recovery set' }, 404);
+        // SAME answer as "no recovery set", deliberately. A distinct status here
+        // would turn this route into an oracle for which codes belong to
+        // accounts worth attacking through some other door.
+        if (row.recovery_id) return json({ error: 'no recovery set' }, 404);
         return json({ wrapped: row.wrapped, salt: row.salt, iters: row.iters });
       }
 
@@ -389,12 +1072,9 @@ export default {
            Case-insensitive, because "Massive Coccyx" and "massive coccyx" are the
            same name to everyone reading a leaderboard. First claimant keeps it.
            `taken` is a named outcome, not an error string the client sniffs. */
-        const clash = await env.DB.prepare(
-          'SELECT id FROM players WHERE name IS NOT NULL AND lower(name) = lower(?) AND id <> ?')
-          .bind(name, auth.playerId).first();
-        if (clash) {
-          // Offer the lowest free #N for this adj+noun so the client can propose
-          // one instead of making the player guess their way through the space.
+        // Offer the lowest free #N for this adj+noun so the client can propose
+        // one instead of making the player guess their way through the space.
+        const taken = async () => {
           const base = buildName(b.adj, b.noun, null);
           const rows = await env.DB.prepare(
             "SELECT name FROM players WHERE name IS NOT NULL AND lower(name) LIKE lower(?) || ' #%'")
@@ -406,9 +1086,27 @@ export default {
           let free = null;
           for (let i = 1; i <= 999; i++) if (!used.has(i)) { free = i; break; }
           return json({ ok: false, reason: 'taken', name, suggestNum: free }, 409);
+        };
+        const clash = await env.DB.prepare(
+          'SELECT id FROM players WHERE name IS NOT NULL AND lower(name) = lower(?) AND id <> ?')
+          .bind(name, auth.playerId).first();
+        if (clash) return await taken();
+        /* THE INDEX IS THE GUARD, the SELECT above only races. idx_players_name_ci
+           is what makes the name unique; the read is a way to give a NICE answer,
+           and there is an await between it and the UPDATE. Two players reaching
+           for the same joke at the same moment both read "free", and the loser's
+           UPDATE threw straight into the outer 500 handler: measured locally on
+           2026-08-17, [200, 500] with "UNIQUE constraint failed:
+           idx_players_name_ci" in the body. The one that loses a name race must
+           get the same designed 409 with a suggested number as the one that reads
+           the clash, because to the player they are the same event. */
+        try {
+          await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
+            .bind(name, Date.now(), auth.playerId).run();
+        } catch (e) {
+          if (!/UNIQUE|constraint/i.test(String(e))) throw e;
+          return await taken();
         }
-        await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
-          .bind(name, Date.now(), auth.playerId).run();
         return json({ ok: true, name });
       }
 
@@ -422,16 +1120,27 @@ export default {
         const target = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
         if (!target) return json({ error: 'no player with that code' }, 404);
         if (target.id === auth.playerId) return json({ error: 'that is your own code' }, 400);
-        const [a, b] = pairKey(auth.playerId, target.id);
-        const ex = await env.DB.prepare('SELECT status, requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
-        const now = Date.now();
-        if (ex && ex.status === 'accepted') return json({ ok: true, status: 'accepted' });
-        if (ex && ex.requested_by !== auth.playerId) { // they already asked me -> accept
-          await env.DB.prepare('UPDATE friendships SET status = ? , ts = ? WHERE a = ? AND b = ?').bind('accepted', now, a, b).run();
-          return json({ ok: true, status: 'accepted' });
-        }
-        if (!ex) await env.DB.prepare('INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,?,?,?)').bind(a, b, 'pending', auth.playerId, now).run();
-        return json({ ok: true, status: 'pending' });
+        return json(await requestFriendship(env, auth.playerId, target.id));
+      }
+
+      /* Signed: add a player straight from the leaderboard, by the opaque
+         addToken that row carried. The board no longer publishes friend codes
+         (see /leaderboard), because a code is also the recovery lookup handle,
+         so it needed a way to add someone that is not a share-key. Same
+         idempotent outcome as /friends/request; only the handle differs. */
+      if (path === '/friends/add' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err) return json({ error: auth.err }, 401);
+        const token = String(JSON.parse(bodyText || '{}').token || '');
+        const targetId = await readAddToken(env, token, Date.now());
+        // one answer for malformed, forged and expired: a caller who can tell
+        // them apart can use the difference to test tokens
+        if (!targetId) return json({ error: 'that add link has expired', code: 'bad-token' }, 400);
+        if (targetId === auth.playerId) return json({ error: 'that is you' }, 400);
+        const exists = await env.DB.prepare('SELECT 1 AS x FROM players WHERE id = ?').bind(targetId).first();
+        if (!exists) return json({ error: 'no such player' }, 404);
+        return json(await requestFriendship(env, auth.playerId, targetId));
       }
 
       // Signed: accept an incoming request.
@@ -556,10 +1265,26 @@ export default {
         const row = await env.DB.prepare('SELECT owner, siege_until, level FROM spires WHERE id = ?').bind(id).first();
         if (!row || row.owner !== auth.playerId) return json({ ok: false, reason: 'not-yours' }, 403);
         if (!row.siege_until || row.siege_until < now) return json({ ok: false, reason: 'no-siege' }, 409);
-        await env.DB.prepare(
+        /* THE SIEGE CHECK LIVES IN THE WHERE CLAUSE, not in the `if` above.
+           The read above is still worth having -- it is what tells a caller
+           whether they were refused for not-yours or for no-siege -- but it CANNOT
+           be the guard, because there is an await between it and the write. Two
+           concurrent defends of the same open siege both saw siege_until set, both
+           ran `level = level + 1`, and one siege paid two levels. Measured locally
+           on 2026-08-17: twelve concurrent defends took a level-1 tower to level 13.
+           `siege_until IS NOT NULL AND siege_until >= ?` makes the row itself the
+           lock: whoever gets there first clears siege_until in the same statement
+           that increments, so every later UPDATE matches nothing. RETURNING hands
+           back the level the write actually produced, so the number the client
+           mirrors is the number in the database rather than one computed from a
+           stale read. */
+        const won = await env.DB.prepare(
           `UPDATE spires SET siege_until = NULL, siege_name = NULL, tended_at = ?, level = level + 1, updated_at = ?
-             WHERE id = ? AND owner = ?`).bind(now, now, id, auth.playerId).run();
-        return json({ ok: true, level: (row.level || 1) + 1 });
+             WHERE id = ? AND owner = ? AND siege_until IS NOT NULL AND siege_until >= ?
+           RETURNING level`).bind(now, now, id, auth.playerId, now).first();
+        // no row changed: another request in flight repelled this same siege
+        if (!won) return json({ ok: false, reason: 'no-siege' }, 409);
+        return json({ ok: true, level: won.level });
       }
 
       // Who holds these spires? ids come from the client's local cell scan.
@@ -608,18 +1333,43 @@ export default {
             .bind(now, now, me.profile || null, id).run();
           return json({ ok: true, already: true, level: prev.level || 1 });
         }
-        // Cap: three live spires each, enforced HERE too. A client-only cap is a
-        // suggestion, and this is the rule that keeps towers available to others.
-        const held = await env.DB.prepare('SELECT COUNT(*) AS n FROM spires WHERE owner = ? AND tended_at > ?')
-          .bind(auth.playerId, now - SPIRE_DORMANT_MS).first();
-        if ((held?.n || 0) >= 3) return json({ error: 'cap', cap: 3 }, 409);
-        await env.DB.prepare(`INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        /* THE CAP AND THE SHIELD ARE PART OF THE WRITE, not `if`s in front of it.
+           Both used to be read across an await and then trusted, and neither
+           survived concurrency. Measured locally on 2026-08-17: eight concurrent
+           claims of eight DIFFERENT towers all read `held = 0`, all passed a cap
+           of three, and the player finished holding eight. The shield had the
+           same hole in the other direction: two rivals claiming the same tower at
+           once both read the pre-claim claimed_at, both took it, and the level
+           went up twice for one takeover.
+
+           Evaluated inside the statement, both become true rules. D1 has one
+           writer, so the second concurrent claim sees the first one's row: its
+           cap subquery counts it, and its shield subquery sees the fresh
+           claimed_at. RETURNING gives the level the write actually produced,
+           which is the number the client has to mirror -- computing it from the
+           stale `prev` read published a level the database did not have. */
+        const won = await env.DB.prepare(
+          `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
+             SELECT ?,?,?,?,?,?,?,?,?,?,?
+              WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
+                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND owner <> ? AND claimed_at > ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
-               level=spires.level+1, updated_at=excluded.updated_at`)
+               level=spires.level+1, updated_at=excluded.updated_at
+           RETURNING level`)
           .bind(id, String(b.name).slice(0, 40), b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
-                me?.profile || null, now, now, 1, now).run();
+                me?.profile || null, now, now, 1, now,
+                auth.playerId, now - SPIRE_DORMANT_MS,
+                id, auth.playerId, now - SPIRE_SHIELD_MS).first();
+        if (!won) {
+          // Nothing landed, so say WHICH rule refused it. Read after the write,
+          // never before: this only picks the message, it decides nothing.
+          const nowRow = await env.DB.prepare('SELECT owner, claimed_at FROM spires WHERE id = ?').bind(id).first();
+          if (nowRow && nowRow.owner !== auth.playerId && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
+            return json({ error: 'shielded', until: (nowRow.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
+          }
+          return json({ error: 'cap', cap: 3 }, 409);
+        }
         // Tell the loser, through the grants channel the client already ingests.
         if (prev && prev.owner !== auth.playerId) {
           await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
@@ -627,10 +1377,7 @@ export default {
               note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
             }), now).run();
         }
-        // the level AFTER this write is the number the client must mirror: a fresh
-        // claim is 1, a takeover is the previous level + 1
-        const lvl = prev ? (prev.level || 1) + 1 : 1;
-        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: lvl });
+        return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
       }
 
       // A visit restores resolve. Owner only.
@@ -646,15 +1393,26 @@ export default {
         return json({ ok: !!(r.meta?.changes) });
       }
 
-      // Signed: the all-players leaderboard. Ranked by snapshot level. Includes
-      // each player's friend code so anyone can add anyone straight from the
-      // board (deliberate while the community is small — codes are share-keys,
-      // not secrets, and names are curated so there's no PII here).
+      /* Signed: the all-players leaderboard. Ranked by snapshot level.
+         NO FRIEND CODES. This route used to publish friend_code for the whole
+         top 100 so the "+ Add" button had something to send, on the stated
+         grounds that codes are share-keys rather than secrets. That reasoning
+         held right up until v230 made the friend code the lookup handle for GET
+         /recovery/<code>, which is unsigned by necessity and hands back the
+         AES-GCM-wrapped identity bundle. From that release on, one signed call
+         to this route harvested 100 codes, and those 100 codes pulled 100
+         wrapped bundles for offline attack at leisure. A cracked phrase yields
+         the signing key and the backup key: full takeover plus decryption of
+         the end-to-end-encrypted save.
+
+         The board now carries an opaque, expiring addToken instead (see
+         makeAddToken), redeemed at POST /friends/add. It adds the same player
+         and nothing else, and it is not a handle to anything. */
       if (path === '/leaderboard' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
         const rows = await env.DB.prepare(
-          `SELECT id, handle, name, friend_code,
+          `SELECT id, handle, name,
                   CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) lvl,
                   json_extract(profile,'$.levelName') lvlName,
                   CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
@@ -675,7 +1433,8 @@ export default {
            WHERE profile IS NOT NULL -- a registration that never synced a snapshot COALESCEs to a level-1 "bot"; hide it
            ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
           .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
-        const players = (rows.results || []).map(r => ({
+        const nowLb = Date.now();
+        const players = await Promise.all((rows.results || []).map(async r => ({
           playerId: r.id,
           name: r.name || r.handle,
           level: r.lvl || 1,
@@ -685,13 +1444,14 @@ export default {
           stats: (() => { try { return r.stats ? JSON.parse(r.stats) : null; } catch { return null; } })(),
           gearCount: r.gearCount || 0,
           pet: (() => { try { return r.pet ? JSON.parse(r.pet) : null; } catch { return null; } })(), // {id, level, shiny, lineage}: the board must show a shiny as its shiny
-          friendCode: r.friend_code,
+          // the add handle for this row. Opaque and expiring: NOT a friend code.
+          addToken: r.id === auth.playerId ? null : await makeAddToken(env, r.id, nowLb),
           lastSeen: r.last_seen,
           joinedAt: r.created_at,   // powers the Crew's "new Boneheadz" welcome list
           spires: r.spires || 0,
           spireDays: Math.floor((r.held_ms || 0) / 86400000),
           you: r.id === auth.playerId,
-        }));
+        })));
         return json({ players });
       }
 
@@ -727,10 +1487,22 @@ export default {
               AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0
             ORDER BY steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 
-        // Settle the week just gone, once, before answering for this one.
+        /* Settle the week just gone, once, before answering for this one.
+           ONLY WHEN `wk` REALLY IS THIS WEEK. `wk` arrives in the query string,
+           and settlement pays the podium for wk minus seven days and then marks
+           it settled forever. So a caller asking for NEXT week used to settle
+           the week currently being raced: it would pay whoever happened to lead
+           on a Tuesday and, because the marker row makes settling idempotent,
+           the real winners on Sunday would then be paid nothing at all. Reading
+           any week's board stays open (it is a read); only the paying half is
+           gated on the server's own clock agreeing that the previous week is
+           over. */
         const prev = new Date(Date.parse(wk + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
         const settledKey = `stepweek-${prev}`;
-        const already = await env.DB.prepare('SELECT 1 FROM grants WHERE key = ? LIMIT 1').bind(settledKey).first();
+        const settleable = classifyWeekKey(wk, Date.now()) === 'current';
+        const already = settleable
+          ? await env.DB.prepare('SELECT 1 FROM grants WHERE key = ? LIMIT 1').bind(settledKey).first()
+          : true;
         let champion = null;
         if (!already) {
           const last = await board(prev);
@@ -847,26 +1619,31 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        let reward, key, note;
+        const now = Date.now();
         if (mode === 'free') {
-          key = `gift-free-${auth.playerId}-${day}`;
-          const existed = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?').bind(to, key).first();
-          if (existed) return json({ error: 'already sent today', code: 'daily-done' }, 409);
-          reward = rollFreeGift();
-          note = `${fromName} sent you a gift!`;
-        } else {
-          const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
-          // prefix-range count (no LIKE: playerIds contain '_', a LIKE wildcard)
-          const pfx = `gift-spend-${auth.playerId}-${day}-`;
-          const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
-          const n = (cnt && cnt.n) || 0;
-          if (n >= 5) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
-          key = `gift-spend-${auth.playerId}-${day}-${n}`;
-          reward = { coins };
-          note = `${fromName} sent you ${coins} coins!`;
+          /* ONCE PER DAY, and the UNIQUE (player_id, key) is what enforces it.
+             The check used to be a SELECT followed by an INSERT, which is not a
+             once-per-day check at all across an await: measured locally on
+             2026-08-17, three of eight concurrent free gifts passed it, three
+             rewards were rolled, and one grant was delivered. INSERT OR IGNORE
+             against the constraint is atomic, and `changes` is the honest answer
+             to "was mine the one that landed". Nothing is written on the losing
+             path, so a refused caller has cost the recipient nothing. */
+          const key = `gift-free-${auth.playerId}-${day}`;
+          const reward = rollFreeGift();
+          const payload = JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you a gift!`, gift: true, mode });
+          const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+            .bind(to, key, 'gift', payload, now).run();
+          if (!(r.meta && r.meta.changes)) return json({ error: 'already sent today', code: 'daily-done' }, 409);
+          return json({ ok: true, reward, mode });
         }
-        const payload = JSON.stringify({ ...reward, from: fromName, note, gift: true, mode });
-        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'gift', payload, Date.now()).run();
+        const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
+        const reward = { coins };
+        const landed = await insertCappedGrant(env, {
+          to, prefix: `gift-spend-${auth.playerId}-${day}-`, cap: 5, type: 'gift', now,
+          payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
+        });
+        if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
       }
 
@@ -888,13 +1665,14 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
-        const pfx = `cheer-${auth.playerId}-${day}-`;
-        const cnt = await env.DB.prepare('SELECT COUNT(*) n FROM grants WHERE player_id = ? AND key >= ? AND key < ?').bind(to, pfx, pfx + '￿').first();
-        const n = (cnt && cnt.n) || 0;
-        if (n >= 10) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
-        const key = `cheer-${auth.playerId}-${day}-${n}`;
-        const payload = JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` });
-        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)').bind(to, key, 'cheer', payload, Date.now()).run();
+        // same COUNT-then-key shape as the spend gift, and the same fix: the
+        // count is evaluated inside the insert, so no two concurrent cheers can
+        // mint the same key and silently collapse into one.
+        const landed = await insertCappedGrant(env, {
+          to, prefix: `cheer-${auth.playerId}-${day}-`, cap: 10, type: 'cheer', now: Date.now(),
+          payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
+        });
+        if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         return json({ ok: true });
       }
 
@@ -917,9 +1695,25 @@ export default {
       // Anonymous analytics ingest. Unsigned (events carry only a random device
       // id + coarse event names, no identity/PII), but capped to resist spam.
       if (path === '/events' && request.method === 'POST') {
+        /* RATE LIMITED, IP FIRST. One request here is up to 50 event rows plus a
+           devices upsert: 51 D1 writes, from anyone, with body.device any string
+           the caller likes. The device bucket is the primary control because it
+           matches how a real client is identified; the IP bucket is the backstop
+           for a caller rotating device ids, and it is deliberately loose because
+           carrier CGNAT puts thousands of genuine players behind one address.
+           The IP check runs BEFORE the body is read so a rotating attacker
+           cannot make us parse a 24 KB body to find out they are over budget.
+           NOTE: this bounds per-identity abuse, not a flood. Each check is
+           itself a D1 write, so a limiter in the database is not a DDoS defence:
+           volumetric protection belongs in a Cloudflare rate-limiting rule in
+           front of the Worker, which is a deploy-side change, not a code one. */
+        const limitedEip = await rateLimit(env, 'rl_events_ip', 'ip', clientIp(request));
+        if (limitedEip) return limitedEip;
         const body = await request.json().catch(() => null);
         if (!body || typeof body.device !== 'string' || !Array.isArray(body.events)) return json({ error: 'bad body' }, 400);
         const device = body.device.slice(0, 64);
+        const limitedEdev = await rateLimit(env, 'rl_events_dev', 'device', device);
+        if (limitedEdev) return limitedEdev;
         const appV = String(body.appV || '').slice(0, 16);
         const batch = body.events.slice(0, 50); // cap per request
         const now = Date.now();
@@ -958,10 +1752,14 @@ export default {
       // Unsigned + best-effort like /events (no account needed). Private dev
       // channel — only ever surfaced in the admin dashboard, never to players.
       if (path === '/report' && request.method === 'POST') {
+        const limitedRip = await rateLimit(env, 'rl_report_ip', 'ip', clientIp(request));
+        if (limitedRip) return limitedRip;
         const body = await request.json().catch(() => null);
         if (!body || typeof body.device !== 'string' || typeof body.kind !== 'string') return json({ error: 'bad body' }, 400);
         const kind = body.kind.slice(0, 24); // 'den-nominate' | 'unreachable'
         const device = body.device.slice(0, 64);
+        const limitedRdev = await rateLimit(env, 'rl_report_dev', 'device', device);
+        if (limitedRdev) return limitedRdev;
         const appV = String(body.appV || '').slice(0, 16);
         const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
         const lat = Number.isFinite(body.lat) ? Math.round(body.lat * 1e5) / 1e5 : null;
@@ -982,9 +1780,13 @@ export default {
       // needed). Email is contact info -> declared in the store data-safety forms.
       // Private dev channel; only ever surfaced in the admin dashboard.
       if (path === '/survey' && request.method === 'POST') {
+        const limitedSip = await rateLimit(env, 'rl_survey_ip', 'ip', clientIp(request));
+        if (limitedSip) return limitedSip;
         const body = await request.json().catch(() => null);
         if (!body || typeof body.device !== 'string') return json({ error: 'bad body' }, 400);
         const device = body.device.slice(0, 64);
+        const limitedSdev = await rateLimit(env, 'rl_survey_dev', 'device', device);
+        if (limitedSdev) return limitedSdev;
         const player = (typeof body.player === 'string' && body.player) ? body.player.slice(0, 200) : null;
         const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
         const name = (typeof body.name === 'string' && body.name) ? body.name.trim().slice(0, 60) : null;
@@ -1124,6 +1926,47 @@ export default {
            WHERE id = ?`)
           .bind(back, back, back, String(b.id || '')).run();
         const row = await env.DB.prepare('SELECT id, owner, claimed_at, tended_at, level, siege_until FROM spires WHERE id = ?').bind(String(b.id || '')).first();
+        return json({ ok: true, row: row || null });
+      }
+      /* Backdate a player's race week so a test can settle a week that is really
+         over, without waiting seven days. DEV only, and it exists BECAUSE of the
+         2026-08-16 snapshot bounds: sanitizeSnapshot deliberately makes "claim a
+         past week's steps" impossible from outside, which is the whole point of
+         it, and that also removed the only way a test could stage a settlement.
+         So the fixture moved in here, where production can never reach it.
+         It writes the same two places a real sync would leave behind: the
+         profile snapshot the board reads, and the server's own record of what it
+         accepted. It grants nothing and cannot change ownership. */
+      if (env.DEV === '1' && path === '/dev/week-warp' && request.method === 'POST') {
+        const b = await request.json();
+        const wk = String(b.weekKey || '');
+        const steps = Math.max(0, Math.floor(Number(b.steps) || 0));
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return json({ error: 'bad week' }, 400);
+        await env.DB.prepare(
+          `UPDATE players SET profile = json_set(COALESCE(profile,'{}'), '$.weekKey', ?, '$.weekSteps', ?),
+             week_key = ?, week_steps = ? WHERE id = ?`)
+          .bind(wk, steps, wk, steps, String(b.playerId || '')).run();
+        const row = await env.DB.prepare('SELECT id, week_key, week_steps, profile FROM players WHERE id = ?')
+          .bind(String(b.playerId || '')).first();
+        return json({ ok: true, row: row || null });
+      }
+      /* Age a player, so a test can exercise the snapshot bounds that are
+         functions of TIME without waiting days. Same shape and same reasoning as
+         /dev/spire-warp above: move EVERY clock on the row together, because a
+         row that is somehow eight days old and also synced one second ago is a
+         state the real world cannot produce and the bounds would read it as
+         nonsense. DEV only; it grants nothing and changes no ownership. */
+      if (env.DEV === '1' && path === '/dev/player-warp' && request.method === 'POST') {
+        const b = await request.json();
+        const back = Number(b.backMs) || 0;
+        await env.DB.prepare(
+          `UPDATE players SET created_at = created_at - ?, last_seen = last_seen - ?,
+             max_level_at = CASE WHEN max_level_at IS NULL THEN NULL ELSE max_level_at - ? END
+           WHERE id = ?`)
+          .bind(back, back, back, String(b.id || '')).run();
+        const row = await env.DB.prepare(
+          'SELECT id, created_at, last_seen, max_level, max_level_at FROM players WHERE id = ?')
+          .bind(String(b.id || '')).first();
         return json({ ok: true, row: row || null });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
