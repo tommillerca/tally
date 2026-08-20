@@ -51,6 +51,20 @@ const PRECACHE = [
      appears, and 4KB is not worth taking out and putting back. */
   './assets/fonts/boldpixels.woff2',
   './assets/brand/wordmark.png',
+  /* GWART, the Shop's shopkeeper. 456KB for the pair, and they are precached
+     because they ARE the Shop tab's header: a cold fetch means the panel paints
+     its crimson glow with nobody standing in it, and his entrance is a 2.4s
+     one-shot that has already played by the time a network image lands.
+     THEY ARE THE 2048 MASTERS ON PURPOSE, and that was measured rather than
+     assumed. The art is flat-shaded: 2,474 unique colours in the whole 2048
+     square. A Lanczos downscale to 1440 interpolates that up to 12,932 colours,
+     and the PNG comes out BIGGER than the master (479KB against 360KB). There
+     is no smaller honest version at a smaller size. The 74% cut that does exist
+     is a 256-colour quantise at full resolution (121KB for the pair), and that
+     edits Cam's art — max delta 30/255 on 0.94% of pixels, alpha included — so
+     it is Tom's call, not a build step. */
+  './assets/gwart/gwart.png',
+  './assets/gwart/gwart-stars.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
      rather than left to the runtime cache for that reason. 36KB for all 9. */

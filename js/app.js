@@ -10915,6 +10915,42 @@ function openHatchReveal(res, charWrap) {
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
 }
 
+/* GWART'S EMPORIUM: the Shop tab's header. Geometry, the crop and every reason
+   for it are in app.css under "GWART'S EMPORIUM"; this is only the markup.
+
+   The layer stack is Cam's, copied from tally-refs/wizard/animation/demo.html
+   and not rearranged: the NPC breathes inside .wz-body, the sparkle arc is three
+   clipped copies of the stars layer inside .wz-sway inside the one-shot .wz-enter,
+   and the two palm glows sit on top. His integration note is that the container
+   must be square and position:relative, which .wz-scene is, and that the entrance
+   replays by re-adding .wz-enter — which costs nothing here, because this markup
+   is built fresh every time the tab is opened, so walking into the shop always
+   spawns him. Nothing re-renders it mid-visit: a purchase re-renders #chContent
+   (renderShop's own `rerender`), not this.
+
+   The wordmark is the <h1>. The hub's name heading is hidden for this tab, so
+   the page still has exactly one, and it is the shop's name rather than the
+   player's. */
+const gwartHeroHtml = () => `
+  <div class="gw-hero">
+    <div class="gw-panel">
+      <div class="gw-art"><div class="wz-scene">
+        <div class="wz-body"><img src="assets/gwart/gwart.png" alt=""></div>
+        <div class="wz-enter"><div class="wz-sway">
+          <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
+        </div></div>
+        <div class="wz-glow left"></div><div class="wz-glow right"></div>
+      </div></div>
+      <div class="gw-floor"></div>
+      <h1 class="gw-wm">Gwart&rsquo;s Emporium</h1>
+      <button id="gwGear" class="gear-btn gw-gear" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>`;
+
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
@@ -10960,7 +10996,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
-    </div>` : `
+    </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
       <div class="bh-hero-meta">
@@ -10992,6 +11028,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
     </div>
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
     <div id="chContent"></div>`;
+
+  /* GWART TAKES THE WHOLE HEADER, AND ONLY ON THE SHOP TAB. The panel above
+     replaced the portrait card; these two lines take the remaining two pieces of
+     hub chrome off the same tab. Wardrobe, Backpack and Build never see either
+     line do anything except put things back.
+       - the hub's heading is the player's own NAME, which is the one thing a
+         shopfront must not be titled. It lives OUTSIDE #chBody (renderBonehead
+         writes it, and a chip click re-renders only #chBody), so it cannot be
+         handled by the template above and has to be toggled here.
+       - the floating Settings gear sits at top-right over the panel, which is
+         where Gwart's hat is. The panel carries its own, so the floating one
+         stands down.
+     BOTH ARE UN-HIDDEN BY THIS SAME CODE on any other tab (anti-regression rule
+     8: whatever hides something owns un-hiding it), and route() re-decides the
+     gear on every navigation, so leaving the hub cannot strand it either. */
+  const hubHeading = $('.hub-title', wrap);
+  if (hubHeading) hubHeading.hidden = tab === 'shop';
+  const floatingGear = $('#gearBtn');
+  if (floatingGear) floatingGear.hidden = tab === 'shop';
+  $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
 
   $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
@@ -15854,7 +15910,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v420'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v421'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
