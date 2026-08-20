@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 416, date: '2026-08-20', title: 'The Boneyard is drawn, not diagrammed', items: [
+    'The map furniture out in the Boneyard is pixel art now: the skull on a mini den, the signpost on a distance row, the tombstone on a spire card, and the bolt that tells you you are moving too fast to loot.',
+    'The coin on a spire you hold was too small to read, so the coin and the number beside it are both bigger. The pickups out on the map are bigger too.',
+    'Every dish in the Kitchen has its own drawing, and so does every potion with its own effect, so you can tell one vial from another in your satchel mid-fight.',
+    'Badges, trophies, bones, paws, stars and the Step Race footprint are drawn too, everywhere they show up big enough to read. Where they do not, they stay as they were rather than turn to mush.',
+  ] },
   { n: 415, date: '2026-08-20', title: 'The wordmark, actually visible', items: [
     'v414 put the Boneheadz wordmark above the Today screen but parked it so high you needed a 73px pull to see any of it. A normal tug shows it now.',
   ] },

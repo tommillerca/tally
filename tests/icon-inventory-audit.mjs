@@ -103,8 +103,16 @@ const DRAWERS = {
   'ingIconHtml':    { size: 1, kindArg: 0, def: 22, floor: 16, prefix: 'ingredient/', art: 'PIX_CUR' },
   // no pixel art exists for these; the vector IS the icon
   'bhIcon':         { size: 1, kindArg: 0, def: 22, floor: null, note: 'the generated game-icons.net vector pack' },
-  'sparkIco':       { size: 0, def: 14, floor: null, fixed: 'sparkle' },
-  'recipeIconHtml': { size: 1, kindArg: 0, def: 24, floor: null, prefix: 'recipe/' },
+  /* v411: the 4-point sparkle has a drawing now. A caller passing a FILL is
+     asking for a recolour a PNG cannot do (the level-up sparks are green), so
+     the second argument forces the vector and is graded that way. */
+  'sparkIco':       { size: 0, def: 14, floor: 16, art: 'PIX_CUR', fixed: 'sparkle', vectorIfArg: 1 },
+  /* v411: all seven dishes have art, and the six potions share one vial. The
+     concept is the recipe OBJECT at every site, so these grade at runtime. */
+  'recipeIconHtml': { size: 1, kindArg: 0, def: 24, floor: 16, art: 'PIX_CUR', prefix: 'recipe/' },
+  /* v411: the four pack badges that have a drawing. Sites that pass bhIcon a
+     tint are deliberately NOT routed through this and stay vector. */
+  'badgePixHtml':   { size: 1, kindArg: 0, floor: 16, art: 'PIX_CUR', note: 'badge-skull / trophy / crown / signpost / footprint' },
   'iconHtml':       { size: 1, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, the reveal card' },
   'iconAt':         { size: 3, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, inside the wheel svg' },
   'pixPrizeImg':    { size: null, floor: 16, fixed: 'wheelprize', art: 'ALWAYS', note: 'js/wheel.js, always asks pixCur for 48' },
@@ -277,10 +285,47 @@ const SUBFLOOR = {
   'js/app.js:crateResultToCard|coin':     '11px in a crate result line.',
   'js/app.js:openStable|dust':            '13-14px dust chips in the stable.',
   'js/app.js:renderBoneyard|pit':         '15px in the map action bar. CANDIDATE for 16: one step away.',
-  'js/app.js:renderBoneyard|coin':        '11px in a marker callout.',
   'js/app.js:renderPit|coin':             '12px in the Gauntlet reward lines.',
   'js/app.js:renderPit|crate/golden':     '22px golden crate on the Gauntlet card, two pixels under the 24 floor. The strongest CANDIDATE on this list: 24 is one step up and the row is 22px of art already.',
   'js/app.js:openFight|coin':             '15px on the fight result. CANDIDATE for 16: one step away.',
+
+  /* ---- v411, the batch that gave star / bone / paw / bolt / sparkle / the four
+     pack badges / all seven dishes their 48px drawings. Every row below is a
+     site the new art CANNOT reach, and all but three are the standing rule:
+     11-13px inline with a line of copy. The exceptions are named. ---- */
+  'js/app.js:petSpriteHtml|sparkle':      '12 and 14px. The shiny badge pinned to the CORNER of a pet sprite: it is sized to the sprite it decorates, not to a whole step, and 14 -> 16 would push it off the 12px sibling it pairs with.',
+  'js/app.js:petPortraitHtml|sparkle':    '12px shiny badge on a pet portrait, the same corner mark as petSpriteHtml.',
+  'js/app.js:openRaceResults|badge-trophy': '13px, inline in the "1ST" ribbon copy.',
+  'js/app.js:renderToday|boltIco':        '13px in the ready-fights chip and the hero-why line, both inline with text.',
+  'js/app.js:renderShop|star':            '12px, repeated once per weapon tier inside a tier tag, so the row is 12px of art whatever the tier.',
+  'js/app.js:crewCardHtml|star':          '15px favourite marker in a friend row. CANDIDATE for 16: one step away.',
+  'js/app.js:renderCharacter|bone':       '14px in the "N found" pill, inline with the count. CANDIDATE for 16: one step away.',
+  'js/app.js:renderCharacter|boltIco':    '11-14px talent and boost marks, every one inline with a gear label or a count.',
+  'js/app.js:renderCharacter|sparkle':    '11-13px looks-tab count and the "look changed" tag.',
+  'js/app.js:packCardHtml|sparkle':       '11, 12 and 15px. A deliberate SCATTER of four sparks at four different sizes around a pack card; the 16px one does draw the art. Bumping 15 to 16 would flatten the variation that makes it read as a scatter.',
+  'js/app.js:petPanelHtml|sparkle':       '10px in the SHINY tag copy.',
+  'js/app.js:petPanelHtml|star':          '11px in the lineage tag copy.',
+  'js/app.js:openPetLevelUp|sparkle':     '11px in the SHINY tag copy.',
+  'js/app.js:openPetLevelUp|star':        '11px in the lineage tag copy.',
+  'js/app.js:openStable|sparkle':         '9 and 12px in the Species Signature header and a rarity chip.',
+  'js/app.js:openStable|star':            '12px in the next-talent sentence.',
+  'js/app.js:openHatchReveal|sparkle':    '11px in the SHINY tag copy.',
+  'js/app.js:openPetBreedResult|sparkle': '11px in the SHINY tag copy.',
+  'js/app.js:renderPit|boltIco':          '13px in the READY chip, inline with the count.',
+  'js/app.js:renderTalents|star':         '11px inside a talent pip, which is a text glyph slot.',
+  'js/app.js:openFight|star':             '14px in the XP reward pill, inline with "+N XP". CANDIDATE for 16: one step away.',
+  'js/app.js:renderFriends|tombstone':    '11px in the leaderboard spire-count copy, inline with "N spires".',
+
+  /* MAP FURNITURE IS THE EXCEPTION TO THE STANDING RULE, and these two are the
+     ones that stay. Measured on the rendered map, 2026-08-20:
+       renderBoneyard|pit  15px inline with "Fight the <name>" INSIDE the mini
+         boss button, so it has a line of copy to sit in. CANDIDATE for 16.
+       spireBannerHtml     the banner rows are .spire-row-r at font-size 13 with
+         a name, a progress bar and a <small> line, so 11-12px is the row, not
+         the map. A 16px icon would out-size its own number.
+     What did NOT stay: renderBoneyard|coin, the spire marker's tribute label,
+     which is a coin plus a number pinned under a marker with no copy anywhere
+     near it. 11px filled 0.44 of its slot and Tom read it as too small. */
 };
 
 /* WHICH CONCEPTS ACTUALLY HAVE PIXEL ART, read from the two tables that decide
@@ -290,7 +335,7 @@ const SUBFLOOR = {
    never escape, because no drawing for it exists. */
 const pixSrc = readFileSync(path.join(JS, 'icons-pix.js'), 'utf8');
 const appSrc = readFileSync(path.join(JS, 'app.js'), 'utf8');
-const pairs = obj => [...obj.matchAll(/(\w+)\s*:\s*'([^']+)'/g)].map(m => [m[1], m[2]]);
+const pairs = obj => [...obj.matchAll(/'?([\w-]+)'?\s*:\s*'([^']+)'/g)].map(m => [m[1], m[2]]);
 const PIX_CUR = pairs((pixSrc.match(/const PIX_CUR = \{([\s\S]*?)\};/) || [, ''])[1]);
 const CRATE = pairs((appSrc.match(/const CRATE_ICON_PIX = \{([\s\S]*?)\};/) || [, ''])[1]);
 const PIX_KEYS = new Set(PIX_CUR.map(([k]) => k));
@@ -359,8 +404,13 @@ for (const f of files) {
            with rows nobody can act on. The drawers are documented above. */
         const screen = ownerAt(i);
         if (PLUMBING.has(screen)) continue;
+        /* Some drawers decline the pixel art when a given argument is present
+           (sparkIco's fill). Without this the inventory would report PIXEL for
+           a site that renders the svg, which is the false green this file
+           exists to prevent. */
+        const forcedVector = d.vectorIfArg != null && !!(a && a[d.vectorIfArg]);
         sites.push({ file: `js/${f}`, line: i + 1, drawer: name, concept, size,
-          floor: d.floor, screen });
+          floor: d.floor, screen, forcedVector });
       }
     }
   });
@@ -387,6 +437,7 @@ const hasArt = s => {
   }
 };
 const medium = s => {
+  if (s.forcedVector) return 'VECTOR';        // the call declines the art by argument
   const art = hasArt(s);
   if (art === false) return 'VECTOR';                         // no pixel drawing exists for this concept
   if (art === null || typeof s.size !== 'number') return 'VARIES';

@@ -2415,7 +2415,7 @@ body::before {
    racer's own Bonehead, because "people want to see and show off their guy"
    (Tom, 2026-08-08) and a rank number tells you nothing about who is ahead. */
 .race-banner > summary { position: relative; overflow: hidden; }
-.race-banner .race-ico { background: var(--coral); }
+.race-banner .race-ico { background: var(--coral); display: flex; align-items: center; justify-content: center; }
 /* the player's own Bonehead, clipped into the corner of the summary */
 .race-art {
   position: absolute; right: -10px; bottom: -34px; width: 96px; height: 110px;
@@ -5046,6 +5046,14 @@ body::before {
 .spire-fx { position: relative; width: 100%; height: 100%; display: block;
   filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)); }
 .map-spire img { width: 100%; height: 100%; object-fit: contain; }
+/* EVERY `.map-spire ... img` FILTER ON THIS PAGE MEANS THE TOMB, and until
+   2026-08-20 the tomb was the only <img> in the marker. The tribute coin is one
+   now, so `.mine`'s hue-rotate(62deg) landed on it and a held tower's gold coin
+   rendered LIME: measured off the render at 440x956, the 16px coin came back
+   peak-channel green, not gold. Reset it here rather than rewriting eight tomb
+   rules. !important on purpose: the [data-age] tomb tints further down outrank
+   any scoped selector, and no tomb tint should ever reach the coin. */
+.map-spire .spire-tribute img { filter: none !important; }
 .map-spire.free img { filter: grayscale(0.85) brightness(0.62); }
 .map-spire.mine img { filter: hue-rotate(62deg) saturate(1.5) brightness(1.05); }
 .map-spire.mine .spire-fx { filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 10px rgba(165, 232, 71, 0.55)); }
@@ -5074,8 +5082,13 @@ body::before {
 .map-spire.mine .spire-flag { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .map-spire.free .spire-flag, .map-spire.dormant .spire-flag { font-size: 11px; color: var(--text-2); }
 .spire-tribute:empty { display: none; }
+/* Tom, 2026-08-20: "i noticed the coin icon on the boneyard is too small as
+   well". The coin went 11 -> 16 (the pixel floor), so the NUMBER beside it has
+   to come up too or the label reads as one big coin and one tiny figure. The
+   label is absolutely positioned, centred and nowrap, so growing it pushes
+   nothing around. */
 .spire-tribute { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
-  font-size: 11px; font-weight: 800; color: var(--gold); white-space: nowrap;
+  font-size: 13px; font-weight: 800; color: var(--gold); white-space: nowrap;
   text-shadow: 0 1px 0 #17151d, 0 0 5px rgba(0, 0, 0, 0.9); }
 /* the in-range action button, sitting above the other map CTAs */
 /* NOTE the distinct class: the marker is .map-spire and this is .map-spire-btn.
