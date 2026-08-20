@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 409, date: '2026-08-19', title: 'The app no longer flashes an empty screen while it opens', items: [
+    'Opening the app used to show a bare tab bar over nothing for a moment before the loading screen appeared. It waits now.',
+  ] },
   { n: 408, date: '2026-08-19', title: 'Small items look like themselves again', items: [
     'Grillz, earrings and other small pieces were being drawn from a half-size copy and then blocked up. They now use the full-resolution art, so you can actually see what they are.',
   ] },
