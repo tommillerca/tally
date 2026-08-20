@@ -7030,9 +7030,14 @@ async function renderShop(el) {
       const r = await buyRackItem(b.dataset.buyrack, currency);
       if (!r.ok) {
         toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+          : r.reason === 'write' ? `${r.label} did not save. Your coins are safe, tap again.`
           : r.reason === 'dust' ? `Need ${amt} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
           : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
           : 'That piece is not on the rack any more.', 2800);
+        /* A RECOVERED PURCHASE JUST CHANGED THE TILE UNDER THE PLAYER'S FINGER.
+           The early return skips the rerender every other path gets, so without
+           this the piece is theirs and the rack still shows a price. */
+        if (r.recovered) rerender();
         return;
       }
       /* S.wpnAura is read once at boot, so buying the aura has to refresh it or
