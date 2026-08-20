@@ -349,8 +349,12 @@ else {
   ok('REROLL-CAP the day\'s rerolls run out, and the ceiling is 2,000 coins',
     refused.length === 2 && refused.every(r => r.reason === 'limit') && res.rrSpent === 2000,
     `${refused.length} refused (${[...new Set(refused.map(r => r.reason))].join('/')}) after ${res.rrSpent} coins spent in total`);
+  /* `refused.every(...)` on an EMPTY set is true, and this row passed vacuously
+     on the prove-red where the ladder never ran out. An empty sample is a
+     failure, never a pass. */
   ok('REROLL-CAP a refused reroll spends nothing',
-    refused.every(r => r.spent === 0), `refused attempts spent ${refused.map(r => r.spent).join(', ')}`);
+    refused.length > 0 && refused.every(r => r.spent === 0),
+    refused.length ? `${refused.length} refused attempts spent ${refused.map(r => r.spent).join(', ')}` : 'NO reroll was ever refused, so this row graded nothing');
 }
 
 ok('CONTROL the page threw nothing while the purchases ran', errors.length === 0, errors.join(' | ') || 'no page errors');
