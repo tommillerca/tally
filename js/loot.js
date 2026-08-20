@@ -2,7 +2,8 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBump, newId } from './db.js';
+import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
+import { dateKey } from './nutrition.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -70,6 +71,167 @@ export async function buyDropItem(itemId) {
   await coinsAdd(-d.cost);
   await grantCosmetic(itemId, 'drop');
   return { ok: true, label: item.name, cost: d.cost, coins: await coins() };
+}
+
+/* ---------- the rack: the weekly cosmetic shop (v409) ----------
+   Nine tiles, three wide, one theme, one rack a week. The design is
+   mockup/shop-rack (approved 2026-08-18); the numbers below are the whole of
+   its economy and they live here rather than in the render, because a price a
+   button merely PRINTS is a price the buy path never enforced.
+
+   ONE RARITY PER RUNG, on purpose: the dust price of a rung must not depend on
+   which of its three items that week's hash lands on, or the ladder cannot be
+   checked by hand. Pools are built by BODY PART rather than by price so no two
+   tiles in a row sell the same kind of thing (measured alpha bounding boxes
+   say the art supplies seven genuinely distinct crops, not nine, so the two
+   lookalike pairs are seated non-adjacent by the order below). */
+export const RACK_THEME = 'HEATWAVE';
+export const RACK_POOLS = [
+  [3000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head
+  [2400, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
+  [2000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
+  [1500, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
+  [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
+  [900, ['P5-1', 'P5-2', 'P6-3']],        // epic swim trunks         hips
+  [700, ['S4-1', 'S5', 'S8']],            // uncommon socks           ankle
+  /* THE ANCHOR, and it is the point of this rung. A starting wallet is 340
+     coins; with a 500-coin floor every one of the eighteen prices rendered out
+     of reach and the screen had no affordable state on it at all, which reads
+     as broken rather than expensive. Every rack carries one piece a starting
+     wallet can actually buy. */
+  [300, ['U2', 'U4', 'U7']],              // common briefs            waist
+];
+/* DUST IS THE CERTAINTY PREMIUM: coins buy whatever the rack happens to offer,
+   dust buys the exact piece you just tried on. So the rate may be kinder on the
+   pieces worth targeting, but it must never REVERSE. This is an explicit
+   per-rung ladder rather than a formula, because a formula over eight rungs is
+   what produced an inversion where plain white briefs cost 25% more dust than
+   the aura. Implied coins-per-dust, dearest to cheapest: 15.0, 13.7, 12.5,
+   11.5, 10.5, 10.0, 9.3, 8.6, strictly single-directional. */
+export const RACK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
+/* AURAS GO ON WEAPONS, and the weapon in the tile is a MANNEQUIN, not the
+   product: a plain common katana nobody is selling carries it so "you are
+   buying the effect, not the sword" survives. Cell 4 is the centre of the
+   three-wide grid. */
+export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
+export const RACK_AURA_CELL = 4;
+/* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A reroll reading FREE
+   with nothing beside it says unlimited, and an unlimited reroll destroys the
+   rack: you spam it until your piece appears and the weekly countdown becomes
+   noise. One free, then six paid ones totalling exactly 2,000 coins, and the
+   allowance resets daily. */
+export const RACK_REROLL_LADDER = [0, 100, 200, 300, 400, 500, 500];
+
+// Same FNV-1a the dens turn over on, so the rack changes every Monday with no
+// server. The salt is the reroll counter: rerolling is a new deterministic draw
+// from the SAME theme pools, never a random pull out of the whole game.
+const rackHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const rackPick = (week, salt) => RACK_POOLS.map(([, ids], i) => ids[rackHash(`${week}:${salt}:rack:${i}`) % ids.length]);
+
+/* WHICH NINE, WHICH WEEK, HOW MANY REROLLS: all of it persisted, because a
+   rack recomputed on every render is a rack that changes under the player's
+   thumb. Owned pieces deliberately STAY on it for the rest of the week rather
+   than being filtered out, which is what gives the screen its owned state. */
+export async function rack() {
+  // lazy import: poi.js imports this module, so a top-level import is a cycle
+  const { isoWeekKey } = await import('./poi.js');
+  const week = isoWeekKey(new Date());
+  const day = dateKey();
+  const cur = await kvGet('rack', null);
+  if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
+    return { ...cur, rr: cur.rrDay === day ? (cur.rr || 0) : 0 };
+  }
+  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0, rrDay: day };
+  await kvSet('rack', st);
+  return st;
+}
+
+export function rackRerollCost(rr) { return RACK_REROLL_LADDER[rr] ?? null; }
+
+/* A SPEND, GUARDED THE SAME WAY A PAYOUT IS. kvUpdate does the read and the
+   write in ONE IndexedDB transaction, so two taps racing cannot both take the
+   same rung of the ladder: the loser sees a moved counter, returns undefined,
+   and nothing is deducted. Coins are only spent AFTER the rung is won. */
+export async function rerollRack() {
+  const st = await rack();
+  if (st.rr >= RACK_REROLL_LADDER.length) return { ok: false, reason: 'limit' };
+  const cost = RACK_REROLL_LADDER[st.rr];
+  const bal = await coins();
+  if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
+  const day = dateKey();
+  const next = await kvUpdate('rack', cur => {
+    const used = (cur && cur.rrDay === day) ? (cur.rr || 0) : 0;
+    if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
+    const salt = (cur.salt || 0) + 1;
+    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1, rrDay: day };
+  });
+  if (!next) return { ok: false, reason: 'race' };
+  if (cost) await coinsAdd(-cost);
+  return { ok: true, cost, rr: next.rr, left: RACK_REROLL_LADDER.length - next.rr, coins: await coins() };
+}
+
+/* THE AURA YOU BOUGHT IS THE AURA YOU WEAR. There is exactly one aura in the
+   game, so ownership and "worn" are the same fact and one kv key holds both.
+   ponytail: single key, promote to an owned-list + a picker when a second aura
+   ships and taking one off becomes a thing a player can want. */
+export async function wornAura() { return (await kvGet('wpnaura', null)) || null; }
+
+/* ---------- THE PURCHASE ----------
+ *
+ * The rewarded-actions SOP (tally/CLAUDE.md) applied to a SPEND, because the
+ * failure mode is the same shape as a double payout: a second call that moves
+ * money again.
+ *
+ *   TRANSITION  a rack piece goes from unowned to owned. Once, and forever.
+ *   AUTHORITY   db.addIfAbsent on the kv row `rackbuy:<artId>`. The check and
+ *               the write are ONE IndexedDB transaction, and IndexedDB
+ *               serialises readwrite transactions on a store across every tab,
+ *               so exactly one caller anywhere on the device is ever told yes.
+ *               The naive kvGet/kvSet form is not a smaller version of this: it
+ *               was MEASURED printing 16,500 coins to three concurrent callers
+ *               on the garden refund, which is the same shape in the opposite
+ *               direction.
+ *   NO-OP       a second attempt loses the claim and returns reason 'owned',
+ *               having deducted nothing. Nothing is spent before the claim is
+ *               won, which is the ordering that makes that true.
+ *
+ * COSMETIC ONLY, and this is Tom's locked call from 2026-08-07: coins never buy
+ * power. This grants a `cos` inventory row and a paid look. It calls no gear
+ * grant, touches no `gearloadout` and writes no `equipped`.
+ * tests/purchase-firewall.mjs is the teeth on that, in both directions: it
+ * measures the stores around a real buy AND fails statically on any reference
+ * from this path to a statted-item function.
+ */
+export async function buyRackItem(artId, currency = 'coins') {
+  const st = await rack();
+  const aura = artId === RACK_AURA.key;
+  const i = st.ids.indexOf(artId);
+  if (!aura && i < 0) return { ok: false, reason: 'not-stocked' };
+  const art = aura ? null : BH_BY_ID[artId];
+  if (!aura && !art) return { ok: false, reason: 'not-stocked' };
+  const price = aura
+    ? (currency === 'dust' ? RACK_AURA.dust : RACK_AURA.coin)
+    : (currency === 'dust' ? RACK_DUST[i] : RACK_POOLS[i][0]);
+  const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
+  if (already) return { ok: false, reason: 'owned' };
+  const bal = currency === 'dust' ? await boneDust() : await coins();
+  if (bal < price) return { ok: false, reason: currency, need: price, have: bal };
+  if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } })))
+    return { ok: false, reason: 'owned' };
+  if (currency === 'dust') await boneDustAdd(-price); else await coinsAdd(-price);
+  if (aura) {
+    await kvSet('wpnaura', artId);
+  } else {
+    await grantCosmetic(artId, 'rack');
+    /* THE PAID-LOOK WRITE, and it is the difference between owning a piece and
+       being allowed to wear it. Transmog is priced in Bone Dust, so without a
+       row in `paidlooks` a player who just paid 3,000 coins for a look would be
+       asked for dust the first time they put it on a statted slot. Invisible
+       until a real buyer hits it, and then it is a refund request. */
+    await markPaid(art.slot, artId);
+  }
+  return { ok: true, label: aura ? RACK_AURA.name : art.name, cost: price, currency,
+    coins: await coins(), dust: await boneDust() };
 }
 
 function rng() {
@@ -1148,7 +1310,7 @@ export async function paidLooks() {
   if (add.length) await kvSet('paidlooks', [...stored, ...add]);
   return set;
 }
-async function markPaid(slot, artId) {
+export async function markPaid(slot, artId) {
   const list = (await kvGet('paidlooks', [])) || [];
   const k = paidKey(slot, artId);
   if (!list.includes(k)) { list.push(k); await kvSet('paidlooks', list); }

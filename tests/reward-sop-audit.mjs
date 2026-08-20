@@ -193,6 +193,15 @@ const ACTIONS = [
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
   { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door opens openHollow). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },
+  /* THE RACK. A SPEND rather than a payout, and it is registered here because
+     the grant on the other side of it is one: coins or dust go out and a
+     cosmetic comes in, so a second call that pays again is the same bug in the
+     same shape. The negative coinsAdd/boneDustAdd are correctly not counted as
+     payouts by the scanner above; grantCosmetic is the one site. */
+  { id: 'js/loot.js:buyRackItem', sites: 1,
+    transition: 'a rack piece goes from unowned to owned, once and forever',
+    authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
+    undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
   { id: 'js/app.js:openGiftSheet', sites: 1, undriven: 'a REFUND of coins this device already deducted, on a failed send; not a payout' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
 ];

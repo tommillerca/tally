@@ -21,6 +21,8 @@ import {
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   DROP, buyDropItem, refundStreakFreezes,
+  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
+  rack, rerollRack, buyRackItem, wornAura,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
@@ -197,6 +199,7 @@ const S = {
   glow: true,      // rarity/slime glow on your Bonehead's gear (Settings > App)
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
+  wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
 
 /* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
@@ -722,6 +725,12 @@ async function boot() {
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
   S.glow = (await kvGet('glow', true)) !== false;
+  /* Read ONCE at boot rather than threaded through avatarLayersHtml's 14 call
+     sites: an aura is a property of the player, not of the surface drawing them,
+     and a per-call-site option is exactly how a new screen loses it (see the
+     figure contract). The rack's own tiles pass opts.wpnAura explicitly because
+     they are previewing a product the player may not own. */
+  S.wpnAura = await wornAura();
   equipped().then(eq => showSplash(eq)).catch(() => {});
 
   // Cloud restore (fresh / wiped / new phone): pull the encrypted backup BEFORE
@@ -3527,10 +3536,21 @@ function avatarLayersHtml(eq, opts = {}) {
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
+    /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
+       passes null MEANS none, and the rack's neutral tiles are exactly that
+       caller. Falling back on a falsy value would let the player's own aura leak
+       onto a product preview they have not bought. */
+    const wpnAura = 'wpnAura' in opts ? opts.wpnAura : S.wpnAura;
     const cls = [
       // COSMETIC ONLY. S.glow never touches stats, gear bonuses or the slimed
       // ledger: it decides whether the halo is drawn, nothing else.
-      S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
+      /* A BOUGHT AURA REPLACES THE RARITY HALO on the same object rather than
+         stacking a second glow on it. Both are one drop-shadow on one <img>, so
+         emitting one class instead of the other is the whole mechanism and
+         "exactly one glow on this object" stays a checkable number. Rarity has
+         not gone anywhere: it still reads off the tile border. */
+      S.glow && (s.code === 'IR' || s.code === 'IL') && wpnAura ? `wpn-aura a-${wpnAura}`
+        : S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
       S.glow && slimed ? 'bh-slimed' : '',
       // EMBER EYES: the eye items drawn as lit coals get a slow breathing glow.
       // A set rather than a rarity test, because "does this art depict light?" is
@@ -6408,7 +6428,8 @@ function scalePer100(per100, grams) {
 // route to Forage, and a placeholder for future real-money packs. Renders into
 // #screen like the other main tabs; re-renders itself after each purchase.
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal, ownedCos] = await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds()]);
+  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
+    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
   const recArch = recommendArch(fighter);
   const rerender = () => renderShop(el);
 
@@ -6458,7 +6479,227 @@ async function renderShop(el) {
   // The mockup is a standalone screen with its own wallet row. In the app the
   // Shop is a hub tab whose header already carries the balances, so the dust
   // pill moved up there rather than printing the same two numbers twice.
+  /* ============ THE RACK IS THE SHOP (v409) ============
+     Design: branch mockup/shop-rack, approved 2026-08-18. This is that design
+     wired: every price, every pool and the reroll ladder are real constants in
+     js/loot.js, and every pill below routes through buyRackItem, which spends
+     real coins or real Bone Dust exactly once.
+
+     One screen. Nine pieces, worn. Two prices each. One reroll. The coin shop,
+     dust shop and Bone Merchant sit behind the row at the foot, because a rack
+     that has to share the screen with five other departments is not a rack.
+     No paragraph explains any of it: a rule a control cannot carry on its own
+     is a broken control, not an under-explained one. */
+  /* THE BANNER AND THE RACK AGREE, and the banner says ONE thing. A month-long
+     theme, four racks inside it, this is rack N, and the right-hand side is a
+     COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
+     timezones and reads as nonsense when you open the app on a Monday). */
+  const rackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
+  const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
+  /* THE NEUTRAL BASE. Tom: "items should just be styled on a base skeleton so
+     that the item doesnt clash with the not for sale items". Taken from the data
+     file's own slot defaults rather than invented, which is the same pair
+     randomOutfit() starts every splash figure from: body B0-1, skull SK0-1, and
+     nothing else. The only non-default thing in a tile is the piece for sale. */
+  const RACK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+  const rackIds = rk.ids;
+  /* OWNERSHIP IS READ, NEVER FAKED. An owned piece stays on the rack for the
+     rest of the week and shows as owned; the picker deliberately does not filter
+     owned ids out, because a tile that vanishes the moment you buy it is a
+     purchase with no receipt on screen. */
+  const rackOwns = id => ownedCos.has(id);
+  /* SLOTS WHOSE ART IS TOO SMALL FOR A HALO, measured not guessed: at the 384px
+     stage a 9px drop-shadow paints 6.61x the art's own area on G3 grillz and
+     2.22x on an earring, against 0.44x on a hat. They get motion instead, which
+     adds no pixels. */
+  const TINY_SLOTS = new Set(['G', 'E']);
+  const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
+    P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
+  /* THE BUY ROW. Two prices for one piece are ALTERNATIVES, and two identical
+     full-width pills stacked on top of each other do not say so: they read as
+     "3,000 AND 200", a bill in two parts. The word between them is the fix.
+     Three states, and the middle one is the point.
+     - owned: inert. Not a pill, not green, no price.
+     - affordable: the filled pill. Filled is what says "press me", and the rack
+       always stocks one piece a starting wallet can reach so that state is
+       always on the screen to compare against.
+     - out of reach: the SAME pill, same size, same digits, hollow. Deliberately
+       NOT the [disabled] grey-out, which turns a number into a dead control.
+       Measured off the render, the hollow pill's digits read 10.4:1 against
+       their own ground and a filled one 10.1:1. What it drops is the button
+       affordance, not the price. It stays pressable and says what is missing,
+       because a control that answers is kinder than one that ignores you. */
+  const rackPrice = (id, kind, amount, bal) =>
+    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}" data-buyrack="${esc(id)}" data-cur="${kind}" data-amt="${amount}">${
+      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}</button>`;
+  const rackBuyRow = (id, coin, dust, extra = '') => rackOwns(id)
+    ? '<div class="rk-buy"><span class="rk-owned">' + ICONS.check(13) + ' Owned</span></div>'
+    : `<div class="rk-buy${extra}">${rackPrice(id, 'coin', coin, coinBal)}<i class="rk-or">or</i>${rackPrice(id, 'dust', dust, dustBal)}</div>`;
+  /* RARITY SITS UNDER THE STAGE, NOT ON IT. Putting the rarity word in the same
+     full-width strip the aura uses did fix "only one card is tagged", and it
+     covered 28% of every card's art to do it. So rarity is a line UNDER the art,
+     in the rarity's own colour, on all nine cards: every card is tagged, rarity
+     teaches its own colour code with no legend, no art is covered, and the
+     aura's ANY WEAPON strip goes back to being the only thing overlaid on a
+     stage anywhere on the rack. */
+  const rackTag = r => `<span class="rk-rar">${r.toUpperCase()}</span>`;
+  const rackTile = (id, i) => {
+    const it = BH_BY_ID[id];
+    const coin = RACK_POOLS[i][0];
+    const dust = RACK_DUST[i];
+    return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
+      <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
+        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { thumb: 384, wpnAura: null, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+      ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
+      ${rackBuyRow(id, coin, dust)}
+    </div>`;
+  };
+  /* AURAS GO ON WEAPONS, and the WEAPON IS A MANNEQUIN, not the product. Tom:
+     "i think the aura looked fine i just meant it wasnt clear in the UI ur
+     buying a cosmetic aura not a item". So the art is untouched and the fix is
+     framing: a plain common katana nobody is selling carries it, the tile is
+     tagged AURA / ANY WEAPON, and the name says Aura. "Any weapon" is the word
+     that kills "I am buying this sword". */
+  const auraOwned = auraWorn === RACK_AURA.key;
+  const rackAuraTile = () => `<div class="rk r-${RACK_AURA.rarity} aura${auraOwned ? ' owned' : ''}">
+    <button class="rk-stage fit-hand" data-tryon="AURA" data-coin="${RACK_AURA.coin}" data-dust="${RACK_AURA.dust}" aria-label="Try on ${esc(RACK_AURA.name)}"
+      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { thumb: 384, wpnAura: RACK_AURA.key, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+    ${rackTag(RACK_AURA.rarity)}<b>${esc(RACK_AURA.name)}</b>
+    ${auraOwned ? `<div class="rk-buy"><span class="rk-owned">${ICONS.check(13)} Owned</span></div>`
+      : `<div class="rk-buy">${rackPrice(RACK_AURA.key, 'coin', RACK_AURA.coin, coinBal)}<i class="rk-or">or</i>${rackPrice(RACK_AURA.key, 'dust', RACK_AURA.dust, dustBal)}</div>`}
+  </div>`;
+  /* TRY-ON, and it is the deliberate opposite of the grid. The grid is neutral
+     so nine pieces can be compared without clashing with what the player owns;
+     this is ONE piece, on the player's OWN bonehead, over what they are actually
+     wearing. Both are right, at different moments.
+     THE FAILURE TO DESIGN AGAINST is a player trying on a 3,000-coin jacket,
+     closing the sheet and believing they own it. Four things say otherwise and
+     none of them is a paragraph:
+       - the title is a verb in progress, "Trying on", never a past tense
+       - a status line names ownership outright, NOT YOURS YET or IN YOUR
+         WARDROBE, and it sits against the piece's name where the eye already is
+       - the prices are the SAME pills in the SAME states as on the rack
+       - there is no equip control anywhere on it, and closing writes nothing
+     Only what is ON THE RACK can be tried on. A full catalogue of every item in
+     the game is the part of Finch's design that backfires: it lets a player find
+     the exact colourway they want and then refuses to sell it to them. */
+  // the try-on stage is YOUR OWN stack, so your own collection answers for shiny
+  const rackShiny = await ownShinyPetId(playerEq);
+  const rackTryOn = (id, coin, dust) => {
+    const aura = id === 'AURA';
+    const it = aura ? null : BH_BY_ID[id];
+    const name = aura ? RACK_AURA.name : it.name;
+    const rarity = aura ? RACK_AURA.rarity : it.rarity;
+    /* An aura lands on the weapon the player is ALREADY holding, which is the
+       exact claim the tile's ANY WEAPON strip makes, so trying it on is what
+       proves the claim. */
+    const fit = aura ? { ...playerEq, IR: playerEq.IR || RACK_AURA.carrier } : { ...playerEq, [it.slot]: id };
+    const owns = aura ? auraOwned : rackOwns(id);
+    /* THE PLAYER'S BACKGROUND IS NOT PART OF THE FITTING. Measured on the
+       render: BG2-1 is an opaque 640 square plate, so it covered 61.5% of the
+       300px stage and painted every rarity the same olive. `skip: ['BG']` is the
+       idiom the leaderboard already uses.
+       THE 640 MASTER, NOT THE 384 THUMBNAIL. The stage draws each layer at 385
+       CSS px on a dpr-2 screen, so 770 physical pixels, and the thumbnail is a
+       2.0x upscale of an already-downscaled image. G3 grillz occupy 15x15 of the
+       640 master, so the thumbnail holds about 9x9 of them. The rack TILES stay
+       on the thumbnail deliberately: nine tiles times eight layers of master art
+       is 72 full-size PNGs for a difference nobody can see at tile size. */
+    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'], shinyPetId: rackShiny,
+      wpnAura: aura ? RACK_AURA.key : (auraOwned ? RACK_AURA.key : null) });
+    /* HONEST ABOUT REACH, and only when neither price is reachable. It states
+       the gap and points at the one route that closes it. Not a pitch and not a
+       nudge: no urgency, no comparison, no second ask. */
+    const shortBy = !owns && coinBal < coin && dustBal < dust
+      ? `<button class="ton-reach" id="tonSalvage">${(coin - coinBal).toLocaleString()} coins or ${(dust - dustBal).toLocaleString()} dust short · melt gear for dust ›</button>` : '';
+    const wrap = openSheet(`
+      <div class="sheet-head">
+        <div class="hd"><h2>Trying on</h2><div class="sub">Free, and it buys nothing</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
+      </div>
+      <div class="sheet-body">
+        <div class="ton-stage d-a r-${rarity}${aura ? ' aura' : ''}${!aura && TINY_SLOTS.has(it.slot) ? ' tiny' : ''}">
+          <div class="ton-burst" id="tonBurst"></div>
+          <div class="ton-fig">${figHtml(fit)}</div>
+        </div>
+        <div class="ton-name"><b>${esc(name)}</b><span class="ton-state${owns ? ' own' : ''}">${owns ? 'IN YOUR WARDROBE' : 'NOT YOURS YET'}</span></div>
+        ${owns ? '' : rackBuyRow(aura ? RACK_AURA.key : id, coin, dust, ' ton-buy')}
+        ${shortBy}
+      </div>`, { name: 'shop-tryon', onClose: () => { clearTimeout(auraBeat); tonBurst?.destroy(); } });
+    $('#tonSalvage', wrap)?.addEventListener('click', () => { history.back(); openCharacter('crates'); });
+    wireRackBuys(wrap, true);
+    /* THE PIECE ARRIVES, it does not appear. The garment's own layer is the one
+       that lands, so the beat is CSS with no timer: `.ton-new` is put on the one
+       <img> whose src is the piece being tried. Nothing is drawn ON the art. */
+    if (!aura) {
+      const layer = $(`.ton-fig img[src$="/${id}.png"]`, wrap);
+      if (layer) layer.classList.add('ton-new');
+    }
+    /* AN AURA'S ARRIVAL IS THE HALO SWITCHING ON, at the intensity the art
+       already ships. The figure lands holding the weapon it always held, wearing
+       that weapon's own rarity halo, and one beat later the class swaps to the
+       aura's. That is the product demonstrating exactly what it does. */
+    let auraBeat = 0;
+    if (aura && !reducedMotion) {
+      const wpn = $('.ton-fig img[src*="/IR/"]', wrap);
+      if (wpn) {
+        const auraCls = wpn.className;
+        const before = playerEq.IR && BH_BY_ID[playerEq.IR] && (BH_BY_ID[playerEq.IR].rarity === 'epic' || BH_BY_ID[playerEq.IR].rarity === 'legendary')
+          ? `wpn-glow r-${BH_BY_ID[playerEq.IR].rarity}` : '';
+        wpn.className = before;
+        auraBeat = setTimeout(() => { wpn.className = auraCls; }, 520);
+      }
+    }
+    /* THE SAME LIGHT THE PACK REVEAL USES, and deliberately the same module:
+       borrowing the game's existing vocabulary for excitement is what makes
+       try-on feel like it belongs to Boneheadz rather than to a shopping app.
+       A WebGL canvas BEHIND the figure at z-index 0, never a filter and never a
+       blur, so no pixel of Cam's art is resampled. */
+    let tonBurst = null;
+    if (!reducedMotion) {
+      const b = aura ? { light: '#7dc8ff', amp: .34, haze: .075 } : (BURST[rarity] || BURST.common);
+      tonBurst = mountCrateBurst($('#tonBurst', wrap), { color: b.light, amp: Math.max(b.amp, .12), haze: b.haze });
+    }
+  };
+  /* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A control reading
+     "Reroll the rack / FREE" with nothing beside it says unlimited, and an
+     unlimited reroll destroys the rack: you spam it until your piece appears and
+     the countdown beside the theme becomes noise. Two words carry the limit,
+     "N left today", and the small line under the label says what a reroll draws
+     from, which is the thing a curated theme and a random reroll otherwise fight
+     about: another nine FROM THE SAME THEME, never a random pull out of the
+     whole game. */
+  const rerollCost = RACK_REROLL_LADDER[rk.rr] ?? null;
+  const rerollsLeft = RACK_REROLL_LADDER.length - rk.rr;
+  // what this wallet actually reaches, counted rather than implied
+  const allRackCoins = [...RACK_POOLS.map(p => p[0]), RACK_AURA.coin];
+  const allRackDust = [...RACK_DUST, RACK_AURA.dust];
+  const cheapestRack = Math.min(...allRackCoins);
+  const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
+
   el.innerHTML = `
+  <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
+  <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
+       from which pills happen to be filled. A player at 340 coins could not buy
+       one of the nine and the screen never said so; the out-of-reach pills were
+       measured for contrast and still went unnoticed, because a state you have
+       to compare against nothing is not a state. And the dust column was
+       decoration at 0 dust with no route to any, so the route is attached to the
+       number that is zero. -->
+  <div class="rk-wallet">
+    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of 9` : `${(cheapestRack - coinBal).toLocaleString()} short of the cheapest`}</i></span>
+    <button class="rk-w link" id="rackDust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${afford.dust ? `buys ${afford.dust} of 9` : 'melt gear to earn it'} ›</i></button>
+  </div>
+  <div class="rk-grid">
+    ${rackIds.slice(0, RACK_AURA_CELL).map((id, i) => rackTile(id, i)).join('')}
+    ${rackAuraTile()}
+    ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, i + RACK_AURA_CELL)).join('')}
+  </div>
+  <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())}</small></span>
+    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left today` : 'none left today'}</span>
+    ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
+  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
+  <div id="shopRestBody" hidden>
 
   <details class="t3-dropsect" id="dropSect">
     <summary class="t3-drop">
@@ -6516,7 +6757,9 @@ async function renderShop(el) {
   <p class="note" style="margin:0 2px 10px">Weapons multiply your effort; they never replace it.</p>
   ${merchantHtml}
 
-  <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>`;
+  <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>
+  </div>
+  <div class="rk-tail"></div>`;
 
   el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
     await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
@@ -6590,6 +6833,68 @@ async function renderShop(el) {
   hydratePackArt(el, '.t3-art[data-art]');
   $('#shopForage', el)?.addEventListener('click', openKitchen);
   $('#shopSalvage', el)?.addEventListener('click', () => openCharacter('crates'));
+  /* THE BUY. One tap never spends (armToConfirm, the app-wide rule), the second
+     tap goes through buyRackItem, and the SAME wiring is used on the rack pills
+     and on the try-on sheet's pills so there is one buy path, not two. */
+  function wireRackBuys(scope, inSheet = false) {
+    scope.querySelectorAll('[data-buyrack]').forEach(b => armToConfirm(b, 'Buy?', async () => {
+      const currency = b.dataset.cur === 'dust' ? 'dust' : 'coins';
+      const amt = +b.dataset.amt;
+      const r = await buyRackItem(b.dataset.buyrack, currency);
+      if (!r.ok) {
+        toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+          : r.reason === 'dust' ? `Need ${amt} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
+          : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
+          : 'That piece is not on the rack any more.', 2800);
+        return;
+      }
+      /* S.wpnAura is read once at boot, so buying the aura has to refresh it or
+         every OTHER surface keeps the old halo until a reload: the rack would
+         say Owned while the Bonehead on Today carried nothing. Whatever hides a
+         change owns showing it. */
+      S.wpnAura = await wornAura();
+      levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+      trackEvent('buy_rack', { id: b.dataset.buyrack, cur: currency, cost: r.cost });
+      toast(r.currency === 'dust'
+        ? `${r.label} is yours. −${r.cost} dust, ${r.dust.toLocaleString()} left. Free to wear in your Wardrobe.`
+        : `${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Free to wear in your Wardrobe.`, 3400);
+      // bought from inside the try-on sheet: close it, so the rack behind it is
+      // the thing the player lands on and the new Owned state is what they see
+      if (inSheet && sheetStack.length) history.back();
+      rerender();
+    }));
+  }
+  wireRackBuys(el);
+  el.querySelectorAll('[data-tryon]').forEach(b => b.addEventListener('click', () => rackTryOn(b.dataset.tryon, +b.dataset.coin, +b.dataset.dust)));
+  /* THE REROLL SPENDS, so it arms first like every other spend in the game. The
+     free one does not, because there is nothing to protect the player from. */
+  const rrBtn = $('#rackReroll', el);
+  if (rrBtn) {
+    const doReroll = async () => {
+      const r = await rerollRack();
+      if (!r.ok) {
+        toast(r.reason === 'limit' ? 'No rerolls left today. A fresh rack lands Monday.'
+          : r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
+          : 'Try that again.', 2800);
+        return;
+      }
+      popSound(S.sounds);
+      trackEvent('rack_reroll', { n: r.rr, cost: r.cost });
+      rerender();
+    };
+    if (rerollCost) armToConfirm(rrBtn, `Spend ${rerollCost}?`, doReroll);
+    else rrBtn.addEventListener('click', doReroll);
+  }
+  /* The other departments are one tap away rather than gone. The control that
+     hides them owns un-hiding them (anti-regression rule 8), and there is no
+     async result in between that could strand them hidden. */
+  $('#shopRest', el)?.addEventListener('click', () => {
+    const body = $('#shopRestBody', el);
+    if (!body) return;
+    body.hidden = !body.hidden;
+    if (!body.hidden) body.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  });
+  $('#rackDust', el)?.addEventListener('click', () => openCharacter('crates'));
 }
 
 /* ================= trends ================= */
@@ -17872,9 +18177,13 @@ async function seedDemo() {
     });
   }
   await kvSet('coins', 340);
-  const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR1', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
+  // The demo weapon is a LEGENDARY (Onyx Dagger) rather than the common flail,
+  // so the rack's aura tile can be checked against a weapon that actually
+  // carries a rarity halo to replace. Demo seed only; ?demo never touches a
+  // real player's data.
+  const demoCos = ['H11-1', 'FW1', 'IL1-1', 'IR10-3', 'C1', 'P1', 'BG2-1', 'E2', 'T6-2', 'U3', 'S3', 'G1', 'SK0-3', 'B0-5'];
   for (const id of demoCos) await db.put('inv', { id: 'demo-' + id, kind: 'cos', itemId: id, source: 'demo', ts: Date.now() });
-  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR1', C: 'C1', P: 'P1', BG: 'BG2-1' });
+  await kvSet('equipped', { H: 'H11-1', FW: 'FW1', IL: 'IL1-1', IR: 'IR10-3', C: 'C1', P: 'P1', BG: 'BG2-1' });
   await db.put('inv', { id: 'demo-crate1', kind: 'crate', crate: 'golden', source: 'level-7', ts: Date.now() });
   await db.put('inv', { id: 'demo-crate2', kind: 'crate', crate: 'daily', source: 'quests', ts: Date.now() });
   await db.put('inv', { id: 'demo-xp2', kind: 'xp2', source: 'crate', ts: Date.now() });
