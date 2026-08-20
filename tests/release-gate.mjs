@@ -310,6 +310,11 @@ const DECLARED = {
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
     + 'NOTE, worth fixing separately: unlike boneyard-audit it carries no capability probe and no UNPROVEN exit, so on a host '
     + 'with no route to the tile server its CONTROL row is the only thing standing between a tile-less run and a vacuous pass.'],
+  'purchase-write-failure-audit.mjs': ['full', "a rejected write during a rack purchase must not cost the player the coins AND the piece. "
+    + 'Run it on any change to buyRackItem, grantCosmetic, markPaid or the db write paths. It makes the real db.addIfAbsent reject '
+    + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
+    + 'logic is stubbed. Proven red on origin/main c3b7bc9 (3 rows) before the fix existed: 300 coins charged, no piece granted, and '
+    + 'the retry answered owned while the player owned nothing, which made the piece unbuyable forever.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
