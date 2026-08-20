@@ -6852,7 +6852,7 @@ async function renderShop(el) {
      "Reroll the rack / FREE" with nothing beside it says unlimited, and an
      unlimited reroll destroys the rack: you spam it until your piece appears and
      the countdown beside the theme becomes noise. Two words carry the limit,
-     "N left today", and the small line under the label says what a reroll draws
+     "N left this week", and the small line under the label says what a reroll draws
      from, which is the thing a curated theme and a random reroll otherwise fight
      about: another nine FROM THE SAME THEME, never a random pull out of the
      whole game. */
@@ -6883,7 +6883,7 @@ async function renderShop(el) {
     ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, i + RACK_AURA_CELL)).join('')}
   </div>
   <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())}</small></span>
-    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left today` : 'none left today'}</span>
+    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
     ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
@@ -7073,7 +7073,7 @@ async function renderShop(el) {
     const doReroll = async () => {
       const r = await rerollRack();
       if (!r.ok) {
-        toast(r.reason === 'limit' ? 'No rerolls left today. A fresh rack lands Monday.'
+        toast(r.reason === 'limit' ? 'No rerolls left this week. A fresh rack lands Monday.'
           : r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
           : 'Try that again.', 2800);
         return;
