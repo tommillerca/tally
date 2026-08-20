@@ -357,7 +357,14 @@ const results = await page.evaluate(async () => {
     friendBattle: () => { const f = uniq(); return { act: () => game.claimFriendBattle(f, true, '2099-01-02'), won: r => !!r.firstToday }; },
     quest: () => {
       const q = { id: uniq(), name: 'SOP quest', coins: 100, dust: 15, crate: 'daily' };
-      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r };
+      /* NOT `!!r`. claimQuest gained a THIRD return shape with the claim cap:
+         null (nothing paid), the xp row (paid), and { capped: true } (refused
+         because the period is spent). `{capped:true}` is TRUTHY, so `!!r` scored
+         a refusal as a win and reported pay:{coins:0}. It is green today only
+         because this driver claims exactly QUEST_N.day distinct ids and so lands
+         ON the cap rather than past it; a fourth quest here would have made it
+         lie. Sitting on a boundary is not passing. */
+      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r && !r.capped };
     },
     questAll: () => {
       const d = `2099-02-${String(1 + (n++ % 27)).padStart(2, '0')}`;

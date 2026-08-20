@@ -278,7 +278,12 @@ try {
       const st = quests.questState(q, ctx);
       if (!st.done || st.claimed) continue;
       const r = await quests.claimQuest(day, q, 'day');
-      if (r) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
+      /* `if (r)` was enough until claimQuest gained { capped: true }, which is
+         truthy and carries no coins or xp: it would have counted a refused claim
+         and added undefined, turning both totals into NaN. Not reachable today
+         (each replayed day gets its own periodKey, so no period is ever spent)
+         but the same unguarded truthiness as reward-sop's `!!r`. */
+      if (r && !r.capped) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
     }
     const bonus = await quests.claimAllBonusIfDue(day, qs, await db.db.all('xp'));
 

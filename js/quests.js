@@ -9,10 +9,9 @@
 // eating less. Longer periods pay bigger (coins + crates) for tougher targets.
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
-import { claimDay } from './db.js';
+import { claimDay, db } from './db.js';
 import { keepersBoon } from './spires.js';
 import { award } from './game.js';
-import { db } from './db.js';
 import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
 import { grantIngredient } from './cooking.js';
 
@@ -264,13 +263,33 @@ export const QUEST_N = { day: 3, week: 3, month: 2 };
 /* Rows this period has already paid. Counted from the ledger rather than from
    the quests currently on screen, because the whole bug was that the on-screen
    set moves: a quest that has dropped out of view still spent its slot.
-   The startsWith guard alone is not enough. A month key ('2026-08') is a prefix
-   of every day key in that month ('2026-08-20'), so `quest-2026-08-` matches
-   daily rows too. Quest ids never begin with a digit and dates always do, which
-   separates them without leaning on the q-/w-/m- naming convention. */
-export function claimsThisPeriod(rows, periodKey) {
+
+   THE KEY PREFIX DOES NOT IDENTIFY THE TIER, AND TWO SEPARATE COLLISIONS PROVE IT.
+   1. A month key ('2026-08') is a prefix of every day key in that month
+      ('2026-08-20'), so `quest-2026-08-` matches daily rows.
+   2. Worse, and the reason this counts POOL MEMBERSHIP now: weekKeyOf() returns
+      the Monday's own date, so ON A MONDAY the week key and the day key are the
+      SAME STRING. A digit test cannot separate those, because both suffixes are
+      quest ids starting with a letter. Measured: three dailies claimed on Monday
+      2026-08-17 made the weekly count read 3, which is the weekly cap, so EVERY
+      weekly quest was refused for the rest of that week. Symmetrically, weeklies
+      claimed on a Monday ate that day's daily budget.
+
+   So the tier is decided by what the id IS, not by what the key looks like. The
+   pools are right here in this file, so this needs no convention, no naming rule
+   and no date parsing: a row counts against the day cap only if its id is a
+   DAILY_POOL id. An unknown id (a pool entry deleted in a later version, like
+   q-harvest when the Bone Garden closed) counts against nothing, which is the
+   safe direction: it can under-count a retired quest, never lock a player out. */
+const POOL_IDS = () => ({
+  day: new Set(DAILY_POOL.map(q => q.id)),
+  week: new Set(WEEKLY_POOL.map(q => q.id)),
+  month: new Set(MONTHLY_POOL.map(q => q.id)),
+});
+export function claimsThisPeriod(rows, periodKey, period = 'day') {
   const pre = `quest-${periodKey}-`;
-  return rows.filter(r => r.key.startsWith(pre) && !/^\d/.test(r.key.slice(pre.length))).length;
+  const ids = POOL_IDS()[period] || POOL_IDS().day;
+  return rows.filter(r => r.key.startsWith(pre) && ids.has(r.key.slice(pre.length))).length;
 }
 
 export function dailyQuests(date, opts = {}) { return pick(DAILY_POOL, 'quests:' + date, QUEST_N.day, opts); }
@@ -315,7 +334,7 @@ export async function claimQuest(periodKey, q, period = 'day') {
      today than the one they already claimed from. */
   const cap = QUEST_N[period] || QUEST_N.day;
   const rows = await db.all('xp');
-  const already = claimsThisPeriod(rows, periodKey);
+  const already = claimsThisPeriod(rows, periodKey, period);
   if (already >= cap && !rows.some(r => r.key === `quest-${periodKey}-${q.id}`)) {
     /* Say so rather than returning null. A null here reaches a click handler that
        does nothing at all, and a button that silently does nothing is the exact
