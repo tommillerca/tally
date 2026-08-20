@@ -28,6 +28,7 @@ import {
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -14632,7 +14633,7 @@ async function renderBoneyard(el) {
     const date = dateKey();
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
-    const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
+    let collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
@@ -15251,6 +15252,12 @@ async function renderBoneyard(el) {
       claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       claimedSecret = new Set(rows.filter(r => r.type === 'secret').map(r => r.key));
+      /* REBUILT FROM THE LEDGER, like the three above it. It used to be seeded
+         once at map open and only ever added to by the collect handler, which
+         was fine while collecting was the only way to spend a spawn. A Mimic is
+         spent by WINNING A FIGHT, and that row is written from the fight settle
+         in another part of the file, so the only honest source is the ledger. */
+      collected = new Set(rows.filter(r => r.type === 'spawn').map(r => r.key));
       refreshSpawns();
       refreshDens();
       refreshMinis();
@@ -15514,6 +15521,34 @@ async function renderBoneyard(el) {
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
       if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
+         PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
+         with this mimic. it should show the pixel art animation and then enter a
+         battle with him."
+         This is the seam because collectSpawn is the thing that SPENDS the
+         chest: it claims `spawn-<date>-<id>` through award -> db.addIfAbsent and
+         pays coins, a crate and an ingredient in the same breath. Branching
+         anywhere downstream of it would pay the loot AND start the fight, which
+         is the double-pay this ordering exists to make impossible. A Mimic chest
+         never reaches collectSpawn at all.
+         `collected` is re-read from the ledger on every refreshWorld, so the
+         guard below is what stops a second tab (or a very fast second tap)
+         opening a second fight for a chest that is already spent. The real
+         authority is still the addIfAbsent in the settle; this is the polite
+         door, not the lock. */
+      if (isMimicSpawn(rec.spawn)) {
+        const spawn = rec.spawn;
+        const claimKey = spawnKey(date, spawn);
+        if (collected.has(claimKey)) return;
+        await showMimicReveal({ reduced: reducedMotion });
+        const fighter = await buildFighter();
+        openFight(wrap, fighter, {
+          mode: 'mimic', name: 'The Mimic', mult: MIMIC_FIGHT.mult,
+          aiLevel: MIMIC_FIGHT.aiLevel, talents: [], venue: 'The Boneyard',
+          mimic: true, claimKey, date, xp: MIMIC_FIGHT.xp, coins: MIMIC_FIGHT.coins,
+        });
+        return;
+      }
       const res = await collectSpawn(rec.spawn);
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
@@ -15630,13 +15665,18 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
+    // A beaten Mimic spends its chest from inside the fight settle, so the map
+    // has to hear about it. refreshWorld re-reads the xp ledger, so the payload
+    // is a nudge and never the authority (same rule as onGluttonBeaten).
+    const onMimicBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-mimic-beaten', onMimicBeaten);
     const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
     // a LOST attempt dispatches only this one, and it still has to spend the day
     const onSpireTried = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-tried', onSpireTried);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -16299,7 +16339,12 @@ function endlessFightCfg(f) {
        dropping one new field is the boring failure, so it is the one to check
        first. */
     foeOutfit: f.look,
-    glutton: !!f.glutton, mage: !!f.mage,
+    /* ...AND THE SAME FOR EVERY BOSS ADDED SINCE. The comment above is about
+       `look` going missing here; `mimic` and `wanderer` are the identical
+       hazard, one boss later. tests/mimic-audit.mjs reads these back through
+       window.__endlessCfg rather than trusting pit.js, because pit.js was never
+       the hop that broke. */
+    glutton: !!f.glutton, mage: !!f.mage, mimic: !!f.mimic, wanderer: !!f.wanderer,
   };
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__endlessCfg = r => endlessFightCfg(endlessFoe(r));
@@ -16586,6 +16631,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
              character flips its chain, its pointing hand and its lightning. */
           : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage-fight.png" alt="">`
+          /* hand-inked too, so same rule: no .mirror-wrap. Flipping the Mimic
+             would flip his chains and his tongue, and flipping the Wanderer
+             would put his lantern in the wrong hand. */
+          : foeCfg.mimic ? mimicPlateHtml()
+          : foeCfg.wanderer ? `<img class="mage-plate" src="assets/bh/wanderer/wanderer.png" alt="">`
           : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
@@ -17796,6 +17846,32 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
         const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
         if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
+      } else if (foeCfg.mode === 'mimic') {
+        /* THE CHEST IS SPENT HERE AND NOWHERE ELSE.
+           The key is the chest's OWN ledger key, `spawn-<date>-<id>`: the exact
+           key collectSpawn would have claimed had it been an ordinary crate. So
+           the Mimic and the loot he replaced compete for one row that can only
+           exist once, and `award` resolves that with db.addIfAbsent, where the
+           check and the insert are a single IndexedDB request. A kvGet/kvSet pair
+           here was measured printing 16,500 coins to three concurrent callers,
+           which is the exact class of bug that primitive exists for. Reusing the
+           spawn key rather than minting a `mimicwin-` one is not a shortcut: it
+           is what makes "a Mimic must not also pay its loot" true by
+           construction instead of by two branches agreeing with each other.
+           A LOSS OR A FLEE CLAIMS NOTHING, on purpose. The chest stays on the map
+           and can be fought again. It cannot be re-rolled into a reward, because
+           isMimicSpawn is a pure function of the spawn id: a Mimic is a Mimic for
+           the whole life of that 45-minute instance, however many times you run
+           from it. */
+        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Mimic', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('daily', 'boneyard');
+          extraCards.push(crateCard('daily'));
+        }
+        // the map holds `collected` in a closure, so tell it the chest is gone
+        dispatchEvent(new CustomEvent('bh-mimic-beaten', { detail: { key: foeCfg.claimKey } }));
       }
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
