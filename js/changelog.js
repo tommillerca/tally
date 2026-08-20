@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 410, date: '2026-08-19', title: 'The Shop is open', items: [
+    'Nine cosmetics a week, shown on your own Bonehead. Tap the magnifier on any tile to try it on for free before you spend anything.',
+    'Pay in coins, or pay in Bone Dust if you would rather have that exact piece. Anything you buy is free to wear afterwards.',
+    'Do not like this week is nine? Reroll the rack. The first one each day is free.',
+    'Weapon auras go on any weapon you carry, and you can take one off and put it back on whenever you like.',
+  ] },
   { n: 409, date: '2026-08-19', title: 'The app no longer flashes an empty screen while it opens', items: [
     'Opening the app used to show a bare tab bar over nothing for a moment before the loading screen appeared. It waits now.',
   ] },

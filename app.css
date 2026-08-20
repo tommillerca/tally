@@ -8401,3 +8401,459 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   content: ''; position: absolute; inset: -5px; border-radius: 50%; z-index: 0; pointer-events: none;
   background: radial-gradient(circle, rgba(232, 194, 77, .55), rgba(232, 194, 77, 0) 70%);
 }
+
+/* ============ THE RACK: the cosmetic shop ============ */
+
+/* An aura is a BOUGHT halo on the weapon. It uses the same one property the
+   rarity halo uses (a single drop-shadow on the same <img>) and avatarLayersHtml
+   emits one class or the other, never both, so a weapon can never wear two
+   glows. Rarity has not gone anywhere: it is the tile border, below. */
+/* ONE drop-shadow, not two: a bought aura is stronger than a rarity halo (6px)
+   because it is the thing you paid for, but it is still a single glow, so
+   "exactly one glow on this object" stays a checkable number. */
+.bh-anim img.wpn-aura.a-tide { filter: drop-shadow(0 0 11px rgba(125, 200, 255, 1)); }
+.bh-anim img.wpn-aura.a-ash { filter: drop-shadow(0 0 11px rgba(240, 236, 225, 1)); }
+
+.rk-theme { display: flex; align-items: center; gap: 8px; margin: 2px 2px 10px; }
+.rk-theme b { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--text-2); }
+.rk-theme i { flex: 1; height: 1px; background: var(--line); }
+.rk-theme span { font-size: 11px; color: var(--text-3); }
+
+/* THREE WIDE, NINE TILES (Tom, after the Finch shop). Measured on the render:
+   a tile is 115px at 393x852 and 129px at 440x956, against 176/198 two-wide.
+   Everything below is what that width forced, and each of it was measured, not
+   guessed. */
+.rk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* One tile language, four times. Rarity is the border and nothing else, so the
+   tile carries a name, two prices and no third line of text. */
+.rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 13px;
+  padding: 6px 6px 8px; text-align: center; }
+.rk.r-uncommon { border-color: color-mix(in srgb, #9fac9f 60%, var(--line-strong)); }
+.rk.r-rare { border-color: color-mix(in srgb, #60a5fa 60%, var(--line-strong)); }
+.rk.r-epic { border-color: color-mix(in srgb, var(--violet) 62%, var(--line-strong)); }
+.rk.r-legendary { border-color: color-mix(in srgb, #ffc961 62%, var(--line-strong)); }
+/* Two lines, reserved whether the name uses them or not, so a one-line name and
+   a two-line name do not produce two different tile heights in the same row.
+   Measured at 393: the longest name on the rack wraps to 2 lines and 0 of 9 are
+   truncated. line-clamp is the backstop, not the plan. */
+.rk > b { display: -webkit-box; margin-top: 2px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 11.5px; line-height: 1.25; height: 28px; margin: 5px 0 6px; }
+/* PRESENCE. Measured off the eight-tile render, clipped to each stage: the
+   selected Shop chip is a solid coral fill at 89% saturated area, while White
+   Hi-Tops measured 0.0% and Yellow X Tee 2.0%. The nav chip is shipped global
+   chrome and out of scope from a mockup branch, so the rack answers on its own
+   side: every stage sits on its own rarity-tinted ground instead of eight
+   copies of the same flat --surface-3. A bone-white sneaker now has a colour to
+   be seen against, and the grid reads as eight tiles rather than one texture.
+   Same --rar-rgb ladder the pack reveal already uses; nothing new invented. */
+.rk, .ton-stage { --rar-rgb: 185, 172, 151; }
+.rk.r-uncommon, .ton-stage.r-uncommon { --rar-rgb: 162, 224, 166; }
+.rk.r-rare, .ton-stage.r-rare { --rar-rgb: 124, 196, 255; }
+.rk.r-epic, .ton-stage.r-epic { --rar-rgb: 155, 146, 232; }
+.rk.r-legendary, .ton-stage.r-legendary { --rar-rgb: var(--gold-rgb); }
+/* THE STAGE IS THE TRY-ON CONTROL. Not a 44px icon parked in a corner of a
+   101px tile, which would have eaten 43% of its width: the art itself is the
+   button, so the target is the whole 101x87 stage and the tile gains no chrome
+   for it. The magnifier is a hint sitting on top, not the hit area. */
+.rk-stage { display: block; border: 0; padding: 0; font: inherit; color: inherit;
+  position: relative; width: 100%; aspect-ratio: 1 / 0.86; border-radius: 12px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
+.rk-stage .bh-anim { position: absolute; inset: 0; }
+.rk-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* STACKED, not side by side. Two pills across a 115px tile leaves 46px each,
+   and a pill is an icon plus up to five digits: measured, the coin pill needs
+   72px to render "3,000" without wrapping. So the prices stack. They keep the
+   full tile width each, which makes them BIGGER tap targets than the two-wide
+   build had (115x44 against 76x44 at 393). */
+.rk-try { position: absolute; right: 3px; bottom: 3px; z-index: 2; width: 17px; height: 17px;
+  display: grid; place-items: center; border-radius: 50%; pointer-events: none;
+  background: rgba(22, 21, 29, .72); color: var(--text-2); }
+.rk-try svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; }
+
+/* min-height is load-bearing: an owned card carries ONE inert marker where the
+   others carry two pills and the word between them, and without a floor the
+   owned card would be 70px shorter than its neighbours and the row would go
+   ragged. The runner asserts every tile in a viewport is the same height, so
+   drift here goes red rather than silent. */
+.rk-buy { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 106px; }
+/* The word that says these are ALTERNATIVES. Two identical full-width pills
+   stacked read as "3,000 AND 200", a bill in two parts, and the whole mechanic
+   is that they are two ways to pay for one thing. */
+.rk-or { display: block; font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  line-height: 14px; height: 14px; color: var(--text-2); text-transform: uppercase; }
+/* 44px minimum, measured: the first build shipped 31px-tall buy buttons. On the
+   owned tile the marker is the thing that has to clear 44, so the rule is on
+   every child of the row, not on the price pill alone. */
+/* The 44px floor is for CONTROLS, not for the word between them. Scoping this
+   to `> *` made the "or" a 44px-tall element, which added 49px to every tile
+   and made the runner report it as a tap target. */
+.rk-buy > button, .rk-buy > /* The aura's wear/take-off control. Same footprint as a price pill so the tile
+   does not jump when it flips, and it reads as a state rather than a purchase:
+   nothing here spends. */
+.rk-aura-toggle { width: 100%; min-height: 44px; border-radius: 11px; background: none;
+  border: 1.5px solid var(--line-strong); color: var(--text-2); font-weight: 800;
+  font-size: 12.5px; letter-spacing: .02em; display: inline-flex; align-items: center;
+  justify-content: center; gap: 6px; }
+.rk-aura-toggle.on { border-color: rgba(125, 200, 255, .7); color: #7dc8ff; }
+.rk-owned { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
+
+/* OUT OF REACH IS STILL A PRICE. The shipped [disabled] grey-out was rejected:
+   with 380 coins and no dust every price on this rack is out of reach, and 16
+   dead controls read as a broken screen instead of an expensive one. So the
+   pill keeps its size, its border, its icon and its digits, and loses only the
+   FILL, which is the part that says "press me". Contrast does not drop:
+   measured off the render, the hollow pill's digits read 10.4:1 against their
+   own ground and the filled pill's 10.1:1. What falls is ink weight, mean
+   saturation x value over the pill: 0.10 hollow against 0.50 filled. */
+.rk-buy .t3-price.cant { background: transparent; box-shadow: none;
+  color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.rk-buy .t3-price.dust.cant { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
+
+/* OWNED IS INERT, and it used to be the loudest thing on a shop rack. It was a
+   solid --accent pill in the same shape as the buy prices, sitting on the one
+   card a player cannot act on, and it collided with the reroll's --mint FREE
+   pill besides: two different greens both meaning "good" on one screen. It is a
+   check and a dimmed card now. No fill, no border, no green, and the card's art
+   drops to half opacity so the eye skips it on the way to the eight for sale. */
+.rk.owned .rk-stage { opacity: .45; }
+.rk.owned > b { color: var(--text-3); }
+/* --text-2, not --text-3: measured off the render at --text-3 this was 4.38:1
+   against its own card, an actual WCAG AA failure at 11px. Inert is a job for
+   shape and colour (no fill, no border, no green, dimmed art), never for
+   contrast. At --text-2 it reads 7.5:1 and is still plainly not a button. */
+.rk-owned { display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  color: var(--text-2); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.rk-owned svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6; }
+
+/* Crop each preview to the part of the figure the piece occupies. Centres and
+   scales are MEASURED alpha bounding boxes (median over every asset in the
+   slot): H (.425,.209) w.322, T (.455,.505) w.486, P (.509,.657) h.270,
+   FW (.495,.832) w.278, IR (.388,.670) w.508.
+   animation:none is load-bearing: .bh-anim carries the bh-idle keyframes, which
+   animate `transform`, and a running animation outranks a plain declaration in
+   the cascade. Without it the crop simply does not happen. */
+.fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim,
+.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim { animation: none; }
+.fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
+.fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
+.fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
+.fit-feet .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }
+/* The aura tile frames the weapon hand, not the whole body: the halo is on the
+   held item, so that is what the preview has to show. */
+/* The aura tile frames the weapon hand of the BASE SKELETON, carrying the plain
+   common katana IR7-3 (measured bbox centre .402/.727, width .600 of canvas). The
+   first carrier, IR7-1, dangles a bright yellow smiley that out-shouted the
+   thing for sale. */
+.fit-hand .bh-anim { transform-origin: 40% 73%; transform: translate(10%, -23%) scale(1.6); }
+/* The four crops the nine-tile rack added. Same recipe as the five above:
+   transform-origin IS the slot's measured alpha-bbox centre, the translate is
+   (50 - centre)%, and the scale is chosen so the piece fills the stage rather
+   than the canvas. fit-hand-l is not a mirror of fit-hand: the left hand's ink
+   sits at .698,.341, high and to the right, where the right hand's sits at
+   .388,.670, low and to the left, so the two hand tiles do not show the same
+   corner of the same skeleton. */
+.fit-hand-l .bh-anim { transform-origin: 70% 34%; transform: translate(-20%, 16%) scale(1.6); }
+.fit-body .bh-anim { transform-origin: 50% 63%; transform: translate(0%, -13%) scale(1.35); }
+.fit-shin .bh-anim { transform-origin: 49% 82%; transform: translate(1%, -32%) scale(2.5); }
+.fit-waist .bh-anim { transform-origin: 51% 60%; transform: translate(-1%, -10%) scale(2.8); }
+/* The one tile that is not selling an object says so, in a FULL WIDTH strip no
+   other tile has. The first pass was an 8px corner chip: the smallest type on
+   the screen carrying the only thing that stops a player reading the katana as
+   the product. A structural difference beats a smaller label. */
+/* The strip was --violet, which is the exact colour of the dust pill sitting
+   two rows below it and of the epic rarity border around it, so a CATEGORY
+   badge was wearing a CURRENCY badge's colour. It is bone on ink now: the only
+   near-achromatic signal on the screen (saturation .11) against gold .62,
+   violet .37, coral .66, mint .71, blue .56 and accent .69, so it cannot be
+   read as a rarity or a price. The strip is what changed; the aura did not. */
+/* Measured, not guessed, and the first guess was wrong. The two-wide build's
+   10px/.1em needs 128.9px of text width; a three-wide stage is 101px at 393, so
+   it wrapped onto THREE lines and buried a third of the art. At 8px/.04em the
+   text measures 96.9px against 101px available. nowrap makes an overflow a
+   visible defect rather than a silent reflow.
+   (scrollWidth cannot measure this: with overflow visible it reports the
+   padding box, so every font size came back "fits" and the check proved
+   nothing. The number above is a Range over the text node.)
+   8.5px with the tracking dropped measures 96.6px, so it buys a larger glyph
+   for the same width as 8px/.04em at 96.9px. It is still the smallest type on
+   the rack, which is a real cost and is called out in the report. */
+/* EVERY CARD CARRIES ONE, which is why this stopped being the AURA strip. As
+   the only tag on the rack it made the other eight cards look untagged by
+   mistake, and rarity was separately illegible: a faint tinted border and a
+   tinted ground, with nothing naming the code and no legend to look it up in.
+   The strip spells the rarity in the rarity's OWN colour, so the card teaches
+   the code itself, and the aura's keeps ANY WEAPON and stays the only INVERTED
+   one, bone fill and ink text against dark-on-tint everywhere else, so it is
+   still structurally the odd card out rather than one more label.
+   Shrinking the type was the wrong lever and the phrase was the right one. This
+   label had been cut to 8.5px, smaller than the tile names at 11.5px, which
+   made the most load-bearing words on the rack the hardest to read. Largest
+   size fitting the 101px stage at 393, measured with a Range over the text
+   node: "AURA . ANY WEAPON" 8.5px, "FITS ANY WEAPON" 9px, "ON ANY WEAPON"
+   9.5px, "ANY WEAPON" 12px. The word AURA moved to the name directly beneath,
+   which was always going to carry it. LEGENDARY, the longest rarity, is shorter
+   than ANY WEAPON, so nothing else has to shrink to keep it company. */
+.rk-tag { position: absolute; top: 0; left: 0; right: 0; z-index: 2; text-align: center;
+  font-size: 12px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; padding: 3px 0;
+  color: var(--ink); background: var(--text); }
+/* Rarity, on every card, under the art rather than over it, in the rarity's own
+   colour so the tinted ground and border stop being a code with no key. */
+.rk-rar { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+  margin: 5px 0 0; color: rgb(var(--rar-rgb)); }
+
+/* One control. No printed ladder: the price on the button IS the price. */
+/* WHERE THE LAST ROW LANDS. Two pieces of shipped chrome float over this
+   screen and neither may be restyled from a mockup branch: the settings gear
+   (fixed, 38px, top right, z20) and the fab, whose lime glow (0 8px 24px)
+   reaches 16px above its own top edge into the bottom of the scroller. On a
+   shop screen app chrome on top of goods is wrong, and the one lever the rack
+   owns is where its own scroll ENDS. This tail is tuned by measurement so that
+   at scroll-bottom, the rest position, the gear band and the fab-glow band both
+   land on tile chrome and empty tail rather than on product art. Mid-scroll
+   transit under a fixed gear is app-wide behaviour and no rack padding removes
+   it; see the report.
+   PARTIAL, and knowingly so: three columns widened the price pills to the full
+   tile, so the top-right PILL now reaches under the gear where the two-wide
+   76px pill did not (measured 31x36px at 393, 31x18px at 440, at scroll
+   bottom). There is no tail height that clears both the art and the pills at
+   both viewports: 393 has exactly one clean value, 0, and 440 has exactly one,
+   78. The art is what this value protects.
+   Re-solved again after the buy row grew the "or" line and the head grew a
+   wallet row, both of which move every row's pitch: the window clean at BOTH
+   393 and 440 is now 6 to 66px, and 36 is its middle. It was 96, which is
+   outside that window and puts the gear back on a stage. The
+   A smaller tail is also less dead space under the rack, which was a separate
+   note. */
+.rk-tail { height: 16px; }
+
+.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
+  background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
+.rk-reroll b { text-align: left; font-size: var(--fs-3); }
+
+/* ============ the try-on sheet ============
+   One piece, on the player's own bonehead, over their real outfit. The grid is
+   neutral on purpose and this is personal on purpose. Nothing here is wired to
+   a purchase and closing the sheet writes nothing. */
+/* THE ITEM IS THE HERO AND IT IS SHOWN AT SIZE. Measured on the old render at
+   440x956: the stage was 300px, the whole sheet 499px tall on a 956px screen,
+   and the player's opaque BG plate covered 61.5% of the stage. So the piece a
+   player is deciding to buy was a third of a third of the screen, on the same
+   olive swatch whatever its rarity.
+   86vw with a 380px ceiling, which is the largest square that still leaves the
+   name, both prices and the reach line above the fold at 393x852 (measured,
+   see the report). */
+.ton-stage { position: relative; width: 86vw; max-width: 380px; margin: 2px auto 0; aspect-ratio: 1 / 1;
+  border-radius: 18px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 62%, rgba(var(--rar-rgb), .30) 0%, rgba(var(--rar-rgb), .12) 55%, rgba(var(--rar-rgb), .04) 100%), var(--surface-3); }
+/* THE LIGHT IS BEHIND THE SPRITE, never on it. A separate stacking context at
+   z-index 0 with the figure at 1: no filter, no blur, nothing that resamples a
+   single pixel of Cam's art. Same rule the weapon halos already follow. */
+.ton-burst { position: absolute; inset: -14%; z-index: 0; pointer-events: none; }
+.ton-burst .burst-gl { display: block; width: 100%; height: 100%; }
+.ton-fig { position: absolute; inset: 0; z-index: 1; }
+.ton-stage .bh-anim { position: absolute; inset: 0; }
+.ton-stage .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* DIRECTION A, SPOTLIGHT: the pack reveal's own vocabulary. The volumetric ray
+   fan from js/crate-fx.js, tinted by rarity from the same BURST table, behind
+   the figure. Reused rather than reinvented on purpose: a second language for
+   "this is exciting" in one app is one too many.
+   DIRECTION B, PLINTH: no burst. A floor the figure stands on, a contact
+   shadow under it and a vignette, so the stage is a place rather than a
+   swatch. Kept on the branch under ?ton=b so the comparison can be re-rendered.
+   Both share the ground, the size and the landing; only the light differs. */
+.ton-stage.d-b .ton-burst { display: none; }
+.ton-stage.d-b::before { content: ''; position: absolute; z-index: 0; left: 6%; right: 6%; bottom: 8%; height: 26%;
+  border-radius: 50%; background: radial-gradient(ellipse at 50% 50%, rgba(var(--rar-rgb), .38) 0%, rgba(var(--rar-rgb), .10) 58%, transparent 78%); }
+/* THE VIGNETTE IS SHARED, AND IT SITS BEHIND THE FIGURE. Measured on the first
+   pair of renders: direction A's burst lifted the stage corners from 32.7 to
+   47.0 mean luminance, so the light stopped being a light and became a wash,
+   and the figure's centre-to-corner separation fell from 2.61 to 1.78. B's
+   vignette is what fixed that, so it belongs to both.
+   z-index 0 is load-bearing and it is the reason this is legal: ::after is the
+   last child in paint order at that level, so it darkens the burst and the
+   ground and is then painted OVER by .ton-fig at z-index 1. Not one pixel of
+   Cam's art is darkened, tinted, filtered or resampled by it. */
+.ton-stage::after { content: ''; position: absolute; z-index: 0; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 40%, rgba(9, 8, 14, .62) 100%); }
+
+/* THE FIGURE LANDS. It does not cut in. `.sheet-in` is applied by
+   revealWhenReady once every layer has DECODED, so the landing can never start
+   on an undecoded frame, and the animation is finite with no fill beyond its
+   own end so nothing is left stuck if the sheet closes mid-beat. */
+#sheets .sheet-body.sheet-in .ton-fig { animation: tonLand .42s cubic-bezier(.18,.86,.26,1) both; }
+@keyframes tonLand {
+  0% { opacity: 0; transform: translateY(16px) scale(.93); }
+  100% { opacity: 1; transform: none; }
+}
+/* THE PIECE ARRIVES ON YOU. One layer of the stack, the piece being tried, on
+   its own opacity and transform. Delayed past the landing so it reads as
+   arriving rather than as having always been there. */
+#sheets .sheet-body.sheet-in .ton-new { animation: tonArrive .34s cubic-bezier(.2,.9,.3,1) .22s both; }
+
+/* THE PRODUCT IS THE ONLY LIT THING ON THE STAGE, and before this it was not
+   lit at all. Measured on the render: eight layers are drawn on the try-on
+   figure, the piece being sold (H13-5.png) computed `filter: none`, and the ONE
+   glowing layer was IR10-3.png, the player's OWN EQUIPPED WEAPON wearing its
+   rarity halo at drop-shadow(rgba(255,201,97,.95) 0 0 6px).
+   So a stage built to sell a hat lit a weapon that is not for sale. That is the
+   same confusion Tom raised about the rack ("its not clear youre buying an aura
+   and not the sword") reappearing inside the sheet whose entire job is to show
+   you the product.
+   `.ton-new` was only an ARRIVAL animation, .34s and then nothing, which is why
+   the piece read as unmarked once it had landed. It now keeps a halo in its own
+   rarity colour, reusing the wpn-glow palette so the light means the same thing
+   here as everywhere else in the game.
+   drop-shadow, not blur or a filter on the art: it casts from the layer's alpha
+   and does not resample a pixel of Cam's art, which is the same reason
+   .bh-anim img.wpn-glow is allowed to use it. */
+.ton-stage .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(242, 233, 215, 0.75)); }
+.ton-stage.r-uncommon  .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(74, 222, 128, 0.75)); }
+.ton-stage.r-rare      .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(111, 208, 255, 0.80)); }
+.ton-stage.r-epic      .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(155, 146, 232, 0.80)); }
+.ton-stage.r-legendary .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(255, 201, 97, 0.85)); }
+
+/* AND THE PLAYER'S OWN GEAR STANDS DOWN WHILE THEY ARE TRYING SOMETHING ON.
+   Only for a garment: on an AURA try-on the weapon's halo IS the product, which
+   is why this is scoped :not(.aura). Without it the two lights compete and the
+   brighter one belongs to the item that is not for sale. */
+/* :not(.ton-new) IS LOAD-BEARING AND I SHIPPED THIS WRONG FIRST TIME. When the
+   piece for sale IS a weapon, its <img> carries BOTH wpn-glow and ton-new, and
+   this selector (3 classes + an element + :not) out-specifies the product halo
+   (3 classes), so the one item on the stage that SHOULD be lit went dark.
+   Measured on the real rack: IL8-1, a weapon rung, computed `filter: none` while
+   every garment rung lit correctly. Excluding .ton-new fixes it without
+   weakening the stand-down for gear that is merely being worn. */
+.ton-stage:not(.aura) .ton-fig img.wpn-glow:not(.ton-new) { filter: none; }
+
+/* A HALO CANNOT MARK A SMALL ITEM, AND MEASURING IT SETTLED THE ARGUMENT.
+   Tom: "im pretty sure youre making the grillz and other small items look worse
+   than the original art". He was right, and it is not a matter of degree.
+
+   Measured at the 384px stage, glow area against the art's OWN area, with the
+   9px drop-shadow above:
+
+     G3 grillz   12x11 on screen     31 art px    205 glow px    6.61x
+     G4 grillz   33x20              120           555            4.62x
+     G1 grillz   34x26              279           756            2.71x
+     E1 earring  56x31              498          1104            2.22x
+     H13-5 hat  145x152            9770          4347            0.44x
+     T9-5 jacket 188x132          12954          4506            0.35x
+
+   So on grillz a player was looking at SIX TIMES more of my glow than of Cam's
+   art. A fixed blur is simply the wrong instrument when the items vary by 300x
+   in area.
+
+   AND NO SMALLER HALO FIXES IT. Sweeping the radius, G3 stays above 1.0x even at
+   2px (1.03), where the glow is already too faint to notice. G4 is 0.95 at 2px.
+   There is no radius that both marks the item and stays smaller than it, so the
+   answer is not a tuned blur, it is a different instrument.
+
+   MOTION ADDS NO PIXELS. For small slots the item's own layer breathes instead:
+   the eye finds it by movement, nothing is painted around it, and not one pixel
+   of the art is altered or covered. This is the same reason the arrival beat was
+   already CSS on the layer itself rather than an effect drawn over it.
+   PRODUCT.md: Cam's art is never redrawn. Adding 6x its own area in glow around
+   it is a way of redrawing it. */
+.ton-stage.tiny .ton-fig .ton-new { filter: none; animation: tonBreathe 1.9s ease-in-out 3; }
+@keyframes tonBreathe {
+  0%, 100% { transform: none; }
+  50% { transform: scale(1.045); }
+}
+/* THE ITERATION COUNT IS CAPPED, NOT THE DURATION. This repo has been bitten by
+   `animation-duration: .001s` under prefers-reduced-motion, which runs a loop a
+   thousand times a second. Three breaths and it rests. */
+@media (prefers-reduced-motion: reduce) {
+  .ton-stage.tiny .ton-fig .ton-new { animation: none; }
+}
+@keyframes tonArrive {
+  0% { opacity: 0; transform: translateY(-9px) scale(1.05); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+/* The name, the badge and the price land last, so the buy is the conclusion of
+   the moment rather than a footer that was always sitting there. */
+#sheets .sheet-body.sheet-in .ton-name { animation: tonRise .34s ease-out .30s both; }
+#sheets .sheet-body.sheet-in .ton-buy { animation: tonRise .34s ease-out .40s both; }
+#sheets .sheet-body.sheet-in .ton-reach { animation: tonRise .34s ease-out .48s both; }
+@keyframes tonRise { 0% { opacity: 0; transform: translateY(9px); } 100% { opacity: 1; transform: none; } }
+
+/* THE FIGURE IS ALIVE HERE. bh-idle was already running on this stage and was
+   measured at a 4px translate, which on a 300px stage is 1.3% and read as
+   frozen. The rack tiles kill it outright so their crops sit still; the try-on
+   stage is not a crop, so it keeps it and gets a stage large enough for it to
+   read. Nothing about the keyframes changed. */
+
+/* REDUCED MOTION IS ALREADY HANDLED, AND ADDING A SECOND HANDLER WAS THE BUG.
+   The first version of this sheet shipped its own @media block capping bh-idle's
+   iteration count. The audit went red on it and was right: the app's global
+   reduce block (top of this file) already sets iteration-count 1, delay 0 and
+   the 0.001s collapse with !important, on `*`, and that combination is the
+   documented fix for the loop trap rather than an instance of it. A per-surface
+   copy could only ever disagree with it.
+   So there is nothing here. Every entrance above declares `both`, so the global
+   collapse lands them on their end state instantly: measured under reduce, the
+   figure, the piece and the price row all read opacity 1 with the art decoded.
+   The two things CSS cannot do are done in JS, both gated on `reducedMotion`:
+   the burst never mounts, and the aura's halo is on from the first frame
+   instead of switching on after a beat. */
+.ton-name { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 10px; }
+.ton-name b { font-size: var(--fs-3); }
+/* The status line sits against the name, where the eye already is, and it is
+   the plainest sentence on the screen because it is the one a player must not
+   get wrong. Coral, which is neither a currency (gold, violet) nor a rarity. */
+.ton-state { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; border-radius: 9px; padding: 4px 8px;
+  color: var(--coral); background: var(--coral-soft); border: 1.5px solid color-mix(in srgb, var(--coral) 45%, transparent); }
+.ton-state.own { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+/* Side by side here: a sheet is full width, so the reason the rack stacks them
+   (46px of tile) does not apply. */
+/* Side by side here: a sheet is full width, so the reason the rack stacks them
+   (46px of tile) does not apply. align-items is load-bearing: the OR is a 14px
+   line between two 44px pills and without it the row stretches everything to
+   the tallest item and the word lands against the top edge. */
+/* THE BUY IS THE CONCLUSION, so it is the width of the stage above it and it is
+   the biggest control on the sheet. It is still the SAME pill in the SAME three
+   states as the rack, because that is what stops the sheet reading as a
+   receipt: a price tag, larger, not a checkout button. */
+.ton-buy { flex-direction: row; align-items: center; gap: 8px; width: 86vw; max-width: 380px; margin: 0 auto; min-height: 0; }
+.ton-buy > button { flex: 1; min-height: 52px; font-size: 16px; }
+.ton-buy .rk-or { flex: none; }
+/* WHERE A PLAYER WHO CANNOT AFFORD IT LANDS. Only drawn when NEITHER price is
+   reachable, states the gap in both currencies, and offers the one route the
+   rack already offers. No urgency, no second ask, nothing that reads as a
+   pitch, and nothing here is derived from health data of any kind. */
+/* 12.5px, NOT 11.5. Measured: this was the SMALLEST type on the sheet while
+   carrying the most commercially important line on it (how far short you are,
+   and the one route that closes the gap). It sits below the prices on purpose,
+   so a player reads what it costs before what they lack, but it should not be
+   the hardest thing on the screen to read. Contrast measured at 5.00:1 on the
+   sheet ground, which clears AA; the problem was size, not colour. */
+.ton-reach { display: block; width: 86vw; max-width: 380px; margin: 10px auto 0; background: none; border: 0;
+  font-size: 12.5px; line-height: 1.35; color: var(--text-3); text-align: center; padding: 7px 4px; }
+
+/* ============ what this wallet reaches ============
+   A player at 340 coins could reach nothing on the old rack and the screen
+   never said so. The out-of-reach pills were real and their contrast was
+   measured, but a state with nothing to compare against is not perceived as a
+   state, so the count is now printed and the rack always stocks one piece a
+   starting wallet can buy. The dust half carries its own route, because a
+   currency shown as 0 with no way to earn any is decoration. It reuses the
+   shipped #shopSalvage handler, which still routes to the Salvage Bench. */
+.rk-wallet { display: flex; gap: 8px; margin: 0 2px 10px; }
+.rk-w { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left;
+  background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 10px;
+  padding: 6px 8px; font-size: 11px; color: var(--text-2); }
+.rk-w b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--text); }
+.rk-w i { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-w svg { flex: none; }
+
+/* The reroll's LIMIT, which the simplification pass cut along with the printed
+   price ladder. The ladder was clutter; the limit is the mechanic, and without
+   it the control reads as unlimited, which would let anyone spam the rack until
+   their piece appears and turn the countdown beside the theme into noise. */
+.rk-rr { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.rk-rr b { font-size: var(--fs-3); }
+.rk-rr small { font-size: 10.5px; color: var(--text-3); }
+.rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
+  background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }
