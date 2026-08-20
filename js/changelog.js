@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 421, date: '2026-08-20', title: 'The Mystery Egg, by one name', items: [
+    'The rare egg out on the map was called a "Mystery Egg" on the card before you open the map and a "Mystery egg" in the map key, with a different line under it each time. It is the Mystery Egg in both places now, and it says the same thing about itself in both.',
+  ] },
   { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
     'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
     'It fades up as you pull, so how far you pull is what decides how much of it you see.',

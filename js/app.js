@@ -512,6 +512,19 @@ function spawnPays(type) {
    spawn pass), so putting marrow or graveroot on the marker would promise an
    ingredient the find may not hold. `garden-seed` is itself already a stand-in
    and now the wrong metaphor, since the seeds it was drawn for left the game. */
+
+/* ONE NAME AND ONE LINE for the rare spawn, because three hand-typed copies is
+   how it ended up with three. The map key said "Mystery egg / Rare: walk to
+   hatch a pet", the Boneyard intro card said "Mystery Egg / rare spawn · walk to
+   hatch a pet", and the gift sheet typed its own third copy. Tom: "you call
+   mystery eggs rare spawns on the map but different in the legend they should be
+   called mystery eggs in both places".
+   NOT CRATES.egg.label, which is "Step Egg" ON PURPOSE: that is the backpack
+   item you earn from a big day of walking, and it is named that in the README,
+   the quests, the level-up rewards and three shipped changelog entries. This is
+   the map-facing name of the rare spawn only. */
+const MYSTERY_EGG = { name: 'Mystery Egg', desc: 'Rare: walk to hatch a pet' };
+
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
@@ -647,7 +660,7 @@ function mapLegendHtml() {
        that is: there is no pixel drawing for a food find yet (see the note on
        spawnIcon). It matches the map, which is what this key is for. */
     [spawn('herbs'), 'Herb patch', 'Two cooking ingredients'],
-    [spawn('rare', ' rare'), 'Mystery egg', 'Rare: walk to hatch a pet'],
+    [spawn('rare', ' rare'), MYSTERY_EGG.name, MYSTERY_EGG.desc],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
     [den(), 'Boss den', 'A landmark boss: rare gear'],
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
@@ -9339,7 +9352,7 @@ function openFriendProfile(f, onChange, opts = {}) {
 
 function giftRewardLabel(reward) {
   if (!reward) return 'a gift';
-  if (reward.crate === 'egg') return 'a Mystery Egg';
+  if (reward.crate === 'egg') return `a ${MYSTERY_EGG.name}`;
   if (reward.crate) return CRATES[reward.crate] ? CRATES[reward.crate].label : 'a crate';
   if (reward.consumable) return CONSUMABLES[reward.consumable] ? CONSUMABLES[reward.consumable].label : 'an item';
   if (reward.coins) return `${reward.coins} coins`;
@@ -14317,7 +14330,7 @@ async function renderBoneyard(el) {
             <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="blip-dot rare"></span><div><b>Mystery Egg</b><span class="note"> · rare spawn · walk to hatch a pet</span></div></div>
+            <div class="legend-row"><span class="blip-dot rare"></span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
           </div>
         </div>
       </div>
@@ -15854,7 +15867,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v420'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v421'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
