@@ -6562,6 +6562,53 @@ body::before {
 #sheets .sheet-body.sheet-in { opacity: 1; transition: opacity .16s ease-out; }
 @media (prefers-reduced-motion: reduce) { #sheets .sheet-body.sheet-in { transition: none; } }
 
+/* AND THE FURNITURE ARRIVES WITH THEM. Tom, 2026-08-19: "when the app boots up
+   before it shows the loading screen it always flashes an empty today tab with
+   the bottom bar visible, this looks amateurish as a first impression."
+   THE ORDERING, MEASURED, NOT GUESSED. `.screen` above is hidden until a screen
+   is in it, but #tabbar and #gearBtn are STATIC MARKUP in index.html with no
+   gate at all, so they paint the moment app.css parses: first paint, long before
+   the module graph has executed and long before showSplash() can create #splash.
+   The splash is a JS-built element and the furniture is HTML, so the furniture
+   always wins. Captured at 440x956 and 393x852, cold AND warm, x1 and x4 CPU:
+   the first painted state was the bare tab bar and gear over an empty screen in
+   every one of the six runs (cold x1: first paint 48ms, splash covers it at
+   109ms). See tests/boot-flash-audit.mjs.
+   THE GATE IS A ONE-SHOT LATCH, and it has to be. Two simpler conditions were
+   tried against the frames first and both are wrong:
+     `#screen:not(.screen-in)` blinks the tab bar out on EVERY tab change,
+     because route() strips screen-in on every navigation.
+     `#screen:empty` releases too early. Measured by this audit's own WARM pass
+     at x6 on both viewports: #screen gets its children at 373ms but
+     revealWhenReady holds screen-in until its images decode at ~495ms, so the
+     furniture came back over a screen that was still at opacity 0, and a bare
+     frame turned up at 495ms (lime=720, edge=0.03%). The splash hides that
+     window in an ordinary boot, but not for a reduced-motion player and not on
+     a second load in the same session, where showSplash bails.
+   So `booted` lands with the FIRST REVEAL, never before it, and is never
+   removed (js/app.js: route's reveal, and renderOnboarding, which is the one
+   screen that does not route).
+   THE FAILSAFE IS THE POINT, NOT A GARNISH (anti-regression rule 8: whatever
+   hides something must own un-hiding it). A boot that throws leaves #screen
+   empty forever, and hiding the shell behind an event that never comes is how
+   you ship a permanently black screen. So the hide is a 0s animation with an
+   8s delay and fill `both`: before the delay it holds the `from` keyframe
+   (hidden), after it holds `to` (visible), with no JS involved at all. Content
+   arriving removes the selector and the furniture returns instantly.
+   8s is measured. Time until #screen has content, cold cache, by CPU throttle,
+   on this tree: x1 127ms, x4 317ms, x6 481ms, x10 860ms, x20 2165ms, x30
+   3847ms, x40 6060ms; index.html's own table, taken against a heavier one-year
+   save, reaches 9968ms at x40. So 8s never fires on a healthy boot on anything
+   short of a 40x device, and it lands 4s BEFORE index.html's dead-shell reload,
+   so a genuinely dead shell shows exactly the picture it shows today rather
+   than nothing at all. */
+html:not(.booted) #tabbar,
+html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
+@keyframes shellFurniture {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+
 /* ============================================================================
    TIER 3: THE DEPTH SCREENS. Shop, Backpack, Build, Pit entry, Garden, Stable,
    built from the mockups Tom approved 2026-08-07 (market-quality-mockups/
