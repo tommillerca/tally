@@ -3536,6 +3536,11 @@ function avatarLayersHtml(eq, opts = {}) {
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
+    /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
+       passes null MEANS none, and the rack's neutral tiles are exactly that
+       caller. Falling back on a falsy value would let the player's own aura leak
+       onto a product preview they have not bought. */
+    const wpnAura = 'wpnAura' in opts ? opts.wpnAura : S.wpnAura;
     const cls = [
       // COSMETIC ONLY. S.glow never touches stats, gear bonuses or the slimed
       // ledger: it decides whether the halo is drawn, nothing else.
@@ -3544,7 +3549,7 @@ function avatarLayersHtml(eq, opts = {}) {
          emitting one class instead of the other is the whole mechanism and
          "exactly one glow on this object" stays a checkable number. Rarity has
          not gone anywhere: it still reads off the tile border. */
-      S.glow && (s.code === 'IR' || s.code === 'IL') && (opts.wpnAura ?? S.wpnAura) ? `wpn-aura a-${opts.wpnAura ?? S.wpnAura}`
+      S.glow && (s.code === 'IR' || s.code === 'IL') && wpnAura ? `wpn-aura a-${wpnAura}`
         : S.glow && (s.code === 'IR' || s.code === 'IL') && (item.rarity === 'epic' || item.rarity === 'legendary') ? `wpn-glow r-${item.rarity}` : '',
       S.glow && slimed ? 'bh-slimed' : '',
       // EMBER EYES: the eye items drawn as lit coals get a slow breathing glow.
@@ -6534,7 +6539,7 @@ async function renderShop(el) {
     const dust = RACK_DUST[i];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
       <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
-        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { thumb: 384, wpnAura: null })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { thumb: 384, wpnAura: null, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}
     </div>`;
@@ -6548,7 +6553,7 @@ async function renderShop(el) {
   const auraOwned = auraWorn === RACK_AURA.key;
   const rackAuraTile = () => `<div class="rk r-${RACK_AURA.rarity} aura${auraOwned ? ' owned' : ''}">
     <button class="rk-stage fit-hand" data-tryon="AURA" data-coin="${RACK_AURA.coin}" data-dust="${RACK_AURA.dust}" aria-label="Try on ${esc(RACK_AURA.name)}"
-      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { thumb: 384, wpnAura: RACK_AURA.key })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { thumb: 384, wpnAura: RACK_AURA.key, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
     ${rackTag(RACK_AURA.rarity)}<b>${esc(RACK_AURA.name)}</b>
     ${auraOwned ? `<div class="rk-buy"><span class="rk-owned">${ICONS.check(13)} Owned</span></div>`
       : `<div class="rk-buy">${rackPrice(RACK_AURA.key, 'coin', RACK_AURA.coin, coinBal)}<i class="rk-or">or</i>${rackPrice(RACK_AURA.key, 'dust', RACK_AURA.dust, dustBal)}</div>`}
@@ -6568,6 +6573,8 @@ async function renderShop(el) {
      Only what is ON THE RACK can be tried on. A full catalogue of every item in
      the game is the part of Finch's design that backfires: it lets a player find
      the exact colourway they want and then refuses to sell it to them. */
+  // the try-on stage is YOUR OWN stack, so your own collection answers for shiny
+  const rackShiny = await ownShinyPetId(playerEq);
   const rackTryOn = (id, coin, dust) => {
     const aura = id === 'AURA';
     const it = aura ? null : BH_BY_ID[id];
@@ -6588,7 +6595,8 @@ async function renderShop(el) {
        640 master, so the thumbnail holds about 9x9 of them. The rack TILES stay
        on the thumbnail deliberately: nine tiles times eight layers of master art
        is 72 full-size PNGs for a difference nobody can see at tile size. */
-    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'], wpnAura: aura ? RACK_AURA.key : (auraOwned ? RACK_AURA.key : null) });
+    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'], shinyPetId: rackShiny,
+      wpnAura: aura ? RACK_AURA.key : (auraOwned ? RACK_AURA.key : null) });
     /* HONEST ABOUT REACH, and only when neither price is reachable. It states
        the gap and points at the one route that closes it. Not a pitch and not a
        nudge: no urgency, no comparison, no second ask. */

@@ -38,6 +38,11 @@
  *            graded against a NEGATIVE CONTROL in the same slot on the same
  *            save: a collected-but-unbought look must still cost dust, so a
  *            transmogPrice that returns 0 for everything cannot pass.
+ *   REROLL   the ladder runs out. A spend with no ceiling is the other way this
+ *            screen could take an unbounded amount of money, so the ladder is
+ *            drained to exhaustion and two attempts past it: each reroll charges
+ *            exactly its rung, the total is 2,000 coins, and a refused reroll
+ *            spends nothing.
  *
  * CONTROL ROWS. Every measurement here is preceded by a row that fails if the
  * check is looking in the wrong place: the static scanner must have found real
@@ -54,6 +59,8 @@
  *      -> ONCE-RACE goes red (three concurrent callers all pay)
  *   4. move the spend above the claim
  *      -> ONCE-SEQ goes red
+ *   5. drop the `st.rr >= RACK_REROLL_LADDER.length` limit in rerollRack
+ *      -> REROLL-CAP goes red (the ladder never runs out and keeps charging)
  *
  * Usage: node tests/purchase-firewall.mjs            (serves this tree)
  *        node tests/purchase-firewall.mjs <base-url>
@@ -237,8 +244,25 @@ const res = await page.evaluate(async () => {
     break;
   }
 
+  /* THE REROLL LADDER, drained. A spend with no ceiling is the other way this
+     screen could take an unbounded amount of money: the ladder is FREE then
+     100/200/300/400/500/500, six paid a day, and it must stop. Driven to
+     exhaustion and one attempt past it. */
+  await db.kvSet('coins', 100000);
+  const rrStart = await loot.coins();
+  const rrSteps = [];
+  for (let n = 0; n < loot.RACK_REROLL_LADDER.length + 2; n++) {
+    const c0 = await loot.coins();
+    const ids0 = (await loot.rack()).ids.join(',');
+    const r = await loot.rerollRack();
+    rrSteps.push({ n, ok: r.ok, reason: r.reason || null, spent: c0 - (await loot.coins()),
+      changed: (await loot.rack()).ids.join(',') !== ids0 });
+  }
+  const rrSpent = rrStart - (await loot.coins());
+
   return { target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
-    buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg };
+    buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
+    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent };
 });
 
 if (res.error) { ok('SETUP the audit found something to grade', false, res.error); }
@@ -312,6 +336,21 @@ else {
   ok('DUST a dust purchase spends dust exactly, and spends no coins at all',
     !!res.dustLeg && res.dustLeg.dustSpent === res.dustLeg.price && res.dustLeg.coinDelta === 0,
     res.dustLeg ? `dust fell ${res.dustLeg.dustSpent} (price ${res.dustLeg.price}), coins moved ${res.dustLeg.coinDelta}` : 'not run');
+
+  /* ---- REROLL: a spend that must run out ---- */
+  const granted = res.rrSteps.filter(r => r.ok);
+  const refused = res.rrSteps.filter(r => !r.ok);
+  ok('CONTROL the reroll ladder actually granted rerolls, and they changed the rack',
+    granted.length === res.ladder.length && granted.every(r => r.changed),
+    `${granted.length} of ${res.ladder.length} granted, ${granted.filter(r => r.changed).length} changed the nine`);
+  ok('REROLL-LADDER each reroll charges exactly its rung, first one free',
+    granted.every((r, i) => r.spent === res.ladder[i]),
+    `spent ${granted.map(r => r.spent).join(', ')} against ladder ${res.ladder.join(', ')}`);
+  ok('REROLL-CAP the day\'s rerolls run out, and the ceiling is 2,000 coins',
+    refused.length === 2 && refused.every(r => r.reason === 'limit') && res.rrSpent === 2000,
+    `${refused.length} refused (${[...new Set(refused.map(r => r.reason))].join('/')}) after ${res.rrSpent} coins spent in total`);
+  ok('REROLL-CAP a refused reroll spends nothing',
+    refused.every(r => r.spent === 0), `refused attempts spent ${refused.map(r => r.spent).join(', ')}`);
 }
 
 ok('CONTROL the page threw nothing while the purchases ran', errors.length === 0, errors.join(' | ') || 'no page errors');
