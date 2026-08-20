@@ -95,7 +95,20 @@ const ok = (name, pass, detail = '') => {
    in both directions, so neither number is a knife edge. */
 const LIME_MIN = 200;
 const EDGE_FLOOR = 1.0;
-const MIN_FRAMES = 8;
+/* 3, NOT 8, AND LOWERING IT DOES NOT WEAKEN THIS AUDIT.
+   8 flaked: a cold boot on this tree reaches content in ~130ms, so the whole
+   window is about eight frames at 60fps and the capture legitimately returned
+   5 and 7 on consecutive runs. It is also a HARD GATE (the early return below),
+   so a flaky low count did not just fail, it SKIPPED the real grading entirely,
+   which is the worst possible combination: red for a reason that is not the app,
+   and silent about the reason it exists.
+   The genuine anti-vacuous guard is the row underneath it, which requires at
+   least one painted frame BEFORE #screen had content. That is what makes the
+   FLASH row impossible to pass by capturing nothing, and it is strictly better
+   than a raw frame count because it asserts the frames are the RIGHT frames.
+   3 still refuses an empty or one-frame capture. This repo's own note applies:
+   a guard that cries wolf gets deleted. */
+const MIN_FRAMES = 3;
 const FAILSAFE_MS = 8000;   // app.css `#screen:empty ~ #tabbar` animation delay
 const RELOAD_MS = 12000;    // index.html's dead-shell recovery
 
