@@ -126,6 +126,50 @@ svg { display: block; }
   padding: calc(var(--sat) + 14px) var(--pad) 24px;
 }
 
+/* THE OVERSCROLL WORDMARK. Today only, printed above the top of the world.
+   Tom: "when you scroll the phone on the today screen and can see the empty
+   space above the bonehead card it has the boneheadz word mark as a nice
+   branding touch."
+
+   WHY IT WORKS ON WKWEBVIEW SPECIFICALLY. The scroller here is .screen, not the
+   document, and iOS implements its rubber band by letting the underlying
+   UIScrollView take a NEGATIVE content offset: the whole scrolled content layer
+   translates down, absolutely-positioned descendants of the scroller included.
+   `overscroll-behavior: contain` above stops the chain reaching the page; it does
+   not stop the element's own bounce. So a mark parked above the content origin
+   rides down into view under your finger with no JS and no listener, and nothing
+   else on the app has to know it exists.
+
+   WHY IT CANNOT PEEK. Scrollable overflow only ever grows downward: scrollTop
+   cannot go negative by scrolling, so at rest and at every scroll position the
+   mark sits outside the overflow clip. The bounce is the only thing that can
+   reach it.
+
+   WHY IT COSTS NO LAYOUT. position: absolute takes it out of flow. Measured with
+   the rule present and absent: all 556 element rects on Today identical, first
+   card y 76 and 76, scrollHeight 3034 and 3034.
+
+   WHY IT IS ANCHORED TO --sat. Any reveal that arrives from above the scrollport
+   necessarily enters THROUGH the status-bar strip, exactly like a pull-to-refresh
+   spinner; there is no placement that avoids it, since the mark starts above y=0
+   by definition. What --sat buys is the accidental sliver: parking the bottom edge
+   one content gap (--sat + 14px) above the scrollport means a 62px inset needs
+   ~76px of bounce before ANY of the mark is on screen, so a momentum twitch at the
+   top shows nothing and only a deliberate pull does. Past ~178px it sits wholly
+   below the safe area, clear of the clock and the Dynamic Island.
+
+   Opacity, not a second colour: #fff3d3 ink at .55 over the midnight backdrop
+   measures ~#928b7d, which is --text-3 (#8f8578) to the eye. No animation, so
+   prefers-reduced-motion has nothing to degrade. Guard:
+   tests/overscroll-wordmark-audit.mjs */
+.screen--today { position: relative; }
+.screen--today::before {
+  content: ""; position: absolute; left: 50%; margin-left: -75px;
+  top: calc(-54px - var(--sat)); width: 150px; height: 40px;
+  background: url(assets/brand/wordmark.png) center / contain no-repeat;
+  opacity: .55; pointer-events: none;
+}
+
 /* ---------- header ---------- */
 .day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 8px; }
 /* Today leads with the Bonehead and nothing above it. The day controls sit with
