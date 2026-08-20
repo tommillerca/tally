@@ -175,6 +175,25 @@ export async function rerollRack() {
    ponytail: single key, promote to an owned-list + a picker when a second aura
    ships and taking one off becomes a thing a player can want. */
 export async function wornAura() { return (await kvGet('wpnaura', null)) || null; }
+/* A COSMETIC YOU CANNOT TAKE OFF IS NOT A COSMETIC. Buying the aura writes
+   kv `wpnaura` and, until this existed, there was no way back: a player spent
+   1,200 coins and was stuck with the halo permanently, on every weapon, forever.
+   That is a worse outcome than not selling it. Ownership is the grant (kv
+   `rackbuy:` and `cos:`), so taking it off does NOT un-buy it and putting it
+   back costs nothing. `null` is off, and wornAura already treats a falsy value
+   as none. */
+export async function setWornAura(key) { await kvSet('wpnaura', key || null); return (await wornAura()); }
+/* OWNERSHIP IS THE PURCHASE CLAIM, NOT WHETHER IT IS CURRENTLY WORN, and the
+   difference is the whole point. MEASURED before this existed: after a real
+   1,200-coin buy, ownedCosmeticIds() does NOT contain the aura key, because
+   grantCosmetic keys off BH item ids and an aura is not one. So kv `wpnaura`
+   was the ONLY record of the purchase, and a wear/take-off toggle built on it
+   would have ERASED THE PURCHASE on the first tap: the tile returns to selling
+   it and the player pays 1,200 again for something they already bought.
+   The durable record already exists. `rackbuy:<key>` is written inside the same
+   addIfAbsent transaction that authorises the spend, it is never removed, and it
+   is what makes a second buy a no-op. Read that instead. */
+export async function ownsAura(key) { return (await kvGet(`rackbuy:${key}`, null)) != null; }
 
 /* ---------- THE PURCHASE ----------
  *

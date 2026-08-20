@@ -8487,7 +8487,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 /* The 44px floor is for CONTROLS, not for the word between them. Scoping this
    to `> *` made the "or" a 44px-tall element, which added 49px to every tile
    and made the runner report it as a tap target. */
-.rk-buy > button, .rk-buy > .rk-owned { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
+.rk-buy > button, .rk-buy > /* The aura's wear/take-off control. Same footprint as a price pill so the tile
+   does not jump when it flips, and it reads as a state rather than a purchase:
+   nothing here spends. */
+.rk-aura-toggle { width: 100%; min-height: 44px; border-radius: 11px; background: none;
+  border: 1.5px solid var(--line-strong); color: var(--text-2); font-weight: 800;
+  font-size: 12.5px; letter-spacing: .02em; display: inline-flex; align-items: center;
+  justify-content: center; gap: 6px; }
+.rk-aura-toggle.on { border-color: rgba(125, 200, 255, .7); color: #7dc8ff; }
+.rk-owned { justify-content: center; padding: 4px 6px; font-size: 14px; min-height: 44px; }
 
 /* OUT OF REACH IS STILL A PRICE. The shipped [disabled] grey-out was rejected:
    with 380 coins and no dust every price on this rack is out of reach, and 16

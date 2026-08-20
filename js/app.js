@@ -22,6 +22,7 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
+  setWornAura, ownsAura,
   rack, rerollRack, buyRackItem, wornAura,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
@@ -6560,12 +6561,17 @@ async function renderShop(el) {
      framing: a plain common katana nobody is selling carries it, the tile is
      tagged AURA / ANY WEAPON, and the name says Aura. "Any weapon" is the word
      that kills "I am buying this sword". */
+  /* WORN and OWNED are different things, and conflating them is what made the
+     aura unremovable: the tile read `auraWorn === key` as "owned", so taking it
+     off would have put it back on sale. Ownership is the grant. */
   const auraOwned = auraWorn === RACK_AURA.key;
+  const auraOwnedEver = await ownsAura(RACK_AURA.key);
   const rackAuraTile = () => `<div class="rk r-${RACK_AURA.rarity} aura${auraOwned ? ' owned' : ''}">
     <button class="rk-stage fit-hand" data-tryon="AURA" data-coin="${RACK_AURA.coin}" data-dust="${RACK_AURA.dust}" aria-label="Try on ${esc(RACK_AURA.name)}"
       ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { thumb: 384, wpnAura: RACK_AURA.key, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
     ${rackTag(RACK_AURA.rarity)}<b>${esc(RACK_AURA.name)}</b>
-    ${auraOwned ? `<div class="rk-buy"><span class="rk-owned">${ICONS.check(13)} Owned</span></div>`
+    ${auraOwnedEver
+      ? `<div class="rk-buy"><button class="rk-aura-toggle${auraOwned ? ' on' : ''}" data-aurawear="${auraOwned ? '' : RACK_AURA.key}">${auraOwned ? `${ICONS.check(13)} Worn` : 'Wear it'}</button></div>`
       : `<div class="rk-buy">${rackPrice(RACK_AURA.key, 'coin', RACK_AURA.coin, coinBal)}<i class="rk-or">or</i>${rackPrice(RACK_AURA.key, 'dust', RACK_AURA.dust, dustBal)}</div>`}
   </div>`;
   /* TRY-ON, and it is the deliberate opposite of the grid. The grid is neutral
@@ -6865,6 +6871,14 @@ async function renderShop(el) {
     }));
   }
   wireRackBuys(el);
+  /* WEAR / TAKE OFF, and deliberately NOT behind armToConfirm. The two-tap arm
+     exists so a stray tap cannot SPEND; this spends nothing and is free to undo,
+     so a confirm step here would be friction pretending to be safety. */
+  el.querySelectorAll('[data-aurawear]').forEach(b => b.addEventListener('click', async () => {
+    await setWornAura(b.dataset.aurawear || null);
+    toast(b.dataset.aurawear ? `${RACK_AURA.name} on. Every weapon carries it.` : `${RACK_AURA.name} off. It stays yours.`, 2200);
+    rerender();
+  }));
   el.querySelectorAll('[data-tryon]').forEach(b => b.addEventListener('click', () => rackTryOn(b.dataset.tryon, +b.dataset.coin, +b.dataset.dust)));
   /* THE REROLL SPENDS, so it arms first like every other spend in the game. The
      free one does not, because there is nothing to protect the player from. */
@@ -15653,7 +15667,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v409'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v410'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
