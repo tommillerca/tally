@@ -9,6 +9,48 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## PARKED 2026-08-19: cosmetics for pets
+
+Tom asked for a shop section for pet cosmetics, tested with a wardrobe hat on the
+lizard. Rendered six hats on the lizard and his verdict was: **"let's pause that
+project, the hat lizard thing. doesnt look great"**. Parked, not cancelled.
+
+**What was learned, so nobody re-derives it.**
+
+The mechanism WORKS. The lizard is already assembled from seven separate layer
+PNGs (base, lid, tongue, mouthline, drool, fly) in `js/petanim.js`, so there is a
+real layer stack to insert a garment into rather than one flat sprite. Of six
+hats tried, `H12-1` (the blue cap) read convincingly as a cap the animal is
+wearing, and `H10-4` and `H1` read acceptably.
+
+**PLACEMENT CANNOT BE DERIVED FROM THE ART, and this is the finding.** Three
+heuristics were tried and every one put the hat on the wrong part of the animal:
+- alpha bounding box: the topmost ink is the spiky crest and the FLY layer, not
+  the skull, so hats landed above and left of the head
+- per-column alpha tops: same problem
+- colour detection of the cream face plate: caught the belly highlights and the
+  underside as well as the face, bbox 24-201 x 24-142, useless as an anchor
+
+The lizard's head is the large cream mass and nothing in the art or the code says
+so. The bonehead's slot system works only because every garment is drawn on the
+same 640 canvas in the same position; pets have no equivalent. So a real
+implementation stores a HAND-AUTHORED anchor per species: head centre x, crown y,
+head width. For the lizard, measured by eye: `{ cx: 158, cy: 40, w: 82 }` against
+its 225x170 art.
+
+**Why it still did not look good enough.** The hats are drawn for a HUMAN-SHAPED
+SKULL. On a bearded dragon the ones that work do so by luck of silhouette, and
+the ones that fail cannot be rescued by better placement. Reusing wardrobe art
+is the cheap path and it is the wrong one.
+
+**What would change the answer:** pet-specific cosmetic art from Cam, drawn for
+each species' head, rather than wardrobe hats reused. At that point the anchor
+work is small and already understood.
+
+**Do not restart this by trying to place bonehead hats more cleverly.** That was
+tried and the ceiling is the art, not the maths.
+
+
 ## DECISION 2026-08-18: the garden refund pays the FULL 5,500, not a reduced amount
 
 Tom, asked directly after being shown what it costs: **"full refund of 5500"**.
