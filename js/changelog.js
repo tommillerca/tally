@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 411, date: '2026-08-20', title: 'A new face on your home screen', items: [
+    'Cam drew the app a proper icon: the skull, with the lime eyes.',
+  ] },
   { n: 410, date: '2026-08-19', title: 'The Shop is open', items: [
     'Nine cosmetics a week, shown on your own Bonehead. Tap the magnifier on any tile to try it on for free before you spend anything.',
     'Pay in coins, or pay in Bone Dust if you would rather have that exact piece. Anything you buy is free to wear afterwards.',
