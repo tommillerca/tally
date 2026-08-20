@@ -112,7 +112,7 @@ const DRAWERS = {
   'recipeIconHtml': { size: 1, kindArg: 0, def: 24, floor: 16, art: 'PIX_CUR', prefix: 'recipe/' },
   /* v411: the four pack badges that have a drawing. Sites that pass bhIcon a
      tint are deliberately NOT routed through this and stay vector. */
-  'badgePixHtml':   { size: 1, kindArg: 0, floor: 16, art: 'PIX_CUR', note: 'badge-skull / trophy / crown / signpost' },
+  'badgePixHtml':   { size: 1, kindArg: 0, floor: 16, art: 'PIX_CUR', note: 'badge-skull / trophy / crown / signpost / footprint' },
   'iconHtml':       { size: 1, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, the reveal card' },
   'iconAt':         { size: 3, kindArg: 0, floor: null, prefix: 'wheelprize/', note: 'js/wheel.js, inside the wheel svg' },
   'pixPrizeImg':    { size: null, floor: 16, fixed: 'wheelprize', art: 'ALWAYS', note: 'js/wheel.js, always asks pixCur for 48' },

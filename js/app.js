@@ -8911,13 +8911,18 @@ async function renderFriends(el) {
     const race = await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
     if (!card || !card.isConnected) return;
+    /* THE STEP-RACE TILE ASKS 24 ON PURPOSE, in both banners below. The footprint
+       medallion has a decorative circular frame and pixCur snaps 21 down to 16,
+       where the frame mushes and a 16px mark sits corner-jammed in the 38px tile.
+       Measured in the render at 440x956: 21 -> 16px of art at inset 1,5 of the
+       tile; 24 -> 24px centred. Do not put it back to 21. */
     /* NEVER DEFAULT TO HIDDEN (anti-regression rule 8). The banner used to bail
        whenever the fetch came back empty, which is exactly the state the race
        launches in: on day one nobody has synced a step, so the announcement said
        "SEE THE BOARD" and the board did not exist. Degrade to ugly, not gone. */
     if (!race) {
       card.innerHTML = `<summary>
-        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>Could not reach the Crew server. Your steps are still counting.</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
@@ -8959,7 +8964,7 @@ async function renderFriends(el) {
     card.innerHTML = `
       <summary>
         <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
-        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
           <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
           <small>${standing}</small>
@@ -15696,7 +15701,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v415'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v416'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
