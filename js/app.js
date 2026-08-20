@@ -2456,7 +2456,7 @@ function route({ keepScroll = false } = {}) {
   if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
   const el = $('#screen');
   if (isNav) el.classList.remove('screen-in');
-  let done;
+  let done, isToday = false;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
   if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
   else if (tab === 'bonehead') done = renderBonehead(el);
@@ -2468,9 +2468,13 @@ function route({ keepScroll = false } = {}) {
   else if (tab === 'friends') done = renderFriends(el);
   else if (tab === 'settings') done = renderSettings(el);
   else if (tab === 'boneyard') done = renderBoneyard(el);
-  else done = renderToday(el);
+  else { isToday = true; done = renderToday(el); }
   // the map fills the screen, so this route drops the usual padding and scroll
   el.classList.toggle('screen--map', tab === 'boneyard');
+  /* Today carries the overscroll wordmark above the top of its scroller (app.css).
+     Flagged by the branch that actually renders Today rather than by a second list
+     of tab names, so a new tab cannot inherit the mark by accident. */
+  el.classList.toggle('screen--today', isToday);
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
