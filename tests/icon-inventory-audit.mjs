@@ -177,6 +177,7 @@ const EMITTERS = {
   'js/app.js:THANKS_MARK':       ['brand', 'the TestFlight mark on the beta thank-you card.'],
   'js/app.js:SPK_ON':            ['icon', 'the sound-on speaker control.'],
   'js/app.js:SPK_OFF':           ['icon', 'the sound-off speaker control.'],
+  'js/talkbox.js:talkBoxHtml':   ['icon', 'the talk box\'s "next" chevron, the only picture in the dialogue markup. Vector by design and no pixel art exists: it is a control glyph sized by the box, not currency, so an icon swap has nothing to do here. The box itself is dialogue UI, not iconography.'],
   /* ---- data drawn as svg ---- */
   'js/app.js:barChart':           ['chart', 'the day-total bars.'],
   'js/app.js:kcalChart':          ['chart', 'the calorie history line.'],
