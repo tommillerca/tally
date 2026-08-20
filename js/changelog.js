@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 414, date: '2026-08-20', title: 'Pull down on Today', items: [
+    'Tug the Today screen past the top and the Boneheadz wordmark is printed up there, above the world.',
+  ] },
   { n: 413, date: '2026-08-20', title: 'Quests rotate properly', items: [
     'Your three daily quests are the same three all day now, whatever else you unlock. They used to shuffle when a gate opened, which quietly handed out extra rewards.',
     'Fixed: claiming your dailies on a Monday could lock you out of every weekly quest for the rest of the week.',
