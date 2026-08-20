@@ -1491,7 +1491,11 @@ body::before {
    landscape where a flat 230 would be arbitrary.
    The vh line stays ahead of the svh line for the same reason it always has: a
    browser that cannot parse svh drops that declaration and falls back. */
-.fight-body > .arena { flex: none; height: clamp(183px, calc(100vh - var(--sat) - 552px), 230px); }
+/* +100px, RECLAIMED, NOT INVENTED: the HUD row measured 92.4px tall plus its
+   8px bottom margin, and it is out of flow now, so the reserve drops 552 -> 452
+   and both clamp ends rise by the same 100. The floor stays the floor Tom's
+   three-rows-of-buttons fix bought (183 -> 283 is the same flow height). */
+.fight-body > .arena { flex: none; height: clamp(283px, calc(100vh - var(--sat) - 452px), 330px); }
 /* @SUPPORTS, NOT A SECOND DECLARATION, AND THIS RULE ONLY NEEDED IT TODAY.
    The old arena height was `calc(100svh - 552px)` with no var() in it, so the
    conventional two-declaration fallback worked: an old browser cannot parse svh,
@@ -1506,9 +1510,9 @@ body::before {
    Caught by tests/dvh-fallback-audit.mjs on the first gate run after that guard
    was unblocked. It is the reason this pattern is a condition and not a pair. */
 @supports (height: 100svh) {
-  .fight-body > .arena { height: clamp(183px, calc(100svh - var(--sat) - 552px), 230px); }
+  .fight-body > .arena { height: clamp(283px, calc(100svh - var(--sat) - 452px), 330px); }
 }
-.fight-body > .fight-hud, .fight-body > .fight-meta,
+.fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
    and scrolls inside it, so a four-move turn, a ten-row spell list and the open
@@ -1603,17 +1607,22 @@ body::before {
   display: grid; gap: 6px; justify-items: center;
 }
 /* fighting-game HUD: compact bars in the arena's top corners, hard center gap */
-/* ITS OWN ROW. This was position:absolute top:0 INSIDE .arena with an opaque
-   background, which meant it did not sit beside the scene, it sat on top of it.
-   Measured at 375x667 against a mage den: 92.4px of HUD over a 292px arena left
-   197.6px of scene, and 110.4px of the 262px boss figure rendered behind the
-   bars. The arena's own box is the scene now, so every pixel of it is playable
-   picture and the figure cannot be occluded by chrome that outranks it. */
+/* A LID ON THE ARENA, AND NOT A CARD. It sat here before with an opaque
+   background, which meant it did not sit beside the scene, it sat ON it:
+   measured at 375x667 against a mage den, 92.4px of HUD over a 292px arena left
+   197.6px of scene and rendered 110.4px of the 262px boss behind the bars. That
+   was the PLATE's fault, not the position's. Tom, 2026-08-20, wants the scene
+   back: "the health bars go on top of the background? then we get more room in
+   the space for the immersive fighting sequences". So the surface, the border
+   and the card radius are gone and the bars float on the backdrop the way a
+   fighting game puts them there; the arena keeps the ~100px the row used to
+   spend. Legibility comes from a drop shadow, not from a fill, because a fill is
+   what stole the picture last time. */
 .fight-hud {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-  padding: 9px 10px 8px; pointer-events: none; margin-bottom: 8px;
-  background: var(--surface); border: 2px solid var(--ink);
-  border-radius: var(--radius); box-shadow: var(--sh-sm);
+  padding: 8px 8px 0; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .85));
 }
 /* min-width:0 is load-bearing: without it a long foe name sets the flex floor,
    both sides sum past 100% and the arena's overflow:hidden eats the right HUD */
@@ -7682,7 +7691,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    keeps his own shadow well below the robe. */
 .arena.boss-mage .fighterG.foe-side { width: 208px; }
 #foeStage.mage-foe {
-  width: 100%; height: clamp(148px, 75cqh, 262px); align-self: end;   /* 46 -> 75: same re-basing onto the arena, and it keeps his full 262px on the
+  /* 75 -> 54cqh. NOT a shrink: he is bigger on every phone than he was before
+     (152.8 against 148 at 375x667, 178.2 against 172.5 at 430x932), because the
+     arena grew 100px underneath him. It is a RE-BASING. cqh is the arena, so
+     handing the arena the HUD's old row handed HIM 75% of it, and he grew right
+     back up behind the bars the HUD had just stopped covering: measured 47.4px
+     of his ink over the band at 375x667 and 33.9px at 430x932, which is a
+     smaller replay of the 110.4px that got the HUD evicted in the first place.
+     The band is 81.4px, his lift is 8cqh, so the ceiling is (A - 81.4 - lift)/A,
+     worst at the short phone: 63%. 54 leaves 13.6px of measured clearance there
+     after the ink slop, rather than sitting on the ceiling. */
+  width: 100%; height: clamp(148px, 54cqh, 262px); align-self: end;   /* the 262 cap and the 148 floor are unchanged: /* 46 -> 75: same re-basing onto the arena, and it keeps his full 262px on the
      352px arena a 390x844 phone gives him. The 196px floor came down to 148
      because a floor is only a floor if the box can hold it: 196 + his 30px lift
      is 226, which does not fit the 183px arena a 375x667 phone can afford. At
@@ -7810,20 +7829,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    by a screenful of empty floor (measured at ~450px before this) */
 .fight-body > .arena { transition: min-height .35s ease, height .35s ease, opacity .3s ease; }
 .fight-body.fight-settled > .arena { flex: 0 0 auto; min-height: 0; height: 0; opacity: 0; overflow: hidden; margin: 0; border: 0; }
-/* THE HUD COLLAPSES WITH THE ARENA. While it was absolutely positioned INSIDE
-   .arena it was collapsed for free, by the arena's own height:0 and
-   overflow:hidden. Moving it out of the arena took that away, and nothing here
-   replaced it: measured at 375x667 after a win, 94.4px of live HP bars stayed
-   on screen and pushed .fight-over from top 157.8 down to 260.2. Two dead bars
-   and an empty pet bar above a VICTORY banner is a smaller version of exactly
-   the complaint this class was written for (Tom, 2026-08-10, "huge blank gap at
-   the top of the screen"). It rides the same class flip as the arena and uses
-   the same transition, so the two leave together rather than in sequence. */
-.fight-body > .fight-hud { transition: height .35s ease, opacity .3s ease, margin .35s ease; }
-.fight-body.fight-settled > .fight-hud {
-  height: 0; opacity: 0; overflow: hidden; margin: 0; padding-top: 0; padding-bottom: 0; border: 0;
-}
-@media (prefers-reduced-motion: reduce) { .fight-body > .fight-hud { transition: none; } }
+/* THE HUD COLLAPSES WITH THE ARENA, FOR FREE AGAIN. It is back inside .arena,
+   so the arena's own height:0 and overflow:hidden take it out on the same class
+   flip and nothing here has to. The hand-rolled collapse that stood here while
+   the HUD was a sibling is deleted with it, and the reason it existed is worth
+   keeping: without it, measured at 375x667 after a win, 94.4px of live HP bars
+   stayed on screen and pushed .fight-over from top 157.8 down to 260.2. Two dead
+   bars over a VICTORY banner is a smaller version of Tom's 2026-08-10 "huge
+   blank gap at the top of the screen". If the HUD ever leaves the arena again,
+   that collapse has to come back with it. */
 .fight-body.fight-settled > .fight-actions,
 .fight-body.fight-settled > #fendrow { display: none; }
 @media (prefers-reduced-motion: reduce) { .fight-body > .arena { transition: none; } }
