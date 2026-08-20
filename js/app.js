@@ -521,6 +521,14 @@ async function boot() {
   }
   requestPersistence();
   S.sounds = (await kvGet('sounds', true)) !== false;
+  /* MUSIC DEFAULTS OFF, and it is the only preference here that does. Sounds,
+     haptics and glow all answer a tap the player just made, so defaulting them
+     on is answering a question they asked. A 79-second loop is not that: it
+     starts on its own and keeps going, and an app that begins singing at
+     somebody who never asked has done the rudest thing it can do on a phone in
+     a quiet room. So it stays silent until it is turned on, once, by hand.
+     tests/hollow-music-audit.mjs fails if that ever stops being true. */
+  S.music = (await kvGet('music', false)) === true;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
   S.glow = (await kvGet('glow', true)) !== false;
@@ -4184,6 +4192,80 @@ function hlwLine({ ripe, growing, planted, owned, seeds, firstEver, daysAway, na
   return pick(HLW_SAY.idle);
 }
 
+/* ---- THE HOLLOW'S MUSIC ----
+ *
+ * Tom's brief was one sentence and the second half of it is the requirement:
+ * "a stardew midi style song in the hollow while people farm but i want it to
+ * be SO easy to turn off and mute if the player doesnt want sound." So the
+ * whole design is about the OFF switch, not the song.
+ *
+ *   SILENT UNTIL TAPPED. S.music defaults false (see the boot comment), the
+ *   element is not even constructed until the player turns it on, and nothing
+ *   here is ever reached from boot.
+ *   TWO PLACES TO KILL IT. A pill in the top-left of the diorama, in the
+ *   player's thumb while they are farming, and the usual row in Settings
+ *   beside Sounds. Both write the same one preference.
+ *   IT IS A SEPARATE PREFERENCE FROM SOUNDS on purpose: the pops and the
+ *   level-up chimes are feedback on your own taps and plenty of people want
+ *   those and not a soundtrack. Killing music must not kill feedback.
+ *   IT STOPS WHEN THE HOLLOW DOES, and when the tab is hidden, or it would
+ *   play over every other screen and out of a pocket.
+ *
+ * The file carries a 2.5s crossfade baked into its own seam (the loop point
+ * measured 0.069 correlation, far too weak to hard-splice), so loop=true is
+ * the entire looping implementation. Measured on the decoded render, wrapped:
+ * the discontinuity at the join fell from 0.110 to 0.062 (0.29x to 0.17x of
+ * the file's own 99.99th-percentile step) and the level jump either side of it
+ * from 0.80x to 1.08x.
+ * ponytail: an <audio loop> can still leave a few ms of AAC container gap at
+ * the wrap. Upgrade to a Web Audio bufferSource only if a real gap is ever
+ * heard, because that costs ~30MB of decoded PCM held for the whole visit.
+ */
+const HLW_MUSIC_SRC = './assets/hollow/morningdew-loop.m4a';
+let hlwAudio = null;
+
+function hollowMusicStop() {
+  if (!hlwAudio) return;
+  hlwAudio.pause();
+  hlwAudio.currentTime = 0;
+}
+
+function hollowMusicPlay() {
+  if (!hlwAudio) {
+    /* Constructed on demand, never at boot. A player who never turns this on
+       never creates a media element and never fetches the file. */
+    hlwAudio = document.createElement('audio');
+    hlwAudio.id = 'hlwMusicEl';
+    hlwAudio.src = HLW_MUSIC_SRC;
+    hlwAudio.loop = true;
+    hlwAudio.volume = 0.45;   // under the keeper and the effects, not over them
+    document.body.appendChild(hlwAudio);
+    /* Hidden tab, or the OS taking the app away, which is the same event on
+       iOS. Registered once, with the element, so it cannot stack up over
+       repeated visits. On the way back it resumes only if the preference is
+       still on AND the Hollow is still the screen the player is looking at. */
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) hlwAudio.pause();
+      else if (S.music && document.getElementById('hollowBody')) hlwAudio.play().catch(() => {});
+    });
+  }
+  /* A rejected play() is a browser autoplay refusal, not a bug worth a toast:
+     the next tap starts it. */
+  return hlwAudio.play().catch(() => {});
+}
+
+/* The pill. Two states, and the OFF one has to still read as a control rather
+   than as a disabled thing, so it keeps its full shape and only loses the
+   accent. No animation on it at all, which is also how it satisfies
+   prefers-reduced-motion without a special case. */
+function hlwMusicBtnHtml(on) {
+  const wave = on
+    ? '<path d="M12 6.5c1.6 1.4 1.6 5.6 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14.6 4c2.9 2.5 2.9 9.5 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+    : '<path d="M12 6.5l6 7M18 6.5l-6 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>';
+  return `<svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true" style="display:block;overflow:visible">
+      <path d="M2.5 7.5h2.4L9 4.2v11.6L4.9 12.5H2.5z" fill="currentColor"/>${wave}</svg>`;
+}
+
 function openHollow(after) {
   /* Read ONCE, on the way in, and written on the way out. See the firstEver
      comment in render(): reading it per render made the welcome line expire
@@ -4192,8 +4274,14 @@ function openHollow(after) {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Hollow</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="hollowBody" style="padding:8px"></div>`,
-    { cls: '', onClose: () => { kvSet('hlwSeen', Date.now()); after?.(); } });
+    { cls: '', onClose: () => { kvSet('hlwSeen', Date.now()); hollowMusicStop(); after?.(); } });
   const body = $('#hollowBody', wrap);
+  /* Resume, not autoplay. Reaching this line took a tap on the kitchen and a
+     tap on the Grow door, and S.music is only ever true because the player set
+     it that way on a previous visit; a preference that has to be re-armed every
+     single visit is not a preference. The DEFAULT profile has S.music false, so
+     a player who has never touched the control hears nothing here, ever. */
+  if (S.music) hollowMusicPlay();
   /* y 500, not 560. His box is 190 tall, so on the 740 stage 560 put his own
      contact shadow 6 units past the bottom edge, and on a 667-tall phone his
      speech bubble, which is the screen's primary status text, sat 30px under
@@ -4308,6 +4396,13 @@ function openHollow(after) {
     <div class="hlw-vp"><div class="hlw-stage" id="hlwStage">
       ${hollowBackdropHtml({ band })}
       <div style="position:absolute;right:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:#f2e9d7">${ICONS.coin(14)} ${coin.toLocaleString()}</div>
+      ${/* THE MUTE, opposite the coin chip and in the same glass so it reads as
+            part of the same furniture rather than as a warning. It is on the
+            stage and not in the sheet header because the header scrolls away
+            and this is the control Tom asked to be reachable WHILE farming.
+            Slightly taller than the coin chip: that one is a readout and this
+            one is a thumb target. */''}
+      <button id="hlwMusic" aria-pressed="${S.music}" aria-label="${S.music ? 'Turn the music off' : 'Turn the music on'}" style="position:absolute;left:14px;top:14px;z-index:20;display:inline-flex;align-items:center;gap:7px;padding:13px 15px;border:0;border-radius:999px;background:rgba(13,12,18,.42);backdrop-filter:blur(10px);font-family:var(--display),Bangers,sans-serif;font-size:15px;letter-spacing:.06em;color:${S.music ? '#f2e9d7' : '#8f8578'};cursor:pointer">${hlwMusicBtnHtml(S.music)} MUSIC</button>
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME.x, y: HLW_FRAME.y, w: HLW_FRAME.w, h: HLW_FRAME.h, style: 'z-index:1;pointer-events:none' })}
       ${hlwArt('hollow-bed-frame', { x: HLW_FRAME_R.x, y: HLW_FRAME_R.y, w: HLW_FRAME_R.w, h: HLW_FRAME_R.h, style: 'z-index:1;pointer-events:none' })}
       ${beds.map((p, i) => `
@@ -4419,6 +4514,25 @@ function openHollow(after) {
     vp.style.height = Math.round(HLW_H * s) + 'px';
     clampSayNow = clampSay;
     requestAnimationFrame(clampSay);
+
+    /* NO `if (busy) return` ON THIS ONE, and that is the whole point of it.
+       Every other handler in here refuses while a ritual is animating, which is
+       right for a spend but exactly wrong for a mute: the moment somebody most
+       wants the sound gone is the moment something is happening. It repaints
+       the pill in place instead of calling render(), because render() is the
+       thing that refuses while busy. */
+    $('#hlwMusic', body)?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      S.music = !S.music;
+      await kvSet('music', S.music);
+      if (S.music) hollowMusicPlay(); else hollowMusicStop();
+      btn.innerHTML = `${hlwMusicBtnHtml(S.music)} MUSIC`;
+      btn.style.color = S.music ? '#f2e9d7' : '#8f8578';
+      btn.setAttribute('aria-pressed', String(S.music));
+      btn.setAttribute('aria-label', S.music ? 'Turn the music off' : 'Turn the music on');
+      btn.querySelector('svg')?.setAttribute('aria-hidden', 'true');
+      haptic.tap();
+    });
 
     $$('[data-bed]', body).forEach(btn => btn.addEventListener('click', () => {
       if (busy) return;
@@ -8953,6 +9067,10 @@ async function renderSettings(el) {
       <div class="seg" style="width:130px"><button id="sndOn" class="${S.sounds ? 'on' : ''}">On</button><button id="sndOff" class="${S.sounds ? '' : 'on'}">Off</button></div>
     </div>
     <div class="settings-row">
+      <div class="lab"><b>Hollow music</b><span>A slow loop while you farm, and nowhere else. There is a mute inside the Hollow too.</span></div>
+      <div class="seg" style="width:130px"><button id="musOn" class="${S.music ? 'on' : ''}">On</button><button id="musOff" class="${S.music ? '' : 'on'}">Off</button></div>
+    </div>
+    <div class="settings-row">
       <div class="lab"><b>Haptics</b><span>A little thump on collects, hits and level-ups</span></div>
       <div class="seg" style="width:130px"><button id="hapOn" class="${S.haptics ? 'on' : ''}">On</button><button id="hapOff" class="${S.haptics ? '' : 'on'}">Off</button></div>
     </div>
@@ -9110,6 +9228,12 @@ async function renderSettings(el) {
   $('#hapOn')?.addEventListener('click', async () => { S.haptics = true; setHaptics(true); await kvSet('haptics', true); haptic.success(); refresh(); });
   $('#hapOff')?.addEventListener('click', async () => { S.haptics = false; setHaptics(false); await kvSet('haptics', false); refresh(); });
   $('#sndOff').addEventListener('click', async () => { S.sounds = false; await kvSet('sounds', false); refresh(); });
+  /* Turning it ON here does NOT start playing: this is Settings, not the
+     Hollow, and a soundtrack starting under a preferences screen would be a
+     jump scare. Turning it OFF does stop it, because a player who came here to
+     kill a noise that is happening RIGHT NOW must have it stop right now. */
+  $('#musOn').addEventListener('click', async () => { S.music = true; await kvSet('music', true); refresh(); });
+  $('#musOff').addEventListener('click', async () => { S.music = false; await kvSet('music', false); hollowMusicStop(); refresh(); });
   $('#glowOn')?.addEventListener('click', async () => { S.glow = true; await kvSet('glow', true); popSound(S.sounds); refresh(); });
   $('#glowOff')?.addEventListener('click', async () => { S.glow = false; await kvSet('glow', false); refresh(); });
   $('#hkGuide')?.addEventListener('click', openHealthGuide);

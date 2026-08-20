@@ -104,6 +104,18 @@ const PRECACHE = [
   './js/hollow-art.js',
   './js/hollow-beds.js',
   './js/hollow-scene.js',
+  /* The Hollow's music loop. It is OPT-IN and off by default, so most installs
+     will never play it, and it is the largest single non-vendor entry in this
+     list (790KB, and install is a Promise.all, so every byte here is byte
+     weight on a first open that can fail). It is precached anyway for the
+     reason the rest of this list exists: the fetch fallback at the bottom of
+     this file answers a miss with index.html, and an <audio> handed HTML is a
+     control that does nothing when tapped, on the one screen where the control
+     is the whole feature. Measured by tests/precache-assets-audit.mjs as
+     BOOTS-WITHOUT, never FATAL: a blocked fetch here costs the song, not the
+     app. If install weight ever becomes the problem, this is the first entry
+     to drop and the runtime cache will pick it up on first play. */
+  './assets/hollow/morningdew-loop.m4a',
   './js/gear.js',
   './js/pets.js',
   './js/paddock.js',

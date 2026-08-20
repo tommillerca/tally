@@ -169,6 +169,27 @@ for (const [W, H] of SIZES) {
     m.hidden <= 2 || (m.scrolls && m.masked),
     `hides ${m.hidden}px, scrolls=${m.scrolls}, masked=${m.masked}`);
 
+  /* 6. THE WHOLE TRAY IS ON SCREEN, NO SCROLLING. Tom, 2026-08-16, on the fix
+     for the bug above: "the new fix for fighting makes the buttons hard to
+     scroll, I think we need to give the button section more real estate".
+     Checks 3 and 4 both accept a scrolling tray as long as it ANNOUNCES itself,
+     which is why they stayed green while the moves sat below the fold. This one
+     does not accept it: a move you have to scroll to is a move you miss on your
+     turn.
+     DIRECTION AND BOUND, not a trend: hidden pixels == 0 and no button's bottom
+     past the tray's own bottom edge, at scrollTop 0, at every supported width.
+     Measured on the shipped clamp (arena = svh - 462): tray 221px, content
+     221px, hidden 0 at both 390x844 and 375x667. The regression this pins
+     measured hidden 62px at 390x844 and 87px at 375x667 (arena = svh - 400),
+     which is a whole row of moves plus most of a second.
+     m.btns is read before check 2 scrolls anything, so belowTray is the
+     scrollTop-0 truth. */
+  const needsScroll = m.btns.filter(b => b.belowTray > 1);
+  ok(`NOSCROLL ${W}x${H}: the tray shows every move row without scrolling`,
+    m.hidden <= 0 && needsScroll.length === 0,
+    `hides ${m.hidden}px (bound 0), ${needsScroll.length} of ${m.btns.length} buttons past the edge` +
+      (needsScroll.length ? `: ${needsScroll.map(b => `"${b.label}" +${b.belowTray}px`).join(', ')}` : ''));
+
   /* 5. TAP TARGETS. */
   const small = m.btns.filter(b => b.h < 44 || b.w < 44);
   ok(`TARGET ${W}x${H}: every move button clears 44x44`, small.length === 0,

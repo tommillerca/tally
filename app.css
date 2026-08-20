@@ -1289,7 +1289,23 @@ body::before {
    for its tallest state, the open ITEMS door.
    258 WAS A NUMBER THE ART OUTGREW: the mage plate renders 292px tall, so that
    is the floor, not a nicety. */
-.fight-body > .arena { flex: none; height: clamp(292px, calc(100svh - 400px), 600px); }
+/* DERIVED, not guessed. Measured in a real mage fight at 390x844 and 375x667:
+   the tray's content is 221px (3 rows x 68px + 2 x 8px gap), the hud/meta/
+   endrow chrome is a constant 139px, and .fight-body is svh - 102 at both
+   sizes. So the arena height that leaves the whole tray visible is
+   svh - (102 + 139 + 221) = svh - 462. The old svh - 400 left 62px hidden on
+   the big phone and 87px on the small one, which is why the moves needed
+   scrolling to reach. The 205px floor is the small-phone value of the same
+   formula; the tray, not the arena, gets the leftover space now. */
+/* AND THE ART HAS TO SCALE WITH IT. cqh was already used to size both fighters
+   and it was INERT: nothing in this stylesheet ever declared container-type, so
+   46cqh and 24cqh fell back to the small viewport and the mage rendered the same
+   262px in a 205px arena as in a 470px one. Measured at 375x667 before this
+   line: 24.5px of the mage's ink on screen out of the 201.5px you see at
+   390x844, and the player's own head 35.9px behind the HUD.
+   The arena has a definite height, so it can be a size container. These are the
+   only two cqh rules in the app, both inside this box. */
+.fight-body > .arena { flex: none; height: clamp(205px, calc(100svh - 462px), 600px); container-type: size; }
 .fight-body > .fight-hud, .fight-body > .fight-meta,
 .fight-body > .fight-endrow { flex: none; }
 /* The tray is what absorbs the variation: it always gets the same leftover box
@@ -1404,7 +1420,20 @@ body::before {
      is measured, not chosen: the two columns sit 43px apart at 112px stages, and
      a stage overflows its 128px column by (stage-128)/2 each side, so 150 leaves
      21px between them. Anything past ~160 and they touch. */
-  width: clamp(112px, 24cqh, 150px); height: clamp(112px, 24cqh, 150px); min-height: 112px; border-radius: 16px;
+  /* THE UNIT WENT LIVE AND 24cqh IS NOT WHAT IT USED TO MEAN. While cqh fell
+     back to the viewport, 24cqh was 160-224 and this always rendered at its 150
+     cap. Against the ARENA it is 92 at 390x844, so honouring the original
+     expression as written would have shrunk the player 39% on the phone that
+     already composed. Measured: 130.5px stage before, 80px after.
+     Same shape as the mage below: what constrains a fighter is the SCENE, not
+     the arena. The HUD is an opaque 92.4px panel inside the arena's top and the
+     group sits 14px off the floor, so the room a fighter has is 100cqh - 106.
+     That is over the 150 cap at both 390x844 and 430x932, so those are untouched,
+     and it is 95 at the 205px arena of a 375x667 phone (cqh is the arena's
+     CONTENT box, so its 2px borders come off first), which renders 82.6px after
+     the 0.87 step-back and clears the HUD by 12px. */
+  width: clamp(92px, calc(100cqh - 106px), 150px); height: clamp(92px, calc(100cqh - 106px), 150px);
+  min-height: 92px; border-radius: 16px;
   background: transparent; border: none; overflow: visible;
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.5));
@@ -7151,7 +7180,14 @@ body::before {
    keeps his own shadow well below the robe. */
 .arena.boss-mage .fighterG.foe-side { width: 208px; }
 #foeStage.mage-foe {
-  width: 100%; height: clamp(196px, 46cqh, 262px); align-self: end;
+  /* 46cqh was written against a container that did not exist, so it always
+     resolved to the viewport and always lost to the 262 cap. Now cqh is the
+     arena, and the number that matters is the SCENE, not the arena: the HUD is
+     an opaque 92.4px panel pinned inside the arena's top, the group sits 14px
+     off the arena floor and the lift below adds 30, so what is left for him is
+     100cqh - 136. 262 is still his ceiling, so nothing changes on a phone with
+     room (470px arena at 430x932). */
+  width: 100%; height: clamp(104px, calc(100cqh - 136px), 262px); align-self: end;
   margin-bottom: 30px;                       /* the lift: he hangs, he does not stand */
   filter: drop-shadow(0 26px 16px rgba(0, 0, 0, 0.55));
 }
