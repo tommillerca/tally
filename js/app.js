@@ -492,6 +492,21 @@ function spawnPays(type) {
   return `${def.xp || 15} XP, plus ${ing}`;
 }
 
+/* THE HERB PATCH IS THE ONE VECTOR MARKER LEFT, and it is waiting on art, not on
+   wiring. Tom, 2026-08-20: "food ingredients till not pixel art". He is looking
+   at this: the Herb patch is THE food spawn (cooking.js SPAWN_FOOD gives it two
+   ingredients every time) and it is the most numerous marker out there, so seven
+   flat vector leaves is most of what the Boneyard looks like. coins, bones,
+   crate and rare all take pixel art below; this one cannot, because
+   assets/icons-pix has no food-find drawing in it. THE SEVEN INGREDIENTS ALL DO
+   have pixel art and all seven are wired (PIX_CUR keys them by INGREDIENTS id,
+   ingIconHtml reads them straight), so this is not a wiring miss anywhere else.
+   WHAT IS NEEDED IS ONE 48px DRAWING of a food find, and it is deliberately NOT
+   one of the seven: the spawn does not know which ingredient it carries until
+   you collect it ("ingredient is a surprise on collect, not previewed" in the
+   spawn pass), so putting marrow or graveroot on the marker would promise an
+   ingredient the find may not hold. `garden-seed` is itself already a stand-in
+   and now the wrong metaphor, since the seeds it was drawn for left the game. */
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
@@ -524,7 +539,44 @@ function spawnIcon(type, s = 20) {
    egg cluster still reads as eggs. The chests survive the same reduction because
    their silhouette is a box with a lid; a smooth ovoid has no edges to keep. */
 const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0', egg: 'icons-pix/egg' };
+/* THE SMALL STEPS TAKE THE BASIC DRAWING, and the reason is texture frequency,
+   not resampling. Tom, on the Boneyard: "chest does not look scaled that small
+   use the basic one", "egg stack looks bad scale that small use a basic one",
+   "some chests still dont have pixel art".
+   MEASURED, off assets, before anything was swapped. The 24px step is served by
+   a pre-made `-24` file and rendered at exactly 24 CSS px under
+   image-rendering:pixelated, so it is 1:1 with no browser resample.
+   AND THE `-24` FILES ARE NOT HAND-MADE SMALL VARIANTS, which is worth writing
+   down because their existence reads like they are, and that reading sends you
+   off to author a 24px drawing instead of fixing the real problem. Diffed pixel
+   by pixel against a Pillow NEAREST halving of their own 48: crates/common/f0-24
+   0 of 576 pixels differ, icons-pix/egg-24 0 of 576 differ. They are machine
+   halvings, and the slot exists only to save the browser the halving. So colours
+   in == colours out and NOTHING gets resampled anywhere on that path.
+   What breaks is FREQUENCY: the detailed chest
+   spends 31 colours on 333 ink pixels (9.3 per 100) at a median luminance of 53,
+   which on the Boneyard's near-black basemap is a smudge with no silhouette
+   left. icons-pix/crate.png over the same 24 box is 26 colours on 335 ink pixels
+   (7.8 per 100) at median luminance 97, so it is a third fewer colours and
+   nearly twice as bright. Same drawing Tom already picked for exactly this
+   problem in crateChip below ("just use the backpack chest icon that is
+   simpler for the crate in that screen if it doesnt work shrunken").
+   AND IT GIVES THE 16 STEP AWAY FREE, which is the other half of the bug: the
+   `-24` file is the only small art these kinds had, so crateIcon's floor was 24
+   and every site under it silently drew the old vector. That is the `far` spawn
+   beacon on the map (asks 16) and the map key (asks 20, snaps to 16), which is
+   literally "some chests still dont have pixel art". pixCur owns the snapping
+   and still returns null under 16, so the tiny inline glyphs keep their vector.
+   GOLDEN IS DELIBERATELY NOT IN HERE. It never spawns on the map (spawnIcon only
+   ever asks for 'daily'), its -24 is bright already (median luminance high
+   enough to read), and pixCur has no gold chest, so routing it here would cost
+   the gold identity to fix a screen that is not broken. */
+const CRATE_ICON_BASIC = { daily: 'crate', egg: 'egg-basic' };
 function crateIcon(kind, s = 22) {
+  if (s < 48) {
+    const basic = pixCur(CRATE_ICON_BASIC[kind], s);
+    if (basic) return `<span class="bhi-wrap">${basic}</span>`;
+  }
   const pix = CRATE_ICON_PIX[kind];
   if (pix && s >= 24) {
     const px = s >= 48 ? Math.floor(s / 48) * 48 : 24;
@@ -553,18 +605,43 @@ function crateChip(kind, s = 16) {
   return `<span class="crate-chip${kind === 'golden' ? ' rare' : ''}">${pix
     || bhIcon(kind === 'golden' ? 'crate-golden' : 'crate-daily', s)}</span>`;
 }
+/* THE MINI-BOSS SKULL, one number for the map and the key. It was 17 in both
+   places, and 17 is not a step: pixCur snaps 25..47 down to 24 and 16..24 down
+   to 16, so the request rendered 16 real px inside a 34px disc. Tom: "mini boss
+   den scale up skill it's too small". 24 is the next real step up, and the disc
+   grows to 42 with it (app.css) so the skull sits at 24-in-36-of-inner-room,
+   the same fill ratio a coin pile has had all along. A shared constant because a
+   fight marker drifting from its own legend row is the bug directly under this. */
+const MINI_SKULL_PX = 24;
 // The Boneyard map key: every marker type that can appear out there, rendered with
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
 function mapLegendHtml() {
   const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
-  const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type)}</div>`;
-  const mini = `<div class="map-mini-mark">${badgePixHtml('badge-skull', 17)}</div>`;
+  /* 24 EXPLICITLY, because that is what the map draws (the `s.far ? 16 : 24` in
+     the spawn pass below). The default was 20, which pixCur snaps DOWN to 16, so
+     every pixel swatch in the key was a step smaller than its own marker and the
+     crate and the egg fell under crateIcon's floor and drew the OLD VECTOR next
+     to a pixel map. Tom: "legend doesnt have updated pixel art icons".
+     .leg-ico lost its 0.82 transform in the same change (app.css): 42px fits a
+     44px cell without it, and scaling pixel art by 0.82 rendered a 16px sprite
+     at 13.1 real px, which is the one place on this path something WAS being
+     resampled. */
+  const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type, 24)}</div>`;
+  const mini = `<div class="map-mini-mark">${badgePixHtml('badge-skull', MINI_SKULL_PX)}</div>`;
   const rows = [
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
     [spawn('crate'), 'Buried crate', 'A common crate of loot'],
-    [spawn('herbs'), 'Herb patch', 'Seeds for the Bone Garden'],
+    /* NOT "Seeds for the Bone Garden" any more. The Bone Garden left the
+       player's path 2026-08-18 and the Boneyard supply change made the Herb
+       patch THE food spawn: SPAWN_FOOD gives it two cooking ingredients every
+       time, where everything else carries one about a fifth of the time. The row
+       was naming a screen that is gone and a payout it no longer gives.
+       ITS ICON IS STILL VECTOR ON PURPOSE, and it is the one thing on this list
+       that is: there is no pixel drawing for a food find yet (see the note on
+       spawnIcon). It matches the map, which is what this key is for. */
+    [spawn('herbs'), 'Herb patch', 'Two cooking ingredients'],
     [spawn('rare', ' rare'), 'Mystery egg', 'Rare: walk to hatch a pet'],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
     [den(), 'Boss den', 'A landmark boss: rare gear'],
@@ -14889,7 +14966,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-mini-mark';
-          el.innerHTML = badgePixHtml('badge-skull', 17);
+          el.innerHTML = badgePixHtml('badge-skull', MINI_SKULL_PX);
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
         } else {
@@ -15740,7 +15817,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v417'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v418'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

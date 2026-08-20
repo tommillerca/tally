@@ -3,6 +3,14 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 418, date: '2026-08-20', title: 'The Boneyard reads properly now', items: [
+    'The buried crate out on the map was a dark smudge at that size. It is the plain chest from your Backpack now, which is brighter and actually looks like a chest.',
+    'The Mystery egg is one clean egg instead of a stack of three, because three eggs fighting for the same twenty pixels turned to porridge.',
+    'Distant crates and eggs used to fall back to the old line drawings once they were far enough away. They keep their art now, all the way out.',
+    'Mini-boss markers were smaller than a coin pile, which is backwards. They are the same size as the rest of the map furniture now, and the skull on them is half again bigger.',
+    'The map key was showing old line drawings for the crate and the egg while the map beside it showed the new art. Every row in the key is now the exact marker you will find out there.',
+    'The key also claimed the Herb patch gave you seeds for the Bone Garden. That garden is gone; it gives you two cooking ingredients, and now it says so.',
+  ] },
   { n: 417, date: '2026-08-20', title: 'Your Bonehead talks now', items: [
     'The line on your home screen types itself out, one letter at a time, in a chunky pixel face. Tap it if you already know what it says and it jumps to the end.',
     'Tap your Bonehead and it answers you by name, and waits for you to tap before it goes.',
