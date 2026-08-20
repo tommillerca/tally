@@ -52,10 +52,15 @@
  *             "Mystery egg / Rare: walk to hatch a pet" on the other, and since
  *             the intro card is destroyed the moment the map starts, a player
  *             never sees them side by side and neither did any screenshot.
- *             Both strings are read out of the rendered DOM. Prove-red 2026-08-20
- *             in a throwaway tree with js/app.js:650 reverted to 'Mystery egg':
- *             three NAME rows go red ("the map key calls it", "the two surfaces
- *             agree", "both describe it as") with all five CONTROL rows green.
+ *             Both strings are read out of the rendered DOM. PROVEN RED twice
+ *             on 2026-08-20, each in a throwaway tree, with all five CONTROL
+ *             rows green in both runs:
+ *               revert the map key row to 'Mystery egg'  -> 2 red
+ *                 ("the map key calls it", "the two surfaces agree"),
+ *                 CONTROL 36 pixel imgs / 36 decoded
+ *               revert the intro card note to 'rare spawn · walk to hatch a pet'
+ *                 -> 1 red ("both describe it as"),
+ *                 CONTROL 37 pixel imgs / 37 decoded
  *
  * PROVE-RED, measured 2026-08-20 against origin/main at v417 (36ea2c6), which
  * has the same map and the same spawn field. FIVE rows go red and all four
