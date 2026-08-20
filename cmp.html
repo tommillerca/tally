@@ -1,0 +1,62 @@
+<!doctype html><meta charset=utf-8>
+<body style="margin:0;background:#0d0c12;font:13px/1.3 -apple-system,system-ui,sans-serif;color:#f2e9d7;padding:18px">
+<div id=out></div>
+<script>
+// EXACT copy of drawTrimmedArt from js/app.js, with two switches so the same
+// code path renders the current and the proposed behaviour.
+function draw(canvas, src, { pad=0.08, nn=true } = {}) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const iw=img.naturalWidth, ih=img.naturalHeight;
+      const off=document.createElement('canvas'); off.width=iw; off.height=ih;
+      const octx=off.getContext('2d'); octx.drawImage(img,0,0);
+      let x0=iw,y0=ih,x1=0,y1=0,found=false;
+      const d=octx.getImageData(0,0,iw,ih).data;
+      for(let y=0;y<ih;y++)for(let x=0;x<iw;x++){if(d[(y*iw+x)*4+3]>14){found=true;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}
+      if(!found){x0=0;y0=0;x1=iw-1;y1=ih-1;}
+      const bw=x1-x0+1, bh=y1-y0+1, cw=canvas.width, ch=canvas.height, p=1-pad*2;
+      const scale=Math.min(cw*p/bw, ch*p/bh, 7);
+      const dw=bw*scale, dh=bh*scale;
+      const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,cw,ch);
+      let s=img, sx=x0, sy=y0, sw=bw, sh=bh;
+      const k=Math.min(3,Math.floor(scale));
+      if(nn && k>=2){
+        const o=document.createElement('canvas'); o.width=bw*k; o.height=bh*k;
+        const c2=o.getContext('2d'); c2.imageSmoothingEnabled=false;
+        c2.drawImage(img,x0,y0,bw,bh,0,0,bw*k,bh*k);
+        s=o; sx=0; sy=0; sw=bw*k; sh=bh*k;
+      }
+      ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+      ctx.drawImage(s,sx,sy,sw,sh,(cw-dw)/2,(ch-dh)/2,dw,dh);
+      canvas.dataset.ink = bw+'x'+bh;
+      res();
+    };
+    img.onerror=()=>res();
+    img.src=src;
+  });
+}
+const ITEMS=[['G','G3','grillz'],['G','G4','grillz'],['G','G1','grillz'],['E','E1','earring'],['H','H13-5','hat']];
+const out=document.getElementById('out');
+(async()=>{
+  out.insertAdjacentHTML('beforeend',
+    `<div style="display:grid;grid-template-columns:70px 150px 150px;gap:12px;align-items:center;margin-bottom:8px;font-weight:700;color:#8f8578">
+       <div></div><div>NOW &nbsp;<span style="font-weight:400">192px source, nearest-neighbour</span></div>
+       <div>FIXED &nbsp;<span style="font-weight:400">640 master, smooth</span></div></div>`);
+  for(const [dir,id,label] of ITEMS){
+    const row=document.createElement('div');
+    row.style.cssText='display:grid;grid-template-columns:70px 150px 150px;gap:12px;align-items:center;margin-bottom:14px';
+    row.innerHTML=`<div><b>${id}</b><br><span style="color:#8f8578">${label}</span></div>`;
+    const a=document.createElement('canvas'); a.width=200; a.height=200;
+    a.style.cssText='width:150px;height:150px;background:#1b1a24;border-radius:12px';
+    const b=document.createElement('canvas'); b.width=200; b.height=200;
+    b.style.cssText='width:150px;height:150px;background:#1b1a24;border-radius:12px';
+    row.append(a,b); out.append(row);
+    await draw(a, `assets/bh/thumb/192/${dir}/${id}.png`, { nn:true });
+    await draw(b, `assets/bh/${dir}/${id}.png`, { nn:false });
+    row.firstElementChild.insertAdjacentHTML('beforeend',
+      `<br><span style="color:#6b6357;font-size:11px">ink ${a.dataset.ink} vs ${b.dataset.ink}</span>`);
+  }
+  document.title='ready';
+})();
+</script></body>
