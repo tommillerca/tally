@@ -14330,7 +14330,7 @@ async function renderBoneyard(el) {
             <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="blip-dot rare"></span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
+            <div class="legend-row"><span class="blip-dot rare"></span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · rare spawn · walk to hatch a pet</span></div></div>
           </div>
         </div>
       </div>
