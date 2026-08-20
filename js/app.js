@@ -3217,6 +3217,15 @@ async function renderToday(el) {
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
     if (!q) return;
     const res = await claimQuest(b.dataset.pkey, q, period);
+    /* The period is already paid out. This is reachable when a gate flips and
+       swaps a quest into a list whose slots are spent, so it has to explain
+       itself instead of leaving a dead button. */
+    if (res?.capped) {
+      const when = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
+      toast(`All ${res.cap} quests for ${when} are already claimed. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
+      refresh();
+      return;
+    }
     if (!res) return;
     trackEvent('quest_claim', { id: q.id, period });
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);

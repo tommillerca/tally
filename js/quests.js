@@ -9,7 +9,7 @@
 // eating less. Longer periods pay bigger (coins + crates) for tougher targets.
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
-import { claimDay } from './db.js';
+import { claimDay, db } from './db.js';
 import { keepersBoon } from './spires.js';
 import { award } from './game.js';
 import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
@@ -225,22 +225,87 @@ function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, 
   /* Callers that predate a gate must not silently lose quests, so an undefined
      flag means "no opinion, keep it". Only an explicit false hides one. */
   const off = (flag) => flag === false;
-  const avail = pool.filter(q =>
+  const ok = (q) =>
     (q.need !== 'hk' || hkConnected) && (q.need !== 'hunt' || huntEnabled) && (q.need !== 'social' || socialOn)
-    && !(q.need === 'pit' && off(pitTried)) && !(q.need === 'kitchen' && off(kitchenReady)));
+    && !(q.need === 'pit' && off(pitTried)) && !(q.need === 'kitchen' && off(kitchenReady));
+  /* ORDER THE WHOLE POOL FIRST, GATE SECOND.
+     This used to filter to `avail` and then draw indices against avail.length.
+     The seed is the period, so the draw looked stable, but the ARRAY it indexed
+     into was not: five flags (hkConnected, huntEnabled, socialOn, pitTried,
+     kitchenReady) change what avail contains, so the same day handed out a
+     different set of quests depending on how much the player had unlocked.
+     Different quests mean different `quest-<periodKey>-<id>` ledger keys, and
+     award() is idempotent per KEY, so each new set was freshly claimable.
+     Measured on the old code, one date, across all 32 flag states: 11 distinct
+     dailies reachable where 3 were intended, 8 weeklies where 3 were, 3 monthlies
+     where 2 were. 1315 XP/day against an intended 605.
+     Shuffling the full pool makes the sequence a property of the period alone.
+     A flag can now only decide whether a quest is SKIPPED, never where the
+     others sit, so unlocking something cannot reshuffle what came before it. */
   const rand = mulberry32(hashStr(seedStr));
-  const out = [], used = new Set();
-  while (out.length < n && used.size < avail.length) {
-    const i = Math.floor(rand() * avail.length);
-    if (used.has(i)) continue;
-    used.add(i); out.push(avail[i]);
+  const order = pool.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const out = [];
+  for (const q of order) {
+    if (out.length >= n) break;
+    if (ok(q)) out.push(q);
   }
   return out;
 }
 
-export function dailyQuests(date, opts = {}) { return pick(DAILY_POOL, 'quests:' + date, 3, opts); }
-export function weeklyQuests(date, opts = {}) { return pick(WEEKLY_POOL, 'weekly:' + weekKeyOf(date), 3, opts); }
-export function monthlyQuests(date, opts = {}) { return pick(MONTHLY_POOL, 'monthly:' + monthKeyOf(date), 2, opts); }
+/* How many claims a period is allowed to pay, ever. Exported because claimQuest
+   enforces it and the audit asserts against it. */
+export const QUEST_N = { day: 3, week: 3, month: 2 };
+
+/* Rows this period has already paid. Counted from the ledger rather than from
+   the quests currently on screen, because the whole bug was that the on-screen
+   set moves: a quest that has dropped out of view still spent its slot.
+
+   THE KEY PREFIX DOES NOT IDENTIFY THE TIER, AND TWO SEPARATE COLLISIONS PROVE IT.
+   1. A month key ('2026-08') is a prefix of every day key in that month
+      ('2026-08-20'), so `quest-2026-08-` matches daily rows.
+   2. Worse, and the reason this counts POOL MEMBERSHIP now: weekKeyOf() returns
+      the Monday's own date, so ON A MONDAY the week key and the day key are the
+      SAME STRING. A digit test cannot separate those, because both suffixes are
+      quest ids starting with a letter. Measured: three dailies claimed on Monday
+      2026-08-17 made the weekly count read 3, which is the weekly cap, so EVERY
+      weekly quest was refused for the rest of that week. Symmetrically, weeklies
+      claimed on a Monday ate that day's daily budget.
+
+   So the tier is decided by what the id IS, not by what the key looks like. The
+   pools are right here in this file, so this needs no convention, no naming rule
+   and no date parsing: a row counts against the day cap only if its id is a
+   DAILY_POOL id. An unknown id (a pool entry deleted in a later version, like
+   q-harvest when the Bone Garden closed) counts against nothing, which is the
+   safe direction: it can under-count a retired quest, never lock a player out. */
+const POOL_IDS = () => ({
+  day: new Set(DAILY_POOL.map(q => q.id)),
+  week: new Set(WEEKLY_POOL.map(q => q.id)),
+  month: new Set(MONTHLY_POOL.map(q => q.id)),
+});
+export function claimsThisPeriod(rows, periodKey, period = 'day') {
+  const pre = `quest-${periodKey}-`;
+  const ids = POOL_IDS()[period] || POOL_IDS().day;
+  return rows.filter(r => r.key.startsWith(pre) && ids.has(r.key.slice(pre.length))).length;
+}
+
+export function dailyQuests(date, opts = {}) { return pick(DAILY_POOL, 'quests:' + date, QUEST_N.day, opts); }
+export function weeklyQuests(date, opts = {}) { return pick(WEEKLY_POOL, 'weekly:' + weekKeyOf(date), QUEST_N.week, opts); }
+export function monthlyQuests(date, opts = {}) { return pick(MONTHLY_POOL, 'monthly:' + monthKeyOf(date), QUEST_N.month, opts); }
+
+/* Test hook: the audit needs the seeded order at FULL pool length to prove the
+   sequence is a property of the period and not of the gate flags. Deliberately
+   the same pick() the app uses, so the audit exercises the real ordering rather
+   than a re-implementation of it (same reason social.js carries __testApplyGrant). */
+export function __questOrder(period, date, opts = {}) {
+  const [pool, seed] = period === 'week' ? [WEEKLY_POOL, 'weekly:' + weekKeyOf(date)]
+    : period === 'month' ? [MONTHLY_POOL, 'monthly:' + monthKeyOf(date)]
+    : [DAILY_POOL, 'quests:' + date];
+  return pick(pool, seed, pool.length, opts);
+}
 
 /* ---------- state + claim ---------- */
 export function questState(q, ctx) {
@@ -250,12 +315,32 @@ export function questState(q, ctx) {
 }
 
 export async function claimQuest(periodKey, q, period = 'day') {
+/* TWO INDEPENDENT CEILINGS, AND BOTH RUN. The day guard came from the clock-trust
+   work and the per-period cap from the rotation fix; they were written against
+   the same function without either knowing about the other, and they stop
+   different things. Cheapest first: the day guard is a single claimDay() and
+   costs no db.all(), so a distrusted clock never pays for a ledger scan. */
   /* MONOTONIC DAY GUARD (js/db.js claimDay). Gated on TODAY rather than on
      periodKey, because periodKey is a week or month key for the other two
      tiers and only dayOrdinal-comparable for 'day'. Gating all three on the
      current day is also the stronger rule: a week and a month roll over off
      the same clock, so a distrusted today must not pay a weekly either. */
   if (!(await claimDay(dateKey())).fresh) return null;
+  /* THE BOUND, not a trend. Ordering the pool stops the set from churning, but
+     it is a property of one function that a later edit could quietly undo. This
+     is the ceiling that holds regardless: a period pays at most QUEST_N claims,
+     counted from the ledger, whatever is on screen. It also covers the rollout
+     of the ordering fix, which necessarily shows some players a different set
+     today than the one they already claimed from. */
+  const cap = QUEST_N[period] || QUEST_N.day;
+  const rows = await db.all('xp');
+  const already = claimsThisPeriod(rows, periodKey, period);
+  if (already >= cap && !rows.some(r => r.key === `quest-${periodKey}-${q.id}`)) {
+    /* Say so rather than returning null. A null here reaches a click handler that
+       does nothing at all, and a button that silently does nothing is the exact
+       failure the write-failure work went after. */
+    return { capped: true, cap, period };
+  }
   const xp = await award(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`);
   if (!xp) return null;
   // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
