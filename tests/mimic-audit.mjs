@@ -256,6 +256,44 @@ try {
     arena.eyeBox ? `left ${arena.eyeBox.l}% top ${arena.eyeBox.t}% width ${arena.eyeBox.w}%` : 'no eye plate');
   ok('ARENA hand-inked art is never mirrored', arena.mirrored === false);
 
+  /* THE ART ITSELF MUST DIFFER, and this is separate from the motion check on
+     purpose. Compositing an RGBA overlay onto the plate changes the pixels at
+     its antialiased edges EVEN WHEN THE TWO IMAGES ARE IDENTICAL, because the
+     alpha coverage doubles. Measured: eye crops regenerated from plate 1 (the
+     exact "the eyes never change" defect) still produced 4 distinct renderings
+     across a cycle and the motion checks all passed. So the sampler proves the
+     animation RUNS and is TIMED like a blink; this proves there is something to
+     see. Both are needed; neither is sufficient. */
+  const art = await page.evaluate(async () => {
+    const load = src => new Promise((res, rej) => {
+      const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(src)); i.src = src;
+    });
+    const { MIMIC_ART } = await import('./js/mimic.js');
+    const [plate, e2, e3] = await Promise.all(
+      [MIMIC_ART.plate, MIMIC_ART.eyes2, MIMIC_ART.eyes3].map(load));
+    // the band's rect inside the 640x518 plate, the same numbers the CSS uses
+    const BOX = { x: 117, y: 61, w: 244, h: 78 };
+    const px = img => {
+      const c = document.createElement('canvas');
+      c.width = BOX.w; c.height = BOX.h;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      if (img.naturalWidth === BOX.w) g.drawImage(img, 0, 0);
+      else g.drawImage(img, BOX.x, BOX.y, BOX.w, BOX.h, 0, 0, BOX.w, BOX.h);
+      return g.getImageData(0, 0, BOX.w, BOX.h).data;
+    };
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4)
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 16) n++;
+      return n; };
+    const P = px(plate), A = px(e2), B = px(e3);
+    return { total: BOX.w * BOX.h, openVsShut: diff(P, A), openVsHalf: diff(P, B), shutVsHalf: diff(A, B),
+             sizes: [e2.naturalWidth + 'x' + e2.naturalHeight, e3.naturalWidth + 'x' + e3.naturalHeight] };
+  });
+  ok('ART the two eye plates each really differ from the open-eyed plate',
+    art.openVsShut > 200 && art.openVsHalf > 200,
+    `${art.openVsShut} and ${art.openVsHalf} differing px of ${art.total}`);
+  ok('ART and they differ from EACH OTHER, so the eyes alternate rather than toggle',
+    art.shutVsHalf > 200, `${art.shutVsHalf} differing px, crops ${art.sizes.join(' / ')}`);
+
   /* ------------------------------------------------- 5. THE BLINK, IN PIXELS */
   /* The clock is DRIVEN, not waited on. Headless Chrome does not advance a CSS
      animation for a screenshot, so a real-time sampler reports "no motion" on a
