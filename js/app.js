@@ -406,8 +406,13 @@ async function refreshSlimedSlots() {
 
 // 4-point sparkle in the game's art style (flat gold fill, thick dark outline).
 // Replaces ✨/✦ emoji + text glyphs so decorations match Cam's illustrations.
-function sparkIco(s = 14, fill = '#ffe08a') {
-  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+/* A CALLER THAT ASKS FOR A COLOUR IS ASKING FOR THE VECTOR. The level-up sparks
+   are green on purpose; a PNG cannot be recoloured, so passing `fill` keeps the
+   svg. tests/icon-inventory-audit.mjs grades those sites VECTOR from the same
+   argument rather than reporting pixel art that never renders. */
+function sparkIco(s = 14, fill) {
+  return (fill ? null : pixCur('sparkle', s))
+    || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill || '#ffe08a'}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 }
 
 const ICONS = {
@@ -419,13 +424,17 @@ const ICONS = {
   star: (a, filled) => {
     const px = typeof a === 'number' ? a : 21;
     const on = typeof a === 'number' ? filled !== false : !!a;
+    /* Only the DECORATIVE star gets the drawing. Called with a boolean this is
+       a favourite/star TOGGLE, and one PNG cannot say "off", so the two-state
+       sites keep the outline-vs-fill svg. */
+    if (typeof a === 'number' && on) { const pix = pixCur('star', px); if (pix) return pix; }
     return `<svg class="ico" viewBox="0 0 24 24" style="width:${px}px;height:${px}px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`;
   },
   coin: (s = 14) => pixCur('coin', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
   flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
-  boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  boltIco: (s = 18) => pixCur('bolt', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
-  paw: (s = 23) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
+  paw: (s = 23) => pixCur('paw', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
 };
 
 /* Tier 1 additions. Stroke icons sized at the call site, so they can sit in a
@@ -450,12 +459,12 @@ ICONS.camera = (s = 18) => t1Stroke(s, `<path d="M3.4 8.4h3.4l1.6-2.4h7.2l1.6 2.
 ICONS.photos = (s = 18) => t1Stroke(s, `<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.4"/><path d="M3.6 16.4l4.6-4.4 3.4 3 3.2-3.6 5.6 5.4"/><circle cx="8.6" cy="9.4" r="1.5"/>`);
 ICONS.barcodeIco = (s = 19) => t1Stroke(s, `<path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/>`);
 ICONS.labelIco = (s = 19) => t1Stroke(s, `<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>`);
-ICONS.boltStroke = (s = 19) => t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
+ICONS.boltStroke = (s = 19) => pixCur('bolt', s) || t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
 ICONS.searchIco = (s = 18) => t1Stroke(s, `<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>`);
 
 ICONS.pit = (s = 22) => pixCur('pit', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
-ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
+ICONS.bone = (s = 18) => pixCur('bone', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
 ICONS.water = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2s6.2 6.6 6.2 10.8A6.2 6.2 0 0 1 5.8 14C5.8 9.8 12 3.2 12 3.2z" fill="#7cc4ff" stroke="#173a52" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.4 13.6a2.6 2.6 0 0 0 2.6 2.6" fill="none" stroke="#e8f5ff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 ICONS.bed = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#f2e9d7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3H9v3" fill="rgba(242,233,215,0.12)"/><path d="M5.5 11V9.4a1.6 1.6 0 0 1 1.6-1.6" /></svg>`;
 ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z" fill="#b6a8e8" stroke="#2a2340" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16.5" cy="7.5" r="0.9" fill="#f0ecff"/></svg>`;
@@ -549,7 +558,7 @@ function crateChip(kind, s = 16) {
 function mapLegendHtml() {
   const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
   const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type)}</div>`;
-  const mini = `<div class="map-mini-mark">${bhIcon('badge-skull', 17)}</div>`;
+  const mini = `<div class="map-mini-mark">${badgePixHtml('badge-skull', 17)}</div>`;
   const rows = [
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
@@ -572,7 +581,14 @@ function consumableIcon(type, s = 20) {
 }
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
 function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; const pix = pixCur(id, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
-function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+/* Dishes key on their iconId; the POTIONS have no iconId and all take the one
+   'potion' vial. Same shape as ingIconHtml above: pixel first, then the pack
+   vector, then the emoji. */
+function recipeIconHtml(r, s = 24) { const pix = r && pixCur(r.potion ? 'potion' : r.iconId, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+/* Pack badges that have a 48px drawing. Sites that pass bhIcon a TINT are not
+   routed here: pixel art cannot be recoloured, so they stay vector by calling
+   bhIcon directly. */
+function badgePixHtml(id, s) { return pixCur(id, s) || bhIcon(id, s); }
 // badges: map the emoji to a pack icon where we have one (else keep the emoji)
 const BADGE_ICON = {
   '💀': 'badge-skull', '👑': 'badge-crown', '🏆': 'badge-trophy', '🥊': 'badge-boxing',
@@ -1448,7 +1464,7 @@ function openRaceResults(podium) {
         <div class="rr-hero">
           <span class="rr-fig">${avatarLayersHtml(w.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
           <div class="rr-who">
-            <span class="rr-crown">${bhIcon('badge-trophy', 13)} 1ST</span>
+            <span class="rr-crown">${badgePixHtml('badge-trophy', 13)} 1ST</span>
             <b>${esc(w.name)}</b>
             <span class="rr-steps">${w.steps.toLocaleString()} <i>STEPS</i></span>
           </div>
@@ -1521,7 +1537,7 @@ async function hydrateRaceResult(el) {
   const w = podium[0];
   card.innerHTML = `
     <summary>
-      <span class="gbn-ico rr-ico">${bhIcon('badge-trophy', 21)}</span>
+      <span class="gbn-ico rr-ico">${badgePixHtml('badge-trophy', 21)}</span>
       <span class="gbn-txt">
         <i>THE STEP RACE · SETTLED</i>
         <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
@@ -2181,7 +2197,7 @@ function teaserWallHtml(n, px) {
 function dropRowIconHtml() {
   const all = dropCosmetics();
   const hero = all.find(i => i.slot === 'H' && i.rarity === 'legendary') || all[0];
-  return hero ? headshotHtml(teaserLook(hero, all), 32) : bhIcon('badge-crown', 26);
+  return hero ? headshotHtml(teaserLook(hero, all), 32) : badgePixHtml('badge-crown', 26);
 }
 
 function cosmeticTeaserBannerHtml() {
@@ -4105,7 +4121,7 @@ async function openSpireInfoSheet(info, onAct = null) {
         <div class="spp${keeperFit ? (held ? ' mine' : rival ? ' rival' : '') : ' empty'}">
           <span class="spot"></span>
           <span class="tower"><img src="assets/brand/tomb.png" alt=""></span>
-          ${wt.tier ? `<span class="ribbon t${wt.tier}">${bhIcon('badge-crown', 15)}${esc(wt.name.toUpperCase())}</span>` : ''}
+          ${wt.tier ? `<span class="ribbon t${wt.tier}">${badgePixHtml('badge-crown', 16)}${esc(wt.name.toUpperCase())}</span>` : ''}
           <span class="lvchip">LV ${lvl} TOWER</span>
           <div class="keeper">
             <div class="bh">${keeperFit
@@ -4130,7 +4146,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           ? 'Beat their warden and the tower flies your name instead. It keeps its level, and its level is how hard it has been fought over.'
           : 'Take it and it flies your name on the map for everyone who walks past.'}</p>
       <div class="den-walk">
-        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${s.dist != null ? esc(fmtDist(s.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough' : `Get within ${SPIRE_RADIUS_M} m to act`}</small></div>
       </div>
     </div>
@@ -4212,7 +4228,7 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
         ${odds.map(o => `<span class="${o.rarity}"><i>${o.pct}%</i>${o.rarity.toUpperCase()}</span>`).join('')}
       </div>
       <div class="den-walk">
-        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${den.dist != null ? esc(fmtDist(den.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough to fight' : `Get within ${DEN_RADIUS_M} m to start`}</small></div>
       </div>
     </div>
@@ -5321,7 +5337,7 @@ async function openKitchen() {
         ? `Pots full? Line up ${cook.queueLeft} more. Each starts on its own the moment the pot ahead of it is done, and the finished dish waits in your Pantry.`
         : 'Your line is full. The pot works through it while you are away.'}</p>` : ''}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
-        ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
+        ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
       ${pantry.length
         ? pantry.map((p, i) => { const r = RECIPE_BY_ID[p.recipeId]; return `<div class="crate-row"><span class="crate-ico">${r ? recipeIconHtml(r, 26) : (p.icon || '🍲')}</span>
@@ -5329,7 +5345,7 @@ async function openKitchen() {
             <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">${ICONS.close(13)}</button></div>`; }).join('')
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
-        <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
+        <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${recipeIconHtml(p, 26)}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
       <div class="sect-h">Transmute · once a day</div>
       <div class="crate-row transmute ${tmute.ready && tmute.canAfford ? '' : 'lack'}">
         <span class="crate-ico">${ingIconHtml(TRANSMUTE.yields, 26)}</span>
@@ -8951,7 +8967,7 @@ async function renderFriends(el) {
         <span class="gbn-chev">›</span>
       </summary>
       <div class="gbn-body">
-        ${race.champion ? `<div class="race-champ">${bhIcon('badge-trophy', 22)}
+        ${race.champion ? `<div class="race-champ">${badgePixHtml('badge-trophy', 22)}
           <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
         ${rows.length ? `<div class="race-lanes">
           ${rows.map(p => {
@@ -9450,7 +9466,7 @@ const NEWS = [
        box (a decoded <img> or an <svg>), and an emoji in a span is neither: it
        is the exact thing ext/news-discord-art removed from the row below, so
        shipping it here would have put it straight back. */
-    thumb: () => bhIcon('badge-crown', 34),
+    thumb: () => badgePixHtml('badge-crown', 34),
     open: () => openThanksCard() },
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
@@ -10449,7 +10465,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       <div class="grainy"></div>
       <div class="reveal-eyebrow">${streakMilestone ? 'Streak milestone' : 'Badge earned'}</div>
       <div class="reveal-body">
-        <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>
+        <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(48) : ICONS.star(48)}</div>
         ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
       </div>
       ${note ? `<p class="cele-note">${esc(note)}</p>` : ''}
@@ -14829,7 +14845,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-mini-mark';
-          el.innerHTML = bhIcon('badge-skull', 17);
+          el.innerHTML = badgePixHtml('badge-skull', 17);
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
         } else {
@@ -15994,7 +16010,7 @@ async function renderPit(wrap) {
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
-      <span class="t3-med">${bhIcon('badge-skull', 20)}</span>
+      <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
         ? 'beaten · a new one is here tomorrow, free'
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
@@ -16261,8 +16277,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="vs-inner">
           <div class="vs-name">YOU</div>
           <div class="vs-bones">
-            <span class="vs-bone l">${ICONS.bone(46)}</span>
-            <span class="vs-bone r">${ICONS.bone(46)}</span>
+            <span class="vs-bone l">${ICONS.bone(48)}</span>
+            <span class="vs-bone r">${ICONS.bone(48)}</span>
             <div class="vs-impact"></div>
           </div>
           <div class="vs-vs">VS</div>

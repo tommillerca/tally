@@ -21,6 +21,19 @@ const PIX_CUR = {
   ectoplasm: 'ectoplasm',
   marrow: 'marrow', graveroot: 'graveroot', ember: 'ember',
   bog: 'bog', sinew: 'sinew', salt: 'salt',
+  /* keyed by the RECIPES iconId so recipeIconHtml can look it up directly. The
+     six POTIONS have no iconId and all key on 'potion': they share ONE vial
+     drawing, which is a real gap waiting on recolours, not a finished state. */
+  'dish-broth': 'dish-broth', 'dish-hash': 'dish-hash', 'dish-stew': 'dish-stew',
+  'dish-skewer': 'dish-skewer', 'dish-fajita': 'dish-fajita',
+  'dish-feast': 'dish-feast', 'dish-kibble': 'dish-kibble',
+  potion: 'potion',
+  /* keyed by the icons-pack id, so badgePixHtml can look it up directly. */
+  'badge-skull': 'badge-skull', 'badge-trophy': 'badge-trophy',
+  'badge-crown': 'badge-crown', 'badge-signpost': 'badge-signpost',
+  /* the general marks. `bolt` serves BOTH ICONS.boltIco and ICONS.boltStroke,
+     which were two drawings of one idea. */
+  star: 'star', bone: 'bone', paw: 'paw', bolt: 'bolt', sparkle: 'sparkle',
 };
 export function pixCur(kind, s) {
   const f = PIX_CUR[kind];

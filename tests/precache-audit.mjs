@@ -53,6 +53,23 @@ const missing = [...reached].filter(m => !precached.has(m) && fs.existsSync(path
 ok('every module the app imports is precached', missing.length === 0,
   missing.length ? `MISSING: ${missing.join(', ')} (one failed fetch of any of these = a blank app)` : `all ${reached.size} covered`);
 
+/* AND EVERY PIXEL ICON THE APP CAN ASK FOR. Added 2026-08-20, when a 17-file
+   icon batch went in believing this file already covered the art. It did not:
+   it only ever read the `js/*.js` entries out of PRECACHE, so a drawing that
+   was wired up and never precached is a BLANK ICON on a bad connection, and
+   nothing went red. PIX_CUR is the authority on what pixCur can build a path
+   to, so derive from it rather than hand-listing.
+   PROVE-RED: delete any './assets/icons-pix/*.png' line from sw.js PRECACHE and
+   this names it. */
+const pix = fs.readFileSync(path.join(ROOT, 'js/icons-pix.js'), 'utf8');
+const pixArt = [...(pix.match(/const PIX_CUR = \{([\s\S]*?)\};/) || [, ''])[1]
+  .matchAll(/:\s*'([^']+)'/g)].map(m => `assets/icons-pix/${m[1]}.png`);
+const precachedArt = new Set([...arr.matchAll(/['"]\.\/(assets\/[\w./-]+)['"]/g)].map(m => m[1]));
+ok('SETUP the pixel-art table was actually parsed', pixArt.length > 20, `${pixArt.length} paths pixCur can build`);
+const artMissing = [...new Set(pixArt)].filter(a => !precachedArt.has(a)).sort();
+ok('every pixel icon pixCur can serve is precached', artMissing.length === 0,
+  artMissing.length ? `MISSING: ${artMissing.join(', ')} (a blank icon on one bar of LTE)` : `all ${new Set(pixArt).size} covered`);
+
 /* The reverse direction is a much smaller problem (a stale entry wastes a
    fetch) but a listed-but-absent path BRICKS the install for everyone, which
    is a documented rule in this repo, so it is worth the two lines. */
