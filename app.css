@@ -161,37 +161,66 @@ svg { display: block; }
    the rule present and absent: all 556 element rects on Today identical, first
    card y 76 and 76, scrollHeight 3034 and 3034.
 
-   WHY IT IS ANCHORED TO --sat, AND WHY THE OFFSET IS NOW SMALL. Any reveal that
-   arrives from above the scrollport necessarily enters THROUGH the status-bar
-   strip, exactly like a pull-to-refresh spinner; there is no placement that
-   avoids it, since the mark starts above y=0 by definition.
-   THE FIRST VERSION SHIPPED A THRESHOLD NOBODY COULD REACH. Tom, 2026-08-20,
-   after updating: "your patch notes say the word mark is there it isnt?" He was
-   right. Measured off the served CSS at three viewports: at --sat 59px the mark
-   sat at top -113px and needed 73px of rubber-band travel before a SINGLE pixel
-   appeared and 113px to be whole, at .55 opacity. The old note called that
-   deliberate ("only a deliberate pull does"), which was the error: it was tuned
-   so far past a real pull that the feature could not be seen at all, and the
-   guard never caught it because the guard only ever proved the rule costs no
-   LAYOUT, never that the reveal happens.
-   The constraint it was protecting was over-weighted. Clearing the clock and the
-   Dynamic Island on the FULL reveal is not worth an unreachable peek, and a
-   pull-to-refresh spinner crosses that same strip without anyone minding.
-   Now: top -(8 + --sat), 46px tall. At --sat 59 that is 23px of pull for the
-   first pixel and 67px to be whole; at --sat 47, 15px and 55px. 23px is a normal
-   pull. Opacity .55 -> .78 because a faint mark behind the status bar was the
-   second half of the same problem.
+   IT SHIPPED TWICE AND TOM NEVER SAW IT. Both misses are worth keeping, because
+   they were different mistakes.
+   v414 parked it at top -(54 + --sat), 150x40, opacity .55: at --sat 59 that was
+   73px of rubber-band travel before ONE pixel appeared and 113px to be whole,
+   and the note called that threshold deliberate. "i dont see it live?"
+   v415 cut the offset to -(8 + --sat) and grew it to 172x46, so 21px for the
+   first pixel. "your wordmark still isnt there." The threshold was no longer the
+   problem: a 172x46 sliver at 55% opacity sitting behind the status bar simply is
+   not something a person notices. (The v415 note claimed .55 -> .78 and the rule
+   shipped .55, because raising it turned the INK row red and the number got put
+   back while the sentence stayed. A guard steering the design.)
+   Tom, third pass: "Make it unmistakable. Drive it off scroll position so it
+   fades in deterministically, bigger and higher contrast."
 
-   Opacity, not a second colour: #fff3d3 ink at .55 over the midnight backdrop
-   measures ~#928b7d, which is --text-3 (#8f8578) to the eye. No animation, so
-   prefers-reduced-motion has nothing to degrade. Guard:
-   tests/overscroll-wordmark-audit.mjs */
+   AND v415 HAD A THIRD FAILURE NOBODY HAD SEEN, WHICH IS WHY THE OFFSET IS GONE.
+   `top: calc(-8px - var(--sat))` at height 46 puts the mark's bottom edge at
+   38 - sat. Measured live at three insets: at --sat 47 and 59 it is above the
+   origin (Tom's case, invisible), and at --sat 0 it is 38px BELOW it, so 38 of
+   the 46px were welded to the top of Today permanently, at every scroll position,
+   on every device with no top inset: desktop, notchless phones, the Android
+   shell. Same rule, opposite failures at the two ends of --sat, which is the tell
+   that arithmetic against the inset was the wrong mechanism from the start.
+
+   SO: `bottom: 100%` and no top offset at all. For an absolutely positioned box
+   in a relatively positioned containing block, `bottom: 100%` puts its bottom
+   edge exactly on the containing block's top edge; verified here that the
+   percentage resolves against the scroller's PADDING BOX height (clientHeight
+   867, not scrollHeight 2972) and that the used top comes out at -62px at --sat
+   0, 47, 59 and 62 alike. Zero pixels at rest and a first pixel at the first
+   pixel of travel, by construction, at every inset. The --sat 0 bug is not fixed,
+   it is unrepresentable, and the height no longer has to be reconciled against
+   anything so it can be sized for legibility: 232x62, 1.82x the old area.
+   Any reveal from above the scrollport enters THROUGH the status-bar strip by
+   definition, exactly like a pull-to-refresh spinner, and that was settled in
+   v415: it is not worth an unreachable peek.
+
+   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is
+   set by a passive scroll listener in js/app.js from the scroller's NEGATIVE
+   scrollTop, which on iOS is the pull distance in pixels: min(1, pull / 36). A
+   1px sliver at 1px of pull is therefore transparent, and by 36px the mark is at
+   full brightness with 56% of it on screen. Deterministic in the pull distance
+   rather than in how hard the flick was.
+
+   THE DEFAULT IS 1, AND THAT IS THE WHOLE SAFETY ARGUMENT. If a WebView ever
+   fails to report the negative offset the listener never fires, --wm-pull is
+   never set, and var(--wm-pull, 1) reveals the mark at FULL opacity off the
+   geometry alone. Third attempt at this feature: a JS reveal that silently
+   no-ops into a blank space is the one outcome that must be impossible.
+
+   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the fade tracks the finger 1:1
+   like a scrollbar does. prefers-reduced-motion is handled in the listener, not
+   here, by pinning --wm-pull to 1: the end state, which is also the loudest one,
+   so a player who asked for no motion gets the mark with no fade rather than a
+   dimmer mark. Guard: tests/overscroll-wordmark-audit.mjs */
 .screen--today { position: relative; }
 .screen--today::before {
-  content: ""; position: absolute; left: 50%; margin-left: -86px;
-  top: calc(-8px - var(--sat)); width: 172px; height: 46px;
+  content: ""; position: absolute; left: 50%; margin-left: -116px;
+  bottom: 100%; width: 232px; height: 62px;
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
-  opacity: .55; pointer-events: none;
+  opacity: var(--wm-pull, 1); pointer-events: none;
 }
 
 /* ---------- header ---------- */

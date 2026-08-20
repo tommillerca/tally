@@ -900,6 +900,7 @@ async function boot() {
   await refreshSlimedSlots();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
+  bindWordmarkPull();
   route();
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
      and handlers before the scene shell exists, and after it lands too. A no-op in
@@ -2486,6 +2487,52 @@ async function backupNudge() {
       setTimeout(() => toast('Tip: back up your log (Settings, Export)', 3400), 4000);
     }
   } catch { /* non-critical */ }
+}
+
+/* THE OVERSCROLL WORDMARK'S FADE, DRIVEN OFF SCROLL POSITION.
+ *
+ * iOS implements the rubber band by giving the scroller a NEGATIVE content
+ * offset, so during a pull #screen.scrollTop reports negative numbers and
+ * -scrollTop IS the pull distance in CSS pixels. That makes the reveal a
+ * function of how FAR you pulled rather than how hard you flicked, which is the
+ * whole point: v414 and v415 both left the look to opacity alone and Tom could
+ * not see either of them (app.css carries that history).
+ *
+ * CHEAP ON PURPOSE. Passive, so it never blocks the scroll. One property read
+ * (scrollTop) and no other layout read at all. The value is quantised to 1/20,
+ * so a full 36px pull writes a custom property at most 20 times instead of once
+ * per frame, and every event outside a bounce hits the early return because q
+ * stays 0. Measured over a scripted 4000-event burst: see the COST row in
+ * tests/overscroll-wordmark-audit.mjs.
+ *
+ * NOT GATED ON TODAY. Only .screen--today declares the ::before that reads the
+ * property, so setting it elsewhere paints nothing, and a class check here would
+ * be a second place that has to agree with route() about what Today is.
+ *
+ * REDUCED MOTION LIVES HERE, NOT IN A MEDIA QUERY. A player who asked for no
+ * motion gets 1 at any pull: the mark, with no fade, rather than a dimmer mark.
+ * Read live off the MediaQueryList so changing the setting mid-session takes.
+ * There is no keyframe and no duration in this feature, so nothing here can be
+ * collapsed to 0.001s and run a loop a thousand times a second.
+ *
+ * HEADLESS CANNOT SEE THIS. Chromium clamps scrollTop at 0, so on desktop this
+ * listener is inert and no automated run can produce the bounce. The audit fakes
+ * the negative offset and dispatches a real scroll event to drive this exact
+ * code; that is a simulation of the geometry, not proof of the bounce. The CSS
+ * defaults --wm-pull to 1 so that a WebView which never reports the offset still
+ * shows the mark at full opacity off the geometry alone. */
+function bindWordmarkPull() {
+  const el = $('#screen');
+  const FULL = 36;         // px of pull at which the mark reaches full opacity
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  let last = -1;
+  el.addEventListener('scroll', () => {
+    const pull = -el.scrollTop;
+    const q = still.matches ? 1 : pull <= 0 ? 0 : Math.round(Math.min(1, pull / FULL) * 20) / 20;
+    if (q === last) return;
+    last = q;
+    el.style.setProperty('--wm-pull', q);
+  }, { passive: true });
 }
 
 function bindTabs() {
@@ -15807,7 +15854,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v419'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v420'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
