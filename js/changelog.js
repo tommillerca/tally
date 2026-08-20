@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
+    'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
+    'It fades up as you pull, so how far you pull is what decides how much of it you see.',
+    'Fixed: on a phone or a desktop with no notch, the wordmark was stuck to the top of Today all the time instead of only when you pull.',
+  ] },
   { n: 419, date: '2026-08-20', title: 'The Boneyard reads properly now', items: [
     'The buried crate out on the map was a dark smudge at that size. It is the plain chest from your Backpack now, which is brighter and actually looks like a chest.',
     'The Mystery egg is one clean egg instead of a stack of three, because three eggs fighting for the same twenty pixels turned to porridge.',
