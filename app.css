@@ -2350,7 +2350,7 @@ body::before {
    racer's own Bonehead, because "people want to see and show off their guy"
    (Tom, 2026-08-08) and a rank number tells you nothing about who is ahead. */
 .race-banner > summary { position: relative; overflow: hidden; }
-.race-banner .race-ico { background: var(--coral); }
+.race-banner .race-ico { background: var(--coral); display: flex; align-items: center; justify-content: center; }
 /* the player's own Bonehead, clipped into the corner of the summary */
 .race-art {
   position: absolute; right: -10px; bottom: -34px; width: 96px; height: 110px;

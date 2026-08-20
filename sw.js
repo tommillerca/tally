@@ -87,6 +87,7 @@ const PRECACHE = [
   './assets/icons-pix/badge-trophy.png',
   './assets/icons-pix/badge-crown.png',
   './assets/icons-pix/badge-signpost.png',
+  './assets/icons-pix/badge-footprint.png',
   './assets/icons-pix/star.png',
   './assets/icons-pix/bone.png',
   './assets/icons-pix/paw.png',
