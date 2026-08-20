@@ -38,6 +38,7 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
+import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
@@ -2897,7 +2898,14 @@ async function renderToday(el) {
         ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
-    <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }))}</div>
+    <!-- THE TALK BOX, not a comic bubble. Same left column, same tail to the jaw,
+         same side-docking and the same auto-dismiss; what changed is that the line
+         TYPES ON and it is drawn by the one shared dialogue path in js/talkbox.js.
+         No name label (this is you, and the design's name label IS what marks a
+         character) and no chevron, because a line that leaves on its own must not
+         also sit there asking to be tapped. -->
+    ${talkBoxHtml(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }),
+      { cls: `hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}` })}
     <!-- A GRADIENT CAPTION, not an opaque band. The 92px plate used to eat the
          bottom of the art; this fades into it instead. The 13px XP bar becomes
          20 pips, and the "Lv N unlocks a Golden Crate" sentence moves to
@@ -3075,8 +3083,17 @@ async function renderToday(el) {
     popSound(S.sounds);
     const b = $('.hero-bubble');
     if (!b) return;
-    b.textContent = PET_LINES[(Math.random() * PET_LINES.length) | 0];
+    /* THE PET IS A NAMED SPEAKER, and it WAITS. Two things follow from the design:
+       the label is what makes a line a character rather than narration, and this
+       line is one the player asked for, so the player closes it (gold chevron,
+       tap to dismiss) instead of it vanishing on a timer. `.again` has always
+       replaced the animation shorthand and so has never carried bubbleOut, which
+       used to mean the pet's line had no way out at all. */
     b.classList.remove('again'); void b.offsetWidth; b.classList.add('again');
+    runTalkBox(b, PET_LINES[(Math.random() * PET_LINES.length) | 0], {
+      hold: true,
+      name: (BH_BY_ID[heroPet?.id] || {}).name || 'Your pet',
+    });
   });
   // Tapping the scene opens the Wardrobe, but the Trends chip and the
   // coin/dust/vigor/crate chips live INSIDE it, so their clicks bubbled here and
@@ -3696,7 +3713,28 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
      no-op. This is anti-regression rule 8 at the one place in the app that
      hides every route: whatever hides content owns un-hiding it, and owning it
      means surviving a backgrounded tab. */
-  const apply = () => { if (root.isConnected) root.classList.add(cls); };
+  const apply = () => {
+    if (!root.isConnected) return;
+    root.classList.add(cls);
+    /* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this is the one place that
+       knows when that is. A talk box types at 26ms a character, so starting it at
+       render time would spend up to this function's whole 700ms cap typing behind
+       an invisible screen: on a cold load the player would arrive 27 characters
+       into the sentence. Sweeping here means no screen and no sheet has to
+       remember, which is the same reason the reveal itself lives in one place.
+       THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and
+       the 300ms timer, so something has to stop the line restarting a third of a
+       second in. It cannot be root: #screen is the SAME element on every route,
+       so a flag there is set by the first navigation of the session and silences
+       every talk box for the rest of it (measured: the line never typed at all
+       after the first route). A box is rebuilt by its screen's innerHTML, so the
+       flag on the box is fresh exactly as often as the line is. */
+    root.querySelectorAll('.talkbox').forEach(b => {
+      if (b._tbStarted) return;
+      b._tbStarted = true;
+      runTalkBox(b);
+    });
+  };
   const show = () => {
     if (shown || !root.isConnected) return;
     shown = true;
@@ -9861,7 +9899,8 @@ async function renderSettings(el) {
   <p class="note" style="text-align:center;margin-top:18px">
     Boneheadz Gym · build ${APP_BUILD} · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
-    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), including the Paddock heart by Skoll
+    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), including the Paddock heart by Skoll<br>
+    Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, used unmodified under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {
