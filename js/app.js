@@ -15667,7 +15667,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v411'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v412'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -16360,29 +16360,34 @@ async function openFight(pitWrap, fighter, foeCfg) {
     });
   }
   body.innerHTML = `
-    <!-- THE HUD IS ITS OWN ROW, NOT A LID ON THE ARENA.
-         It used to be position:absolute top:0 inside .arena carrying an opaque
-         background, so it did not sit beside the scene, it sat ON it. Measured
-         at 375x667 against a mage den: the HUD is 92.4px tall, so a 292px arena
-         held only 197.6px of scene and 110.4px of the 262px boss figure rendered
-         BEHIND the bars. The arena is the scene now, and nothing covers it. -->
-    <div class="fight-hud">
-      <div class="hud-side you">
-        <div class="fname">You</div>
-        <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
-        <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
-        <div class="fstate" id="youState" hidden></div>
-        ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
-      </div>
-      <div class="hud-side foe">
-        <div class="fname">${esc(foe.name)}</div>
-        <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
-        <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
-        <div class="fstate" id="foeState" hidden></div>
-        ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
-      </div>
-    </div>
     <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
+    <!-- THE HUD IS A LID ON THE ARENA AGAIN, AND THIS TIME IT IS NOT A CARD.
+         It lived here before, lost the argument, and moved out to its own row:
+         measured at 375x667 against a mage den, 92.4px of HUD over a 292px arena
+         left 197.6px of scene and put 110.4px of the 262px boss BEHIND the bars.
+         What made that fail was the opaque plate, not the position. Tom,
+         2026-08-20: "can we make it so the health bars go on top of the
+         background? then we get more room in the space for the immersive
+         fighting sequences". So the plate is gone, the bars float on the
+         backdrop, and the ~100px the row used to spend is back in the scene.
+         The overlap is not assumed to be gone: fight-layout-audit measures
+         PAINTED INK against the HUD's real rect at every viewport. -->
+      <div class="fight-hud">
+        <div class="hud-side you">
+          <div class="fname">You</div>
+          <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
+          <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
+          <div class="fstate" id="youState" hidden></div>
+          ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
+        </div>
+        <div class="hud-side foe">
+          <div class="fname">${esc(foe.name)}</div>
+          <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
+          <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
+          <div class="fstate" id="foeState" hidden></div>
+          ${add ? `<div class="hud-add" id="hudAdd"><span class="aname">${esc(add.name)}</span><div class="bar fhp add"><i id="addHp" style="width:100%"></i></div></div>` : ''}
+        </div>
+      </div>
       <div class="pit-crowd"></div>
       <div class="pit-banner l"></div><div class="pit-banner r"></div>
       <div class="pit-torch l"></div><div class="pit-torch r"></div>

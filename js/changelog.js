@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 412, date: '2026-08-20', title: 'The fight is bigger', items: [
+    'The health bars now float on top of the arena instead of sitting in a card above it, so the fight scene is 100px taller on every phone.',
+    'The bosses are bigger too, not smaller: the arena grew underneath them.',
+  ] },
   { n: 411, date: '2026-08-20', title: 'A new face on your home screen', items: [
     'Cam drew the app a proper icon: the skull, with the lime eyes.',
   ] },
