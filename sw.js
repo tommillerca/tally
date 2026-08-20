@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v417';
+const VERSION = 'tally-v418';
 const PRECACHE = [
   './',
   './index.html',
@@ -45,8 +45,10 @@ const PRECACHE = [
   './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
-  /* BoldPixels: the dialogue face. 4KB, and the talk box is on Today, so a
-     miss is unstyled dialogue on the first screen of the app. */
+  /* BoldPixels: the dialogue face. 4KB. No surface renders a talk box since v418
+     took Today's line off, so this is precached AHEAD of Gwart rather than for a
+     screen that needs it today: the face has to be there the first time a box
+     appears, and 4KB is not worth taking out and putting back. */
   './assets/fonts/boldpixels.woff2',
   './assets/brand/wordmark.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
