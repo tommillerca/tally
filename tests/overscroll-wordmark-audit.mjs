@@ -337,12 +337,63 @@ ok('NO-SHIFT  the first card\'s y and the scroll height are EXACTLY equal with t
   && onGeo.scrollH > 0 && onGeo.scrollH === offGeo.scrollH,
   `first card y ${onGeo.firstY} -> ${offGeo.firstY}, scrollHeight ${onGeo.scrollH} -> ${offGeo.scrollH}`);
 
+/* ---- REACHABLE. The assertion this file was missing, and the reason it passed
+   while the feature was invisible on Tom's phone. Everything above proves the
+   mark costs no LAYOUT. Nothing proved it can be SEEN. Shipped v414 needed 73px
+   of rubber-band travel at --sat 59px before one pixel appeared, and 113px to be
+   whole, at .55 opacity; the CSS called that deliberate. A reveal nobody can
+   reach is not a reveal.
+   The bounce itself cannot be reproduced headless (WKWebView gives the scroller
+   a negative content offset; Chromium does not), so this asserts the GEOMETRY
+   that decides the pull, which is the part that was wrong. FIRST_PX_MAX is a
+   ceiling and may only be ratcheted DOWN. */
+/* RE-ENABLE FIRST. The section above deliberately strips .screen--today to
+   measure the feature OFF, and never puts it back, so a naive read here finds no
+   pseudo-element at all and every ceiling below passes vacuously on a null. That
+   is the same empty-sample trap this file's own SAMPLE rows exist to catch. */
+await page.evaluate(() => document.getElementById('screen').classList.add('screen--today'));
+await sleep(300);
+const FIRST_PX_MAX = 30;
+/* THERE IS NO OPACITY CEILING HERE ON PURPOSE. I added one, asserting .7+ so the
+   mark would "read", and it immediately contradicted the INK row above, which
+   pins the revealed mark to composite to --text-3 and measures within 1/2/5 of
+   it. Two rows disagreeing about the same pixel is how a suite starts grading
+   its own opinion instead of the app. INK owns the look; this section owns the
+   GEOMETRY, which is the half that was actually broken. */
+const INSETS = [[390, 844, 47], [393, 852, 59], [440, 956, 59]];
+let reachChecked = 0;
+for (const [W, H, sat] of INSETS) {
+  await page.setViewport({ width: W, height: H, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.evaluate(v => document.documentElement.style.setProperty('--sat', v + 'px'), sat);
+  await sleep(400);
+  const g = await page.evaluate(() => {
+    const sc = document.querySelector('.screen--today');
+    if (!sc) return null;
+    const cs = getComputedStyle(sc, '::before');
+    return { top: parseFloat(cs.top), h: parseFloat(cs.height), op: parseFloat(cs.opacity) };
+  });
+  /* SAMPLE REACH: no element, no pseudo, or a zero-height mark makes every
+     ceiling below pass for free. */
+  ok(`SAMPLE    ${W}x${H} --sat ${sat}: there is a wordmark with real geometry to measure`,
+    !!g && Number.isFinite(g.top) && g.h > 0,
+    JSON.stringify(g));
+  if (!g || !Number.isFinite(g.top) || !(g.h > 0)) continue;
+  reachChecked++;
+  const firstPx = -(g.top + g.h);
+  const whole = -g.top;
+  ok(`REACHABLE ${W}x${H} --sat ${sat}: the first pixel arrives within ${FIRST_PX_MAX}px of pull`,
+    firstPx <= FIRST_PX_MAX,
+    `needs ${firstPx.toFixed(0)}px of rubber-band travel before ANY of the mark is on screen (${whole.toFixed(0)}px to be whole). v414 shipped at 73px, which is why Tom could not see it.`);
+}
+ok('SAMPLE    every inset in the class was measured, so the ceilings above mean something',
+  reachChecked === INSETS.length, `${reachChecked} of ${INSETS.length}`);
+
 await dec.close();
 await browser.close();
 if (srv) srv.close();
 
 const failed = results.filter(r => !r.pass);
-if (results.length < 18) { console.log(`\nFAIL: only ${results.length} checks ran, expected 18`); process.exit(1); }
+if (results.length < 25) { console.log(`\nFAIL: only ${results.length} checks ran, expected 25`); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.n).join(', ')); process.exit(1); }
 console.log('overscroll-wordmark-audit clean');
