@@ -285,7 +285,6 @@ const SUBFLOOR = {
   'js/app.js:crateResultToCard|coin':     '11px in a crate result line.',
   'js/app.js:openStable|dust':            '13-14px dust chips in the stable.',
   'js/app.js:renderBoneyard|pit':         '15px in the map action bar. CANDIDATE for 16: one step away.',
-  'js/app.js:renderBoneyard|coin':        '11px in a marker callout.',
   'js/app.js:renderPit|coin':             '12px in the Gauntlet reward lines.',
   'js/app.js:renderPit|crate/golden':     '22px golden crate on the Gauntlet card, two pixels under the 24 floor. The strongest CANDIDATE on this list: 24 is one step up and the row is 22px of art already.',
   'js/app.js:openFight|coin':             '15px on the fight result. CANDIDATE for 16: one step away.',
@@ -315,6 +314,18 @@ const SUBFLOOR = {
   'js/app.js:renderPit|boltIco':          '13px in the READY chip, inline with the count.',
   'js/app.js:renderTalents|star':         '11px inside a talent pip, which is a text glyph slot.',
   'js/app.js:openFight|star':             '14px in the XP reward pill, inline with "+N XP". CANDIDATE for 16: one step away.',
+  'js/app.js:renderFriends|tombstone':    '11px in the leaderboard spire-count copy, inline with "N spires".',
+
+  /* MAP FURNITURE IS THE EXCEPTION TO THE STANDING RULE, and these two are the
+     ones that stay. Measured on the rendered map, 2026-08-20:
+       renderBoneyard|pit  15px inline with "Fight the <name>" INSIDE the mini
+         boss button, so it has a line of copy to sit in. CANDIDATE for 16.
+       spireBannerHtml     the banner rows are .spire-row-r at font-size 13 with
+         a name, a progress bar and a <small> line, so 11-12px is the row, not
+         the map. A 16px icon would out-size its own number.
+     What did NOT stay: renderBoneyard|coin, the spire marker's tribute label,
+     which is a coin plus a number pinned under a marker with no copy anywhere
+     near it. 11px filled 0.44 of its slot and Tom read it as too small. */
 };
 
 /* WHICH CONCEPTS ACTUALLY HAVE PIXEL ART, read from the two tables that decide

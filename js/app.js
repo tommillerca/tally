@@ -584,7 +584,7 @@ function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; const pix = pixCur
 /* Dishes key on their iconId; the POTIONS have no iconId and all take the one
    'potion' vial. Same shape as ingIconHtml above: pixel first, then the pack
    vector, then the emoji. */
-function recipeIconHtml(r, s = 24) { const pix = r && pixCur(r.potion ? 'potion' : r.iconId, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+function recipeIconHtml(r, s = 24) { const pix = r && pixCur(r.potion ? r.id : r.iconId, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
 /* Pack badges that have a 48px drawing. Sites that pass bhIcon a TINT are not
    routed here: pixel art cannot be recoloured, so they stay vector by calling
    bhIcon directly. */
@@ -4090,7 +4090,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     : 'Never been taken';
   const inRange = s.dist != null && s.dist <= SPIRE_RADIUS_M;
   const facts = [
-    { ico: bhIcon('tombstone', 20), big: `LV ${lvl}`, lab: 'TOWER' },
+    { ico: badgePixHtml('tombstone', 20), big: `LV ${lvl}`, lab: 'TOWER' },
     heldSince ? { ico: ICONS.star(20), big: String(days), lab: days === 1 ? 'DAY HELD' : 'DAYS HELD' } : null,
     held && view.tribute && view.tribute.coins ? { ico: ICONS.coin(20), big: String(view.tribute.coins), lab: 'TRIBUTE' } : null,
   ].filter(Boolean);
@@ -5302,7 +5302,7 @@ async function openKitchen() {
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
     const potCard = s => {
-      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">🍲</span><small>Empty pot<br>pick a recipe below</small></div>`;
+      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">${pixCur('recipe', 26) || '🍲'}</span><small>Empty pot<br>pick a recipe below</small></div>`;
       const pct = s.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - s.remainingMs / Math.max(1, s.readyAt - s.startedAt)) * 100)));
       return `<div class="pot-card ${s.ready ? 'ready' : 'cooking'}">
         <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
@@ -8226,7 +8226,7 @@ async function renderFriends(el) {
     const shown = fresh.length ? fresh : rows.slice(0, 3);
     const rowHtml = r => `
       <div class="t3-row${isNew(r) ? ' unread' : ''}">
-        <span class="t3-med">${r.type === 'spire' ? bhIcon('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
+        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
@@ -8780,7 +8780,7 @@ async function renderFriends(el) {
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
           <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
-          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -15003,7 +15003,7 @@ async function renderBoneyard(el) {
         const lvl = rival ? (rival.level || 1) : (view.level || 1);
         rec.el.classList.toggle('levelled', lvl > 1);
         const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - Date.now())}`
-          : held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
+          : held && view.tribute.coins ? `${ICONS.coin(16)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
         // everything the tap sheet needs, captured at paint time so the sheet
@@ -15194,7 +15194,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''} ${s.far ? 'far' : ''}`;
-          el.innerHTML = spawnIcon(s.type, 20); // ingredient is a surprise on collect, not previewed
+          el.innerHTML = spawnIcon(s.type, s.far ? 16 : 24); // ingredient is a surprise on collect, not previewed
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         } else {
@@ -15224,8 +15224,8 @@ async function renderBoneyard(el) {
       const ro = $('#mapReadout', body);
       if (ro && showBar) {
         ro.innerHTML = tooFast
-          ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
-          : `<span class="ic near">${spawnIcon(nearest.type, 20)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
+          ? `<span class="ic warn">${ICONS.boltStroke(24)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
+          : `<span class="ic near">${spawnIcon(nearest.type, 24)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
       }
       const card = $('#mapAct', body);
       if (card) {
@@ -16019,7 +16019,7 @@ async function renderPit(wrap) {
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
       : `<div class="pit-gate">
-          <div class="pg-head"><span class="pg-ico">${bhIcon('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
+          <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
           <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b>. Each one raises the ceiling by <b>3 ranks</b>. <b>The remote den above counts</b>, so this moves whether or not you can get out today.</p>
           <div class="pg-meter"><span>${denWins} boss${denWins === 1 ? '' : 'es'} beaten</span><b>cap ${ceiling}</b><span>next boss → cap ${ceiling + 3}</span></div>
           <button class="btn" id="endlessGate" style="width:100%">Find a world boss on the map</button>
@@ -17501,7 +17501,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             // nothing like the gear it had just given you.
             const gArt = GEAR_BY_ID[r.gear.id] && BH_BY_ID[GEAR_BY_ID[r.gear.id].artId];
             extraCards.push({
-              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: bhIcon('tombstone', 96) }),
+              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
               slimed: !!r.gear.slimed,
               name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
               stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
