@@ -6838,6 +6838,11 @@ async function renderShop(el) {
           : 'That piece is not on the rack any more.', 2800);
         return;
       }
+      /* S.wpnAura is read once at boot, so buying the aura has to refresh it or
+         every OTHER surface keeps the old halo until a reload: the rack would
+         say Owned while the Bonehead on Today carried nothing. Whatever hides a
+         change owns showing it. */
+      S.wpnAura = await wornAura();
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
       trackEvent('buy_rack', { id: b.dataset.buyrack, cur: currency, cost: r.cost });
       toast(r.currency === 'dust'
