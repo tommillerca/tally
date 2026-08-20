@@ -9,6 +9,58 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## PARKED 2026-08-20: The Raising, the eight-tap opening
+
+Tom: **"ok let's save the raising bone design thing for later but keep it
+accessible"**. Parked, not cancelled, and everything needed to build it is
+already in hand. Do not redesign it when it comes back.
+
+**WHERE IT LIVES, all three copies:**
+- Design canvas, current: https://claude.ai/code/artifact/3edab174-6640-4659-ae88-49e648c98bd2
+  ("The Raising and the Talk Box") - the live eight-tap interaction, the eight
+  beats as a sheet, the talk box states, and Grit the wizard.
+- Original prototype, 2026-08-09: https://claude.ai/code/artifact/1b8c4810-eb45-47e7-b704-141ced21aa27
+  ("The Raising: new-player opening moment") - the beats table, the copy, the
+  reasoning.
+- Offline copy, in this repo tree, NOT in git:
+  `tally-refs/the-raising/the-raising-prototype.html` plus
+  `tally-refs/the-raising/art/{bg,body,fg,skull}.png`, the four Deathpile layers
+  extracted out of that prototype.
+
+**WHY IT TOOK AN HOUR TO FIND, so it does not happen again.** It was never code.
+Searching every branch for it returns nothing, because the whole thing only ever
+existed as a published Artifact. If a design cannot be found in the repo, check
+the artifact list before concluding it was never made.
+
+**THE ART IS NOT IN THE REPO.** Cam sent Deathpile on 2026-08-09 and it lives as
+base64 inside that prototype, nowhere else. The four layers above were recovered
+from it. If those refs are lost, re-extract them from the artifact.
+
+**THE FINDING THAT MAKES IT CHEAP TO BUILD.** Cam's placement layers are the
+shipped catalogue items moved by exactly ONE offset, `+48, +254` on his 1000px
+canvas: no scale, no rotation. Verified by rebuilding the pile from plain
+catalogue art (`SK0-1`, `H1`, `E1`, `M1`, `G1`) through that single translation:
+mouth matched at 95% overlap, grillz at 85%, hat and eyes within about 14px where
+he nudged by hand. So ANY hat, eyes, mouth or grillz in the catalogue drops into
+the pile through one translation.
+
+**THE DESIGN, in one line each:**
+- Eight taps, about six seconds. One rule: NO TAP DOES NOTHING.
+- The heap shrinking IS the progress bar, so the screen never carries a meter.
+- Beat 6 is the joke: the body stands up fully confident with NO HEAD, holds for
+  one whole tap, and the line says "Missing something."
+- The skull is the payoff, and it is the SAME element that sat in the pile, so
+  the last tap is a travel, not a swap.
+- It ends deadpan: "Congratulations. It's a skeleton."
+- Headline before: SOMETHING'S IN THERE. After: THIS ONE'S YOURS.
+
+**WHAT IT REPLACES.** The shipped onboarding is a static three-step screen
+(`renderOnboarding`, js/app.js). Note that function is also the one screen that
+does not route, so it latches the shell itself; anything replacing it inherits
+that responsibility or a new player gets a blank screen (that was the TestFlight
+first-open bug, fixed in v370).
+
+
 ## DECISION 2026-08-18: the garden refund pays the FULL 5,500, not a reduced amount
 
 Tom, asked directly after being shown what it costs: **"full refund of 5500"**.
