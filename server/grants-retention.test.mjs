@@ -27,9 +27,22 @@
  *
  * Needs DEV=1 and ADMIN_TOKEN, exactly like the other suites.
  */
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
+
+/* The limiter outlives the process, and this suite registers players, so a
+   second run starts throttled and every case fails as "too many requests"
+   rather than on its own merits. security.test.mjs and recovery.test.mjs
+   already do this; this file predates the rate_limits table, which is why it
+   was the only one still bleeding. */
+if (/127\.0\.0\.1|localhost/.test(BASE)) {
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command', 'DELETE FROM rate_limits'],
+      { cwd: import.meta.dirname, stdio: 'ignore' });
+  } catch { console.log('(could not reset the rate limiter; some limits may already be spent)'); }
+}
 const DAY = 86400000;
 const RETENTION_DAYS = 90;      // must match GRANT_RETENTION_DAYS in src/index.js
 let passed = 0, failed = 0;
@@ -68,11 +81,29 @@ async function postJson(path, body) {
 
 /** A brand new account with its own keypair, so one test can never move another
  *  test's acknowledgement cursor. */
-async function newPlayer() {
-  const { kp, pubJwk } = await makeKeys();
-  const r = await (await fetch(BASE + '/register', {
+/* THIS SUITE NEEDS 16 REGISTRATIONS AND rl_register_ip ALLOWS 10 AN HOUR.
+   Resetting once at import is not enough: the suite outruns the limit halfway
+   through its own run, and every case after that failed as "too many requests"
+   rather than on its own merits, which reads as nine broken features instead of
+   one exhausted counter. Clearing the counter on a 429 and retrying ONCE keeps
+   the limit itself honest (it is a real guard on a real route, and lowering it
+   for tests would be testing a different server) while letting the suite finish.
+   A second 429 is a genuine failure and still asserts. */
+async function register(pubJwk) {
+  return (await fetch(BASE + '/register', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: pubJwk }),
   })).json();
+}
+async function newPlayer() {
+  const { kp, pubJwk } = await makeKeys();
+  let r = await register(pubJwk);
+  if (!r.playerId && /127\.0\.0\.1|localhost/.test(BASE)) {
+    try {
+      execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command', 'DELETE FROM rate_limits'],
+        { cwd: import.meta.dirname, stdio: 'ignore' });
+      r = await register(pubJwk);
+    } catch { /* fall through to the assert with the original answer */ }
+  }
   assert.ok(r.playerId, 'register failed: ' + JSON.stringify(r));
   return { kp, id: r.playerId };
 }
@@ -282,7 +313,12 @@ await test('a cheer that STARTS PAYING is a rule change, not a test failure', as
   // the payload is inert.
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('./src/index.js', import.meta.url), 'utf8');
-  const m = /const payload = JSON\.stringify\(\{ from: fromName, cheer[^\n]*\n/.exec(src);
+  /* Matches the assignment form AND the object-property form. /cheer moved from
+     `const payload = JSON.stringify({...})` to an inline `payload:` inside
+     insertCappedGrant when the daily cap landed, and the old pattern then matched
+     nothing, which is why this assertion went red rather than quietly passing.
+     Anchor on the cheer-specific fields, not on the surrounding syntax. */
+  const m = /(?:const payload = |payload: )JSON\.stringify\(\{ from: fromName, cheer[^\n]*\n/.exec(src);
   assert.ok(m, 'the /cheer payload line has moved; re-read it and re-check the pruner rule');
   for (const field of ['coins', 'xp', 'dust', 'crate', 'gearId', 'egg', 'consumable']) {
     assert.ok(!new RegExp(`\\b${field}\\b`).test(m[0]),

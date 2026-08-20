@@ -198,19 +198,17 @@ const CASES = [
     boundSql: 'SELECT id FROM events WHERE day < ? AND name NOT IN (?,?) LIMIT ?',
     sql: 'DELETE FROM events WHERE id IN (SELECT id FROM events WHERE day < ? AND name NOT IN (?,?) LIMIT ?)',
   },
-  {
-    /* The recovery rate limiter shares the events table, and it is the one read
-       here that guards something rather than reporting it: if this goes back to
-       a scan, every unsigned ciphertext lookup pays for the whole table. On
-       (device, day) only `device` could be used; on (device, name, day) both
-       columns are a seek. */
-    name: 'rateLimitRecovery seeks on device AND name, not device alone',
-    fragment: "'SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ? AND ts > ?'",
-    mustIndex: 'idx_events_device_name_day (device=? AND name=?)',
-    mustNotScan: 'SCAN events',
-    params: ['iphash01', 'rl_ridcheck', 0],
-    sql: 'SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ? AND ts > ?',
-  },
+  /* REMOVED, not lost: 'rateLimitRecovery seeks on device AND name'.
+     It planned `SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ?
+     AND ts > ?`, which was the recovery limiter counting its own rows in the
+     events table. The concurrency work moved the limiter to its own
+     `rate_limits` table with an atomic upsert, so that statement no longer
+     exists anywhere in src/index.js and this case was planning a query nobody
+     runs. The COVERAGE assertion below is what caught it, which is the whole
+     reason that assertion exists: a plan test pinned to a deleted route reads
+     green forever while guarding nothing.
+     The index it guarded, idx_events_device_name_day, is still covered: the
+     `testers` case above reads e.name out of it. */
 ];
 
 const planOf = (sql, params) =>
