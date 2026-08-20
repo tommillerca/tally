@@ -99,9 +99,23 @@ await test('GET /recovery/id returns the wrapped bundle', async () => {
   assert.equal(j.iters, 1000000);
 });
 
-await test('GET /recovery/<friendCode> still works for pre-v231 accounts', async () => {
+/* INVERTED 2026-08-17. This used to assert the friend-code lookup still worked.
+   It cannot: /leaderboard publishes every player's friend code to every player,
+   so a code that also unlocks a recovery bundle makes all 100 bundles fetchable
+   by anyone. The code stays public and shareable, and recovery moves to the
+   chosen recovery id. Checked on production D1 before removing the route: 11
+   recovery rows, 0 without a recovery_id, so no account lost its way back in.
+   The assertion is kept rather than deleted, pointing the other way, so that
+   quietly restoring the route fails here. */
+await test('GET /recovery/<friendCode> is GONE: a published code cannot unlock a bundle', async () => {
   const r = await read(await fetch(`${BASE}/recovery/${a.me.friendCode}`));
-  assert.equal(r.status, 200, `friend-code lookup must not regress (${r.text})`);
+  assert.notEqual(r.status, 200, `the friend-code recovery route must stay retired (${r.text})`);
+  assert.ok(!(r.json && r.json.wrapped), 'no wrapped bundle may come back for a friend code');
+});
+
+await test('the recovery id still works, so the account is not stranded', async () => {
+  const r = await read(await fetch(`${BASE}/recovery/id/${ridA}`));
+  assert.equal(r.status, 200, `recovery-id lookup is now the only way in (${r.text})`);
   assert.equal(r.json.wrapped, blob('A').wrapped);
 });
 

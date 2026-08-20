@@ -347,17 +347,21 @@ export default {
       // hands out ciphertext to anyone who knows a code. That is acceptable only
       // because the phrase is never sent and the wrap is PBKDF2-hardened, but it
       // does mean an offline attack is possible, so it is rate limited per IP.
-      if (path.startsWith('/recovery/') && request.method === 'GET') {
-        const code = decodeURIComponent(path.slice('/recovery/'.length)).toUpperCase().trim();
-        if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return json({ error: 'bad code' }, 400);
-        const limited = await rateLimitRecovery(request, env);
-        if (limited) return limited;
-        const p = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
-        if (!p) return json({ error: 'no account' }, 404);
-        const row = await env.DB.prepare('SELECT wrapped, salt, iters FROM recovery WHERE player_id = ?').bind(p.id).first();
-        if (!row) return json({ error: 'no recovery set' }, 404);
-        return json({ wrapped: row.wrapped, salt: row.salt, iters: row.iters });
-      }
+      /* RETIRED 2026-08-17: GET /recovery/<friendCode>.
+         It handed the account's encrypted recovery bundle to anyone who knew the
+         friend code. That was sound while a code was something you passed to one
+         person, and it stopped being sound the moment /leaderboard started
+         publishing all 100 players' codes to every player (see the comment on
+         that route: "codes are share-keys, not secrets"). Both statements were
+         reasonable on their own and could not both hold: one route treats the
+         code as public, the other treats it as the gate on ciphertext.
+         Tom's call, and the right one: the code stays public and shareable, so
+         the RECOVERY side is what changes. Restores go through
+         /recovery/id/<recoveryId>, where the identifier is chosen rather than
+         published and the client demands a longer phrase to match.
+         Nobody was stranded by this. Measured on production D1 before removing
+         it: 11 recovery rows, 0 with a NULL or empty recovery_id, so every
+         account that has recovery set up can already restore by id. */
 
       // Signed: pull server-issued ledger events (idempotent on the client by key).
       if (path === '/grants' && request.method === 'GET') {

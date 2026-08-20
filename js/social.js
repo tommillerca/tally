@@ -753,20 +753,25 @@ export async function hasRecoveryPhrase() { return !!(await kvGet('recoverySetAt
 // BONE-XXXX-XXXX friend code (what people who wrote theirs down already have).
 export async function restoreWithPhrase(handle, phrase) {
   const input = String(handle || '').trim();
+  /* A friend code is no longer a way in. It is printed on the leaderboard for
+     every player to see, so it cannot also be the key that unlocks a recovery
+     bundle. Say that plainly instead of sending the request and letting it 404
+     into "No account found", which would read as "your account is gone". */
   const isCode = /^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(input.toUpperCase());
-  if (!isCode && recoveryIdProblem(input)) {
-    return { ok: false, reason: 'That does not look like a recovery ID or a friend code.' };
+  if (isCode) {
+    return { ok: false, reason: 'Friend codes cannot restore an account: everyone on the leaderboard can see yours. Use the recovery ID you chose when you set up recovery.' };
   }
-  const url = isCode
-    ? `/recovery/${encodeURIComponent(input.toUpperCase())}`
-    : `/recovery/id/${encodeURIComponent(input.toLowerCase())}`;
+  if (recoveryIdProblem(input)) {
+    return { ok: false, reason: 'That does not look like a recovery ID.' };
+  }
+  const url = `/recovery/id/${encodeURIComponent(input.toLowerCase())}`;
   const base = await apiBase();
   if (!base) return { ok: false, reason: 'No connection.' };
   let meta;
   try {
     const res = await fetch(base + url);
     if (res.status === 429) return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };
-    if (!res.ok) return { ok: false, reason: `No account found for that ${isCode ? 'friend code' : 'recovery ID'}.` };
+    if (!res.ok) return { ok: false, reason: 'No account found for that recovery ID.' };
     meta = await res.json();
   } catch { return { ok: false, reason: 'Could not reach the server.' }; }
   let bundle;
