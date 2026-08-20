@@ -11341,7 +11341,34 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 // Trim an image to its non-transparent content and draw it CENTERED + as large as
 // fits into the canvas. Fixes art (pets, gear, cosmetics) that sits parked in a
 // corner of its 640x640 sprite sheet so it fills the reveal card instead.
-function drawTrimmedArt(canvas, src, pad = 0.08) {
+/* SMALL ART GETS THE MASTER, AND NO NEAREST-NEIGHBOUR STEP.
+   Tom: "when the grill or small item is presented alone it's always look super
+   pixelated are you fixing that elsewhere?" He was right, and it was two causes
+   stacked, both measured through this exact function.
+
+   1. THE SOURCE. Callers hand this `bhThumb(...)`, which defaults to the 192px
+      tier. An item's ink is a fraction of its 640 canvas, so the thumbnail keeps
+      a fraction of a fraction. Measured ink, 192 tier vs 640 master:
+        G3 grillz   3x4   vs  11x11
+        G4 grillz  15x7   vs  47x22
+        G1 grillz  16x11  vs  50x35
+        E1 earring 27x14  vs  86x44
+        H13-5 hat  71x74  vs 234x244
+      A hat loses nothing it can show at 200px. A grill is being drawn from
+      TWELVE PIXELS. So when the trimmed ink comes back small, this refetches the
+      master once and redraws. Large art keeps the thumbnail, which is what the
+      tiers are for.
+   2. THE DELIBERATE PIXELATION. The integer nearest-neighbour step below exists
+      to keep thick cartoon outlines crisp, and its own comment names "a 43px
+      grillz" as the case. That reasoning holds at 43px and inverts far below it:
+      at 12px of ink an integer blow-up is not preserving an outline, it is
+      drawing squares. Skipped under the same threshold.
+
+   THRESHOLD 64. Chosen from the table, not taste: every item that measured
+   BELOW it was visibly blocky in the side-by-side and every item above it was
+   indistinguishable between the two paths. */
+const SMALL_INK = 64;
+function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -11357,6 +11384,11 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       } catch { /* tainted; use full image */ }
       if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+      /* Tiny ink from a thumbnail: take the master and start again. One extra
+         request, and only for the items that cannot be served by a tier. */
+      if (!_fromMaster && Math.max(bw, bh) < SMALL_INK && /\/thumb\/\d+\//.test(src || '')) {
+        return void drawTrimmedArt(canvas, src.replace(/\/thumb\/\d+\//, '/'), pad, true).then(res);
+      }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
       // grillz) BOLD and crisp instead of smoothing it into mush: an integer
@@ -11365,16 +11397,17 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       const scale = Math.min(cw * p / bw, ch * p / bh, 7);
       const dw = bw * scale, dh = bh * scale;
       const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, cw, ch);
-      let src = img, sx = x0, sy = y0, sw = bw, sh = bh;
-      const k = Math.min(3, Math.floor(scale));
+      let from = img, sx = x0, sy = y0, sw = bw, sh = bh;
+      /* No integer step for small ink: it draws squares rather than outlines. */
+      const k = Math.max(bw, bh) < SMALL_INK ? 1 : Math.min(3, Math.floor(scale));
       if (k >= 2) {
         const off2 = document.createElement('canvas'); off2.width = bw * k; off2.height = bh * k;
         const o2 = off2.getContext('2d'); o2.imageSmoothingEnabled = false;
         o2.drawImage(img, x0, y0, bw, bh, 0, 0, bw * k, bh * k);
-        src = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
+        from = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(src, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
       res();
     };
     /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
@@ -15302,7 +15335,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v407'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v408'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

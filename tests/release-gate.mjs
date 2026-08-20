@@ -114,6 +114,7 @@ const BROWSER = [
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
   'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
+  'art-resolution-audit.mjs',  // no gear art drawn above the resolution Cam's masters actually carry, and no nearest-neighbour on continuous-tone art
   'fight-layout-audit.mjs',  // the fight screen holds still
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
   'teaser-fire-audit.mjs',   // the drop announcement fires from BOOT, not by hand

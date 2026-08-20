@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 408, date: '2026-08-19', title: 'Small items look like themselves again', items: [
+    'Grillz, earrings and other small pieces were being drawn from a half-size copy and then blocked up. They now use the full-resolution art, so you can actually see what they are.',
+  ] },
   { n: 407, date: '2026-08-19', title: 'The selected tab is easier to read', items: [
     'The tab you are on no longer sits under a solid red block, so its label is legible instead of washed out, and it reads as "you are here" rather than as a warning.',
   ] },

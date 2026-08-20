@@ -3068,6 +3068,40 @@ test('the app-wide no-select rule keeps form fields and the recovery code usable
   assert.match(code, /user-select\s*:\s*all/, '.code-line must stay fully selectable');
 });
 
+/* SMALL ART IS NOT DRAWN FROM A THUMBNAIL, AND NOT NEAREST-NEIGHBOURED.
+ * Tom, 2026-08-19: "when the grill or small item is presented alone it's always
+ * look super pixelated". Measured ink at the 192 tier vs the 640 master:
+ *   G3 grillz 3x4 vs 11x11, G4 15x7 vs 47x22, G1 16x11 vs 50x35,
+ *   E1 earring 27x14 vs 86x44, H13-5 hat 71x74 vs 234x244.
+ * A hat loses nothing. A grill was being drawn from twelve pixels and then
+ * INTEGER-BLOWN-UP by a nearest-neighbour step whose own comment names "a 43px
+ * grillz" as its case. That reasoning holds at 43px and draws squares at 12.
+ *
+ * WHY THIS IS STATIC AND WHAT THAT COSTS. tests/art-resolution-audit.mjs sweeps
+ * the real app but can only measure <img> elements; the lone-item path draws
+ * into a <canvas>, which has no naturalWidth once painted, so that audit is
+ * BLIND to this exact fix. I proved that rather than assuming it: disabling
+ * SMALL_INK left it green. So this case pins the two behaviours at the source.
+ * It cannot tell you the picture got better, only that neither rule was
+ * deleted. Saying so plainly rather than implying more.
+ */
+test('small art takes the master and skips the nearest-neighbour step', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/const SMALL_INK = (\d+);/);
+  assert.ok(m, 'SMALL_INK is gone: the small-art path has been removed entirely');
+  const threshold = +m[1];
+  assert.ok(threshold >= 32, `SMALL_INK is ${threshold}; below ~32 it stops covering the items that need it ` +
+    '(G1 grillz measure 50x35 in the master and were still visibly blocky)');
+
+  const fn = app.slice(app.indexOf('function drawTrimmedArt'), app.indexOf('function hydratePackArt'));
+  assert.ok(fn.length > 200, 'drawTrimmedArt not found: this check has drifted, it has not passed');
+
+  assert.match(fn, /thumb\\\/\\d\+\\\//,
+    'the thumbnail-to-master upgrade is gone: small items will be drawn from the 192 tier again');
+  assert.match(fn, /Math\.max\(bw, bh\) < SMALL_INK[\s\S]{0,80}Math\.min\(3, Math\.floor\(scale\)\)/,
+    'the nearest-neighbour step is no longer skipped for small ink: tiny art will be drawn as squares again');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
