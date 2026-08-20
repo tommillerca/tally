@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 416, date: '2026-08-20', title: 'Your Bonehead talks now', items: [
+    'The line on your home screen types itself out, one letter at a time, in a chunky pixel face. Tap it if you already know what it says and it jumps to the end.',
+    'Tap your Bonehead and it answers you by name, and waits for you to tap before it goes.',
+  ] },
   { n: 415, date: '2026-08-20', title: 'The wordmark, actually visible', items: [
     'v414 put the Boneheadz wordmark above the Today screen but parked it so high you needed a 73px pull to see any of it. A normal tug shows it now.',
   ] },
