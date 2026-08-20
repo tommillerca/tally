@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 421, date: '2026-08-20', title: 'The Shop has a shopkeeper', items: [
+    'His name is Gwart, and the Shop is his. He stands across the top of the tab with a spell running in his hands, and the place is signed Gwart’s Emporium over his head.',
+    'The rack, your coins and your dust are all exactly where they were, and so is everything you can buy. He took the room the old header was using, not the room the shelves were using.',
+    'Wardrobe, Backpack and Build are untouched — your Bonehead, your level and your pills are still up top on all three.',
+    'The Settings gear tucks into his corner while you are in there, so nothing sits over him.',
+  ] },
   { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
     'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
     'It fades up as you pull, so how far you pull is what decides how much of it you see.',

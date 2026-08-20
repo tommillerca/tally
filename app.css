@@ -9089,3 +9089,163 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .rk-rr small { font-size: 10.5px; color: var(--text-3); }
 .rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
   background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }
+
+/* ============================================================================
+   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
+   ============================================================================
+   The Shop tab drops the hub's character header entirely (no name heading, no
+   portrait card, no LV/streak row, no stat pills) and puts the shopkeeper there
+   instead: a full-bleed panel, Gwart large and centred, the wordmark in the
+   headroom above him, the Settings gear in his bottom corner. Wardrobe,
+   Backpack and Build share this hub and are untouched: the swap is one ternary
+   arm in renderCharacter(), see js/app.js.
+
+   WHY OPTION A AND NOT THE WHOLE FIGURE. Six builds were rendered and measured
+   (scratchpad emporium/, sheet4.png). A is the CROP FIX, not a reframe: Gwart
+   stays at the size Tom approved, face 77px, and what changes is where he is cut
+   off. The complaint it fixes, in source rows off the 2048px art: the shipped
+   fade started at row 1020 while both hands run 746..1105, so 23.7% of his hands
+   were dissolving into the floor. He now cuts at row 1240, below the hands and
+   below the belly, at the row where his feet start, so he reads as standing
+   behind a counter rather than as melting into one. His feet are still absent
+   and Tom accepted that: the alternatives that keep them (B/C/D) cost the face
+   77 -> 60, 52 or the grid a whole extra tile row.
+
+   EVERY NUMBER BELOW IS DERIVED FROM THE ART, NOT TUNED. The art's own alpha
+   bbox is [183, 202, 1821, 1689] in the 2048 square, so:
+     --gw-k     384 / 1638   the scale that makes his ink 384 CSS px wide
+     --gw-side  2048 * k     the square the animation needs (Cam: aspect-ratio 1)
+     --gw-off   1002 * k     his ink's x-centre, so he centres on 50% and not
+                             the art file's own middle, which is 5px off him
+     --gw-top   70 - 202*k   drops the art so the top of the sparkle arc lands
+                             exactly on the wordmark band's floor
+     --gw-panel top + 1240*k + 14.5   the cut row plus the opaque floor
+   Panel 327.84px, and with the chips' own 14px margin the grid pays 150.7px
+   against today's 191.1px header. Product tiles: 1.08 rows at --sat 0, 0.89 at
+   --sat 59.
+
+   THE FLOOR IS var(--bg) AND THE BLOCK IS PAINTED, so the seam under the panel
+   is zero BY CONSTRUCTION rather than by a matched hex. The mockup could get
+   away with #111122 because it sat on a flat plate; the app's ground is a
+   four-stop body gradient plus three radials, and no constant matches that at
+   every y. So .gw-hero paints var(--bg) across the panel AND the 14px below it,
+   the floor fades to the same var(--bg), and the two sides of the seam are the
+   same declared colour.
+
+   NO GRAIN LAYER HERE, AND THAT IS A BUG FIX, NOT TASTE. body::before is the
+   app's grain and it is a BACKDROP: position fixed, z-index 0, behind #app at
+   z-index 1, so an opaque panel is supposed to occlude it. An earlier build of
+   this panel copied that backdrop's recipe (opacity .5, mix-blend-mode
+   soft-light) as a LOCAL layer, and soft-light over near-black is a net LIFT:
+   the headroom fogged to (59,59,71) at sigma 8.90 against the app's own 1.68.
+   That is what Tom saw "spilling everywhere". If grain is ever wanted here the
+   local idiom is .hero-scene's ::after: opacity .07 and NO blend mode.
+
+   THE GEAR MOVES INTO THE PANEL rather than floating over Gwart's hat. The
+   global #gearBtn is hidden for this tab and un-hidden by the same code on the
+   way out (anti-regression rule 8), and the one in here is the same .gear-btn
+   with the same target, so nothing new was styled. Measured on the render: 0%
+   wordmark ink and 0% art ink inside its 38px box, disc against its own ground
+   1.16:1 where the floating gear sits at 1.11:1 today.
+
+   Guard: tests/emporium-audit.mjs. */
+.gw-hero {
+  --gw-side: 480.117px;
+  --gw-off: 234.901px;
+  --gw-top: 22.645px;
+  --gw-panel: 327.841px;
+  --gw-band: 70px;
+  --gw-fl: 30px;
+  --gw-air: 14.5px;
+  position: relative;
+  /* full-bleed: out through .screen's own calc(var(--sat) + 14px) / var(--pad) */
+  margin: calc(-1 * (var(--sat) + 14px)) calc(-1 * var(--pad)) 0;
+  padding-bottom: 14px;
+  background: var(--bg);
+}
+/* the chips' own 14px margin is the gap, and .gw-hero already paid it above */
+.gw-hero + .ch-tabs { margin-top: 0; }
+.gw-panel {
+  position: relative; overflow: hidden; height: calc(var(--sat) + var(--gw-panel));
+  /* isolation, because the palm glows are mix-blend-mode: screen and a screen
+     blend with no stacking context of its own reaches every pixel below it. */
+  isolation: isolate;
+  /* K_DIM, the approved dim level (r2, Tom 2026-08-20). The four stops are the
+     deck's crimson ramp at full strength — 194,21,46 / 160,17,38 / 109,14,30 /
+     43,10,19 — and --gw-dim is the ONE number that sets how far down they are
+     pulled, so a different level is a one-line change and not a recomputed ramp.
+     At 0.45 that lands on rgb(87,9,21) at the core, which is what every contrast
+     and ink number on this panel was measured against. The last stop is var(--bg)
+     at zero alpha, so the glow dies into the ground rather than into black. */
+  --gw-dim: 0.45;
+  background: radial-gradient(ellipse 84% 66% at 50% 54%,
+    rgb(calc(194 * var(--gw-dim)) calc(21 * var(--gw-dim)) calc(46 * var(--gw-dim))) 0%,
+    rgb(calc(160 * var(--gw-dim)) calc(17 * var(--gw-dim)) calc(38 * var(--gw-dim))) 22%,
+    rgb(calc(109 * var(--gw-dim)) calc(14 * var(--gw-dim)) calc(30 * var(--gw-dim))) 46%,
+    rgba(calc(43 * var(--gw-dim)), calc(10 * var(--gw-dim)), calc(19 * var(--gw-dim)), 0.7) 72%,
+    rgba(13, 12, 18, 0) 100%);
+}
+.gw-art { position: absolute; left: calc(50% - var(--gw-off)); top: calc(var(--sat) + var(--gw-top)); width: var(--gw-side); }
+/* rgba(13,12,18,0) is var(--bg) at zero alpha: naming `transparent` here would
+   still be correct in every engine that ships today, but spelling the colour out
+   is what makes the top of the fade provably the same hue as its bottom. */
+.gw-floor {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none;
+  height: var(--gw-fl);
+  background: linear-gradient(to top, var(--bg) 0, var(--bg) var(--gw-air), rgba(13, 12, 18, 0) 100%);
+}
+/* The app's own sticker shadow (3px 4px 0 var(--ink)), not a straight-down drop:
+   every other display heading in here throws to the lower right and one that
+   throws straight down reads as a different app. -3px is an optical nudge, not a
+   centring fix: Bangers' apostrophe and the terminal M do not weigh the same. */
+.gw-wm {
+  position: absolute; left: 0; right: 0; top: calc(var(--sat) + 14px); z-index: 4;
+  font-family: var(--display); font-weight: 400; font-size: 55px; line-height: 1;
+  letter-spacing: 0.004em; text-align: center; color: var(--text);
+  transform: translateX(-3px); text-shadow: 3px 4px 0 var(--ink);
+}
+.gw-gear { top: auto; bottom: 14px; right: 16px; }
+
+/* ---- Cam's spell-cast animation, inlined VERBATIM from tally-refs/wizard/
+   animation/wizard-cast.css. Not one keyframe, duration, easing or percentage is
+   altered; the only additions are the reduced-motion block Cam's README asks for
+   and the .gw- prefix on nothing at all (his class names are kept so the file can
+   be diffed against the handoff). ---- */
+@keyframes zBreathe { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.012) scaleX(1.003)} }
+@keyframes zEnterCine { 0%{transform:scale(.88) translateY(2.5%);opacity:0;filter:blur(8px)} 25%{filter:blur(1.5px)} 45%{opacity:.7;filter:blur(0)} 100%{transform:scale(1) translateY(0);opacity:1;filter:blur(0)} }
+/* starts and ends at 0deg so the delayed loop begins without a jolt */
+@keyframes zOrbitSoft { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(1.1deg)} 75%{transform:rotate(-1.1deg)} }
+@keyframes zTwA { 0%,100%{opacity:1} 22%{opacity:.35} 48%{opacity:.9} 71%{opacity:.5} }
+@keyframes zTwB { 0%,100%{opacity:.5} 30%{opacity:1} 55%{opacity:.4} 80%{opacity:.95} }
+@keyframes zTwC { 0%,100%{opacity:.8} 18%{opacity:.45} 42%{opacity:1} 76%{opacity:.4} }
+@keyframes zGlowIn { 0%{opacity:0;transform:scale(.6)} 100%{opacity:.55;transform:scale(1)} }
+@keyframes zGlowIdle { 0%,100%{opacity:.35;transform:scale(1)} 50%{opacity:.75;transform:scale(1.12)} }
+
+.wz-scene { position:relative; aspect-ratio:1; overflow:hidden; }
+.wz-scene img { position:absolute; inset:0; width:100%; height:100%; }
+.wz-body { position:absolute; inset:0; transform-origin:50% 95%; animation:zBreathe 5.4s ease-in-out infinite; }
+.wz-enter { position:absolute; inset:0; transform-origin:50% 62%; animation:zEnterCine 2.4s cubic-bezier(0.22,1,0.36,1) both; }
+.wz-sway { position:absolute; inset:0; transform-origin:50% 85%; animation:zOrbitSoft 9s ease-in-out 2.4s infinite; }
+.wz-stars-l { clip-path:inset(0 62% 0 0);   animation:zTwA 3.6s ease-in-out 2.4s infinite; }
+.wz-stars-m { clip-path:inset(0 38% 0 38%); animation:zTwB 4.4s ease-in-out 2.4s infinite; }
+.wz-stars-r { clip-path:inset(0 0 0 62%);   animation:zTwC 3s   ease-in-out 2.4s infinite; }
+.wz-glow { position:absolute; width:12%; height:9%; border-radius:50%;
+  background:radial-gradient(circle,rgba(211,255,60,.55),transparent 70%);
+  filter:blur(6px); mix-blend-mode:screen;
+  animation:zGlowIn 1.6s cubic-bezier(0.22,1,0.36,1) both, zGlowIdle 4.5s ease-in-out 2.4s infinite; }
+.wz-glow.left  { left:16%; top:40%; }
+.wz-glow.right { left:72%; top:40%; animation-delay:0s,4.65s; }
+
+/* Cam's README: "keep the entrance as a plain fast fade, disable the sway; the
+   twinkle is low-amplitude and can stay". THE DURATIONS ARE NOT COLLAPSED. The
+   sway, the breathe, the twinkle and the glow idle are all INFINITE loops, and
+   this repo has already been bitten by `animation-duration: .001s` under reduced
+   motion, which runs a loop a thousand times a second. An infinite loop is
+   switched OFF with animation-name: none. The twinkle keeps its authored
+   3.6 / 4.4 / 3s. */
+@media (prefers-reduced-motion: reduce) {
+  .gw-panel .wz-enter { animation: zGwFade .28s linear both; }
+  .gw-panel .wz-sway, .gw-panel .wz-body { animation-name: none; }
+  .gw-panel .wz-glow { animation: zGwFade .28s linear both; opacity: .45; }
+}
+@keyframes zGwFade { from { opacity: 0 } to { opacity: 1 } }
