@@ -8434,6 +8434,82 @@ body::before {
    its own opacity and transform. Delayed past the landing so it reads as
    arriving rather than as having always been there. */
 #sheets .sheet-body.sheet-in .ton-new { animation: tonArrive .34s cubic-bezier(.2,.9,.3,1) .22s both; }
+
+/* THE PRODUCT IS THE ONLY LIT THING ON THE STAGE, and before this it was not
+   lit at all. Measured on the render: eight layers are drawn on the try-on
+   figure, the piece being sold (H13-5.png) computed `filter: none`, and the ONE
+   glowing layer was IR10-3.png, the player's OWN EQUIPPED WEAPON wearing its
+   rarity halo at drop-shadow(rgba(255,201,97,.95) 0 0 6px).
+   So a stage built to sell a hat lit a weapon that is not for sale. That is the
+   same confusion Tom raised about the rack ("its not clear youre buying an aura
+   and not the sword") reappearing inside the sheet whose entire job is to show
+   you the product.
+   `.ton-new` was only an ARRIVAL animation, .34s and then nothing, which is why
+   the piece read as unmarked once it had landed. It now keeps a halo in its own
+   rarity colour, reusing the wpn-glow palette so the light means the same thing
+   here as everywhere else in the game.
+   drop-shadow, not blur or a filter on the art: it casts from the layer's alpha
+   and does not resample a pixel of Cam's art, which is the same reason
+   .bh-anim img.wpn-glow is allowed to use it. */
+.ton-stage .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(242, 233, 215, 0.75)); }
+.ton-stage.r-uncommon  .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(74, 222, 128, 0.75)); }
+.ton-stage.r-rare      .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(111, 208, 255, 0.80)); }
+.ton-stage.r-epic      .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(155, 146, 232, 0.80)); }
+.ton-stage.r-legendary .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(255, 201, 97, 0.85)); }
+
+/* AND THE PLAYER'S OWN GEAR STANDS DOWN WHILE THEY ARE TRYING SOMETHING ON.
+   Only for a garment: on an AURA try-on the weapon's halo IS the product, which
+   is why this is scoped :not(.aura). Without it the two lights compete and the
+   brighter one belongs to the item that is not for sale. */
+/* :not(.ton-new) IS LOAD-BEARING AND I SHIPPED THIS WRONG FIRST TIME. When the
+   piece for sale IS a weapon, its <img> carries BOTH wpn-glow and ton-new, and
+   this selector (3 classes + an element + :not) out-specifies the product halo
+   (3 classes), so the one item on the stage that SHOULD be lit went dark.
+   Measured on the real rack: IL8-1, a weapon rung, computed `filter: none` while
+   every garment rung lit correctly. Excluding .ton-new fixes it without
+   weakening the stand-down for gear that is merely being worn. */
+.ton-stage:not(.aura) .ton-fig img.wpn-glow:not(.ton-new) { filter: none; }
+
+/* A HALO CANNOT MARK A SMALL ITEM, AND MEASURING IT SETTLED THE ARGUMENT.
+   Tom: "im pretty sure youre making the grillz and other small items look worse
+   than the original art". He was right, and it is not a matter of degree.
+
+   Measured at the 384px stage, glow area against the art's OWN area, with the
+   9px drop-shadow above:
+
+     G3 grillz   12x11 on screen     31 art px    205 glow px    6.61x
+     G4 grillz   33x20              120           555            4.62x
+     G1 grillz   34x26              279           756            2.71x
+     E1 earring  56x31              498          1104            2.22x
+     H13-5 hat  145x152            9770          4347            0.44x
+     T9-5 jacket 188x132          12954          4506            0.35x
+
+   So on grillz a player was looking at SIX TIMES more of my glow than of Cam's
+   art. A fixed blur is simply the wrong instrument when the items vary by 300x
+   in area.
+
+   AND NO SMALLER HALO FIXES IT. Sweeping the radius, G3 stays above 1.0x even at
+   2px (1.03), where the glow is already too faint to notice. G4 is 0.95 at 2px.
+   There is no radius that both marks the item and stays smaller than it, so the
+   answer is not a tuned blur, it is a different instrument.
+
+   MOTION ADDS NO PIXELS. For small slots the item's own layer breathes instead:
+   the eye finds it by movement, nothing is painted around it, and not one pixel
+   of the art is altered or covered. This is the same reason the arrival beat was
+   already CSS on the layer itself rather than an effect drawn over it.
+   PRODUCT.md: Cam's art is never redrawn. Adding 6x its own area in glow around
+   it is a way of redrawing it. */
+.ton-stage.tiny .ton-fig .ton-new { filter: none; animation: tonBreathe 1.9s ease-in-out 3; }
+@keyframes tonBreathe {
+  0%, 100% { transform: none; }
+  50% { transform: scale(1.045); }
+}
+/* THE ITERATION COUNT IS CAPPED, NOT THE DURATION. This repo has been bitten by
+   `animation-duration: .001s` under prefers-reduced-motion, which runs a loop a
+   thousand times a second. Three breaths and it rests. */
+@media (prefers-reduced-motion: reduce) {
+  .ton-stage.tiny .ton-fig .ton-new { animation: none; }
+}
 @keyframes tonArrive {
   0% { opacity: 0; transform: translateY(-9px) scale(1.05); }
   60% { opacity: 1; }
@@ -8490,8 +8566,14 @@ body::before {
    reachable, states the gap in both currencies, and offers the one route the
    rack already offers. No urgency, no second ask, nothing that reads as a
    pitch, and nothing here is derived from health data of any kind. */
+/* 12.5px, NOT 11.5. Measured: this was the SMALLEST type on the sheet while
+   carrying the most commercially important line on it (how far short you are,
+   and the one route that closes the gap). It sits below the prices on purpose,
+   so a player reads what it costs before what they lack, but it should not be
+   the hardest thing on the screen to read. Contrast measured at 5.00:1 on the
+   sheet ground, which clears AA; the problem was size, not colour. */
 .ton-reach { display: block; width: 86vw; max-width: 380px; margin: 10px auto 0; background: none; border: 0;
-  font-size: 11.5px; line-height: 1.35; color: var(--text-3); text-align: center; padding: 6px 4px; }
+  font-size: 12.5px; line-height: 1.35; color: var(--text-3); text-align: center; padding: 7px 4px; }
 
 /* ============ MOCKUP ONLY: what this wallet reaches ============
    A player at 340 coins could reach nothing on the old rack and the screen

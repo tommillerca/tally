@@ -6579,7 +6579,13 @@ async function renderShop(el) {
   // Worn, never a loose PNG: a hat is ~32% of its 640 canvas, so a `contain`
   // thumbnail of the raw asset is a speck. Centres/scales are MEASURED alpha
   // bounding boxes, median over every asset in the slot.
-  const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
+  /* SLOTS WHOSE ART IS TOO SMALL FOR A HALO, measured not guessed. At the 384px
+   stage a 9px drop-shadow paints 6.61x the art's own area on G3 grillz and
+   2.22x on an earring, against 0.44x on a hat. See the note in app.css for the
+   full table and the radius sweep that shows no blur value works. These get
+   motion instead, which adds no pixels. */
+const TINY_SLOTS = new Set(['G', 'E']);
+const MOCK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
     P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
   /* THE BUY ROW. Two prices for one piece are ALTERNATIVES, and two identical
      full-width pills stacked on top of each other do not say so: they read as
@@ -6695,7 +6701,23 @@ async function renderShop(el) {
        stage and painted every rarity the same olive. The stage's own
        rarity-tinted ground and the aura's cyan halo were both rendering into a
        green swatch. `skip: ['BG']` is the idiom the leaderboard already uses. */
-    const figHtml = eq => avatarLayersHtml(eq, { thumb: 384, skip: ['BG'],
+    /* THE 640 MASTER, NOT THE 384 THUMBNAIL. Tom asked whether the small items
+       were being pixelated. They were not (image-rendering computes to `auto`
+       everywhere, which is correct for this continuous-tone art), but measuring
+       it turned up a real resolution loss underneath the question.
+       Measured on the render: the stage draws each layer at 385 CSS px on a
+       dpr-2 screen, so 770 PHYSICAL pixels, and it was sourcing the 384px
+       thumbnail. That is a 2.0x upscale of an already-downscaled image.
+       It costs a jacket almost nothing and it costs a small item a great deal:
+       G3 grillz occupy 15x15 of the 640 master, so the 384 thumbnail holds
+       about 9x9 of them, and that 9x9 patch was being stretched across 18
+       device pixels. The master makes it a 1.2x upscale from 15x15 instead.
+       The RACK TILES stay on the 384 thumbnail deliberately: they draw at
+       268 CSS (536 device, a 1.4x upscale) and there are nine of them times
+       eight layers, so the master there would be 72 full-size PNGs for a
+       difference nobody can see at tile size. The try-on stage is the one place
+       the figure is large enough to be worth the bytes. */
+    const figHtml = eq => avatarLayersHtml(eq, { skip: ['BG'],
       ...(aura ? { wpnAura: MOCK_AURA.key } : {}) });
     /* HONEST ABOUT REACH, and only when neither price is reachable. It states
        the gap and points at the one route that closes it, which the rack
@@ -6709,7 +6731,7 @@ async function renderShop(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Close">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <div class="ton-stage d-${MOCK_TON_DIR} r-${rarity}${aura ? ' aura' : ''}">
+        <div class="ton-stage d-${MOCK_TON_DIR} r-${rarity}${aura ? ' aura' : ''}${!aura && TINY_SLOTS.has(it.slot) ? ' tiny' : ''}">
           <div class="ton-burst" id="tonBurst"></div>
           <div class="ton-fig">${figHtml(fit)}</div>
         </div>
