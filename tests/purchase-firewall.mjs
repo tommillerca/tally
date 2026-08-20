@@ -1,4 +1,4 @@
-/* tests/purchase-firewall.mjs — COINS MUST NEVER REACH A STATTED ITEM.
+/* tests/purchase-firewall.mjs: COINS MUST NEVER REACH A STATTED ITEM.
  *
  * WHY THIS EXISTS. Tom's call, locked 2026-08-07 and not up for reopening:
  * Boneheadz monetisation is COSMETIC ONLY. Never sell power. The rack (the
@@ -126,7 +126,7 @@ for (const [id, fn, markers] of PATH_FNS) {
   const got = fn ? markers.filter(w => fn.blank.includes(w)) : [];
   ok(`CONTROL the scanner found the real body of ${id}`,
     !!fn && fn.raw.length > 200 && got.length === markers.length,
-    fn ? `${fn.raw.length} chars, markers found: ${got.join(', ') || 'NONE'}` : 'NOT FOUND — did it get renamed or turned into an arrow function?');
+    fn ? `${fn.raw.length} chars, markers found: ${got.join(', ') || 'NONE'}` : 'NOT FOUND. Did it get renamed or turned into an arrow function?');
 }
 
 /* Every one of these either grants a statted item, equips one, or writes the
@@ -311,7 +311,7 @@ else {
   /* ---- WEAR: the end of the chain the player actually experiences ---- */
   ok('CONTROL a look that was NOT bought still costs dust in the same slot',
     res.wearOther != null && res.wearOther > 0,
-    res.otherArt ? `${res.target.slot}:${res.otherArt} costs ${res.wearOther} dust` : 'no second art in this slot to price against — the WEAR row below cannot fail');
+    res.otherArt ? `${res.target.slot}:${res.otherArt} costs ${res.wearOther} dust` : 'no second art in this slot to price against, so the WEAR row below cannot fail');
   ok('CONTROL the bought look cost dust to wear BEFORE it was bought',
     res.wearBefore > 0, `${res.wearBefore} dust before the purchase`);
   ok('WEAR-FREE a bought look is free to wear, forever',
