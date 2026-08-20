@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 417, date: '2026-08-20', title: 'Your Bonehead talks now', items: [
+    'The line on your home screen types itself out, one letter at a time, in a chunky pixel face. Tap it if you already know what it says and it jumps to the end.',
+    'Tap your Bonehead and it answers you by name, and waits for you to tap before it goes.',
+  ] },
   { n: 416, date: '2026-08-20', title: 'The Boneyard is drawn, not diagrammed', items: [
     'The map furniture out in the Boneyard is pixel art now: the skull on a mini den, the signpost on a distance row, the tombstone on a spire card, and the bolt that tells you you are moving too fast to loot.',
     'The coin on a spire you hold was too small to read, so the coin and the number beside it are both bigger. The pickups out on the map are bigger too.',

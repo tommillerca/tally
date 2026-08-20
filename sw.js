@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v416';
+const VERSION = 'tally-v417';
 const PRECACHE = [
   './',
   './index.html',
@@ -42,8 +42,12 @@ const PRECACHE = [
   './js/hunt.js',
   './js/native.js',
   './js/pit.js',
+  './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
+  /* BoldPixels: the dialogue face. 4KB, and the talk box is on Today, so a
+     miss is unstyled dialogue on the first screen of the app. */
+  './assets/fonts/boldpixels.woff2',
   './assets/brand/wordmark.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
