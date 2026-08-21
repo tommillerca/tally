@@ -315,6 +315,12 @@ const DECLARED = {
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
     + 'logic is stubbed. Proven red on origin/main c3b7bc9 (3 rows) before the fix existed: 300 coins charged, no piece granted, and '
     + 'the retry answered owned while the player owned nothing, which made the piece unbuyable forever.'],
+  'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
+    + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
+    + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
+    + 'not from tokens: this bar layers a plate under a glyph under a label, and a token says what was asked for rather than what '
+    + 'the player got. Proven red twice on 2026-08-21: sinking one tab dim colour into the bar ground (CONTRAST, 1.07:1 on '
+    + 'boneyard) and growing the tab padding until the active plate matched the FAB (FAB, 0.5x).'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],

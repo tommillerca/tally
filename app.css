@@ -6774,6 +6774,45 @@ body::before {
 /* the tab you press acknowledges the press; the active state slides in instead
    of teleporting */
 #tabbar .tab { transition: color .18s ease, transform .12s ease; }
+/* POSTER STICKERS. Tom picked this direction 2026-08-21 out of three, over a
+   quieter "one lamp lit" option. The complaint it answers: "right now it feels
+   all one note."
+   EVERY TAB CARRIES ITS HUE ALL THE TIME, held back into bone while inactive,
+   and the active one becomes a filled sticker in the same language the cards
+   already use (--sh-sm, the hard offset shadow that is never blurred).
+   THE HUES ARE THE DECK'S, and three of the four are tokens this file already
+   defines. Sky is the one the app had no token for, so it is written out with
+   its deck value rather than invented.
+   NO color-mix, ON PURPOSE. The direction was authored with
+   `color-mix(in srgb, var(--nav) 55%, #8f8578)`, which needs iOS 16.4. These
+   four hexes are that mix pre-computed and were verified identical against the
+   rendered output, so the floor stays where it is.
+   MEASURED off the render, not off the stylesheet: worst pair is the active
+   Today label at 4.85:1, and the inactive tinted labels land 5.62 to 7.06,
+   which is BETTER than the 5.17 the untinted bar ships today.
+   THE FAB STAYS LOUDEST. A bar of coloured blocks puts real pressure on the
+   primary action, so it keeps its ring and its own shadow; measured 1.11x the
+   active plate's area and 8px of rise. If a future tab grows, re-measure that
+   ratio rather than trusting it. */
+#tabbar .tab[data-tab="today"]    { --nav: var(--coral);  --nav-dim: #cc7566; }
+#tabbar .tab[data-tab="boneyard"] { --nav: var(--violet); --nav-dim: #968cb6; }
+#tabbar .tab[data-tab="friends"]  { --nav: #72a8f1;       --nav-dim: #7f98bb; }
+#tabbar .tab[data-tab="bonehead"] { --nav: var(--gold);   --nav-dim: #bd9a54; }
+#tabbar { border-top: 2px solid rgba(242, 233, 215, .2); }
+#tabbar .tab { position: relative; border-radius: 12px; color: var(--nav-dim); }
+#tabbar .tab::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  border-radius: 12px; background: var(--nav); box-shadow: var(--sh-sm);
+  opacity: 0; transform: translate(-1px, -1px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+#tabbar .tab.active::before { opacity: 1; transform: none; }
+#tabbar .tab.active { color: var(--ink); font-weight: 800; }
+#tabbar .fab { box-shadow: var(--sh), 0 0 0 4px var(--bg); }
+@media (prefers-reduced-motion: reduce) {
+  /* the plate still appears, it just stops sliding. Never a 0.001s duration. */
+  #tabbar .tab::before { transition: opacity .16s ease; transform: none; }
+}
 #tabbar .tab:active { transform: scale(.92); }
 .fab { transition: transform .12s ease; }
 .fab:active { transform: scale(.92); }
