@@ -230,6 +230,49 @@ const S = {
    from navigator.webdriver: they are the same switch, thrown from two places. */
 const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver === true) || S.calm;
 
+/* ONE INTERRUPTION PER APP OPEN. Tom, 2026-08-21, after watching a fresh device
+   boot: "Fix the pop ups that's a night mare."
+
+   He is right and the pixels agree: opening the app on a real phone put four
+   sheets in a row on screen before Today was reachable. Nothing here was
+   overlapping, which is the part that made it feel endless: every one of these
+   already waits politely for the last to close, retrying for up to 30 seconds.
+   So they QUEUED. You dismiss one and the next slides up.
+
+   Nobody had seen it because all of them suppress themselves under
+   navigator.webdriver, so no automated check has ever rendered one. The first
+   session is the only path with no test on it, and it is the one every new
+   player takes.
+
+   THE RULE IS ONE PER OPEN, not a shorter queue. A budget that is a count
+   ("show at most three") is still a queue, just a politer one; the thing that
+   reads as a nightmare is the SECOND sheet, because it tells the player that
+   dismissing did not end it.
+
+   WHICH ONE GETS IT is already decided and is not changed here: each of these
+   fires on its own delay (rename 1200ms, teaser 1400, what's-new 1700, drop
+   2200, spires 2600, bosses 3000, race 3200, the Live Wire 3400) so the earliest
+   ready wins, which is the priority order that was already authored.
+
+   A LOSER CONSUMES NOTHING. The claim is taken immediately before the seen
+   counter is written, so a sheet that stands down this session has not been
+   marked seen and arrives next open instead. Nothing is lost, it is spread.
+
+   The daily wheel and the recovery prompt are deliberately NOT claimants. The
+   wheel is the reward for opening the app rather than an interruption, and the
+   recovery prompt is a standing decision of Tom's that the code already records:
+   players "see it each time they open until they pick one, for their own good". */
+let bootSheetClaimed = false;
+function claimBootSheet() {
+  if (bootSheetClaimed) return false;
+  bootSheetClaimed = true;
+  return true;
+}
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__bootSheetClaimed = () => bootSheetClaimed;
+  window.__resetBootSheet = () => { bootSheetClaimed = false; };
+}
+
 /* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
  *
  * Every one of these used to be `S.settings.x = v; await kvSet('settings',
@@ -1120,6 +1163,7 @@ async function maybeShowWhatsNew() {
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
     if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
+    if (!claimBootSheet()) return;               // another sheet already had this open
     openWhatsNew();
   } catch { /* never block boot */ }
 }
@@ -1156,6 +1200,7 @@ async function maybeShowRenameNotice() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       openRenameNotice({ oldName: me.name });
     };
     setTimeout(tick, 1200);
@@ -1275,7 +1320,7 @@ async function maybeShowCosmeticTeaser() {
        A showing is only spent when the post is ACTUALLY shown, not when boot is
        busy (see the tick below), so ten opens means ten sightings. */
     const seen = await kvGet(TEASER_SEEN_KEY, 0);
-    if (seen >= 10) return;
+    if (seen >= 2) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
@@ -1291,6 +1336,7 @@ async function maybeShowCosmeticTeaser() {
       }
       if (teaserFired) return;      // one showing per app session, no matter who asks
       teaserFired = true;
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(TEASER_SEEN_KEY, seen + 1);
       openCosmeticTeaser();
     };
@@ -1309,6 +1355,7 @@ async function maybeShowSpireIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(SPIRE_SEEN_KEY, true);
       openSpireIntro();
     };
@@ -1365,6 +1412,7 @@ async function maybeShowBossIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(BOSS_SEEN_KEY, true);
       openBossIntro();
     };
@@ -1387,6 +1435,7 @@ async function maybeShowMageIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(MAGE_SEEN_KEY, true);
       openMageIntro();
     };
@@ -1657,6 +1706,7 @@ async function maybeShowRaceResults() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       /* SPENT BEFORE IT IS DRAWN, so a crash inside the render cannot put a
          player in a loop. A showing is spent by being shown, not by being
          read: closing it with "Nice one" costs this one open and no more. */
@@ -1735,6 +1785,7 @@ async function maybeShowRaceIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(RACE_SEEN_KEY, true);
       openRaceIntro();
     };
@@ -1761,7 +1812,7 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
 const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
 const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
 const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
-const COMMUNITY_MAX_SHOWS = 3;
+const COMMUNITY_MAX_SHOWS = 2;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
    this card is written for. Drawn in currentColor so it takes the eyebrow's
@@ -1868,6 +1919,7 @@ async function maybeShowCommunityIntro() {
       /* Spend the showing BEFORE opening, not after: the card is dismissed by
          several routes (the button, the veil, history) and a counter written on
          the way out can be skipped by any of them. */
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
       await kvSet(COMMUNITY_SEEN_KEY, true);
       openCommunityCard();
@@ -1974,6 +2026,7 @@ async function maybeShowThanksCard() {
          out can be skipped by any of them. It is only spent once the overlay
          check above has passed, so it is never burned on a card that did not
          get to render. */
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(THANKS_SEEN_KEY, true);
       openThanksCard();
     };
@@ -2157,13 +2210,14 @@ async function maybeShowDropPopup() {
   try {
     if ((CALM_BOOT() && !window.__dropForce) || !S.settings) return;
     const seen = await kvGet(DROP_SEEN_KEY, 0);
-    if (seen >= 5) return;
+    if (seen >= 2) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
         if (tries++ < 60) setTimeout(tick, 500);
         return;      // busy boot: does NOT consume one of the 5 showings
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       await kvSet(DROP_SEEN_KEY, seen + 1);
       openDropPopup();
     };
