@@ -33,13 +33,14 @@
  * art on disk.
  *
  * WHAT IT ASSERTS, and which direction is failure.
- *   CONTROL   SEVEN rows, because this file has three graded media and each one
+ *   CONTROL   NINE rows, because this file has three graded media and each one
  *             passes for free on a sample that does not contain it. Every driver
  *             painted something (counted INSIDE the app's content, not including
  *             the always-present tab bar), the ten drivers landed on ten DIFFERENT
  *             screens, all three media are present, the seeded dish really reached
- *             the Backpack, an icons-pix PNG was found AND decoded, the vector
- *             fingerprint table matched real drawings, and the inventory parse
+ *             the Backpack, an icons-pix PNG was found AND decoded, EVERY pixel
+ *             img decoded, the vector fingerprint table matched real drawings, the
+ *             emoji table was derived from the game's data, and the inventory parse
  *             yielded rows. An empty sample is a FAILURE, never a pass: four
  *             guards in this repo went green while blind on 2026-08-19.
  *   SWAP      no rendered vector draws at >= 16 CSS px for a concept that HAS
@@ -596,20 +597,33 @@ console.log('\n' + out.join('\n'));
 console.log(fails ? `\n${fails} FAILED` : '\nevery screen draws one medium');
 
 /* PROVEN-RED-BY. Every row below was reddened against a REAL defect in a
- * throwaway worktree off this branch (/tmp/pixswap/red), 2026-08-21. Each run's
- * exit code was written to its own file and read back from that file, never
- * through a pipe, and the tree was `git checkout -- .`d between mutations.
+ * throwaway worktree off this branch, 2026-08-21. Each run's exit code was
+ * written to its own file and read back from that file, never through a pipe,
+ * and the tree was `git checkout -- .`d between mutations.
+ *
+ * IN TWO SITTINGS, and the second is the one that matters. The first proved
+ * thirteen of the sixteen rows and left three CONTROLS unproven when the session
+ * died; this note claimed all sixteen before that was true, which is the exact
+ * shape of the unverified claim this repo keeps paying for. The three below
+ * marked (2nd) were proved afterwards, against the rebased tip, with a green
+ * baseline run of the SAME file immediately before them. CONTROL distinct in
+ * particular had already been ATTEMPTED and come back exit 0: the row's
+ * signature carried each node's rendered width, two renders of one screen
+ * measured differently, and a driver that plainly no-oped passed. That is why
+ * the signature is structural now, and why the row is listed as re-proved.
  *
  *   CONTROL painted      renderTrends returns before writing any markup ->
  *                        "progress: ZERO pictures rendered".
- *   CONTROL distinct     `id="stableBtn"` renamed on the hero tile, so the
+ *   CONTROL distinct (2nd) `id="stableBtn"` renamed on the hero tile, so the
  *                        Stable driver silently grades Today a second time ->
  *                        "stable is identical to today".
  *   CONTROL three media  the wheel's .dw-hub 💀 replaced with markup ->
  *                        "found ZERO of: emoji slot".
- *   CONTROL seeded dish  activeFoodBuffs returns [] -> "0 icon slots in the
+ *   CONTROL seeded dish (2nd) activeFoodBuffs returns [] -> "0 icon slots in the
  *                        Backpack tab's dish rows".
- *   CONTROL any decoded  assets/icons-pix AND assets/crates both moved away.
+ *   CONTROL any decoded (2nd) assets/icons-pix AND assets/crates both moved away
+ *                        -> "122 pixel imgs, 0 decoded", and all 35 named by the
+ *                        all-decoded row beside it.
  *   CONTROL all decoded  assets/icons-pix moved away -> all 33 named; and with
  *                        ONLY coin.png moved -> "assets/icons-pix/coin.png".
  *   CONTROL fingerprint  bhIcon inlines its tint in place of currentColor, so
