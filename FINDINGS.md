@@ -1,126 +1,147 @@
-# Overscroll wordmark, third attempt: make it unmistakable
+# FINDINGS — Boneyard: one name for the Mystery Egg, and the Herb patch's missing pixel art
 
-Branch `feat/wordmark-unmistakable`, rebased onto `origin/main` @ `510d583`.
-Ships as **v420** (v418 and v419 both landed while this was in flight).
+Base: origin/main @ c3b7bc9 (v420). Written as I went.
 
-## Findings before writing code
+## Fix 1 — every place the egg is named
 
-1. **The shipped opacity contradicted its own comment.** The wordmark note in
-   `app.css` said "Opacity .55 -> .78 because a faint mark behind the status bar
-   was the second half of the same problem." The rule shipped `opacity: .55`.
-   v415's contrast half never landed, because raising it turned the INK row red
-   (that row pinned the composite to `--text-3`) and the number got put back
-   while the sentence stayed. The guard was steering the design instead of
-   grading it.
+Re-derived with `grep -rni mystery` plus a `Step Egg` sweep. Tom's four locations are all real.
+The sweep found a FIFTH name, and it changes the shape of the fix.
 
-2. **The guard had 25 checks, not 27, and no rows named PREMISE.** Counted off
-   `origin/main`, and its own floor was `results.length < 25`. The TODAY row is
-   what covers "the app itself sets the class": it reads what route() left behind
-   rather than setting the class itself. Now 37 checks.
+### The two surfaces Tom is looking at
 
-3. **The `--sat 0` regression is real and I reproduced it.** Measured against the
-   shipped rule (`top: calc(-8px - var(--sat))`, height 46), bottom edge at
-   `38 - sat`:
-
-   ```
-   --sat  0px : top -8   bottom +38   38px welded on screen at every scroll position
-   --sat 47px : top -55  bottom  -9   0px visible, 9px of pull for the first pixel
-   --sat 59px : top -67  bottom -21   0px visible, 21px of pull (Tom's phone)
-   ```
-
-   Same rule, opposite failures at the two ends of `--sat`. That is the tell that
-   arithmetic against the inset was the wrong mechanism, not that the constant
-   needed another tune. Every inset the old guard graded was non-zero, which is
-   how a rule with a live regression on desktop, notchless phones and the Android
-   shell passed 25 of 25.
-
-4. **`bottom: 100%` behaves as described, verified not assumed.** Probed at
-   `--sat` 0, 47, 59 and 62: the percentage resolves against the scroller's
-   PADDING BOX height (`clientHeight` 867, not `scrollHeight` 2972), and the used
-   `top` comes out `-62px` at every one of them, i.e. the bottom edge lands
-   exactly on the containing block's top edge. `getComputedStyle` returns that
-   used value in px, so the guard's existing `top + height` arithmetic keeps
-   working unchanged. Adopted.
-
-## What shipped
-
-- `app.css`: `bottom: 100%` and no `top` at all, 232x62 (was 172x46, 1.82x the
-  area), `opacity: var(--wm-pull, 1)`. Zero pixels at rest and a first pixel at
-  the first pixel of travel, by construction, on every inset. The `--sat 0` bug
-  is not fixed, it is unrepresentable.
-- `js/app.js`: `bindWordmarkPull()`, a passive `scroll` listener on `#screen`
-  setting `--wm-pull` to `min(1, -scrollTop / 36)` quantised to 1/20. iOS reports
-  a negative `scrollTop` for the whole rubber band, so `-scrollTop` IS the pull
-  distance in px and the fade is a function of position, not of force.
-- **The CSS default is 1, not 0.** If a WebView never reports the negative offset
-  the listener never fires, `--wm-pull` stays unset, and the mark reveals at FULL
-  opacity off the geometry alone. Third attempt at this feature: a JS-driven
-  reveal that silently no-ops into a blank space is the one outcome that must be
-  impossible. Guarded by the FAILOPEN row.
-- `prefers-reduced-motion` is handled in the listener (`q = 1` at any pull), not
-  in a media query, so a player who asked for no motion gets the mark with no
-  fade rather than a dimmer mark. No keyframe, no duration and no iteration count
-  exist anywhere in this feature, so there is nothing that could be collapsed to
-  0.001s and run a loop a thousand times a second.
-
-## Curve, measured off the render at `--sat 59`
-
-| pull | mark visible | opacity |
+| where | origin/main | now |
 |---|---|---|
-| 0px | 0px | 0.00 |
-| 10px | 10px | 0.30 |
-| 20px | 20px | 0.55 |
-| 36px | 36px | 1.00 |
-| 63px | 62px (whole) | 1.00 |
-| 110px | 62px (whole) | 1.00 |
+| js/app.js:650 map key row (mapLegendHtml, the `?` legend) | 'Mystery egg' + 'Rare: walk to hatch a pet' | MYSTERY_EGG.name + MYSTERY_EGG.desc -> Mystery Egg / Rare: walk to hatch a pet |
+| js/app.js:14320 Boneyard intro card ("OUT THERE TODAY") | `<b>Mystery Egg</b> · rare spawn · walk to hatch a pet` | `<b>${MYSTERY_EGG.name}</b> · ${MYSTERY_EGG.desc}` -> Mystery Egg · Rare: walk to hatch a pet |
 
-v414: 73px for pixel one, 113px for whole, ceiling 0.55.
-v415: 21px / 67px at `--sat 59`, 9px / 55px at 47, and **-38px / 8px at 0**
-(already on screen), ceiling 0.55.
-v420: 0px / 62px at every inset, ceiling 1.00.
+Two different surfaces: `#mapIntro`'s OUT THERE TODAY card is what you see BEFORE tapping
+"Open the map" (coloured .blip-dots, 4 rows); mapLegendHtml() is the `?` map key you see AFTER
+(real markers, 9 rows). The intro card is destroyed when the map starts, so a player only ever
+sees one at a time and the drift was invisible in any single screenshot.
 
-## The INK row
+### Third mention, folded into the same constant (no text change)
 
-Inverted, deliberately. It pinned the revealed mark to `--text-3` with a
-brightness CEILING of 200: a rule that said "this must stay dim", which is the
-thing Tom rejected in words, and which had already bent the code once (finding
-1). It now requires the opposite, with a brightness FLOOR: mean within 40 of the
-source cream (255,243,211) and a brightest channel of at least 240. Measured,
-opacity 1 gives mean rgb(243,232,202) / max 255; the .55 the old row demanded
-gives mean rgb(144,137,127) / max under 200. 80+ levels apart on every channel,
-so the bound is not delicate. Proven red by restoring `.55`.
+js/app.js:9342 giftRewardLabel: 'a Mystery Egg' -> `a ${MYSTERY_EGG.name}`.
 
-## Two harness traps found, both of which made a working feature look broken
+### Not touched, and why
 
-1. **A released fake pull gets corrected during the next `await`.** The VISIBLE
-   row read opacity 1 and then screenshotted a black band. The listener was
-   right: releasing the `scrollTop` override lets a real scroll event land, and
-   at `scrollTop` 0 the mark is correctly transparent. Anything grading pixels
-   has to HOLD the negative offset across the capture, which is also a truer
-   simulation of a bounce.
-2. **Pseudo-element computed style lags one recalc cycle under emulated media.**
-   Under `Emulation.setEmulatedMedia` the listener set `--wm-pull` to "1" and
-   three consecutive reads returned "0", "0", "1". The first draft of REDUCED
-   read in the same task, got 0, and I concluded a perfectly good CSS `@media`
-   pin did not apply and swapped the mechanism. The swap stands on its own merits
-   but the evidence for it was a stale read, and that is recorded in the guard.
+- js/app.js:518 `// Mystery Egg spawn` — a comment; still correct.
+- js/loot.js:414 DUST_SHOP 'Mystery Egg' — already canonical. A cross-module import to share one
+  word is more churn than the drift it prevents.
+- js/changelog.js:13,714 — shipped changelog entries, historical record, never edited.
+- tests/boneyard-icon-audit.mjs:79 — UPDATED to 'Mystery Egg' or its MATCH row goes red on the fix.
 
-## Genuinely unverifiable headless
+### The fifth name: CRATES.egg.label is 'Step Egg'
 
-- **The rubber band itself.** Chromium clamps `scrollTop` at 0 (the CLAMP row
-  asserts it). Both the geometry and the listener are exercised by SIMULATION:
-  the content layer and the mark are displaced by the geometry a bounce produces,
-  and the listener is driven by shadowing `scrollTop` with an own property and
-  dispatching a real `scroll` event. That runs the production handler and the
-  assertions are on pixels, but it is a simulation of the bounce, not the bounce.
-  The only proof that pulling down on an iPhone shows the wordmark is pulling
-  down on an iPhone.
-- **Whether iOS fires `scroll` often enough during the bounce for the fade to
-  look smooth rather than steppy.** Unknowable off-device. Mitigated by the
-  quantisation being 20 steps over 36px, and by the geometric reveal being
-  continuous regardless of how often the listener runs.
-- **Whether `-webkit-overflow-scrolling: touch` throttles scroll events during
-  momentum on the current iOS.** If it does, the fade lands late rather than not
-  at all, because the default is the loud end state.
-- **The Android WebView's `--sat`.** It is almost certainly 0, which is what made
-  the old bug so visible there, but this build has not run on a device.
+js/loot.js:23 — `egg: { label: 'Step Egg', ... }`. A genuinely different concept on the same crate
+id, and NOT a drift to fix:
+
+- Step Egg = the backpack item you earn from walking. Named that in README.md (x2), js/game.js
+  ('Big-day Step Egg'), js/pit.js, sw.js (15 hatch frames), js/poi.js:332, js/app.js:489/4346/
+  10710/15577, three shipped changelog entries, assets/icons-proposal/manifest.json.
+- Mystery Egg = the map's rare spawn marker, and the Bone Dust shop row.
+
+So the reveal cards (js/app.js:3395, 15577, 15881, 17608) all say "Step Egg" while the Bone Dust
+shop says "Mystery Egg" for the same grant. Real product question, out of scope for a copy fix;
+renaming CRATES.egg.label ripples into the README, quest copy and shipped changelog voice.
+Flagged, not changed. This is also why the fix does NOT source the name from CRATES.egg.label
+(my first instinct, and it would have silently renamed the map key to "Step Egg").
+
+### The shared constant
+
+js/app.js, immediately above spawnIcon:
+
+    const MYSTERY_EGG = { name: 'Mystery Egg', desc: 'Rare: walk to hatch a pet' };
+
+## Do other spawn types have the same split-brain? YES
+
+Three of the four intro-card rows drift from the map key, and the intro card omits five of the
+nine marker types. Reported, not fixed (copy decisions, not the same one-line change).
+
+| row | intro card (14317-14320) | map key (646-656) | drift |
+|---|---|---|---|
+| Bone cache | XP for your bonehead | XP for your bonehead | none |
+| Coin pile | spend in the crate shop | Coins to spend in the shop | wording; "crate shop" vs "shop" |
+| Buried crate | a wearable inside | A common crate of loot | wording AND a stronger promise |
+| Mystery Egg | rare spawn · walk to hatch a pet | Rare: walk to hatch a pet | FIXED |
+| Herb patch | absent | Two cooking ingredients | intro card omits the most numerous marker |
+| Mini-boss | absent | A quick fight for coins + XP | absent |
+| Boss / Roaming / Secret den | absent | 3 rows | absent |
+
+Buried crate is the worst: "a wearable inside" is a stronger promise than "A common crate of
+loot", and CRATES.daily has consumableChance 0.12, so it is not always a wearable.
+
+## Fix 2 — the Herb patch marker
+
+js/app.js:519 `if (type === 'herbs') return bhIcon('garden-seed', s);` is the last vector marker.
+
+### The search (option 1)
+
+| searched | result |
+|---|---|
+| assets/icons-pix/ (47 files) | no herb/food/leaf/sprout/plant/mushroom. Confirmed. |
+| tally-refs/pixellab/ | one file, egg-simple-48.png. |
+| gwart/pixellab-library/ (53 files + _index.tsv) | eggs, chests, coins only. grep for herb/plant/leaf/sprout/mushroom/berry/forage/basket/greens on the index: ZERO hits. |
+| ~/Downloads (ASSETS, SOL ASSETS, patches, design_handoff_*, Heckle) | one hit, crop-ember-pepper-sprout.svg, a Hollow vector. |
+| gwart/farm-art/ (70 PNGs, all 48x48 PixelLab, Tom's own) | the only real candidates; measured and rejected below. |
+
+### farm-art candidates, measured (rendered 8x, inspected)
+
+| file | colours | ink % | why not |
+|---|---|---|---|
+| a-small-cluster-of-glowing-gre__base.png | 19 | 12.5 | glowing green spores. Ectoplasm Spore is one of the seven ingredients and is the green glowing one. Exactly the trap the constraint names. |
+| a-tuft-of-dry-grass__base.png | 22 | 37.4 | grass, not food; 1px vertical strands alias into a brown smear at 24px. |
+| a-young-seedling-two-small-le__base.png | 29 | 22.0 | a seedling in soil = something you PLANTED. Same wrong metaphor as garden-seed. ~6 green pixels on a dirt mound; a brown lump at 24px. |
+| a-patch-of-dark-wet-soil-fres__base.png | 29 | 42.5 | soil, no food. |
+| a-scatter-of-loose-dirt-and-sm__base.png | - | - | dirt, no food. |
+| a-burlap-seed-sack-open-at-th__base.png | 37 | 38.7 | seeds again, reads as a shop bag. |
+
+### Call: OPTION 2. Leave the vector, Tom draws one.
+
+Nothing on disk reads as "a patch of something to forage" at 24px, and every near-miss either
+promises one of the seven ingredients or repeats the seed metaphor the Bone Garden left behind.
+The audit's VECTOR row already goes red the day the file lands. No code change.
+
+### Art brief for Tom (paste into PixelLab)
+
+Filename: assets/icons-pix/herbs.png  (spawnIcon passes type 'herbs', so PIX_CUR.herbs in
+js/icons-pix.js must point at it)
+
+Canvas: 48 x 48, transparent, ~2px padding max. Must survive nearest-neighbour halve to 24 and
+quarter to 16: chunky silhouette, no 1px strands, no detail below 2x2. Aim ~20-30% ink, under
+~24 colours, which is where the other icons-pix markers sit.
+
+Prompt:
+
+  A small foraging patch of dark leafy herbs, top-down three-quarter view, a low
+  clump of four or five broad rounded leaves in muted graveyard green with one
+  pale bone-cream sprig, sitting on a shallow mound of dark brown soil. Chunky
+  readable silhouette, heavy dark outline, no thin stems. Not a single plant, not
+  a sprout, not a seed, not a mushroom. 48x48 pixel art, transparent background,
+  limited palette.
+
+Why those words: it must not look like any of the seven ingredients (Marrow, Graveroot, Bog
+Mushroom, Sinew Vine, Grave Salt, Ectoplasm Spore, Ember), because the spawn does not know which
+one it carries until you collect it. A generic clump of leaves says "food here" without naming
+which.
+
+### The "Two cooking ingredients" copy
+
+CONFIRMED shipped on origin/main: js/app.js:645 `[spawn('herbs'), 'Herb patch', 'Two cooking
+ingredients']`, with the comment recording the correction away from "Seeds for the Bone Garden".
+
+It matches the payout with one nuance: js/cooking.js:41 SPAWN_FOOD.herbs = 2 and spawnIngredient
+does `n = food >= 1 ? food : (rng() < food ? 1 : 0)`, so herbs always yields n=2 — but it returns
+a SINGLE id with n:2, i.e. two units of ONE randomly-picked ingredient, never one of each of two.
+Accurate as a count, loose as a description of variety. Not changed; flagged.
+
+## Version stamps
+
+origin/main sw.js at start: tally-v420 (c3b7bc9). Renumbering to v421. Three stamps per
+tests/version-stamp-audit.mjs: sw.js VERSION, js/app.js APP_BUILD, js/changelog.js newest n:.
+
+## In-flight conflict warning
+
+Another agent is implementing the Mimic in js/app.js, js/poi.js, js/pit.js, app.css. My js/app.js
+hunks are at ~514, ~650, ~9342, ~14320 and are localised; expect an additive conflict on
+js/changelog.js and the version stamps for whoever merges second.
