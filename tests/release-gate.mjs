@@ -329,6 +329,12 @@ const DECLARED = {
     + 'translate on .hero-char is overwritten by the animation), and --bh-shift is a custom property, so setting it one level up '
     + 'walks the PET left by the same 58px. Proven red both ways on 2026-08-21: flagging every pet as sharing reddens CONTROL, '
     + 'and moving the property to the scene reddens the pet-inheritance row.'],
+  'emporium-audit.mjs': ['full', "Gwart's Emporium: the shopkeeper takes the header's room, not the shelves'. "
+    + 'Run it on any change to gwartHeroHtml, the .gw-* block in app.css, or the hub tab scoping. Full because it drives four hub '
+    + 'tabs and reads pixels back. WRITTEN BECAUSE app.css PROMISED IT: the block ended with \"Guard: tests/emporium-audit.mjs\" '
+    + 'and that file existed on no ref, which reads as covered to the next person. Proven red twice on 2026-08-21: restoring '
+    + '--gw-off (the union-of-both-layers centring) puts CENTRED at 202.0 against 196.5, and hiding the floating gear without '
+    + 'giving it back reddens SCOPE.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
