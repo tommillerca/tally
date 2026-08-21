@@ -414,6 +414,10 @@ const DECLARED = {
     + 'still starts the fight is decoration) and COVER must find the overlay STILL UP when the choice resolves, because the '
     + 'arena is built underneath its hold frame and tearing it down one line early brings the map back mid-handover. '
     + 'All eight rows proven red on 2026-08-21 in a throwaway tree; the mutations are listed in the file header.'],
+  'device-open.mjs': ['skip', "not an audit: it is the tool that OPENS the app on a booted simulator, "
+    + 'serves the tree on a fresh port and hands back the URL. Declared here because the gate refuses to start while any '
+    + 'file in tests/ is undeclared, which is the assertion that has already blocked this gate four separate times. '
+    + 'Running it would boot a simulator and sit in the foreground serving, which is the opposite of what a gate wants.'],
   'rebuild-lossless-audit.mjs': ['full', "re-running scripts/build-cosmetics.py must not delete, rename or "
     + 're-rarity a single item that ships today. Run it on any change to that script, to SPECIALS/OVERRIDES, or to the art '
     + 'library. Tiered full rather than pure because it shells out to python3 and rebuilds the whole catalogue against Cam\'s '
