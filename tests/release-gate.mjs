@@ -360,6 +360,12 @@ const DECLARED = {
     + 'and that file existed on no ref, which reads as covered to the next person. Proven red twice on 2026-08-21: restoring '
     + '--gw-off (the union-of-both-layers centring) puts CENTRED at 202.0 against 196.5, and hiding the floating gear without '
     + 'giving it back reddens SCOPE.'],
+  'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
+    + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
+    + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
+    + 'not from tokens: this bar layers a plate under a glyph under a label, and a token says what was asked for rather than what '
+    + 'the player got. Proven red twice on 2026-08-21: sinking one tab dim colour into the bar ground (CONTRAST, 1.07:1 on '
+    + 'boneyard) and growing the tab padding until the active plate matched the FAB (FAB, 0.5x).'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
