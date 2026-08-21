@@ -238,10 +238,16 @@ const SCREENS = [
   ['today', p => hash(p, '#/today')],
   ['bonehead', p => hash(p, '#/bonehead')],
   ['shop', p => hash(p, '#/shop')],
-  ['foods', p => hash(p, '#/foods')],
   ['progress', p => hash(p, '#/progress')],
-  ['friends', p => hash(p, '#/friends')],
-  ['settings', p => hash(p, '#/settings')],
+  /* NOT HERE, AND MEASURED RATHER THAN ASSUMED: #/foods, #/friends and #/settings
+     render 1, 0 and 0 pictures respectively outside the tab bar on a demo save.
+     Foods is a text list with stroke controls, and Crew and Settings draw nothing
+     at all without a signed-in social account. Driving them costs 15s and adds a
+     screen the distinctness control cannot tell from another empty one, so they
+     would have to be exempted from their own control. The one icon on those
+     screens that this class could reach is the sealed-gift crate in renderFriends,
+     which needs a pending gift from a real account to render; it is covered from
+     source by the CALLSITE row instead. */
   ['backpack', p => viaToday(p, 'charBtn')],
   ['stable', p => viaToday(p, 'stableBtn')],
   ['kitchen', async p => {
@@ -294,6 +300,27 @@ const drove = [];
 try {
   await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await seed(page, { level: 14, coins: 5000, dust: 5000 });
+  /* GIVE THE SAMPLE THE SURFACES IT IS MEANT TO GRADE. The hub's "active dish"
+     row and the Kitchen's pantry only render when there is something in them, and
+     an audit whose sample cannot reach the row it was written for is the vacuous
+     green four guards in this repo shipped on 2026-08-19. The active-dish row is
+     specifically where the EMOJI row's real subject lives: without this the only
+     emoji in the whole sample is the wheel's own hub, which is declared, so the
+     row would grade nothing while reporting ok. Written the way the game writes
+     it, off real RECIPES entries through cooking.js's own buff shape. */
+  await page.evaluate(async () => {
+    const { RECIPES } = await import('./js/cooking.js');
+    const { kvSet } = await import('./js/db.js');
+    const r = RECIPES.find(x => x.buff) || RECIPES[0];
+    const b = { recipe: r.id, name: r.name, icon: r.icon, ...r.buff };
+    if (b.kind === 'coins') b.untilMs = Date.now() + 6 * 3600e3;
+    if (b.kind === 'combat') b.fightsLeft = b.fights;
+    await kvSet('foodbuffs', [b]);
+    await kvSet('pantry', RECIPES.slice(0, 3).map(x => ({ recipeId: x.id, name: x.name, icon: x.icon, cookedAt: Date.now() })));
+    await kvSet('ingredients', { marrow: 4, graveroot: 3, ember: 2, bog: 2, sinew: 3, salt: 4, ectoplasm: 1 });
+  });
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(2200);
 
   for (const [label, drive] of SCREENS) {
     let err = null;
@@ -302,7 +329,7 @@ try {
        open, and closing first detached the wheel and graded an empty overlay. */
     try { await drive(page); await sleep(700); }
     catch (e) { err = String(e.message || e).split('\n')[0]; }
-    const got = err ? { seen: [], total: 0 } : await page.evaluate((label, VECTORS, EMOJI_MAP) => {
+    const got = err ? { seen: [], total: 0, slots: 0 } : await page.evaluate((label, VECTORS, EMOJI_MAP) => {
       /* NORMALISE THE EXPECTED MARKUP THROUGH THIS PAGE'S OWN SERIALIZER.
          Comparing a string from a .js file against element.innerHTML compares
          two different quoting conventions and matches nothing, which is a guard
@@ -360,11 +387,19 @@ try {
          classified count would demand every screen carry currency, which is a
          false red; grading it on "did this surface paint any picture at all" is
          the question the control is actually asking. */
-      const total = [...document.querySelectorAll('img,svg')].filter(shown).length;
-      return { seen, total };
+      /* CONTENT ONLY, NOT THE CHROME. #tabbar and #gearBtn are static markup in
+         index.html and are on screen on every route, so counting the whole
+         document made this "did the app boot", which it already knows, and the
+         row could not fail on a screen that rendered nothing at all. */
+      const total = [...document.querySelectorAll('img,svg')]
+        .filter(el => shown(el) && !el.closest('#tabbar') && !el.closest('#gearBtn')).length;
+      /* The seeded-surface control's evidence, and the only place this file looks
+         at a class: it asks whether the ROW EXISTS, never what is drawn in it. */
+      const slots = [...document.querySelectorAll('.crate-row .crate-ico')].filter(shown).length;
+      return { seen, total, slots };
     }, label, VECTORS, EMOJI_MAP);
     nodes.push(...got.seen);
-    drove.push({ label, err, n: got.seen.length, total: got.total });
+    drove.push({ label, err, n: got.seen.length, total: got.total, slots: got.slots });
     console.log(`  ${label.padEnd(14)} ${err ? 'DRIVER FAILED: ' + err : `${got.total} pictures, ${got.seen.length} classified`}`);
   }
 } finally {
@@ -384,6 +419,25 @@ ok('CONTROL  every screen driver reached a surface that painted something',
   dead.length === 0,
   dead.length ? dead.map(d => `${d.label}: ${d.err || 'ZERO pictures rendered'}`).join(' | ')
     : `${drove.length} screens, ${drove.reduce((s, d) => s + d.total, 0)} pictures, ${nodes.length} classified as icons`);
+/* AND THE THIRTEEN SCREENS ARE THIRTEEN DIFFERENT SCREENS. This is the control
+   that "did it paint anything" cannot be: the tab bar and the gear button are
+   always on screen, so a driver whose click silently misses still reports a
+   healthy picture count while grading Today for the fourth time. That is not
+   hypothetical, it is what this file did while it was being written: openCharacter
+   routes to the hub, so #charBtn no longer existed for the next three drivers and
+   `stable`, `kitchen` and `pit` all came back as the same 29 nodes. Every row
+   would have stayed green over a sample missing three of its screens. */
+const sig = d => JSON.stringify(nodes.filter(n => n.label === d.label)
+  .map(n => `${n.kind}:${n.src || n.concept || n.glyph}@${n.w}`).sort());
+const sigs = new Map();
+const clones = [];
+for (const d of drove) {
+  const k = sig(d);
+  if (sigs.has(k)) clones.push(`${d.label} is identical to ${sigs.get(k)}`); else sigs.set(k, d.label);
+}
+ok('CONTROL  no two screen drivers landed on the same screen',
+  clones.length === 0,
+  clones.length ? clones.join(' | ') : `${sigs.size} distinct screens out of ${drove.length} drivers`);
 /* ALL THREE MEDIA, OR THE ROW FOR THE MISSING ONE IS VACUOUS. SWAP grades
    vectors, EMOJI grades emoji and STEP grades pixel <img>; each one passes for
    free if its probe found nothing at all, and "found nothing" is indistinguishable
@@ -399,6 +453,20 @@ ok('CONTROL  the sample contains all three media, so no row is graded blind',
   blindTo.length === 0,
   blindTo.length ? `found ZERO of: ${blindTo.join(', ')} — the matching row below cannot fail`
     : Object.entries(media).map(([k, n]) => `${k} ${n}`).join(', '));
+/* AND THE SEEDED SURFACE REALLY ARRIVED. The hub's active-dish row is the one
+   place in the sample where an emoji has ever stood in for pixel art (Backpack tab,
+   the "Kitchen · food & buffs" section), so if the
+   seed stops landing, EMOJI quietly goes back to grading nothing but the wheel's
+   own declared hub.
+   DELIBERATELY MEDIUM-BLIND. The first version of this row asserted a dish PNG on
+   the hub, which reads as the stronger check and is the wrong one: it goes red on
+   exactly the defect EMOJI exists to catch, and because a failed CONTROL aborts
+   the run, the EMOJI row would never have been reached to report it. A control
+   proves the SAMPLE was reached; whether what arrived is correct is the graded
+   row's job, and merging the two costs you the row. */
+ok('CONTROL  the seeded dish reached the hub, so the EMOJI row has a real surface',
+  (drove.find(d => d.label === 'backpack') || {}).slots > 0,
+  `${(drove.find(d => d.label === 'backpack') || {}).slots || 0} icon slots in the Backpack tab's dish rows`);
 ok('CONTROL  the sample holds pixel art that actually DECODED (not just boxes)',
   pixImgs.length > 0 && pixImgs.some(i => i.nw > 0),
   `${pixImgs.length} pixel imgs, ${pixImgs.filter(i => i.nw > 0).length} decoded`);
