@@ -92,7 +92,15 @@ const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
-  { key: 'golden', iconId: 'crate-golden',   tag: 'GOLD',   name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
+  /* 'Golden', not 'GOLD'. The wedge grants grantCrate('golden'), reveals as "a
+     Golden Crate", and now draws assets/crates/golden/f0.png, which is the same
+     bone chest the Shop cell and the gift reveal serve for that crate and which
+     v389 shipped under that exact name. 'GOLD' promised treasure over a picture
+     of a chest and read as a currency the game does not have; the drawing and
+     the grant agreed with each other and only the word was the odd one out.
+     Title case to match its sibling wedges too: the gold fill and the gold text
+     colour already say jackpot without shouting. */
+  { key: 'golden', iconId: 'crate-golden',   tag: 'Golden', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
   { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
   { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },

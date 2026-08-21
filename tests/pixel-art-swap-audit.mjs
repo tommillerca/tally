@@ -33,16 +33,18 @@
  * art on disk.
  *
  * WHAT IT ASSERTS, and which direction is failure.
- *   CONTROL   NINE rows, because this file has three graded media and each one
+ *   CONTROL   TEN rows, because this file has three graded media and each one
  *             passes for free on a sample that does not contain it. Every driver
  *             painted something (counted INSIDE the app's content, not including
  *             the always-present tab bar), the ten drivers landed on ten DIFFERENT
  *             screens, all three media are present, the seeded dish really reached
  *             the Backpack, an icons-pix PNG was found AND decoded, EVERY pixel
  *             img decoded, the vector fingerprint table matched real drawings, the
- *             emoji table was derived from the game's data, and the inventory parse
- *             yielded rows. An empty sample is a FAILURE, never a pass: four
- *             guards in this repo went green while blind on 2026-08-19.
+ *             emoji table was derived from the game's data, the wheel's words were
+ *             paired to its pictures and at least three of those pictures carry a
+ *             name, and the inventory parse yielded rows. An empty sample is a
+ *             FAILURE, never a pass: four guards in this repo went green while
+ *             blind on 2026-08-19.
  *   SWAP      no rendered vector draws at >= 16 CSS px for a concept that HAS
  *             pixel art. 16 is pixCur's floor, so at or above it the art was
  *             available and something chose the vector. Below 16 is the standing
@@ -61,6 +63,16 @@
  *             through a CSS transform reads as mush while every count still
  *             passes. (boneyard-icon-audit pins this on the map; this pins it
  *             everywhere else.)
+ *   LABEL     no wheel wedge's WORD disagrees with the picture drawn above it.
+ *             The other rows all ask which MEDIUM a concept is drawn in; this one
+ *             asks whether the drawing and the copy beside it are about the same
+ *             object, which is the defect a medium swap creates and none of them
+ *             can see. The gold wedge shipped a bone chest under the word GOLD on
+ *             2026-08-21: correct medium, correct art, correct grant, wrong word.
+ *             The wedge's tag must be a WHOLE WORD of the label the Shop gives
+ *             the thing that wedge draws (SHOP / DUST_SHOP in loot.js, resolved
+ *             through CRATE_ICON_PIX and PIX_CUR to the art path the DOM shows).
+ *             Whole word, not substring: 'GOLD' is a substring of 'Golden Crate'.
  *   CALLSITE  no bhIcon() call asks >= 16 for a pack id that has a pixel twin.
  *             SOURCE-derived on purpose: this is the half the DOM sample cannot
  *             reach, because SCREENS is ten screens and the app has more.
@@ -134,6 +146,23 @@ const RENAMED = { 'crate-daily': 'crate', 'crate-golden': 'crates/golden/f0', ch
 const twinOf = id => (PIX_CUR[id] ? id
   : PIX_CUR[id.replace(/^ingr-/, '')] ? id.replace(/^ingr-/, '')
     : RENAMED[id] || null);
+
+/* WHAT THE GAME CALLS THE THING IN EACH PICTURE, keyed by the art path that
+   lands in the DOM. Scraped off the Shop's own product rows (SHOP and DUST_SHOP
+   in loot.js), because the Shop is where this game NAMES the objects it hands
+   out, and the wheel hands out the same objects through the same grantCrate /
+   grantConsumable calls. Deriving it means the day a crate is renamed, the name
+   moves here on its own and the wedge that still says the old word goes red.
+   Not every drawing is a shop product: the bone-coin and the ingredients are
+   not sold, so they resolve to nothing and the LABEL row below skips them
+   rather than inventing a name for them. */
+const lootSrc = readFileSync(path.join(JS, 'loot.js'), 'utf8');
+const ART_NAME = {};
+for (const m of lootSrc.matchAll(/\{\s*id:\s*'([\w-]+)',\s*label:\s*'([^']+)'/g)) {
+  const t = twinOf(m[1]);
+  const f = CRATE_ICON_PIX[m[1].replace(/^crate-/, '')] || (t && PIX_CUR[t] && `icons-pix/${PIX_CUR[t]}`);
+  if (f) ART_NAME[`assets/${f}.png`] = m[2];
+}
 
 /* The pack's raw path data, per id. bhIcon emits `<svg ...>${it.p}</svg>`, so
    `p` IS what lands in the DOM and it is the only thing that identifies which
@@ -302,6 +331,7 @@ const { browser, page } = await boot(base, {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
 const nodes = [];
+const wedges = [];
 const drove = [];
 try {
   await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -335,7 +365,7 @@ try {
        open, and closing first detached the wheel and graded an empty overlay. */
     try { await drive(page); await sleep(700); }
     catch (e) { err = String(e.message || e).split('\n')[0]; }
-    const got = err ? { seen: [], total: 0, slots: 0 } : await page.evaluate((label, VECTORS, EMOJI_MAP) => {
+    const got = err ? { seen: [], total: 0, slots: 0, wedges: [] } : await page.evaluate((label, VECTORS, EMOJI_MAP) => {
       /* NORMALISE THE EXPECTED MARKUP THROUGH THIS PAGE'S OWN SERIALIZER.
          Comparing a string from a .js file against element.innerHTML compares
          two different quoting conventions and matches nothing, which is a guard
@@ -386,6 +416,49 @@ try {
         seen.push({ label, kind: 'emoji', glyph: t, concept: EMOJI_MAP[t],
           w: px(parseFloat(getComputedStyle(el).fontSize)), h: 0 });
       }
+      /* THE WHEEL'S WEDGES, WORD PAIRED TO PICTURE. Every wedge carries two
+         claims about the same prize: an <svg> <text> tag and a drawing. They are
+         emitted by two different functions (wheelSvg's labels, wheelIconsHtml's
+         DOM imgs) off one shared geometry, so nothing in the source holds them
+         to each other and they can disagree without any code looking wrong.
+         PAIRED BY THE WEDGE EACH ONE IS DRAWN INSIDE, which is exact and needs
+         no threshold: every wedge is a real <path> sector in the wheel's svg, so
+         the question "is this word and this picture on the same slice" is asked
+         of the geometry itself with isPointInFill, in the svg's own user space,
+         through the wheel's live screen CTM. That survives the spin (the rotate
+         moves the sector, the word and the picture together), the viewport, and
+         a reordered PRIZES table.
+         AN EARLIER VERSION PAIRED BY PROXIMITY AND IT WAS WRONG BOTH WAYS ROUND.
+         The word sits 17 units below the wedge's anchor and the picture 8 above
+         it, which is 25 units apart on wedges whose neighbouring pictures are
+         only 27 away: nearest-by-distance cleared its runner-up by 1.1x, and
+         nearest-by-angle by 23.6 degrees of a 51-degree wedge. Either was one
+         layout tweak from silently grading every word against the picture next
+         door while reporting a clean pass. */
+      const wedges = [];
+      const wheel = document.querySelector('.dw-wheel');
+      const svg = wheel && wheel.querySelector('svg');
+      if (wheel && svg && shown(wheel)) {
+        const inv = svg.getScreenCTM() && svg.getScreenCTM().inverse();
+        const slice = el => {
+          const r = el.getBoundingClientRect();
+          const q = new DOMPoint(r.x + r.width / 2, r.y + r.height / 2).matrixTransform(inv);
+          const paths = [...svg.querySelectorAll('path')];
+          return paths.findIndex(pa => pa.isPointInFill(q));
+        };
+        const arts = [...wheel.querySelectorAll('.dw-ico img')].filter(shown)
+          .map(el => ({ w: inv ? slice(el) : -1, src: el.getAttribute('src') }));
+        for (const t of svg.querySelectorAll('text')) {
+          const tag = (t.textContent || '').trim();
+          if (!tag || !shown(t) || !inv) continue;
+          const w = slice(t);
+          const hit = arts.filter(a => a.w === w && w >= 0);
+          /* `src: null` when the word's own wedge holds no picture, or more than
+             one. Reported, never dropped: a word alone on its slice is exactly
+             the state the control below has to be able to see. */
+          wedges.push({ label, tag, wedge: w, src: hit.length === 1 ? hit[0].src : null });
+        }
+      }
       /* `total` is the DRIVER's control and is deliberately not the same number
          as seen.length. #/settings and #/foods hold only stroke controls (close,
          chevron, search) which no pixel art will ever replace, so they classify
@@ -402,9 +475,10 @@ try {
       /* The seeded-surface control's evidence, and the only place this file looks
          at a class: it asks whether the ROW EXISTS, never what is drawn in it. */
       const slots = [...document.querySelectorAll('.crate-row .crate-ico')].filter(shown).length;
-      return { seen, total, slots };
+      return { seen, total, slots, wedges };
     }, label, VECTORS, EMOJI_MAP);
     nodes.push(...got.seen);
+    wedges.push(...got.wedges);
     drove.push({ label, err, n: got.seen.length, total: got.total, slots: got.slots });
     console.log(`  ${label.padEnd(14)} ${err ? 'DRIVER FAILED: ' + err : `${got.total} pictures, ${got.seen.length} classified`}`);
   }
@@ -496,6 +570,21 @@ const blank = pixImgs.filter(i => !(i.nw > 0));
 ok('CONTROL  every pixel <img> reports naturalWidth > 0',
   blank.length === 0,
   blank.length ? [...new Set(blank.map(i => i.src))].join(', ') : `${pixImgs.length} decoded`);
+/* THE WEDGE PAIRING IS AN INSTRUMENT TOO, and the LABEL row below reads nothing
+   else. It goes blind two ways and both look like a pass: a word lands on a
+   wedge that holds no single picture (so it is graded against nothing), or
+   ART_NAME resolves none of the paths the wheel actually draws, because a Shop
+   label was reworded or an art file moved. So require BOTH: every word paired to
+   exactly one picture on its own wedge, and at least three of those pairs
+   carrying a name the Shop gave them. Three is what the wheel has today (the two
+   crates and the Battle Charm); the bone-coin and the ingredients are not sold
+   and are unnamed by design. */
+const named = wedges.filter(w => ART_NAME[w.src]);
+const loose = wedges.filter(w => !w.src);
+ok('CONTROL  the wheel\'s words were paired to the wheel\'s pictures, and named',
+  wedges.length > 0 && loose.length === 0 && named.length >= 3,
+  loose.length ? `words with no single picture on their own wedge: ${loose.map(w => `${w.label}|${w.tag} (wedge ${w.wedge})`).join(', ')}`
+    : `${wedges.length} wedge pairs across ${new Set(wedges.map(w => w.label)).size} renders, ${named.length} drawing the Shop has a name for, of ${Object.keys(ART_NAME).length} named drawings`);
 if (fails) { console.log(out.join('\n')); console.log('\nthe sample did not hold; nothing below it is evidence'); process.exit(1); }
 
 /* ---- SWAP. A vector at or above the floor, for a concept that has art. ---- */
@@ -535,6 +624,28 @@ ok('STEP     every pixel <img> renders at a whole step and at its own declared w
   offStep.length
     ? [...new Set(offStep.map(i => `${i.src.split('/').slice(-2).join('/')} @${i.w}px (attr ${i.attrW})`))].join(', ')
     : `sizes seen: ${[...new Set(pixImgs.map(i => i.w))].sort((a, b) => a - b).join(', ')}`);
+
+/* ---- LABEL. The word on a wedge and the picture on it name the same thing.
+   The wheel is the one screen in the app that puts a one-word tag directly under
+   a drawing, and the two are written in different functions, so the drawing can
+   be swapped without anyone reading the word. That is what happened when the
+   gold wedge got its pixel art on 2026-08-21: it grants grantCrate('golden'),
+   reveals as "a Golden Crate" and now draws assets/crates/golden/f0.png, the
+   same bone chest the Shop cell and the gift reveal serve, while its tag still
+   said GOLD, a currency this game does not have.
+   WHOLE WORD, case-insensitive, against the Shop's label for that drawing.
+   Whole word rather than substring on purpose: 'GOLD' IS a substring of 'Golden
+   Crate' and a substring test would have called the defect clean. Wedges whose
+   drawing the Shop does not sell (the bone-coin, the ingredients) are skipped
+   rather than guessed at, and the control above counts how many were graded so
+   the skip cannot quietly become all of them. */
+const labelBad = wedges.filter(w => ART_NAME[w.src]
+  && !ART_NAME[w.src].toLowerCase().split(/[^a-z0-9]+/).includes(w.tag.toLowerCase()));
+ok('LABEL    every wheel wedge\'s word names the thing that wedge draws',
+  labelBad.length === 0,
+  labelBad.length
+    ? labelBad.map(w => `${w.label}: wedge says "${w.tag}" over ${w.src}, which this game calls a ${ART_NAME[w.src]}`).join(' | ')
+    : named.map(w => `"${w.tag}" = ${ART_NAME[w.src]}`).filter((v, i, a) => a.indexOf(v) === i).join(', '));
 
 /* ==========================================================================
  * 6. THE SOURCE ROWS, off icon-inventory-audit's own printed inventory.
@@ -651,6 +762,19 @@ console.log(fails ? `\n${fails} FAILED` : '\nevery screen draws one medium');
  *                        "NEWS|badge-crown@40 asks 40, serves 24".
  *   SHORTFALL un-decl.   the same call changed to 24, so the declared hole
  *                        closes -> "js/app.js:NEWS|badge-crown@34 — delete
- *                        these rows from SHORTFALL_OK".
+ *                        these rows from SHORTFALL_OK"
+ *
+ * AND THE TWO ROWS ADDED 2026-08-21 with the gold wedge's word, same method,
+ * same throwaway-tree-and-exit-code-file discipline, green baseline immediately
+ * before each:
+ *   LABEL                js/wheel.js's gold wedge tag put back to 'GOLD' ->
+ *                        "wheel: wedge says \"GOLD\" over assets/crates/golden/f0.png,
+ *                        which this game calls a Golden Crate", and the same hit
+ *                        again on wheel-reveal.
+ *   CONTROL wedge pair   wheelIconsHtml's percentages halved, so every picture
+ *                        collapses onto the hub and no word's own wedge holds one
+ *                        -> "words with no single picture on their own wedge";
+ *                        and separately SHOP's crate labels reworded -> a named
+ *                        count under the floor of 3..
  */
 process.exit(fails ? 1 : 0);
