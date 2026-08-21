@@ -229,6 +229,9 @@ const PRECACHE = [
   './assets/bh/C/shiny/C4.png',
   './assets/bh/C/shiny/C5.png',
   './assets/bh/C/CX.png',
+  // Bumbleseal, drawn on the Today hype banner, which is the DEFAULT screen: a
+  // cold-cache miss is a hole in the first thing a player sees.
+  './assets/bh/C/C6.png',
   './assets/bh/anim/lizard-amethyst/base.png',
   './assets/bh/anim/lizard-amethyst/lid.png',
   './assets/pit/gate-boneyard.webp',

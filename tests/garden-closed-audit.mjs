@@ -238,7 +238,12 @@ const today = await page.evaluate(() => {
   const screen = document.getElementById('screen');
   return {
     rendered: !!screen && screen.textContent.trim().length > 200,
-    outThereRows: document.querySelectorAll('.out-there .glutton-banner').length,   // the control
+    /* THE CONTROL. It used to count the rows in "Out there today", which is the
+       card the garden banner would have appeared in. That card came off Today on
+       2026-08-21 (Tom: every banner but the step winner), so the control moved to
+       the hype banner that replaced it: a Today that rendered its banner really
+       rendered, and every absence below is a measurement rather than a blank. */
+    bannerRendered: !!document.querySelector('.card.hype .hype-line'),
     gardenBanner: !!document.querySelector('.garden-banner'),
     gardenCta: !!document.getElementById('gardenToKitchen'),
     kitchenBadge: !!document.querySelector('#kitchenActBtn .hero-badge'),
@@ -247,8 +252,8 @@ const today = await page.evaluate(() => {
     words: (screen?.textContent || '').match(/\b(garden|crop|crops|harvest|seed|seeds)\b/gi) || [],
   };
 });
-check('SETUP Today really rendered, with rows in Out There (an empty screen would pass every absence below)',
-  today.rendered && today.outThereRows > 0, JSON.stringify({ rendered: today.rendered, rows: today.outThereRows }));
+check('SETUP Today really rendered, hype banner and all (an empty screen would pass every absence below)',
+  today.rendered && today.bannerRendered, JSON.stringify({ rendered: today.rendered, banner: today.bannerRendered }));
 check('ROUTES no ripe-crop banner on Today, with three crops standing ripe', !today.gardenBanner);
 check('ROUTES no "Open the garden" CTA on Today', !today.gardenCta);
 check('ROUTES the Kitchen button carries no ripe-crop badge', !today.kitchenBadge);

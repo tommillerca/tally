@@ -2698,6 +2698,47 @@ body::before {
 .rr-haul .pz { background: rgba(42, 45, 40, .82); font-size: var(--fs-2); padding: 3px 11px 3px 8px; }
 .pz svg { flex: none; }
 
+/* THE HYPE BANNER, directly above the step-race result. It has to out-shout the
+   gold banner underneath it WITHOUT shouting in words (ten of them, all told), so
+   every bit of the weight is art and colour: a coral wash over the card grain, a
+   coral keyline, and figures at 78px, which is bigger than any row the "Out there
+   today" card it replaced ever drew.
+   ONE FRAME, TWO TARGETS. The halves are a grid, not two cards: the eyebrow and
+   the sentence both span the full width, and a single hairline is the only thing
+   between the Boneyard column and the shop column. That is what stops it reading
+   as a list of announcements. */
+.hype { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end; column-gap: 10px; padding: 10px 11px 11px; }
+/* THE WASH IS THREE LAYERS AND EACH NEEDS ITS OWN SIZE. .card sets
+   background-size: 150px 150px for the grain, and background-size applies to
+   EVERY layer: the first render tiled both gradients at 150px and painted the
+   banner in vertical bands. Caught in the screenshot, not in the source. */
+.hype { background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
+  linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
+  background-size: cover, cover, 150px 150px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-blend-mode: normal, normal, soft-light;
+  border-color: var(--ink); box-shadow: var(--sh), inset 0 0 0 1.5px rgba(253, 104, 87, .38); }
+.hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
+  font-size: var(--fs-2); line-height: 1; letter-spacing: .16em; color: var(--coral);
+  margin-bottom: 2px; }
+.hype-half { grid-row: 2; display: flex; align-items: flex-end; justify-content: center;
+  background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
+.hype-half.seal { grid-column: 2; padding-left: 11px; border-left: 1px solid var(--line-strong); }
+.hype-half:active { transform: translateY(1px); }
+.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 2px; min-width: 0; }
+/* The box is fixed and the plate inside it is absolutely placed by
+   hypePlateHtml's measured transform, so both creatures stand on one floor. */
+.hype-fig { position: relative; display: block; flex: 0 0 auto; overflow: visible;
+  filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
+.hype-half .petcrop { filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.hype-line { grid-column: 1 / -1; grid-row: 3; margin-top: 6px; font-family: var(--display);
+  font-weight: 400; font-size: var(--fs-4); line-height: 1.15; letter-spacing: .02em;
+  color: var(--text); }
+.hype-line span { color: var(--coral); }
+@media (max-width: 360px) { .hype-line { font-size: var(--fs-3); } }
+
 /* THE TODAY BANNER: the permanent home for the result, and the surface that
    carries EVERY place's purse (the poster drops them to keep 4th and 5th above
    the fold on a 375px phone). Same <details> shape as the Spires and Garden

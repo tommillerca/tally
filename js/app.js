@@ -48,7 +48,7 @@ import { hlwArt } from './hollow-art.js';
 import { runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
-import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
+import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
@@ -2967,7 +2967,7 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
-  const [coinBal, dustBal, pitEnergy, heldSpiresNow] = await Promise.all([coins(), boneDust(), refreshPitEnergy(), heldSpires()]);
+  const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
@@ -3150,9 +3150,9 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
+  ${isToday ? hypeBannerHtml() : ''}
 
-  ${isToday ? outThereHtml({ held: heldSpiresNow, cropsRipe }) : ''}
+  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -3294,39 +3294,12 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  /* THE ROW OPENS THE TEASER. Tom has said twice that "the monster bestiary
-     popup is gone", then "clicking it is broken": tapping the day's hunt jumped
-     straight to the map with no acknowledgement, which reads as a dead button.
-     The popup's own CTA still takes you hunting, so the map is one tap further,
-     not gone. Delegated off the card rather than bound to the node, because this
-     row is rebuilt on every Today refresh and a node-bound listener dies with it. */
-  $('.out-there')?.addEventListener('click', e => {
-    if (e.target.closest('#bestiaryToMap')) openBossIntro();
-  });
-  /* The row's monster is a layered stack like any other Bonehead, so it needs
-     composing. Unlike the teaser strip this is ONE figure and it is the whole
-     reason the row is interesting, so it composes on render rather than on open
-     (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
-  const bestRow = $('.bestiary-banner');
-  if (bestRow) composeAvatars(bestRow);
-  /* NEVER BUILD ART FOR A CLOSED PANEL (1C). The strip lives inside a <details>
-     that is CLOSED by default, and it used to ship its 18 stacked heads in the
-     markup: 69 images and 107.8 MB of the 129.1 MB Today measured, for something
-     the player sees as one line of text. Composing was already deferred to the
-     open; the DECODING was not, and decoding is what the renderer pays for.
-     The wall is built on the first open and then left alone, so re-opening is
-     free and a player who never taps it never pays. */
-  $('details.teaser-banner')?.addEventListener('toggle', e => {
-    if (!e.target.open) return;
-    const strip = $('.tz-strip', e.target);
-    if (strip && !strip.firstChild) strip.innerHTML = teaserWallHtml(18, 62);
-    composeAvatars(e.target);
-  });
-  $('details.garden-banner')?.addEventListener('toggle', e => {
-    if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
-  });
-  $('#gardenToKitchen')?.addEventListener('click', () => openHollow(() => refresh()));
+  /* THE HYPE BANNER'S TWO HALVES, each going where its own subject lives. The
+     handlers that used to sit here belonged to the "Out there today" rows and
+     came off with them (the spire CTA, the bestiary row's delegate and its
+     compose, the teaser strip's deferred wall, and the garden row's two). */
+  $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -4108,6 +4081,71 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   </button>`;
 }
 
+/* THE HYPE BANNER. Tom, 2026-08-21: "remove all banners on the today page except
+   the step winner but above it we need to create a new hypebanner that is bold
+   and stands out and shows the 2 new creatures that are out in the boneyard and
+   simultaneously teases bumbleseal being sold in the shop. this all needs to be
+   in the same banner and feel cohesive not like a verbose list it should just be
+   minimal wording, clean easy marketing that excites."
+   BOLD ART, TEN WORDS. That is the only way both halves of the brief hold at
+   once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
+   loud part has to be the picture. A banner that needs a sentence to explain its
+   own picture is a press release.
+   ONE SENTENCE, NOT THREE ANNOUNCEMENTS. "Two want to eat you. One wants your
+   coins." carries all three arrivals in one breath, and the art says which is
+   which, so nothing has to be named or listed. It is also what keeps the two tap
+   targets from reading as two banners: the sentence spans the whole frame and the
+   only thing dividing the halves is a hairline.
+   NO PRICE ON THE SEAL, deliberately. Bumbleseal has no rack listing on any
+   branch here, so a number would be a promise the shop cannot keep today, and
+   Tom's own framing is that she is a tease and not a storefront. "One wants your
+   coins" is true the day she lands and funny before it. */
+/* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
+   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
+   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
+   the same object-fit box drew one of them standing fifteen pixels in the air.
+   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one fixed
+   box, one transform per plate, and no per-art nudges anywhere else. */
+const HYPE_PLATES = {
+  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
+  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+};
+function hypePlateHtml(src, px) {
+  const p = HYPE_PLATES[src];
+  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
+  const s = (px * 0.94) / Math.max(cw, ch);                   // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the whole plate, as displayed
+  const tx = (px - cw * s) / 2 - p.x0 * iw;                   // ink centred across the box
+  const ty = px - p.y1 * ih;                                  // ink SEATED on the box floor
+  return `<span class="hype-fig" style="width:${px}px;height:${px}px"><img src="${src}" alt=""
+    style="width:${iw.toFixed(1)}px;height:${ih.toFixed(1)}px;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)"></span>`;
+}
+function hypeBannerHtml() {
+  return `<div class="card hype">
+    <span class="hype-eye">NEW</span>
+    <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
+      <span class="hype-figs">
+        ${hypePlateHtml('assets/bh/mimic/mimic.png', 78)}
+        ${hypePlateHtml('assets/bh/wanderer/wanderer.png', 78)}
+      </span>
+    </button>
+    <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
+      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 74)}</span>
+    </button>
+    <p class="hype-line">Two want to eat you. <span>One wants your coins.</span></p>
+  </div>`;
+}
+
+/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner above replaced
+   the whole "Out there today" card, which is the banner stack Tom asked to be
+   gone. This builder and the four row builders it calls are left intact and
+   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+   is putting the call back in renderToday, and restoring the held-spires read to
+   that function's Promise.all along with its import from js/spires.js (dropped
+   here because it was the only caller, and unit.test.js lints app.js for spires
+   names used without importing them, comments included).
+   tests/out-there-audit.mjs and tests/spire-explainer-audit.mjs are skipped in
+   the gate for the same reason, and say so there. */
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
   const sieged = held.filter(s => s.siege).length;
   const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
