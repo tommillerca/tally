@@ -318,6 +318,13 @@ const DECLARED = {
     + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
     + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
     + 'boots two pages and claims against the real IndexedDB; about 30s.'],
+  'wanderer-patrol-live-audit.mjs': ['full', "the Wanderer's TRIP WIRE, fired for real: the sibling suite proves his derivation, his cone geometry, "
+    + 'his ledger key and the ceiling by calling the module, and none of that can see the thing the feature actually IS, which is a GPS '
+    + 'fix arriving on the open Boneyard, landing inside a cone nobody tapped, and a fight starting on its own. Two boots of the real app '
+    + "with the device position overridden off his REAL heading: 45 m behind him he is drawn and lit and nothing happens, 45 m into his "
+    + 'light the arena opens on his name. Each boot is the other\'s control. Run it on any change to refreshWanderer, the geolocation '
+    + 'watch, or the cone. MapLibre needs WebGL and vector tiles, so on a machine with neither it reports UNPROVEN with exit 97 by name '
+    + 'rather than green, the same contract boneyard-audit.mjs runs under. About 60s.'],
   'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
     + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
     + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '
