@@ -36,7 +36,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustVa
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
-import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
@@ -509,7 +509,12 @@ test('rarity weights sum to 100 and crates are sane', () => {
 test('boneheadz: unique ids, valid slots, assets exist', () => {
   const ids = new Set(BH_ITEMS.map(i => i.id));
   assert.equal(ids.size, BH_ITEMS.length);
-  const slotCodes = new Set(BH_SLOTS.map(s => s.code));
+  /* BOTH SLOT TABLES. This set exists to catch a typo'd slot, and a pet
+     accessory's slot is not a typo: PET_SLOTS is a second, deliberate table
+     (see data/boneheadz.js) precisely BECAUSE those codes must not sit in
+     BH_SLOTS, which nine sites iterate to paint the PLAYER figure. Checking
+     against BH_SLOTS alone rejected CE1 for having a slot the app defines. */
+  const slotCodes = new Set([...BH_SLOTS.map(s => s.code), ...PET_SLOTS.map(s => s.code)]);
   for (const i of BH_ITEMS) {
     assert.ok(slotCodes.has(i.slot), i.id);
     assert.ok(RARITY_ORDER.includes(i.rarity), i.id);
@@ -2804,8 +2809,13 @@ test('paddock: the species grid counts copies, stars shinies and locks the rest'
 });
 
 test('paddock: the footer counts copies and kinds, not species rows', () => {
-  assert.equal(PDK.footerLabel(PDK_ROSTER), '5 PETS · 3 OF 6 KINDS');
-  assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), '1 PET · 1 OF 6 KINDS', 'singular reads right');
+  /* DERIVED, NOT TYPED. This read '3 OF 6 KINDS' and broke the day a seventh
+     pet was added, which is a true statement about the catalogue being graded
+     as a regression. The point of the row is that the footer counts COPIES and
+     KINDS rather than species rows, and that survives the catalogue growing. */
+  const kinds = BH_ITEMS.filter(i => i.slot === 'C').length;
+  assert.equal(PDK.footerLabel(PDK_ROSTER), `5 PETS · 3 OF ${kinds} KINDS`);
+  assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), `1 PET · 1 OF ${kinds} KINDS`, 'singular reads right');
   assert.equal(PDK.footerLabel([]), '0 PETS · 0 OF 6 KINDS');
 });
 
