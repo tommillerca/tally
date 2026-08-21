@@ -2545,33 +2545,41 @@ async function backupNudge() {
  * stays 0. Measured over a scripted 4000-event burst: see the COST row in
  * tests/overscroll-wordmark-audit.mjs.
  *
- * NOT GATED ON TODAY. Only .screen--today declares the ::before that reads the
- * property, so setting it elsewhere paints nothing, and a class check here would
- * be a second place that has to agree with route() about what Today is.
+ * NOT GATED ON TODAY. Only `#app:has(.screen--today)::before` reads the property,
+ * so setting it elsewhere paints nothing, and a class check here would be a
+ * second place that has to agree with route() about what Today is.
  *
- * REDUCED MOTION LIVES HERE, NOT IN A MEDIA QUERY. A player who asked for no
- * motion gets 1 at any pull: the mark, with no fade, rather than a dimmer mark.
- * Read live off the MediaQueryList so changing the setting mid-session takes.
- * There is no keyframe and no duration in this feature, so nothing here can be
- * collapsed to 0.001s and run a loop a thousand times a second.
+ * IT IS WRITTEN ON :root, NOT ON #screen, AND THAT IS NOT A TIDY-UP. The mark
+ * moved out of the scroller in the release that finally made it visible (app.css
+ * carries the device measurement: nothing parked above a WKWebView scroller's
+ * content origin paints into the rubber-band strip, in any of the four forms
+ * tested). #app::before is #screen's PARENT's pseudo-element, so a custom
+ * property set on #screen cannot reach it. :root is the one node both ends of
+ * this feature can see.
  *
- * HEADLESS CANNOT SEE THIS. Chromium clamps scrollTop at 0, so on desktop this
- * listener is inert and no automated run can produce the bounce. The audit fakes
- * the negative offset and dispatches a real scroll event to drive this exact
- * code; that is a simulation of the geometry, not proof of the bounce. The CSS
- * defaults --wm-pull to 1 so that a WebView which never reports the offset still
- * shows the mark at full opacity off the geometry alone. */
+ * REDUCED MOTION IS A MEDIA QUERY IN app.css NOW, NOT A BRANCH HERE. It pins the
+ * OPACITY to 1 and leaves the travel alone, which is the only version that still
+ * works: the reveal is a transform now, so pinning --wm-pull itself to 1 would
+ * park the mark permanently on screen the moment anything scrolled. There is no
+ * keyframe and no duration in this feature, so nothing here can be collapsed to
+ * 0.001s and run a loop a thousand times a second.
+ *
+ * HEADLESS CANNOT SEE THE BOUNCE, BUT A DEVICE HAS. Chromium clamps scrollTop at
+ * 0, so on desktop this listener is inert and no automated run can produce a
+ * rubber band; the audit fakes the negative offset and dispatches a real scroll
+ * event to drive this exact code. That the offset is really reported was measured
+ * on a booted iPhone 17 Pro on 2026-08-21: scrollTop bottomed out at -168 and 33
+ * scroll events fired with a negative value during one held drag. */
 function bindWordmarkPull() {
   const el = $('#screen');
-  const FULL = 36;         // px of pull at which the mark reaches full opacity
-  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  const FULL = 36;         // px of pull at which the mark is fully revealed
   let last = -1;
   el.addEventListener('scroll', () => {
     const pull = -el.scrollTop;
-    const q = still.matches ? 1 : pull <= 0 ? 0 : Math.round(Math.min(1, pull / FULL) * 20) / 20;
+    const q = pull <= 0 ? 0 : Math.round(Math.min(1, pull / FULL) * 20) / 20;
     if (q === last) return;
     last = q;
-    el.style.setProperty('--wm-pull', q);
+    document.documentElement.style.setProperty('--wm-pull', q);
   }, { passive: true });
 }
 
