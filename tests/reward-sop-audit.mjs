@@ -188,7 +188,16 @@ const ACTIONS = [
   { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself" },
 
   // ---- app.js: the screens that pay ------------------------------------
-  { id: 'js/app.js:openFight', sites: 13, undriven: 'the fight settlement: eleven modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js, and tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits' },
+  /* 13 -> 17, RE-GRADED, and the count was two behind before this change: the
+     Mimic's settle landed without touching this line, which is exactly the
+     drift this row exists to catch. The four sites are the two spawn ambushes,
+     two each (the xp award and the crate it hands over). Both are the same
+     shape and both are graded: each claims the SPAWN'S OWN ledger key, so the
+     boss and the loot he replaced compete for one row that db.addIfAbsent can
+     only create once, and both orders plus three-way concurrency are driven
+     against a real IndexedDB by tests/mimic-audit.mjs and
+     tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
+  { id: 'js/app.js:openFight', sites: 17, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
   { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },

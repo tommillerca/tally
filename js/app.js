@@ -29,6 +29,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
+import { isWandererSpawn, WANDERER_FIGHT } from './wanderer.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -15549,6 +15550,29 @@ async function renderBoneyard(el) {
         });
         return;
       }
+      /* AND ONE RARE IN FOUR HAS SOMEBODY STANDING OVER IT. The Wanderer takes
+         the egg the way the Mimic takes the chest, and for the same structural
+         reason he sits HERE, above collectSpawn: this call is what SPENDS the
+         spawn, so a guarded egg must never reach it. He gets no reveal of his
+         own on purpose. The Mimic has one because Cam drew a chest opening;
+         the Wanderer is one still plate, and a full-screen takeover to hold a
+         static drawing for two seconds is ceremony for its own sake. */
+      if (isWandererSpawn(rec.spawn)) {
+        const spawn = rec.spawn;
+        const claimKey = spawnKey(date, spawn);
+        if (collected.has(claimKey)) return;
+        const fighter = await buildFighter();
+        openFight(wrap, fighter, {
+          mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
+          aiLevel: WANDERER_FIGHT.aiLevel, talents: WANDERER_FIGHT.talents, venue: 'The Boneyard',
+          /* CARRY THE FACE. Without this flag openFight falls through to the
+             coin-flip generator and the rarest boss on the map arrives dressed
+             as a random skeleton, which is the exact drop that cost the Gauntlet
+             its roster look (see endlessFightCfg). */
+          wanderer: true, claimKey, date, xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
+        });
+        return;
+      }
       const res = await collectSpawn(rec.spawn);
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
@@ -15670,13 +15694,17 @@ async function renderBoneyard(el) {
     // is a nudge and never the authority (same rule as onGluttonBeaten).
     const onMimicBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
     addEventListener('bh-mimic-beaten', onMimicBeaten);
+    // and the same for a beaten Wanderer: the egg he was standing on is spent
+    // from inside the settle, so the map has to hear about it.
+    const onWandererBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-wanderer-beaten', onWandererBeaten);
     const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
     // a LOST attempt dispatches only this one, and it still has to spend the day
     const onSpireTried = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-tried', onSpireTried);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-wanderer-beaten', onWandererBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -16503,8 +16531,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
      flee toast said you slipped out of The Pit, and the exit handler below ran
      renderPit() on a screen the player had never opened. A spire is a map
      object, reached through #mapSpire, exactly like a den or a mini. */
+  /* THE TWO SPAWN AMBUSHES BELONG HERE TOO, and `mimic` was missing: a Mimic
+     is launched by tapping "Grab it" on the Boneyard map, so its Done button
+     read "Back to The Pit" and its exit ran renderPit() on a screen the player
+     never opened, the exact three-part failure the spire note above describes.
+     tests/fight-exit-audit.mjs has been red on that since the Mimic shipped.
+     The Wanderer is the identical fight one boss later, so both are named
+     rather than fixing only the path this change added. Neither launcher goes
+     stale: the marker they came from is gone on the next refreshWorld. */
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
-    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire';
+    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire'
+    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -17872,6 +17909,36 @@ async function openFight(pitWrap, fighter, foeCfg) {
         }
         // the map holds `collected` in a closure, so tell it the chest is gone
         dispatchEvent(new CustomEvent('bh-mimic-beaten', { detail: { key: foeCfg.claimKey } }));
+      } else if (foeCfg.mode === 'wanderer') {
+        /* THE EGG IS SPENT HERE AND NOWHERE ELSE, on the spawn's OWN ledger key,
+           for the reason written at length in the Mimic branch above: the boss
+           and the loot he is standing on compete for one row that db.addIfAbsent
+           can only create once, so "he must not also pay the egg" is true by
+           construction rather than by two branches agreeing. A loss or a flee
+           claims nothing and the egg stays on the map until its 45-minute
+           instance turns over, still guarded, because isWandererSpawn is pure.
+
+           HE DOES NOT RAISE THE GAUNTLET CEILING, and that is a decision, not an
+           omission. denWinsCount() counts `bossfirst-` rows and the ceiling is
+           7 + 3 per row, so anything that mints one is progression. A Boneyard
+           Wanderer rides a spawn slot that re-rolls every 45 minutes, which
+           makes him unlimited per day: a per-kill marker would hand out +3 ranks
+           a fight, forever, which is precisely what the doctrine written above
+           denWinsCount forbids ("daily re-clears must never inflate
+           progression"). A single lifetime `bossfirst-wanderer` would be
+           farm-proof, but the Glutton earned his because he is a scheduled world
+           event with one clear per appearance, and the Mimic, this fight's exact
+           sibling, mints nothing. So the Wanderer sits with the Mimic. Granting
+           a marker later is easy; taking one back is not. Asserted by name in
+           tests/wanderer-boneyard-audit.mjs (CEILING). */
+        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('egg', 'boneyard');
+          extraCards.push(crateCard('egg'));
+        }
+        dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
