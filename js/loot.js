@@ -3,7 +3,6 @@
 // stays portable (no DOM, no web-only APIs).
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
-import { dateKey } from './nutrition.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -136,12 +135,20 @@ export async function rack() {
   // lazy import: poi.js imports this module, so a top-level import is a cycle
   const { isoWeekKey } = await import('./poi.js');
   const week = isoWeekKey(new Date());
-  const day = dateKey();
   const cur = await kvGet('rack', null);
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
-    return { ...cur, rr: cur.rrDay === day ? (cur.rr || 0) : 0 };
+    /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
+       mechanism: a record that survives to here belongs to THIS week, so its
+       reroll count stands, and a new week rebuilds the record from scratch with
+       rr: 0. It used to reset on rrDay, which made the first reroll free EVERY
+       DAY. Seven free full-rack draws a week against 3-deep rungs surfaces any
+       specific piece 94% of weeks (1 - (2/3)^7) for nothing, which is exactly
+       what the comment beside RACK_REROLL_LADDER says a reroll must not do:
+       "you spam it until your piece appears and the countdown becomes noise".
+       Tom approved weekly on 2026-08-20. `day` is no longer read here. */
+    return { ...cur, rr: cur.rr || 0 };
   }
-  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0, rrDay: day };
+  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -158,12 +165,14 @@ export async function rerollRack() {
   const cost = RACK_REROLL_LADDER[st.rr];
   const bal = await coins();
   if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
-  const day = dateKey();
   const next = await kvUpdate('rack', cur => {
-    const used = (cur && cur.rrDay === day) ? (cur.rr || 0) : 0;
+    /* Weekly, per above. The `cur.week !== st.week` guard on the next line is
+       what makes reading cur.rr straight off the record safe: a record from
+       another week never gets this far. */
+    const used = (cur && cur.rr) || 0;
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
-    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1, rrDay: day };
+    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1 };
   });
   if (!next) return { ok: false, reason: 'race' };
   if (cost) await coinsAdd(-cost);
@@ -235,9 +244,45 @@ export async function buyRackItem(artId, currency = 'coins') {
   if (already) return { ok: false, reason: 'owned' };
   const bal = currency === 'dust' ? await boneDust() : await coins();
   if (bal < price) return { ok: false, reason: currency, need: price, have: bal };
-  if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } })))
-    return { ok: false, reason: 'owned' };
+  if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } }))) {
+    /* THE RECEIPT EXISTS, WHICH IS NOT THE SAME AS OWNING THE PIECE.
+       The claim below is won BEFORE the money moves and before the grant, which
+       is what makes a double-spend impossible. The cost of that ordering is a
+       gap: if any write after the claim rejects (db.js rejects on abort, on
+       quota, and on the wipe-protocol freeze flag), the player has paid and owns
+       nothing, and every later tap lands here. This branch used to answer
+       `owned`, so the UI told them "Already in your Wardrobe" about a piece that
+       was not in it, and js/loot.js:194 means that receipt is never removed, so
+       the piece was unbuyable FOREVER, on every future rack.
+       Recovery, not refund. A refund would have to delete the receipt, and a
+       delete that lands while the refund does not reopens the double-spend the
+       receipt exists to prevent. Finishing the grant instead is idempotent by
+       construction: grantCosmetic returns null when the row is already there and
+       markPaid will not push a duplicate key, so running this twice is a no-op.
+       It also needs no new field and no migration, because "paid but ungranted"
+       is already fully derivable from the two rows we have.
+       The aura is deliberately excluded: ownsAura() reads THIS receipt as the
+       ownership record, so an aura receipt cannot be stuck. An aura that reads
+       as unowned while a receipt exists is the separate worn-versus-bought bug
+       in the try-on sheet, and paying it out here would be wrong. */
+    if (aura) return { ok: false, reason: 'owned' };
+    if ((await ownedCosmeticIds()).has(artId)) return { ok: false, reason: 'owned' };
+    await grantCosmetic(artId, 'rack');
+    await markPaid(art.slot, artId);
+    /* REPORTED AS 'owned', NOT AS A FRESH PURCHASE, and that is deliberate.
+       This branch cannot tell a stuck receipt from a LOSING CALLER in a race:
+       three concurrent taps all lose the claim, and at the instant they look the
+       winner has not written its inv row yet, so all three see "not owned" and
+       all three arrive here. Answering ok:true made one purchase report three
+       successes, three toasts and three confetti bursts, which is what
+       purchase-firewall's ONCE-RACE row caught.
+       'owned' is the honest answer in BOTH cases, because by the time it is
+       returned the grant above has run and the piece really is owned. The
+       recovered flag is only so the UI can refresh the tile it is looking at. */
+    return { ok: false, reason: 'owned', recovered: true };
+  }
   if (currency === 'dust') await boneDustAdd(-price); else await coinsAdd(-price);
+  try {
   if (aura) {
     await kvSet('wpnaura', artId);
   } else {
@@ -248,6 +293,12 @@ export async function buyRackItem(artId, currency = 'coins') {
        asked for dust the first time they put it on a statted slot. Invisible
        until a real buyer hits it, and then it is a refund request. */
     await markPaid(art.slot, artId);
+  }
+  } catch (e) {
+    /* SAY SO. The money has moved and the receipt is down, so the piece is
+       recoverable on the next tap by the branch above, but silence here is what
+       made this look like a working purchase that ate the coins. */
+    return { ok: false, reason: 'write', label: aura ? RACK_AURA.name : art.name };
   }
   return { ok: true, label: aura ? RACK_AURA.name : art.name, cost: price, currency,
     coins: await coins(), dust: await boneDust() };

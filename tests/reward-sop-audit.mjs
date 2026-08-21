@@ -198,7 +198,19 @@ const ACTIONS = [
      cosmetic comes in, so a second call that pays again is the same bug in the
      same shape. The negative coinsAdd/boneDustAdd are correctly not counted as
      payouts by the scanner above; grantCosmetic is the one site. */
-  { id: 'js/loot.js:buyRackItem', sites: 1,
+  /* RE-GRADED 2026-08-20, from 1 site to 2. The second grantCosmetic is the
+     RECOVERY path added with the write-failure fix: when a rackbuy receipt
+     exists but the piece is not owned, the player already paid and the grant is
+     what never landed, so it is finished on the next tap. It cannot double-pay,
+     and the reason is structural rather than careful: the recovery branch is
+     only reachable when db.addIfAbsent LOSES, which means the receipt was
+     already down, which means the deduct below it never runs on that path. It
+     deducts nothing and returns reason 'owned'. grantCosmetic is itself
+     idempotent (it returns null when the cos row exists), so running it twice
+     grants once. Proven both ways by tests/purchase-write-failure-audit.mjs:
+     red on unfixed main where the retry leaves the player owning nothing, and
+     green here with zero coins taken on the retry. */
+  { id: 'js/loot.js:buyRackItem', sites: 2,
     transition: 'a rack piece goes from unowned to owned, once and forever',
     authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
