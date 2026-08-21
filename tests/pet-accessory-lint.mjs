@@ -176,18 +176,25 @@ function pngAlpha(file) {
     }
     r += stride;
   }
-  let x0 = w, y0 = h, x1 = 0, y1 = 0, any = false;
+  /* THE BOX AND THE CENTROID ARE DIFFERENT ANSWERS, which is the entire point of
+     the SHOT row below: a purse's strap stretches the BOX upward while the bag
+     holds the MASS, so the two differ by 223 art-px on CB1. Alpha-weighted, and
+     on the pixel index (not the pixel centre), which is the convention the
+     shipped boxes were measured with: CE1, CB2 and CG1 reproduce to 0.1 px. */
+  let x0 = w, y0 = h, x1 = 0, y1 = 0, any = false, sx = 0, sy = 0, sa = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (!out[y * stride + x * bpp + 3]) continue;
+      const a = out[y * stride + x * bpp + 3];
+      if (!a) continue;
       any = true;
       if (x < x0) x0 = x;
       if (x >= x1) x1 = x + 1;
       if (y < y0) y0 = y;
       y1 = y + 1;
+      sx += x * a; sy += y * a; sa += a;
     }
   }
-  return { w, h, box: any ? [x0, y0, x1, y1] : null };
+  return { w, h, box: any ? [x0, y0, x1, y1] : null, ink: any ? [sx / sa / w, sy / sa / h] : null };
 }
 
 const SQUARE = 2048;
@@ -199,12 +206,43 @@ const art = accessories.map(i => {
   try { png = pngAlpha(full); } catch (e) { return { id: i.id, rel, why: e.message }; }
   if (png.w !== SQUARE || png.h !== SQUARE) return { id: i.id, rel, why: `${png.w}x${png.h}, not ${SQUARE}x${SQUARE}, so it registers against nothing` };
   if (!png.box) return { id: i.id, rel, why: 'fully transparent: a bought accessory nobody can see' };
-  return { id: i.id, rel, box: png.box };
+  return { id: i.id, rel, box: png.box, ink: png.ink };
 });
 const badArt = art.filter(a => a.why);
 ok(`ART every pet accessory has its ${SQUARE}x${SQUARE} layer on disk with ink in it`,
   badArt.length === 0,
   badArt.length ? badArt.map(a => `${a.rel}: ${a.why}`).join('; ') : art.map(a => `${a.id} [${a.box.join(',')}]`).join(' '));
+
+/* ---- 5b. THE PRODUCT SHOT IS CENTRED ON THE INK MASS, NOT ON THE BOX ---- */
+/* Tom, twice: "your purse is focused on the strap right now in the preview not
+   the bag", and again after v421 shipped. petShotHtml (js/app.js) reads ONLY the
+   shot box's centre and its x extent, so the centre IS the framing decision. The
+   bounding box is the wrong centre for anything with a thin limb: CB1's strap
+   pulls its box 223 art-px above its mass. Three of the five items were already
+   on their centroid to 0.1 art-px, so this is the house rule being enforced
+   rather than a new one being invented; the two that broke it are the two Tom
+   flagged. SIZE stays a judgement call and is deliberately not graded: patches
+   needs the widest window because it is three scattered marks. */
+const SHOT_TOL = 4;                                    // art-px at 2048, ~20x the measurement noise
+const shopItems = ((BH.PET_SHOP || {}).items) || [];
+const shotRows = shopItems.map(it => {
+  const a = art.find(r => r.id === it.id);
+  if (!a || !a.ink) return { id: it.id, why: a ? 'art unmeasurable' : 'sold but not in the catalogue' };
+  const [x0, y0, x1, y1] = it.shot || [];
+  if (![x0, y0, x1, y1].every(Number.isFinite)) return { id: it.id, why: 'no shot box' };
+  return {
+    id: it.id,
+    dx: ((x0 + x1) / 2 - a.ink[0]) * SQUARE,
+    dy: ((y0 + y1) / 2 - a.ink[1]) * SQUARE,
+  };
+});
+const offCentre = shotRows.filter(r => r.why || Math.abs(r.dx) > SHOT_TOL || Math.abs(r.dy) > SHOT_TOL);
+ok(`SHOT every shop tile frames its item's alpha centroid, within ${SHOT_TOL} art-px`,
+  shotRows.length > 0 && offCentre.length === 0,
+  shotRows.length
+    ? shotRows.map(r => r.why ? `${r.id} ${r.why}` : `${r.id} ${r.dx >= 0 ? '+' : ''}${r.dx.toFixed(1)},${r.dy >= 0 ? '+' : ''}${r.dy.toFixed(1)}`).join('  ')
+      + (offCentre.length ? `  | OFF: ${offCentre.map(r => r.id).join(', ')} frame empty canvas instead of the product` : '')
+    : 'PET_SHOP sells nothing, so no product shot was graded');
 
 /* ---- 6. the layer fits inside the box the base pet's scale leaves it ---- */
 /* THE BASE PET IS NAMED, BECAUSE NOTHING IN THE DATA LINKS AN ACCESSORY TO A
