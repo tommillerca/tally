@@ -325,6 +325,13 @@ const DECLARED = {
     + 'light the arena opens on his name. Each boot is the other\'s control. Run it on any change to refreshWanderer, the geolocation '
     + 'watch, or the cone. MapLibre needs WebGL and vector tiles, so on a machine with neither it reports UNPROVEN with exit 97 by name '
     + 'rather than green, the same contract boneyard-audit.mjs runs under. About 60s.'],
+  'wanderer-patrol-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check, the same shape as gauntlet-sim.mjs: it prints "
+    + 'catches per hour of walking against the Wanderer at a sweep of cone ranges and asserts nothing about them, so running it on '
+    + 'every gate would burn a minute to prove nothing. Run it BY HAND whenever CONE_RANGE_M, CONE_HALF_DEG, WANDER_LAP_MIN or the '
+    + 'cell size changes. It is where the shipped 300 m came from: 90 m measured 0.12 catches/h and 88% of hour-long walks meeting '
+    + 'him not at all, which is a headline feature nobody meets. It imports the real js/wanderer.js and its FIRST line is a control '
+    + 'that its own range-sweep cone agrees with inWandererCone at the shipped range, because a sim with a private copy of the '
+    + "geometry measures the copy. Exits 1 if that control fails."],
   'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
     + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
     + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '

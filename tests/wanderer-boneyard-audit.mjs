@@ -188,9 +188,15 @@ try {
      the Mimic: an invisible hunter is a mugging. wanderersNear must hand the map
      Wanderers that are nowhere near catching you, so they can be drawn and
      walked around. */
+  /* Three times his own reach, not five. The beam went 90 m -> 300 m and the
+     multiple came down with it; what the row is for is unchanged, which is that
+     you must be able to SEE him from well outside the light or routing around it
+     is not a move you can make. 1200 m against a 300 m beam still means four
+     minutes of walking between spotting him and being lit. */
   ok('VISIBLE he is handed to the map far outside his own cone, so he can be avoided',
-    walk.nearFar > 0 && walk.showM > walk.coneRange * 5,
-    `${walk.nearFar} of ${walk.nearN} nearby are beyond the ${walk.coneRange} m cone; drawn out to ${walk.showM} m`);
+    walk.nearFar > 0 && walk.showM >= walk.coneRange * 3,
+    `${walk.nearFar} of ${walk.nearN} nearby are beyond the ${walk.coneRange} m cone; drawn out to ${walk.showM} m ` +
+    `(${(walk.showM / walk.coneRange).toFixed(1)}x his reach)`);
 
   ok('DENSITY one per cell, no more',
     walk.nearN > 0 && walk.nearN === walk.nearCells, `${walk.nearN} nearby across ${walk.nearCells} cells`);
@@ -302,6 +308,71 @@ try {
     && Math.abs(cone.drawnFrom - (123.4 - cone.H)) < 0.11
     && Math.abs(cone.drawnSpan - cone.H * 2) < 3.01,
     `painted from ${cone.drawnFrom}deg spanning ${cone.drawnSpan}deg for heading 123.4 +/- ${cone.H}`);
+
+  /* THE APEX IS THE LANTERN, NOT THE MIDDLE OF HIM.
+   *
+   * Tom: "cone originates from his lantern". Every row above measures angle and
+   * distance from his lat/lng, and every one of them would still be green with
+   * the beam springing from his chest, his boots or his horns, because they
+   * never ask WHERE ON THE DRAWING that point is. This does.
+   *
+   * The trick that makes it one measurement rather than two coordinate systems:
+   * the marker is anchored centre, so his lat/lng is the marker's centre, so the
+   * cone is centred there and the PLATE is what moves. Build the real marker
+   * from the real markup, and the lantern's ink must land on the cone's centre.
+   * Carries its own anti-vacuity control, because if LANTERN were {0.5, 0.5}
+   * this row would pass with nothing implemented at all. */
+  const apex = await page.evaluate(async () => {
+    const W = await import('./js/wanderer.js');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:40px;top:40px;';
+    const el = document.createElement('div');
+    el.className = 'map-wanderer-mark';
+    el.innerHTML = W.wandererMarkHtml();
+    host.appendChild(el);
+    document.body.appendChild(host);
+    W.paintWandererCone(el.querySelector('.wanderer-cone'), 480, 0);
+    const mark = el.getBoundingClientRect();
+    const body = el.querySelector('.wanderer-body').getBoundingClientRect();
+    const cone = el.querySelector('.wanderer-cone').getBoundingClientRect();
+    const lant = { x: body.left + W.LANTERN.x * body.width, y: body.top + W.LANTERN.y * body.height };
+    const cc = { x: cone.left + cone.width / 2, y: cone.top + cone.height / 2 };
+    const pc = { x: body.left + body.width / 2, y: body.top + body.height / 2 };
+    const taps = getComputedStyle(el).pointerEvents;
+    host.remove();
+    return {
+      markPx: Math.round(mark.width), MARK_PX: W.MARK_PX, taps,
+      dLantern: +Math.hypot(cc.x - lant.x, cc.y - lant.y).toFixed(2),
+      dPlateCentre: +Math.hypot(cc.x - pc.x, cc.y - pc.y).toFixed(2),
+      lantern: W.LANTERN,
+    };
+  });
+  ok('CONTROL the marker was really built and measured at its shipped size',
+    apex.markPx === apex.MARK_PX && apex.markPx > 0, `${apex.markPx}px box, MARK_PX ${apex.MARK_PX}`);
+  ok('CONTROL and the lantern is nowhere near the middle of him, so APEX is not vacuous',
+    apex.dPlateCentre > apex.MARK_PX * 0.1,
+    `the plate's centre is ${apex.dPlateCentre}px from the apex (lantern at ${(apex.lantern.x * 100).toFixed(1)}%, ${(apex.lantern.y * 100).toFixed(1)}% of the plate)`);
+  ok('APEX the cone springs from his LANTERN, not from the middle of the drawing',
+    apex.dLantern < 1.5, `${apex.dLantern}px between the cone's apex and the flame`);
+  ok('TAPTHRU a 260px marker does not swallow taps on the spawns underneath him',
+    apex.taps === 'none', `pointer-events: ${apex.taps}`);
+
+  /* OUTWALKABLE. The range is the difficulty dial and it has a hard ceiling that
+     is arithmetic, not taste: he turns one lap per WANDER_LAP_MIN, so the far tip
+     of the beam sweeps sideways at range * 2PI / lap. Once that reaches walking
+     pace, stepping out of the light stops being a move a player can make and the
+     feature becomes the mugging it was designed not to be. Graded on the real
+     exported function at the real shipped constant. */
+  const reach = await page.evaluate(async () => {
+    const W = await import('./js/wanderer.js');
+    return { range: W.CONE_RANGE_M, tip: +W.coneTipSpeed().toFixed(3), lap: W.WANDER_LAP_MIN,
+      at700: +W.coneTipSpeed(700).toFixed(3) };
+  });
+  ok('CONTROL the tip-speed instrument moves with the range (700 m outruns a walk)',
+    reach.at700 > 1.4, `${reach.at700} m/s at 700 m, so the ceiling this row guards is real`);
+  ok('OUTWALKABLE the beam\'s far tip sweeps at under half walking pace, so the light can always be left',
+    reach.tip < 0.7 && reach.range <= 400,
+    `${reach.range} m over a ${reach.lap} min lap = ${reach.tip} m/s at the tip (a walk is 1.4)`);
 
   /* -------------------------------------------------------- 3. THE MONEY */
 

@@ -76,15 +76,47 @@ async function run(offsetDeg, label) {
   });
   await sleep(11000);
 
-  const seenState = await page.evaluate(() => {
+  const seenState = await page.evaluate(async () => {
+    const W = await import('./js/wanderer.js');
     const mark = document.querySelector('.map-wanderer-mark');
     const cone = mark && mark.querySelector('.wanderer-cone');
+    const bodyEl = mark && mark.querySelector('.wanderer-body');
     const img = mark && mark.querySelector('img');
     const rb = mark && mark.getBoundingClientRect();
     const cb = cone && cone.getBoundingClientRect();
+    const bb = bodyEl && bodyEl.getBoundingClientRect();
     const cs = cone && getComputedStyle(cone);
     const arena = document.querySelector('#arena');
     const foeName = arena && (arena.textContent.match(/The Wanderer/) ? 'The Wanderer' : arena.textContent.slice(0, 60));
+    /* THE INK, not the box. The plate is a 640-square with transparent margins,
+       so its element rect says nothing about how big he LOOKS. These are the
+       art's own alpha bounds, measured off assets/bh/wanderer/wanderer.png. */
+    const INK = { x0: 60 / 640, y0: 88 / 640, x1: 622 / 640, y1: 505 / 640 };
+    const ink = bb ? { w: (INK.x1 - INK.x0) * bb.width, h: (INK.y1 - INK.y0) * bb.height } : null;
+    const ring = document.querySelector('.map-radius');
+    const rr = ring && ring.getBoundingClientRect();
+    const pin = document.querySelector('.map-spawn');
+    const pr = pin && pin.getBoundingClientRect();
+    // does a tap on his coat reach what is underneath him
+    let through = null;
+    if (bb) {
+      const hit = document.elementFromPoint(Math.round(bb.left + bb.width * 0.5), Math.round(bb.top + bb.height * 0.42));
+      through = !!hit && !hit.closest('.map-wanderer-mark');
+    }
+    // the apex, on the REAL map: the cone's centre must land on the flame
+    let dLantern = null, dPlateCentre = null;
+    if (bb && cb) {
+      const l = { x: bb.left + W.LANTERN.x * bb.width, y: bb.top + W.LANTERN.y * bb.height };
+      const c = { x: cb.left + cb.width / 2, y: cb.top + cb.height / 2 };
+      dLantern = +Math.hypot(c.x - l.x, c.y - l.y).toFixed(2);
+      dPlateCentre = +Math.hypot(c.x - (bb.left + bb.width / 2), c.y - (bb.top + bb.height / 2)).toFixed(2);
+    }
+    // is a spawn pin still on top of him, and still hit-testable at its centre
+    let pinOnTop = null;
+    if (pr && rb && pr.left < rb.right && pr.right > rb.left && pr.top < rb.bottom && pr.bottom > rb.top) {
+      const hit = document.elementFromPoint(Math.round(pr.left + pr.width / 2), Math.round(pr.top + pr.height / 2));
+      pinOnTop = !!hit && !!hit.closest('.map-spawn');
+    }
     return {
       hasMark: !!mark,
       markVisible: !!mark && +getComputedStyle(mark).opacity > 0.5 && rb.width > 10,
@@ -93,6 +125,10 @@ async function run(offsetDeg, label) {
       coneOpacity: cs ? +cs.opacity : null,
       coneBg: cs ? cs.backgroundImage.slice(0, 120) : null,
       coneRadius: cs ? cs.borderRadius : null,
+      inkW: ink ? Math.round(ink.w) : null, inkH: ink ? Math.round(ink.h) : null,
+      ringPx: rr ? Math.round(rr.width) : null, pinPx: pr ? Math.round(pr.width) : null,
+      through, pinOnTop, dLantern, dPlateCentre,
+      range: W.CONE_RANGE_M, screenH: innerHeight, screenW: innerWidth,
       arena: !!arena, foeName,
     };
   });
@@ -108,6 +144,12 @@ const ROWS = [
   'CONTROL the behind-him fix was really outside his cone',
   'DRAWN-LIVE he is on the real map, as Cam drew him',
   'CONE-LIVE his lantern is painted on the real map, as a circular sector',
+  'CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
+  'LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
+  'LOOMS-LIVE he is the biggest thing on the map, by a distance',
+  'PINS-SURVIVE a spawn pin overlapping him is still drawn on top and still tappable',
+  'TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
+  'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
   'NO-AMBUSH standing behind him starts no fight',
   'CONTROL the ahead fix was really inside his cone',
   'CHARGE-LIVE walking into the light starts the fight, with no tap anywhere',
@@ -125,6 +167,33 @@ if (behind && !cap) {
   ok('CONE-LIVE his lantern is painted on the real map, as a circular sector',
     s.conePx > 60 && s.coneOpacity > 0.5 && /conic-gradient/.test(s.coneBg || '') && /50%/.test(s.coneRadius || ''),
     `${s.conePx}px wide, opacity ${s.coneOpacity}, ${String(s.coneBg).slice(0, 60)}`);
+  /* THE APEX, ON THE REAL MAP. The sibling suite proves the geometry in a bare
+     document; this proves the marker MapLibre positioned, at the zoom the player
+     actually gets, still has its beam springing from the flame. Carries the same
+     anti-vacuity control: if the lantern sat at the plate's centre the row would
+     pass with nothing implemented. */
+  ok('CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
+    s.dPlateCentre > 40, `${s.dPlateCentre}px between the plate's centre and the apex`);
+  ok('LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
+    s.dLantern !== null && s.dLantern < 2, `${s.dLantern}px between the cone's apex and the lantern`);
+  /* HE LOOMS. Tom: "needs to be much bigger". Graded against the two things on
+     that screen that set the scale, the 75 m collect ring and an ordinary spawn
+     pin, rather than against a px number that means nothing on its own. And the
+     other half of "bigger": the pins next to him must survive it. */
+  ok('LOOMS-LIVE he is the biggest thing on the map, by a distance',
+    s.inkH > s.ringPx * 1.2 && s.inkW > s.pinPx * 4,
+    `his ink is ${s.inkW}x${s.inkH} against a ${s.ringPx}px collect ring and a ${s.pinPx}px spawn pin`);
+  ok('PINS-SURVIVE a spawn pin overlapping him is still drawn on top and still tappable',
+    s.pinOnTop !== false, s.pinOnTop === null ? 'no pin overlapped him this run' : 'the pin is on top and hit-testable');
+  ok('TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
+    s.through === true, `elementFromPoint over his body returned ${s.through ? 'something else' : 'the Wanderer'}`);
+  /* REACH. Tom's mockup runs the beam off the edge of the screen. The ring is
+     75 m and is measured by the map's own projection, so the beam's radius in px
+     over the ring's radius in px IS the range ratio, measured rather than
+     restated, and the same number says whether it leaves the frame. */
+  ok('REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
+    s.conePx / 2 > s.ringPx / 2 * 3 && s.conePx / 2 > s.screenW / 2,
+    `${Math.round(s.conePx / 2)}px of beam (${s.range} m) against a ${Math.round(s.ringPx / 2)}px 75 m ring, on a ${s.screenW}x${s.screenH} screen`);
   ok('NO-AMBUSH standing behind him starts no fight', s.arena === false, s.foeName || 'no arena');
 }
 

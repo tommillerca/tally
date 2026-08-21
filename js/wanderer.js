@@ -81,21 +81,66 @@ export const WANDER_LAP_MIN = 45;
 export const WANDER_R_MIN_M = 140;   // 0.33 m/s
 export const WANDER_R_MAX_M = 220;   // 0.51 m/s
 
-/* THE CONE. 90 m and 60 degrees total (+/- 30 off his heading).
+/* THE CONE. 300 m and 60 degrees total (+/- 30 off his heading).
  *
- * The range is set against COLLECT_RADIUS_M (75 m), the one distance on this
- * screen the player already has a feel for, and set ABOVE it: his light reaches
- * further than your reach does, so he can catch you standing over a spawn you
- * cannot quite grab. Below about 60 m it would be inside GPS noise and getting
- * caught would read as random; much above 120 m and a beat 400 m across becomes
- * a wall you cannot walk past.
+ * Tom, after seeing the first build on the map: "cone originates from his lantern
+ * and points in the direction he faces with much more reach". His mockup runs the
+ * beam off the edge of the screen. A phone viewport at MAP_START_ZOOM covers
+ * about 260 x 525 m, so "off the edge" means the range has to clear ~260 m: this
+ * is a searchlight, not the 90 m puddle it shipped as.
  *
- * 60 degrees is a torch, not a floodlight: the lit arc at full range is ~94 m
- * wide against a ~1.1 km cell, so walking round the back of him is always open,
- * and the unlit 300 degrees is what makes "avoid him" a real move rather than a
- * dice roll. */
-export const CONE_RANGE_M = 90;
+ * THE RANGE IS A DIFFICULTY DIAL, NOT A LOOK, so it was measured rather than
+ * picked. tests/wanderer-patrol-sim.mjs walks 240 seeded players 5 km each at
+ * 1.4 m/s with the cone evaluated on the map's own 5-second cadence:
+ *
+ *    90 m   0.12 catches/h   88% of hour-long walks meet him not at all
+ *   150 m   0.22            80%
+ *   200 m   0.26            76%
+ *   240 m   0.33            70%
+ *   300 m   0.40            66%   <- shipped
+ *   400 m   0.53            57%
+ *
+ * Those walkers do not look where they are going, so every figure is an UPPER
+ * bound for a player who can see the beam. 300 m is 3.3x the old catch rate and
+ * still leaves two hours of walking between encounters, which is the right side
+ * of rare for the hardest fight on the map.
+ *
+ * THE CEILING, and it is arithmetic rather than taste. He turns one full lap per
+ * WANDER_LAP_MIN, so the far tip of the beam sweeps sideways at
+ * range * 2*PI / (45*60) m/s. At 300 m that is 0.70 m/s, half walking pace, so
+ * stepping out of the light is always a move a player can make. At 400 m it is
+ * 0.93 m/s, still under a walk. Past about 600 m the tip outruns a walking
+ * player and being caught stops being avoidable by construction, which is the
+ * one thing this feature must never become. DO NOT SET THIS ABOVE 400 without
+ * changing WANDER_LAP_MIN to match. Asserted in
+ * tests/wanderer-boneyard-audit.mjs (OUTWALKABLE).
+ *
+ * 60 degrees is a torch, not a floodlight: the unlit 300 degrees behind and
+ * beside him is what makes "avoid him" a real move rather than a dice roll. */
+export const CONE_RANGE_M = 300;
 export const CONE_HALF_DEG = 30;
+// the sweep speed of the beam's far tip, m/s. Exported so the guard reads the
+// real number rather than restating the arithmetic in its own words.
+export const coneTipSpeed = (range = CONE_RANGE_M) => (2 * Math.PI * range) / (WANDER_LAP_MIN * 60);
+
+/* WHERE HIS LANTERN IS, MEASURED OFF THE ART'S OWN INK.
+ *
+ * Tom: "cone originates from his lantern". So the beam's apex is not the middle
+ * of the drawing, it is the flame, and a guessed pixel nudge would drift the
+ * moment the marker is scaled or the plate is re-exported. These are FRACTIONS
+ * of the 640x640 plate, taken from the flame's red core: the mask
+ * (alpha > 200, R > 180, G < 110, B < 110) isolates a single 10x10 blob at
+ * (120.4, 401.7) and nothing else in the drawing, because the red core is the
+ * only pure red ink Cam used. 120.4/640 and 401.7/640.
+ *
+ * The apex is put on his lat/lng by moving the DRAWING, not the light: the
+ * marker is anchored centre, so the cone sits on the anchor and the plate is
+ * translated by the difference. That way his geographic position IS the flame,
+ * inWandererCone needs no offset at all, and the drawn apex and the apex that
+ * catches you cannot disagree at any zoom. Asserted in
+ * tests/wanderer-boneyard-audit.mjs (APEX) and measured on the live map in
+ * tests/wanderer-patrol-live-audit.mjs (LANTERN-LIVE). */
+export const LANTERN = { x: 120.4 / 640, y: 401.7 / 640 };
 
 // how far out he is drawn at all. The 3x3 cell scan below reaches further than
 // this, so the limit is this number rather than the grid.
@@ -188,13 +233,46 @@ export function wandererKey(date, w) { return `wanderer-${date}-${w.id}`; }
 /* Injected here rather than added to app.css, the js/mimic.js and js/gateintro.js
    pattern: app.css is 5k lines and contested, and this feature's whole visual
    surface is one marker and one wedge. */
+// his marker's box, px. See the note on .map-wanderer-mark below for how it was
+// picked; exported so the guard grades the shipped number rather than a copy.
+export const MARK_PX = 260;
+
 const STYLE_ID = 'wanderer-style';
 export function ensureWandererStyle() {
   if (typeof document === 'undefined' || document.getElementById(STYLE_ID)) return;
   const st = document.createElement('style');
   st.id = STYLE_ID;
+  const bodyX = ((0.5 - LANTERN.x) * 100).toFixed(3);
+  const bodyY = ((0.5 - LANTERN.y) * 100).toFixed(3);
   st.textContent = `
-.map-wanderer-mark { position: relative; width: 78px; height: 78px; }
+/* HE IS THE BIGGEST THING ON THE MAP, and that is the point rather than a
+   flourish: he is the one POI you are meant to see coming and route around, so
+   at 78px among 44px spawn pins he read as one more collectable. MARK_PX was
+   picked by rendering at 393x852 over four sizes and measuring, not by
+   multiplying: at 180 he is merely large, at 340 his silhouette reaches the
+   screen edges and buries the pins beside him. At 260 his ink stands 169px tall
+   against a 127px collect ring and a 44px spawn pin, which is the mockup's
+   proportion, and the pins next to him are still whole.
+   POINTER-EVENTS OFF ON THE WHOLE MARKER. A 260px element anchored over the map
+   would swallow every tap in a 260px square, and the spawn pins under his coat
+   are the things you are out here to collect. He has no tap interaction of his
+   own: the encounter fires from the player's position, never from a thumb, so
+   nothing is lost. Asserted in tests/wanderer-patrol-live-audit.mjs (TAPTHRU). */
+.map-wanderer-mark { position: relative; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
+/* HE GOES TO THE BACK OF THE MARKER LAYER, and this rule names other people's
+   classes on purpose. MapLibre markers are DOM siblings with no z-index at all,
+   so they paint in creation order and he is created after the player: measured
+   at 260px, his coat covered the player's own marker AND the 75 m collect ring,
+   which is the one thing on that screen that tells you what "in reach" means.
+   He is the only marker big enough to bury another one, so the rule is his, and
+   it lives here rather than in app.css for the same reason the rest of this
+   stylesheet does. Raising all six together leaves their order among themselves
+   exactly as it was; the only thing that changes is that they clear him. */
+.map-you, .map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark { z-index: 1; }
+/* The plate is shifted so the LANTERN lands on the marker's centre, which is the
+   anchor, which is his lat/lng. Percentages of the marker's own box, so this
+   stays correct at any MARK_PX. */
+.wanderer-body { position: absolute; inset: 0; transform: translate(${bodyX}%, ${bodyY}%); }
 .map-wanderer-mark img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
   filter: drop-shadow(0 5px 8px rgba(0,0,0,.7)); z-index: 2;
@@ -208,8 +286,13 @@ export function ensureWandererStyle() {
 .wanderer-cone {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 200px; height: 200px; border-radius: 50%; z-index: 1; pointer-events: none;
-  -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,0) 100%);
-  mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,0) 100%);
+  /* A BEAM, NOT A PANE OF LIGHT. Tom: brightest at the lantern, fading out along
+     its length. At 90 m the old near-flat mask read as a puddle and got away
+     with it; over 300 m a flat wedge reads as a coloured shape laid on the map.
+     The falloff starts at the flame and never fully stops, so the far end is a
+     hint of light rather than an edge. */
+  -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.28) 68%, rgba(0,0,0,0) 100%);
+  mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.28) 68%, rgba(0,0,0,0) 100%);
   animation: wandererLantern 3.2s ease-in-out infinite;
 }
 @keyframes wandererLantern { 0%, 100% { opacity: .74 } 50% { opacity: .98 } }
@@ -232,7 +315,8 @@ export const WANDERER_ART = 'assets/bh/wanderer/wanderer.png';
 
 export function wandererMarkHtml() {
   ensureWandererStyle();
-  return `<div class="wanderer-cone"></div><img src="${WANDERER_ART}" alt="The Wanderer">`;
+  return `<div class="wanderer-cone"></div>` +
+    `<div class="wanderer-body"><img src="${WANDERER_ART}" alt="The Wanderer"></div>`;
 }
 
 // px is the cone's DIAMETER at CONE_RANGE_M; heading is his compass bearing.
