@@ -188,6 +188,16 @@ const SITES = [
       + 'failure mode here that IS real, a layer that never decodes, is asserted on pixels in '
       + "tests/hype-banner-audit.mjs (ART, naturalWidth after an awaited decode, both viewports).",
   },
+  {
+    key: 'emporium-pet-hero', claim: 'pet-hero-art', paired: false, undriven:
+      'the SHOP SHELF, not the player\'s own figure: Bumbleseal is drawn at 176 in Gwart\'s '
+      + 'Menagerie before anybody owns her, so there is no Bonehead in the frame to stand '
+      + 'her beside and the plane/scale rows this file exists for have nothing to compare. '
+      + 'What CAN go wrong here is the crop and the price, and both are graded elsewhere: '
+      + 'tests/pet-accessory-lint.mjs owns the product-shot framing and '
+      + 'tests/purchase-firewall.mjs drives the buy itself to destruction. Registered rather '
+      + 'than driven so the row cannot rot into "covered".',
+  },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
     /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder

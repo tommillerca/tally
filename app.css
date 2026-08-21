@@ -9429,7 +9429,6 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   .gw-panel .wz-glow { animation: zGwFade .28s linear both; opacity: .45; }
 }
 @keyframes zGwFade { from { opacity: 0 } to { opacity: 1 } }
-=======
 /* ------------------------------------------------------------ THE WANDERER
    IN THE PIT. Tom, with a mockup: "make this work better than my crude mock up
    but he should be about this big in the pit". His mockup has the Wanderer
