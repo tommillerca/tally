@@ -177,6 +177,17 @@ const SITES = [
       + 'STATIC rule below, and tests/hollow-audit.mjs drives the surface for real: it '
       + 'asserts the pet is absent on a first visit and present afterwards.',
   },
+  {
+    key: 'today-hype-banner', claim: "petAsideHtml(petFrom(null, 'C6')", paired: false, undriven:
+      'the Today hype banner draws Bumbleseal as a MARKETING PLATE of a species, not as '
+      + "anybody's pet: there is no Bonehead beside her, so paired alignment has nothing to "
+      + 'measure, and there is no instance to be shiny (C6 ships no shiny art, and the player '
+      + 'being teased does not own her). It still goes through petFrom + petAsideHtml rather '
+      + 'than a hand-placed img, which is what this contract is for: she is mass-normalised '
+      + 'against every other species instead of being sized off her 2048 canvas. The one '
+      + 'failure mode here that IS real, a layer that never decodes, is asserted on pixels in '
+      + "tests/hype-banner-audit.mjs (ART, naturalWidth after an awaited decode, both viewports).",
+  },
   { key: 'helper', claim: '!petHovers(pet.id)', paired: false, undriven: 'this IS petAsideHtml, the contract itself' },
   {
     /* THE STABLE'S DOOR into the Paddock (W-PADDOCK-3, Tom picked this over a louder

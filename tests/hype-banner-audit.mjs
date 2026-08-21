@@ -55,8 +55,13 @@ async function measure() {
     if (!card) return { rendered: !!screen && screen.textContent.trim().length > 200, missing: true };
     const r = card.getBoundingClientRect();
     const imgs = [...card.querySelectorAll('img')];
-    const line = card.querySelector('.hype-line');
+    /* THE COPY IS NOW THREE PIECES, one heading and one caption per half. Tom
+       struck the single spanning sentence out on 2026-08-21 and wrote a caption
+       under Bumbleseal instead, so what has to hold is that each half labels
+       ITSELF and that the three together stay inside the word budget. */
     const eye = card.querySelector('.hype-eye');
+    const caps = [...card.querySelectorAll('.hype-cap')];
+    const texts = [eye, ...caps];
     /* CLIPPING, measured on the element's own overflow rather than on a
        character count: a word that has been ellipsed or cut by a fixed height
        reports scrollWidth/scrollHeight past its client box. */
@@ -74,10 +79,18 @@ async function measure() {
       sources: imgs.map(i => i.getAttribute('src')),
       figBoxes: [...card.querySelectorAll('.hype-fig, .petcrop')]
         .map(e => Math.round(Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))),
-      words: (line?.textContent || '').trim().split(/\s+/).filter(Boolean).length
-        + (eye?.textContent || '').trim().split(/\s+/).filter(Boolean).length,
-      copy: ((eye?.textContent || '') + ' ' + (line?.textContent || '')).replace(/\s+/g, ' ').trim(),
-      lineClipped: clipped(line) || clipped(eye),
+      words: texts.reduce((n, e) => n + (e?.textContent || '').trim().split(/\s+/).filter(Boolean).length, 0),
+      copy: texts.map(e => (e?.textContent || '').trim()).join(' / '),
+      lineClipped: texts.some(clipped),
+      caps: caps.length,
+      // each caption inside its OWN half, and no full-width sentence spanning both
+      capsOwned: caps.length === 2
+        && !!document.querySelector('#hypeYard .hype-cap') && !!document.querySelector('#hypeShop .hype-cap'),
+      spanningLine: !!card.querySelector('.hype-line'),
+      // one frame: both halves are children of the SAME card, never two cards
+      oneFrame: document.querySelectorAll('.card.hype').length === 1
+        && card.contains(document.getElementById('hypeYard')) && card.contains(document.getElementById('hypeShop')),
+      sealCell: !!document.querySelector('#hypeShop .hype-figs'),
       yard: !!document.getElementById('hypeYard'),
       shop: !!document.getElementById('hypeShop'),
       // ORDER: the banner's own position among Today's children, against the
@@ -110,8 +123,13 @@ for (const [w, h] of [[393, 852], [320, 568]]) {
   ok(`ORDER ${tag} the hype banner sits ABOVE the step winner`, m.aboveRace);
   ok(`ART ${tag} all three creatures decoded`, m.figures === 3 && m.drawn === 3,
     `${m.drawn}/${m.figures} drawn: ${m.sources.join(', ')}`);
+  /* THE FLOOR ROSE WITH TOM'S REVISION. It was 56 when the plates were 78/74 and
+     he came back with "the creatures are bigger": measured after, 100 / 100 / 92
+     at 393 and 78 / 78 / 78 at 320. 72 is the floor because it is under the
+     smallest shipped box and above the 56 that let the first version pass, so a
+     quiet slide back to the band of thumbnails he rejected goes red. */
   ok(`ART ${tag} every figure is a whole creature, not a thumbnail`,
-    m.figBoxes.length === 3 && Math.min(...m.figBoxes) >= 56, m.figBoxes.join(' / ') + 'px');
+    m.figBoxes.length === 3 && Math.min(...m.figBoxes) >= 72, m.figBoxes.join(' / ') + 'px');
   ok(`FIT ${tag} the banner does not run off the right edge`, m.right <= w + 1, `right ${m.right}`);
   /* THE RING WAS NEVER ON THE FIRST SCREEN, and an absolute "above the fold" row
      here would have been a check that cannot pass on any tree. Measured on
@@ -125,7 +143,11 @@ for (const [w, h] of [[393, 852], [320, 568]]) {
   ok(`FIT ${tag} it is a banner, not a screen`, m.height <= 180, `${m.height}px tall`);
   ok(`COPY ${tag} nothing is clipped`, !m.lineClipped, m.copy);
   ok(`COPY ${tag} minimal wording: twelve words or fewer`, m.words <= 12, `${m.words} words: ${m.copy}`);
+  ok(`COPY ${tag} each half carries its own caption`, m.capsOwned, `${m.caps} captions`);
+  ok(`COPY ${tag} no single sentence spanning both halves`, !m.spanningLine);
   ok(`REACH ${tag} both halves are real controls`, m.yard && m.shop);
+  ok(`ONE ${tag} it is one banner in one frame, not two cards`, m.oneFrame);
+  ok(`ONE ${tag} the seal stands in her own cell`, m.sealCell);
   ok(`GONE ${tag} the Out there today card is off Today`, !m.outThere);
   ok(`GONE ${tag} no old banner rows survive on Today`, m.oldBanners === 0, `${m.oldBanners} rows`);
 }

@@ -243,7 +243,7 @@ const today = await page.evaluate(() => {
        2026-08-21 (Tom: every banner but the step winner), so the control moved to
        the hype banner that replaced it: a Today that rendered its banner really
        rendered, and every absence below is a measurement rather than a blank. */
-    bannerRendered: !!document.querySelector('.card.hype .hype-line'),
+    bannerRendered: !!document.querySelector('.card.hype .hype-cap'),
     gardenBanner: !!document.querySelector('.garden-banner'),
     gardenCta: !!document.getElementById('gardenToKitchen'),
     kitchenBadge: !!document.querySelector('#kitchenActBtn .hero-badge'),

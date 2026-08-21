@@ -4091,48 +4091,64 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
    once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
    loud part has to be the picture. A banner that needs a sentence to explain its
    own picture is a press release.
-   ONE SENTENCE, NOT THREE ANNOUNCEMENTS. "Two want to eat you. One wants your
-   coins." carries all three arrivals in one breath, and the art says which is
-   which, so nothing has to be named or listed. It is also what keeps the two tap
-   targets from reading as two banners: the sentence spans the whole frame and the
-   only thing dividing the halves is a hairline.
-   NO PRICE ON THE SEAL, deliberately. Bumbleseal has no rack listing on any
-   branch here, so a number would be a promise the shop cannot keep today, and
-   Tom's own framing is that she is a tease and not a storefront. "One wants your
-   coins" is true the day she lands and funny before it. */
+   REVISION, from Tom's markup on the first render (2026-08-21, "something like
+   this is better for the banner, clean it up"). Three things changed and each is
+   the same idea executed better, not a new element:
+     - the tiny NEW chip became "New Creatures", a coral label that reads as the
+       banner's heading rather than a decoration;
+     - the one spanning sentence became TWO CAPTIONS, one under each half. He
+       struck "one wants your coins" out and wrote "Likes to shop" under the seal.
+       Each half now says what it is, which is honest about what they already
+       were: two different tap targets going to two different places;
+     - the creatures got BIGGER and the seal got her own cell. The wide
+       undivided strip was what made three large plates read as thumbnails.
+   It is still ONE banner: one frame, one heading across the top, one grid. The
+   halves are columns in it, never two cards pushed together.
+   NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
+   number would be a promise the shop cannot keep today, and Tom has not settled
+   it. "Likes to shop" is true the day she lands and funny before it. */
 /* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
    different amounts of empty margin (the Mimic's ink fills its file edge to edge,
    the Wanderer leaves 21% of his file empty below his feet), so dropping both into
    the same object-fit box drew one of them standing fifteen pixels in the air.
-   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one fixed
-   box, one transform per plate, and no per-art nudges anywhere else. */
+   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one box,
+   one transform per plate, and no per-art nudges anywhere else. */
 const HYPE_PLATES = {
   'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
   'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
 };
-function hypePlateHtml(src, px) {
+/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
+   version took a px argument and emitted px, which pinned the art to one size in
+   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
+   more than a 320 one without rendering the banner twice. The maths is linear in
+   the box, so the ratios are the same at every size, and a CSS transform's
+   percentages are relative to the element itself, which is exactly what the
+   offsets need. */
+function hypePlateHtml(src) {
   const p = HYPE_PLATES[src];
   const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
-  const s = (px * 0.94) / Math.max(cw, ch);                   // ink fills 94% of the box's long edge
-  const iw = p.w * s, ih = p.h * s;                           // the whole plate, as displayed
-  const tx = (px - cw * s) / 2 - p.x0 * iw;                   // ink centred across the box
-  const ty = px - p.y1 * ih;                                  // ink SEATED on the box floor
-  return `<span class="hype-fig" style="width:${px}px;height:${px}px"><img src="${src}" alt=""
-    style="width:${iw.toFixed(1)}px;height:${ih.toFixed(1)}px;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)"></span>`;
+  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
+  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
+  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
+  const pc = n => (n * 100).toFixed(2) + '%';
+  return `<span class="hype-fig"><img src="${src}" alt=""
+    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
 }
 function hypeBannerHtml() {
   return `<div class="card hype">
-    <span class="hype-eye">NEW</span>
+    <span class="hype-eye">New Creatures</span>
     <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
       <span class="hype-figs">
-        ${hypePlateHtml('assets/bh/mimic/mimic.png', 78)}
-        ${hypePlateHtml('assets/bh/wanderer/wanderer.png', 78)}
+        ${hypePlateHtml('assets/bh/mimic/mimic.png')}
+        ${hypePlateHtml('assets/bh/wanderer/wanderer.png')}
       </span>
+      <b class="hype-cap">Two want to eat you.</b>
     </button>
     <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
-      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 74)}</span>
+      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92)}</span>
+      <b class="hype-cap">Likes to shop</b>
     </button>
-    <p class="hype-line">Two want to eat you. <span>One wants your coins.</span></p>
   </div>`;
 }
 

@@ -2708,7 +2708,21 @@ body::before {
    between the Boneyard column and the shop column. That is what stops it reading
    as a list of announcements. */
 .hype { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end; column-gap: 10px; padding: 10px 11px 11px; }
+  align-items: end; column-gap: 8px; padding: 9px 10px 10px;
+  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
+     boxes are sized here and nowhere else. 320 is the narrowest phone this app
+     supports and it is what caps the small value: two plates, the seal's cell and
+     both captions have to sit on 268px of content. */
+  --hf: 78px; }
+@media (min-width: 380px) { .hype { --hf: 100px; } }
+/* THE SEAL SCALES WITH THEM. petAsideHtml takes its size in px and writes it into
+   the markup, so unlike the two plates she cannot be sized from a custom property:
+   rendered at one number she was 92 against 100px monsters on a 393 phone and 92
+   against 78 on a 320 one, where she dwarfed them. zoom scales the cell's LAYOUT
+   box as well as its pixels, which is the whole requirement here, and one
+   declaration is cheaper than teaching the pet contract a second sizing path. */
+.hype-half.seal .hype-figs { zoom: .85; }
+@media (min-width: 380px) { .hype-half.seal .hype-figs { zoom: 1; } }
 /* THE WASH IS THREE LAYERS AND EACH NEEDS ITS OWN SIZE. .card sets
    background-size: 150px 150px for the grain, and background-size applies to
    EVERY layer: the first render tiled both gradients at 150px and painted the
@@ -2719,25 +2733,29 @@ body::before {
   background-repeat: no-repeat, no-repeat, repeat;
   background-blend-mode: normal, normal, soft-light;
   border-color: var(--ink); box-shadow: var(--sh), inset 0 0 0 1.5px rgba(253, 104, 87, .38); }
+/* The heading, not a chip. It spans both columns, which is a large part of what
+   keeps the two halves reading as one banner. */
 .hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
-  font-size: var(--fs-2); line-height: 1; letter-spacing: .16em; color: var(--coral);
-  margin-bottom: 2px; }
-.hype-half { grid-row: 2; display: flex; align-items: flex-end; justify-content: center;
+  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--coral);
+  margin-bottom: 6px; }
+.hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
-.hype-half.seal { grid-column: 2; padding-left: 11px; border-left: 1px solid var(--line-strong); }
+.hype-half.seal { grid-column: 2; }
 .hype-half:active { transform: translateY(1px); }
-.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 2px; min-width: 0; }
+.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
+/* HER OWN CELL. Tom's markup sets the seal apart more definitely than the
+   hairline did, so she stands on a sunken plate instead of beside a line. */
+.hype-half.seal .hype-figs { padding: 4px 4px 2px; border-radius: 14px;
+  background: rgba(0, 0, 0, .28); border: 1px solid var(--line-strong); }
 /* The box is fixed and the plate inside it is absolutely placed by
-   hypePlateHtml's measured transform, so both creatures stand on one floor. */
-.hype-fig { position: relative; display: block; flex: 0 0 auto; overflow: visible;
-  filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
+.hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
+  overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
 .hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
 .hype-half .petcrop { filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
-.hype-line { grid-column: 1 / -1; grid-row: 3; margin-top: 6px; font-family: var(--display);
-  font-weight: 400; font-size: var(--fs-4); line-height: 1.15; letter-spacing: .02em;
-  color: var(--text); }
-.hype-line span { color: var(--coral); }
-@media (max-width: 360px) { .hype-line { font-size: var(--fs-3); } }
+.hype-cap { font-family: var(--display); font-weight: 400; font-size: var(--fs-3); line-height: 1.1;
+  letter-spacing: .02em; color: var(--text); text-align: center; }
+.hype-half.seal .hype-cap { color: var(--coral); }
 
 /* THE TODAY BANNER: the permanent home for the result, and the surface that
    carries EVERY place's purse (the poster drops them to keep 4th and 5th above
