@@ -24,6 +24,7 @@ import {
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
   rack, rerollRack, buyRackItem, wornAura,
+  buyPetItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
@@ -82,7 +83,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_PX } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_PX, PET_SHOP } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -6633,6 +6634,69 @@ function scalePer100(per100, grams) {
 // the buried Build sheet), the coin + Bone Dust shops (moved out of Backpack), a
 // route to Forage, and a placeholder for future real-money packs. Renders into
 // #screen like the other main tabs; re-renders itself after each purchase.
+
+/* GWART'S MENAGERIE, the pet shelf that sits above the rack.
+ *
+ * THE TILE IS A PRODUCT SHOT, not a picture of the pet. Framing an accessory's
+ * bounding box centres the purse's STRAP, because the strap stretches the box
+ * upward while the bag holds the ink: Tom, 2026-08-21, "your purse is focused on
+ * the strap right now in the preview not the bag." So each tile crops to the
+ * item's own measured shot box (PET_SHOP), padded, and draws the pet underneath
+ * it for context. Same transform on both layers, which is what keeps them
+ * registered: Cam draws every accessory positioned for HER body in the shared
+ * 2048 canvas.
+ */
+const PET_SHOT_PAD = 1.30;
+function petShotHtml(itemId, px) {
+  const it = PET_SHOP.items.find(i => i.id === itemId);
+  const art = BH_BY_ID[itemId];
+  if (!it || !art) return '';
+  let [x0, y0, x1, y1] = it.shot;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = ((x1 - x0) / 2) * PET_SHOT_PAD;
+  const img = px / (half * 2), tx = -(cx - half) * img, ty = -(cy - half) * img;
+  const layer = src => `<img src="${src}" style="position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  return `<span class="petcrop" style="width:${px}px;height:${px}px">`
+    + layer(bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer(bhAsset(art)) + `</span>`;
+}
+function petShelfHtml(ownedCos, coinBal) {
+  const pet = BH_BY_ID[PET_SHOP.pet.id];
+  if (!pet) return '';
+  const hasPet = ownedCos.has(PET_SHOP.pet.id);
+  const hero = hasPet ? '' : `
+  <div class="pet-hero">
+    <span class="pet-new">NEW ARRIVAL</span>
+    <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true)}</div>
+    <div class="pet-hero-copy">
+      <div class="pet-kind">${esc((pet.rarity || '').toUpperCase())} PET</div>
+      <div class="pet-name">${esc(pet.name)}</div>
+      <p>${esc(PET_SHOP.pet.blurb)}</p>
+      <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
+        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}>${PET_SHOP.pet.coin.toLocaleString()}</button>
+    </div>
+  </div>`;
+  /* The accessories stay visible before she is owned, but they cannot be bought:
+     each one is drawn for HER body and would hang in empty air on anything else.
+     Showing them locked is the honest version of that, and it is also the reason
+     to want her. */
+  const tile = it => {
+    const a = BH_BY_ID[it.id]; if (!a) return '';
+    const owned = ownedCos.has(it.id);
+    const locked = !hasPet;
+    return `<div class="rk r-${a.rarity}${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
+      <div class="rk-stage">${petShotHtml(it.id, 112)}</div>
+      <div class="rk-rar">${esc((a.rarity || '').toUpperCase())}</div>
+      <div class="rk-name">${esc(a.name)}</div>
+      ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
+        : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
+        : `<button class="t3-price pet-buy" data-petbuy="${it.id}" data-amt="${it.coin}"
+             ${coinBal < it.coin ? 'data-short="1"' : ''}>${it.coin.toLocaleString()}</button>`}
+    </div>`;
+  };
+  return `<div class="pet-shelf">${hero}
+    <div class="rk-theme"><b>DECK HER OUT</b><i></i><span>${PET_SHOP.items.length} pieces</span></div>
+    <div class="pet-row">${PET_SHOP.items.map(tile).join('')}</div>
+  </div>`;
+}
 async function renderShop(el) {
   const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
     await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
@@ -6889,6 +6953,7 @@ async function renderShop(el) {
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
   el.innerHTML = `
+  ${petShelfHtml(ownedCos, coinBal)}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
@@ -7081,6 +7146,30 @@ async function renderShop(el) {
     }));
   }
   wireRackBuys(el);
+  /* THE PET BUYS. armToConfirm on every one, the app-wide rule that one tap can
+     never spend. buyPetItem does the atomic claim before the money moves and
+     recovers a receipt whose grant never landed, the same shape as the rack, so
+     nothing here needs to know about that. */
+  el.querySelectorAll('[data-petbuy]').forEach(b => armToConfirm(b, 'Buy?', async () => {
+    const id = b.dataset.petbuy, amt = +b.dataset.amt;
+    const r = await buyPetItem(id);
+    if (!r.ok) {
+      toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+        : r.reason === 'needs-pet' ? `${esc(BH_BY_ID[PET_SHOP.pet.id].name)} first. Everything she wears is drawn for her.`
+        : r.reason === 'write' ? `${esc(r.label || '')} did not save. Your coins are safe, tap again.`
+        : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
+        : 'That is not for sale right now.', 2800);
+      if (r.recovered) rerender();
+      return;
+    }
+    levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+    trackEvent('buy_pet', { id, cost: r.cost });
+    toast(r.isPet
+      ? `${esc(r.label)} is yours, and she is out with you now. −${r.cost.toLocaleString()} coins.`
+      : `${esc(r.label)} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`, 3400);
+    if (r.isPet) S.shinyPets = new Set(await shinyPetIds());
+    rerender();
+  }));
   /* WEAR / TAKE OFF, and deliberately NOT behind armToConfirm. The two-tap arm
      exists so a stray tap cannot SPEND; this spends nothing and is free to undo,
      so a confirm step here would be friction pretending to be safety. */

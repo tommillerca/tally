@@ -9100,3 +9100,31 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .rk-rr small { font-size: 10.5px; color: var(--text-3); }
 .rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
   background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }
+
+/* GWART'S MENAGERIE. The pet shelf sits above the rack: Tom, 2026-08-21, wanted
+   "a hero banner above the normal shop stuff for bumbleseal ... below on one
+   segment you can have a scrolling list of just her accessories and then the
+   normal shop below that." The rack's nine cells are untouched; this is its own
+   block, so the theme rules and the adjacency rule the rack lives by still hold. */
+.pet-shelf { margin: 0 0 18px; }
+.pet-hero { position: relative; margin: 0 0 4px; border: 2px solid rgba(242, 233, 215, .10);
+  border-radius: 16px; overflow: hidden; display: flex; align-items: flex-end; gap: 6px;
+  padding: 8px 12px 12px;
+  background: radial-gradient(ellipse 90% 70% at 50% 46%, #4a3a10 0%, #2a2109 46%, rgba(13, 12, 18, 0) 100%); }
+.pet-new { position: absolute; left: 12px; top: 11px; font-size: 10px; font-weight: 800;
+  letter-spacing: .14em; padding: 3px 8px; border-radius: 999px; background: var(--text); color: var(--ink); }
+.pet-hero-art { flex: none; margin-top: 6px; }
+.pet-hero-copy { flex: 1; min-width: 0; padding-bottom: 10px; }
+.pet-kind { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; color: var(--gold); }
+.pet-name { font-family: var(--display); font-size: 26px; line-height: 1.02; margin: 2px 0 5px; }
+.pet-hero-copy p { font-size: 11.5px; opacity: .74; line-height: 1.38; margin: 0 0 9px; }
+.pet-buy { font-size: 14px; }
+/* scroll-snap so a flick lands on a tile rather than between two */
+.pet-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pet-row .rk { width: 112px; flex: none; scroll-snap-align: start; }
+/* LOCKED, NOT HIDDEN. Every accessory is drawn for HER body and would hang in
+   empty air on any other pet, so it cannot be sold before she is. Showing it
+   locked says why, and is also the reason to want her. */
+.pet-locked .rk-stage { opacity: .45; }
+.pet-lock { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding: 6px 4px; }
+.rk-owned { font-size: 10.5px; font-weight: 700; color: var(--text-2); text-align: center; padding: 6px 4px; }
