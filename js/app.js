@@ -16726,7 +16726,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     });
   }
   body.innerHTML = `
-    <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
+    <div class="arena${foeCfg.mage ? ' boss-mage' : ''}${foeCfg.wanderer ? ' boss-wanderer' : ''}" id="arena">
     <!-- THE HUD IS A LID ON THE ARENA AGAIN, AND THIS TIME IT IS NOT A CARD.
          It lived here before, lost the argument, and moved out to its own row:
          measured at 375x667 against a mage den, 92.4px of HUD over a 292px arena
@@ -16761,7 +16761,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-fog"></div>
       <div class="arena-floor"></div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
-        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}${foeCfg.wanderer ? ' wanderer-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
              character flips its chain, its pointing hand and its lightning. */
           : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage-fight.png" alt="">`
