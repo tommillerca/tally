@@ -139,32 +139,40 @@ try {
     /* THE GAP IS THE DESIGN. Graded as a ratio of drawn heights rather than a px
        size, because "big" only means anything next to the thing it is bigger
        than, and the player's own figure shrinks on the small phone too. */
+    /* EVERY ROW BELOW READS THROUGH `m.ink &&`. Measured while proving these red:
+       with the fight seam dead, `m.ink.w` threw inside the FILLS row, the try
+       block aborted, and the eleven rows after it never ran at all, so a suite
+       that should have gone red across the board printed two failures and
+       stopped. A guard that crashes is a guard that hides the rest of itself. */
     ok(tag('LOOMS he is more than twice the player, drawn height against drawn height'),
       m.ratio >= 2.2, `${m.ink && m.ink.h}px of him against ${m.you && m.you.h}px of you = ${m.ratio}x`);
     ok(tag('FILLS he takes most of the stage, which is what the mockup shows'),
-      m.ink.w >= m.arenaW * 0.72 && m.ink.h >= m.arenaH * 0.6,
-      `${m.ink.w}x${m.ink.h} of a ${m.arenaW}x${m.arenaH} arena ` +
-      `(${Math.round(m.ink.w / m.arenaW * 100)}% wide, ${Math.round(m.ink.h / m.arenaH * 100)}% tall)`);
+      !!m.ink && m.ink.w >= m.arenaW * 0.72 && m.ink.h >= m.arenaH * 0.6,
+      m.ink ? `${m.ink.w}x${m.ink.h} of a ${m.arenaW}x${m.arenaH} arena ` +
+        `(${Math.round(m.ink.w / m.arenaW * 100)}% wide, ${Math.round(m.ink.h / m.arenaH * 100)}% tall)` : 'no ink to measure');
     /* THE v49 ROW. Scaling a figure in this arena is how the combat overlap
        happened, and the Live Wire's own history records a boss rendering behind
        the bars. Two things must stay clear: the HP bars above and the move tray
        below. Nothing here is graded against the stage box. */
     ok(tag('BARS-CLEAR nothing of him reaches the health bars'),
-      m.inkTopBelowBars >= 20, `${m.inkTopBelowBars}px between the foe HP bar and the top of his ink`);
+      m.inkTopBelowBars !== null && m.inkTopBelowBars >= 20,
+      `${m.inkTopBelowBars}px between the foe HP bar and the top of his ink`);
     ok(tag('TRAY-CLEAR nothing of him reaches the move buttons'),
-      m.inkOverActions === 0, `${m.inkOverActions}px of overlap with #factions`);
+      m.inkOverActions === 0, `${m.inkOverActions === null ? 'no ink to measure' : m.inkOverActions + 'px'} of overlap with #factions`);
     /* STANDS. A 21% transparent strip hangs below his boots in the plate, so a
        stage sitting on the floor line leaves him hovering a fifth of his own
        height above it. Graded against the PLAYER's feet, which is the thing that
        makes it read as one floor rather than two. */
     ok(tag('STANDS he and the player stand on the same ground'),
-      Math.abs(m.inkFootFromArenaBottom - m.youFootFromArenaBottom) <= 12 && m.inkFootFromArenaBottom <= 26,
+      m.inkFootFromArenaBottom !== null && m.youFootFromArenaBottom !== null
+      && Math.abs(m.inkFootFromArenaBottom - m.youFootFromArenaBottom) <= 12 && m.inkFootFromArenaBottom <= 26,
       `his feet ${m.inkFootFromArenaBottom}px off the arena floor, yours ${m.youFootFromArenaBottom}px`);
     /* THE PLAYER IS STILL A CHARACTER. The failure mode of "make the boss huge"
        is a bonehead squashed, clipped or buried, so: whole, legible, and in
        front of him rather than behind. */
     ok(tag('YOU-WHOLE the player is drawn complete inside the arena and still legible'),
-      m.youWhole && m.you.h >= 60, `${m.you.w}x${m.you.h}, fully inside: ${m.youWhole}`);
+      m.youWhole && !!m.you && m.you.h >= 60,
+      m.you ? `${m.you.w}x${m.you.h}, fully inside: ${m.youWhole}` : 'the player was not drawn');
     ok(tag('YOU-IN-FRONT the player stands in front of him, not inside his coat'),
       m.youInFront === true, `elementFromPoint on the player hit ${m.youInFront ? 'the player' : 'the Wanderer'}`);
     /* THE LANTERN IS THE CHARACTER. It is the light he hunts you with on the map

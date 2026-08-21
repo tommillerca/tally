@@ -247,11 +247,11 @@ export function ensureWandererStyle() {
   st.textContent = `
 /* HE IS THE BIGGEST THING ON THE MAP, and that is the point rather than a
    flourish: he is the one POI you are meant to see coming and route around, so
-   at 78px among 44px spawn pins he read as one more collectable. MARK_PX was
+   at 78px among 42px spawn pins he read as one more collectable. MARK_PX was
    picked by rendering at 393x852 over four sizes and measuring, not by
    multiplying: at 180 he is merely large, at 340 his silhouette reaches the
    screen edges and buries the pins beside him. At 260 his ink stands 169px tall
-   against a 127px collect ring and a 44px spawn pin, which is the mockup's
+   against a 127px collect ring and a 42px spawn pin, which is the mockup's
    proportion, and the pins next to him are still whole.
    POINTER-EVENTS OFF ON THE WHOLE MARKER. A 260px element anchored over the map
    would swallow every tap in a 260px square, and the spawn pins under his coat

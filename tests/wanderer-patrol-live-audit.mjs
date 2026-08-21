@@ -111,11 +111,28 @@ async function run(offsetDeg, label) {
       dLantern = +Math.hypot(c.x - l.x, c.y - l.y).toFixed(2);
       dPlateCentre = +Math.hypot(c.x - (bb.left + bb.width / 2), c.y - (bb.top + bb.height / 2)).toFixed(2);
     }
-    // is a spawn pin still on top of him, and still hit-testable at its centre
-    let pinOnTop = null;
-    if (pr && rb && pr.left < rb.right && pr.right > rb.left && pr.top < rb.bottom && pr.bottom > rb.top) {
-      const hit = document.elementFromPoint(Math.round(pr.left + pr.width / 2), Math.round(pr.top + pr.height / 2));
-      pinOnTop = !!hit && !!hit.closest('.map-spawn');
+    /* IS HE AT THE BACK OF THE MARKER LAYER. Graded on the STACKING ORDER, not
+       on whether a pin happened to land on him this run: the field is generated
+       from the clock, so "no pin overlapped him" is a normal outcome and a
+       hit-test alone would pass vacuously on exactly the runs that matter.
+       (Measured: removing the z-index rule and re-running left this row green,
+       because querySelector('.map-spawn') picked one that was nowhere near him.)
+       The z-index is always there to read, so it always grades. */
+    const zOf = sel => { const n = document.querySelector(sel); return n ? getComputedStyle(n).zIndex : null; };
+    const zWanderer = mark ? getComputedStyle(mark).zIndex : null;
+    const zOthers = ['.map-you', '.map-spawn'].map(zOf).filter(v => v !== null);
+    const behindAll = zWanderer !== null && zOthers.length > 0
+      && zOthers.every(z => Number(z) > Number(zWanderer));
+    // and where a pin DOES land on him, it must really be tappable
+    let pinsOnHim = 0, pinsHittable = 0;
+    if (rb) {
+      for (const n of document.querySelectorAll('.map-spawn')) {
+        const b = n.getBoundingClientRect();
+        if (!(b.left < rb.right && b.right > rb.left && b.top < rb.bottom && b.bottom > rb.top)) continue;
+        pinsOnHim++;
+        const hit = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2));
+        if (hit && hit.closest('.map-spawn')) pinsHittable++;
+      }
     }
     return {
       hasMark: !!mark,
@@ -127,8 +144,10 @@ async function run(offsetDeg, label) {
       coneRadius: cs ? cs.borderRadius : null,
       inkW: ink ? Math.round(ink.w) : null, inkH: ink ? Math.round(ink.h) : null,
       ringPx: rr ? Math.round(rr.width) : null, pinPx: pr ? Math.round(pr.width) : null,
-      through, pinOnTop, dLantern, dPlateCentre,
-      range: W.CONE_RANGE_M, screenH: innerHeight, screenW: innerWidth,
+      through, dLantern, dPlateCentre,
+      zWanderer, zOthers, behindAll, pinsOnHim, pinsHittable,
+      range: W.CONE_RANGE_M, markPx: rb ? Math.round(rb.width) : null,
+      screenH: innerHeight, screenW: innerWidth,
       arena: !!arena, foeName,
     };
   });
@@ -147,7 +166,7 @@ const ROWS = [
   'CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
   'LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
   'LOOMS-LIVE he is the biggest thing on the map, by a distance',
-  'PINS-SURVIVE a spawn pin overlapping him is still drawn on top and still tappable',
+  'PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
   'TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
   'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
   'NO-AMBUSH standing behind him starts no fight',
@@ -172,8 +191,12 @@ if (behind && !cap) {
      actually gets, still has its beam springing from the flame. Carries the same
      anti-vacuity control: if the lantern sat at the plate's centre the row would
      pass with nothing implemented. */
+  /* Relative to the marker, not a fixed 40px: the offset is a FRACTION of the
+     plate, so a hardcoded threshold would go red on a legitimate size change
+     rather than on a real defect. */
   ok('CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
-    s.dPlateCentre > 40, `${s.dPlateCentre}px between the plate's centre and the apex`);
+    s.dPlateCentre > s.markPx * 0.1,
+    `${s.dPlateCentre}px between the plate's centre and the apex, on a ${s.markPx}px marker`);
   ok('LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
     s.dLantern !== null && s.dLantern < 2, `${s.dLantern}px between the cone's apex and the lantern`);
   /* HE LOOMS. Tom: "needs to be much bigger". Graded against the two things on
@@ -183,8 +206,10 @@ if (behind && !cap) {
   ok('LOOMS-LIVE he is the biggest thing on the map, by a distance',
     s.inkH > s.ringPx * 1.2 && s.inkW > s.pinPx * 4,
     `his ink is ${s.inkW}x${s.inkH} against a ${s.ringPx}px collect ring and a ${s.pinPx}px spawn pin`);
-  ok('PINS-SURVIVE a spawn pin overlapping him is still drawn on top and still tappable',
-    s.pinOnTop !== false, s.pinOnTop === null ? 'no pin overlapped him this run' : 'the pin is on top and hit-testable');
+  ok('PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
+    s.behindAll === true && s.pinsHittable === s.pinsOnHim,
+    `wanderer z-index ${s.zWanderer} against [${s.zOthers}]; ` +
+    `${s.pinsHittable}/${s.pinsOnHim} pin(s) overlapping him are still tappable`);
   ok('TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
     s.through === true, `elementFromPoint over his body returned ${s.through ? 'something else' : 'the Wanderer'}`);
   /* REACH. Tom's mockup runs the beam off the edge of the screen. The ring is
