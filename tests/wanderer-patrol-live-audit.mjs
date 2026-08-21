@@ -149,6 +149,11 @@ async function run(offsetDeg, label) {
       range: W.CONE_RANGE_M, markPx: rb ? Math.round(rb.width) : null,
       screenH: innerHeight, screenW: innerWidth,
       arena: !!arena, foeName,
+      /* THE ENCOUNTER IS WHAT CONE ENTRY OPENS NOW, not the arena. Captured here
+         so the row below can assert the thing that actually happens without a
+         tap, and still tell an encounter apart from a fight. */
+      encounter: !!document.querySelector('.wnd-enc'),
+      encButtons: [...document.querySelectorAll('.wnd-enc-acts .btn')].map(b => b.textContent.trim()),
     };
   });
   // kept for the eye, not asserted on: the rows above measure the DOM
@@ -171,7 +176,8 @@ const ROWS = [
   'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
   'NO-AMBUSH standing behind him starts no fight',
   'CONTROL the ahead fix was really inside his cone',
-  'CHARGE-LIVE walking into the light starts the fight, with no tap anywhere',
+  'CHARGE-LIVE walking into the light catches you, with no tap anywhere',
+  'CHARGE-LIVE and what it opens is the CHOICE, not the arena behind it',
 ];
 
 // ---- 1. BEHIND him: drawn, lit, and NOT fought
@@ -228,8 +234,24 @@ if (ahead && !ahead.cap) {
   const { target: t, seenState: s } = ahead;
   ok('CONTROL the ahead fix was really inside his cone', t.predicted === true,
     `45 m dead ahead of heading ${t.w.heading.toFixed(0)} deg`);
-  ok('CHARGE-LIVE walking into the light starts the fight, with no tap anywhere',
-    s.arena === true && s.foeName === 'The Wanderer', s.foeName || 'no arena');
+  /* THIS ROW USED TO REQUIRE AN ARENA, and it was right when it was written:
+     cone entry went toast -> lunge -> openFight. It now opens the encounter, and
+     the arena is behind a deliberate tap on Fight. So the row was asserting a
+     behaviour that has been deliberately replaced, which is drift, not a defect.
+     WHAT IT IS STILL FOR IS UNCHANGED and is the whole point of the suite: being
+     caught must cost the player NO TAP. Standing in the light is enough. That is
+     what the first row asserts, off the real map with a real GPS fix.
+     The second row is the other half and it is not redundant: it pins that what
+     arrives is the CHOICE and not the fight. If a refactor ever routed cone entry
+     straight back into openFight, the first row would still pass and the player
+     would be back to being ambushed with no way out. */
+  ok('CHARGE-LIVE walking into the light catches you, with no tap anywhere',
+    s.encounter === true || s.arena === true,
+    s.encounter ? 'the encounter opened from the fix alone'
+      : (s.arena ? `arena straight away, foe ${s.foeName}` : 'nothing opened'));
+  ok('CHARGE-LIVE and what it opens is the CHOICE, not the arena behind it',
+    s.encounter === true && s.arena === false && s.encButtons.length === 2,
+    `encounter=${s.encounter} arena=${s.arena} buttons=[${s.encButtons.join(', ')}]`);
 }
 
 if (cap || (ahead && ahead.cap)) {
