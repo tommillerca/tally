@@ -202,6 +202,19 @@ const S = {
   userFoods: [],
   date: dateKey(),
   demo: new URLSearchParams(location.search).has('demo'),
+  /* CALM BOOT. Every first-run sheet (the drop, the intros, the recovery-code
+     prompt, the survey) already suppresses itself under navigator.webdriver,
+     which is why no Chromium audit has ever had to dismiss one. A real device
+     opened with `xcrun simctl openurl` is NOT webdriver, so on a phone the whole
+     stack fires in a queue and there is no way to reach Today: three sheets deep
+     before the app is usable, which is what made every device check so far a
+     manual tapping exercise and is why the wordmark was only ever proven on a
+     stripped-down proxy page rather than in the app.
+     ?calm is the device-side equivalent of that same switch. It is read ONCE,
+     here, next to ?demo and ?automap, which are the app's two existing test
+     params, and it is applied ONLY to guards that already test !S.settings, i.e.
+     the "do not interrupt a fresh boot" family. It suppresses nothing else. */
+  calm: new URLSearchParams(location.search).has('calm'),
   onlineCache: new Map(),
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
@@ -211,6 +224,11 @@ const S = {
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
+
+/* The one thing the boot-sheet guards below ask. Named rather than inlined so
+   the set of surfaces it governs is greppable, and so ?calm can never drift away
+   from navigator.webdriver: they are the same switch, thrown from two places. */
+const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver === true) || S.calm;
 
 /* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
  *
@@ -1098,7 +1116,7 @@ async function rollDayIfNeeded() {
 // sheet sets changelogSeen = latest, so it won't fire again until the next patch.
 async function maybeShowWhatsNew() {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
     if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
@@ -1120,7 +1138,7 @@ const SPIRE_SEEN_KEY = 'spiresIntroSeen';
    finish, and it clears itself the moment the name actually changes. */
 async function maybeShowRenameNotice() {
   try {
-    if ((navigator.webdriver && !window.__renameForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__renameForce) || !S.settings) return;
     // the server is the authority (players.rename_of); the kv copy is only a
     // cache so an offline open still shows it once the server has said so
     const owed = (await social.renameOwed()) || (await kvGet('renameRequired', null));
@@ -1249,7 +1267,7 @@ function openCosmeticTeaser() {
 let teaserFired = false;   // one showing per app session, no matter who asks
 async function maybeShowCosmeticTeaser() {
   try {
-    if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__teaserForce) || !S.settings) return;
     if (!dropCosmetics().length) return;   // nothing to announce
     /* Tom, 2026-08-08: "let's make this popup show up on the next like 10 app
        opens." Ten, not three. This is the biggest drop the game has had and a
@@ -1283,7 +1301,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__cosmeticTease
 
 async function maybeShowSpireIntro() {
   try {
-    if ((navigator.webdriver && !window.__spireForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__spireForce) || !S.settings) return;
     if (await kvGet(SPIRE_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1339,7 +1357,7 @@ function openSpireIntro() {
 const BOSS_SEEN_KEY = 'bossesIntroSeen';
 async function maybeShowBossIntro() {
   try {
-    if ((navigator.webdriver && !window.__bossForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__bossForce) || !S.settings) return;
     if (await kvGet(BOSS_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1361,7 +1379,7 @@ async function maybeShowBossIntro() {
 const MAGE_SEEN_KEY = 'mageIntroSeen';
 async function maybeShowMageIntro() {
   try {
-    if ((navigator.webdriver && !window.__mageForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__mageForce) || !S.settings) return;
     if (await kvGet(MAGE_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1708,7 +1726,7 @@ let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
 async function maybeShowRaceIntro() {
   try {
     if (!RACE_LIVE) return;
-    if ((navigator.webdriver && !window.__raceForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__raceForce) || !S.settings) return;
     if (await kvGet(RACE_SEEN_KEY, false)) return;
     raceIntroFit = await equipped();       // it is YOUR bonehead on the start line
     let tries = 0;
@@ -1832,7 +1850,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 async function maybeShowCommunityIntro() {
   try {
-    if ((navigator.webdriver && !window.__communityForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__communityForce) || !S.settings) return;
     /* Three strikes, and JOIN ends it early and permanently. Somebody who has
        joined must never see this again; that is the one behaviour here worth
        being careful about, so it is checked first and written the moment the
@@ -1943,7 +1961,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 async function maybeShowThanksCard() {
   try {
-    if ((navigator.webdriver && !window.__thanksForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__thanksForce) || !S.settings) return;
     if (await kvGet(THANKS_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -2040,7 +2058,7 @@ const GARDEN_SEEN_KEY = 'gardenIntroSeen';
 
 async function maybeShowGardenPopup() {
   try {
-    if ((navigator.webdriver && !window.__gardenForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__gardenForce) || !S.settings) return;
     const seen = await kvGet(GARDEN_SEEN_KEY, 0);
     if (seen >= 5) return;
     let tries = 0;
@@ -2137,7 +2155,7 @@ function dropFitHtml(topId, hatId) {
 
 async function maybeShowDropPopup() {
   try {
-    if ((navigator.webdriver && !window.__dropForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__dropForce) || !S.settings) return;
     const seen = await kvGet(DROP_SEEN_KEY, 0);
     if (seen >= 5) return;
     let tries = 0;
@@ -9904,7 +9922,7 @@ function showDayOneReveal(granted) {
 // Skips webdriver/demo.
 async function maybeShowSurvey() {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     if (await kvGet('surveyDone', false)) return;
     // Established-player check: an account created 3+ days ago (or with a missing
     // createdAt = pre-dates the field = old account) OR already past level 2 is
@@ -14586,7 +14604,7 @@ async function openRestoreSheet() {
 // good." So this is NOT once-per-session: every open, until it is set.
 async function maybePromptRecovery(tries = 0) {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     // Offline players used to be skipped here. They are the MOST exposed group,
     // with no cloud backup at all, so they get the prompt too: setRecoveryPhrase
     // now takes them online as part of saving it.

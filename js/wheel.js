@@ -256,7 +256,14 @@ function landingRotation(idx, spins = 5) {
 export async function maybeShowDailyWheel({ sounds = true, force = false } = {}) {
   // ?wheel=1 = preview: shows the wheel anytime, no gate, no grant (safe to demo)
   const preview = typeof location !== 'undefined' && location.search.includes('wheel=1');
-  if (navigator.webdriver && !window.__wheelForce && !force && !preview) return false;
+  /* ?calm is the device-side twin of navigator.webdriver, and the wheel needs it
+     named separately because it is the one boot interruption that does NOT live
+     in js/app.js's !S.settings family: it is its own module and its own gate.
+     Without it a phone opened with simctl lands on the wheel every time and no
+     device check can reach Today. See the CALM_BOOT comment in js/app.js. */
+  const calm = navigator.webdriver
+    || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('calm'));
+  if (calm && !window.__wheelForce && !force && !preview) return false;
   ensureStyle();
   const today = dateKey();
   // one-time make-good: the pre-v61 bug consumed the day on SHOW, so anyone who
