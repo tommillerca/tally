@@ -434,7 +434,7 @@ export const ENCOUNTER_LINES = [
   'Something approaches...',
 ];
 
-export const ZOOM_MS = 820;
+export const ZOOM_MS = 900;
 
 function ensureEncounterStyle() {
   if (typeof document === 'undefined' || document.getElementById(ENC_STYLE_ID)) return;
@@ -510,27 +510,51 @@ function ensureEncounterStyle() {
 }
 
 /* ---- THE CHARGE. Stepped, not tweened. ---- */
-.wnd-enc.zoom .wnd-enc-scene { animation: wndEncZoom ${ZOOM_MS}ms steps(7, end) both; }
+.wnd-enc.zoom .wnd-enc-scene { animation: wndEncZoom ${ZOOM_MS}ms steps(9, end) both; }
 .wnd-enc.zoom .wnd-enc-art { animation: none; filter: brightness(1); }
 .wnd-enc.zoom::after {
   content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
-  background: #ffe9c2;
-  animation: wndEncFlash ${ZOOM_MS}ms steps(1, end) both;
+  /* NOT steps(). The hard cuts are made by PAIRED percentages (51% and 51.01%),
+     so they stay hard; leaving a gap between the last two keyframes is what buys
+     the fade at the end. steps(1) would quantise that fade into one jump. */
+  animation: wndEncFlash ${ZOOM_MS}ms linear both;
 }
 .wnd-enc.zoom .wnd-enc-box, .wnd-enc.zoom .wnd-enc-acts { opacity: 0; transition: none; }
 @keyframes wndEncZoom {
   0%   { transform: translate(-50%, -50%) scale(1.16); }
-  100% { transform: translate(-50%, -50%) scale(6.4); }
+  100% { transform: translate(-50%, -50%) scale(7.2); }
 }
-/* two hard alternations then hold white, so the arena is built behind a wash
-   rather than behind a black hole */
+/* THE ZOOM IS WATCHED FIRST, THEN THE STROBE. The first build interleaved them
+   and it read as janky, which it was, and the luminance trace off the recording
+   says why: the clear windows were about 110ms each and the art HOLDS inside a
+   step, so what the eye actually got was dark, WHITE, dark, WHITE, grey, WHITE.
+   A strobe, with the zoom hidden behind it. Measured means per frame were
+   40, 33, 220, 63, 229, 115, 235: two of those are the art and four are wash.
+   So the order is now sequential, not interleaved:
+     0 to 42%   CLEAR. 294ms of nothing but him rushing the camera, nine steps
+                of it, which is the part that was being thrown away.
+     42 to 76%  THE STROBE, bright / black / bright / black on even ~60ms beats.
+                Alternating to near-black rather than dipping to a mid opacity:
+                the old 25% dip measured 115 mean, a muddy grey that reads as a
+                rendering fault rather than as a beat.
+     72 to 100% FADE TO BLACK, 252ms of it, and the arena is built behind the
+                black rather than behind a bright wash. Tom, 2026-08-21, on the
+                previous cut: "i dont think it should end on a white frame it can
+                fade to black then open the fight encounter". He is right for a
+                reason worth writing down: a white hold is the brightest frame in
+                the sequence, so handing over on it means the arena arrives as a
+                drop in brightness, which reads as the screen recovering from the
+                transition rather than as the fight beginning.
+   Colour is animated instead of opacity so the black beats are really black
+   rather than a translucent film over a bright frame. */
 @keyframes wndEncFlash {
-  0%, 14%  { opacity: 0 }
-  14.01%, 28% { opacity: .92 }
-  28.01%, 44% { opacity: 0 }
-  44.01%, 62% { opacity: .96 }
-  62.01%, 78% { opacity: .25 }
-  78.01%, 100% { opacity: 1 }
+  0%,     40%  { background: rgba(255, 233, 194, 0) }
+  40.01%, 47%  { background: rgba(255, 233, 194, 1) }
+  47.01%, 53%  { background: rgba(5, 4, 10, 1) }
+  53.01%, 60%  { background: rgba(255, 233, 194, 1) }
+  60.01%, 66%  { background: rgba(5, 4, 10, 1) }
+  66.01%, 72%  { background: rgba(255, 233, 194, 1) }
+  100%         { background: rgba(5, 4, 10, 1) }
 }
 .wnd-enc.out { animation: wndEncOut 260ms ease both; }
 @keyframes wndEncOut { to { opacity: 0 } }
