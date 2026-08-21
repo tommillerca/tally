@@ -142,7 +142,7 @@ function ensureStyle() {
 .mimic-reveal {
   position: fixed; inset: 0; z-index: 200; display: flex;
   flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-  background: radial-gradient(120% 90% at 50% 45%, rgba(24,10,6,0.86), rgba(4,3,6,0.97));
+  background: radial-gradient(120% 90% at 50% 45%, rgba(24,10,6,0.95), rgba(3,2,4,0.995));
   animation: mimicRevealIn 220ms ease both;
 }
 .mimic-reveal.out { animation: mimicRevealOut 260ms ease both; }
