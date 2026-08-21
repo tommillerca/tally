@@ -3,7 +3,7 @@
 // stays portable (no DOM, no web-only APIs).
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
-import { BH_ITEMS, BH_BY_ID, BH_SLOTS } from '../data/boneheadz.js';
+import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -302,6 +302,59 @@ export async function buyRackItem(artId, currency = 'coins') {
   }
   return { ok: true, label: aura ? RACK_AURA.name : art.name, cost: price, currency,
     coins: await coins(), dust: await boneDust() };
+}
+
+/* BUYING FROM GWART'S MENAGERIE.
+ *
+ * Deliberately the SAME SHAPE as buyRackItem, because the failure modes are the
+ * same and one of them already cost a real player their coins and their piece:
+ *   - the claim is won BEFORE the money moves, so a double-spend is impossible
+ *   - the gap that ordering leaves is closed by the recovery branch below
+ *   - the grant is wrapped, so a rejected write is reported instead of vanishing
+ * If this ever diverges from buyRackItem, the divergence is the bug.
+ *
+ * AN ACCESSORY IS UNBUYABLE UNTIL YOU OWN HER, and that is geometry, not
+ * merchandising. Measured 2026-08-21: the glasses overlap Bumbleseal's ink by
+ * 94.8% and overlap every other pet by 0.0%, because Cam draws each piece
+ * positioned for HER body inside the shared 2048 canvas. Sold to someone who
+ * does not own her, a purse would hang in empty air.
+ *
+ * BUYING THE PET EQUIPS HER. Fifty thousand coins should not end with the
+ * player hunting through a menu to find what they just bought.
+ */
+export async function buyPetItem(id) {
+  const isPet = id === PET_SHOP.pet.id;
+  const entry = isPet ? PET_SHOP.pet : PET_SHOP.items.find(i => i.id === id);
+  const art = BH_BY_ID[id];
+  if (!entry || !art) return { ok: false, reason: 'not-stocked' };
+
+  const owned = await ownedCosmeticIds();
+  if (owned.has(id)) return { ok: false, reason: 'owned' };
+  if (!isPet && !owned.has(PET_SHOP.pet.id)) return { ok: false, reason: 'needs-pet', pet: PET_SHOP.pet.id };
+
+  const price = entry.coin;
+  const bal = await coins();
+  if (bal < price) return { ok: false, reason: 'coins', need: price, have: bal };
+
+  if (!(await db.addIfAbsent('kv', { k: `petbuy:${id}`, v: { ts: Date.now(), price } }))) {
+    /* Paid but never granted: finish it rather than answering 'owned' about
+       something the player does not have. Reported as 'owned' and not as a
+       fresh purchase, because this branch cannot tell a stuck receipt from a
+       losing caller in a race, and answering ok:true there makes one purchase
+       report several successes. Same reasoning as buyRackItem. */
+    if ((await ownedCosmeticIds()).has(id)) return { ok: false, reason: 'owned' };
+    await grantCosmetic(id, 'petshop');
+    if (isPet) await equip('C', id);
+    return { ok: false, reason: 'owned', recovered: true };
+  }
+  await coinsAdd(-price);
+  try {
+    await grantCosmetic(id, 'petshop');
+    if (isPet) await equip('C', id);
+  } catch {
+    return { ok: false, reason: 'write', label: art.name };
+  }
+  return { ok: true, label: art.name, cost: price, isPet, coins: await coins() };
 }
 
 function rng() {
@@ -1152,8 +1205,17 @@ function rollRarity(floor = 0) {
 }
 
 function candidates(rarity, owned, slotBias) {
-  // pets (slot C) hatch from step eggs only, never from crates
-  let pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && i.rarity === rarity && !owned.has(i.id));
+  /* pets (slot C) hatch from step eggs only, never from crates.
+     PET ACCESSORY SLOTS ARE EXCLUDED TOO, and this line is load-bearing. Tom,
+     2026-08-21: "accessories locked to bumbleseal for sale only in cash shop
+     not in any chests or found elsewhere in game." Their slot codes are not 'C'
+     (deliberately, so they stay out of the egg's species pool), which meant they
+     PASSED this filter and every one of them was droppable from a crate. Derived
+     from PET_SLOTS rather than listed, so a sixth accessory cannot arrive
+     without inheriting the exclusion. */
+  const petSlots = new Set(PET_SLOTS.map(s => s.code));
+  let pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && !petSlots.has(i.slot)
+    && i.rarity === rarity && !owned.has(i.id));
   if (slotBias && rng() < 0.5) {
     const biased = pool.filter(i => slotBias.includes(i.slot));
     if (biased.length) pool = biased;

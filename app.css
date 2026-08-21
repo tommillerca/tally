@@ -1370,7 +1370,18 @@ body::before {
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
-@keyframes bhIdle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+/* THE SIDEWAYS SHIFT LIVES INSIDE THE KEYFRAMES, and it has to. bhIdle owns
+   `transform`, so a static translateX on .hero-char is overwritten the moment
+   the animation runs. --bh-shift defaults to 0, so every existing user of this
+   animation is unchanged. */
+@keyframes bhIdle { 0%, 100% { transform: translate(var(--bh-shift, 0px), 0); }
+  50% { transform: translate(var(--bh-shift, 0px), -5px); } }
+/* A BIG PET SHARES THE FRAME. Tom, 2026-08-21: "we need to start moving the
+   bonehead off centre and to the left because it has to share the screen more
+   with its pet." Set on .hero-char and NOT on the scene, because custom
+   properties inherit and the companion runs the same animation: putting it on
+   the parent would walk the pet left by the same 58px. */
+.hero-scene.sharing .hero-char { --bh-shift: -58px; }
 .hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */

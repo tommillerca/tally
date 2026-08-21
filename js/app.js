@@ -82,7 +82,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_PX } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -3050,11 +3050,11 @@ async function renderToday(el) {
        card rather than a panel. The frame carries the border and shadow; the
        plate inside carries the scene. -->
   <div class="hero-card">
-  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPet && (PET_HERO_PX[heroPet.id] || 108) > 108 ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 108)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion${(PET_HERO_PX[heroPet.id] || 108) > 108 ? ' big' : ''}" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, PET_HERO_PX[heroPet.id] || 108)}</button>` : ''}
 
     <!-- Four separate chips became one wallet pill and an icon-only Trends dot:
          the top of the card was four competing plates over the art. -->

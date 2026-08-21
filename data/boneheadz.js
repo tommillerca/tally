@@ -1870,6 +1870,7 @@ const BH_ITEMS_ALL = [
   "id": "C6",
   "slot": "C",
   "rarity": "epic",
+  "exclusive": true,
   "name": "Bumbleseal"
  },
  {
@@ -2053,6 +2054,45 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
  * multiplied per pet. Each layer is drawn with the SAME crop transform as the
  * base, which is what keeps it registered.
  */
+/* GWART'S MENAGERIE: what the shop sells for a pet, and at what price.
+ *
+ * THE SHOT BOX IS THE PRODUCT PHOTO. Framing an accessory's bounding box puts
+ * the purse's STRAP in the middle of the tile, because the strap stretches the
+ * box upward while the BAG holds the ink. Tom, 2026-08-21: "your purse is
+ * focused on the strap right now in the preview not the bag." So each item
+ * carries the box that holds its ink mass, centred on its own centroid, as
+ * fractions of the 2048 square. Measured, not eyeballed. Patches is the wide one
+ * because it is three scattered marks (flower, heart, star) rather than one
+ * mass, and a tight box drops two of them out of shot.
+ *
+ * EVERY ACCESSORY BELONGS TO ONE PET, and that is a fact about the art, not a
+ * rule someone chose. Measured 2026-08-21: the glasses overlap Bumbleseal's own
+ * ink by 94.8% and overlap Drizzle, Mallard and Bulldog by 0.0%. Cam draws each
+ * piece positioned for that pet's body inside the shared canvas, so on any other
+ * pet it would float in empty space. A second pet needs its own set drawn.
+ *
+ * PRICES ARE TOM'S (2026-08-21), and deliberately high: "we want to sell the pet
+ * for 50,000 and her accessories need to cost more too this is a test to see
+ * appetite for pet cosmetics." For scale, the rack's dearest piece is 3,000. */
+/* HOW BIG A PET STANDS ON TODAY. 108 is the house size every species is
+   normalised to. Bumbleseal is deliberately larger: Tom, 2026-08-21, asked for
+   "about 25% bigger" than the 135 he was shown, which is 169. She is a 50,000
+   coin epic and she reads as a companion rather than a trinket at that size.
+   Anything not listed here uses the house 108, so a new pet inherits the norm
+   rather than an accident. */
+export const PET_HERO_PX = { C6: 169 };
+
+export const PET_SHOP = {
+  pet: { id: 'C6', coin: 50000, blurb: 'A diva who would rather shop than fly. She walks with you, and every piece she owns is sold on its own.' },
+  items: [
+    { id: 'CE1', coin: 8000,  shot: [0.1394, 0.3327, 0.3933, 0.5866] },
+    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4482, 0.7973, 0.8193] },
+    { id: 'CB2', coin: 9000,  shot: [0.4210, 0.4253, 0.7921, 0.7964] },
+    { id: 'CG1', coin: 12000, shot: [0.7261, 0.2925, 0.9117, 0.4780] },
+    { id: 'CM1', coin: 3500,  shot: [0.1497, 0.3625, 0.4134, 0.6262] },
+  ],
+};
+
 export const PET_SLOTS = [
   { code: 'CG', label: 'Stinger', z: 10 },
   { code: 'CB', label: 'Bag', z: 20 },
