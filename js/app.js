@@ -29,7 +29,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
-import { isWandererSpawn, WANDERER_FIGHT } from './wanderer.js';
+import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -14275,7 +14275,7 @@ const APPROACH_LOCK_M = 400; // within this, a spawn is "yours": it won't move/d
 // the arena renders them as plain <img> tags at fight start, so on a cold cache
 // the boss simply was not there for the opening moves. Warmed with the map, which
 // is the screen you must be on to reach him.
-const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png',
+const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png', 'assets/bh/wanderer/wanderer.png',
   'assets/bh/glutton/combat/idle.png', 'assets/bh/glutton/combat/tongue.png', 'assets/bh/glutton/combat/middle.png'];
 let _mapArtWarm = null;
 function warmMapArt() {
@@ -14571,6 +14571,7 @@ async function renderBoneyard(el) {
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
       if (typeof refreshGlutton === 'function') refreshGlutton();
+      if (typeof refreshWanderer === 'function') refreshWanderer();
       /* You have looked somewhere genuinely new: resolve the layers that are not
          part of the ordinary settle pass. Gated on `scouted` because spires cost
          a network round trip; on every moveend that would be a request per pan.
@@ -15073,6 +15074,121 @@ async function renderBoneyard(el) {
       if (gb) gb.hidden = dist > GLUTTON_RADIUS_M;
     }
 
+    /* THE WANDERER: the only thing out here that MOVES ON ITS OWN.
+     *
+     * Tom, 2026-08-21: "the wanderer walks around the boneyard slowly hunting
+     * down the player, he casts a cone of light ahead of the way he is walking
+     * and if the player steps into that light he will charge at them and start
+     * an encounter."
+     *
+     * Every other layer on this screen answers "what is at this place"; this one
+     * answers "where is he right now". js/wanderer.js does the whole derivation
+     * (pure function of date, cell and clock, so this pass is free to rebuild
+     * from scratch every 5 seconds and every GPS fix without him twitching), and
+     * this function is only the marker, the lit wedge and the trip wire.
+     *
+     * THE TRIP WIRE IS NOT A TAP, which is the whole difference between him and
+     * the Mimic. It is evaluated HERE, on the same passes that redraw him, so it
+     * fires both ways round: the player walking into the light, and the light
+     * sweeping onto a player who is standing still. Standing still is not a
+     * defence on purpose. He is hunting, and a "you must be moving" rule would
+     * be invisible, unexplainable and exploitable (park on an egg under his nose
+     * and farm it).
+     *
+     * IT ONLY RUNS WHILE THE BONEYARD IS OPEN. There is no background trigger
+     * and there never should be: refreshWorld's interval and the geolocation
+     * watch are both torn down by cleanup(), so a phone in a pocket cannot be
+     * ambushed. Coming back later finds him wherever the clock says he is by
+     * then, which is what a derived path buys.
+     */
+    const wandererMarkers = new Map();   // id -> {marker, el}
+    /* Two different "no" answers, and they are not the same no.
+       `wandererDone` is the LEDGER: an instance he has already been PAID for,
+       rebuilt from the xp rows on every refreshWorld like claimedBoss above it,
+       so a win in another tab is honoured here.
+       `wandererEngaged` is this SESSION: an instance that has already thrown a
+       fight, win, loss or flee. Without it a player who loses and is still
+       standing in the light gets a fresh fight 5 seconds later, forever. It is
+       deliberately not persisted: the ledger already caps the REWARD at one per
+       instance, so the worst a reopened map buys is the right to retake a fight
+       you are losing 85.8% of, which is a punishment, not an exploit. */
+    const wandererEngaged = new Set();
+    let wandererDone = new Set(xpRows0.filter(r => r.type === 'wanderer').map(r => r.key));
+    function refreshWanderer() {
+      const live = wanderersNear(date, lat, lng);
+      const liveIds = new Set(live.map(w => w.id));
+      for (const [id, rec] of wandererMarkers) {
+        if (!liveIds.has(id)) { rec.marker.remove(); wandererMarkers.delete(id); }
+      }
+      for (const w of live) {
+        let rec = wandererMarkers.get(w.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-wanderer-mark';
+          el.innerHTML = wandererMarkHtml();
+          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el };
+          wandererMarkers.set(w.id, rec);
+        } else {
+          rec.marker.setLngLat([w.lng, w.lat]);
+        }
+        /* NEVER placeWalkable. Every other POI is snapped onto the nearest road
+           or path because it sits still and a spawn in a pond is unreachable. He
+           is not a place, he is a man walking a loop, and re-snapping a moving
+           marker every 5 seconds would drag him between whichever features
+           happened to be rendered and destroy both his path and his heading.
+           He walks over water. He is a ghost with a lantern.
+           ponytail: unsnapped by design; if his beat ever needs to follow roads
+           the answer is a road-aware seeded loop in wanderer.js, not a snap here. */
+        // The lit ground is sized from the map's OWN projection (his pixel vs a
+        // point CONE_RANGE_M north of him), so 90 m on screen is 90 m at every
+        // zoom, the same rule sizeRadius and the Glutton's blight both use.
+        let px = 200;
+        if (map && map.loaded()) {
+          try {
+            const a = map.project([w.lng, w.lat]);
+            const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+            const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+            if (isFinite(d) && d > 40) px = d;
+          } catch { /* projection not ready: keep the fallback */ }
+        }
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+        if (!inWandererCone(w, lat, lng)) continue;
+        if (wandererEngaged.has(w.id) || wandererDone.has(wandererKey(date, w))) continue;
+        // the anti-cheat gate the tap handlers get, silently: being DRIVEN past
+        // him must not start a fight, and a toast every 5 seconds from a moving
+        // car is not a message, it is a fault.
+        if (youSpeed > MAX_LOOT_SPEED) continue;
+        if (document.getElementById('arena')) continue;   // a fight is already on screen
+        wandererEngaged.add(w.id);
+        startWandererEncounter(w, rec.el);
+      }
+    }
+
+    /* THE CHARGE. He gets a beat before the arena because the player did not ask
+       for this fight and has to be told why it started; the Mimic's full-screen
+       reveal is not the right size for it, because the map ALREADY showed them
+       the man and the light. So: the marker lunges, one line says what happened,
+       and then the arena opens on his own plate. */
+    async function startWandererEncounter(w, el) {
+      haptic.heavy();
+      toast('The lantern swings onto you. The Wanderer charges.', 3000);
+      el.classList.add('charging');
+      await new Promise(r => setTimeout(r, 700));
+      el.classList.remove('charging');
+      if (!body.isConnected) return;   // they left during the beat
+      const fighter = await buildFighter();
+      openFight(wrap, fighter, {
+        mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
+        aiLevel: WANDERER_FIGHT.aiLevel, talents: WANDERER_FIGHT.talents, venue: 'The Boneyard',
+        /* CARRY THE FACE. Without this flag openFight falls through to the
+           coin-flip generator and the rarest boss on the map arrives dressed as
+           a random skeleton, which is the exact drop that cost the Gauntlet its
+           roster look (see endlessFightCfg). */
+        wanderer: true, claimKey: wandererKey(date, w), date,
+        xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
+      });
+    }
+
     // Dark Spires: permanent territory. Unclaimed ones are held by an NPC warden;
     // yours light up, accrue tribute you must walk to, and fade to dormant if you
     // stop visiting. Marker root carries position ONLY (MapLibre owns its
@@ -15259,11 +15375,15 @@ async function renderBoneyard(el) {
          spent by WINNING A FIGHT, and that row is written from the fight settle
          in another part of the file, so the only honest source is the ledger. */
       collected = new Set(rows.filter(r => r.type === 'spawn').map(r => r.key));
+      // and the same for the Wanderer, who is paid on his OWN key rather than a
+      // spawn's: a win banked in another tab has to take him off this one.
+      wandererDone = new Set(rows.filter(r => r.type === 'wanderer').map(r => r.key));
       refreshSpawns();
       refreshDens();
       refreshMinis();
       refreshSecrets();
       refreshGlutton();
+      refreshWanderer();
       // the spire fetch must never gate the reveal: if the network hangs, the map
       // would sit blank forever behind opacity 0
       await Promise.race([refreshSpires(), new Promise(r => setTimeout(r, 2500))]);
@@ -15550,29 +15670,6 @@ async function renderBoneyard(el) {
         });
         return;
       }
-      /* AND ONE RARE IN FOUR HAS SOMEBODY STANDING OVER IT. The Wanderer takes
-         the egg the way the Mimic takes the chest, and for the same structural
-         reason he sits HERE, above collectSpawn: this call is what SPENDS the
-         spawn, so a guarded egg must never reach it. He gets no reveal of his
-         own on purpose. The Mimic has one because Cam drew a chest opening;
-         the Wanderer is one still plate, and a full-screen takeover to hold a
-         static drawing for two seconds is ceremony for its own sake. */
-      if (isWandererSpawn(rec.spawn)) {
-        const spawn = rec.spawn;
-        const claimKey = spawnKey(date, spawn);
-        if (collected.has(claimKey)) return;
-        const fighter = await buildFighter();
-        openFight(wrap, fighter, {
-          mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
-          aiLevel: WANDERER_FIGHT.aiLevel, talents: WANDERER_FIGHT.talents, venue: 'The Boneyard',
-          /* CARRY THE FACE. Without this flag openFight falls through to the
-             coin-flip generator and the rarest boss on the map arrives dressed
-             as a random skeleton, which is the exact drop that cost the Gauntlet
-             its roster look (see endlessFightCfg). */
-          wanderer: true, claimKey, date, xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
-        });
-        return;
-      }
       const res = await collectSpawn(rec.spawn);
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
@@ -15694,9 +15791,9 @@ async function renderBoneyard(el) {
     // is a nudge and never the authority (same rule as onGluttonBeaten).
     const onMimicBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
     addEventListener('bh-mimic-beaten', onMimicBeaten);
-    // and the same for a beaten Wanderer: the egg he was standing on is spent
-    // from inside the settle, so the map has to hear about it.
-    const onWandererBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    // and the same for a beaten Wanderer: his instance is spent from inside the
+    // settle, on his own ledger key, so the map has to hear about it.
+    const onWandererBeaten = e => { if (e?.detail?.key) wandererDone.add(e.detail.key); refreshWorld(); };
     addEventListener('bh-wanderer-beaten', onWandererBeaten);
     const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
@@ -17910,28 +18007,38 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // the map holds `collected` in a closure, so tell it the chest is gone
         dispatchEvent(new CustomEvent('bh-mimic-beaten', { detail: { key: foeCfg.claimKey } }));
       } else if (foeCfg.mode === 'wanderer') {
-        /* THE EGG IS SPENT HERE AND NOWHERE ELSE, on the spawn's OWN ledger key,
-           for the reason written at length in the Mimic branch above: the boss
-           and the loot he is standing on compete for one row that db.addIfAbsent
-           can only create once, so "he must not also pay the egg" is true by
-           construction rather than by two branches agreeing. A loss or a flee
-           claims nothing and the egg stays on the map until its 45-minute
-           instance turns over, still guarded, because isWandererSpawn is pure.
+        /* THE ENCOUNTER IS SPENT HERE AND NOWHERE ELSE, on his own ledger key:
+           `wanderer-<date>-<cell>_i<instance>`, built by wandererKey and carried
+           in from the map. He no longer hijacks a rare spawn, so there is no
+           spawn key for him to share and the double-pay the Mimic branch above
+           guards against cannot arise; what this key stops instead is FARMING.
+           His path is a derived loop, so a player who knows where he is can walk
+           back into the light every thirty seconds, and without a key that is
+           150 XP, 200 coins and a Step Egg every time. One payout per cell per
+           45-minute instance, resolved by db.addIfAbsent, which is a single
+           IndexedDB request rather than a read-then-write pair (a kvGet/kvSet
+           version of this exact claim was once measured paying 16,500 coins to
+           three concurrent callers).
+           A LOSS OR A FLEE CLAIMS NOTHING, on purpose, and the map's
+           `wandererEngaged` set is what stops him re-charging a player who is
+           still standing in his light. The fight can be retaken; the reward
+           cannot be re-won.
 
            HE DOES NOT RAISE THE GAUNTLET CEILING, and that is a decision, not an
            omission. denWinsCount() counts `bossfirst-` rows and the ceiling is
            7 + 3 per row, so anything that mints one is progression. A Boneyard
-           Wanderer rides a spawn slot that re-rolls every 45 minutes, which
-           makes him unlimited per day: a per-kill marker would hand out +3 ranks
-           a fight, forever, which is precisely what the doctrine written above
+           Wanderer walks a beat that re-rolls every 45 minutes, which makes him
+           unlimited per day: a per-kill marker would hand out +3 ranks a fight,
+           forever, which is precisely what the doctrine written above
            denWinsCount forbids ("daily re-clears must never inflate
            progression"). A single lifetime `bossfirst-wanderer` would be
            farm-proof, but the Glutton earned his because he is a scheduled world
            event with one clear per appearance, and the Mimic, this fight's exact
            sibling, mints nothing. So the Wanderer sits with the Mimic. Granting
-           a marker later is easy; taking one back is not. Asserted by name in
-           tests/wanderer-boneyard-audit.mjs (CEILING). */
-        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
+           a marker later is easy; taking one back is not. Tom confirmed this on
+           2026-08-21. Asserted by name in tests/wanderer-boneyard-audit.mjs
+           (CEILING). */
+        const g = await award(foeCfg.claimKey, 'wanderer', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
         if (g) {
           xp += g;
           coins = foeCfg.coins;

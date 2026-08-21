@@ -130,7 +130,7 @@ export function createBoneyardMap(maplibregl, container, { lat, lng }) {
    for the map never assembling itself in front of you, which is the complaint. */
 const ARRIVE_QUIET_MS = 1200;   // no new marker for this long = the beat is over
 const ARRIVE_MAX_MS = 2600;     // never hold anything longer than this
-const POI_CLASSES = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark'];
+const POI_CLASSES = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark', 'map-wanderer-mark'];
 let arriving = [];
 let quietT = null;
 let capT = null;

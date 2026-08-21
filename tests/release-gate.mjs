@@ -309,12 +309,15 @@ const DECLARED = {
     + 'Run it on any change to js/mimic.js, the Boneyard chest spawn, or the drawn-boss list in js/pit.js. Full rather than fast '
     + 'because it boots the Boneyard and drives a real reveal, whose animation IS assets/bh/mimic/mimic-loop.gif: without that '
     + 'file precached the chest never opens, which is why sw.js carries it.'],
-  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors: one RARE spawn in four is him, DERIVED from the spawn id so a guarded egg '
-    + 'stays guarded across refreshWorld, offline and on every device, and re-rolls when the 45-minute instance turns over. '
-    + 'Run it on any change to js/wanderer.js, the rare spawn in js/hunt.js, or the collect handler in js/app.js. It also pins '
+  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors, the map\'s only PATROLLING agent: his position and heading are a pure '
+    + 'function of (date, cell, clock), so a 5-second refreshWorld cannot teleport him, a second device computes the same metre, '
+    + 'and closing the app cannot reroll him off your back. Purity is proved in a SECOND browser page with its own module realm, '
+    + 'the heading against the real path bearing, and the cone with the player inside it and outside it on both axes, then read '
+    + 'back out of the paint function so the drawn wedge and the wedge that catches you are one shape. '
+    + 'Run it on any change to js/wanderer.js or refreshWanderer / the wanderer settle branch in js/app.js. It also pins '
     + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
     + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
-    + 'boots a page and claims against the real IndexedDB; about 25s.'],
+    + 'boots two pages and claims against the real IndexedDB; about 30s.'],
   'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
     + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
     + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '
