@@ -299,8 +299,27 @@ check('GATE  commit-date-gate: named + double-dip refused',
    this art only survives 48/24/16). So the assertion is on rendered pixels:
    each one measures 48 CSS px AND reports naturalWidth, because a decoded-size
    check passes over a 404 that the CSS box hides.
-   The expected count is DERIVED from the module's own prize table, so removing a
-   coin wedge does not quietly shrink the bar, and an empty sample FAILS. */
+   THE EXPECTED COUNT COMES FROM THE MODULE, and that is a correction. This row
+   used to count RENDERED LABELS (a numeric tag, or the word "Charm") and call
+   that "derived from the prize table". It was a proxy for the table, and the
+   comment beside it said "Crates and Scrap keep the vector on purpose", which
+   stopped being true when the Scrap wedge joined the pixel set: the row then
+   read 5/4 and went red on healthy code, which is audit drift, not a defect.
+   It now asks wheel.js for pixelPrizeCount(), so a wedge cannot join or leave
+   the pixel set without moving the expectation with it.
+   The row still has teeth, because the two sides are different LAYERS: the
+   expectation is what the module DECLARES, and `got`/`bad` are what the browser
+   actually rendered and decoded. A declared wedge that never renders, that 404s,
+   or that lands at the wrong CSS size still fails. An empty sample FAILS.
+
+   RE-PROVEN RED after the change, 2026-08-21, in a throwaway tree:
+     stop pixPrizeImg rendering the Scrap wedge while it stays declared -> 4/5
+     point the Scrap wedge's key at art that does not exist            -> 4/5
+   and green again on restore, 5/5. Note honestly what the second mutation did
+   NOT prove: pixCur declines an unknown key and returns null, so that wedge
+   never reaches the DOM and the row fails on the count rather than on
+   naturalWidth. The decode half of `bad` is inherited from this row as written
+   on 2026-08-17 and was not re-exercised here; only the expectation changed. */
 await reboot({ wheelForce: true });
 await cleanState();
 await page.evaluate(async () => {
@@ -308,12 +327,13 @@ await page.evaluate(async () => {
   window.__wheelPromise4 = w.maybeShowDailyWheel({ sounds: false, force: true });
 });
 const arrived4 = await waitForWheel(9000);
-const art = arrived4 ? await page.evaluate(() => {
+const art = arrived4 ? await page.evaluate(async () => {
   const wrap = document.querySelector('.dw-wheel');
-  const tags = [...wrap.querySelectorAll('svg > text')].map(t => t.textContent);
-  /* every wedge whose label is a coin amount, plus the Charm wedge: the prizes
-     that have a 1:1 drawing. Crates and Scrap keep the vector on purpose. */
-  const want = tags.filter(t => /^\d+$/.test(t) || t === 'Charm').length;
+  /* the module's own answer to "how many wedges are declared pixel", not a
+     guess read off the labels. Crates are excluded by construction: they draw
+     through CRATE_PRIZE into .crate-ico-pix, which this row does not count. */
+  const { pixelPrizeCount } = await import('./js/wheel.js');
+  const want = pixelPrizeCount();
   const imgs = [...wrap.querySelectorAll('img.pix-cur')];
   return {
     want, got: imgs.length,
@@ -322,7 +342,7 @@ const art = arrived4 ? await page.evaluate(() => {
     srcs: imgs.map(i => i.getAttribute('src').split('/').pop()).join(','),
   };
 }) : null;
-check('ART   every coin + charm wedge carries decoded 48px pixel art',
+check('ART   every wedge the module declares pixel renders decoded 48px art',
   !!art && art.want > 0 && art.got === art.want && art.bad.length === 0,
   art ? `${art.got}/${art.want} at 48px (${art.srcs})${art.bad.length ? ' BAD: ' + art.bad.join(' ') : ''}` : 'wheel never arrived');
 await page.evaluate(() => document.querySelectorAll('.dw').forEach(n => n.remove()));

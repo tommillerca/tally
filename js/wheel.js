@@ -54,7 +54,16 @@ function iconHtml(p, size) {
        below), so this swaps the medium and changes no subject.
    The vector arms below are the fallback, not the plan: they still fire if a
    PNG ever goes missing, so a wedge can never come up bare. */
+/* EXPORTED SO THE GUARD CAN ASK RATHER THAN GUESS. tests/wheel-audit.mjs used to
+   derive its expected count from the rendered LABEL text (a numeric tag, or the
+   word "Charm"), and its header claimed that was "derived from the module's own
+   prize table". It was not: it was a proxy for the table, and when the Scrap
+   wedge joined the pixel set the proxy stayed behind and the row went red on
+   healthy code. Now both sides of that row come from here.
+   pixelPrizeCount is a function of the SAME table wheelSvg draws, so a wedge
+   cannot join or leave the pixel set without moving the expectation with it. */
 const PIX_PRIZE = p => (p.coin ? 'coin' : p.iconId === 'charm' ? 'xp2' : p.iconId === 'ingredient' ? 'sinew' : null);
+export const pixelPrizeCount = () => PRIZES.filter(p => PIX_PRIZE(p)).length;
 /* Keyed by iconId, and it reuses .crate-ico-pix on purpose: that class is where
    image-rendering:pixelated lives (app.css). A private class here would render
    these two through the browser's smooth scaler, which is the exact failure this
