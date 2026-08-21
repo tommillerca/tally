@@ -106,7 +106,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    slot codes out of BH_SLOTS (nine app.js sites iterate it to draw the PLAYER),
    holds the glasses on top of the pet stack, and grades every layer against the
    clipping budget croppedPetImg's own scale leaves it. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'pet-accessory-lint.mjs'];
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'pet-accessory-lint.mjs', 'rack-theme-lint.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
@@ -331,6 +331,16 @@ const DECLARED = {
     + 'multiplier, a talent tree or a drawn boss changes. Its own header records why it exists: the Mimic was specced at 1.05x '
     + 'and measured 12.0% player win against 28.8% for an ordinary rung, and the Wanderer was specced at 1.22x to sit above the '
     + "Glutton's 1.18x and measured EASIER than him. Reading the multiplier is not the same as knowing the difficulty."],
+  'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
+    + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
+    + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
+    + 'NOTE, worth fixing separately: unlike boneyard-audit it carries no capability probe and no UNPROVEN exit, so on a host '
+    + 'with no route to the tile server its CONTROL row is the only thing standing between a tile-less run and a vacuous pass.'],
+  'purchase-write-failure-audit.mjs': ['full', "a rejected write during a rack purchase must not cost the player the coins AND the piece. "
+    + 'Run it on any change to buyRackItem, grantCosmetic, markPaid or the db write paths. It makes the real db.addIfAbsent reject '
+    + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
+    + 'logic is stubbed. Proven red on origin/main c3b7bc9 (3 rows) before the fix existed: 300 coins charged, no piece granted, and '
+    + 'the retry answered owned while the player owned nothing, which made the piece unbuyable forever.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
