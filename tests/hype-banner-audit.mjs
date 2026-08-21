@@ -10,7 +10,7 @@
  *      perfectly. Every figure is graded on naturalWidth, never on its rect.
  *   2. it grows and pushes the step-race banner or the calorie ring off the
  *      first screen, which is the whole reason it sits where it does.
- *   3. the copy clips. It is ten words; a clipped one is a quarter of the brief.
+ *   3. the copy clips. It is eleven words; a clipped one is a tenth of the brief.
  *
  * And the ORDER is the instruction itself: above the step winner, not below.
  *
@@ -81,6 +81,11 @@ async function measure() {
         .map(e => Math.round(Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))),
       words: texts.reduce((n, e) => n + (e?.textContent || '').trim().split(/\s+/).filter(Boolean).length, 0),
       copy: texts.map(e => (e?.textContent || '').trim()).join(' / '),
+      /* THE PAIR OF TALLIES. "Two want to eat you." / "One likes to shop": a
+         count on each side is the joke, and the shop caption shipped without its
+         number for one revision (Tom: "it is meant to say ONE likes to shop").
+         Word-initial, so a stray "one" inside a sentence cannot satisfy it. */
+      capCounts: caps.map(e => (/^(one|two|three)\b/i.exec((e?.textContent || '').trim()) || [''])[0].toLowerCase()),
       lineClipped: texts.some(clipped),
       caps: caps.length,
       // each caption inside its OWN half, and no full-width sentence spanning both
@@ -90,7 +95,30 @@ async function measure() {
       // one frame: both halves are children of the SAME card, never two cards
       oneFrame: document.querySelectorAll('.card.hype').length === 1
         && card.contains(document.getElementById('hypeYard')) && card.contains(document.getElementById('hypeShop')),
-      sealCell: !!document.querySelector('#hypeShop .hype-figs'),
+      /* NO BOX AROUND THE BEE. Tom, 2026-08-21: "there shouldnt be any button
+         thing around the bee remove that." She sat on a sunken plate for one
+         revision (rgba(0,0,0,.28), a hairline border, 14px radius) and it read
+         as a control. Both halves ARE controls and the left one carries no box,
+         so the assertion is a COMPARISON, not a constant: nothing inside the
+         shop half may paint a fill, a border or a radius that the Boneyard half
+         does not. Graded on computed style, because the plate was one rule and a
+         source scan for it would go blind the moment it is spelt differently.
+         A BOX IS NOT A DIVIDER, and the difference is the number of edges: the
+         hairline between the columns is ONE border side, no fill, no radius, and
+         that is the separation Tom kept. Two or more sides, a fill or a corner
+         radius is a surround. The half itself is walked too, so moving the plate
+         up onto the button cannot slip past. */
+      boxed: (() => {
+        const skin = root => [root, ...root.querySelectorAll('*')].map(e => {
+          const c = getComputedStyle(e);
+          const fill = c.backgroundColor !== 'rgba(0, 0, 0, 0)' && c.backgroundColor !== 'transparent';
+          const sides = ['Top', 'Right', 'Bottom', 'Left']
+            .filter(s => parseFloat(c['border' + s + 'Width']) > 0 && c['border' + s + 'Style'] !== 'none');
+          const rad = parseFloat(c.borderTopLeftRadius) > 0;
+          return { tag: e.className || e.tagName, fill, bord: sides.length >= 2 ? sides.join('+') : '', rad };
+        }).filter(x => x.fill || x.bord || x.rad);
+        return { shop: skin(document.getElementById('hypeShop')), yard: skin(document.getElementById('hypeYard')) };
+      })(),
       yard: !!document.getElementById('hypeYard'),
       shop: !!document.getElementById('hypeShop'),
       // ORDER: the banner's own position among Today's children, against the
@@ -142,12 +170,16 @@ for (const [w, h] of [[393, 852], [320, 568]]) {
     `ring top ${m.ringTop}, was ${BASE_RING_TOP[tag]}`);
   ok(`FIT ${tag} it is a banner, not a screen`, m.height <= 180, `${m.height}px tall`);
   ok(`COPY ${tag} nothing is clipped`, !m.lineClipped, m.copy);
-  ok(`COPY ${tag} minimal wording: twelve words or fewer`, m.words <= 12, `${m.words} words: ${m.copy}`);
+  ok(`COPY ${tag} minimal wording: eleven words or fewer`, m.words <= 11, `${m.words} words: ${m.copy}`);
   ok(`COPY ${tag} each half carries its own caption`, m.capsOwned, `${m.caps} captions`);
+  ok(`COPY ${tag} both captions lead with their count`, m.capCounts.length === 2 && m.capCounts.every(Boolean),
+    m.capCounts.map(c => c || '(none)').join(' / ') + ' -- ' + m.copy);
   ok(`COPY ${tag} no single sentence spanning both halves`, !m.spanningLine);
   ok(`REACH ${tag} both halves are real controls`, m.yard && m.shop);
   ok(`ONE ${tag} it is one banner in one frame, not two cards`, m.oneFrame);
-  ok(`ONE ${tag} the seal stands in her own cell`, m.sealCell);
+  ok(`ONE ${tag} nothing pressable-looking around the seal: no box the other half lacks`,
+    m.boxed.shop.length <= m.boxed.yard.length,
+    `shop ${JSON.stringify(m.boxed.shop)} vs yard ${JSON.stringify(m.boxed.yard)}`);
   ok(`GONE ${tag} the Out there today card is off Today`, !m.outThere);
   ok(`GONE ${tag} no old banner rows survive on Today`, m.oldBanners === 0, `${m.oldBanners} rows`);
 }

@@ -4087,7 +4087,7 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
    simultaneously teases bumbleseal being sold in the shop. this all needs to be
    in the same banner and feel cohesive not like a verbose list it should just be
    minimal wording, clean easy marketing that excites."
-   BOLD ART, TEN WORDS. That is the only way both halves of the brief hold at
+   BOLD ART, ELEVEN WORDS. That is the only way both halves of the brief hold at
    once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
    loud part has to be the picture. A banner that needs a sentence to explain its
    own picture is a press release.
@@ -4100,13 +4100,24 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
        struck "one wants your coins" out and wrote "Likes to shop" under the seal.
        Each half now says what it is, which is honest about what they already
        were: two different tap targets going to two different places;
-     - the creatures got BIGGER and the seal got her own cell. The wide
-       undivided strip was what made three large plates read as thumbnails.
+     - the creatures got BIGGER. The wide undivided strip was what made three
+       large plates read as thumbnails.
+   SECOND REVISION (2026-08-21, same day): "there shouldnt be any button thing
+   around the bee remove that. and it is meant to say ONE likes to shop not just
+   likes to shop." So:
+     - the seal's sunken plate is GONE. It was meant to set her apart and it read
+       as a button instead, which is worse than the problem it solved: her half
+       IS a button and so is the other one, and the other one has no box. She
+       stands on the banner's own ground now, told apart by the hairline and the
+       gap. See .hype-half.seal in app.css;
+     - the caption carries its COUNT. "Two want to eat you." / "One likes to
+       shop" is a pair of tallies, and dropping the number off one of them left
+       the joke doing half its work.
    It is still ONE banner: one frame, one heading across the top, one grid. The
    halves are columns in it, never two cards pushed together.
    NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
    number would be a promise the shop cannot keep today, and Tom has not settled
-   it. "Likes to shop" is true the day she lands and funny before it. */
+   it. "One likes to shop" is true the day she lands and funny before it. */
 /* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
    different amounts of empty margin (the Mimic's ink fills its file edge to edge,
    the Wanderer leaves 21% of his file empty below his feet), so dropping both into
@@ -4147,7 +4158,7 @@ function hypeBannerHtml() {
     </button>
     <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
       <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92)}</span>
-      <b class="hype-cap">Likes to shop</b>
+      <b class="hype-cap">One likes to shop</b>
     </button>
   </div>`;
 }

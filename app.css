@@ -2740,13 +2740,14 @@ body::before {
   margin-bottom: 6px; }
 .hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
-.hype-half.seal { grid-column: 2; }
+/* THE HAIRLINE, BACK. She stood on a sunken plate for one revision and Tom read
+   it as a button ("there shouldnt be any button thing around the bee"). Both
+   halves are tap targets and the left one has never carried a box, so neither
+   does she now: the columns are told apart by a line and the gap, and nothing in
+   either half looks pressable. */
+.hype-half.seal { grid-column: 2; padding-left: 9px; border-left: 1px solid var(--line-strong); }
 .hype-half:active { transform: translateY(1px); }
 .hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
-/* HER OWN CELL. Tom's markup sets the seal apart more definitely than the
-   hairline did, so she stands on a sunken plate instead of beside a line. */
-.hype-half.seal .hype-figs { padding: 4px 4px 2px; border-radius: 14px;
-  background: rgba(0, 0, 0, .28); border: 1px solid var(--line-strong); }
 /* The box is fixed and the plate inside it is absolutely placed by
    hypePlateHtml's measured percentages, so both creatures stand on one floor. */
 .hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
