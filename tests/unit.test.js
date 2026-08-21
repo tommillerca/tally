@@ -2816,7 +2816,7 @@ test('paddock: the footer counts copies and kinds, not species rows', () => {
   const kinds = BH_ITEMS.filter(i => i.slot === 'C').length;
   assert.equal(PDK.footerLabel(PDK_ROSTER), `5 PETS · 3 OF ${kinds} KINDS`);
   assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), `1 PET · 1 OF ${kinds} KINDS`, 'singular reads right');
-  assert.equal(PDK.footerLabel([]), '0 PETS · 0 OF 6 KINDS');
+  assert.equal(PDK.footerLabel([]), `0 PETS · 0 OF ${kinds} KINDS`);
 });
 
 test('paddock: nothing emits a .pd- class', () => {
