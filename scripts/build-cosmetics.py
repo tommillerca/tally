@@ -10,6 +10,7 @@ inventories stay valid across art updates (ids are the source filenames).
 import hashlib
 import json
 import os
+import re
 import sys
 from PIL import Image
 
@@ -65,6 +66,103 @@ SLOTS = {
 # here or the next rebuild eats it.
 SPECIALS = [
     {'id': 'CX', 'slot': 'C', 'rarity': 'legendary', 'name': 'Day One Lizard', 'exclusive': True},
+    # Gwart's Menagerie, v421. Bumbleseal and the wardrobe drawn FOR HER: every
+    # piece is positioned for her body inside the shared canvas, which is why the
+    # accessory slots are hers alone and why they are sold rather than dropped.
+    # hatchChance is what keeps her a 1% egg instead of an even quarter of the
+    # non-common pool; see pickRandomPet in js/loot.js and tests/pet-pool-audit.mjs.
+    # These six were hand-added to data/boneheadz.js and were NOT mirrored here,
+    # which is exactly what the comment above this list warns about: the next
+    # rebuild would have deleted a 50,000-coin pet and five paid accessories out
+    # from under everyone who bought them.
+    {'id': 'C6',  'slot': 'C',  'rarity': 'legendary', 'name': 'Bumbleseal', 'hatchChance': 0.01},
+    {'id': 'CE1', 'slot': 'CE', 'rarity': 'epic',      'name': 'Bug-Eye Shades'},
+    {'id': 'CB1', 'slot': 'CB', 'rarity': 'rare',      'name': 'Courier Purse'},
+    {'id': 'CB2', 'slot': 'CB', 'rarity': 'epic',      'name': 'Charmed Courier'},
+    {'id': 'CG1', 'slot': 'CG', 'rarity': 'legendary', 'name': 'Live Wire Stinger'},
+    {'id': 'CM1', 'slot': 'CM', 'rarity': 'uncommon',  'name': 'Pimple Patches'},
+
+    # ---- THE 63 THAT A REBUILD WAS ALREADY DELETING ----
+    # Found 2026-08-21 by running this script into a throwaway tree and diffing:
+    # 188 items in, 125 out. Every one of the 63 below has RENDERED ART on disk in
+    # assets/bh/<slot>/<id>.png and NO source in the NFT library, so the library
+    # lost their sources at some point and the generator has had no way to know
+    # they exist. They are not stale entries: they are items players own.
+    #
+    # Their name and rarity are mirrored EXACTLY as shipped, not regenerated. That
+    # matters more than it looks: pick_rarity is a hash of the id, so letting the
+    # generator re-derive these would silently re-roll the rarity of items people
+    # already have, and the running-number namer would renumber their neighbours
+    # too. The comment above about the T slot's legendary quietly moving from
+    # T9-1 to T3 is the same failure, already caught once.
+    #
+    # THE REAL FIX IS NOT THIS LIST, it is tests/rebuild-lossless-audit.mjs, which
+    # fails if any item in data/boneheadz.js cannot be reproduced from here. A list
+    # that has to be maintained by hand is exactly what failed; a list with a guard
+    # behind it announces the next omission instead of eating it.
+    {'id': 'ES1', 'slot': 'E', 'rarity': 'common', 'name': 'Pink Cat-Eyes'},
+    {'id': 'ES2', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Purple Slants'},
+    {'id': 'ES3', 'slot': 'E', 'rarity': 'rare', 'name': 'Teal Rounds'},
+    {'id': 'ES4', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Black Rounds'},
+    {'id': 'ES5', 'slot': 'E', 'rarity': 'common', 'name': 'Odd Pair'},
+    {'id': 'ES6', 'slot': 'E', 'rarity': 'rare', 'name': 'Groucho Shades'},
+    {'id': 'ES7', 'slot': 'E', 'rarity': 'common', 'name': 'Pin Dots'},
+    {'id': 'ES8', 'slot': 'E', 'rarity': 'legendary', 'name': 'Slit Eyes'},
+    {'id': 'ES9', 'slot': 'E', 'rarity': 'rare', 'name': 'Frost Puffs'},
+    {'id': 'ES10', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Squint Lines'},
+    {'id': 'ES11', 'slot': 'E', 'rarity': 'common', 'name': 'Pinpricks'},
+    {'id': 'ES12', 'slot': 'E', 'rarity': 'rare', 'name': 'Blood Moons'},
+    {'id': 'ES13', 'slot': 'E', 'rarity': 'common', 'name': 'Googly Eyes'},
+    {'id': 'ES14', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Ugly Cry'},
+    {'id': 'ES15', 'slot': 'E', 'rarity': 'rare', 'name': 'Spore Eyes'},
+    {'id': 'ES16', 'slot': 'E', 'rarity': 'legendary', 'name': 'Wide Whites'},
+    {'id': 'ES17', 'slot': 'E', 'rarity': 'common', 'name': 'Heavy Lids'},
+    {'id': 'ES18', 'slot': 'E', 'rarity': 'rare', 'name': 'Sleepy Lids'},
+    {'id': 'ES19', 'slot': 'E', 'rarity': 'common', 'name': 'Bubblegum Eyes'},
+    {'id': 'ES20', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Cryo Orbs'},
+    {'id': 'ES21', 'slot': 'E', 'rarity': 'rare', 'name': "X'd Out"},
+    {'id': 'ES22', 'slot': 'E', 'rarity': 'uncommon', 'name': 'Rainbow Band'},
+    {'id': 'ES23', 'slot': 'E', 'rarity': 'common', 'name': 'Alert Eyes'},
+    {'id': 'GS1', 'slot': 'G', 'rarity': 'common', 'name': 'Drip Grill'},
+    {'id': 'GS2', 'slot': 'G', 'rarity': 'uncommon', 'name': 'Stud Braces'},
+    {'id': 'GS3', 'slot': 'G', 'rarity': 'rare', 'name': 'Ice Tooth'},
+    {'id': 'MS1', 'slot': 'M', 'rarity': 'common', 'name': 'Soap Wand'},
+    {'id': 'MS2', 'slot': 'M', 'rarity': 'uncommon', 'name': 'Crystal Fangs'},
+    {'id': 'MS3', 'slot': 'M', 'rarity': 'rare', 'name': 'Cloud Puff'},
+    {'id': 'MS4', 'slot': 'M', 'rarity': 'uncommon', 'name': 'Fern Frond'},
+    {'id': 'MS5', 'slot': 'M', 'rarity': 'common', 'name': 'Dotted Grin'},
+    {'id': 'MS6', 'slot': 'M', 'rarity': 'rare', 'name': 'Amber Wand'},
+    {'id': 'MS7', 'slot': 'M', 'rarity': 'common', 'name': 'Daisy Stem'},
+    {'id': 'MS8', 'slot': 'M', 'rarity': 'legendary', 'name': 'Fat Cigar'},
+    {'id': 'MS9', 'slot': 'M', 'rarity': 'rare', 'name': 'Firecracker'},
+    {'id': 'MS10', 'slot': 'M', 'rarity': 'uncommon', 'name': 'Fresh Catch'},
+    {'id': 'MS11', 'slot': 'M', 'rarity': 'common', 'name': 'Swamp Gob'},
+    {'id': 'MS12', 'slot': 'M', 'rarity': 'rare', 'name': 'Rose Bite'},
+    {'id': 'MS13', 'slot': 'M', 'rarity': 'common', 'name': 'Bubble Gum'},
+    {'id': 'HS1', 'slot': 'H', 'rarity': 'common', 'name': 'Rope Coil'},
+    {'id': 'HS2', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Ronin Band'},
+    {'id': 'HS3', 'slot': 'H', 'rarity': 'rare', 'name': 'Soda Jerk'},
+    {'id': 'HS4', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Nap Mask'},
+    {'id': 'HS5', 'slot': 'H', 'rarity': 'common', 'name': 'Fish Bowl'},
+    {'id': 'HS6', 'slot': 'H', 'rarity': 'rare', 'name': 'Flower Crown'},
+    {'id': 'HS7', 'slot': 'H', 'rarity': 'common', 'name': 'Stitch Band'},
+    {'id': 'HS8', 'slot': 'H', 'rarity': 'legendary', 'name': 'Toadstool Hat'},
+    {'id': 'HS9', 'slot': 'H', 'rarity': 'rare', 'name': 'Atom Rings'},
+    {'id': 'HS10', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Party Cone'},
+    {'id': 'HS11', 'slot': 'H', 'rarity': 'common', 'name': 'Polka Do-Rag'},
+    {'id': 'HS12', 'slot': 'H', 'rarity': 'rare', 'name': 'Cold Halo'},
+    {'id': 'HS13', 'slot': 'H', 'rarity': 'common', 'name': 'Gold Halo'},
+    {'id': 'HS14', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Ash Beanie'},
+    {'id': 'HS15', 'slot': 'H', 'rarity': 'rare', 'name': 'Moss Beanie'},
+    {'id': 'HS16', 'slot': 'H', 'rarity': 'legendary', 'name': 'Ember Beanie'},
+    {'id': 'HS17', 'slot': 'H', 'rarity': 'common', 'name': 'Crossed Arrows'},
+    {'id': 'HS18', 'slot': 'H', 'rarity': 'rare', 'name': 'Skewered'},
+    {'id': 'HS19', 'slot': 'H', 'rarity': 'common', 'name': 'Grape Visor'},
+    {'id': 'HS20', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Clay Visor'},
+    {'id': 'HS21', 'slot': 'H', 'rarity': 'rare', 'name': 'Turf Visor'},
+    {'id': 'HS22', 'slot': 'H', 'rarity': 'uncommon', 'name': 'Skull Cap'},
+    {'id': 'HS23', 'slot': 'H', 'rarity': 'common', 'name': 'Racer Wrap'},
+    {'id': 'HS24', 'slot': 'H', 'rarity': 'legendary', 'name': 'Sleep Bonnet'},
 ]
 
 # Drop items: explicit name + rarity, and EXCLUDED from the running-number naming
@@ -115,6 +213,43 @@ def pick_rarity(item_id):
         if r < acc:
             return name
     return 'common'
+
+
+def _prior_items():
+    """Name and rarity of every item in the CURRENTLY SHIPPED data file.
+
+    PARSED, NOT PATTERN-MATCHED, and that is the whole point of this docstring.
+    The first version of this function scraped ids with the pattern
+    [A-Za-z0-9]+, which silently skips every id containing a hyphen: IL11-3,
+    T9-1, crate-daily. That is not an edge case, it is 172 of the 370 items, so
+    the function reported success while preserving barely half the catalogue and
+    the rebuild still demoted "Nightfall Katana" from legendary to common. The
+    array is real JSON, so it is read as JSON: bracket-matched from BH_ITEMS and
+    handed to json.loads, which cannot have an opinion about which ids look
+    normal.
+
+    Returns {} when the file is absent or unreadable, so a first build on a clean
+    checkout behaves exactly as it always did."""
+    path = os.path.join(ROOT, 'data', 'boneheadz.js')
+    try:
+        text = open(path, encoding='utf-8').read()
+    except OSError:
+        return {}
+    try:
+        start = text.index('[', text.index('BH_ITEMS'))
+        depth = 0
+        for end in range(start, len(text)):
+            if text[end] == '[':
+                depth += 1
+            elif text[end] == ']':
+                depth -= 1
+                if depth == 0:
+                    break
+        prior = json.loads(text[start:end + 1])
+    except (ValueError, json.JSONDecodeError):
+        return {}
+    return {d['id']: {'name': d.get('name'), 'rarity': d.get('rarity')}
+            for d in prior if d.get('id') and d.get('name') and d.get('rarity')}
 
 
 def main():
@@ -171,6 +306,37 @@ def main():
             it['default'] = True
 
     items.extend(SPECIALS)
+
+    # ---- NOTHING A PLAYER ALREADY OWNS MAY CHANGE ----
+    # Measured 2026-08-21 by running this script into a throwaway tree and
+    # diffing the result against the shipped file: of 188 items, 118 came back
+    # RENAMED and 3 came back DEMOTED. IL14 went from legendary "Bolt Flail" to
+    # common "Standard Off-hand #12"; IL13 rare -> common; IL15 uncommon ->
+    # common. Those are items in people's inventories.
+    #
+    # WHY IT HAPPENS, and it is not one bug. Names come from a running counter
+    # plus a hash of the id, and rarity from pick_rarity, another hash. Both are
+    # deterministic in the INPUT SET, so anything that changes the set changes
+    # the answer for items that did not change at all: adding art renumbers its
+    # neighbours, and the per-slot legendary and epic guarantees pick by
+    # `index % len(base_items)`, so the guarantee moves the moment the list
+    # grows. The comment above base_items records that exact failure happening
+    # once before, to the T slot.
+    #
+    # So the generator is authoritative for NEW ids only. For any id already in
+    # the shipped file, that file wins: name and rarity are copied forward
+    # verbatim. This is deliberately a read of the script's own previous output,
+    # because the requirement is continuity with what shipped, and there is no
+    # other record of it. Rarity and name only; slot, defaults and art are still
+    # generated.
+    prior = _prior_items()
+    for it in items:
+        was = prior.get(it['id'])
+        if was:
+            it['name'], it['rarity'] = was['name'], was['rarity']
+    kept = sum(1 for it in items if it['id'] in prior)
+    print(f'preserved name+rarity for {kept} existing item(s); '
+          f'{len(items) - kept} newly generated')
 
     slots_out = [{'code': c, 'label': l, 'z': z, 'default': d} for c, (l, z, d) in SLOTS.items()]
     body = (

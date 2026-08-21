@@ -408,6 +408,15 @@ const DECLARED = {
     + 'still starts the fight is decoration) and COVER must find the overlay STILL UP when the choice resolves, because the '
     + 'arena is built underneath its hold frame and tearing it down one line early brings the map back mid-handover. '
     + 'All eight rows proven red on 2026-08-21 in a throwaway tree; the mutations are listed in the file header.'],
+  'rebuild-lossless-audit.mjs': ['full', "re-running scripts/build-cosmetics.py must not delete, rename or "
+    + 're-rarity a single item that ships today. Run it on any change to that script, to SPECIALS/OVERRIDES, or to the art '
+    + 'library. Tiered full rather than pure because it shells out to python3 and rebuilds the whole catalogue against Cam\'s '
+    + 'library, about a minute; it needs no browser. THIS IS A MIGRATION GUARD, NOT A BUILD CHECK: every cosmetic a player owns '
+    + 'is keyed by an id in the generated file, and its name and rarity are what the game shows them, so re-running the script '
+    + 'edits live inventory. Measured on 2026-08-21 before the fix: 63 items DELETED, 172 RENAMED and 3 DEMOTED, including '
+    + 'Nightfall Katana going legendary to common, and the script exited 0 and printed a cheerful item count either way. '
+    + 'It SKIPS with a reason when the art library is absent, because a guard that fails on a teammate\'s laptop for an '
+    + 'environmental reason is one people learn to ignore. Four mutations proven red; they are in the file header.'],
   'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
     + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
     + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
