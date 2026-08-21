@@ -40,6 +40,8 @@
  * composited back into the arrangement he drew.
  */
 
+import { talkBoxHtml, runTalkBox } from './talkbox.js';
+
 /* Small stable hash, kept local rather than imported. Same call as js/bosses.js
    makes: this module is loaded on the Boneyard's hot path and has no business
    dragging in hunt.js (which imports game.js, loot.js and nutrition.js) just to
@@ -139,10 +141,17 @@ function ensureStyle() {
   94.2308%, 97.0654% { opacity: 1 }
   97.1154%, 100% { opacity: 0 }
 }
+/* A SCRIM, NOT A BLACKOUT, and the difference is deliberate. The Wanderer paints
+   an opaque #05040a and the map is gone: he is a boss who hunted you down. This
+   is an ambush on a crate you chose to tap, so the room you are standing in is
+   still faintly there behind him. Measured on the real Today screen at 430x932:
+   the ground under it reads mean luma 77.5, through this scrim 7.6 with a
+   contrast (std) ratio of 0.03, against 0.00 for the Wanderer's blackout. */
 .mimic-reveal {
   position: fixed; inset: 0; z-index: 200; display: flex;
-  flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-  background: radial-gradient(120% 90% at 50% 45%, rgba(24,10,6,0.95), rgba(3,2,4,0.995));
+  flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  padding: 0 16px;
+  background: radial-gradient(120% 90% at 50% 45%, rgba(24,10,6,0.972), rgba(3,2,4,0.998));
   animation: mimicRevealIn 220ms ease both;
 }
 .mimic-reveal.out { animation: mimicRevealOut 260ms ease both; }
@@ -150,10 +159,28 @@ function ensureStyle() {
   width: min(58vw, 240px); height: auto; image-rendering: pixelated;
   filter: drop-shadow(0 10px 26px rgba(0,0,0,0.7));
 }
-.mimic-reveal b {
-  font-size: 15px; letter-spacing: 0.26em; color: #f4d98a; text-transform: uppercase;
+/* The line is the app's talk box, not two centred labels. Narrower than the
+   screen and centred under the chest: he is an OBJECT you are looking down at,
+   where the Wanderer is a figure filling a stage. */
+.mimic-reveal .mimic-enc-box { position: relative; z-index: 2; width: min(84vw, 330px); --tb-size: 14px; }
+/* THE HANDOVER COVER. One beat, no strobe and no charge: the scrim closes to
+   black and STAYS there while the caller builds the arena underneath it. It is a
+   layer rather than a background swap because a gradient cannot interpolate to a
+   flat colour, and z-index 3 so it covers the box as well as the chest.
+   NOT switched off under reduced motion, and the fill mode is why: this is a
+   ONE-SHOT, so app.css's global reduce rule collapses it to an instant that
+   holds its end state (its own comment says exactly that), and the map stays
+   hidden. The trap that block warns about is a fast duration on something that
+   REPEATS, which this is not. The BOTH fill mode is load-bearing: without it
+   the collapsed animation lands back on opacity 0 and the handover uncovers
+   the map, which was measured on that exact mutation.
+   Guard: tests/mimic-audit.mjs REDUCED. */
+.mimic-reveal::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: #05040a; opacity: 0;
 }
-.mimic-reveal small { font-size: 12px; letter-spacing: 0.14em; color: rgba(255,255,255,0.62); }
+.mimic-reveal.snap::after { animation: mimicSnap ${SNAP_MS}ms ease both; }
+@keyframes mimicSnap { from { opacity: 0 } to { opacity: 1 } }
 @keyframes mimicRevealIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes mimicRevealOut { from { opacity: 1 } to { opacity: 0 } }
 /* REDUCED MOTION DISABLES, IT DOES NOT SPEED UP. animation-duration:0.001s is
@@ -187,17 +214,57 @@ export function mimicPlateHtml() {
    (1800ms, measured off the GIF's own frame delays) then it hands over.
    Awaited by the caller, unlike showGateIntro which is fire-and-forget: the
    whole point is that the player sees the chest turn into a monster BEFORE the
-   arena exists, so overlapping them would throw the reveal away. */
+   arena exists, so overlapping them would throw the reveal away.
+ *
+ * SMALLER THAN THE WANDERER, ON PURPOSE. Tom, 2026-08-21: "do something similar
+ * for the mimic but not quite as intense." Similar means it speaks the same
+ * language as showWandererEncounter; not as intense means every dial is turned
+ * down, and the reasons are not cosmetic:
+ *
+ *   NO CHOICE. He gets no Fight/Flee. You already reached into the crate, so the
+ *   trap has sprung; a prompt here would hand the ambush an escape hatch and
+ *   flatten the difference between a boss who hunted you across the map and a
+ *   box you chose to tap. The Wanderer's Flee is free BECAUSE nobody asked for
+ *   him. Nobody asks for a Mimic either, but they do ask for the chest.
+ *
+ *   ONE LINE, through the app's one typing path. Not two beats with a staged
+ *   arrival between them, and emphatically not a second typer: talkBoxHtml /
+ *   runTalkBox is the same module the Wanderer speaks through (js/talkbox.js's
+ *   own header on why there is only ever one). What it replaced was two centred
+ *   labels, which is the thing that made this read as a toast with a picture
+ *   next to it rather than as an encounter.
+ *
+ *   ONE BEAT AT THE HANDOVER. The Wanderer gets a stepped charge, a white/black
+ *   strobe and a fade to black over 900ms. This gets a 260ms close to black and
+ *   nothing else. The sequence never brightens after the scrim lands, which is
+ *   the measurable difference between a beat and a strobe, and is the shape the
+ *   NOSTROBE row in tests/mimic-audit.mjs pins.
+ *
+ *   HALF THE LENGTH. 2060ms to the arena against his 5100ms, both derived from
+ *   the two modules' own exported constants in the SMALLER row rather than from
+ *   numbers typed into a test.
+ *
+ * THE OVERLAY IS NOT REMOVED WHEN THIS RESOLVES. Same handover as the Wanderer,
+ * and for the same reason: the caller builds the arena underneath the black hold
+ * frame and calls dismiss() afterwards, so there is no frame where the map comes
+ * back between the chest and the fight. */
 export const MIMIC_REVEAL_MS = 1800;
+const SNAP_MS = 260;
+
+/* His one line. Both of the phrases the two labels used to carry, said once, in
+   the app's dialogue voice. Exported so the guard asserts the SHIPPED string. */
+export const MIMIC_LINE = 'The chest was never a chest. It has teeth.';
 
 export function showMimicReveal({ reduced = false } = {}) {
-  if (typeof document === 'undefined') return Promise.resolve();
+  if (typeof document === 'undefined') return Promise.resolve({ dismiss: () => {} });
   ensureStyle();
   const el = document.createElement('div');
   el.className = 'mimic-reveal';
   el.innerHTML = `<img src="${MIMIC_ART.loop}" alt="">` +
-    `<b>It has teeth</b><small>The chest was never a chest</small>`;
+    talkBoxHtml(MIMIC_LINE, { cls: 'mimic-enc-box' });
   document.body.appendChild(el);
+  const box = el.querySelector('.talkbox');
+  runTalkBox(box, MIMIC_LINE);
   // reduced motion still gets the beat, just a shorter, still one
   const hold = reduced ? 700 : MIMIC_REVEAL_MS;
   return new Promise(resolve => {
@@ -205,13 +272,24 @@ export function showMimicReveal({ reduced = false } = {}) {
     const finish = () => {
       if (done) return;
       done = true;
-      el.removeEventListener('click', finish);
-      el.classList.add('out');
-      setTimeout(() => { el.remove(); resolve(); }, reduced ? 0 : 260);
+      el.removeEventListener('click', tap);
+      el.classList.add('snap');
+      setTimeout(resolve, reduced ? 0 : SNAP_MS);
     };
-    el.addEventListener('click', finish);          // tap to skip
+    /* TAP TO SKIP, IN TWO STAGES, which is the talk box's own contract rather
+       than a second rule invented here: a tap while the line is still typing
+       finishes the LINE (box.onclick owns that), and a tap after it ends the
+       beat. Taps that land on the box never reach this handler at all while it
+       is typing, because runTalkBox stops them there. */
+    const tap = () => {
+      if (!box.classList.contains('tb-done')) { box.click(); return; }
+      finish();
+    };
+    el.addEventListener('click', tap);
     setTimeout(finish, hold);
-  });
+  }).then(() => ({
+    dismiss: () => { el.classList.add('out'); setTimeout(() => el.remove(), 260); },
+  }));
 }
 
 /* ---------------------------------------------------------------- the fight */

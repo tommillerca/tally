@@ -325,7 +325,12 @@ const DECLARED = {
   'mimic-audit.mjs': ['full', "the Mimic: a chest that is not a chest, its reveal, and both new drawn bosses in the Gauntlet. "
     + 'Run it on any change to js/mimic.js, the Boneyard chest spawn, or the drawn-boss list in js/pit.js. Full rather than fast '
     + 'because it boots the Boneyard and drives a real reveal, whose animation IS assets/bh/mimic/mimic-loop.gif: without that '
-    + 'file precached the chest never opens, which is why sw.js carries it.'],
+    + 'file precached the chest never opens, which is why sw.js carries it. Its REVEAL section also owns the half of the feature '
+    + 'that is a JUDGEMENT: Tom asked for the Wanderer\'s encounter "but not quite as intense", so the SMALLER rows turn that into '
+    + 'measurements off a CDP screencast of the real overlay over the real lit app: no choice at all, a scrim bounded on BOTH sides '
+    + '(a full blackout fails it, which the prove-red caught), a sequence that only ever darkens so a strobe cannot creep in, and a '
+    + 'length under 60% of the Wanderer\'s own exported constants. COVER and HANDOVER are the quiet pair, the same shape as the '
+    + "Wanderer's: the overlay hands over on a black frame it still owns, and app.js builds the arena before it lifts it."],
   'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors, the map\'s only PATROLLING agent: his position and heading are a pure '
     + 'function of (date, cell, clock), so a 5-second refreshWorld cannot teleport him, a second device computes the same metre, '
     + 'and closing the app cannot reroll him off your back. Purity is proved in a SECOND browser page with its own module realm, '
