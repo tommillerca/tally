@@ -3,6 +3,18 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 421, date: '2026-08-21', title: 'The Wanderer, and Gwart has a pet for sale', items: [
+    'Someone else is out in the Boneyard now. The Wanderer walks a slow beat around the map with a lantern, and the light in front of him is a cone you can see on the ground. Step into it and he comes for you.',
+    'He gives you a moment first. The screen goes dark, you hear him coming, and you choose: fight him or back out of the light. Backing out costs you nothing but the moment.',
+    'He is the hardest thing out there. Fighting him is meant to be a decision.',
+    'Buried crates on the map are not always crates. Some of them have teeth.',
+    'Gwart is selling a Bumbleseal, and a wardrobe to go with her. Shades, two different purses, a live wire stinger and a set of patches, all sold separately so you can dress her how you want.',
+    'The Shop tab is Gwart\'s Emporium now: he stands behind the counter instead of the usual character header, and he was leaning three pixels to the right, which he is not any more.',
+    'The tab bar carries a colour for each place it goes, and the one you are on reads like a sticker.',
+    'The daily wheel had three prizes still drawn as line art next to four drawn in pixels. All seven match now.',
+    'Fixed: the tray flashed on its way between the Boneyard and Today.',
+    'Fixed: the Mystery Egg was called two different things on two screens that sit one tap apart.',
+  ] },
   { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
     'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
     'It fades up as you pull, so how far you pull is what decides how much of it you see.',

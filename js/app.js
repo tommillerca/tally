@@ -30,7 +30,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
-import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
+import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -15533,18 +15533,37 @@ async function renderBoneyard(el) {
       }
     }
 
-    /* THE CHARGE. He gets a beat before the arena because the player did not ask
-       for this fight and has to be told why it started; the Mimic's full-screen
-       reveal is not the right size for it, because the map ALREADY showed them
-       the man and the light. So: the marker lunges, one line says what happened,
-       and then the arena opens on his own plate. */
+    /* THE CHARGE, then the encounter. He gets a beat on the MAP first because
+       that is where the player already is: the marker lunges so the thing that
+       caused this is the last thing seen before the screen changes. Then the
+       full-screen encounter takes over and asks (js/wanderer.js,
+       showWandererEncounter).
+
+       WHY THE TOAST IS GONE. It said the sentence, and a toast is this app's
+       interruption channel: it slides over whatever you were doing without
+       stopping it. This is the one fight on the map nobody asked for, so it is
+       the one that has to stop the screen and offer a way out.
+
+       THE OVERLAY IS TORN DOWN AFTER openFight, NOT BEFORE. On 'fight' it holds
+       on the zoom's white frame and the arena is built underneath it, so there
+       is no frame where the map comes back. */
     async function startWandererEncounter(w, el) {
       haptic.heavy();
-      toast('The lantern swings onto you. The Wanderer charges.', 3000);
       el.classList.add('charging');
       await new Promise(r => setTimeout(r, 700));
       el.classList.remove('charging');
       if (!body.isConnected) return;   // they left during the beat
+
+      const { choice, dismiss } = await showWandererEncounter({ reduced: reducedMotion });
+      if (!body.isConnected) { dismiss(); return; }
+      if (choice === 'flee') {
+        /* Fleeing costs this instance and nothing else. wandererEngaged already
+           holds him, so he will not re-charge from the same light; walk out of
+           the cone and back in later and the ledger still owes you the fight. */
+        toast('You back out of the light. He keeps walking.', 2600);
+        return;
+      }
+      haptic.heavy();
       const fighter = await buildFighter();
       openFight(wrap, fighter, {
         mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
@@ -15556,6 +15575,7 @@ async function renderBoneyard(el) {
         wanderer: true, claimKey: wandererKey(date, w), date,
         xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
       });
+      dismiss();
     }
 
     // Dark Spires: permanent territory. Unclaimed ones are held by an NPC warden;

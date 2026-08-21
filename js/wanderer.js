@@ -378,3 +378,242 @@ export const WANDERER_FIGHT = {
   xp: 150,
   coins: 200,
 };
+
+/* ============================================================================
+   THE ENCOUNTER, before the fight
+   ============================================================================
+   Tom, 2026-08-21, with screenshots: "i want to create a cool encounter sequence
+   before the fight ... reproduce it with our assets i.e. the typing on screen
+   style textbox and proper buttons for fight or flee. if you select fight, then
+   it should zoom in retro style (kind of like pokemon combat when you get in a
+   trainer battle)".
+
+   WHAT THIS REPLACES. Cone entry used to be `toast() -> 700ms lunge -> arena`.
+   The toast said the sentence, which is the problem: a toast is the app's
+   interruption channel (a coin landed, a quest ticked) and it slides over
+   whatever you were doing without stopping it. This fight is the one thing on
+   the map the player did not ask for, so it is the one that has to take the
+   screen and ask.
+
+   THE ORDER IS SOUND, THEN LIGHT, THEN HIM, and it is the order in the writing:
+   footsteps and a glow first, the silhouette second, his name never. The scene
+   is black with one lantern in it and he resolves out of that ground rather than
+   cutting in, because you are supposed to be looking at the light wondering what
+   is carrying it. That is why the art fades AND walks (a slow scale toward the
+   camera) instead of just appearing: 2.2s at 1.0 -> 1.16 is not an entrance
+   flourish, it is the distance closing while you read.
+
+   IT IS A REAL CHOICE AND FLEEING IS FREE. wandererEngaged in js/app.js already
+   counts a flee as engaged, so walking away costs you this instance and nothing
+   else: no coins, no ledger row, no penalty. A prompt whose second button is a
+   worse version of the first is not a prompt, and he is a 1.45x boss standing in
+   the street, so "not right now" has to be a real answer.
+
+   NO NEW TYPER. talkBoxHtml/runTalkBox is the app's one typing path and this is
+   its seventeenth caller, not a private reimplementation (see js/talkbox.js's
+   own header on exactly this). Tap-to-skip, the caret/chevron states and the
+   reduced-motion print-at-once all come along for free.
+
+   THE ZOOM IS STEPPED ON PURPOSE. `steps(7)` and not a smooth cubic: a Game Boy
+   could not tween, and the chunky ratchet is the whole reason the transition
+   reads as retro rather than as a modern hero animation. The flash under it is
+   two hard alternations, no fade, for the same reason. Duration is 820ms,
+   measured against the arena's own build time so the screen is never blank
+   between the last frame here and the first frame of the fight.
+
+   Guard: tests/wanderer-encounter-audit.mjs. */
+
+import { talkBoxHtml, runTalkBox, TALK_MS } from './talkbox.js';
+
+const ENC_STYLE_ID = 'wanderer-enc-style';
+
+/* The two lines, in Tom's words from the screenshots. Exported so the guard
+   asserts the SHIPPED strings rather than its own copy of them. */
+export const ENCOUNTER_LINES = [
+  'You hear heavy footsteps, and see a warm glowing light.',
+  'Something approaches...',
+];
+
+export const ZOOM_MS = 820;
+
+function ensureEncounterStyle() {
+  if (typeof document === 'undefined' || document.getElementById(ENC_STYLE_ID)) return;
+  const st = document.createElement('style');
+  st.id = ENC_STYLE_ID;
+  st.textContent = `
+/* z-index 220: above the Mimic's reveal (200), because both can be on screen in
+   the same second if a Mimic crate sits inside his cone, and the man who walked
+   up to you is the one that has to be in front. */
+.wnd-enc {
+  position: fixed; inset: 0; z-index: 220; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 22px);
+  background: #05040a;
+  animation: wndEncIn 420ms ease both;
+  --wnd-art: min(96vw, 460px);
+  --wnd-lx: ${(LANTERN.x * 100).toFixed(2)}%;
+  --wnd-ly: ${(LANTERN.y * 100).toFixed(2)}%;
+}
+/* THE SCENE IS ONE MOVING THING: the glow and the plate share a wrapper, so the
+   walk carries both and the light stays on the lantern for every frame of it.
+   The alternative (a fixed vignette behind a moving figure) is what the first
+   build did and it read as a spotlight on a stage rather than as a man carrying
+   a lamp: he drifted out of his own light as he came forward. */
+.wnd-enc-scene {
+  position: absolute; left: 50%; top: 46%;
+  width: var(--wnd-art); height: var(--wnd-art);
+  transform: translate(-50%, -50%); pointer-events: none;
+  animation: wndEncWalk 2200ms cubic-bezier(.33, 0, .32, 1) both;
+}
+/* THE LANTERN IS THE ONLY LIGHT IN THE ROOM, and it hangs where Cam drew it.
+   --wnd-lx / --wnd-ly are LANTERN, the same constant the map marker centres its
+   cone on, expressed as a percentage of the plate: nothing here is eyeballed, and
+   retiring the constant moves the map and this scene together or neither.
+   It is a sibling layer rather than a filter on the <img> because it has to
+   spill onto the ground and up onto the talk box, which a drop-shadow cannot. */
+.wnd-enc-glow {
+  position: absolute; left: var(--wnd-lx); top: var(--wnd-ly);
+  width: 420%; height: 420%; transform: translate(-50%, -50%); pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(255, 226, 158, .52) 0%, rgba(255, 190, 92, .30) 7%,
+    rgba(196, 120, 40, .15) 18%, rgba(96, 56, 18, .06) 34%, rgba(5, 4, 10, 0) 58%);
+  animation: wndEncFlicker 2.6s ease-in-out infinite;
+}
+/* HE COMES OUT OF THE DARK RATHER THAN CUTTING IN. The brightness ramp is the
+   whole reason the order of the writing works: for the first second you have a
+   light and a shape, and he resolves into a man while the line finishes. */
+.wnd-enc-art {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; pointer-events: none;
+  animation: wndEncRise 2200ms cubic-bezier(.33, 0, .32, 1) both;
+}
+/* The box and the buttons sit in flow at the bottom, over the scene. */
+.wnd-enc .talkbox { position: relative; z-index: 2; margin: 0 0 12px; }
+.wnd-enc-acts {
+  position: relative; z-index: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  opacity: 0; pointer-events: none; transition: opacity 220ms ease;
+}
+.wnd-enc-acts.on { opacity: 1; pointer-events: auto; }
+.wnd-enc-acts .btn { width: 100%; }
+
+@keyframes wndEncIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes wndEncFlicker { 0%, 100% { opacity: .82 } 42% { opacity: 1 } 71% { opacity: .74 } }
+/* the distance closing while you read: 16% over the length of the first line */
+@keyframes wndEncWalk {
+  0%   { transform: translate(-50%, -50%) scale(1.00); }
+  100% { transform: translate(-50%, -50%) scale(1.16); }
+}
+@keyframes wndEncRise {
+  0%   { opacity: .18; filter: brightness(.30) }
+  46%  { opacity: .85; filter: brightness(.62) }
+  100% { opacity: 1;   filter: brightness(1) }
+}
+
+/* ---- THE CHARGE. Stepped, not tweened. ---- */
+.wnd-enc.zoom .wnd-enc-scene { animation: wndEncZoom ${ZOOM_MS}ms steps(7, end) both; }
+.wnd-enc.zoom .wnd-enc-art { animation: none; filter: brightness(1); }
+.wnd-enc.zoom::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: #ffe9c2;
+  animation: wndEncFlash ${ZOOM_MS}ms steps(1, end) both;
+}
+.wnd-enc.zoom .talkbox, .wnd-enc.zoom .wnd-enc-acts { opacity: 0; transition: none; }
+@keyframes wndEncZoom {
+  0%   { transform: translate(-50%, -50%) scale(1.16); }
+  100% { transform: translate(-50%, -50%) scale(6.4); }
+}
+/* two hard alternations then hold white, so the arena is built behind a wash
+   rather than behind a black hole */
+@keyframes wndEncFlash {
+  0%, 14%  { opacity: 0 }
+  14.01%, 28% { opacity: .92 }
+  28.01%, 44% { opacity: 0 }
+  44.01%, 62% { opacity: .96 }
+  62.01%, 78% { opacity: .25 }
+  78.01%, 100% { opacity: 1 }
+}
+.wnd-enc.out { animation: wndEncOut 260ms ease both; }
+@keyframes wndEncOut { to { opacity: 0 } }
+
+/* REDUCED MOTION KEEPS THE SCENE AND DROPS THE TRAVEL. Every loop here is
+   switched off by NAME rather than shortened: this repo has already shipped an
+   an animation-duration of .001s that ran an infinite loop a thousand times a
+   second. The flash is the one thing that is removed outright rather than
+   stilled, because a hard alternating wash is the exact thing the setting is
+   asking not to be shown. */
+@media (prefers-reduced-motion: reduce) {
+  .wnd-enc { animation: wndEncIn 160ms linear both; }
+  .wnd-enc-glow { animation-name: none; opacity: .9; }
+  .wnd-enc-art { animation: wndEncIn 200ms linear both; filter: brightness(1); }
+  .wnd-enc-scene, .wnd-enc.zoom .wnd-enc-scene {
+    animation: none; transform: translate(-50%, -50%) scale(1.08); }
+  .wnd-enc.zoom::after { animation: wndEncIn 200ms linear both; opacity: 1; }
+}`;
+  document.head.appendChild(st);
+}
+
+/* Resolves 'fight' or 'flee'. The overlay removes itself either way; on 'fight'
+   it holds through the zoom and hands over on a full white screen, so the caller
+   can build the arena underneath and there is no black frame between them. */
+export function showWandererEncounter({ reduced = false } = {}) {
+  if (typeof document === 'undefined') return Promise.resolve('fight');
+  ensureEncounterStyle();
+  const el = document.createElement('div');
+  el.className = 'wnd-enc';
+  el.innerHTML =
+    `<div class="wnd-enc-scene"><div class="wnd-enc-glow"></div>` +
+      `<img class="wnd-enc-art" src="${WANDERER_ART}" alt=""></div>` +
+    talkBoxHtml(ENCOUNTER_LINES[0], { hold: true }) +
+    `<div class="wnd-enc-acts">` +
+      `<button type="button" class="btn wnd-fight">Fight</button>` +
+      `<button type="button" class="btn ghost wnd-flee">Flee</button>` +
+    `</div>`;
+  document.body.appendChild(el);
+
+  const box = el.querySelector('.talkbox');
+  const acts = el.querySelector('.wnd-enc-acts');
+  runTalkBox(box, ENCOUNTER_LINES[0], { hold: true });
+
+  /* The second line lands when the first has finished typing, plus a beat. The
+     box's own tap-to-skip can get there sooner, which is why this reads tb-done
+     rather than trusting the clock: skipping the line must bring the buttons
+     forward, not leave them on a timer the player already outran. */
+  const firstMs = reduced ? 0 : ENCOUNTER_LINES[0].length * TALK_MS;
+  const secondMs = reduced ? 0 : ENCOUNTER_LINES[1].length * TALK_MS;
+  let t2 = 0, t3 = 0;
+  const waitDone = (after, ms) => {
+    const started = Date.now();
+    const tick = () => {
+      if (!el.isConnected) return;
+      if (box.classList.contains('tb-done') || Date.now() - started > ms + 400) { after(); return; }
+      t2 = setTimeout(tick, 60);
+    };
+    t2 = setTimeout(tick, Math.min(ms, 60));
+  };
+  waitDone(() => {
+    runTalkBox(box, ENCOUNTER_LINES[1], { hold: true });
+    t3 = setTimeout(() => acts.classList.add('on'), Math.max(secondMs, 200));
+  }, firstMs);
+
+  return new Promise(resolve => {
+    let done = false;
+    const end = (choice) => {
+      if (done) return;
+      done = true;
+      clearTimeout(t2); clearTimeout(t3);
+      if (choice === 'flee') {
+        el.classList.add('out');
+        setTimeout(() => { el.remove(); resolve('flee'); }, reduced ? 0 : 260);
+        return;
+      }
+      el.classList.add('zoom');
+      /* The overlay is NOT removed here. It is left on the white hold frame and
+         torn down by the caller once the arena exists; removing it on this side
+         would show the map again for however long openFight takes. */
+      setTimeout(() => resolve('fight'), reduced ? 220 : ZOOM_MS);
+    };
+    el.querySelector('.wnd-fight').addEventListener('click', () => end('fight'));
+    el.querySelector('.wnd-flee').addEventListener('click', () => end('flee'));
+    el._wndEnd = () => { el.classList.add('out'); setTimeout(() => el.remove(), 200); };
+  }).then(choice => ({ choice, dismiss: () => el._wndEnd && el._wndEnd() }));
+}

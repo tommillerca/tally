@@ -386,6 +386,13 @@ const DECLARED = {
     + 'and that file existed on no ref, which reads as covered to the next person. Proven red twice on 2026-08-21: restoring '
     + '--gw-off (the union-of-both-layers centring) puts CENTRED at 202.0 against 196.5, and hiding the floating gear without '
     + 'giving it back reddens SCOPE.'],
+  'wanderer-encounter-audit.mjs': ['full', "the beat between stepping into his light and the arena: two typed lines, "
+    + 'a real Fight/Flee choice, and a stepped retro zoom on Fight. Run it on any change to showWandererEncounter, the '
+    + '.wnd-enc block, or startWandererEncounter in js/app.js. Full because it drives the real buttons and screenshots the '
+    + 'transition. The two rows that matter most are the quiet ones: FLEE must open no fight (a prompt whose second button '
+    + 'still starts the fight is decoration) and COVER must find the overlay STILL UP when the choice resolves, because the '
+    + 'arena is built underneath its hold frame and tearing it down one line early brings the map back mid-handover. '
+    + 'All eight rows proven red on 2026-08-21 in a throwaway tree; the mutations are listed in the file header.'],
   'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
     + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
     + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
