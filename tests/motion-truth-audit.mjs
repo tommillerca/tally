@@ -115,8 +115,22 @@ const REGISTER = [
     what: 'the cosmetics drop wall: 36 heads, each bobbing on bh-idle',
     sel: '#tzWall',
     moves: true,
-    /* The heads bob at 3.4s, so a 3s window always contains most of a cycle. */
-    windowMs: 3000,
+    /* The heads bob at 3.4s, so a 2.4s window always contains most of a cycle.
+       Short ALSO because of quietOn below: it has to fit inside one beat. */
+    windowMs: 2400,
+    /* WITHOUT THIS THE ROW WAS A LIE, and the prove-red is what said so. The
+       wall lives INSIDE #tzReel, and the reel drops it to opacity .12 and
+       scale .96 on every solo and quad beat. So `#tzWall` changing pixels was
+       being satisfied by the reel's own crossfade: with
+       `.tz-head-in .bh-anim { animation: none !important }` in app.css, every
+       head frozen solid, this row still read 44.276% and PASSED. A guard that
+       passes on the exact bug it names is worse than none.
+       quietOn holds the sample inside the GRID beat, where the wall is at
+       opacity 1 and scale 1 and the only thing that can move is the art. The
+       beat class is recorded across the window and the sample is thrown away
+       and retaken if it changed, so a beat boundary landing mid-window cannot
+       be mistaken for a bobbing head. */
+    quietOn: { sel: '#tzReel', cls: 'tz-s-grid' },
     reach: async page => page.evaluate(() => { window.__cosmeticTeaser?.(); }),
   },
   {
@@ -226,6 +240,24 @@ const sampleMotion = async (page, dp, clip, windowMs) => {
   return peak;
 };
 
+/* Take the sample only while a driver elsewhere is holding still, so the number
+   is about THIS surface's own art. Waits for the quiet class, lets its 0.9s
+   crossfade settle, samples, and throws the sample away if the class moved
+   underneath it. Returns null after `tries` if the quiet window never came,
+   which fails the row rather than reporting a number taken during a transition. */
+const sampleQuiet = async (page, dp, clip, windowMs, quiet, tries = 4) => {
+  const held = async () => (await page.evaluate(s => document.querySelector(s)?.className || '', quiet.sel)).includes(quiet.cls);
+  for (let t = 0; t < tries; t++) {
+    for (let i = 0; i < 60 && !await held(); i++) await sleep(250);
+    if (!await held()) continue;
+    await sleep(1100);                       // the .9s wall crossfade, settled
+    if (!await held()) continue;
+    const peak = await sampleMotion(page, dp, clip, windowMs);
+    if (await held()) return peak;           // the beat never moved: the sample is about the art
+  }
+  return null;
+};
+
 const W = 430, H = 932;
 
 async function pass({ reduce }) {
@@ -303,13 +335,24 @@ async function pass({ reduce }) {
         var stopPoll = () => clearInterval(poll);   // eslint-disable-line no-var
       }
 
-      const peak = await sampleMotion(page, dp, clip, row.windowMs);
+      /* quietOn only applies with motion ALLOWED: under reduce the driver it
+         waits on never runs, so the quiet class never arrives and the row would
+         time out instead of measuring the stillness it is there to measure. */
+      const peak = (row.quietOn && !reduce)
+        ? await sampleQuiet(page, dp, clip, row.windowMs, row.quietOn)
+        : await sampleMotion(page, dp, clip, row.windowMs);
       if (row.beats && !reduce) stopPoll();
       seen[row.key] = peak;
 
+      if (row.quietOn && !reduce && peak === null) {
+        ok(`${tag}: MOVES ${row.key} was sampled while ${row.quietOn.sel} held on "${row.quietOn.cls}" (a sample taken across a beat change measures the driver, not this surface)`,
+          false, `the quiet window never came in 4 tries`);
+        continue;
+      }
+
       if (row.moves && !reduce) {
         ok(`${tag}: MOVES ${row.key} actually changes pixels in the app (${row.what})`,
-          peak >= MOVE_FLOOR, `peak ${peak.toFixed(3)}% of ${clip.width}x${clip.height} changed (floor ${MOVE_FLOOR}%)`);
+          peak >= MOVE_FLOOR, `peak ${peak.toFixed(3)}% of ${clip.width}x${clip.height} changed (floor ${MOVE_FLOOR}%)${row.quietOn ? `, sampled with ${row.quietOn.sel} held on "${row.quietOn.cls}"` : ''}`);
       } else if (!row.moves && !reduce) {
         ok(`${tag}: STILL ${row.key} is declared static and changes NOTHING with motion allowed (this is the instrument's own control: noise read as motion goes red here)`,
           peak <= STILL_MAX, `peak ${peak.toFixed(3)}% (max ${STILL_MAX}%)`);
