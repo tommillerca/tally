@@ -72,9 +72,18 @@
  * outgoing screen was genuinely painted before the tap, so a run that landed on
  * a half-loaded screen fails loudly instead of grading a hole against a hole.
  *
- * PROVE-RED (confirmed 2026-08-21, throwaway tree at /private/tmp): revert
- * holdOutgoing's call in route() and FLASH fails on both graded swaps naming
- * the bare frames, while CONTROL stays green.
+ * PROVE-RED (confirmed 2026-08-21, three throwaway trees under /private/tmp).
+ * Each mutation reddens the row that owns it and no other, which is the part
+ * worth having: a suite where every mutation reddens everything is one
+ * assertion wearing a lot of names.
+ *   drop `holdOutgoing(scr)` from route(), i.e. the fix reverted
+ *        -> FLASH red on all three graded swaps (9, 9 and 3 bare frames, over
+ *           132ms, 148ms and 24ms), CANVAS red, CONTROL still green. 35/39.
+ *   `g.append(...el.childNodes)` -> `.map(n => n.cloneNode(true))`
+ *        -> CANVAS red alone, held=9 inked=0: nine canvases in the copy and not
+ *           one pixel in any of them. 38/39.
+ *   delete the 1200ms `cap` timer in holdOutgoing
+ *        -> FAILSAFE red alone, one copy still parked over the app. 38/39.
  *
  * Usage: node tests/route-flash-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
