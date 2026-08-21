@@ -9262,8 +9262,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pet-locked .rk-stage { opacity: .45; }
 .pet-lock { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding: 6px 4px; }
 .rk-owned { font-size: 10.5px; font-weight: 700; color: var(--text-2); text-align: center; padding: 6px 4px; }
-/* ============================================================================
-   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
+/* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
    ============================================================================
    The Shop tab drops the hub's character header entirely (no name heading, no
    portrait card, no LV/streak row, no stat pills) and puts the shopkeeper there
@@ -9430,3 +9429,44 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   .gw-panel .wz-glow { animation: zGwFade .28s linear both; opacity: .45; }
 }
 @keyframes zGwFade { from { opacity: 0 } to { opacity: 1 } }
+=======
+/* ------------------------------------------------------------ THE WANDERER
+   IN THE PIT. Tom, with a mockup: "make this work better than my crude mock up
+   but he should be about this big in the pit". His mockup has the Wanderer
+   filling the stage, head near the top and feet on the floor, with the player's
+   bonehead small at the bottom left. The point is not size, it is the GAP: it
+   should read as fighting something far bigger than you.
+
+   This is per-boss on purpose and touches nothing else. The Glutton keeps
+   #foeStage.glutton-foe, the Live Wire keeps #foeStage.mage-foe, and the Mimic
+   keeps the default .fstage, which is a decision rather than an oversight: the
+   Mimic is a chest that bit you and is deliberately NOT a wall.
+
+   WHY THE NUMBERS ARE WHAT THEY ARE, and they were measured off the render at
+   393x852 and 320x568, not derived on paper. His plate is a 640-square whose ink
+   only occupies 562x417 of it (the art's own alpha box), so 35% of the box is
+   transparent and the element's height says nothing about how big he looks. Two
+   consequences drive everything below:
+     - object-fit:contain renders the square at min(width, height), so WIDTH is
+       the binding constraint in a landscape arena, not height. Growing the
+       height past the arena's width buys nothing but overflow.
+     - 21% of the box hangs below his boots, so a stage sitting on the floor line
+       leaves him floating a fifth of his own height above it. The negative
+       margin below is that strip, pulled off, so his feet land on the floor. */
+.arena.boss-wanderer .fighterG.foe-side { width: 100%; transform: translateX(14px); }
+#foeStage.wanderer-foe {
+  /* Wider than the column and taller than the arena on purpose: the height is
+     what keeps WIDTH the binding dimension, so his ink grows with the arena's
+     width rather than being letterboxed by its height. */
+  width: 100%; height: clamp(300px, 130cqh, 430px); align-self: end;
+  /* the empty strip under his boots, pulled off so he stands on the floor */
+  margin-bottom: clamp(-120px, -35cqh, -92px);
+}
+/* THE PLAYER STEPS BACK AND TO THE LEFT, exactly as they do for the Live Wire,
+   and further: the gap IS the design. Scaled rather than re-sized so nothing in
+   the fighter's own layout (the pet, the KO pose, the lunge transforms) has to
+   know about it, and anchored bottom-centre so their feet stay on the same
+   floor line as his. */
+.arena.boss-wanderer .fighterG:not(.foe-side) { transform: translateX(-52px); z-index: 3; }
+.arena.boss-wanderer .fighterG:not(.foe-side) > .fstage { transform: scale(.58); transform-origin: bottom center; }
+.arena.boss-wanderer .pet-fighter { transform: translateX(14px); z-index: 4; }

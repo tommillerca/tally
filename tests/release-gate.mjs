@@ -326,12 +326,38 @@ const DECLARED = {
     + 'Run it on any change to js/mimic.js, the Boneyard chest spawn, or the drawn-boss list in js/pit.js. Full rather than fast '
     + 'because it boots the Boneyard and drives a real reveal, whose animation IS assets/bh/mimic/mimic-loop.gif: without that '
     + 'file precached the chest never opens, which is why sw.js carries it.'],
-  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors: one RARE spawn in four is him, DERIVED from the spawn id so a guarded egg '
-    + 'stays guarded across refreshWorld, offline and on every device, and re-rolls when the 45-minute instance turns over. '
-    + 'Run it on any change to js/wanderer.js, the rare spawn in js/hunt.js, or the collect handler in js/app.js. It also pins '
+  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors, the map\'s only PATROLLING agent: his position and heading are a pure '
+    + 'function of (date, cell, clock), so a 5-second refreshWorld cannot teleport him, a second device computes the same metre, '
+    + 'and closing the app cannot reroll him off your back. Purity is proved in a SECOND browser page with its own module realm, '
+    + 'the heading against the real path bearing, and the cone with the player inside it and outside it on both axes, then read '
+    + 'back out of the paint function so the drawn wedge and the wedge that catches you are one shape. '
+    + 'Run it on any change to js/wanderer.js or refreshWanderer / the wanderer settle branch in js/app.js. It also pins '
     + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
     + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
-    + 'boots a page and claims against the real IndexedDB; about 25s.'],
+    + 'boots two pages and claims against the real IndexedDB; about 30s.'],
+  'wanderer-patrol-live-audit.mjs': ['full', "the Wanderer's TRIP WIRE, fired for real: the sibling suite proves his derivation, his cone geometry, "
+    + 'his ledger key and the ceiling by calling the module, and none of that can see the thing the feature actually IS, which is a GPS '
+    + 'fix arriving on the open Boneyard, landing inside a cone nobody tapped, and a fight starting on its own. Two boots of the real app '
+    + "with the device position overridden off his REAL heading: 45 m behind him he is drawn and lit and nothing happens, 45 m into his "
+    + 'light the arena opens on his name. Each boot is the other\'s control. Run it on any change to refreshWanderer, the geolocation '
+    + 'watch, or the cone. MapLibre needs WebGL and vector tiles, so on a machine with neither it reports UNPROVEN with exit 97 by name '
+    + 'rather than green, the same contract boneyard-audit.mjs runs under. About 60s.'],
+  'wanderer-arena-audit.mjs': ['full', "the Wanderer LOOMS in the Pit, and nothing else on that stage moved. Tom's mockup has him filling the "
+    + 'arena with the player small at the bottom left, and the gap is the design rather than the size. Every row is measured off the '
+    + 'INK, never the stage box: his plate is a 640-square whose drawing occupies 562x417 of it, so 35% of the element is transparent '
+    + 'and its rect says nothing about what he covers. Graded at 393x852 AND 320x568 because the arena height is a clamp on the '
+    + 'viewport and those are two genuinely different boxes (330px and 283px). It also PINS the three other drawn bosses: the Mimic is '
+    + 'held to the default stage, exactly the player\'s size, because he is a chest that bit you and not a wall, and the player is only '
+    + 'scaled down in front of the Wanderer. Needs no map: it drives window.__denFight with wanderer:true, which is the field the arena '
+    + 'class, the stage class and the plate all key off. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, .fstage '
+    + 'or the arena height. About 40s.'],
+  'wanderer-patrol-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check, the same shape as gauntlet-sim.mjs: it prints "
+    + 'catches per hour of walking against the Wanderer at a sweep of cone ranges and asserts nothing about them, so running it on '
+    + 'every gate would burn a minute to prove nothing. Run it BY HAND whenever CONE_RANGE_M, CONE_HALF_DEG, WANDER_LAP_MIN or the '
+    + 'cell size changes. It is where the shipped 300 m came from: 90 m measured 0.12 catches/h and 88% of hour-long walks meeting '
+    + 'him not at all, which is a headline feature nobody meets. It imports the real js/wanderer.js and its FIRST line is a control '
+    + 'that its own range-sweep cone agrees with inWandererCone at the shipped range, because a sim with a private copy of the '
+    + "geometry measures the copy. Exits 1 if that control fails."],
   'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
     + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
     + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '
