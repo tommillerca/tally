@@ -1867,6 +1867,42 @@ const BH_ITEMS_ALL = [
   "name": "Gold Stick"
  },
  {
+  "id": "C6",
+  "slot": "C",
+  "rarity": "epic",
+  "name": "Bumbleseal"
+ },
+ {
+  "id": "CE1",
+  "slot": "CE",
+  "rarity": "epic",
+  "name": "Bug-Eye Shades"
+ },
+ {
+  "id": "CB1",
+  "slot": "CB",
+  "rarity": "rare",
+  "name": "Courier Purse"
+ },
+ {
+  "id": "CB2",
+  "slot": "CB",
+  "rarity": "epic",
+  "name": "Charmed Courier"
+ },
+ {
+  "id": "CG1",
+  "slot": "CG",
+  "rarity": "legendary",
+  "name": "Live Wire Stinger"
+ },
+ {
+  "id": "CM1",
+  "slot": "CM",
+  "rarity": "uncommon",
+  "name": "Pimple Patches"
+ },
+ {
   "id": "C1",
   "slot": "C",
   "rarity": "epic",
@@ -1994,7 +2030,37 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
    to fill its slot, which is what the figure contract means by aligning on INK.
    Re-measure with PIL's getbbox on assets/bh/C/*.png if the art is ever redrawn;
    every value below is within 0.002 of the current files. */
+
+/* PET ACCESSORY SLOTS, and the reason they are their own table.
+ *
+ * They are NOT in BH_SLOTS. Everything that draws the player figure iterates
+ * BH_SLOTS (js/app.js has nine such sites), so a pet accessory listed there
+ * would be painted on the BONEHEAD, not on the pet.
+ *
+ * And they do NOT use slot 'C'. Six places filter on `slot === 'C'` to mean
+ * "a pet species": hatchEgg and breed draw their pool from it, the pet roster
+ * reads it, and the shiny-gap list reads it. A sellable accessory carrying 'C'
+ * would become hatchable from a 60-dust Mystery Egg, which is the shop giving
+ * away its own stock on the same screen that sells it. Distinct slot codes
+ * exclude them from all six by construction rather than by remembering a flag.
+ *
+ * Z-ORDER: the glasses are ALWAYS on top. Tom, 2026-08-20: "the glasses are
+ * ALWAYS on top in the hierarchy for cosmetics." One number, here, rather than
+ * an ordering rule spread across the renderer.
+ *
+ * Cam draws every layer pre-positioned in the same 2048 square as the base, so
+ * compositing is a plain stack: no per-pet anchors, no offsets, no art
+ * multiplied per pet. Each layer is drawn with the SAME crop transform as the
+ * base, which is what keeps it registered.
+ */
+export const PET_SLOTS = [
+  { code: 'CG', label: 'Stinger', z: 10 },
+  { code: 'CB', label: 'Bag', z: 20 },
+  { code: 'CM', label: 'Patches', z: 30 },
+  { code: 'CE', label: 'Glasses', z: 40 },
+];
 export const PET_CROP = {
+  C6: { x0: 0.1187, y0: 0.1709, x1: 0.8389, y1: 0.8843 },
   C1: { x0: 0.5594, y0: 0.6047, x1: 0.8531, y1: 0.8938 },
   C2: { x0: 0.5453, y0: 0.5922, x1: 0.9187, y1: 0.8500 },
   C3: { x0: 0.5422, y0: 0.6125, x1: 0.8969, y1: 0.8812 },

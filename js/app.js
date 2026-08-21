@@ -82,7 +82,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -280,9 +280,24 @@ function petScale(petId) {
 }
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
-function croppedPetImg(petId, px, ground = false, srcOverride = null) {
+/* WHAT THE PET IS WEARING, resolved to an ordered list of art sources.
+   Cam draws every accessory pre-positioned in the SAME 2048 square as the pet,
+   so a layer needs no anchor and no offset: drawn with the base's own crop
+   transform it lands exactly where he drew it. That is the whole mechanism, and
+   it is why pet accessories cost no per-pet art.
+   Sorted by PET_SLOTS z, so the glasses sit on top of everything. Tom,
+   2026-08-20: "the glasses are ALWAYS on top in the hierarchy for cosmetics." */
+function petWornLayers(wear) {
+  if (!wear) return [];
+  return [...PET_SLOTS].sort((a, b) => a.z - b.z)
+    .map(sl => wear[sl.code])
+    .filter(id => id && BH_BY_ID[id])
+    .map(id => bhAsset(BH_BY_ID[id]));
+}
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
+  const worn = petWornLayers(wear);
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -290,7 +305,11 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
   const tx = (px - cw * imgSize) / 2 - c.x0 * imgSize; // center content horizontally
   const ty = ground ? (px - c.y1 * imgSize)            // seat content bottom on the floor
                      : ((px - ch * imgSize) / 2 - c.y0 * imgSize); // else center (hover)
-  return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt=""></span>`;
+  /* EVERY LAYER GETS THE IDENTICAL TRANSFORM. Registration is not something this
+     function computes per layer; it is inherited from the shared canvas. Any
+     per-layer nudge here would be a second source of truth fighting the art. */
+  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  return `<span class="petcrop" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(layer).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
