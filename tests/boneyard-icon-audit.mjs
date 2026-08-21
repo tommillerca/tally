@@ -142,18 +142,55 @@ try {
      below fails loudly rather than the MATCH row failing for a reason that
      reads like an art regression. */
   const HOME = { latitude: 49.2827, longitude: -123.1207 };
-  const eggSpot = await page.evaluate(async (home) => {
+  /* STAND WHERE EVERY GRADED TYPE IS ACTUALLY PRESENT, and this row has now been
+     wrong in BOTH directions, which is the useful part.
+     v421 pinned a fixed Vancouver point. The Mystery Egg is an 8% roll per cell
+     per 45-minute instance (js/hunt.js), so the egg was there in some instances
+     and not others and the row blocked a release on a dice roll. The fix moved
+     the player onto an egg cell. That immediately broke the CRATE, because
+     standing on an egg cell moves you away from whatever crate was near the old
+     pin: one flake traded for another, in the same file, by me.
+     So the sample is chosen for ALL of EXPECT at once. The generator is a pure
+     function of (date, cell, instance), so this is a search over candidates and
+     not a guess: the first position whose NEAR_M field contains every graded
+     type wins, and if none does, the fixed pin is kept and the CONTROL row below
+     says which types were missing instead of MATCH failing for a reason that
+     reads like an art regression. */
+  const spot = await page.evaluate(async (home) => {
     const hunt = await import('./js/hunt.js');
     const date = new Date().toISOString().slice(0, 10);
-    const near = hunt.spawnsForRoute(date, home.latitude, home.longitude)
-      .filter(sp => sp.type === 'rare');
-    if (!near.length) return null;
-    /* stand ON the egg's own cell so it lands inside NEAR_M and draws as a
-       full-density marker rather than a dimmed far beacon */
-    const e = near.sort((a, b) => a.dist - b.dist)[0];
-    return { latitude: e.lat, longitude: e.lng, was: e.dist };
+    /* ONLY the types spawnsForRoute can produce. 'mini' is NOT a spawn: the
+       mini-boss is its own marker system, so asking for it here can never be
+       satisfied and the search would reject every candidate, which is exactly
+       what it did on the first attempt. The graded types that ARE spawns:
+       bones (weight 5), coins (5), crate (1) and rare, which has weight 0 and
+       is placed by its own 8% roll. The crate being 1-in-14 is why a fixed pin
+       misses it often enough to block a release. */
+    const WANT = ['bones', 'coins', 'crate', 'rare'];
+    const typesAt = (lat, lng) => {
+      const near = hunt.spawnsForRoute(date, lat, lng).filter(sp => !sp.far);
+      return new Set(near.map(sp => sp.type));
+    };
+    /* candidates: the fixed pin, then a ring of cell-sized steps around it.
+       CELL_DEG is 0.005, so this sweeps a few hundred metres either way. */
+    const cands = [[home.latitude, home.longitude]];
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        if (!dx && !dy) continue;
+        cands.push([home.latitude + dx * 0.005, home.longitude + dy * 0.005]);
+      }
+    }
+    let best = null;
+    for (const [lat, lng] of cands) {
+      const t = typesAt(lat, lng);
+      const have = WANT.filter(w => t.has(w));
+      if (!best || have.length > best.have.length) best = { lat, lng, have, missing: WANT.filter(w => !t.has(w)) };
+      if (have.length === WANT.length) break;
+    }
+    return best;
   }, HOME);
-  await page.setGeolocation(eggSpot ? { latitude: eggSpot.latitude, longitude: eggSpot.longitude } : HOME);
+  await page.setGeolocation(spot && !spot.missing.length
+    ? { latitude: spot.lat, longitude: spot.lng } : HOME);
   await page.evaluate(() => { location.hash = '#/today'; });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await sleep(1500);
@@ -201,12 +238,14 @@ try {
   });
 
   /* ---- CONTROL first. Every row below reads from this sample. ---- */
-  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this the MATCH row's egg failure
-     is ambiguous: it reads the same whether the art regressed or whether the
-     instance simply had no egg in it. */
-  ok('CONTROL  an egg was placed on the map to compare, so the MATCH row has a sample',
-    !!eggSpot, eggSpot ? `stood on an egg cell (it was ${Math.round(eggSpot.was)}m from the fixed pin)`
-      : 'NO CELL IN RANGE HAS A MYSTERY EGG THIS 45-MINUTE INSTANCE: the MATCH row below cannot grade the egg, and a failure there is about the sample, not the art');
+  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this, a missing spawn type reads
+     exactly like an art regression in the MATCH row below, which is how this
+     file blocked a release twice for reasons that had nothing to do with art. */
+  ok('CONTROL  a location was found carrying every spawn type the MATCH row grades',
+    !!spot && spot.missing.length === 0,
+    spot ? (spot.missing.length
+      ? `NO LOCATION IN RANGE HAS ${spot.missing.join(', ')} THIS 45-MINUTE INSTANCE: the MATCH row below cannot grade ${spot.missing.length} of its rows, and a failure there is about the sample, not the art`
+      : `stood where all ${spot.have.length} graded types are present`) : 'no candidate searched');
 
   ok('CONTROL  the map drew spawn markers', s.spawns.length > 0, `${s.spawns.length} spawn discs`);
   ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
