@@ -368,6 +368,11 @@ async function ownShinyPetId(eq) {
   return (await shinyPetIds()).includes(sp) ? sp : null;
 }
 const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : null);
+/* TEST SEAM, the same shape as window.__endlessCfg. A pet accessory has no
+   equip UI yet, so without this the only way to grade the composite is to
+   re-implement croppedPetImg's maths in the audit, and an audit that reproduces
+   the code it is grading proves nothing. This hands out the REAL markup. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__petLayerHtml = (petId, px, wear, ground) => croppedPetImg(petId, px, !!ground, null, wear);
 function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
