@@ -68,8 +68,15 @@ const ok = (label, pass, detail = '') => {
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
 console.log(`URL UNDER TEST  ${base}`);
-const { browser, page } = await boot(base, { seed: true });
-const errs = [];
+/* BOOT'S OWN ERROR ARRAY, not a listener attached after it. A listener added
+   once boot() has returned cannot see anything thrown during the very first
+   load, which is exactly where a broken module import lands: the app comes up
+   empty, every module-level row here still passes because it imports its own
+   modules by hand, and NO PAGE ERRORS reports green over an app that never
+   started. Measured: `import { paintWandererConeXX }` printed PAGEERROR and the
+   post-boot listener saw nothing. */
+const { browser, page, errors: bootErrs = [] } = await boot(base, { seed: true });
+const errs = bootErrs;
 page.on('pageerror', e => errs.push(String(e)));
 
 const DATE = '2026-08-21';
@@ -304,9 +311,15 @@ try {
     const a = W.wandererAt(101, 5, DATE, 400), b = W.wandererAt(102, 5, DATE, 400);
     const aKey = W.wandererKey(DATE, a);
 
-    // walking back into the same light twice must not pay twice
+    /* WALKING BACK INTO THE SAME LIGHT MUST NOT PAY TWICE, and the second claim
+       RE-DERIVES its key the way the map does rather than reusing the first
+       one's string. Reusing it would grade db.addIfAbsent and nothing else: a
+       wandererKey carrying a timestamp or a counter would mint a fresh row on
+       every charge, the treadmill this key exists to stop, with this row still
+       green. So: same instance, one minute later, freshly derived. */
     const first = await game.award(aKey, 'wanderer', 150, 'Boneyard: the Wanderer', DATE);
-    const second = await game.award(aKey, 'wanderer', 150, 'Boneyard: the Wanderer', DATE);
+    const againKey = W.wandererKey(DATE, W.wandererAt(101, 5, DATE, 401));
+    const second = await game.award(againKey, 'wanderer', 150, 'Boneyard: the Wanderer', DATE);
 
     // three simultaneous wins on one instance: exactly one may pay
     const bKey = W.wandererKey(DATE, b);
@@ -408,7 +421,11 @@ try {
      entirely inside renderBoneyard, whose interval and geolocation watch are torn
      down by cleanup(). Anything that reaches them from module scope (a
      setInterval, a notification handler, a service-worker message) would be able
-     to ambush a phone in a pocket. Graded as containment, not as a name. */
+     to ambush a phone in a pocket. Graded as containment, not as a name.
+     The span runs to the NEXT top-level declaration, so it is generous by a few
+     lines at its tail; what it is built to catch is a reference from somewhere
+     else entirely (module scope, a notification handler, a service-worker
+     message) in an 18,000-line file, not a line snuck into the gap. */
   const iMap = src.indexOf('async function renderBoneyard(');
   const iAfterMap = src.indexOf('async function buildFighter()', iMap);
   const outside = [...src.matchAll(/refreshWanderer|startWandererEncounter/g)]
