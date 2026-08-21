@@ -791,8 +791,85 @@ function report(r) {
     for (const w of u.why) console.log(`        ${w}`);
   } else if (r.code !== 0) console.log(failLines(r.out));
 }
-for (const f of PURE) { const r = await run(f, []); results.push(r); report(r); }
-for (const f of BROWSER) { const r = await run(f, [base]); results.push(r); report(r); }
+/* ============================================================================
+   RUNNING THEM AT THE SAME TIME
+   ============================================================================
+   This loop was `for (const f of LIST) await run(f)`: strictly one suite at a
+   time. Measured on this Mac, --all is 174 suites averaging ~45s, so about two
+   hours of wall clock on a 16-core machine with fourteen cores idle throughout.
+   That cost is not academic. It is why `node tests/release-gate.mjs` runs the
+   FAST tier only (69 of 174), why a release is usually verified on 40% of the
+   suite, and why sixteen audits were able to rot red on main without anyone
+   noticing. The serial loop is the reason the gate stopped being run.
+
+   Each suite is already a separate PROCESS with its own browser, its own
+   IndexedDB and its own page, so nothing about them was ever ordered. Only the
+   driver was.
+
+   WHAT STOPS IT FROM BEING FAST AND FLAKY, which is worse than slow:
+
+   1. SERIAL, below, names the suites that genuinely cannot share the machine,
+      each with a reason. Adding to it is cheap; assuming everything is safe is
+      how a parallel gate starts lying.
+   2. The concurrency is bounded by MEMORY, not by cores. A Chromium under one
+      of these holds ~1.3GB (measured when eleven orphans turned a healthy tree
+      into "five suites blocked"), so the cap is derived from total RAM and then
+      clamped by cores, rather than being a number somebody liked.
+   3. The orphan reaper runs ONCE, before any of this, and only kills processes
+      whose parent is already dead. It cannot reap a live sibling.
+   4. OUTPUT STAYS IN DECLARED ORDER. Results are held until every earlier suite
+      has printed, so two runs of the same tree produce the same transcript and a
+      diff between runs means something. A gate whose output order depends on
+      which suite happened to finish first cannot be diffed, and diffing two runs
+      is exactly how "is this red mine?" gets answered.
+
+   GATE_JOBS=1 restores the old behaviour exactly, for bisecting a suite that
+   only fails with company. */
+const SERIAL = {
+  'offline-boot-audit.mjs': 'binds a FIXED port (serveTree forcePort) because it '
+    + 'must survive the service worker across a restart on the same origin. Two of '
+    + 'anything on that port is a bind error, not a finding.',
+};
+
+const CPUS = (await import('node:os')).cpus().length;
+const GB = (await import('node:os')).totalmem() / 1e9;
+/* ~1.3GB per browser, and leave 8GB for everything else on the machine */
+const BY_RAM = Math.max(1, Math.floor((GB - 8) / 1.3));
+const JOBS = Math.max(1, Number(process.env.GATE_JOBS) || Math.min(6, CPUS - 2, BY_RAM));
+
+async function runPool(files, args) {
+  const out = new Array(files.length);
+  const done = new Array(files.length).fill(false);
+  let next = 0, printed = 0;
+  const flush = () => {
+    while (printed < files.length && done[printed]) { results.push(out[printed]); report(out[printed]); printed++; }
+  };
+  const worker = async () => {
+    for (let i = next++; i < files.length; i = next++) {
+      out[i] = await run(files[i], args);
+      done[i] = true;
+      flush();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(JOBS, files.length) }, worker));
+  flush();
+}
+
+const isSerial = f => Object.prototype.hasOwnProperty.call(SERIAL, f);
+const purePar = PURE.filter(f => !isSerial(f)), pureSer = PURE.filter(isSerial);
+const browPar = BROWSER.filter(f => !isSerial(f)), browSer = BROWSER.filter(isSerial);
+
+console.log(`running ${PURE.length + BROWSER.length} suite(s), ${JOBS} at a time`
+  + ` (${CPUS} cores, ${GB.toFixed(0)}GB; GATE_JOBS=1 to go back to one at a time)`);
+if (pureSer.length + browSer.length) {
+  console.log(`  ${pureSer.length + browSer.length} run alone: `
+    + [...pureSer, ...browSer].join(', '));
+}
+
+await runPool(purePar, []);
+for (const f of pureSer) { const r = await run(f, []); results.push(r); report(r); }
+await runPool(browPar, [base]);
+for (const f of browSer) { const r = await run(f, [base]); results.push(r); report(r); }
 
 if (own) own.server.close();
 if (!runAll && FULL.length) {
