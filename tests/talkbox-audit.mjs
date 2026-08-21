@@ -167,6 +167,11 @@ const SITES = {
      in .tb-txt, which is the thing that would break if this module regressed. */
   'js/wanderer.js:wnd-enc-box': { driven: true,
     why: "the Wanderer's pre-fight encounter, driven end to end by tests/wanderer-encounter-audit.mjs: real overlay, both lines typed through runTalkBox, real taps on the real Fight/Flee buttons" },
+  /* The Mimic's reveal, the SECOND app surface to render a box, and deliberately
+     the smaller shape of the two: one un-held line, no speaker, no choice, so it
+     exercises the SYSTEM state where the Wanderer exercises the WAITING one. */
+  'js/mimic.js:mimic-enc-box': { driven: true,
+    why: "the Mimic's pre-fight reveal, driven end to end by tests/mimic-audit.mjs: the real overlay over the real app, the shipped line typed through runTalkBox, a real tap mid-line, and the frames sampled in pixels through the handover" },
 };
 
 const puppeteer = await loadPuppeteer();

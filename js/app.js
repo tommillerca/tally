@@ -16050,13 +16050,19 @@ async function renderBoneyard(el) {
         const spawn = rec.spawn;
         const claimKey = spawnKey(date, spawn);
         if (collected.has(claimKey)) return;
-        await showMimicReveal({ reduced: reducedMotion });
+        /* THE REVEAL IS TORN DOWN AFTER openFight, NOT BEFORE, exactly as the
+           Wanderer's encounter is: it resolves holding on a black cover frame
+           and the arena is built underneath it, so the map never comes back
+           between the chest and the fight. */
+        const { dismiss } = await showMimicReveal({ reduced: reducedMotion });
+        if (!body.isConnected) { dismiss(); return; }
         const fighter = await buildFighter();
         openFight(wrap, fighter, {
           mode: 'mimic', name: 'The Mimic', mult: MIMIC_FIGHT.mult,
           aiLevel: MIMIC_FIGHT.aiLevel, talents: [], venue: 'The Boneyard',
           mimic: true, claimKey, date, xp: MIMIC_FIGHT.xp, coins: MIMIC_FIGHT.coins,
         });
+        dismiss();
         return;
       }
       const res = await collectSpawn(rec.spawn);

@@ -71,6 +71,23 @@ ok('WIRED cone entry goes through the encounter, not straight to the arena',
   /showWandererEncounter\(/.test(startFn) && /choice === 'flee'/.test(startFn),
   startFn ? `${startFn.split('\n').length} lines` : 'startWandererEncounter NOT FOUND');
 
+/* TOM ASKED THE RIGHT QUESTION on 2026-08-21, looking at a screen recording that
+   showed the encounter over Today: "why is the encounter starting off of the
+   today tab? you can only fight the wanderer if youre in the boneyard?" That
+   recording was the capture harness calling the export directly, not the app.
+   But the guarantee it questioned was never asserted anywhere, so it is now.
+   startWandererEncounter and refreshWanderer are NESTED INSIDE renderBoneyard,
+   which is what makes this true: they do not exist as callable things unless the
+   Boneyard is on screen. Hoisting either to module scope would compile, would
+   pass every other row in this file, and would let the rarest boss in the game
+   ambush somebody logging their lunch. */
+const boneyardFn = (appJs.match(/async function renderBoneyard\([\s\S]*?\n\}\n/) || [''])[0];
+ok('BONEYARD the encounter only exists while the Boneyard is on screen',
+  !!boneyardFn && boneyardFn.includes('async function startWandererEncounter')
+    && boneyardFn.includes('function refreshWanderer'),
+  boneyardFn ? `both nested inside renderBoneyard (${boneyardFn.split('\n').length} lines)`
+    : 'renderBoneyard NOT FOUND');
+
 ok('NOTOAST the line it replaced is not also toasted over the map',
   !/toast\(\s*['"]The lantern swings onto you/.test(appJs), 'old charge toast absent');
 
@@ -91,8 +108,18 @@ const open = () => page.evaluate(async () => {
 });
 
 const meta = await open();
-/* long enough for both lines to type out and the buttons to fade in */
-await sleep(3400);
+/* WAIT FOR THE CONDITION, NOT FOR A NUMBER. This was sleep(3400), which was
+   long enough at the time and silently stopped being long enough the moment a
+   readable hold was added between the lines: the row then failed with the
+   buttons merely LATE rather than missing, which is a lie about the defect.
+   The timeout is the real assertion; if the buttons never arrive it still fails. */
+const armed = await page.waitForFunction(() => {
+  const a = document.querySelector('.wnd-enc-acts');
+  return !!a && getComputedStyle(a).opacity === '1';
+}, { timeout: 12000, polling: 50 }).then(() => true).catch(() => false);
+ok('ARMED the choice arms itself without a tap, so the beat cannot hang',
+  armed, armed ? 'Fight/Flee reached full opacity' : 'buttons never armed within 12s');
+await sleep(250);
 await settle(page);
 
 const shown = await page.evaluate(() => {
@@ -140,11 +167,17 @@ ok('FLEE backing out closes the encounter and opens no fight',
    NOT getComputedStyle. A transform that is declared and never composited reads
    identical to one that runs, and this repo has been burned by exactly that. */
 await open();
-await sleep(3400);
+await page.waitForFunction(() => {
+  const a = document.querySelector('.wnd-enc-acts');
+  return !!a && getComputedStyle(a).opacity === '1';
+}, { timeout: 12000, polling: 50 }).catch(() => {});
+await sleep(250);
 const shot = async () => Buffer.from(await page.screenshot({ encoding: 'base64', type: 'png' }), 'base64');
 const before = await page.screenshot({ encoding: 'binary' });
 await page.evaluate(() => document.querySelector('.wnd-enc .wnd-fight').click());
-await sleep(Math.round(meta.zoomMs * 0.45));
+/* 0.35, inside the CLEAR window: the strobe starts at 42% and a frame
+   sampled under a full-screen wash measures the wash, not the art. */
+await sleep(Math.round(meta.zoomMs * 0.35));
 const mid = await page.screenshot({ encoding: 'binary' });
 
 /* PNG bytes are not comparable pixel-for-pixel, so the frames are reduced in
@@ -183,5 +216,5 @@ ok('COVER the overlay is still up when the choice resolves, so no map frame show
 
 await browser.close();
 if (srv) await srv.close();
-console.log(`\n${fails ? `${fails} FAILED` : 'all green'}, 8 checks`);
+console.log(`\n${fails ? `${fails} FAILED` : 'all green'}, 10 checks`);
 process.exit(fails ? 1 : 0);

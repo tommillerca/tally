@@ -434,7 +434,15 @@ export const ENCOUNTER_LINES = [
   'Something approaches...',
 ];
 
-export const ZOOM_MS = 820;
+export const ZOOM_MS = 900;
+
+/* A LINE HAS TO SIT STILL LONG ENOUGH TO BE READ. Tom, 2026-08-21: "the text is
+   currently too fast to read". It was, and not because of the typing speed: the
+   first line was being REPLACED the instant it finished, so it was fully on
+   screen for zero milliseconds. TALK_MS is 26ms a character and is the approved
+   app-wide number, so it is not touched here; what was missing was the pause
+   after. 55 characters take 1.43s to type and then get 1.1s to be read. */
+export const LINE_HOLD_MS = 1100;
 
 function ensureEncounterStyle() {
   if (typeof document === 'undefined' || document.getElementById(ENC_STYLE_ID)) return;
@@ -459,12 +467,24 @@ function ensureEncounterStyle() {
    The alternative (a fixed vignette behind a moving figure) is what the first
    build did and it read as a spotlight on a stage rather than as a man carrying
    a lamp: he drifted out of his own light as he came forward. */
+/* HE WALKS IN FROM SCREEN RIGHT. Tom, 2026-08-21, after I ignored his reference
+   and invented a scale-up instead: "all i wanted was you to have him translate in
+   via position key frames from screen right and slide in". So it is position and
+   nothing else: he is PARKED off the right edge, and .arrive slides him to centre.
+   No scale on this element at any point, which also keeps the zoom's own scale
+   the only scale in the sequence and means the two cannot fight over transform. */
 .wnd-enc-scene {
   position: absolute; left: 50%; top: 46%;
   width: var(--wnd-art); height: var(--wnd-art);
-  transform: translate(-50%, -50%); pointer-events: none;
-  animation: wndEncWalk 2200ms cubic-bezier(.33, 0, .32, 1) both;
+  transform: translate(calc(-50% + 118vw), -50%); pointer-events: none;
 }
+/* EASED AT BOTH ENDS, Tom 2026-08-21: "ease the wanderer's slide and landing a
+   touch". The old curve started at .22/.61, which is nearly linear off the mark,
+   so he snapped into motion and then arrived at a speed he had to stop dead at.
+   This one leans in gently and spends its long tail decelerating, so the landing
+   settles rather than halts. 1650ms rather than 1500 for the same reason: the
+   extra 150ms all lands in the tail. */
+.wnd-enc.arrive .wnd-enc-scene { animation: wndEncWalk 1650ms cubic-bezier(.42, .02, .17, 1) both; }
 /* THE LANTERN IS THE ONLY LIGHT IN THE ROOM, and it hangs where Cam drew it.
    --wnd-lx / --wnd-ly are LANTERN, the same constant the map marker centres its
    cone on, expressed as a percentage of the plate: nothing here is eyeballed, and
@@ -482,10 +502,14 @@ function ensureEncounterStyle() {
 /* HE COMES OUT OF THE DARK RATHER THAN CUTTING IN. The brightness ramp is the
    whole reason the order of the writing works: for the first second you have a
    light and a shape, and he resolves into a man while the line finishes. */
+/* OPACITY 1, ALWAYS. This was opacity zero with the entrance supplying the 1,
+   and the .wnd-enc.zoom rule setting animation:none then took that animation
+   away, so he VANISHED for the whole charge and the sequence zoomed an empty
+   frame. He is off screen because the SCENE is off screen, never because the art
+   is transparent: one mechanism, and nothing to cancel. */
 .wnd-enc-art {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; pointer-events: none;
-  animation: wndEncRise 2200ms cubic-bezier(.33, 0, .32, 1) both;
+  object-fit: contain; pointer-events: none; opacity: 1;
 }
 /* The box and the buttons sit in flow at the bottom, over the scene. */
 .wnd-enc .wnd-enc-box { position: relative; z-index: 2; margin: 0 0 12px; }
@@ -499,38 +523,60 @@ function ensureEncounterStyle() {
 @keyframes wndEncIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes wndEncFlicker { 0%, 100% { opacity: .82 } 42% { opacity: 1 } 71% { opacity: .74 } }
 /* the distance closing while you read: 16% over the length of the first line */
+/* POSITION KEYFRAMES, NOTHING ELSE. 118vw parks him fully off the right edge at
+   every width; 0% holds there for a beat so the slide reads as an entrance
+   rather than as the screen already being mid-move when it fades up. */
 @keyframes wndEncWalk {
-  0%   { transform: translate(-50%, -50%) scale(1.00); }
-  100% { transform: translate(-50%, -50%) scale(1.16); }
-}
-@keyframes wndEncRise {
-  0%   { opacity: .18; filter: brightness(.30) }
-  46%  { opacity: .85; filter: brightness(.62) }
-  100% { opacity: 1;   filter: brightness(1) }
+  0%, 6% { transform: translate(calc(-50% + 118vw), -50%); }
+  100%   { transform: translate(-50%, -50%); }
 }
 
 /* ---- THE CHARGE. Stepped, not tweened. ---- */
-.wnd-enc.zoom .wnd-enc-scene { animation: wndEncZoom ${ZOOM_MS}ms steps(7, end) both; }
+.wnd-enc.zoom .wnd-enc-scene { animation: wndEncZoom ${ZOOM_MS}ms steps(9, end) both; }
 .wnd-enc.zoom .wnd-enc-art { animation: none; filter: brightness(1); }
 .wnd-enc.zoom::after {
   content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
-  background: #ffe9c2;
-  animation: wndEncFlash ${ZOOM_MS}ms steps(1, end) both;
+  /* NOT steps(). The hard cuts are made by PAIRED percentages (51% and 51.01%),
+     so they stay hard; leaving a gap between the last two keyframes is what buys
+     the fade at the end. steps(1) would quantise that fade into one jump. */
+  animation: wndEncFlash ${ZOOM_MS}ms linear both;
 }
 .wnd-enc.zoom .wnd-enc-box, .wnd-enc.zoom .wnd-enc-acts { opacity: 0; transition: none; }
 @keyframes wndEncZoom {
-  0%   { transform: translate(-50%, -50%) scale(1.16); }
-  100% { transform: translate(-50%, -50%) scale(6.4); }
+  0%   { transform: translate(-50%, -50%) scale(1); }
+  100% { transform: translate(-50%, -50%) scale(6.2); }
 }
-/* two hard alternations then hold white, so the arena is built behind a wash
-   rather than behind a black hole */
+/* THE ZOOM IS WATCHED FIRST, THEN THE STROBE. The first build interleaved them
+   and it read as janky, which it was, and the luminance trace off the recording
+   says why: the clear windows were about 110ms each and the art HOLDS inside a
+   step, so what the eye actually got was dark, WHITE, dark, WHITE, grey, WHITE.
+   A strobe, with the zoom hidden behind it. Measured means per frame were
+   40, 33, 220, 63, 229, 115, 235: two of those are the art and four are wash.
+   So the order is now sequential, not interleaved:
+     0 to 42%   CLEAR. 294ms of nothing but him rushing the camera, nine steps
+                of it, which is the part that was being thrown away.
+     42 to 76%  THE STROBE, bright / black / bright / black on even ~60ms beats.
+                Alternating to near-black rather than dipping to a mid opacity:
+                the old 25% dip measured 115 mean, a muddy grey that reads as a
+                rendering fault rather than as a beat.
+     72 to 100% FADE TO BLACK, 252ms of it, and the arena is built behind the
+                black rather than behind a bright wash. Tom, 2026-08-21, on the
+                previous cut: "i dont think it should end on a white frame it can
+                fade to black then open the fight encounter". He is right for a
+                reason worth writing down: a white hold is the brightest frame in
+                the sequence, so handing over on it means the arena arrives as a
+                drop in brightness, which reads as the screen recovering from the
+                transition rather than as the fight beginning.
+   Colour is animated instead of opacity so the black beats are really black
+   rather than a translucent film over a bright frame. */
 @keyframes wndEncFlash {
-  0%, 14%  { opacity: 0 }
-  14.01%, 28% { opacity: .92 }
-  28.01%, 44% { opacity: 0 }
-  44.01%, 62% { opacity: .96 }
-  62.01%, 78% { opacity: .25 }
-  78.01%, 100% { opacity: 1 }
+  0%,     40%  { background: rgba(255, 233, 194, 0) }
+  40.01%, 47%  { background: rgba(255, 233, 194, 1) }
+  47.01%, 53%  { background: rgba(5, 4, 10, 1) }
+  53.01%, 60%  { background: rgba(255, 233, 194, 1) }
+  60.01%, 66%  { background: rgba(5, 4, 10, 1) }
+  66.01%, 72%  { background: rgba(255, 233, 194, 1) }
+  100%         { background: rgba(5, 4, 10, 1) }
 }
 .wnd-enc.out { animation: wndEncOut 260ms ease both; }
 @keyframes wndEncOut { to { opacity: 0 } }
@@ -544,9 +590,10 @@ function ensureEncounterStyle() {
 @media (prefers-reduced-motion: reduce) {
   .wnd-enc { animation: wndEncIn 160ms linear both; }
   .wnd-enc-glow { animation-name: none; opacity: .9; }
-  .wnd-enc-art { animation: wndEncIn 200ms linear both; filter: brightness(1); }
-  .wnd-enc-scene, .wnd-enc.zoom .wnd-enc-scene {
-    animation: none; transform: translate(-50%, -50%) scale(1.08); }
+  .wnd-enc-art { opacity: 1; animation: none; }
+  .wnd-enc-scene { transform: translate(calc(-50% + 118vw), -50%); }
+  .wnd-enc.arrive .wnd-enc-scene, .wnd-enc.zoom .wnd-enc-scene {
+    animation: none; transform: translate(-50%, -50%); }
   .wnd-enc.zoom::after { animation: wndEncIn 200ms linear both; opacity: 1; }
 }`;
   document.head.appendChild(st);
@@ -562,7 +609,7 @@ export function showWandererEncounter({ reduced = false } = {}) {
   el.className = 'wnd-enc';
   el.innerHTML =
     `<div class="wnd-enc-scene"><div class="wnd-enc-glow"></div>` +
-      `<img class="wnd-enc-art" src="${WANDERER_ART}" alt=""></div>` +
+      `<img class="wnd-enc-art" src="${WANDERER_ART}" alt="" aria-hidden="true"></div>` +
     talkBoxHtml(ENCOUNTER_LINES[0], { hold: true, cls: 'wnd-enc-box' }) +
     `<div class="wnd-enc-acts">` +
       `<button type="button" class="btn wnd-fight">Fight</button>` +
@@ -574,33 +621,50 @@ export function showWandererEncounter({ reduced = false } = {}) {
   const acts = el.querySelector('.wnd-enc-acts');
   runTalkBox(box, ENCOUNTER_LINES[0], { hold: true });
 
-  /* The second line lands when the first has finished typing, plus a beat. The
-     box's own tap-to-skip can get there sooner, which is why this reads tb-done
-     rather than trusting the clock: skipping the line must bring the buttons
-     forward, not leave them on a timer the player already outran. */
-  const firstMs = reduced ? 0 : ENCOUNTER_LINES[0].length * TALK_MS;
-  const secondMs = reduced ? 0 : ENCOUNTER_LINES[1].length * TALK_MS;
-  let t2 = 0, t3 = 0;
-  const waitDone = (after, ms) => {
+  /* YOU HEAR HIM BEFORE YOU SEE HIM, and the first cut got this backwards. Tom,
+     2026-08-21: "the point was that he is out of frame before the person reads
+     'you hear something coming' right now you see him from the very start it
+     makes no sense". He is right: the line says you HEAR footsteps and see a
+     LIGHT, and the screen was showing the man who is making them. The line and
+     the picture contradicted each other for the whole of the first beat.
+     So the scene runs in two beats and the class is the switch:
+       beat 1  the glow alone in the dark. No figure at all. Line one.
+       beat 2  `.arrive` lands, and he walks up out of the black. Line two.
+     The art is aria-hidden and the box carries the words, so a screen reader
+     gets the same two beats in the same order without the staging.
+
+     THE ADVANCE IS DRIVEN OFF tb-done, NOT OFF A CLOCK, because the box's own
+     tap-to-skip can get there first: skipping a line must bring the next beat
+     forward, not leave it waiting on a timer the player already outran. The
+     clock is only a backstop for a box that never reports done. */
+  const typeMs = i => (reduced ? 0 : ENCOUNTER_LINES[i].length * TALK_MS);
+  const hold = reduced ? 200 : LINE_HOLD_MS;
+  let timer = 0;
+  const afterLine = (i, next) => {
     const started = Date.now();
     const tick = () => {
       if (!el.isConnected) return;
-      if (box.classList.contains('tb-done') || Date.now() - started > ms + 400) { after(); return; }
-      t2 = setTimeout(tick, 60);
+      const done = box.classList.contains('tb-done');
+      if (done || Date.now() - started > typeMs(i) + 600) {
+        timer = setTimeout(next, hold);
+        return;
+      }
+      timer = setTimeout(tick, 60);
     };
-    t2 = setTimeout(tick, Math.min(ms, 60));
+    timer = setTimeout(tick, 60);
   };
-  waitDone(() => {
+  afterLine(0, () => {
+    el.classList.add('arrive');
     runTalkBox(box, ENCOUNTER_LINES[1], { hold: true });
-    t3 = setTimeout(() => acts.classList.add('on'), Math.max(secondMs, 200));
-  }, firstMs);
+    afterLine(1, () => acts.classList.add('on'));
+  });
 
   return new Promise(resolve => {
     let done = false;
     const end = (choice) => {
       if (done) return;
       done = true;
-      clearTimeout(t2); clearTimeout(t3);
+      clearTimeout(timer);
       if (choice === 'flee') {
         el.classList.add('out');
         setTimeout(() => { el.remove(); resolve('flee'); }, reduced ? 0 : 260);
