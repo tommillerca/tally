@@ -167,6 +167,7 @@ const EMITTERS = {
   'js/app.js:sparkIco':       ['icon', 'the 4-point sparkle that replaced the emoji stars. Vector, no pixel art exists.'],
   'js/app.js:crateIcon':      ['icon', 'the one function all crate/egg art goes through. Pixel at 24 and 48, vector below.'],
   'js/app.js:mapLegendHtml':  ['icon', 'the Boneyard map key: draws each marker with the same markup the map uses, so legend and map cannot drift.'],
+  'js/wheel.js:pixPrizeImg':  ['icon', 'the daily wheel\'s pixel prize art. It became an EMITTER in v421: five of the seven prizes come back from pixCur, and the two crate wedges are built here as a direct <img> because assets/crates/{common,golden}/f0.png sit outside PIX_CUR, which is keyed to assets/icons-pix/. It reuses .crate-ico-pix so it inherits image-rendering:pixelated.'],
   'js/wheel.js:iconAt':       ['icon', 'daily wheel prize icons, positioned inside the wheel svg.'],
   'js/wheel.js:iconHtml':     ['icon', 'daily wheel prize icon on the reveal card.'],
   'js/wheel.js:wheelSvg':     ['icon', 'the wheel body. Its pixel prize art is placed as <img> siblings, not inside the svg, because the svg scales to a fractional viewport size.'],

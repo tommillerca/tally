@@ -8407,7 +8407,11 @@ async function renderFriends(el) {
        name on it. */
     const sealedHtml = sealed.slice().reverse().map(g => `
       <button class="gift-sealed" data-gift="${esc(g.key)}">
-        <span class="wrap">${bhIcon('crate-golden', 30)}</span>
+        ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
+             drawn as a vector at a size the art covers (crateIcon serves its 24
+             step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
+             it loses costs the row nothing. */''}
+        <span class="wrap">${crateIcon('golden', 30)}</span>
         <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
         <span class="open">OPEN</span>
       </button>`).join('');
@@ -10465,7 +10469,10 @@ function renderOnboarding(step = 0, ctx = {}) {
       </div>
       <div class="onb-earns">
         <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP and coins, every meal</small></div>
-        <div class="onb-earn"><span class="ic">${bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
+        ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
+             18 and both serve the 16 step, so a vector egg here left one of three
+             icons in a three-icon row drawn in a different medium. */''}
+        <div class="onb-earn"><span class="ic">${pixCur('egg', 18) || bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
         <div class="onb-earn"><span class="ic">${ICONS.pit(18)}</span><b>FIGHT</b><small>Spend it all in the Pit</small></div>
       </div>
       <div class="onb-foot">
@@ -11483,7 +11490,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="t3-sect"><b>Kitchen · food &amp; buffs</b><i></i></div>
-      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
+      ${/* SAME EXPRESSION AS THE KITCHEN'S OWN "Active dishes" ROW (openKitchen,
+           above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,
+           which app.css sets to font-size 24 -- so a 24px emoji sat where the
+           Kitchen, on the same buff objects, draws the 24px pixel dish. All seven
+           dishes have art. The emoji stays as the last resort for a buff whose
+           recipe id no longer resolves. */''}
+      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || '🍲')}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
