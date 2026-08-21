@@ -1793,11 +1793,14 @@ test('the Warden badges are the only ones you cannot grind for', () => {
 
 test('no random pet roll can ever include an exclusive pet', () => {
   // hatchEgg() has always excluded them; grantPet('random') did not, so the
-  // Founder's Lizard was reachable by chance. Both roll pools are asserted here by
-  // reading the source, because the pools are built inline and cannot be imported.
+  // Founder's Lizard was reachable by chance. The two inline pools were merged
+  // into pickRandomPet() so there is nothing left to keep in step, and this reads
+  // the source because there is still no way to ask the pool what it contains
+  // without driving it. ONE pool now, and it excludes exclusives; that the two
+  // callers really route through it is tests/pet-pool-audit.mjs's SHARED row.
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const pools = [...src.matchAll(/BH_ITEMS\.filter\(i => i\.slot === 'C'([^)]*)\)/g)].map(m => m[1]);
-  assert.ok(pools.length >= 2, `expected the hatch + grant pools, found ${pools.length}`);
+  assert.ok(pools.length >= 1, `expected the shared pet pool, found ${pools.length}`);
   for (const p of pools) {
     assert.match(p, /!i\.exclusive/, `a pet pool is built without excluding exclusives: "i.slot === 'C'${p}"`);
   }

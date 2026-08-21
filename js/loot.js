@@ -601,6 +601,40 @@ export async function repairEggAnchors() {
 // owned pet to shiny instead of paying coins.
 export const SHINY_CHANCE = 0.03;
 
+/* ONE PET POOL, TWO CALLERS, AND THAT IS THE POINT.
+ *
+ * hatchEgg and grantPet('random') each built this pool inline, and they drifted:
+ * `!i.exclusive` was present in hatchEgg and MISSING in grantPet, so a random
+ * grant could hand out the Day One Lizard, a pet that is supposed to be
+ * unobtainable, permanently devaluing it for everyone who was actually given
+ * one. The lesson is not "remember to copy the filter", it is that there must be
+ * nothing to copy. Every rule about who can come out of a random pet roll lives
+ * here, once, and both callers get it by construction.
+ *
+ * Two kinds of pet never take an even share:
+ *   `exclusive`   never appears at all (awarded by name only).
+ *   `hatchChance` appears at exactly that rate and is excluded from the even
+ *                 split below. Bumbleseal (C6) is 1%: she is sold for 50,000
+ *                 coins, and an even share of today's non-common pool would be
+ *                 25%, which would make the price meaningless.
+ * Both are read off the catalogue rather than listed here, so the next pet
+ * inherits the rule by declaring a field.
+ *
+ * `owned` is a Set of owned cosmetic ids: unowned species are preferred, and the
+ * common pets are the consolation the pool falls back to when nothing better is
+ * left. Returns the picked BH_ITEMS entry. Exported so a guard can drive it
+ * directly over enough trials to measure a 1% rate; nothing else calls it. */
+export function pickRandomPet(owned) {
+  const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive);
+  for (const shop of pets.filter(i => i.hatchChance)) if (rng() < shop.hatchChance) return shop;
+  const rest = pets.filter(i => !i.hatchChance);
+  const fresh = rest.filter(i => !owned.has(i.id));
+  const poolAll = fresh.length ? fresh : rest;          // own them all -> a stacking dupe
+  const pool = poolAll.filter(i => i.rarity !== 'common');
+  const src = pool.length ? pool : poolAll;
+  return src[Math.floor(rng() * src.length)];
+}
+
 // Crack a ready egg: rolls a PET (slot C). A NEW species if you're missing any
 // (rarity-weighted, uncommon floor), otherwise a DUPLICATE that stacks in your
 // crew as breeding stock (v126: no more coins dead-end when you own them all).
@@ -616,15 +650,14 @@ export async function hatchEgg(invId) {
      hands the row to exactly one caller; anybody else sees it already gone. */
   if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
-  const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive); // exclusive pets (Day One Lizard) never hatch
-  const fresh = pets.filter(i => !owned.has(i.id));
   const isShiny = rng() < SHINY_CHANCE;
-  const isDupe = !fresh.length;
-  const poolAll = isDupe ? pets : fresh;
-  const pool = poolAll.filter(i => i.rarity !== 'common');
-  const pick = (pool.length ? pool : poolAll)[Math.floor(rng() * (pool.length ? pool.length : poolAll.length))];
+  const pick = pickRandomPet(owned);
   await addPetInstance(pick.id, { shiny: isShiny });
-  return { ready: true, item: pick, shiny: isShiny, dupe: isDupe };
+  /* DUPE IS ASKED OF THE PICK, not of whether a fresh species existed. It drives
+     one line of copy ("ANOTHER ONE!" against "IT HATCHED!") and the two agreed
+     only while every pet took an even share: a 1% pet can now come out of an egg
+     while unowned species are still on the board, and she is not a duplicate. */
+  return { ready: true, item: pick, shiny: isShiny, dupe: owned.has(pick.id) };
 }
 
 /* ============ v126: pet INSTANCES (duplicates stack) ============
@@ -979,17 +1012,12 @@ export async function petCounts() {
 // no fresh pets. Shared by hatching and code redemption.
 export async function grantPet(petId, source = 'code') {
   const owned = await ownedCosmeticIds();
-  // EXCLUSIVE pets (the Founder's / Day One Lizard) are awarded by name only. This
-  // filter was missing here while hatchEgg has always had it, so a 'random' grant
-  // could hand out a pet that is supposed to be unobtainable, permanently
-  // devaluing it for everyone who was actually given one.
-  const pets = BH_ITEMS.filter(i => i.slot === 'C' && !i.exclusive);
   let pick;
+  // pickRandomPet is the ONE place the rules live (see its header): it is what
+  // keeps the exclusives and the 1% shop pet out of a 'random' grant, and it is
+  // shared with hatchEgg so the two can never drift again.
   if (petId === 'random') {
-    const fresh = pets.filter(i => !owned.has(i.id));
-    const poolAll = fresh.length ? fresh : pets;   // own them all -> a stacking dupe
-    const pool = poolAll.filter(i => i.rarity !== 'common');
-    pick = (pool.length ? pool : poolAll)[Math.floor(rng() * (pool.length ? pool.length : poolAll.length))];
+    pick = pickRandomPet(owned);
   } else {
     pick = BH_BY_ID[petId];
     if (!pick || pick.slot !== 'C') return null;   // owning it already is fine now (dupes stack)
@@ -1204,18 +1232,25 @@ function rollRarity(floor = 0) {
   return pool[pool.length - 1];
 }
 
+/* WHAT A CRATE IS ALLOWED TO CONTAIN, in ONE predicate, because there are two
+   pools in this file and they have already drifted apart once.
+   Pets (slot C) hatch from step eggs only, never from crates. PET ACCESSORY
+   SLOTS ARE EXCLUDED TOO, and that is the load-bearing half. Tom, 2026-08-21:
+   "accessories locked to bumbleseal for sale only in cash shop not in any
+   chests or found elsewhere in game." Their slot codes are not 'C'
+   (deliberately, so they stay out of the egg's species pool), which meant they
+   PASSED a plain `slot !== 'C'` filter. The exclusion was added to candidates()
+   and NOT to the terminal fallback below, so the leak survived the fix: measured
+   on that tree, 0.99% of Common Crate fallback rolls and 2.94% of Golden Crate
+   ones came back a pet accessory, revealed as a duplicate of an item the player
+   has never owned and paid out at its rarity (400 coins for the legendary Live
+   Wire Stinger). Derived from PET_SLOTS rather than listed, so a sixth accessory
+   cannot arrive without inheriting the exclusion. */
+const petSlots = new Set(PET_SLOTS.map(s => s.code));
+export const crateEligible = i => !i.default && i.slot !== 'C' && !petSlots.has(i.slot);
+
 function candidates(rarity, owned, slotBias) {
-  /* pets (slot C) hatch from step eggs only, never from crates.
-     PET ACCESSORY SLOTS ARE EXCLUDED TOO, and this line is load-bearing. Tom,
-     2026-08-21: "accessories locked to bumbleseal for sale only in cash shop
-     not in any chests or found elsewhere in game." Their slot codes are not 'C'
-     (deliberately, so they stay out of the egg's species pool), which meant they
-     PASSED this filter and every one of them was droppable from a crate. Derived
-     from PET_SLOTS rather than listed, so a sixth accessory cannot arrive
-     without inheriting the exclusion. */
-  const petSlots = new Set(PET_SLOTS.map(s => s.code));
-  let pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && !petSlots.has(i.slot)
-    && i.rarity === rarity && !owned.has(i.id));
+  let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
   if (slotBias && rng() < 0.5) {
     const biased = pool.filter(i => slotBias.includes(i.slot));
     if (biased.length) pool = biased;
@@ -1237,7 +1272,10 @@ export function rollCosmetic(owned, floor, slotBias) {
   // catalogue. The catalogue is 10.2% legendary against a 3% drop weight, so a
   // uniform pick paid the 400-coin legendary dupe 3.41x too often and turned a
   // finished collection into the game's biggest coin faucet.
-  const pool = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && i.rarity === RARITY_ORDER[rolled]);
+  // SAME predicate as candidates() above, not a second copy of it: this line
+  // carrying its own `slot !== 'C'` is exactly how the pet accessories stayed
+  // droppable here after they were shut out one function up.
+  const pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
   const item = pool[Math.floor(rng() * pool.length)];
   return { item, dupe: true };
 }

@@ -106,7 +106,22 @@ if (own) console.log(`serving this repo at ${base}\n`);
    slot codes out of BH_SLOTS (nine app.js sites iterate it to draw the PLAYER),
    holds the glasses on top of the pet stack, and grades every layer against the
    clipping budget croppedPetImg's own scale leaves it. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs'];
+/* pet-pool-audit is PURE for the same reason: it imports js/loot.js and
+   data/boneheadz.js, boots nothing, and finishes in ~5s. It is the price tag on
+   Gwart's Emporium as an assertion. Bumbleseal is 50,000 coins and her
+   accessories 3,500 to 12,000, and all of that scarcity is four filter calls in
+   js/loot.js that nothing measured. It pins her hatch rate at 1% over 200,000
+   draws in BOTH pool shapes (+/- 0.0015, 6.7 sigma, red at the 25% an even share
+   would give her), that no pet accessory can come out of a crate at either
+   floor, and, statically, that there is exactly ONE pet pool and ONE crate
+   predicate in the module. That last row is the point: the two pet pools had
+   already drifted once (the Day One Lizard reachable from a random grant), and
+   the two crate pools were drifted when this was written, which is how 0.993%
+   of Common Crate fallback rolls and 2.938% of Golden Crate rolls came back a
+   pet accessory revealed as a duplicate of an item the player never owned.
+   Carries SAMPLE, REACH and LEAK as controls: LEAK rebuilds the pre-fix pool and
+   REQUIRES it to leak, because three of its rows assert a zero. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
