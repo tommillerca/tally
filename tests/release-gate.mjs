@@ -305,6 +305,12 @@ const DECLARED = {
   'boneyard-audit.mjs': ['full', "the Boneyard loading and its action bar; run it on any map or action-bar change. All 22 rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17 on a container with no route to tiles.openfreemap.org it read 11 green and 11 red, and SEVEN of those greens were vacuous: three straggler rows on 0 stragglers, a beat row on 0 beats, a pop-time row on all-zero counts and two INTERACTED rows where false stays false because there is no map to interact with. Its own ARRIVAL-SLOW latency row carries the `stragglers.length > 0` empty-sample guard and went red correctly; the identical ARRIVAL row one section up never got that guard."],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
+  'emporium-audit.mjs': ['full', "Gwart's Emporium: the shopkeeper takes the header's room, not the shelves'. "
+    + 'Run it on any change to gwartHeroHtml, the .gw-* block in app.css, or the hub tab scoping. Full because it drives four hub '
+    + 'tabs and reads pixels back. WRITTEN BECAUSE app.css PROMISED IT: the block ended with \"Guard: tests/emporium-audit.mjs\" '
+    + 'and that file existed on no ref, which reads as covered to the next person. Proven red twice on 2026-08-21: restoring '
+    + '--gw-off (the union-of-both-layers centring) puts CENTRED at 202.0 against 196.5, and hiding the floating gear without '
+    + 'giving it back reddens SCOPE.'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
