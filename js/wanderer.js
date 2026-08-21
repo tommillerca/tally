@@ -488,7 +488,7 @@ function ensureEncounterStyle() {
   animation: wndEncRise 2200ms cubic-bezier(.33, 0, .32, 1) both;
 }
 /* The box and the buttons sit in flow at the bottom, over the scene. */
-.wnd-enc .talkbox { position: relative; z-index: 2; margin: 0 0 12px; }
+.wnd-enc .wnd-enc-box { position: relative; z-index: 2; margin: 0 0 12px; }
 .wnd-enc-acts {
   position: relative; z-index: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   opacity: 0; pointer-events: none; transition: opacity 220ms ease;
@@ -517,7 +517,7 @@ function ensureEncounterStyle() {
   background: #ffe9c2;
   animation: wndEncFlash ${ZOOM_MS}ms steps(1, end) both;
 }
-.wnd-enc.zoom .talkbox, .wnd-enc.zoom .wnd-enc-acts { opacity: 0; transition: none; }
+.wnd-enc.zoom .wnd-enc-box, .wnd-enc.zoom .wnd-enc-acts { opacity: 0; transition: none; }
 @keyframes wndEncZoom {
   0%   { transform: translate(-50%, -50%) scale(1.16); }
   100% { transform: translate(-50%, -50%) scale(6.4); }
@@ -563,7 +563,7 @@ export function showWandererEncounter({ reduced = false } = {}) {
   el.innerHTML =
     `<div class="wnd-enc-scene"><div class="wnd-enc-glow"></div>` +
       `<img class="wnd-enc-art" src="${WANDERER_ART}" alt=""></div>` +
-    talkBoxHtml(ENCOUNTER_LINES[0], { hold: true }) +
+    talkBoxHtml(ENCOUNTER_LINES[0], { hold: true, cls: 'wnd-enc-box' }) +
     `<div class="wnd-enc-acts">` +
       `<button type="button" class="btn wnd-fight">Fight</button>` +
       `<button type="button" class="btn ghost wnd-flee">Flee</button>` +

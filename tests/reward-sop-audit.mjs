@@ -223,6 +223,10 @@ const ACTIONS = [
     transition: 'a rack piece goes from unowned to owned, once and forever',
     authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
+  { id: 'js/loot.js:buyPetItem', sites: 2,
+    transition: 'Bumbleseal, or one piece of her wardrobe, goes from unowned to owned, once and forever',
+    authority: 'db.addIfAbsent on the kv row petbuy:<id>, claimed BEFORE anything is deducted, so the check and the write are one transaction. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug',
+    undriven: "driven to destruction by tests/purchase-firewall.mjs, added 2026-08-21 when THIS ROW WAS THE THING THAT WAS MISSING: the function shipped on ext/bumbleseal-pets and reward-sop found it unregistered during the v421 merge. A registry row saying 'same shape as the one next door' is an argument, not evidence, and this is the most expensive button in the game, so it got the rack's own three legs instead. Measured green there: 50,000 spent exactly once, a second sequential buy pays 0, three concurrent buys of one 8,000 accessory spend 8,000 and grant 1. Plus a leg the rack has no equivalent for, PET-GATE: an accessory is refused with reason 'needs-pet' before she is owned AND the balance does not move, because every piece is drawn positioned for HER body and would hang in empty air on any other pet" },
   { id: 'js/app.js:openGiftSheet', sites: 1, undriven: 'a REFUND of coins this device already deducted, on a failed send; not a payout' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
 ];

@@ -127,7 +127,33 @@ try {
   await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, ['geolocation']);
   await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await seed(page, {});
-  await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
+  /* WHERE THE PLAYER STANDS IS CHOSEN, NOT ASSUMED, and this row is why.
+     The Mystery Egg is an 8% roll per cell per 45-minute instance
+     (js/hunt.js: `if (rr() < 0.08)`, seeded on date:cx:cy:rare:i<N>), so a
+     fixed pin gets an egg on the map in some instances and not in others. That
+     is exactly what happened on 2026-08-21: this audit blocked a release gate
+     with "no map marker draws assets/icons-pix/egg-basic.png", then passed four
+     times in a row half an hour later. Nothing was broken either time. A guard
+     whose sample is a dice roll reports the weather, not the code.
+     So: ask the app's OWN generator which nearby cell has an egg in the
+     instance that is running right now, and stand there. Deterministic given
+     the clock, and no app change: spawnsForRoute is a pure function.
+     If no cell within range has one, the fixed pin is kept and EGG-PRESENT
+     below fails loudly rather than the MATCH row failing for a reason that
+     reads like an art regression. */
+  const HOME = { latitude: 49.2827, longitude: -123.1207 };
+  const eggSpot = await page.evaluate(async (home) => {
+    const hunt = await import('./js/hunt.js');
+    const date = new Date().toISOString().slice(0, 10);
+    const near = hunt.spawnsForRoute(date, home.latitude, home.longitude)
+      .filter(sp => sp.type === 'rare');
+    if (!near.length) return null;
+    /* stand ON the egg's own cell so it lands inside NEAR_M and draws as a
+       full-density marker rather than a dimmed far beacon */
+    const e = near.sort((a, b) => a.dist - b.dist)[0];
+    return { latitude: e.lat, longitude: e.lng, was: e.dist };
+  }, HOME);
+  await page.setGeolocation(eggSpot ? { latitude: eggSpot.latitude, longitude: eggSpot.longitude } : HOME);
   await page.evaluate(() => { location.hash = '#/today'; });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await sleep(1500);
@@ -175,6 +201,13 @@ try {
   });
 
   /* ---- CONTROL first. Every row below reads from this sample. ---- */
+  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this the MATCH row's egg failure
+     is ambiguous: it reads the same whether the art regressed or whether the
+     instance simply had no egg in it. */
+  ok('CONTROL  an egg was placed on the map to compare, so the MATCH row has a sample',
+    !!eggSpot, eggSpot ? `stood on an egg cell (it was ${Math.round(eggSpot.was)}m from the fixed pin)`
+      : 'NO CELL IN RANGE HAS A MYSTERY EGG THIS 45-MINUTE INSTANCE: the MATCH row below cannot grade the egg, and a failure there is about the sample, not the art');
+
   ok('CONTROL  the map drew spawn markers', s.spawns.length > 0, `${s.spawns.length} spawn discs`);
   ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
   ok('CONTROL  the map key rendered all nine rows', s.legend.length === 9, `${s.legend.length} rows`);
