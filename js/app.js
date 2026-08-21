@@ -29,6 +29,8 @@ import {
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
+import { isWandererSpawn, WANDERER_FIGHT } from './wanderer.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -47,7 +49,7 @@ import { hlwArt } from './hollow-art.js';
 import { runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
-import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
+import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
@@ -3083,7 +3085,7 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
-  const [coinBal, dustBal, pitEnergy, heldSpiresNow] = await Promise.all([coins(), boneDust(), refreshPitEnergy(), heldSpires()]);
+  const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
@@ -3266,9 +3268,9 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
+  ${isToday ? hypeBannerHtml() : ''}
 
-  ${isToday ? outThereHtml({ held: heldSpiresNow, cropsRipe }) : ''}
+  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
 
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
@@ -3410,39 +3412,12 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  /* THE ROW OPENS THE TEASER. Tom has said twice that "the monster bestiary
-     popup is gone", then "clicking it is broken": tapping the day's hunt jumped
-     straight to the map with no acknowledgement, which reads as a dead button.
-     The popup's own CTA still takes you hunting, so the map is one tap further,
-     not gone. Delegated off the card rather than bound to the node, because this
-     row is rebuilt on every Today refresh and a node-bound listener dies with it. */
-  $('.out-there')?.addEventListener('click', e => {
-    if (e.target.closest('#bestiaryToMap')) openBossIntro();
-  });
-  /* The row's monster is a layered stack like any other Bonehead, so it needs
-     composing. Unlike the teaser strip this is ONE figure and it is the whole
-     reason the row is interesting, so it composes on render rather than on open
-     (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
-  const bestRow = $('.bestiary-banner');
-  if (bestRow) composeAvatars(bestRow);
-  /* NEVER BUILD ART FOR A CLOSED PANEL (1C). The strip lives inside a <details>
-     that is CLOSED by default, and it used to ship its 18 stacked heads in the
-     markup: 69 images and 107.8 MB of the 129.1 MB Today measured, for something
-     the player sees as one line of text. Composing was already deferred to the
-     open; the DECODING was not, and decoding is what the renderer pays for.
-     The wall is built on the first open and then left alone, so re-opening is
-     free and a player who never taps it never pays. */
-  $('details.teaser-banner')?.addEventListener('toggle', e => {
-    if (!e.target.open) return;
-    const strip = $('.tz-strip', e.target);
-    if (strip && !strip.firstChild) strip.innerHTML = teaserWallHtml(18, 62);
-    composeAvatars(e.target);
-  });
-  $('details.garden-banner')?.addEventListener('toggle', e => {
-    if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
-  });
-  $('#gardenToKitchen')?.addEventListener('click', () => openHollow(() => refresh()));
+  /* THE HYPE BANNER'S TWO HALVES, each going where its own subject lives. The
+     handlers that used to sit here belonged to the "Out there today" rows and
+     came off with them (the spire CTA, the bestiary row's delegate and its
+     compose, the teaser strip's deferred wall, and the garden row's two). */
+  $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -4224,6 +4199,98 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   </button>`;
 }
 
+/* THE HYPE BANNER. Tom, 2026-08-21: "remove all banners on the today page except
+   the step winner but above it we need to create a new hypebanner that is bold
+   and stands out and shows the 2 new creatures that are out in the boneyard and
+   simultaneously teases bumbleseal being sold in the shop. this all needs to be
+   in the same banner and feel cohesive not like a verbose list it should just be
+   minimal wording, clean easy marketing that excites."
+   BOLD ART, ELEVEN WORDS. That is the only way both halves of the brief hold at
+   once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
+   loud part has to be the picture. A banner that needs a sentence to explain its
+   own picture is a press release.
+   REVISION, from Tom's markup on the first render (2026-08-21, "something like
+   this is better for the banner, clean it up"). Three things changed and each is
+   the same idea executed better, not a new element:
+     - the tiny NEW chip became "New Creatures", a coral label that reads as the
+       banner's heading rather than a decoration;
+     - the one spanning sentence became TWO CAPTIONS, one under each half. He
+       struck "one wants your coins" out and wrote "Likes to shop" under the seal.
+       Each half now says what it is, which is honest about what they already
+       were: two different tap targets going to two different places;
+     - the creatures got BIGGER. The wide undivided strip was what made three
+       large plates read as thumbnails.
+   SECOND REVISION (2026-08-21, same day): "there shouldnt be any button thing
+   around the bee remove that. and it is meant to say ONE likes to shop not just
+   likes to shop." So:
+     - the seal's sunken plate is GONE. It was meant to set her apart and it read
+       as a button instead, which is worse than the problem it solved: her half
+       IS a button and so is the other one, and the other one has no box. She
+       stands on the banner's own ground now, told apart by the hairline and the
+       gap. See .hype-half.seal in app.css;
+     - the caption carries its COUNT. "Two want to eat you." / "One likes to
+       shop" is a pair of tallies, and dropping the number off one of them left
+       the joke doing half its work.
+   It is still ONE banner: one frame, one heading across the top, one grid. The
+   halves are columns in it, never two cards pushed together.
+   NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
+   number would be a promise the shop cannot keep today, and Tom has not settled
+   it. "One likes to shop" is true the day she lands and funny before it. */
+/* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
+   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
+   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
+   the same object-fit box drew one of them standing fifteen pixels in the air.
+   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one box,
+   one transform per plate, and no per-art nudges anywhere else. */
+const HYPE_PLATES = {
+  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
+  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+};
+/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
+   version took a px argument and emitted px, which pinned the art to one size in
+   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
+   more than a 320 one without rendering the banner twice. The maths is linear in
+   the box, so the ratios are the same at every size, and a CSS transform's
+   percentages are relative to the element itself, which is exactly what the
+   offsets need. */
+function hypePlateHtml(src) {
+  const p = HYPE_PLATES[src];
+  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
+  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
+  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
+  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
+  const pc = n => (n * 100).toFixed(2) + '%';
+  return `<span class="hype-fig"><img src="${src}" alt=""
+    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
+}
+function hypeBannerHtml() {
+  return `<div class="card hype">
+    <span class="hype-eye">New Creatures</span>
+    <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
+      <span class="hype-figs">
+        ${hypePlateHtml('assets/bh/mimic/mimic.png')}
+        ${hypePlateHtml('assets/bh/wanderer/wanderer.png')}
+      </span>
+      <b class="hype-cap">Two want to eat you.</b>
+    </button>
+    <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
+      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92)}</span>
+      <b class="hype-cap">One likes to shop</b>
+    </button>
+  </div>`;
+}
+
+/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner above replaced
+   the whole "Out there today" card, which is the banner stack Tom asked to be
+   gone. This builder and the four row builders it calls are left intact and
+   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+   is putting the call back in renderToday, and restoring the held-spires read to
+   that function's Promise.all along with its import from js/spires.js (dropped
+   here because it was the only caller, and unit.test.js lints app.js for spires
+   names used without importing them, comments included).
+   tests/out-there-audit.mjs and tests/spire-explainer-audit.mjs are skipped in
+   the gate for the same reason, and say so there. */
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
   const sieged = held.filter(s => s.siege).length;
   const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
@@ -14936,7 +15003,7 @@ async function renderBoneyard(el) {
     const date = dateKey();
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
-    const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
+    let collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
@@ -15555,6 +15622,12 @@ async function renderBoneyard(el) {
       claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       claimedSecret = new Set(rows.filter(r => r.type === 'secret').map(r => r.key));
+      /* REBUILT FROM THE LEDGER, like the three above it. It used to be seeded
+         once at map open and only ever added to by the collect handler, which
+         was fine while collecting was the only way to spend a spawn. A Mimic is
+         spent by WINNING A FIGHT, and that row is written from the fight settle
+         in another part of the file, so the only honest source is the ledger. */
+      collected = new Set(rows.filter(r => r.type === 'spawn').map(r => r.key));
       refreshSpawns();
       refreshDens();
       refreshMinis();
@@ -15818,6 +15891,57 @@ async function renderBoneyard(el) {
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
       if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
+         PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
+         with this mimic. it should show the pixel art animation and then enter a
+         battle with him."
+         This is the seam because collectSpawn is the thing that SPENDS the
+         chest: it claims `spawn-<date>-<id>` through award -> db.addIfAbsent and
+         pays coins, a crate and an ingredient in the same breath. Branching
+         anywhere downstream of it would pay the loot AND start the fight, which
+         is the double-pay this ordering exists to make impossible. A Mimic chest
+         never reaches collectSpawn at all.
+         `collected` is re-read from the ledger on every refreshWorld, so the
+         guard below is what stops a second tab (or a very fast second tap)
+         opening a second fight for a chest that is already spent. The real
+         authority is still the addIfAbsent in the settle; this is the polite
+         door, not the lock. */
+      if (isMimicSpawn(rec.spawn)) {
+        const spawn = rec.spawn;
+        const claimKey = spawnKey(date, spawn);
+        if (collected.has(claimKey)) return;
+        await showMimicReveal({ reduced: reducedMotion });
+        const fighter = await buildFighter();
+        openFight(wrap, fighter, {
+          mode: 'mimic', name: 'The Mimic', mult: MIMIC_FIGHT.mult,
+          aiLevel: MIMIC_FIGHT.aiLevel, talents: [], venue: 'The Boneyard',
+          mimic: true, claimKey, date, xp: MIMIC_FIGHT.xp, coins: MIMIC_FIGHT.coins,
+        });
+        return;
+      }
+      /* AND ONE RARE IN FOUR HAS SOMEBODY STANDING OVER IT. The Wanderer takes
+         the egg the way the Mimic takes the chest, and for the same structural
+         reason he sits HERE, above collectSpawn: this call is what SPENDS the
+         spawn, so a guarded egg must never reach it. He gets no reveal of his
+         own on purpose. The Mimic has one because Cam drew a chest opening;
+         the Wanderer is one still plate, and a full-screen takeover to hold a
+         static drawing for two seconds is ceremony for its own sake. */
+      if (isWandererSpawn(rec.spawn)) {
+        const spawn = rec.spawn;
+        const claimKey = spawnKey(date, spawn);
+        if (collected.has(claimKey)) return;
+        const fighter = await buildFighter();
+        openFight(wrap, fighter, {
+          mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
+          aiLevel: WANDERER_FIGHT.aiLevel, talents: WANDERER_FIGHT.talents, venue: 'The Boneyard',
+          /* CARRY THE FACE. Without this flag openFight falls through to the
+             coin-flip generator and the rarest boss on the map arrives dressed
+             as a random skeleton, which is the exact drop that cost the Gauntlet
+             its roster look (see endlessFightCfg). */
+          wanderer: true, claimKey, date, xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
+        });
+        return;
+      }
       const res = await collectSpawn(rec.spawn);
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
@@ -15934,13 +16058,22 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
+    // A beaten Mimic spends its chest from inside the fight settle, so the map
+    // has to hear about it. refreshWorld re-reads the xp ledger, so the payload
+    // is a nudge and never the authority (same rule as onGluttonBeaten).
+    const onMimicBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-mimic-beaten', onMimicBeaten);
+    // and the same for a beaten Wanderer: the egg he was standing on is spent
+    // from inside the settle, so the map has to hear about it.
+    const onWandererBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-wanderer-beaten', onWandererBeaten);
     const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
     // a LOST attempt dispatches only this one, and it still has to spend the day
     const onSpireTried = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-tried', onSpireTried);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-wanderer-beaten', onWandererBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -16603,7 +16736,12 @@ function endlessFightCfg(f) {
        dropping one new field is the boring failure, so it is the one to check
        first. */
     foeOutfit: f.look,
-    glutton: !!f.glutton, mage: !!f.mage,
+    /* ...AND THE SAME FOR EVERY BOSS ADDED SINCE. The comment above is about
+       `look` going missing here; `mimic` and `wanderer` are the identical
+       hazard, one boss later. tests/mimic-audit.mjs reads these back through
+       window.__endlessCfg rather than trusting pit.js, because pit.js was never
+       the hop that broke. */
+    glutton: !!f.glutton, mage: !!f.mage, mimic: !!f.mimic, wanderer: !!f.wanderer,
   };
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__endlessCfg = r => endlessFightCfg(endlessFoe(r));
@@ -16762,8 +16900,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
      flee toast said you slipped out of The Pit, and the exit handler below ran
      renderPit() on a screen the player had never opened. A spire is a map
      object, reached through #mapSpire, exactly like a den or a mini. */
+  /* THE TWO SPAWN AMBUSHES BELONG HERE TOO, and `mimic` was missing: a Mimic
+     is launched by tapping "Grab it" on the Boneyard map, so its Done button
+     read "Back to The Pit" and its exit ran renderPit() on a screen the player
+     never opened, the exact three-part failure the spire note above describes.
+     tests/fight-exit-audit.mjs has been red on that since the Mimic shipped.
+     The Wanderer is the identical fight one boss later, so both are named
+     rather than fixing only the path this change added. Neither launcher goes
+     stale: the marker they came from is gone on the next refreshWorld. */
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
-    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire';
+    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire'
+    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -16890,6 +17037,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
              character flips its chain, its pointing hand and its lightning. */
           : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage-fight.png" alt="">`
+          /* hand-inked too, so same rule: no .mirror-wrap. Flipping the Mimic
+             would flip his chains and his tongue, and flipping the Wanderer
+             would put his lantern in the wrong hand. */
+          : foeCfg.mimic ? mimicPlateHtml()
+          : foeCfg.wanderer ? `<img class="mage-plate" src="assets/bh/wanderer/wanderer.png" alt="">`
           : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
@@ -18100,6 +18252,62 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
         const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
         if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
+      } else if (foeCfg.mode === 'mimic') {
+        /* THE CHEST IS SPENT HERE AND NOWHERE ELSE.
+           The key is the chest's OWN ledger key, `spawn-<date>-<id>`: the exact
+           key collectSpawn would have claimed had it been an ordinary crate. So
+           the Mimic and the loot he replaced compete for one row that can only
+           exist once, and `award` resolves that with db.addIfAbsent, where the
+           check and the insert are a single IndexedDB request. A kvGet/kvSet pair
+           here was measured printing 16,500 coins to three concurrent callers,
+           which is the exact class of bug that primitive exists for. Reusing the
+           spawn key rather than minting a `mimicwin-` one is not a shortcut: it
+           is what makes "a Mimic must not also pay its loot" true by
+           construction instead of by two branches agreeing with each other.
+           A LOSS OR A FLEE CLAIMS NOTHING, on purpose. The chest stays on the map
+           and can be fought again. It cannot be re-rolled into a reward, because
+           isMimicSpawn is a pure function of the spawn id: a Mimic is a Mimic for
+           the whole life of that 45-minute instance, however many times you run
+           from it. */
+        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Mimic', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('daily', 'boneyard');
+          extraCards.push(crateCard('daily'));
+        }
+        // the map holds `collected` in a closure, so tell it the chest is gone
+        dispatchEvent(new CustomEvent('bh-mimic-beaten', { detail: { key: foeCfg.claimKey } }));
+      } else if (foeCfg.mode === 'wanderer') {
+        /* THE EGG IS SPENT HERE AND NOWHERE ELSE, on the spawn's OWN ledger key,
+           for the reason written at length in the Mimic branch above: the boss
+           and the loot he is standing on compete for one row that db.addIfAbsent
+           can only create once, so "he must not also pay the egg" is true by
+           construction rather than by two branches agreeing. A loss or a flee
+           claims nothing and the egg stays on the map until its 45-minute
+           instance turns over, still guarded, because isWandererSpawn is pure.
+
+           HE DOES NOT RAISE THE GAUNTLET CEILING, and that is a decision, not an
+           omission. denWinsCount() counts `bossfirst-` rows and the ceiling is
+           7 + 3 per row, so anything that mints one is progression. A Boneyard
+           Wanderer rides a spawn slot that re-rolls every 45 minutes, which
+           makes him unlimited per day: a per-kill marker would hand out +3 ranks
+           a fight, forever, which is precisely what the doctrine written above
+           denWinsCount forbids ("daily re-clears must never inflate
+           progression"). A single lifetime `bossfirst-wanderer` would be
+           farm-proof, but the Glutton earned his because he is a scheduled world
+           event with one clear per appearance, and the Mimic, this fight's exact
+           sibling, mints nothing. So the Wanderer sits with the Mimic. Granting
+           a marker later is easy; taking one back is not. Asserted by name in
+           tests/wanderer-boneyard-audit.mjs (CEILING). */
+        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('egg', 'boneyard');
+          extraCards.push(crateCard('egg'));
+        }
+        dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {

@@ -122,7 +122,9 @@ const BROWSER = [
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
-  'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
+  'bestiary-audit.mjs',      // the teaser stays a teaser, and since 2026-08-21 Today names no hunt at all: its row went with the "Out there today" card, so the Today half of that file is now an ABSENCE graded against the teaser wall as its control
+  'hype-banner-audit.mjs',   // the Today hype banner, on the app's default screen: the two new Boneyard creatures and the new pet, in ONE banner above the step winner. Three ways this fails silently and none of them throw: a creature that never decodes (graded on naturalWidth after an awaited decode, because an empty box measures perfectly), the banner growing until it pushes the ring further down than the 275px banner stack it replaced did (bounded against 1133 / 973, measured on 6212e75), and the copy clipping (scrollWidth against clientWidth, not a character count). Both viewports, because the ten words and the three figures fail differently at 320 than at 393. SETUP refuses to grade anything unless Today rendered AND the banner is on it, and the two ROUTE rows drive the real buttons because the whole point of the two halves is that they land in two different places
+
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'art-resolution-audit.mjs',  // no gear art drawn above the resolution Cam's masters actually carry, and no nearest-neighbour on continuous-tone art
   'fight-layout-audit.mjs',  // the fight screen holds still
@@ -320,6 +322,22 @@ const DECLARED = {
   'boneyard-audit.mjs': ['full', "the Boneyard loading and its action bar; run it on any map or action-bar change. All 22 rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17 on a container with no route to tiles.openfreemap.org it read 11 green and 11 red, and SEVEN of those greens were vacuous: three straggler rows on 0 stragglers, a beat row on 0 beats, a pop-time row on all-zero counts and two INTERACTED rows where false stays false because there is no map to interact with. Its own ARRIVAL-SLOW latency row carries the `stragglers.length > 0` empty-sample guard and went red correctly; the identical ARRIVAL row one section up never got that guard."],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
+  'mimic-audit.mjs': ['full', "the Mimic: a chest that is not a chest, its reveal, and both new drawn bosses in the Gauntlet. "
+    + 'Run it on any change to js/mimic.js, the Boneyard chest spawn, or the drawn-boss list in js/pit.js. Full rather than fast '
+    + 'because it boots the Boneyard and drives a real reveal, whose animation IS assets/bh/mimic/mimic-loop.gif: without that '
+    + 'file precached the chest never opens, which is why sw.js carries it.'],
+  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors: one RARE spawn in four is him, DERIVED from the spawn id so a guarded egg '
+    + 'stays guarded across refreshWorld, offline and on every device, and re-rolls when the 45-minute instance turns over. '
+    + 'Run it on any change to js/wanderer.js, the rare spawn in js/hunt.js, or the collect handler in js/app.js. It also pins '
+    + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
+    + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
+    + 'boots a page and claims against the real IndexedDB; about 25s.'],
+  'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
+    + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
+    + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '
+    + 'multiplier, a talent tree or a drawn boss changes. Its own header records why it exists: the Mimic was specced at 1.05x '
+    + 'and measured 12.0% player win against 28.8% for an ordinary rung, and the Wanderer was specced at 1.22x to sit above the '
+    + "Glutton's 1.18x and measured EASIER than him. Reading the multiplier is not the same as knowing the difficulty."],
   'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
     + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
@@ -404,7 +422,7 @@ const DECLARED = {
   /* THE NETWORK BETWEEN OFF AND ON, which nothing here had ever driven. */
   'flaky-network-audit.mjs': ['full', "offline-boot proves the app BOOTS with no network; this drives what happens when you press things, in the three states that are not 'on': GONE, HANGING (accepted and never answered, which no catch in this app could ever reach) and FLAP (the server acts, the answer is lost). Grades what reached the store AND what the player was told, with an online CONTROL twin on every offline row and every gift row gated on the sheet having opened, so an empty sample set cannot read green. Proven red at ddbb079 with only this file copied into a throwaway tree: 11/31 there against 31/31 here, and the 20 red rows are the findings, not a broken harness (its OFFLINE-FIRST rows and every online CONTROL twin are green in BOTH trees). 32/32 and 191s measured on the final file, green on three consecutive runs. Self-serving, and it stops its own server and clears the browser HTTP cache, so 'full' rather than fast."],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
-  'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
+  'out-there-audit.mjs': ['skip', 'its whole subject is the "Out there today" card, which came off Today on 2026-08-21 when Tom asked for every banner except the step winner to go and one hype banner to replace them. outThereHtml and its four row builders are intact and unreachable in js/app.js (revival is one call plus the heldSpires read), so this file is kept as the record of what the card had to do. tests/hype-banner-audit.mjs guards what stands there now, including a GONE row that fails if the card comes back unasked.'],
   'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen.'],
   'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],
   'pit-cap-audit.mjs': ['full', 'the Gauntlet ceiling reads as a ceiling.'],
@@ -416,7 +434,7 @@ const DECLARED = {
   'scout-audit.mjs': ['full', "the world follows where you look and stays the same size. All six rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17: three red, and both greens vacuous. 'BOUNDED: scouting does not grow the marker count' passed on `0 -> 0 markers`, which is tally/CLAUDE.md rule 11 in one line, a ceiling satisfied by an empty set; 'ANCHORED: a den you only looked at is not enterable' passed because there was no map, not because the distance rule held. window.__map is assigned before the map's error handler runs, so its presence proved nothing either."],
   'spawn-quiet-audit.mjs': ['full', "the quiet Boneyard collect: bones, coins and herbs must never regain the full-screen reveal, and crate + rare must keep it. Four STATIC rows grade everywhere and pin the write-cost arithmetic to its sources (openSheet is the only emitter of feat_open/feat_time; the D1 events table carries 3 indexes, so one sheet is 2 events is 8 row-writes of the 100k/day free tier). The driven half walks onto a real spawn of each of the five types on a real map, so it needs a reachable vector tile host and declares itself UNPROVEN with exit 97 without one rather than passing on an empty sample. Counts analytics by serving a one-line patched js/analytics.js over request interception, because the real queue refuses to record under ?demo; the two ceremony collects are the control that proves the zero on the quiet path is a measurement."],
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
-  'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
+  'spire-explainer-audit.mjs': ['skip', 'it opens the spire explainer through details.spire-banner on Today, and that row went with the "Out there today" card on 2026-08-21. The explainer copy it grades is still built by spireBannerHtml, which nothing calls; when the spires get a surface again this file is the check that comes back with it.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
   't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow. Section 7 (the Boneyard, 11 rows) needs a reachable vector tile host and declares itself UNPROVEN with exit 97 where there is not one, rather than letting two `count(...) === 0` rows pass on a map with nothing on it. Sections 1 to 6 need no map and still grade there.'],
   't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],

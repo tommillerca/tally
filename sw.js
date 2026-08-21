@@ -42,6 +42,8 @@ const PRECACHE = [
   './js/hunt.js',
   './js/native.js',
   './js/pit.js',
+  './js/mimic.js',
+  './js/wanderer.js',
   './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
@@ -181,6 +183,13 @@ const PRECACHE = [
   './assets/bh/mage/fx/zigzag.png',
   './assets/bh/mage/fx/sparks.png',
   './assets/bh/mage/mage-fight.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
+  // the two bosses added with the Mimic. Same rule as the line above: a
+  // cold-cache miss draws a broken image where a monster should be.
+  './assets/bh/mimic/mimic.png',
+  './assets/bh/mimic/mimic-eyes-2.png',
+  './assets/bh/mimic/mimic-eyes-3.png',
+  './assets/bh/mimic/mimic-loop.gif',   // the reveal IS this file; without it the chest never opens
+  './assets/bh/wanderer/wanderer.png',
   './assets/bh/glutton/idle.png',
   './assets/bh/glutton/tongue.png',
   './assets/bh/glutton/middle.png',
@@ -234,6 +243,9 @@ const PRECACHE = [
   './assets/bh/C/shiny/C4.png',
   './assets/bh/C/shiny/C5.png',
   './assets/bh/C/CX.png',
+  // Bumbleseal, drawn on the Today hype banner, which is the DEFAULT screen: a
+  // cold-cache miss is a hole in the first thing a player sees.
+  './assets/bh/C/C6.png',
   './assets/bh/anim/lizard-amethyst/base.png',
   './assets/bh/anim/lizard-amethyst/lid.png',
   './assets/pit/gate-boneyard.webp',

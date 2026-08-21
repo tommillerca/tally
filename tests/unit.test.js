@@ -698,7 +698,11 @@ test('endless: the Live Wire lands every 7 rungs, never on the Glutton', async (
   assert.equal(pit.endlessFoe(70).glutton, true, 'rung 70 stays the Glutton');
   for (let r = 1; r <= 200; r++) {
     const f = pit.endlessFoe(r);
-    assert.ok(!(f.mage && f.glutton), `rung ${r} cannot be both`);
+    /* FOUR drawn bosses share the ladder now, so "never two at once" is a
+       property of the whole set rather than of one pair. Counting is the form
+       that cannot rot when a fifth is added. */
+    const drawn = [f.glutton, f.mage, f.mimic, f.wanderer].filter(Boolean).length;
+    assert.ok(drawn <= 1, `rung ${r} cannot be more than one boss (${drawn})`);
   }
   // a real step above the ordinary ladder, but a lighter one than the Glutton's
   const plain = r => 1.32 + r * 0.07;
@@ -2311,7 +2315,7 @@ test('every Gauntlet rank resolves a real monster look', () => {
   const naked = [];
   for (let r = 1; r <= 140; r++) {
     const f = pitMod.endlessFoe(r);
-    if (f.glutton || f.mage) continue;      // drawn bosses bring their own art
+    if (f.glutton || f.mage || f.mimic || f.wanderer) continue;   // drawn bosses bring their own art
     if (!f.look || !f.look.B || !f.look.SK) naked.push(`${r}: ${f.name}`);
     if (/\s\d+$/.test(f.name)) naked.push(`${r}: bare digit in "${f.name}"`);
   }

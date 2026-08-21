@@ -66,6 +66,13 @@ const EXITS = {
   boss:    'map',       // the den row re-renders as TOMORROW once beaten
   mini:    'map',
   secret:  'map',
+  /* The two spawn ambushes. Both are launched from the map's own "Grab it"
+     button, not from a sheet, so there is no stale launcher to close past: the
+     marker they came from is gone on the next refreshWorld. They only have to
+     be recognised as map-launched, which mimic was not, which is what this row
+     has been red about since the Mimic shipped. */
+  mimic:    'map',
+  wanderer: 'map',
   friend:  'pit',       // nothing about the friend list goes stale
   spar:    'pit',       // renderPit() refreshes the rungs
 };
