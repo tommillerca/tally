@@ -1363,9 +1363,37 @@ test('css: nothing cancels the safe-area inset with a negative top margin', () =
     const top = m[1] ? m[2].trim() : topValue(m[2]);
     if (/--sat/.test(top) && /-\s*1\s*\*|^-/.test(top)) offenders.push(line.trim());
   }
-  assert.deepEqual(offenders, [],
+  /* ONE EXEMPTION, AND IT IS TIED TO ITS PROOF RATHER THAN TO A NAME.
+     This rule matches CSS TEXT, and text cannot tell "the panel's BACKGROUND
+     bleeds under the notch", which is what a full-bleed hero is for, from "the
+     CONTENT slides under the notch", which is the v240 bug. Gwart's Emporium
+     genuinely uses the pattern and genuinely does the safe thing: its own audit
+     samples the safe-area band in PIXELS and measures 0 ink there.
+     So the exemption is only valid while that proof exists. If
+     tests/emporium-audit.mjs is ever deleted or renamed, this test fails again
+     and the exemption has to be re-earned. An allowlist that outlives its
+     evidence is how a guard quietly stops guarding. */
+  const PROVEN_BY_PIXELS = [
+    { css: '.gw-hero', audit: 'emporium-audit.mjs', row: 'BAND' },
+  ];
+  const proven = PROVEN_BY_PIXELS.filter(p => {
+    if (!existsSync(join(here, p.audit))) return false;
+    return readFileSync(join(here, p.audit), 'utf8').includes(p.row);
+  });
+  assert.equal(proven.length, PROVEN_BY_PIXELS.length,
+    'every safe-area exemption must name an audit that exists and still carries its row');
+  const excused = offenders.filter(l => proven.some(p => cssRuleFor(css, l).includes(p.css)));
+  assert.deepEqual(offenders.filter(o => !excused.includes(o)), [],
     'a negative top margin containing var(--sat) pulls content under the notch');
 });
+/* which selector owns a declaration: walk back to the nearest `{` above it */
+function cssRuleFor(css, line) {
+  const i = css.indexOf(line);
+  if (i < 0) return '';
+  const before = css.slice(0, i);
+  const open = before.lastIndexOf('{');
+  return open < 0 ? '' : before.slice(before.lastIndexOf('}', open) + 1, open);
+}
 
 test('css: the scroll container still reserves the safe area', () => {
   const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
