@@ -143,84 +143,109 @@ svg { display: block; }
    space above the bonehead card it has the boneheadz word mark as a nice
    branding touch."
 
-   WHY IT WORKS ON WKWEBVIEW SPECIFICALLY. The scroller here is .screen, not the
-   document, and iOS implements its rubber band by letting the underlying
-   UIScrollView take a NEGATIVE content offset: the whole scrolled content layer
-   translates down, absolutely-positioned descendants of the scroller included.
-   `overscroll-behavior: contain` above stops the chain reaching the page; it does
-   not stop the element's own bounce. So a mark parked above the content origin
-   rides down into view under your finger with no JS and no listener, and nothing
-   else on the app has to know it exists.
+   FOURTH ATTEMPT, AND THE FIRST ONE THAT MEASURED WKWEBVIEW INSTEAD OF ASSUMING
+   IT. v414, v415 and v421 all parked the mark ABOVE the Today scroller's content
+   origin (`bottom: 100%` on `.screen--today::before`) on the reasoning written in
+   the version of this block they shipped with: iOS rubber-bands the nested
+   UIScrollView to a NEGATIVE content offset, the scrolled content layer
+   translates down, and an absolutely positioned descendant parked above the
+   origin rides down into view for free. Half of that is true. The half that is
+   not is the half the whole feature stood on.
 
-   WHY IT CANNOT PEEK. Scrollable overflow only ever grows downward: scrollTop
-   cannot go negative by scrolling, so at rest and at every scroll position the
-   mark sits outside the overflow clip. The bounce is the only thing that can
-   reach it.
+   MEASURED 2026-08-21 ON A BOOTED iPHONE 17 PRO (iOS 26.5), MobileSafari, a
+   sustained synthesised drag held down for ~10s so the bounce could be
+   screenshotted while it was open:
+     - the bounce is REAL: `#screen.scrollTop` bottomed out at -168, 33 scroll
+       events fired with a negative offset, and an element inside the scroller
+       moved 168px down by getBoundingClientRect. `overscroll-behavior: contain`
+       does NOT kill it. So the listener below has always been getting real data.
+     - and NOTHING PARKED ABOVE THE ORIGIN PAINTS INTO THE EXPOSED STRIP. In a
+       126pt-deep bounce, sampled at both halves of the width, the strip was the
+       scroller's own background COLOUR (#202) edge to edge and 0 px of anything
+       else. Four forms tested in one page: a `::before` at `bottom: 100%`, a real
+       `<div>` at `bottom: 100%`, and a `background-image` at `center -60px` with
+       `background-attachment: local` AND with `scroll`. Zero pixels, all four.
+       WebKit sizes the scrolled-contents layer to the scrollable-overflow rect,
+       which starts AT the scroll origin, and fills the rubber-band region from
+       the layer's solid backgroundColor. Content above the origin is outside the
+       layer and outside the fill. It is not clipped by a rule anyone can move: it
+       is not in the layer that gets translated.
+   So the mark Tom was told to pull for could not have appeared however far he
+   pulled, on any of the three builds. That, and not the pull threshold, is why he
+   never saw it. The old geometry note argued the reveal "enters THROUGH the
+   status-bar strip by definition, exactly like a pull-to-refresh spinner, and
+   that was settled in v415: it is not worth an unreachable peek." Tom has
+   overridden that: "i still have not been able to see the wordmark after
+   scrolling at any time or update despite what you say so fix that shit." The
+   peek is not unreachable now, it is landed clear of the status bar, and this is
+   the paragraph that records the override.
 
-   WHY IT COSTS NO LAYOUT. position: absolute takes it out of flow. Measured with
-   the rule present and absent: all 556 element rects on Today identical, first
-   card y 76 and 76, scrollHeight 3034 and 3034.
+   SO THE MARK LEFT THE SCROLLER. It is `#app::before` now, gated on Today by
+   `:has(.screen--today)` so `screen--today` stays the single source of truth and
+   route() needs no second flag. #app is `position: relative; z-index: 1;
+   overflow: hidden` (line 134 and 901), so:
+     - HIDDEN AT REST BY THE SAME CONSTRUCTION AS BEFORE, and this is the part
+       that must not regress. `bottom: 100%` against #app puts the box at
+       [-62, 0], i.e. entirely above the viewport, and #app's `overflow: hidden`
+       clips it. Zero pixels at rest at --sat 0, 47, 59, 62 alike, with no
+       arithmetic against the inset to get backwards the way v415 did. What
+       changed is only WHICH box does the clipping, and #app is a plain
+       non-scrolling clip in the ordinary paint order rather than a compositor
+       layer that stops existing above its origin.
+     - REVEALED BY A TRANSFORM, NOT BY THE BOUNCE. `translateY` off --wm-pull
+       drives it down `--sat + 66px`, so at full pull the box lands at
+       [--sat + 4, --sat + 66]: the WHOLE mark below the status bar and the
+       Dynamic Island, on every inset, instead of 0 visible pixels at 36px of pull
+       and a first pixel at 76px. Guard: the UNDERNOTCH row.
+     - z-index: -1 puts it BEHIND the screen's content inside #app's stacking
+       context. At full pull its lower ~16px are under the first card (which the
+       real bounce has itself pushed down by the pull), so the mark slides out
+       from behind the world rather than printing on top of it, and a
+       pointer-events: none element at a negative z-index cannot take a tap off
+       any control (anti-regression rule 6).
 
-   IT SHIPPED TWICE AND TOM NEVER SAW IT. Both misses are worth keeping, because
-   they were different mistakes.
-   v414 parked it at top -(54 + --sat), 150x40, opacity .55: at --sat 59 that was
-   73px of rubber-band travel before ONE pixel appeared and 113px to be whole,
-   and the note called that threshold deliberate. "i dont see it live?"
-   v415 cut the offset to -(8 + --sat) and grew it to 172x46, so 21px for the
-   first pixel. "your wordmark still isnt there." The threshold was no longer the
-   problem: a 172x46 sliver at 55% opacity sitting behind the status bar simply is
-   not something a person notices. (The v415 note claimed .55 -> .78 and the rule
-   shipped .55, because raising it turned the INK row red and the number got put
-   back while the sentence stayed. A guard steering the design.)
-   Tom, third pass: "Make it unmistakable. Drive it off scroll position so it
-   fades in deterministically, bigger and higher contrast."
+   CONFIRMED ON THE DEVICE, NOT JUST IN THE AUDIT. This rule and the listener were
+   lifted verbatim into a bare page with the same #app/.screen boxes and the real
+   wordmark.png, served to the same booted iPhone 17 Pro, and the same held drag
+   was screenshotted: the wordmark painted IN FULL, entirely below the Dynamic
+   Island, during a real rubber band. Four releases in, that link gets checked
+   before the file is believed.
 
-   AND v415 HAD A THIRD FAILURE NOBODY HAD SEEN, WHICH IS WHY THE OFFSET IS GONE.
-   `top: calc(-8px - var(--sat))` at height 46 puts the mark's bottom edge at
-   38 - sat. Measured live at three insets: at --sat 47 and 59 it is above the
-   origin (Tom's case, invisible), and at --sat 0 it is 38px BELOW it, so 38 of
-   the 46px were welded to the top of Today permanently, at every scroll position,
-   on every device with no top inset: desktop, notchless phones, the Android
-   shell. Same rule, opposite failures at the two ends of --sat, which is the tell
-   that arithmetic against the inset was the wrong mechanism from the start.
+   IT STILL COSTS NO LAYOUT. position: absolute takes it out of flow and it is no
+   longer a child of the scroller at all. Guard: the NO-SHIFT rows, which compare
+   every rect on Today with the mark present and absent.
 
-   SO: `bottom: 100%` and no top offset at all. For an absolutely positioned box
-   in a relatively positioned containing block, `bottom: 100%` puts its bottom
-   edge exactly on the containing block's top edge; verified here that the
-   percentage resolves against the scroller's PADDING BOX height (clientHeight
-   867, not scrollHeight 2972) and that the used top comes out at -62px at --sat
-   0, 47, 59 and 62 alike. Zero pixels at rest and a first pixel at the first
-   pixel of travel, by construction, at every inset. The --sat 0 bug is not fixed,
-   it is unrepresentable, and the height no longer has to be reconciled against
-   anything so it can be sized for legibility: 232x62, 1.82x the old area.
-   Any reveal from above the scrollport enters THROUGH the status-bar strip by
-   definition, exactly like a pull-to-refresh spinner, and that was settled in
-   v415: it is not worth an unreachable peek.
+   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is set
+   on :root by a passive scroll listener in js/app.js from the scroller's NEGATIVE
+   scrollTop, which on iOS is the pull distance in pixels (measured above, not
+   assumed): min(1, pull / 36), quantised to twentieths. :root and not #screen
+   because #app::before cannot inherit a property set on #screen, which is its
+   sibling's subtree.
 
-   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is
-   set by a passive scroll listener in js/app.js from the scroller's NEGATIVE
-   scrollTop, which on iOS is the pull distance in pixels: min(1, pull / 36). A
-   1px sliver at 1px of pull is therefore transparent, and by 36px the mark is at
-   full brightness with 56% of it on screen. Deterministic in the pull distance
-   rather than in how hard the flick was.
+   THE OPACITY DEFAULT IS 1 AND THE TRANSFORM DEFAULT IS 0. A `var(--wm-pull, 0)`
+   opacity is the transparent-by-default trap that shipped invisible before, so
+   the default stays loud and the FAILOPEN row still goes red on it. Be honest
+   about what that no longer buys: with the reveal now a transform, a listener
+   that never fires means no reveal, full stop. The old block claimed the CSS
+   default made a silent no-op "impossible"; it never did, because the geometry it
+   fell back on could not paint. What actually retires that risk is the device
+   measurement above: the negative offset IS reported and the listener DOES fire.
 
-   THE DEFAULT IS 1, AND THAT IS THE WHOLE SAFETY ARGUMENT. If a WebView ever
-   fails to report the negative offset the listener never fires, --wm-pull is
-   never set, and var(--wm-pull, 1) reveals the mark at FULL opacity off the
-   geometry alone. Third attempt at this feature: a JS reveal that silently
-   no-ops into a blank space is the one outcome that must be impossible.
-
-   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the fade tracks the finger 1:1
-   like a scrollbar does. prefers-reduced-motion is handled in the listener, not
-   here, by pinning --wm-pull to 1: the end state, which is also the loudest one,
-   so a player who asked for no motion gets the mark with no fade rather than a
-   dimmer mark. Guard: tests/overscroll-wordmark-audit.mjs */
+   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the reveal tracks the finger 1:1
+   like a scrollbar does. prefers-reduced-motion drops the FADE (opacity pinned to
+   1) and keeps the travel, because a scroll-linked position is direct
+   manipulation and not an animation; it is one line of CSS below rather than a
+   branch in the listener. Guard: tests/overscroll-wordmark-audit.mjs */
 .screen--today { position: relative; }
-.screen--today::before {
-  content: ""; position: absolute; left: 50%; margin-left: -116px;
-  bottom: 100%; width: 232px; height: 62px;
+#app:has(.screen--today)::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  left: 50%; margin-left: -116px; bottom: 100%; width: 232px; height: 62px;
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
-  opacity: var(--wm-pull, 1); pointer-events: none;
+  opacity: var(--wm-pull, 1);
+  transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
+}
+@media (prefers-reduced-motion: reduce) {
+  #app:has(.screen--today)::before { opacity: 1; }
 }
 
 /* ---------- header ---------- */
