@@ -1869,8 +1869,8 @@ const BH_ITEMS_ALL = [
  {
   "id": "C6",
   "slot": "C",
-  "rarity": "epic",
-  "exclusive": true,
+  "rarity": "legendary",
+  "hatchChance": 0.01,
   "name": "Bumbleseal"
  },
  {
@@ -2077,10 +2077,21 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
 /* HOW BIG A PET STANDS ON TODAY. 108 is the house size every species is
    normalised to. Bumbleseal is deliberately larger: Tom, 2026-08-21, asked for
    "about 25% bigger" than the 135 he was shown, which is 169. She is a 50,000
-   coin epic and she reads as a companion rather than a trinket at that size.
+   coin legendary and she reads as a companion rather than a trinket at that size.
    Anything not listed here uses the house 108, so a new pet inherits the norm
    rather than an accident. */
 export const PET_HERO_PX = { C6: 169 };
+
+/* `hatchChance` ON A PET IS THE WHOLE SHOP-PET MECHANISM, and it lives on the
+   item rather than in a table in js/loot.js on purpose: pickRandomPet reads it
+   off the catalogue, so a second shop pet inherits the rule by declaring the
+   field instead of by somebody remembering a second list. Tom, 2026-08-21:
+   "she can be a legendary pet and shes only in 1% of eggs so most people will
+   want to buy her." A pet carrying it rolls at exactly that rate and is kept
+   OUT of the even split the rest of the roster shares, or the 50,000-coin price
+   is a lie: an equal share of today's four-deep non-common pool is 25%.
+   `exclusive` is the stronger, separate flag (never obtainable at all, the Day
+   One Lizard) and the two are not interchangeable. */
 
 export const PET_SHOP = {
   pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },

@@ -106,7 +106,22 @@ if (own) console.log(`serving this repo at ${base}\n`);
    slot codes out of BH_SLOTS (nine app.js sites iterate it to draw the PLAYER),
    holds the glasses on top of the pet stack, and grades every layer against the
    clipping budget croppedPetImg's own scale leaves it. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs'];
+/* pet-pool-audit is PURE for the same reason: it imports js/loot.js and
+   data/boneheadz.js, boots nothing, and finishes in ~5s. It is the price tag on
+   Gwart's Emporium as an assertion. Bumbleseal is 50,000 coins and her
+   accessories 3,500 to 12,000, and all of that scarcity is four filter calls in
+   js/loot.js that nothing measured. It pins her hatch rate at 1% over 200,000
+   draws in BOTH pool shapes (+/- 0.0015, 6.7 sigma, red at the 25% an even share
+   would give her), that no pet accessory can come out of a crate at either
+   floor, and, statically, that there is exactly ONE pet pool and ONE crate
+   predicate in the module. That last row is the point: the two pet pools had
+   already drifted once (the Day One Lizard reachable from a random grant), and
+   the two crate pools were drifted when this was written, which is how 0.993%
+   of Common Crate fallback rolls and 2.938% of Golden Crate rolls came back a
+   pet accessory revealed as a duplicate of an item the player never owned.
+   Carries SAMPLE, REACH and LEAK as controls: LEAK rebuilds the pre-fix pool and
+   REQUIRES it to leak, because three of its rows assert a zero. */
+const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
@@ -398,6 +413,15 @@ const DECLARED = {
     + 'still starts the fight is decoration) and COVER must find the overlay STILL UP when the choice resolves, because the '
     + 'arena is built underneath its hold frame and tearing it down one line early brings the map back mid-handover. '
     + 'All eight rows proven red on 2026-08-21 in a throwaway tree; the mutations are listed in the file header.'],
+  'rebuild-lossless-audit.mjs': ['full', "re-running scripts/build-cosmetics.py must not delete, rename or "
+    + 're-rarity a single item that ships today. Run it on any change to that script, to SPECIALS/OVERRIDES, or to the art '
+    + 'library. Tiered full rather than pure because it shells out to python3 and rebuilds the whole catalogue against Cam\'s '
+    + 'library, about a minute; it needs no browser. THIS IS A MIGRATION GUARD, NOT A BUILD CHECK: every cosmetic a player owns '
+    + 'is keyed by an id in the generated file, and its name and rarity are what the game shows them, so re-running the script '
+    + 'edits live inventory. Measured on 2026-08-21 before the fix: 63 items DELETED, 172 RENAMED and 3 DEMOTED, including '
+    + 'Nightfall Katana going legendary to common, and the script exited 0 and printed a cheerful item count either way. '
+    + 'It SKIPS with a reason when the art library is absent, because a guard that fails on a teammate\'s laptop for an '
+    + 'environmental reason is one people learn to ignore. Four mutations proven red; they are in the file header.'],
   'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
     + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
     + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
