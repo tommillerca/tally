@@ -3195,6 +3195,27 @@ async function renderToday(el) {
         ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
+    ${/* GWART, DIRECTLY UNDER THE CURRENCIES. Tom asked for this arrangement
+         three times: the balances at the top of the screen and the wizard below
+         them, so the top-left is one status column instead of chips floating in
+         open artwork. Decoration, not a control, so it is aria-hidden and
+         pointer-transparent: the scene itself is the tap target and putting a
+         second one over the art would take a tap that used to open the
+         character. He does not speak here yet. tests/talkbox-audit.mjs pins
+         Today as having no talk box, which was Tom's own call on 2026-08-20,
+         and the coach copy is his to approve; the plaque is the half of the
+         mockup that is a layout decision. The art is the same untouched pair
+         the Emporium uses (already precached), cropped by CSS. */''}
+    <div class="gw-today" aria-hidden="true">
+      <div class="wz-scene">
+        <div class="wz-body"><img src="assets/gwart/gwart.png" alt=""></div>
+        <div class="wz-enter"><div class="wz-sway">
+          <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
+        </div></div>
+      </div>
+    </div>
     <!-- NO TALK BOX HERE FOR NOW. Tom, 2026-08-20: "let's remove the text bubble
          until we have gwart in the scene floating and talking that will replace
          the bonehead talking and gwart will be more the coach character." So the
