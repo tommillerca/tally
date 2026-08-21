@@ -108,8 +108,18 @@ const open = () => page.evaluate(async () => {
 });
 
 const meta = await open();
-/* long enough for both lines to type out and the buttons to fade in */
-await sleep(3400);
+/* WAIT FOR THE CONDITION, NOT FOR A NUMBER. This was sleep(3400), which was
+   long enough at the time and silently stopped being long enough the moment a
+   readable hold was added between the lines: the row then failed with the
+   buttons merely LATE rather than missing, which is a lie about the defect.
+   The timeout is the real assertion; if the buttons never arrive it still fails. */
+const armed = await page.waitForFunction(() => {
+  const a = document.querySelector('.wnd-enc-acts');
+  return !!a && getComputedStyle(a).opacity === '1';
+}, { timeout: 12000, polling: 50 }).then(() => true).catch(() => false);
+ok('ARMED the choice arms itself without a tap, so the beat cannot hang',
+  armed, armed ? 'Fight/Flee reached full opacity' : 'buttons never armed within 12s');
+await sleep(250);
 await settle(page);
 
 const shown = await page.evaluate(() => {
@@ -157,7 +167,11 @@ ok('FLEE backing out closes the encounter and opens no fight',
    NOT getComputedStyle. A transform that is declared and never composited reads
    identical to one that runs, and this repo has been burned by exactly that. */
 await open();
-await sleep(3400);
+await page.waitForFunction(() => {
+  const a = document.querySelector('.wnd-enc-acts');
+  return !!a && getComputedStyle(a).opacity === '1';
+}, { timeout: 12000, polling: 50 }).catch(() => {});
+await sleep(250);
 const shot = async () => Buffer.from(await page.screenshot({ encoding: 'base64', type: 'png' }), 'base64');
 const before = await page.screenshot({ encoding: 'binary' });
 await page.evaluate(() => document.querySelector('.wnd-enc .wnd-fight').click());
@@ -202,5 +216,5 @@ ok('COVER the overlay is still up when the choice resolves, so no map frame show
 
 await browser.close();
 if (srv) await srv.close();
-console.log(`\n${fails ? `${fails} FAILED` : 'all green'}, 9 checks`);
+console.log(`\n${fails ? `${fails} FAILED` : 'all green'}, 10 checks`);
 process.exit(fails ? 1 : 0);
