@@ -61,6 +61,9 @@
  *      -> ONCE-SEQ goes red
  *   5. drop the `st.rr >= RACK_REROLL_LADDER.length` limit in rerollRack
  *      -> REROLL-CAP goes red (the ladder never runs out and keeps charging)
+ *   6. key the reroll allowance back on the day (`cur.rrDay === day`) in both
+ *      rack() and rerollRack()
+ *      -> REROLL-WEEKLY goes red (a stale day hands back a whole free ladder)
  *
  * Usage: node tests/purchase-firewall.mjs            (serves this tree)
  *        node tests/purchase-firewall.mjs <base-url>
@@ -349,6 +352,40 @@ else {
   ok('REROLL-CAP the day\'s rerolls run out, and the ceiling is 2,000 coins',
     refused.length === 2 && refused.every(r => r.reason === 'limit') && res.rrSpent === 2000,
     `${refused.length} refused (${[...new Set(refused.map(r => r.reason))].join('/')}) after ${res.rrSpent} coins spent in total`);
+  /* ---- THE ALLOWANCE IS WEEKLY, NOT DAILY ----
+     Tom approved weekly on 2026-08-20. The old code reset the ladder on rrDay,
+     so the first reroll was free EVERY DAY: seven free full-rack draws a week
+     against 3-deep rungs surfaces any specific piece 94% of weeks (1-(2/3)^7)
+     for nothing, which is the exact outcome the ladder exists to prevent.
+     Driven by ageing the PERSISTED record rather than by faking a clock: the
+     ladder is already exhausted above, so a stale day must change nothing while
+     a stale week must hand the allowance back. The first half is what goes red
+     if the reset is ever keyed on the day again. */
+  const weekly = await page.evaluate(async () => {
+    const loot = await import('./js/loot.js');
+    const { kvGet, kvSet } = await import('./js/db.js');
+    const before = await kvGet('rack', null);
+    const out = { rrAtStart: before ? before.rr : null };
+
+    await kvSet('rack', { ...before, rrDay: '2000-01-01' });      // yesterday, same week
+    const staleDay = await loot.rerollRack();
+    out.staleDay = { ok: !!staleDay.ok, reason: staleDay.reason || null };
+
+    await kvSet('rack', { ...before, week: 'stale-week' });        // a week that is not this one
+    const staleWeek = await loot.rack();
+    out.staleWeekRr = staleWeek.rr;
+    out.staleWeekRegenerated = staleWeek.week !== 'stale-week';
+    return out;
+  });
+  ok('CONTROL the ladder really was exhausted before the weekly probe ran',
+    weekly.rrAtStart === res.ladder.length, `rr was ${weekly.rrAtStart} of ${res.ladder.length}`);
+  ok('REROLL-WEEKLY a new DAY inside the same week hands back no rerolls',
+    weekly.staleDay.ok === false && weekly.staleDay.reason === 'limit',
+    `ok=${weekly.staleDay.ok} reason=${weekly.staleDay.reason}`);
+  ok('REROLL-WEEKLY and a new WEEK does hand the allowance back',
+    weekly.staleWeekRegenerated === true && weekly.staleWeekRr === 0,
+    `regenerated=${weekly.staleWeekRegenerated} rr=${weekly.staleWeekRr}`);
+
   /* `refused.every(...)` on an EMPTY set is true, and this row passed vacuously
      on the prove-red where the ladder never ran out. An empty sample is a
      failure, never a pass. */
