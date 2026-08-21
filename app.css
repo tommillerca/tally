@@ -6808,6 +6808,41 @@ body::before {
 .screen > .route-in { animation: routeIn .2s ease-out; }
 @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }
+
+/* AND THE OLD SCREEN COVERS THE GAP WHILE IT WAITS. Tom, 2026-08-21: "swapping
+   between boneyard and today briefly shows the empty tray that sits behind the
+   app. feels cheap." The rule above hides #screen from the moment a navigation
+   starts until every image on the new screen has decoded, and for that window
+   there was nothing in front of the body gradient but the tab bar. js/app.js
+   (holdOutgoing) MOVES the outgoing nodes into one of these and parks it over
+   #screen; the new screen builds underneath and the copy fades off it.
+   IT SITS BETWEEN #screen AND #tabbar, by DOM order and nothing else: both are
+   positioned with z-index auto, so paint order is source order, and inserting it
+   right after #screen is what keeps the bar and the gear on top of it and
+   tappable. pointer-events: none for the same reason.
+   It carries #screen's own class list (holdOutgoing copies className), so it
+   keeps that screen's padding, including the Boneyard's full-bleed
+   `.screen--map`. overflow is clamped here so a frozen copy never grows a
+   scrollbar of its own; scrollTop is still settable on it, which is how the copy
+   freezes at the offset the player left.
+   THE FADE IS A TRANSITION AND THE REMOVAL IS A TIMER, deliberately. Nothing
+   waits on transitionend, so a reduced-motion player, whose transition is none,
+   gets a clean hard cut at the same moment instead of a copy that never leaves.
+   No keyframes, no iteration count: there is nothing here to collapse to 0.001s
+   and run a thousand times a second. */
+.screen-held {
+  position: absolute; left: 0; right: 0;
+  overflow: hidden; pointer-events: none;
+  transition: opacity .18s ease-out;
+}
+.screen-held-out { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .screen-held { transition: none; } }
+/* A held swap already has a finished picture on top, so the arriving child must
+   NOT also fade up from transparent: two crossed opacity fades leave a quarter of
+   the ground visible at the midpoint, which is the tray again. The class stays on
+   the child regardless (it is the router's "arrived by a navigation" marker and
+   two audits read it); only the animation is suppressed. */
+.screen.screen-swap > .route-in { animation: none; }
 /* Sheets are the app's other surface and get the same treatment. SCOPED TO
    #sheets deliberately: the Boneyard reuses `.sheet-body` as a screen class, so an
    unscoped rule matched it, tied on specificity with `.screen > .route-in` and won

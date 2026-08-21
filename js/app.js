@@ -2585,6 +2585,86 @@ function currentTab() {
 // map keeps running and draining battery behind whatever you opened next.
 let screenCleanup = null;
 
+/* THE OLD SCREEN HOLDS UNTIL THE NEW ONE IS READY.
+ *
+ * Tom, 2026-08-21: "swapping between boneyard and today briefly shows the empty
+ * tray that sits behind the app. feels cheap"
+ *
+ * WHAT IT WAS. route() stripped `screen-in` (app.css: `.screen:not(.screen-in)
+ * { opacity: 0 }`) BEFORE the new screen existed, and revealWhenReady put it
+ * back only once every image had decoded, up to a 700ms cap. So every real
+ * navigation opened a hole where #screen was transparent and nothing had
+ * replaced it, and what showed through was the body gradient, the grain and the
+ * bare tab bar: the tray the app sits on. Measured on this tree, Boneyard ->
+ * Today at 440x956 through a CDP screencast: 4 bare frames / 108ms at CPU x1,
+ * 6 frames / 136ms at x6. See tests/route-flash-audit.mjs.
+ *
+ * WHY A HELD COPY AND NOT A LONGER REVEAL. The reveal is not the bug and must
+ * not be weakened: it exists because screens used to assemble themselves in
+ * front of the player (see revealWhenReady). The old paint cannot simply be left
+ * alone either, because a screen renders with `el.innerHTML = ...` and that
+ * destroys it no matter what the opacity says. So the outgoing nodes are MOVED
+ * out of the way and parked over the top, and the new screen builds underneath
+ * them, invisible, exactly as it does today.
+ *
+ * MOVED, NEVER CLONED, and that is the whole reason this works on the Boneyard.
+ * cloneNode gives a canvas with a BLANK bitmap, and this app is full of canvases:
+ * the map, the wardrobe tiles, the crew fan, the shop art. A clone would have
+ * swapped a bare tray for a screen full of empty boxes, which is the same bug
+ * wearing better clothes. Reparenting a canvas keeps its bitmap.
+ *
+ * AND THE TEARDOWN RIDES WITH THE PAINT. screenCleanup is the outgoing screen's
+ * own destructor and the Boneyard's calls map.remove(), which rips the live map
+ * out of the DOM. Run at the old time it would have emptied the held copy a
+ * frame after it was made, so it is captured here and fired when the copy is
+ * dropped instead. It cannot outlive the next navigation: holdOutgoing() drops
+ * whatever is held before it holds anything new, and dropping runs the pending
+ * teardown, so a fast Boneyard -> Today -> Boneyard cannot leave one map's
+ * destructor pointed at another map.
+ *
+ * IT OWNS ITS OWN REMOVAL (anti-regression rule 8). A copy of a screen parked
+ * over the app is the worst thing to leave behind if the reveal never lands, so
+ * the drop is on a hard 1200ms timer from the moment it is created, well past
+ * revealWhenReady's 700ms cap, and every stale node is swept on the next
+ * navigation regardless. Degrade to a hard cut, never to a frozen app.
+ *
+ * NO REFERENCES BREAK. #screen keeps its identity: bindWordmarkPull() binds a
+ * scroll listener to that exact node once at startup, so swapping in a fresh
+ * element instead would have silently killed the overscroll wordmark. */
+let dropHeld = null;
+function holdOutgoing(el) {
+  dropHeld?.();
+  // sweep anything a mid-fade navigation left behind: the class is the truth
+  el.parentNode.querySelectorAll('.screen-held').forEach(n => n.remove());
+  // nothing painted means nothing to hold, and holding an empty box would put a
+  // transparent lid over the boot instead of over a screen
+  if (!el.classList.contains('screen-in') || !el.firstChild) return;
+  const g = document.createElement('div');
+  // the same classes, so the copy keeps the padding it was laid out with
+  // (.screen--map drops it entirely) and the same scrollable box
+  g.className = el.className + ' screen-held';
+  g.style.top = el.offsetTop + 'px';
+  g.style.height = el.offsetHeight + 'px';
+  const top = el.scrollTop;
+  g.append(...el.childNodes);
+  g.scrollTop = top;                  // a held screen freezes where the player left it
+  el.after(g);                        // after #screen, before #tabbar: the bar stays live
+  const cl = screenCleanup;
+  screenCleanup = null;
+  let gone = false;
+  const drop = () => {
+    if (gone) return;
+    gone = true;
+    clearTimeout(cap);
+    if (dropHeld === drop) dropHeld = null;
+    g.classList.add('screen-held-out');
+    setTimeout(() => g.remove(), 260);   // > the .18s fade; a timer, so reduced motion still clears it
+    try { cl?.(); } catch { /* never block navigation on teardown */ }
+  };
+  const cap = setTimeout(drop, 1200);
+  dropHeld = drop;
+}
+
 /* THE MAP ONLY ASKS FOR LOCATION WHEN THE PLAYER ASKED FOR THE MAP.
  *
  * The Boneyard used to auto-start the map for anyone who had ever opened it
@@ -2612,6 +2692,12 @@ function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
   closeAllSheets();
+  /* BEFORE the teardown, not after: screenCleanup is what rips the live map out
+     of the DOM, so the paint has to be taken out of its reach first. When a hold
+     is taken it adopts the teardown and nulls it, so the call below is a no-op;
+     when there is nothing to hold, the teardown runs exactly as it always did. */
+  const scr = $('#screen');
+  if (isNav) holdOutgoing(scr);
   try { screenCleanup?.(); } catch { /* never block navigation on teardown */ }
   screenCleanup = null;
   const tab = currentTab();
@@ -2625,7 +2711,7 @@ function route({ keepScroll = false } = {}) {
   // Today carries its own gear in the day strip, so the floating one stays out
   // of the way and nothing sits above the Bonehead.
   if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
-  const el = $('#screen');
+  const el = scr;
   if (isNav) el.classList.remove('screen-in');
   let done, isToday = false;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
@@ -2666,7 +2752,25 @@ function route({ keepScroll = false } = {}) {
      * flash the whole tab on every small edit. */
     const child = el.firstElementChild;
     if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
-    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => { markBooted(); child?.classList.add('route-in'); });
+    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
+      markBooted();
+      /* ONE FADE, NOT TWO, AND THE CLASS STAYS EITHER WAY.
+         `route-in` fades the new child up from transparent. Over the ground on a
+         boot that is right. Under a held screen it is wrong: two crossed opacity
+         fades do not add up to one, they leave the ground showing through at
+         t(1-t), a quarter of it at the midpoint, which is this bug again, dimmer.
+         So the ANIMATION is suppressed for a held swap (app.css .screen-swap) and
+         the held copy alone does the dissolve, with the new screen already whole
+         underneath it. The CLASS is still applied on every navigation, because it
+         is the router's marker that a child arrived by one and two audits read it
+         that way (tests/feel-audit.mjs ROUTE-IN, tests/screen-sweep.mjs ARRIVAL).
+         Set explicitly per navigation rather than cleared on the way out: a hold
+         that is dropped mid-fade must not leave the next screen's entrance
+         suppressed, and a boot has no hold to suppress it in the first place. */
+      el.classList.toggle('screen-swap', !!dropHeld);
+      child?.classList.add('route-in');
+      dropHeld?.();
+    });
   });
 }
 
