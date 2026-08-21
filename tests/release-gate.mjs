@@ -328,7 +328,8 @@ const DECLARED = {
     + 'renders the screen for each. Its CONTROL row is the point: the shift composes through --bh-shift INSIDE bhIdle (a static '
     + 'translate on .hero-char is overwritten by the animation), and --bh-shift is a custom property, so setting it one level up '
     + 'walks the PET left by the same 58px. Proven red both ways on 2026-08-21: flagging every pet as sharing reddens CONTROL, '
-    + 'and moving the property to the scene reddens the pet-inheritance row.'],\n  'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
+    + 'and moving the property to the scene reddens the pet-inheritance row.'],
+  'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
   'beta-thanks-audit.mjs': ['full', 'the beta thank-you card: real TestFlight and Discord links, the Android instruction, a hero with real pixels, once from boot, and the Crew strip opens it.'],
