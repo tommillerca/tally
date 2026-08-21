@@ -764,17 +764,33 @@ console.log(fails ? `\n${fails} FAILED` : '\nevery screen draws one medium');
  *                        closes -> "js/app.js:NEWS|badge-crown@34 — delete
  *                        these rows from SHORTFALL_OK"
  *
- * AND THE TWO ROWS ADDED 2026-08-21 with the gold wedge's word, same method,
- * same throwaway-tree-and-exit-code-file discipline, green baseline immediately
- * before each:
+ * AND THE TWO ROWS ADDED 2026-08-21 with the gold wedge's word. Same method and
+ * the same throwaway-tree-and-exit-code-file discipline, off a detached worktree
+ * at 853afbad with a green run of this file (exit 0) immediately before, and
+ * `git checkout -- .` between each. FOUR mutations for two rows, because each
+ * row has two independent ways to go wrong:
  *   LABEL                js/wheel.js's gold wedge tag put back to 'GOLD' ->
  *                        "wheel: wedge says \"GOLD\" over assets/crates/golden/f0.png,
  *                        which this game calls a Golden Crate", and the same hit
- *                        again on wheel-reveal.
- *   CONTROL wedge pair   wheelIconsHtml's percentages halved, so every picture
- *                        collapses onto the hub and no word's own wedge holds one
- *                        -> "words with no single picture on their own wedge";
- *                        and separately SHOP's crate labels reworded -> a named
- *                        count under the floor of 3..
+ *                        again on wheel-reveal. exit 1.
+ *   LABEL, from the other end. The wedges left alone and the GAME renamed
+ *                        instead: SHOP and DUST_SHOP's 'Common Crate' and
+ *                        'Battle Charm' reworded to 'Common Box' and 'Battle
+ *                        Trinket' -> both the Crate and the Charm wedge named,
+ *                        on both renders, exit 1. This is the direction that
+ *                        matters most for drift: nobody touches the wheel, a
+ *                        product gets a new name, and the wheel is the screen
+ *                        still using the old word.
+ *   CONTROL wedge pair   wheelIconsHtml's per-wedge percentages replaced with
+ *                        left:50%;top:50%, so every picture collapses onto the
+ *                        hub and no word's own wedge holds exactly one -> all
+ *                        fourteen named, "words with no single picture on their
+ *                        own wedge", exit 1 and the run aborts before LABEL.
+ *   CONTROL named floor  the shop rows' IDS renamed ('crate-golden' -> 'box-golden'
+ *                        and so on) so ART_NAME can no longer reach the crate art
+ *                        while every label still reads correctly -> "2 drawing the
+ *                        Shop has a name for, of 3 named drawings" against the
+ *                        floor of 3, exit 1. Without this row LABEL would have
+ *                        gone green on two skipped wedges and one graded one..
  */
 process.exit(fails ? 1 : 0);
