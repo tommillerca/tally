@@ -2083,13 +2083,13 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
 export const PET_HERO_PX = { C6: 169 };
 
 export const PET_SHOP = {
-  pet: { id: 'C6', coin: 50000, blurb: 'A diva who would rather shop than fly. She walks with you, and every piece she owns is sold on its own.' },
+  pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },
   items: [
     { id: 'CE1', coin: 8000,  shot: [0.1394, 0.3327, 0.3933, 0.5866] },
-    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4482, 0.7973, 0.8193] },
+    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4132, 0.7973, 0.7843] },   // rides higher than CB2: no charms on the strap to fill the top of the frame
     { id: 'CB2', coin: 9000,  shot: [0.4210, 0.4253, 0.7921, 0.7964] },
     { id: 'CG1', coin: 12000, shot: [0.7261, 0.2925, 0.9117, 0.4780] },
-    { id: 'CM1', coin: 3500,  shot: [0.1497, 0.3625, 0.4134, 0.6262] },
+    { id: 'CM1', coin: 3500,  shot: [0.1215, 0.3293, 0.4116, 0.6194] },   // 10% wider and nudged up-left: three scattered marks, not one mass
   ],
 };
 
