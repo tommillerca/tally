@@ -1044,10 +1044,45 @@ body::before {
   background: #f2e9d7; border-radius: 22px;
   padding: 7px 7px 20px; box-shadow: 5px 6px 0 rgba(0, 0, 0, .55);
 }
+/* THE SCROLL PEEK, and it is arithmetic rather than a tuned height. Tom,
+   2026-08-21: "how will the player know to scroll down and see more right now?
+   i have a feeling they wont know unless we show half a banner width or
+   something to make them go look." Measured on the shipped tree before the
+   change: the first card below the doors cleared the fold by 60px at 393x852
+   with no inset, by 1.2px at --sat 59, by 14.8px at 320x568, and by nothing at
+   all at 320x568 with an inset. Three of the four viewports showed a sliver or
+   less, so a constant height cannot be the answer: the fold moves with the
+   viewport and the notch, and the hero has to move with it.
+
+   So the SCENE gives up exactly what the peek needs, and the 201px is measured,
+   not chosen. From the fold upward, at both widths:
+     66.2  the tab bar (plus --sab, which is why it is a separate term)
+     14    .screen's own top padding, on top of --sat
+      7    .hero-card's top padding
+     20    .hero-card's chin
+     12    .hero-card's bottom margin
+     67.8  .hero-actions, the four doors
+     14    .hero-actions' bottom margin
+   134.8 of that is below the scene and above the first card, 66.2 is the bar,
+   and the sum is 201. Whatever is left after the peek is the scene's, capped so
+   a tall screen does not get an absurd hero and floored so a short one keeps a
+   figure. Verified by measuring the peek off the render at four configurations,
+   not by trusting this comment: tests/today-peek-audit.mjs.
+
+   --gw-h and --gw-top are the status column above the figure (the chips, then
+   Gwart), and they live here because .hero-char's top is their sum. 90px is
+   R3's ruling (Tom: "essentially half his current height"), the height at which
+   his face measures 40.8px against a 40px legibility bar, and it scales down
+   with the viewport rather than through a breakpoint: 10.6vh crosses 90 at an
+   849px-tall screen, so every current phone gets the full plaque and only a
+   short one trades it away. */
 .hero-scene {
+  --gw-top: 50px;                          /* .hero-top's 10px + its 32px + an 8px gap */
+  --gw-h: clamp(58px, 10.6vh, 90px);
+  --peek: clamp(28px, 5.2vh, 46px);
   position: relative; overflow: hidden; cursor: pointer;
   margin: 0;
-  height: min(62vh, 520px);
+  height: min(600px, max(280px, calc(100vh - var(--sat) - var(--sab) - 201px - var(--peek))));
   background: var(--coral);
   border: 2.5px solid #17151d; border-radius: 16px;
   text-align: left;
@@ -1076,14 +1111,94 @@ body::before {
      (sat+14) and the scene's negative margin cancels exactly that padding, so the
      scene starts under the day-head. Adding var(--sat) here double-counted the
      notch (~59px of dead space on notched phones). Anchor to the scene instead. */
+  /* CURRENCIES AT THE TOP, AND THEY LEAD. Tom asked for the currencies at the
+     top of the screen with Gwart under them, three times. They used to be a
+     split row, the Trends dot pinned left and the wallet pinned right, with the
+     art showing between them; that is two floating plates rather than a status
+     column. Left-aligned and grouped, they are one object with the plaque
+     directly beneath, which is the whole point of the arrangement. */
   position: absolute; top: 10px; left: 12px; right: 12px; z-index: 5;
-  display: flex; justify-content: space-between; align-items: flex-start;
+  display: flex; justify-content: flex-start; align-items: center; gap: 7px;
 }
 .hero-top-right { display: flex; gap: 7px; }
 .hero-top .streak-chip, .hero-top .bh-coin, .hero-top .bh-crates {
   background: rgba(42, 45, 40, .82); border: 2px solid var(--ink); color: var(--text);
   box-shadow: var(--sh-sm);
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+
+/* ============================ GWART, ON TODAY ==============================
+   Under the currencies, which is where Tom put him. This is NOT the Emporium
+   panel: that one is a full-bleed 328px header with a crimson radial behind a
+   384px-wide wizard, and every number in it was solved for that panel's size.
+   Nothing is copied from it. What IS shared is Cam's animation (.wz-body,
+   .wz-enter, .wz-sway, .wz-stars-*, declared once, further down this file) and
+   the art files, which are already precached for the Shop.
+
+   THE PLATE IS #d5c8b0 AND THAT IS TOM'S NUMBER. The first version used the
+   app's own cream and he came back with "gwart's background is too bright",
+   then, given two darker options, "split the difference between A and B". Note
+   what this hex is NOT: it is not --text. --text is #f2e9d7 and it is also the
+   talk box's type colour, so a search-and-replace on the cream in this file
+   changes the words in the dialogue box as well. Tom caught exactly that once:
+   "why did you change the text colour in the textbox? i asked you to just
+   change gwart's background colour." One literal, in one rule, on purpose.
+
+   THE CROP IS THE ART'S, NOT A TASTE CALL. R3 measured the frame that keeps the
+   whole pointed hat while making his face read: (293, 442) - (1753, 1136) in
+   the 2048 square, 1460 x 694, which is where the tip of the cone lands on the
+   top edge and the beard on the bottom. So the plate's proportions FOLLOW that
+   rect instead of being declared: the height is the ruling (--gw-h), the
+   content width is height x 1460/694, and the art is the untouched 2048 square
+   blown up until 1460 of its columns span the plate and shoved left and up by
+   the crop's own origin. No second copy of the PNG, no object-fit guessing, and
+   the whole square stays intact underneath so Cam's clip-path thirds and his
+   sway origin land where he drew them.
+
+   NO PALM GLOWS. Measured in R3: his lime screen-blend is a 134-channel shift
+   over his own near-black demo ground and 12 channels over this cream plate,
+   which is invisible. They belong on the dark Emporium panel, and they are
+   there. */
+.gw-today {
+  --gw-ch: calc(var(--gw-h) - 4px);                   /* inside the 2px border */
+  --gw-cw: calc(var(--gw-ch) * 1460 / 694);           /* the crop's own aspect */
+  position: absolute; left: 12px; top: var(--gw-top); z-index: 5;
+  width: calc(var(--gw-cw) + 4px); height: var(--gw-h);
+  overflow: hidden; pointer-events: none;
+  background: #d5c8b0;
+  border: 2px solid var(--ink); border-radius: var(--radius-sm); box-shadow: var(--sh);
+  animation: gwFloat 6.4s ease-in-out infinite;
+}
+/* 5.00px peak to peak, 6.4s, resting midpoint 0, so a frozen frame sits dead
+   centre rather than at an extreme. */
+@keyframes gwFloat { 0%, 100% { transform: translateY(2.5px); } 50% { transform: translateY(-2.5px); } }
+/* The 2048 square, scaled so 1460 of its columns fill the plate, then offset by
+   the crop's origin. .wz-scene's own position:relative and aspect-ratio are
+   overridden here; both dimensions are given, so the ratio has nothing to do. */
+.gw-today .wz-scene {
+  position: absolute;
+  width: calc(var(--gw-cw) * 2048 / 1460); height: calc(var(--gw-cw) * 2048 / 1460);
+  left: calc(var(--gw-cw) * -293 / 1460); top: calc(var(--gw-cw) * -442 / 1460);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gw-today { animation: none; }
+}
+/* HE STEPS OUT ON A SHORT PHONE, and the arithmetic is why. Above the fold at
+   320x568 there are 501.8px, of which 201 belong to the tab bar, the doors and
+   the card's own frame. That leaves 300.8 to be split between the scene and the
+   peek, so the figure's box is `238 - peek - plaque` px however it is sliced:
+   at a 24px peek and a plaque small enough to keep his face legible there is
+   nothing left, and the measured result was a 144px Bonehead standing beside a
+   108px pet, which is the figure contract's own failure mode. Above 600px of
+   viewport height there is room for all three and he is drawn; below it the
+   currencies and the peek are kept, because those are what Tom asked for, and
+   the wizard is what gives way. One line to reverse if that is the wrong trade:
+   the figure goes back to 144px and he comes back at 320x568. Graded in both
+   directions by tests/today-peek-audit.mjs, so his disappearing at 852 is red
+   and so is the figure collapsing here. */
+@media (max-height: 600px) {
+  .hero-scene { --gw-h: 0px; }
+  .gw-today { display: none; }
 }
 /* ===== THE TALK BOX: the app's one typing-dialogue surface =====
    Approved in the canvas "The Raising and the Talk Box". Every talking surface
@@ -1366,7 +1481,15 @@ body::before {
    The asymmetric left/right is not a typo: the ink inside the 640 canvas is NOT
    centred in it (bbox 94..509, centre 301 not 320), so a symmetric box hangs the
    drawing 17px to the left. This puts it on the card's centre line. */
-.hero-char { position: absolute; left: -16px; right: -34px; top: 18px; bottom: 79px;
+/* THE FIGURE STARTS WHERE THE STATUS COLUMN ENDS, and that is a sum rather than
+   a number so the plaque can never grow into his head: it is exactly the chips'
+   top offset plus their height plus the gap (--gw-top) plus the plaque
+   (--gw-h). This is also what closes the dead air over his skull. The scene had
+   been taller than the figure could fill, so the top of the card was empty
+   coral; the chips and Gwart occupy that band now and the figure sits under it
+   rather than floating inside it. */
+.hero-char { position: absolute; left: -16px; right: -34px;
+  top: calc(var(--gw-top, 50px) + var(--gw-h, 90px)); bottom: 79px;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
@@ -9424,12 +9547,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    switched OFF with animation-name: none. The twinkle keeps its authored
    3.6 / 4.4 / 3s. */
 @media (prefers-reduced-motion: reduce) {
-  .gw-panel .wz-enter { animation: zGwFade .28s linear both; }
-  .gw-panel .wz-sway, .gw-panel .wz-body { animation-name: none; }
+  .gw-panel .wz-enter, .gw-today .wz-enter { animation: zGwFade .28s linear both; }
+  .gw-panel .wz-sway, .gw-panel .wz-body,
+  .gw-today .wz-sway, .gw-today .wz-body { animation-name: none; }
   .gw-panel .wz-glow { animation: zGwFade .28s linear both; opacity: .45; }
 }
 @keyframes zGwFade { from { opacity: 0 } to { opacity: 1 } }
-=======
 /* ------------------------------------------------------------ THE WANDERER
    IN THE PIT. Tom, with a mockup: "make this work better than my crude mock up
    but he should be about this big in the pit". His mockup has the Wanderer
