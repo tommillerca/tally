@@ -33,11 +33,15 @@
  * art on disk.
  *
  * WHAT IT ASSERTS, and which direction is failure.
- *   CONTROL   every screen in SCREENS rendered icons, at least one icons-pix PNG
- *             was found AND decoded (naturalWidth > 0), and the fingerprint
- *             table matched at least one vector somewhere. An empty sample is a
- *             FAILURE, never a pass: four guards in this repo went green while
- *             blind on 2026-08-19, and a probe reading zero nodes is how.
+ *   CONTROL   SEVEN rows, because this file has three graded media and each one
+ *             passes for free on a sample that does not contain it. Every driver
+ *             painted something (counted INSIDE the app's content, not including
+ *             the always-present tab bar), the ten drivers landed on ten DIFFERENT
+ *             screens, all three media are present, the seeded dish really reached
+ *             the Backpack, an icons-pix PNG was found AND decoded, the vector
+ *             fingerprint table matched real drawings, and the inventory parse
+ *             yielded rows. An empty sample is a FAILURE, never a pass: four
+ *             guards in this repo went green while blind on 2026-08-19.
  *   SWAP      no rendered vector draws at >= 16 CSS px for a concept that HAS
  *             pixel art. 16 is pixCur's floor, so at or above it the art was
  *             available and something chose the vector. Below 16 is the standing
@@ -46,9 +50,10 @@
  *   EMOJI     no element whose entire text is a single emoji renders at >= 16px
  *             for a concept that has pixel art. This is the third medium and
  *             neither existing guard can see it: an emoji is not an <svg> and
- *             not an <img>, so it is invisible to a scan for either. It found a
- *             24px emoji dish in the hub's active-buff row, in a .crate-ico slot
- *             where the Kitchen draws the 24px pixel dish off the same objects.
+ *             not an <img>, so it is invisible to a scan for either. It found the
+ *             Backpack tab's active-dish row drawing the recipe EMOJI in a
+ *             .crate-ico slot, which app.css sets to font-size 24, while the
+ *             Kitchen drew the 24px pixel dish off the very same buff objects.
  *   STEP      every icons-pix / crates <img> renders at a whole 16/24/48/96 AND
  *             at exactly the width its own attribute claims. Failure is the
  *             fractional resample: art that only survives integer scaling put
@@ -57,7 +62,7 @@
  *             everywhere else.)
  *   CALLSITE  no bhIcon() call asks >= 16 for a pack id that has a pixel twin.
  *             SOURCE-derived on purpose: this is the half the DOM sample cannot
- *             reach, because SCREENS is thirteen screens and the app has more.
+ *             reach, because SCREENS is ten screens and the app has more.
  *             A call passing a TINT is exempt by derivation, not by hand: pixel
  *             art cannot be recoloured, so a tinted call is a deliberate vector
  *             (the rule badgePixHtml already documents). A call that is the RHS
@@ -419,7 +424,7 @@ ok('CONTROL  every screen driver reached a surface that painted something',
   dead.length === 0,
   dead.length ? dead.map(d => `${d.label}: ${d.err || 'ZERO pictures rendered'}`).join(' | ')
     : `${drove.length} screens, ${drove.reduce((s, d) => s + d.total, 0)} pictures, ${nodes.length} classified as icons`);
-/* AND THE THIRTEEN SCREENS ARE THIRTEEN DIFFERENT SCREENS. This is the control
+/* AND THE TEN SCREENS ARE TEN DIFFERENT SCREENS. This is the control
    that "did it paint anything" cannot be: the tab bar and the gear button are
    always on screen, so a driver whose click silently misses still reports a
    healthy picture count while grading Today for the fourth time. That is not
@@ -427,8 +432,14 @@ ok('CONTROL  every screen driver reached a surface that painted something',
    routes to the hub, so #charBtn no longer existed for the next three drivers and
    `stable`, `kitchen` and `pit` all came back as the same 29 nodes. Every row
    would have stayed green over a sample missing three of its screens. */
+/* STRUCTURAL, NOT DIMENSIONAL. The first version put each node's rendered width
+   in the signature and two renders of the SAME screen came back different, so
+   the row passed on a driver that had plainly no-oped: route() adds .route-in
+   and .screen-in, so a measurement taken a few frames apart reads fractionally
+   different boxes off identical markup. WHICH pictures a screen draws is the
+   stable identity; how wide they were at the instant of measurement is not. */
 const sig = d => JSON.stringify(nodes.filter(n => n.label === d.label)
-  .map(n => `${n.kind}:${n.src || n.concept || n.glyph}@${n.w}`).sort());
+  .map(n => `${n.kind}:${n.src || n.concept || n.glyph}`).sort());
 const sigs = new Map();
 const clones = [];
 for (const d of drove) {
@@ -584,27 +595,48 @@ ok('SHORTFALL and no declared shortfall has been fixed or moved without being un
 console.log('\n' + out.join('\n'));
 console.log(fails ? `\n${fails} FAILED` : '\nevery screen draws one medium');
 
-/* PROVEN-RED-BY, 2026-08-21, each in a throwaway worktree off this branch, exit
- * code written to a file and read from the file (never through a pipe):
- *   CONTROL(screen)   delete the `wheel` entry's force call so the driver reaches
- *                     nothing -> FAIL "wheel: ZERO icon nodes".
- *   CONTROL(decode)   move assets/icons-pix/coin.png away -> FAIL naming it, and
- *                     the run stops before SWAP rather than grading a blank.
- *   CONTROL(fp)       break the pack fingerprint (VECTORS emptied) -> FAIL
- *                     "0 pack ids with a pixel twin".
- *   CONTROL(inv)      point the inventory parse at a file that prints nothing ->
- *                     FAIL "0 call sites parsed".
- *   SWAP              revert js/wheel.js's PIX_PRIZE/CRATE_PRIZE to v420 -> FAIL
- *                     naming wheel|crate, wheel|crates/golden/f0 and wheel|sinew
- *                     at 34.9/38.6/37.5px.
- *   EMOJI             revert the hub's active-dish row to `${b.icon || '🍲'}` ->
- *                     FAIL "bonehead|dish-* at 24px".
- *   SWAP(un-declared) delete a live SWAP_OK row's defect -> FAIL by name.
- *   STEP              add `transform: scale(.82)` to .ico.pix-cur -> FAIL naming
- *                     the files at 13.1px.
- *   CALLSITE          revert js/app.js:10463 to bhIcon('egg', 18) -> FAIL
- *                     "renderOnboarding draws vector 'egg' at 18".
- *   SHORTFALL         change js/app.js:9626 badge-crown from 34 to 40 -> FAIL,
- *                     and deleting a SHORTFALL_OK row -> FAIL the un-declared row.
+/* PROVEN-RED-BY. Every row below was reddened against a REAL defect in a
+ * throwaway worktree off this branch (/tmp/pixswap/red), 2026-08-21. Each run's
+ * exit code was written to its own file and read back from that file, never
+ * through a pipe, and the tree was `git checkout -- .`d between mutations.
+ *
+ *   CONTROL painted      renderTrends returns before writing any markup ->
+ *                        "progress: ZERO pictures rendered".
+ *   CONTROL distinct     `id="stableBtn"` renamed on the hero tile, so the
+ *                        Stable driver silently grades Today a second time ->
+ *                        "stable is identical to today".
+ *   CONTROL three media  the wheel's .dw-hub 💀 replaced with markup ->
+ *                        "found ZERO of: emoji slot".
+ *   CONTROL seeded dish  activeFoodBuffs returns [] -> "0 icon slots in the
+ *                        Backpack tab's dish rows".
+ *   CONTROL any decoded  assets/icons-pix AND assets/crates both moved away.
+ *   CONTROL all decoded  assets/icons-pix moved away -> all 33 named; and with
+ *                        ONLY coin.png moved -> "assets/icons-pix/coin.png".
+ *   CONTROL fingerprint  bhIcon inlines its tint in place of currentColor, so
+ *                        the pack markup stops round-tripping -> "24 pack ids
+ *                        with a pixel twin, 0 matched on screen".
+ *   CONTROL emoji table  cooking.js renames its `icon:` field -> "8 emoji stand
+ *                        for a concept with art" against a floor of 10.
+ *   CONTROL inventory    icon-inventory-audit's print format drifts by one
+ *                        separator -> "0 call sites parsed".
+ *   SWAP                 js/wheel.js reverted to v420 -> all six hits named:
+ *                        wheel|crate and wheel-reveal|crate at 34.9px,
+ *                        |crates/golden/f0 at 38.6px, |sinew at 37.5 and 40px.
+ *   SWAP un-declared     badgeIconHtml wired to pixCur, ledger left alone ->
+ *                        six progress| rows named as needing deletion.
+ *   EMOJI                recipeIconHtml reverted to pre-v411 (emoji only) ->
+ *                        "backpack|dish-broth 🍲 at 24px" plus six Kitchen
+ *                        dishes. That 24px is .crate-ico's font-size, and it is
+ *                        the measurement this file's header quotes.
+ *   STEP                 `transform: scale(.82)` on .ico.pix-cur -> "coin.png
+ *                        @13.1px (attr 16)" and 30 more. The .leg-ico bug that
+ *                        boneyard-icon-audit caught on the map, off the map.
+ *   CALLSITE             js/app.js:10470 reverted to bhIcon('egg', 18) ->
+ *                        "renderOnboarding draws vector 'egg' at 18".
+ *   SHORTFALL            badgePixHtml('badge-crown', 34) changed to 40 ->
+ *                        "NEWS|badge-crown@40 asks 40, serves 24".
+ *   SHORTFALL un-decl.   the same call changed to 24, so the declared hole
+ *                        closes -> "js/app.js:NEWS|badge-crown@34 — delete
+ *                        these rows from SHORTFALL_OK".
  */
 process.exit(fails ? 1 : 0);
